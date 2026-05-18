@@ -1,0 +1,43 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+.next
+.turbo
+out
+build
+*.tsbuildinfo
+
+# Test
+coverage
+*.lcov
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Drizzle
+drizzle/meta
+
+# Template version tracking — these must be committed, not ignored
+# .template-version and .framework-scope are intentionally tracked in git
+!.template-version
+!.framework-scope
