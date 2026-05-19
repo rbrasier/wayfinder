@@ -13,6 +13,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <Link href="/admin/flows" className="text-muted-foreground hover:text-foreground">
               Flows
             </Link>
+            <Link href="/admin/sessions" className="text-muted-foreground hover:text-foreground">
+              Sessions
+            </Link>
             <Link href="/admin/users" className="text-muted-foreground hover:text-foreground">
               Users
             </Link>
