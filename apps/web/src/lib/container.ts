@@ -1,20 +1,34 @@
 import {
+  AddContextDoc,
+  CreateFlow,
+  CreateFlowEdge,
+  CreateFlowNode,
   CreateUser,
+  DeleteFlowEdge,
+  DeleteFlowNode,
   DeleteUser,
   FailJob,
   GetFeatureFlag,
+  GetFlowCanvas,
   GetUsageSummary,
+  GrantFlowOwner,
   ListErrors,
   ListFeatureFlags,
+  ListFlows,
+  ListFlowsForUser,
   ListJobs,
   ListUsers,
   LogAuditEvent,
   LogError,
   PingJob,
   RegisterJob,
+  RemoveContextDoc,
   SendMessage,
   TrackUsage,
   UpdateErrorStatus,
+  UpdateFlow,
+  UpdateFlowNode,
+  UpdateFlowNodePosition,
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
@@ -24,6 +38,9 @@ import {
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
   DrizzleFeatureFlagRepository,
+  DrizzleFlowEdgeRepository,
+  DrizzleFlowNodeRepository,
+  DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleUsageRepository,
   DrizzleUserRepository,
@@ -55,6 +72,9 @@ const build = () => {
   const featureFlags = new DrizzleFeatureFlagRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
+  const flows = new DrizzleFlowRepository(db);
+  const flowNodes = new DrizzleFlowNodeRepository(db);
+  const flowEdges = new DrizzleFlowEdgeRepository(db);
 
   const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER);
   const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
@@ -106,7 +126,7 @@ const build = () => {
     logger,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, errorLogger, auditLogger },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges },
     useCases: {
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
@@ -126,6 +146,20 @@ const build = () => {
       pingJob: new PingJob(jobRepo),
       failJob: new FailJob(jobRepo),
       listJobs: new ListJobs(jobRepo),
+      createFlow: new CreateFlow(flows),
+      listFlows: new ListFlows(flows),
+      listFlowsForUser: new ListFlowsForUser(flows),
+      getFlowCanvas: new GetFlowCanvas(flows, flowNodes, flowEdges),
+      updateFlow: new UpdateFlow(flows),
+      createFlowNode: new CreateFlowNode(flowNodes),
+      updateFlowNode: new UpdateFlowNode(flowNodes),
+      updateFlowNodePosition: new UpdateFlowNodePosition(flowNodes),
+      deleteFlowNode: new DeleteFlowNode(flowNodes),
+      createFlowEdge: new CreateFlowEdge(flowEdges),
+      deleteFlowEdge: new DeleteFlowEdge(flowEdges),
+      addContextDoc: new AddContextDoc(flows),
+      removeContextDoc: new RemoveContextDoc(flows),
+      grantFlowOwner: new GrantFlowOwner(flows),
     },
   };
 };

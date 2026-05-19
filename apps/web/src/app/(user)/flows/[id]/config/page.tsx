@@ -30,7 +30,6 @@ import { trpc } from "@/trpc/client";
 import type { FlowContextDoc } from "@rbrasier/domain";
 
 const NODE_TYPES = { conversationalNode: ConversationalNode };
-
 const DEBOUNCE_MS = 600;
 
 const toRfNode = (node: {
@@ -59,11 +58,10 @@ const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): E
   markerEnd: { type: MarkerType.ArrowClosed },
 });
 
-export default function FlowCanvasPage() {
+export default function FlowOwnerCanvasPage() {
   const params = useParams<{ id: string }>();
   const flowId = params.id;
 
-  const utils = trpc.useUtils();
   const canvasQuery = trpc.flow.getCanvas.useQuery({ flowId });
 
   const [rfNodes, setRfNodes] = useState<Node[]>([]);
@@ -71,7 +69,6 @@ export default function FlowCanvasPage() {
   const [contextDocs, setContextDocs] = useState<FlowContextDoc[]>([]);
   const [flowName, setFlowName] = useState("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
-  const [editingName, setEditingName] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -80,9 +77,7 @@ export default function FlowCanvasPage() {
 
   const positionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
-  const updateFlowMutation = trpc.flow.update.useMutation({
-    onSuccess: () => utils.flow.getCanvas.invalidate({ flowId }),
-  });
+  const updateFlowMutation = trpc.flow.update.useMutation();
   const createNodeMutation = trpc.flow.node.create.useMutation();
   const updateNodeMutation = trpc.flow.node.update.useMutation();
   const updatePositionMutation = trpc.flow.node.updatePosition.useMutation();
@@ -106,7 +101,6 @@ export default function FlowCanvasPage() {
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     setRfEdges((eds) => applyEdgeChanges(changes, eds));
-
     const deletions = changes.filter((c) => c.type === "remove");
     for (const del of deletions) {
       void deleteEdgeMutation.mutateAsync({ edgeId: del.id, flowId });
@@ -129,9 +123,7 @@ export default function FlowCanvasPage() {
       fromNodeId: connection.source,
       toNodeId: connection.target,
     }).then((created) => {
-      setRfEdges((eds) =>
-        eds.map((e) => (e.id === edge.id ? { ...e, id: created.id } : e)),
-      );
+      setRfEdges((eds) => eds.map((e) => (e.id === edge.id ? { ...e, id: created.id } : e)));
     });
   }, [createEdgeMutation, flowId]);
 
@@ -147,14 +139,11 @@ export default function FlowCanvasPage() {
     if (!paneEl) return;
     const paneRect = paneEl.getBoundingClientRect();
 
-    const newX = target.clientX - paneRect.left;
-    const newY = target.clientY - paneRect.top;
-
     const tempId = `temp-${Date.now()}`;
     const tempNode: Node<ConversationalNodeData> = {
       id: tempId,
       type: "conversationalNode",
-      position: { x: newX - 112, y: newY - 40 },
+      position: { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
       data: { name: "New step", colour: "#6366f1", aiInstruction: null },
     };
 
@@ -173,12 +162,7 @@ export default function FlowCanvasPage() {
     const existing = positionTimers.current.get(node.id);
     if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
-      void updatePositionMutation.mutateAsync({
-        nodeId: node.id,
-        flowId,
-        x: node.position.x,
-        y: node.position.y,
-      });
+      void updatePositionMutation.mutateAsync({ nodeId: node.id, flowId, x: node.position.x, y: node.position.y });
       positionTimers.current.delete(node.id);
     }, DEBOUNCE_MS);
     positionTimers.current.set(node.id, timer);
@@ -187,13 +171,7 @@ export default function FlowCanvasPage() {
   const handleConfigSave = useCallback(async (values: NodeConfigValues) => {
     if (!editingNodeId) return;
     setIsSavingConfig(true);
-
-    const config = {
-      aiInstruction: values.aiInstruction,
-      doneWhen: values.doneWhen,
-      outputType: values.outputType,
-    };
-
+    const config = { aiInstruction: values.aiInstruction, doneWhen: values.doneWhen, outputType: values.outputType };
     const isTempNode = editingNodeId.startsWith("temp-");
 
     try {
@@ -206,21 +184,11 @@ export default function FlowCanvasPage() {
           positionY: rfNodes.find((n) => n.id === editingNodeId)?.position.y ?? 200,
           config,
         });
-
         setRfNodes((nds) =>
-          nds.map((n) =>
-            n.id === editingNodeId
-              ? { ...toRfNode({ ...newNode, config }), id: newNode.id }
-              : n,
-          ),
+          nds.map((n) => (n.id === editingNodeId ? { ...toRfNode({ ...newNode, config }), id: newNode.id } : n)),
         );
-
         if (pendingEdge) {
-          const edge = await createEdgeMutation.mutateAsync({
-            flowId,
-            fromNodeId: pendingEdge.fromNodeId,
-            toNodeId: newNode.id,
-          });
+          const edge = await createEdgeMutation.mutateAsync({ flowId, fromNodeId: pendingEdge.fromNodeId, toNodeId: newNode.id });
           setRfEdges((eds) => [
             ...eds,
             { id: edge.id, source: edge.fromNodeId, target: edge.toNodeId, type: "smoothstep", markerEnd: { type: MarkerType.ArrowClosed } },
@@ -228,13 +196,7 @@ export default function FlowCanvasPage() {
           setPendingEdge(null);
         }
       } else {
-        await updateNodeMutation.mutateAsync({
-          nodeId: editingNodeId,
-          flowId,
-          name: values.name,
-          colour: values.colour,
-          config,
-        });
+        await updateNodeMutation.mutateAsync({ nodeId: editingNodeId, flowId, name: values.name, colour: values.colour, config });
         setRfNodes((nds) =>
           nds.map((n) =>
             n.id === editingNodeId
@@ -263,72 +225,46 @@ export default function FlowCanvasPage() {
     if (!editingNodeId || editingNodeId.startsWith("temp-")) return;
     await deleteNodeMutation.mutateAsync({ nodeId: editingNodeId, flowId });
     setRfNodes((nds) => nds.filter((n) => n.id !== editingNodeId));
-    setRfEdges((eds) =>
-      eds.filter((e) => e.source !== editingNodeId && e.target !== editingNodeId),
-    );
+    setRfEdges((eds) => eds.filter((e) => e.source !== editingNodeId && e.target !== editingNodeId));
     setConfigOpen(false);
     setEditingNodeId(null);
   }, [editingNodeId, deleteNodeMutation, flowId]);
-
-  const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
-  const editingData = editingNode?.data as ConversationalNodeData | undefined;
-
-  const initialConfigValues = editingData
-    ? {
-        name: editingData.name,
-        colour: editingData.colour ?? "#6366f1",
-        aiInstruction: editingData.aiInstruction ?? "",
-        doneWhen: (editingNode && (editingNode.data as Record<string, unknown>).doneWhen as string | undefined) ?? "",
-        outputType: ((editingNode?.data as Record<string, unknown>).outputType as "conversation_only" | "generate_document" | undefined) ?? "conversation_only",
-      }
-    : undefined;
 
   if (canvasQuery.isLoading) {
     return <div className="flex items-center justify-center h-96 text-muted-foreground">Loading canvas…</div>;
   }
 
+  if (canvasQuery.error?.data?.httpStatus === 403) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 gap-4 text-center">
+        <p className="text-xl font-semibold text-gray-900">Access denied</p>
+        <p className="text-sm text-muted-foreground">You do not have permission to edit this flow.</p>
+        <Link href="/" className="text-sm text-indigo-600 hover:underline">Go home</Link>
+      </div>
+    );
+  }
+
+  const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
+  const editingData = editingNode?.data as ConversationalNodeData | undefined;
+  const initialConfigValues = editingData
+    ? {
+        name: editingData.name,
+        colour: editingData.colour ?? "#6366f1",
+        aiInstruction: editingData.aiInstruction ?? "",
+        doneWhen: ((editingNode?.data as Record<string, unknown>).doneWhen as string | undefined) ?? "",
+        outputType: ((editingNode?.data as Record<string, unknown>).outputType as "conversation_only" | "generate_document" | undefined) ?? "conversation_only",
+      }
+    : undefined;
+
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
+    <div className="flex flex-col" style={{ height: "100vh" }}>
       <div className="flex items-center gap-3 border-b bg-white px-4 py-3 shrink-0">
-        <Link href="/admin/flows" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Flows
-        </Link>
+        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Home</Link>
         <div className="h-4 w-px bg-border" />
-
-        {editingName ? (
-          <input
-            autoFocus
-            className="rounded border px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-300"
-            value={flowName}
-            onChange={(e) => setFlowName(e.target.value)}
-            onBlur={() => {
-              setEditingName(false);
-              if (flowName.trim()) {
-                void updateFlowMutation.mutateAsync({ flowId, name: flowName.trim() });
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") e.currentTarget.blur();
-              if (e.key === "Escape") {
-                setFlowName(canvasQuery.data?.flow.name ?? "");
-                setEditingName(false);
-              }
-            }}
-          />
-        ) : (
-          <button
-            type="button"
-            className="text-sm font-semibold hover:text-indigo-600"
-            onClick={() => setEditingName(true)}
-          >
-            {flowName || "Untitled flow"}
-          </button>
-        )}
-
+        <span className="text-sm font-semibold">{flowName}</span>
         <Badge variant={flowStatus === "published" ? "default" : "secondary"}>
           {flowStatus === "published" ? "Published" : "Draft"}
         </Badge>
-
         <div className="ml-auto flex items-center gap-2">
           <Button
             size="sm"
@@ -341,13 +277,7 @@ export default function FlowCanvasPage() {
           >
             {flowStatus === "published" ? "Unpublish" : "Publish"}
           </Button>
-          <Button
-            size="sm"
-            disabled
-            title="Available in Phase 2"
-          >
-            Open Chat
-          </Button>
+          <Button size="sm" disabled title="Available in Phase 2">Open Chat</Button>
         </div>
       </div>
 
@@ -369,11 +299,7 @@ export default function FlowCanvasPage() {
         </ReactFlow>
       </div>
 
-      <ContextDocsStrip
-        flowId={flowId}
-        docs={contextDocs}
-        onDocsChange={setContextDocs}
-      />
+      <ContextDocsStrip flowId={flowId} docs={contextDocs} onDocsChange={setContextDocs} />
 
       <NodeConfigModal
         open={configOpen}

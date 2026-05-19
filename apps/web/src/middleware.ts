@@ -26,7 +26,7 @@ export const middleware = (req: NextRequest): NextResponse => {
     return NextResponse.next();
   }
 
-  if (pathname.startsWith("/admin") || pathname.startsWith("/chats")) {
+  if (pathname.startsWith("/admin") || pathname.startsWith("/chats") || pathname.startsWith("/flows")) {
     const sessionCookie = getSessionCookie(req);
     if (!sessionCookie?.value) {
       return redirectToLogin(req, pathname);
@@ -37,5 +37,5 @@ export const middleware = (req: NextRequest): NextResponse => {
 };
 
 export const config = {
-  matcher: ["/admin/:path*", "/chats/:path*", "/chats"],
+  matcher: ["/admin/:path*", "/chats/:path*", "/chats", "/flows/:path*"],
 };

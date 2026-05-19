@@ -10,6 +10,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             Admin
           </Link>
           <nav className="flex gap-4 text-sm">
+            <Link href="/admin/flows" className="text-muted-foreground hover:text-foreground">
+              Flows
+            </Link>
             <Link href="/admin/users" className="text-muted-foreground hover:text-foreground">
               Users
             </Link>

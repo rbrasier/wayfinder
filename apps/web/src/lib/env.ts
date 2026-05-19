@@ -18,6 +18,7 @@ const serverEnvSchema = z.object({
     .default("magic-link"),
   PKI_TRUSTED_PROXY_IPS: z.string().optional(),
   PKI_SESSION_TTL_HOURS: z.coerce.number().int().positive().default(8),
+  DOCUMENT_STORAGE_PATH: z.string().default("./data"),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

@@ -66,6 +66,13 @@ const errorLogging = t.middleware(async ({ ctx, path, type, next }) => {
 export const router = t.router;
 export const publicProcedure = t.procedure.use(errorLogging);
 
+export const authenticatedProcedure = publicProcedure.use(({ ctx, next }) => {
+  if (!ctx.userId) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Authentication required." });
+  }
+  return next({ ctx: { ...ctx, userId: ctx.userId } });
+});
+
 export const adminProcedure = publicProcedure.use(({ ctx, next }) => {
   if (!ctx.isAdmin) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
