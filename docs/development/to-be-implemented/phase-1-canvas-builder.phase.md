@@ -102,10 +102,10 @@ shadcn `<Dialog>` with:
 - Instructions for the AI (textarea, required)
 - Done when… (textarea, required)
 - Output type toggle: `Conversation only` / `Generate document`
-- Document template (textarea, monospace, shown only when output type =
-  Generate document). Placeholder text shows the Markdown headings the
-  parser supports per ADR-009 (H1–H3, paragraphs, bullets, numbered, bold,
-  italic — no tables).
+- Document template upload (shown only when output type = Generate document)
+  — **Phase 1 renders a disabled affordance** ("Upload a .docx template —
+  available after Phase 3") so the modal layout is established. The real
+  upload is wired in Phase 3 per ADR-009.
 - "Remove step" button → confirmation → deletes node + connected edges.
 
 ### Context documents strip
@@ -114,9 +114,9 @@ Sticky at the bottom of the canvas page:
 
 - File upload (accepts `.pdf`, `.docx`, `.xlsx`; max 20 MB per file).
 - For each uploaded doc: type badge, filename, size, remove button.
-- Files stored at `/tmp/flow-context/<flowId>/<filename>` for MVP; row in
-  `app_flow_context_docs`. Documented as ephemeral storage per ADR-009 —
-  durable storage is a Phase 4+ concern.
+- Files stored at `DOCUMENT_STORAGE_PATH/context/<flowId>/<filename>` (env
+  var, defaults to `./data/`); row in `app_flow_context_docs`. Phase 4
+  migrates this to MinIO via the `IObjectStorage` port (ADR-009).
 
 ## 6. Database changes
 
@@ -190,10 +190,10 @@ Three sessions:
   it to match needs care. Acceptance criteria call for the drag-to-empty
   gesture to work; visual parity is "close enough" — pixel-match is Phase 4
   polish.
-- **`/tmp` context docs lost on restart** — documented limitation, same as
-  generated documents. The flow's `app_flow_context_docs` rows remain;
-  on missing file the AI gets a "context doc unavailable" notice and
-  proceeds without it.
+- **Context docs lost if `DOCUMENT_STORAGE_PATH` is not volume-mounted** —
+  documented limitation for Phase 1–3. The flow's `app_flow_context_docs`
+  rows remain; on missing file the AI gets a "context doc unavailable"
+  notice and proceeds without it. Phase 4 resolves this with MinIO.
 - **Branching UX** — Phase 1 supports multiple outgoing edges (the DB
   allows it). The canvas does not visually differentiate a branching node;
   the AI does the branch selection at session time per ADR-007. If branching
