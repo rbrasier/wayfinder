@@ -44,8 +44,10 @@ specialist support for every workflow instance.
   link.
 - Magic-link login works against the existing `AUTH_METHOD=magic-link` config
   (no new auth code required for MVP).
-- AU Gov procurement flow (7 nodes, 5 compliance branches, 3 document templates,
-  3 context documents) is seeded into a fresh install and runs end-to-end.
+- Example `.docx` templates (RFT, Evaluation Report, Contract Management Plan)
+  are committed to `docs/templates/` and uploaded to flow nodes via the admin
+  canvas. The AU Gov procurement flow configuration is not auto-seeded —
+  it is built manually by the flow owner during testing/deployment.
 
 ## 4. Non-goals
 
@@ -72,7 +74,7 @@ specialist support for every workflow instance.
 | FlowPermission    | `packages/domain/src/entities/flow-permission.ts`     | new            | user_id, flow_id, permission (`owner`/`viewer`) |
 | INodeExecutor port| `packages/domain/src/ports/node-executor.ts`          | new            | `MockNodeExecutor` MVP; `N8nNodeExecutor` Phase 5 |
 | FlowSessionGraph  | `packages/adapters/src/agents/flow-session-graph.ts`  | new            | LangGraph instance per session, extends ADR-004 |
-| DocumentGeneration| `packages/adapters/src/documents/docx-generator.ts`   | new            | docx-js implementation behind `IDocumentGenerator` port |
+| DocumentGeneration| `packages/adapters/src/documents/docx-generator.ts`   | new            | docxtemplater implementation behind `IDocumentGenerator` port; fills uploaded `.docx` template with AI-generated JSON values |
 
 All new tables use the `app_` prefix (Wayfinder is the application built on the
 template, not core or AI infrastructure). Columns are snake_case. Every table has
@@ -174,8 +176,10 @@ are not reused for session messages — sessions have a richer schema
   built from the flow config at session start, checkpointed to Postgres.
 - **ADR-008 Canvas Builder on React Flow** — `@xyflow/react` as the canvas
   library; custom `ConversationalNode` component.
-- **ADR-009 Document Generation: docx-js + Markdown Templates** — server-side
-  generation, `/tmp` storage at MVP, documented limitation.
+- **ADR-009 Document Generation: docxtemplater + Uploaded DOCX Templates** —
+  flow owners upload a `.docx` template per node; AI fills `{{variable}}`
+  placeholders; `docxtemplater` preserves template formatting. Local
+  filesystem storage in Phases 1–3; MinIO (`IObjectStorage`) from Phase 4.
 - **ADR-010 External Workflow Integration via INodeExecutor** — port shape
   includes `userId` / `userRole` from day one; `MockNodeExecutor` ships at MVP,
   `N8nNodeExecutor` is Phase 5. Express webhook receiver lives in `apps/api`.
@@ -203,9 +207,11 @@ during `/build`. Each phase doc references the subset it satisfies.
 - [ ] When confidence ≥ 90 and `readyToAdvance` is true, the step badge in the
       progress rail flips to complete (green checkmark) and the next node's
       prompt streams in.
-- [ ] When a step with `output_type='generate_document'` completes, a document
-      card renders inline with a Download button that delivers a DOCX file
-      named `[FlowName]-[NodeName]-[SessionId]-[Date].docx`.
+- [ ] When a step with `output_type='generate_document'` completes (and a
+      `.docx` template has been uploaded for that node), a document card
+      renders inline with a Download button that delivers a DOCX file named
+      `[FlowName]-[NodeName]-[SessionId]-[Date].docx`. The DOCX matches the
+      uploaded template's formatting with `{{variable}}` tags replaced.
 - [ ] An admin viewing `/admin/sessions` sees every session in the
       organisation; user badges (name + initials) appear on each card.
 - [ ] Sharing a session URL copies `[base_url]/chats/[sessionId]?shared=true`;
@@ -254,16 +260,17 @@ Captured to prevent scope creep — these are deliberately deferred.
   per turn. Mitigation: run conversation `streamText` and confidence
   `streamObject` in parallel; render text immediately, update confidence when it
   resolves.
-- **`/tmp` document storage lost on restart** — documented limitation. Document
-  rows in `app_documents` reference `storage_path`; on missing file the
-  download endpoint returns 410 with a "regenerate" hint. Phase 4 considers
-  durable storage.
+- **File storage lost if `DOCUMENT_STORAGE_PATH` not volume-mounted** —
+  documented limitation for Phases 1–3. Document rows in `app_documents`
+  reference `storage_path`; on missing file the download endpoint returns 410
+  with a "regenerate" hint. Phase 4 resolves this with MinIO (`IObjectStorage`
+  port) backed by a named Docker volume.
 - **Drag-to-connect on React Flow with custom node** — handle position and
   pointer-events must be carefully styled to avoid orphaned edges. Risk
   addressed in Phase 1b acceptance criteria.
-- **`docx-js` table rendering** — Markdown tables require explicit conversion
-  to `docx.Table`. Phase 3 templates avoid tables in v1 (use headed sections
-  with bullet lists); table support is a Phase 4 polish item if needed.
+- **docxtemplater tag validation** — malformed `{{` tags in an uploaded
+  template cause a parse error at generation time. Mitigated by a dry-run
+  validation on template upload that surfaces the error before saving.
 - **n8n payload contract stability** — including `userId` / `userRole` in
   `NodeExecutionInput` from day one (ADR-010) prevents Phase 5 from being a
   breaking change. Open question: do we also include `sessionTitle` and

@@ -1,4 +1,4 @@
-# ADR-009 — Document Generation: docx-js + Markdown Templates (MVP)
+# ADR-009 — Document Generation: docxtemplater + Uploaded DOCX Templates
 
 - **Status**: Accepted
 - **Date**: 2026-05-19
@@ -13,35 +13,64 @@ constraints:
   PDF.
 - Generation must happen **server-side** — the AI key never reaches the
   browser.
-- A document is a function of `(node.config.document_template_markdown,
-  sessionMessages, flowContextDocs)` — pure inputs, no external state.
+- A document is a function of `(uploadedTemplate, sessionMessages,
+  flowContextDocs)` — pure inputs, no external state.
 - Filenames must be predictable for filing in agency document stores.
+- **Templates must preserve agency branding** — letterhead, headers/footers,
+  table structure, styles, and fonts. A Markdown-to-DOCX converter cannot
+  replicate an agency's existing template layout.
 
 The template stack already includes Vercel AI SDK and Anthropic. It does
-not include a DOCX library.
+not include a DOCX templating library.
 
 ## Decision
 
-Adopt **`docx`** (npm `docx`, "docx-js") as the DOCX rendering library.
+Adopt **`docxtemplater`** (+ **`pizzip`** peer dependency) as the DOCX
+template engine.
+
+Flow owners upload a real `.docx` file as the document template for each
+document-generating node. The template uses `{{variable_name}}` mustache-style
+placeholder tags wherever the AI should fill in content. `docxtemplater`
+substitutes those tags at generation time, preserving all surrounding DOCX
+formatting, styles, and structure.
+
+### Template authoring
+
+- Template authors create a `.docx` in Word or LibreOffice.
+- Placeholders are written as `{{variable_name}}` — they work anywhere Word
+  accepts text: body paragraphs, table cells, headers, footers, text boxes.
+- `docxtemplater` loop syntax (`{#items}...{/items}`) is available for
+  repeated sections such as evaluation criteria rows.
+- Template variables and their descriptions are documented by the flow owner
+  in the node's AI instructions so the model knows what to populate.
 
 ### Pipeline
 
-1. Step completes (confidence ≥ 90 and `readyToAdvance === true`, and the
-   node has `output_type = 'generate_document'`).
-2. The `DocumentGenerationService` (`packages/adapters/src/documents/docx-generator.ts`)
-   calls `ILanguageModel.generateText` with:
-   - **system prompt** = `node.config.document_template_markdown`
-   - **user content** = compact session transcript + flow context docs
-3. The model returns structured Markdown (headings, paragraphs, bullets).
-4. The adapter parses the Markdown using a small built-in converter
-   (`markdown → docx.Document`) supporting: H1–H3, paragraphs, bullets,
-   numbered lists, bold, italic. **Tables are not supported at MVP**; templates
-   in Phase 3 avoid them.
-5. `Packer.toBuffer(document)` produces a DOCX buffer.
-6. The buffer is written to `/tmp/<sessionId>-<nodeId>-<isoDate>.docx`.
-7. A row is inserted into `app_documents` with `storage_path`, `filename`,
+1. A node with `output_type = 'generate_document'` is configured. The admin
+   uploads a `.docx` template file via the node config modal (Phase 3). The
+   template is stored via `IObjectStorage` (MinIO in Phase 4; local `/tmp` in
+   Phase 3 with a documented restart-loss limitation). The storage path and
+   original filename are written to the node's `config` jsonb as
+   `document_template_path` and `document_template_filename`.
+2. Step completes (confidence ≥ 90, `readyToAdvance === true`).
+3. `DocumentGenerationService`
+   (`packages/adapters/src/documents/docx-generator.ts`) loads the template
+   bytes from `IObjectStorage`.
+4. Extracts the list of `{{variable_name}}` tags from the template using
+   `docxtemplater`'s dry-run inspection.
+5. Calls `ILanguageModel.generateText` with:
+   - **system prompt** = `node.config.ai_instruction` (the document-generation
+     instruction, which includes variable descriptions)
+   - **user content** = compact session transcript + flow context docs +
+     "Return a JSON object with exactly these keys: `[variable_name, ...]`"
+6. The model returns structured JSON: `{ [variableName: string]: string }`.
+7. `docxtemplater` fills the template with the JSON data, producing a DOCX
+   buffer that exactly matches the template's formatting.
+8. The buffer is written to `IObjectStorage` under
+   `generated/<sessionId>/<filename>`.
+9. A row is inserted into `app_documents` with `storage_path`, `filename`,
    and an AI-generated 2-line `summary` for the chat card.
-8. The chat UI re-renders to include the document card.
+10. The chat UI re-renders to include the document card.
 
 ### Filename pattern
 
@@ -57,55 +86,76 @@ truncated to its first 8 chars for readability. Example:
 
 `GET /api/documents/[documentId]` — requires authenticated session; verifies
 the requesting user can read the parent session (own session, admin, or shared
-viewer); streams the file from `storage_path` with `Content-Disposition`
+viewer); streams the file from `IObjectStorage` with `Content-Disposition`
 matching the `filename`. Returns `410 Gone` with `{ error, hint: "regenerate" }`
-if the file is missing on disk (server restart wiped `/tmp`).
+if the object is missing (e.g. storage was wiped).
 
-### Why not store DOCX in Postgres `bytea` or S3 at MVP
+### Library choice: `docxtemplater` + `pizzip`
 
-- Postgres `bytea`: works but adds row weight to common queries; preferred
-  for "small, durable" artefacts only. DOCX files can be 50 KB–500 KB.
-- S3 (or any object store): introduces an infrastructure dependency that the
-  template does not currently have. Phase 4+ may add a generic
-  `IObjectStorage` port and swap from `/tmp`.
+- `docxtemplater` handles template parsing and placeholder substitution.
+- `pizzip` (required peer) handles the underlying DOCX ZIP manipulation.
+- No custom parser to write or maintain.
+- Supports all DOCX features natively: tables, headers, footers, lists,
+  images (via the image module if needed later).
 
-For MVP, `/tmp` + documented limitation ("documents are lost on server
-restart — regenerate by re-completing the step") is acceptable.
+### Storage: `IObjectStorage` port
 
-### Markdown parser
+Introduced in Phase 4. The port (in `packages/domain`) abstracts over object
+storage backends. Phase 4 ships a `MinioStorageAdapter` in
+`packages/adapters/src/storage/` backed by a MinIO service in
+`docker-compose.yml`. Production deployments swap MinIO for AWS S3 or
+equivalent via a single env-var change.
 
-A 200-line custom parser, not a full Markdown library. Reasons:
+In Phase 3 (before Phase 4), templates are stored at
+`DOCUMENT_STORAGE_PATH/templates/<nodeId>/` (local filesystem, env-var
+configurable, defaults to `./data/`). Generated documents are stored at
+`DOCUMENT_STORAGE_PATH/generated/<sessionId>/`. This directory should be
+volume-mounted in any persistent deployment; the documented limitation
+("documents lost if volume unmounted") is resolved in Phase 4 with MinIO.
 
-- Most full Markdown → DOCX libraries either bring a heavy CommonMark
-  dependency or produce styled output we can't customise.
-- We control exactly which Markdown subset our templates use; supporting only
-  that subset is cheaper than supporting all of CommonMark.
+### Why not a Markdown-to-DOCX converter
 
-The parser lives at
-`packages/adapters/src/documents/markdown-to-docx.ts` and has its own test
-file covering every supported construct.
+- Agency procurement templates have fixed letterhead, headers/footers, table
+  layouts, and styles. A Markdown-to-DOCX converter cannot replicate these.
+- Template authors work in Word or LibreOffice; they should not need to learn
+  a custom Markdown subset.
+- A custom Markdown parser is one more internal surface to maintain and test.
+  `docxtemplater` is a mature library (5 M weekly downloads) with its own
+  test suite.
 
 ## Consequences
 
 **Positive**
 
-- No external services. Self-contained on the API process.
+- Generated DOCX exactly matches the uploaded template's branding, styles,
+  tables, and structure. No visual gap between template and output.
+- No custom Markdown parser. Template maintenance is in Word/LibreOffice, not
+  code.
+- `docxtemplater` supports tables, headers/footers, and loops out of the box —
+  no deferred "Phase 4 table support" limitation.
 - Editable output suits agency review workflows.
-- Pure-function pipeline (`input → docx`) is easy to test offline.
+- Pure-function pipeline (`template bytes + JSON data → docx`) is easy to
+  test offline.
 
 **Negative**
 
-- `/tmp` storage is ephemeral. Documented limitation; addressed in Phase 4+.
-- No tables in v1 templates. Markdown table support is on the parser's
-  roadmap (Phase 4 polish) if real templates need it.
-- The custom Markdown parser is one more thing to maintain. Mitigation:
-  scope strict (only what templates use), fully tested, single file.
+- Template authors must learn the `{{variable_name}}` syntax (minor;
+  one-paragraph documentation is sufficient).
+- Malformed tags in an uploaded template cause a `docxtemplater` parse error
+  at generation time — mitigated by a dry-run validation on upload that
+  returns a user-friendly error before saving the template.
+- Phase 3 uses local filesystem storage; `/data/` directory must be
+  volume-mounted for persistence. Fully resolved in Phase 4 with MinIO.
 
 ## Tests
 
-- Snapshot test for each seed template: feed a canned session transcript,
-  assert the produced DOCX has the expected text content (extracted via
-  `docx`'s own reader).
-- Parser tests: every Markdown construct in isolation.
-- Endpoint tests: own-session 200; another user's session 403; missing file
+- Unit tests for `DocxGenerator`: feed a test `.docx` template with known
+  `{{variable}}` tags and a JSON payload; assert the output DOCX contains
+  the substituted values (extracted via `docxtemplater`'s reader or
+  `mammoth`).
+- Template validation test: a template with a malformed tag (`{{unclosed`)
+  returns a structured error and does not write to storage.
+- Endpoint tests: own-session 200; another user's session 403; missing object
   410.
+- Round-trip test: generated buffer opens cleanly — no XML errors (verified
+  by `docxtemplater`'s own parser).
