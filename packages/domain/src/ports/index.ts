@@ -17,3 +17,5 @@ export * from "./flow-edge-repository";
 export * from "./session-repository";
 export * from "./session-message-repository";
 export * from "./session-agent";
+export * from "./document-storage";
+export * from "./document-generator";

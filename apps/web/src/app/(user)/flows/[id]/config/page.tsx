@@ -47,6 +47,10 @@ const toRfNode = (node: {
     name: node.name,
     colour: node.colour,
     aiInstruction: (node.config.aiInstruction as string | null) ?? null,
+    doneWhen: (node.config.doneWhen as string | null) ?? null,
+    outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
+    documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
+    documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
   },
 });
 
@@ -168,10 +172,33 @@ export default function FlowOwnerCanvasPage() {
     positionTimers.current.set(node.id, timer);
   }, [updatePositionMutation, flowId]);
 
+  const handleUploadTemplate = useCallback(async (file: File): Promise<{ path: string; filename: string } | { error: string }> => {
+    if (!editingNodeId || editingNodeId.startsWith("temp-")) {
+      return { error: "Save the step first before uploading a template." };
+    }
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`/api/flows/${flowId}/nodes/${editingNodeId}/template`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json() as { path?: string; filename?: string; error?: string };
+    if (!res.ok || data.error) {
+      return { error: data.error ?? "Upload failed" };
+    }
+    return { path: data.path!, filename: data.filename! };
+  }, [editingNodeId, flowId]);
+
   const handleConfigSave = useCallback(async (values: NodeConfigValues) => {
     if (!editingNodeId) return;
     setIsSavingConfig(true);
-    const config = { aiInstruction: values.aiInstruction, doneWhen: values.doneWhen, outputType: values.outputType };
+    const config = {
+      aiInstruction: values.aiInstruction,
+      doneWhen: values.doneWhen,
+      outputType: values.outputType,
+      documentTemplatePath: values.documentTemplatePath ?? null,
+      documentTemplateFilename: values.documentTemplateFilename ?? null,
+    };
     const isTempNode = editingNodeId.startsWith("temp-");
 
     try {
@@ -251,8 +278,10 @@ export default function FlowOwnerCanvasPage() {
         name: editingData.name,
         colour: editingData.colour ?? "#6366f1",
         aiInstruction: editingData.aiInstruction ?? "",
-        doneWhen: ((editingNode?.data as Record<string, unknown>).doneWhen as string | undefined) ?? "",
-        outputType: ((editingNode?.data as Record<string, unknown>).outputType as "conversation_only" | "generate_document" | undefined) ?? "conversation_only",
+        doneWhen: (editingData.doneWhen as string | null) ?? "",
+        outputType: (editingData.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
+        documentTemplatePath: (editingData.documentTemplatePath as string | null) ?? null,
+        documentTemplateFilename: (editingData.documentTemplateFilename as string | null) ?? null,
       }
     : undefined;
 
@@ -308,6 +337,7 @@ export default function FlowOwnerCanvasPage() {
         onDelete={editingNodeId && !editingNodeId.startsWith("temp-") ? handleNodeDelete : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
+        onUploadTemplate={editingNodeId && !editingNodeId.startsWith("temp-") ? handleUploadTemplate : undefined}
       />
     </div>
   );

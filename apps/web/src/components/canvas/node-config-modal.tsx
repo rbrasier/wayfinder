@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type ChangeEvent, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,6 +28,8 @@ export interface NodeConfigValues {
   aiInstruction: string;
   doneWhen: string;
   outputType: "conversation_only" | "generate_document";
+  documentTemplatePath?: string | null;
+  documentTemplateFilename?: string | null;
 }
 
 interface NodeConfigModalProps {
@@ -37,6 +39,7 @@ interface NodeConfigModalProps {
   onDelete?: () => void;
   onClose: () => void;
   isSaving?: boolean;
+  onUploadTemplate?: (file: File) => Promise<{ path: string; filename: string } | { error: string }>;
 }
 
 const DEFAULT_VALUES: NodeConfigValues = {
@@ -45,6 +48,8 @@ const DEFAULT_VALUES: NodeConfigValues = {
   aiInstruction: "",
   doneWhen: "",
   outputType: "conversation_only",
+  documentTemplatePath: null,
+  documentTemplateFilename: null,
 };
 
 export function NodeConfigModal({
@@ -54,9 +59,13 @@ export function NodeConfigModal({
   onDelete,
   onClose,
   isSaving = false,
+  onUploadTemplate,
 }: NodeConfigModalProps) {
   const [values, setValues] = useState<NodeConfigValues>({ ...DEFAULT_VALUES, ...initialValues });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -69,8 +78,35 @@ export function NodeConfigModal({
   const handleOpenChange = (isOpen: boolean) => {
     if (!isOpen) {
       setConfirmDelete(false);
+      setUploadError(null);
       onClose();
     }
+  };
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUploadTemplate) return;
+    setUploadError(null);
+    setIsUploading(true);
+    try {
+      const result = await onUploadTemplate(file);
+      if ("error" in result) {
+        setUploadError(result.error);
+      } else {
+        set("documentTemplatePath", result.path);
+        set("documentTemplateFilename", result.filename);
+      }
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveTemplate = async () => {
+    if (!onUploadTemplate) return;
+    set("documentTemplatePath", null);
+    set("documentTemplateFilename", null);
+    setUploadError(null);
   };
 
   return (
@@ -172,8 +208,54 @@ export function NodeConfigModal({
               </div>
 
               {values.outputType === "generate_document" && (
-                <div className="rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500">
-                  Upload a .docx template — available after Phase 3
+                <div className="space-y-2">
+                  <Label>DOCX template</Label>
+                  {!onUploadTemplate ? (
+                    <p className="text-xs text-muted-foreground rounded-md border border-dashed border-gray-300 bg-gray-50 p-3">
+                      Save this step first, then re-open to upload a template.
+                    </p>
+                  ) : values.documentTemplateFilename ? (
+                    <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <span className="text-xs text-emerald-800 flex-1 truncate">
+                        {values.documentTemplateFilename}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs text-gray-500 hover:text-gray-700 shrink-0"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                      >
+                        Replace
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-red-500 hover:text-red-700 shrink-0"
+                        onClick={handleRemoveTemplate}
+                        disabled={isUploading}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="w-full rounded-md border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-500 hover:border-indigo-400 hover:bg-indigo-50 hover:text-indigo-600 transition-colors disabled:opacity-50"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
+                      {isUploading ? "Uploading…" : "Click to upload a .docx template"}
+                    </button>
+                  )}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".docx"
+                    className="sr-only"
+                    onChange={handleFileChange}
+                  />
+                  {uploadError && (
+                    <p className="text-xs text-red-600">{uploadError}</p>
+                  )}
                 </div>
               )}
             </div>

@@ -10,4 +10,6 @@ export * from "./audit/index";
 export * from "./health/index";
 export * from "./telemetry/index";
 export * from "./node-executors/index";
+export * from "./documents/index";
+export * from "./storage/index";
 export * from "./factory";

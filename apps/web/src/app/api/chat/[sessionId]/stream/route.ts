@@ -1,6 +1,6 @@
 import { createDataStreamResponse, generateText, streamObject, streamText } from "ai";
 import { resolveModel } from "@rbrasier/adapters";
-import type { ConversationalNodeConfig } from "@rbrasier/domain";
+import type { ConversationalNodeConfig, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
 import { turnSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 
@@ -116,7 +116,7 @@ export async function POST(
         missingInformation: turn.confidence.missingInformation,
       });
 
-      await container.useCases.runTurn.execute({
+      const turnResult = await container.useCases.runTurn.execute({
         session,
         flowId: flow.id,
         userMessage: lastUserMessage,
@@ -125,6 +125,22 @@ export async function POST(
         branchChoice: turn.branchChoice,
         advanceThreshold: (nodeConfig.advanceConfidenceThreshold ?? 90),
       });
+
+      if (!turnResult.error && turnResult.data.advanced) {
+        const assistantMessages = await container.repos.sessionMessages.listBySession(session.id);
+        if (!assistantMessages.error) {
+          const milestone = [...assistantMessages.data].reverse().find(
+            (m) => m.role === "assistant" && m.stepNodeId === session.currentNodeId,
+          );
+          if (
+            milestone &&
+            nodeConfig.outputType === "generate_document" &&
+            nodeConfig.documentTemplatePath
+          ) {
+            void generateDocument(container, milestone.id, session.id, flow, nodes, assistantMessages.data, currentNode);
+          }
+        }
+      }
 
       if (dbMessages.filter((m) => m.role === "user").length === 0) {
         void generateTitle(container, session.id, lastUserMessage, provider);
@@ -141,6 +157,34 @@ export async function POST(
       return "An error occurred during the AI response. Please try again.";
     },
   });
+}
+
+async function generateDocument(
+  container: ReturnType<typeof getContainer>,
+  messageId: string,
+  sessionId: string,
+  flow: Flow,
+  nodes: FlowNode[],
+  messages: SessionMessage[],
+  node: FlowNode,
+): Promise<void> {
+  try {
+    await container.useCases.generateDocument.execute({
+      messageId,
+      sessionId,
+      messages,
+      flow,
+      node,
+    });
+  } catch (cause) {
+    await container.services.errorLogger.log({
+      level: "error",
+      message: "Document generation failed",
+      stack: cause instanceof Error ? cause.stack ?? null : null,
+      page: `api/chat/${sessionId}/stream`,
+      metadata: { sessionId, messageId, nodeId: node.id },
+    });
+  }
 }
 
 async function generateTitle(

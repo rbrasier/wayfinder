@@ -8,6 +8,7 @@ import {
   DeleteFlowNode,
   DeleteUser,
   FailJob,
+  GenerateDocument,
   GetFeatureFlag,
   GetFlowCanvas,
   GetSession,
@@ -38,6 +39,7 @@ import {
   UpsertFeatureFlag,
 } from "@rbrasier/application";
 import {
+  DocxGenerator,
   DrizzleAuditLogger,
   DrizzleConversationRepository,
   DrizzleErrorLogRepository,
@@ -54,6 +56,7 @@ import {
   FlowSessionGraph,
   LangGraphAgentRunner,
   LanguageModelAdapter,
+  LocalDocumentStorage,
   PinoLogger,
   PkiCertAdapter,
   createAuth,
@@ -90,6 +93,8 @@ const build = () => {
   const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
   const agent = new LangGraphAgentRunner(llm);
   const sessionAgent = new FlowSessionGraph();
+  const docxGenerator = new DocxGenerator();
+  const documentStorage = new LocalDocumentStorage();
 
   const pkiConfig = {
     trustedProxyIps: (env.PKI_TRUSTED_PROXY_IPS ?? "")
@@ -139,6 +144,7 @@ const build = () => {
     services: { llm, agent, sessionAgent, errorLogger, auditLogger },
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages },
     useCases: {
+      generateDocument: new GenerateDocument(docxGenerator, documentStorage, llm, sessionMessages),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),

@@ -6,6 +6,7 @@ import {
   type ISessionMessageRepository,
   type NewSessionMessage,
   type Result,
+  type SessionDocument,
   type SessionMessage,
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
@@ -45,6 +46,18 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
     }
   }
 
+  async findById(id: string): Promise<Result<SessionMessage | null>> {
+    try {
+      const [row] = await this.db
+        .select()
+        .from(app_session_messages)
+        .where(eq(app_session_messages.id, id));
+      return ok(row ? toEntity(row) : null);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to find session message.", cause));
+    }
+  }
+
   async listBySession(sessionId: string): Promise<Result<SessionMessage[]>> {
     try {
       const rows = await this.db
@@ -55,6 +68,20 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list session messages.", cause));
+    }
+  }
+
+  async updateDocument(id: string, document: SessionDocument): Promise<Result<SessionMessage>> {
+    try {
+      const [row] = await this.db
+        .update(app_session_messages)
+        .set({ document })
+        .where(eq(app_session_messages.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", "Session message not found."));
+      return ok(toEntity(row));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to update session message document.", cause));
     }
   }
 }

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
+import { DocumentCard } from "./document-card";
 import { MilestonePill } from "./milestone-pill";
 
 interface ConfidenceAnnotation {
@@ -25,6 +26,7 @@ interface MessageFeedProps {
   streamingMessages: UIMessage[];
   nodes: FlowNode[];
   isStreaming: boolean;
+  onRegenerateDocument?: (messageId: string) => void;
 }
 
 const formatRelativeTime = (date: Date): string => {
@@ -40,6 +42,7 @@ export function MessageFeed({
   streamingMessages,
   nodes,
   isStreaming,
+  onRegenerateDocument,
 }: MessageFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -49,7 +52,6 @@ export function MessageFeed({
 
   const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
 
-  // Build unified message list: use streaming messages if streaming, else DB messages
   const showStreaming = isStreaming || streamingMessages.length > dbMessages.length;
 
   return (
@@ -68,6 +70,16 @@ export function MessageFeed({
 
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";
+          const hasTemplate = Boolean(config?.["documentTemplatePath"]);
+
+          type DocState = "generating" | "no_template" | "failed" | "done" | null;
+          const docState: DocState = isAdvancingMsg && isDocNode
+            ? msg.document
+              ? "done"
+              : hasTemplate
+              ? "generating"
+              : "no_template"
+            : null;
 
           return (
             <div key={msg.id}>
@@ -98,11 +110,27 @@ export function MessageFeed({
                 </div>
               </div>
               {isAdvancingMsg && node && (
-                <MilestonePill
-                  nodeName={node.name}
-                  confidence={msg.confidence ?? 0}
-                  isDocumentNode={isDocNode}
-                />
+                <>
+                  <MilestonePill
+                    nodeName={node.name}
+                    confidence={msg.confidence ?? 0}
+                    documentState={docState}
+                    onRegenerate={
+                      docState === "generating" && onRegenerateDocument
+                        ? () => onRegenerateDocument(msg.id)
+                        : undefined
+                    }
+                  />
+                  {msg.document && (
+                    <DocumentCard
+                      messageId={msg.id}
+                      document={msg.document}
+                      onRegenerate={
+                        onRegenerateDocument ? () => onRegenerateDocument(msg.id) : undefined
+                      }
+                    />
+                  )}
+                </>
               )}
             </div>
           );

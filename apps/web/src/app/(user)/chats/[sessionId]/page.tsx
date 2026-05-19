@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
@@ -8,7 +8,6 @@ import type { FlowNode } from "@rbrasier/domain";
 import { Badge } from "@/components/ui/badge";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { MessageFeed } from "@/components/chat/message-feed";
-import { MilestonePill } from "@/components/chat/milestone-pill";
 import { ShareButton } from "@/components/chat/share-button";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
 import { trpc } from "@/trpc/client";
@@ -31,11 +30,11 @@ export default function SessionPage({ params }: SessionPageProps) {
   const utils = trpc.useUtils();
   const sessionQuery = trpc.session.get.useQuery({ sessionId });
   const sessionData = sessionQuery.data;
+  const [_regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
 
   const dbMessages = sessionData?.messages ?? [];
   const nodes: FlowNode[] = sessionData?.nodes ?? [];
 
-  // Determine completed node IDs from message history
   const completedNodeIds: string[] = [];
   if (dbMessages.length > 0) {
     const messagesByNode = new Map<string, { maxConfidence: number; lastStepNodeId: string }>();
@@ -81,6 +80,20 @@ export default function SessionPage({ params }: SessionPageProps) {
     handleSubmit();
   };
 
+  const handleRegenerateDocument = useCallback(async (messageId: string) => {
+    setRegeneratingIds((prev) => new Set(prev).add(messageId));
+    try {
+      await fetch(`/api/documents/${messageId}`, { method: "POST" });
+      void utils.session.get.invalidate({ sessionId });
+    } finally {
+      setRegeneratingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(messageId);
+        return next;
+      });
+    }
+  }, [sessionId, utils.session.get]);
+
   if (sessionQuery.isLoading) {
     return (
       <main className="flex h-screen flex-col items-center justify-center gap-4 text-muted-foreground">
@@ -101,12 +114,9 @@ export default function SessionPage({ params }: SessionPageProps) {
   }
 
   const { session, flow } = sessionData;
-  const config = nodes.find((n) => n.id === session.currentNodeId)?.config as Record<string, unknown> | undefined;
-  const isCurrentNodeDocType = config?.["outputType"] === "generate_document";
 
   return (
     <main className="flex h-screen flex-col overflow-hidden">
-      {/* Header */}
       <header className="flex items-center justify-between border-b bg-white px-4 py-3">
         <div className="flex items-center gap-3 min-w-0">
           <Link href="/chats" className="text-sm text-muted-foreground hover:text-foreground">
@@ -124,31 +134,20 @@ export default function SessionPage({ params }: SessionPageProps) {
         </div>
       </header>
 
-      {/* Step progress rail */}
       <StepProgressRail
         nodes={nodes}
         currentNodeId={session.currentNodeId}
         completedNodeIds={completedNodeIds}
       />
 
-      {/* Message feed */}
       <MessageFeed
         dbMessages={dbMessages}
         streamingMessages={messages}
         nodes={nodes}
         isStreaming={isLoading}
+        onRegenerateDocument={!isShared ? handleRegenerateDocument : undefined}
       />
 
-      {/* Milestone pill when last message advanced a generate_document node */}
-      {!isLoading && session.status === "active" && isCurrentNodeDocType && completedNodeIds.length > 0 && (
-        <MilestonePill
-          nodeName={nodes.find((n) => n.id === session.currentNodeId)?.name ?? ""}
-          confidence={0}
-          isDocumentNode
-        />
-      )}
-
-      {/* Composer */}
       <ChatComposer
         value={input}
         onChange={(v) => setInput(v)}
