@@ -7,3 +7,5 @@ export * from "./drizzle-job-repository";
 export * from "./drizzle-flow-repository";
 export * from "./drizzle-flow-node-repository";
 export * from "./drizzle-flow-edge-repository";
+export * from "./drizzle-session-repository";
+export * from "./drizzle-session-message-repository";

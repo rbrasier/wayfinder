@@ -10,20 +10,25 @@ import {
   FailJob,
   GetFeatureFlag,
   GetFlowCanvas,
+  GetSession,
   GetUsageSummary,
   GrantFlowOwner,
+  ListAllSessions,
   ListErrors,
   ListFeatureFlags,
   ListFlows,
   ListFlowsForUser,
   ListJobs,
+  ListSessions,
   ListUsers,
   LogAuditEvent,
   LogError,
   PingJob,
   RegisterJob,
   RemoveContextDoc,
+  RunTurn,
   SendMessage,
+  StartSession,
   TrackUsage,
   UpdateErrorStatus,
   UpdateFlow,
@@ -42,8 +47,11 @@ import {
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
   DrizzleJobRepository,
+  DrizzleSessionMessageRepository,
+  DrizzleSessionRepository,
   DrizzleUsageRepository,
   DrizzleUserRepository,
+  FlowSessionGraph,
   LangGraphAgentRunner,
   LanguageModelAdapter,
   PinoLogger,
@@ -75,10 +83,13 @@ const build = () => {
   const flows = new DrizzleFlowRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
   const flowEdges = new DrizzleFlowEdgeRepository(db);
+  const sessions = new DrizzleSessionRepository(db);
+  const sessionMessages = new DrizzleSessionMessageRepository(db);
 
   const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER);
   const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
   const agent = new LangGraphAgentRunner(llm);
+  const sessionAgent = new FlowSessionGraph();
 
   const pkiConfig = {
     trustedProxyIps: (env.PKI_TRUSTED_PROXY_IPS ?? "")
@@ -125,8 +136,8 @@ const build = () => {
     pkiCertAdapter,
     logger,
     resolveSession: (token: string) => resolveSession(db, token),
-    services: { llm, agent, errorLogger, auditLogger },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages },
     useCases: {
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
@@ -160,6 +171,11 @@ const build = () => {
       addContextDoc: new AddContextDoc(flows),
       removeContextDoc: new RemoveContextDoc(flows),
       grantFlowOwner: new GrantFlowOwner(flows),
+      startSession: new StartSession(sessions, flows, flowNodes, flowEdges),
+      listSessions: new ListSessions(sessions),
+      listAllSessions: new ListAllSessions(sessions),
+      getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
+      runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
     },
   };
 };
