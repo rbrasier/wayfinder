@@ -1,12 +1,12 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: template-postgres
+    container_name: wayfinder-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: template
+      POSTGRES_DB: wayfinder
     ports:
       - "5432:5432"
     volumes:
@@ -17,9 +17,28 @@ services:
       timeout: 5s
       retries: 10
 
+  storage:
+    image: minio/minio:latest
+    container_name: wayfinder-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
   redis:
     image: redis:7-alpine
-    container_name: template-redis
+    container_name: wayfinder-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -28,7 +47,7 @@ services:
 
   langfuse:
     image: langfuse/langfuse:2
-    container_name: template-langfuse
+    container_name: wayfinder-langfuse
     restart: unless-stopped
     depends_on:
       postgres:
@@ -44,4 +63,5 @@ services:
 
 volumes:
   postgres-data:
+  minio-data:
   redis-data:

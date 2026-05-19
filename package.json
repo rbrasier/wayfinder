@@ -1,8 +1,8 @@
 {
   "name": "wayfinder",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
-  "description": "Production-ready AI application monorepo template (hexagonal architecture).",
+  "description": "Wayfinder — AI-guided workflow agent for document-heavy processes.",
   "packageManager": "pnpm@9.12.0",
   "engines": {
     "node": ">=20.0.0",

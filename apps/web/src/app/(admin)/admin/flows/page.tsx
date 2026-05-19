@@ -3,6 +3,7 @@
 import type { Flow } from "@rbrasier/domain";
 import Link from "next/link";
 import { useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "@/components/empty-state";
+import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { trpc } from "@/trpc/client";
 
 const ICONS = ["🗂️", "🏗️", "💬", "📋", "🔄", "⚙️"];
@@ -42,6 +45,7 @@ export default function AdminFlowsPage() {
     onSuccess: () => {
       void utils.flow.list.invalidate();
       setCreating(false);
+      toast.success("Flow created");
     },
   });
 
@@ -90,12 +94,15 @@ export default function AdminFlowsPage() {
       </CardHeader>
       <CardContent>
         {flowsQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <TableSkeletonRows count={4} />
         ) : !flowsQuery.data?.length ? (
-          <div className="flex flex-col items-center gap-4 py-24 text-center text-muted-foreground">
-            <p className="text-lg font-medium">No flows yet</p>
-            <p className="text-sm">Create a flow to define the guided workflow your users will follow.</p>
-          </div>
+          <EmptyState
+            icon="🗂️"
+            heading="No flows yet"
+            body="Create a flow to define the guided workflow your users will follow."
+            ctaLabel="New Flow"
+            onCta={() => { setForm(emptyForm()); setCreating(true); }}
+          />
         ) : (
           <Table>
             <TableHeader>

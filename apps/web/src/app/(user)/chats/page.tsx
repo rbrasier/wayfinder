@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { Flow } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/empty-state";
+import { CardSkeletonGrid } from "@/components/skeleton/card-skeleton";
 import { NewChatModal } from "@/components/chat/new-chat-modal";
 import { SessionCard } from "@/components/chat/session-card";
 import { trpc } from "@/trpc/client";
@@ -59,17 +61,15 @@ export default function ChatsPage() {
       </div>
 
       {sessionsQuery.isLoading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100" />
-          ))}
-        </div>
+        <CardSkeletonGrid count={3} />
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center gap-4 py-24 text-center text-muted-foreground">
-          <p className="text-lg font-medium">No sessions yet</p>
-          <p className="text-sm">Start a new chat to begin a guided workflow session.</p>
-          <Button onClick={() => setNewChatOpen(true)}>New Chat</Button>
-        </div>
+        <EmptyState
+          icon="💬"
+          heading="No chats yet"
+          body="Start a new chat to begin a guided workflow session."
+          ctaLabel="New Chat"
+          onCta={() => setNewChatOpen(true)}
+        />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((session) => (

@@ -12,8 +12,50 @@ concurrency:
 
 jobs:
   validate:
-    name: Typecheck / Lint / Test
+    name: Typecheck / Lint / Test / Validate
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wayfinder_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 6
+        volumes: []
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_test
+      REDIS_URL: redis://localhost:6379
+      MINIO_ENDPOINT: localhost
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: wayfinder-documents
+      MINIO_USE_SSL: "false"
+      BETTER_AUTH_SECRET: ci-test-secret-must-be-at-least-16-chars
+      BETTER_AUTH_URL: http://localhost:3000
+      AI_DEFAULT_PROVIDER: anthropic
+
     steps:
       - uses: actions/checkout@v4
 
@@ -36,8 +78,8 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Build packages
-        run: pnpm build
+      - name: Validate
+        run: ./validate.sh
 
   security:
     name: Security scan

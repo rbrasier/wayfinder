@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { NextResponse, type NextRequest } from "next/server";
 import type { ConversationalNodeConfig } from "@rbrasier/domain";
 import { getContainer } from "@/lib/container";
@@ -48,22 +47,22 @@ export async function GET(
 
   const { storagePath, filename } = documentMeta;
 
-  try {
-    const bytes = await readFile(storagePath);
-    return new NextResponse(bytes, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Content-Disposition": `attachment; filename="${filename}"`,
-        "Content-Length": String(bytes.length),
-      },
-    });
-  } catch {
+  const getResult = await container.objectStorage.get(storagePath);
+  if (getResult.error) {
     return NextResponse.json(
       { error: "document_unavailable", hint: "regenerate" },
       { status: 410 },
     );
   }
+
+  return new NextResponse(getResult.data as unknown as BodyInit, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(getResult.data.length),
+    },
+  });
 }
 
 export async function POST(

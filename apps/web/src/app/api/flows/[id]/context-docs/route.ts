@@ -1,8 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, basename } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { getContainer } from "@/lib/container";
-import { serverEnv } from "@/lib/env";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = new Set([
@@ -68,22 +65,22 @@ export async function POST(
     return NextResponse.json({ error: "File type not allowed" }, { status: 400 });
   }
 
-  const env = serverEnv();
-  const storageBase = env.DOCUMENT_STORAGE_PATH;
-  const dir = join(storageBase, "context", flowId);
-  await mkdir(dir, { recursive: true });
+  const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const storageKey = `context/${flowId}/${timestamp}-${safeFilename}`;
+  const buffer = Buffer.from(await file.arrayBuffer());
 
-  const safeFilename = basename(file.name).replace(/[^a-zA-Z0-9._-]/g, "_");
-  const storagePath = join(dir, safeFilename);
-  const buffer = await file.arrayBuffer();
-  await writeFile(storagePath, Buffer.from(buffer));
+  const putResult = await container.objectStorage.put(storageKey, buffer, file.type);
+  if (putResult.error) {
+    return NextResponse.json({ error: "Failed to store document" }, { status: 500 });
+  }
 
   const doc = {
     id: crypto.randomUUID(),
     filename: safeFilename,
     mimeType: file.type,
     sizeBytes: file.size,
-    storagePath,
+    storagePath: storageKey,
   };
 
   const result = await container.useCases.addContextDoc.execute(flowId, doc);

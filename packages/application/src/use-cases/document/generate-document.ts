@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import {
   domainError,
   err,
@@ -7,7 +6,7 @@ import {
   type Flow,
   type FlowNode,
   type IDocumentGenerator,
-  type IDocumentStorage,
+  type IObjectStorage,
   type ILanguageModel,
   type ISessionMessageRepository,
   type Result,
@@ -31,7 +30,7 @@ export interface GenerateDocumentOutput {
 export class GenerateDocument {
   constructor(
     private readonly documentGenerator: IDocumentGenerator,
-    private readonly documentStorage: IDocumentStorage,
+    private readonly objectStorage: IObjectStorage,
     private readonly languageModel: ILanguageModel,
     private readonly sessionMessages: ISessionMessageRepository,
   ) {}
@@ -43,7 +42,7 @@ export class GenerateDocument {
       return err(domainError("VALIDATION_FAILED", "No template configured for this node."));
     }
 
-    const templateResult = await this.documentStorage.readBytes(config.documentTemplatePath);
+    const templateResult = await this.objectStorage.get(config.documentTemplatePath);
     if (templateResult.error) return templateResult;
 
     const tagsResult = this.documentGenerator.extractTags({ templateBytes: templateResult.data });
@@ -76,10 +75,14 @@ export class GenerateDocument {
     if (generateResult.error) return generateResult;
 
     const filename = this.buildFilename(input.flow.name, input.node.name, input.sessionId);
-    const storagePath = join("generated", input.sessionId, filename);
+    const storageKey = `generated/${input.sessionId}/${filename}`;
 
-    const writeResult = await this.documentStorage.writeBytes(storagePath, generateResult.data.docxBytes);
-    if (writeResult.error) return writeResult;
+    const putResult = await this.objectStorage.put(
+      storageKey,
+      generateResult.data.docxBytes,
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    );
+    if (putResult.error) return putResult;
 
     const summaryResult = await this.languageModel.generateObject<{ summary: string }>({
       purpose: "document-summary",
@@ -93,7 +96,7 @@ export class GenerateDocument {
 
     const document: SessionDocument = {
       filename,
-      storagePath,
+      storagePath: storageKey,
       summary,
       generatedAt: new Date().toISOString(),
     };

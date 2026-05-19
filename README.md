@@ -1,142 +1,105 @@
-# ai-app-template
+# Wayfinder
 
-Production-ready AI application monorepo template using **hexagonal architecture**.
+**AI-guided workflow agent for document-heavy processes.**
+
+Wayfinder helps organisations run structured, multi-step workflows where each step involves a
+conversational AI gathering information, and one or more steps produce filled-in DOCX documents
+(reports, contracts, RFTs, assessments). A flow owner designs the workflow on a canvas; users
+follow it via a chat interface; the AI handles all prompting, branching, and document generation.
 
 ---
 
-## Create a new project
+## Quickstart (Docker Compose)
 
 ```bash
-mkdir my-app && cd my-app
-pnpm create ai-app-template
-./restart.sh
-# web → http://localhost:3000   api → http://localhost:3001
+git clone https://github.com/rbrasier/wayfinder
+cd wayfinder
+cp .env.example .env
+# Edit .env: set ADMIN_SEED_EMAIL, ANTHROPIC_API_KEY (or OPENAI_API_KEY / MISTRAL_API_KEY)
+docker compose up
 ```
 
-The create script prompts for project name, package scope, AI provider, database
-setup (name or existing URL), and admin email. It detects PostgreSQL locally, offers
-to install it or use Docker Compose if not found, auto-generates `BETTER_AUTH_SECRET`,
-and writes a fully-populated `.env`. Then `./restart.sh` installs all packages, starts
-infrastructure, runs migrations, and launches the dev servers.
+- Web UI → http://localhost:3000
+- MinIO console → http://localhost:9001 (user: `minioadmin`, pass: `minioadmin`)
 
-To pull in framework updates later:
+On first run, request a magic link for the email you set in `ADMIN_SEED_EMAIL`. You are automatically
+promoted to admin on login. Navigate to **Admin → Flows** to create your first flow.
 
-```bash
-pnpm run framework:update
-```
+---
+
+## Local development (without Docker Compose)
+
+See [`docs/guides/setup-local.md`](docs/guides/setup-local.md).
+
+## Railway deployment
+
+See [`docs/guides/setup-railway.md`](docs/guides/setup-railway.md).
 
 ---
 
 ## Stack
 
-- **Monorepo**: pnpm workspaces + Turborepo
-- **Frontend**: Next.js 15 (App Router) — `/app/(user)/*` and `/app/(admin)/*`
-- **UI**: shadcn/ui + Tailwind CSS
-- **Streaming**: Vercel AI SDK (`useChat`, `streamObject`)
-- **Internal API**: tRPC v11 via Next.js Route Handlers
-- **Public API**: Express with Zod-validated routes
-- **DB**: PostgreSQL + Drizzle ORM + pgvector
-- **Auth**: Better Auth (magic-link, passwordless)
-- **AI**: Vercel AI SDK with `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/mistral`
-- **Agents**: LangGraph.js (lives entirely in `packages/adapters`)
-- **Observability**: Langfuse (stubbed by default — activates when env vars are set)
-- **Errors**: Custom in-DB error log via `IErrorLogger` port
-- **Tests**: Vitest
-- **Runtime**: Node 20+, always-on (Railway / Fly.io)
+| Layer | Technology |
+|---|---|
+| Monorepo | pnpm workspaces + Turborepo |
+| Frontend | Next.js 15 (App Router) |
+| UI | shadcn/ui + Tailwind CSS |
+| Streaming | Vercel AI SDK (`useChat`, `streamObject`) |
+| Internal API | tRPC v11 |
+| DB | PostgreSQL + pgvector + Drizzle ORM |
+| Auth | Better Auth (magic-link, passwordless) |
+| AI | Vercel AI SDK — Anthropic / OpenAI / Mistral |
+| Agents | LangGraph.js |
+| Object storage | MinIO (S3-compatible) |
+| Observability | Langfuse (opt-in) + OpenTelemetry |
+| Tests | Vitest |
 
 ---
 
-## Contributing to this template
+## Architecture
 
-If you are working on the template itself (not creating a project from it):
-
-```bash
-pnpm install
-cp .env.example .env   # fill in DATABASE_URL, BETTER_AUTH_SECRET, etc.
-docker compose up -d
-pnpm db:migrate
-./restart.sh
-# web → http://localhost:3000   api → http://localhost:3001
-```
-
----
-
-## Repo Layout
+Wayfinder follows **hexagonal architecture** (ports and adapters):
 
 ```
-apps/
-  web/                 Next.js — user + admin UI, tRPC routes
-  api/                 Express — public REST API
-packages/
-  domain/              Pure TypeScript. Entities, ports, errors.
-                       ZERO external dependencies.
-  application/         Use cases. Imports only @rbrasier/domain.
-  adapters/            Drizzle, AI SDK, LangGraph, Langfuse, Better Auth.
-                       Implements port interfaces.
-  shared/              Zod schemas, types, utils. No business logic.
-docs/
-  guides/              Architecture, conventions, how-tos
-  development/
-    to-be-implemented/ PRDs, ADRs, phase docs awaiting implementation
-    implemented/       Completed work organised by version (v0.1/, v0.2/…)
-    adr/               Permanent home for ADRs
-    prd/               Permanent home for PRDs
-CLAUDE.md              Skill routing rules — read this first
-VERSION                Plain text version (e.g. 0.1.0)
-validate.sh            Runs typecheck + lint + tests + arch checks
-restart.sh             Kills ports, runs migrations, starts dev servers
+packages/domain        — pure TypeScript entities + port interfaces. No dependencies.
+packages/application   — use cases. Imports domain only.
+packages/adapters      — Drizzle, MinIO, LangGraph, Vercel AI SDK, Better Auth.
+apps/web               — Next.js app. Imports application + adapters.
+apps/api               — Express health/webhook API. Imports application + adapters.
 ```
 
----
-
-## The Skill System
-
-This template ships with a **skill routing layer** in `CLAUDE.md`. Every prompt
-to Claude Code is routed automatically:
-
-| If you say…                                | Skill                       |
-| ------------------------------------------ | --------------------------- |
-| "let's plan…", "design a…"                 | New App / Feature Setup     |
-| "review the docs", "let's build this"      | Documentation Review        |
-| "implement phase X"                        | Build — New Phase / Feature |
-| "change…", "extend…"                       | Enhancement / Revision      |
-| "broken", "not working"                    | Bug Fix                     |
-
-Each skill follows a documented workflow that produces docs in
-`docs/development/`, then code, then runs `./validate.sh`.
-
-See `docs/guides/skills.md` for full detail.
+Architecture rules are enforced by `validate.sh` and ESLint.
 
 ---
 
-## Working Pages
+## Configuration reference
 
-- **`/`** — Landing hero
-- **`/sample`** — AI demo: streaming structured response (text + confidence + rationale)
-- **`/admin`** — Admin dashboard (auth required, magic-link)
-- **`/admin/users`** — User CRUD
-- **`/admin/errors`** — Grouped error log with status updates
+See [`.env.example`](.env.example) for all variables with inline documentation.
 
----
+Key variables:
 
-## Versioning
+| Variable | Description |
+|---|---|
+| `ADMIN_SEED_EMAIL` | Email auto-promoted to admin on first login |
+| `ANTHROPIC_API_KEY` | Required when `AI_DEFAULT_PROVIDER=anthropic` |
+| `DATABASE_URL` | Postgres connection string |
+| `MINIO_ENDPOINT` | MinIO / S3 hostname |
+| `MINIO_ACCESS_KEY` | MinIO / S3 access key |
+| `MINIO_SECRET_KEY` | MinIO / S3 secret key |
+| `BETTER_AUTH_SECRET` | 32-byte random string for session signing |
 
-`MAJOR.MINOR.PATCH` tracked in both `VERSION` and root `package.json` (must match).
-
-- MAJOR — breaking API / domain changes
-- MINOR — DB schema change, new phase, new feature
-- PATCH — bug fixes, UI tweaks, config changes with no schema impact
-
-Starting version: `0.1.0`.
+For production on AWS S3, set `MINIO_ENDPOINT=s3.amazonaws.com` and `MINIO_USE_SSL=true`.
 
 ---
 
-## Validation
+## Document templates
 
-```bash
-./validate.sh
-```
+Example `.docx` templates are in [`docs/templates/`](docs/templates/). Upload them via the
+node configuration modal on the canvas (**Admin → Flows → [flow] → edit a generate_document node**).
 
-Runs typecheck, lint, tests, Drizzle schema check, domain-purity grep,
-table-naming check, version sync, and doc lifecycle checks. Must pass
-before any commit lands.
+---
+
+## Licence
+
+[Functional Source Licence 1.1 (FSL-1.1)](LICENSE) — free to use, study, and modify; converts to
+Apache 2.0 two years after each release.

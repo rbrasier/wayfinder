@@ -1,9 +1,6 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { join, basename } from "node:path";
 import { NextResponse, type NextRequest } from "next/server";
 import { DocxGenerator } from "@rbrasier/adapters";
 import { getContainer } from "@/lib/container";
-import { serverEnv } from "@/lib/env";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -81,18 +78,23 @@ export async function POST(
     );
   }
 
-  const env = serverEnv();
-  const safeFilename = basename(file.name).replace(/[^a-zA-Z0-9._-]/g, "_");
+  const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const dir = join(env.DOCUMENT_STORAGE_PATH, "templates", nodeId);
-  await mkdir(dir, { recursive: true });
-  const storagePath = join(dir, `${timestamp}-${safeFilename}`);
-  await writeFile(storagePath, buffer);
+  const storageKey = `templates/${nodeId}/${timestamp}-${safeFilename}`;
+
+  const putResult = await container.objectStorage.put(
+    storageKey,
+    buffer,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  );
+  if (putResult.error) {
+    return NextResponse.json({ error: "Failed to store template" }, { status: 500 });
+  }
 
   const existingConfig = node.config as Record<string, unknown>;
   const updatedConfig = {
     ...existingConfig,
-    documentTemplatePath: storagePath,
+    documentTemplatePath: storageKey,
     documentTemplateFilename: safeFilename,
   };
 
@@ -104,7 +106,7 @@ export async function POST(
   }
 
   return NextResponse.json(
-    { path: storagePath, filename: safeFilename, tagCount: validationResult.data.tags.length },
+    { path: storageKey, filename: safeFilename, tagCount: validationResult.data.tags.length },
     { status: 200 },
   );
 }
@@ -139,6 +141,12 @@ export async function DELETE(
   if (!node) return NextResponse.json({ error: "Node not found" }, { status: 404 });
 
   const existingConfig = node.config as Record<string, unknown>;
+  const templateKey = existingConfig.documentTemplatePath as string | null;
+
+  if (templateKey) {
+    await container.objectStorage.delete(templateKey);
+  }
+
   const updatedConfig = {
     ...existingConfig,
     documentTemplatePath: null,

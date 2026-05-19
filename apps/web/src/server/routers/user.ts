@@ -5,9 +5,14 @@ import {
   updateUserInputSchema,
 } from "@rbrasier/shared";
 import { TRPCError } from "@trpc/server";
-import { adminProcedure, router } from "../trpc";
+import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 
 export const userRouter = router({
+  me: authenticatedProcedure.query(({ ctx }) => ({
+    userId: ctx.userId,
+    isAdmin: ctx.isAdmin,
+  })),
+
   list: adminProcedure.input(listUsersInputSchema).query(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.listUsers.execute(input);
     if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });

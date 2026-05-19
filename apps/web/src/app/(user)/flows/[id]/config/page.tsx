@@ -3,11 +3,15 @@
 import {
   Background,
   BackgroundVariant,
+  Controls,
   MarkerType,
+  MiniMap,
   ReactFlow,
+  ReactFlowProvider,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
+  useReactFlow,
   type Connection,
   type Edge,
   type EdgeChange,
@@ -19,6 +23,7 @@ import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
@@ -62,10 +67,8 @@ const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): E
   markerEnd: { type: MarkerType.ArrowClosed },
 });
 
-export default function FlowOwnerCanvasPage() {
-  const params = useParams<{ id: string }>();
-  const flowId = params.id;
-
+function CanvasInner({ flowId }: { flowId: string }) {
+  const { fitView } = useReactFlow();
   const canvasQuery = trpc.flow.getCanvas.useQuery({ flowId });
 
   const [rfNodes, setRfNodes] = useState<Node[]>([]);
@@ -97,7 +100,10 @@ export default function FlowOwnerCanvasPage() {
     setContextDocs(data.flow.contextDocs);
     setFlowName(data.flow.name);
     setFlowStatus(data.flow.status);
-  }, [canvasQuery.data]);
+    if (data.nodes.length > 3) {
+      setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
+    }
+  }, [canvasQuery.data, fitView]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setRfNodes((nds) => applyNodeChanges(changes, nds));
@@ -301,7 +307,9 @@ export default function FlowOwnerCanvasPage() {
             onClick={() => {
               const target = flowStatus === "published" ? "draft" : "published";
               setFlowStatus(target);
-              void updateFlowMutation.mutateAsync({ flowId, status: target });
+              void updateFlowMutation.mutateAsync({ flowId, status: target }).then(() => {
+                toast.success(target === "published" ? "Flow published" : "Flow unpublished");
+              });
             }}
           >
             {flowStatus === "published" ? "Unpublish" : "Publish"}
@@ -325,6 +333,8 @@ export default function FlowOwnerCanvasPage() {
           deleteKeyCode="Backspace"
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+          <Controls />
+          <MiniMap zoomable pannable />
         </ReactFlow>
       </div>
 
@@ -340,5 +350,14 @@ export default function FlowOwnerCanvasPage() {
         onUploadTemplate={editingNodeId && !editingNodeId.startsWith("temp-") ? handleUploadTemplate : undefined}
       />
     </div>
+  );
+}
+
+export default function FlowOwnerCanvasPage() {
+  const params = useParams<{ id: string }>();
+  return (
+    <ReactFlowProvider>
+      <CanvasInner flowId={params.id} />
+    </ReactFlowProvider>
   );
 }

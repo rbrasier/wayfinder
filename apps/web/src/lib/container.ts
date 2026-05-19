@@ -24,6 +24,7 @@ import {
   ListUsers,
   LogAuditEvent,
   LogError,
+  OverrideBranch,
   PingJob,
   RegisterJob,
   RemoveContextDoc,
@@ -56,7 +57,7 @@ import {
   FlowSessionGraph,
   LangGraphAgentRunner,
   LanguageModelAdapter,
-  LocalDocumentStorage,
+  MinioStorageAdapter,
   PinoLogger,
   PkiCertAdapter,
   createAuth,
@@ -94,7 +95,16 @@ const build = () => {
   const agent = new LangGraphAgentRunner(llm);
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
-  const documentStorage = new LocalDocumentStorage();
+  const objectStorage = new MinioStorageAdapter({
+    endPoint: env.MINIO_ENDPOINT,
+    port: env.MINIO_PORT,
+    useSSL: env.MINIO_USE_SSL,
+    accessKey: env.MINIO_ACCESS_KEY,
+    secretKey: env.MINIO_SECRET_KEY,
+    bucket: env.MINIO_BUCKET,
+    pathStyle: true,
+  });
+  void objectStorage.initialise();
 
   const pkiConfig = {
     trustedProxyIps: (env.PKI_TRUSTED_PROXY_IPS ?? "")
@@ -140,11 +150,12 @@ const build = () => {
     auth,
     pkiCertAdapter,
     logger,
+    objectStorage,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger },
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages },
     useCases: {
-      generateDocument: new GenerateDocument(docxGenerator, documentStorage, llm, sessionMessages),
+      generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),
@@ -182,6 +193,7 @@ const build = () => {
       listAllSessions: new ListAllSessions(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
+      overrideBranch: new OverrideBranch(sessions, flowEdges),
     },
   };
 };

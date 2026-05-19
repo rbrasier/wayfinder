@@ -30,20 +30,11 @@ code, run `./validate.sh` and fix all failures before declaring done.
 
 ## Project Identity
 
-This repo is the **template** scaffold. Framework packages are published under
-`@rbrasier/*` on GitHub Package Registry and consumed as versioned npm
-dependencies by downstream projects. The `packages/create` bootstrapper is
-published to public npm as `create-ai-app-template`.
+This repo implements **Wayfinder**, an AI-guided workflow agent for document-heavy
+processes. Framework packages live under `@rbrasier/*` in `packages/`. The two
+application packages (`apps/web`, `apps/api`) contain all Wayfinder-specific logic.
 
-When a real project is bootstrapped via `npx create-ai-app-template` or `pnpm run init`:
-
-- `packages/` is removed (framework source becomes an npm dep, not local workspace code)
-- Only `@rbrasier/web` and `@rbrasier/api` are renamed to `@<app-scope>/web` and `@<app-scope>/api`
-- `workspace:*` framework deps become versioned ranges (e.g. `^0.5.0`)
-- `pnpm-workspace.yaml` is updated to `apps/*` only
-- `.framework-scope=@rbrasier`, `.template-version`, and `.npmrc` are written
-
-Run `./validate.sh` once infrastructure (DB, Redis) is running.
+Run `./validate.sh` once infrastructure (Postgres, Redis, MinIO) is running.
 
 ---
 

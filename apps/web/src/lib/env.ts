@@ -19,6 +19,15 @@ const serverEnvSchema = z.object({
   PKI_TRUSTED_PROXY_IPS: z.string().optional(),
   PKI_SESSION_TTL_HOURS: z.coerce.number().int().positive().default(8),
   DOCUMENT_STORAGE_PATH: z.string().default("./data"),
+  MINIO_ENDPOINT: z.string().default("localhost"),
+  MINIO_PORT: z.coerce.number().int().default(9000),
+  MINIO_ACCESS_KEY: z.string().default("minioadmin"),
+  MINIO_SECRET_KEY: z.string().default("minioadmin"),
+  MINIO_BUCKET: z.string().default("wayfinder-documents"),
+  MINIO_USE_SSL: z
+    .string()
+    .transform((v) => v === "true")
+    .default("false"),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

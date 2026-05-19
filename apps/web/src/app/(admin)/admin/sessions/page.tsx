@@ -5,6 +5,8 @@ import type { Flow, Session, User } from "@rbrasier/domain";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmptyState } from "@/components/empty-state";
+import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { trpc } from "@/trpc/client";
 
 const statusVariant = (status: string) => {
@@ -45,12 +47,13 @@ export default function AdminSessionsPage() {
       </CardHeader>
       <CardContent>
         {sessionsQuery.isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <TableSkeletonRows count={4} />
         ) : sessions.length === 0 ? (
-          <div className="flex flex-col items-center gap-4 py-24 text-center text-muted-foreground">
-            <p className="text-lg font-medium">No sessions yet</p>
-            <p className="text-sm">Sessions will appear here once users start chats.</p>
-          </div>
+          <EmptyState
+            icon="📋"
+            heading="No sessions yet"
+            body="Sessions will appear here once users start chats."
+          />
         ) : (
           <Table>
             <TableHeader>
