@@ -55,7 +55,6 @@ All entities already exist from Phase 0. Phase 1 adds:
 | `FlowOwnerCanvas` page (user surface)                   | `apps/web/src/app/(user)/flows/[id]/config/page.tsx`           | yes |
 | `flow` tRPC router (real impl)                          | `apps/web/src/server/trpc/routers/flow.ts`                     | replaces stub |
 | `flow.context-doc` upload handler                       | `apps/web/src/app/api/flows/[id]/context-docs/route.ts`        | yes |
-| Node document template upload handler                   | `apps/web/src/app/api/flows/[id]/nodes/[nodeId]/template/route.ts` | yes |
 | Use cases in `packages/application/src/use-cases/flow/` | `create-flow.ts`, `list-flows.ts`, `update-node.ts`, etc.      | yes |
 
 ## 5. Pages / surfaces
@@ -108,14 +107,10 @@ shadcn `<Dialog>` with:
 - Instructions for the AI (textarea, required)
 - Done when… (textarea, required)
 - Output type toggle: `Conversation only` / `Generate document`
-- Document template section (shown only when output type = `Generate document`):
-  - File upload accepting `.docx` only, max 5 MB.
-  - On upload, the server extracts `{{placeholder_name}}` markers from the
-    template XML and returns them as read-only chips displayed under the
-    upload field, so the flow admin can confirm the AI will be asked to fill
-    in the correct fields (per ADR-009).
-  - Shows the uploaded filename + a "Replace" affordance if a template is
-    already saved.
+- Document template upload (shown only when output type = `Generate document`)
+  — **Phase 1 renders a disabled affordance** ("Upload a .docx template —
+  available after Phase 3") so the modal layout is established. The real
+  upload is wired in Phase 3 per ADR-009.
 - "Remove step" button → confirmation → deletes node + connected edges.
 
 ### Context documents strip
@@ -124,9 +119,9 @@ Sticky at the bottom of the canvas page:
 
 - File upload (accepts `.pdf`, `.docx`, `.xlsx`; max 20 MB per file).
 - For each uploaded doc: type badge, filename, size, remove button.
-- Files stored at `/tmp/flow-context/<flowId>/<filename>` for MVP; row in
-  `app_flow_context_docs`. Documented as ephemeral storage per ADR-009 —
-  durable storage is a Phase 4+ concern.
+- Files stored at `DOCUMENT_STORAGE_PATH/context/<flowId>/<filename>` (env
+  var, defaults to `./data/`); row in `app_flow_context_docs`. Phase 4
+  migrates this to MinIO via the `IObjectStorage` port (ADR-009).
 
 ## 6. Database changes
 
@@ -153,9 +148,8 @@ None beyond Phase 0. All Phase 1 work uses the schema created in v1.1.0.
 - [ ] Uploading a PDF context doc shows a card in the bottom strip; the
       row is in `app_flow_context_docs`; removing the card deletes the row.
 - [ ] Switching a node to `Generate document` output type reveals the
-      template upload field; uploading a `.docx` saves the path in
-      `app_flow_nodes.config.document_template_path` and shows extracted
-      `{{placeholder}}` chips in the modal.
+      disabled template upload affordance ("Upload a .docx template —
+      available after Phase 3"); no upload is possible yet.
 - [ ] Publishing a flow flips `app_flows.status` to `published`. The flow
       now appears in `/chats` "New Chat" modal (which is fully implemented
       in Phase 2 — verify here only that the flow row's status is
@@ -204,10 +198,10 @@ Three sessions:
   it to match needs care. Acceptance criteria call for the drag-to-empty
   gesture to work; visual parity is "close enough" — pixel-match is Phase 4
   polish.
-- **`/tmp` context docs lost on restart** — documented limitation, same as
-  generated documents. The flow's `app_flow_context_docs` rows remain;
-  on missing file the AI gets a "context doc unavailable" notice and
-  proceeds without it.
+- **Context docs lost if `DOCUMENT_STORAGE_PATH` is not volume-mounted** —
+  documented limitation for Phase 1–3. The flow's `app_flow_context_docs`
+  rows remain; on missing file the AI gets a "context doc unavailable"
+  notice and proceeds without it. Phase 4 resolves this with MinIO.
 - **Branching UX** — Phase 1 supports multiple outgoing edges (the DB
   allows it). The canvas does not visually differentiate a branching node;
   the AI does the branch selection at session time per ADR-007. If branching

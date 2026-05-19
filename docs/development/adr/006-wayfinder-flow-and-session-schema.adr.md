@@ -1,6 +1,6 @@
 # ADR-006 — Wayfinder Flow & Session Schema
 
-- **Status**: Accepted
+- **Status**: Accepted (revised — consolidated from 8 to 5 tables)
 - **Date**: 2026-05-19
 
 ## Context
@@ -22,21 +22,58 @@ Per CLAUDE.md, application-specific tables use the `app_` prefix.
 
 ## Decision
 
-Eight new tables, all `app_*`, snake_case columns, every table has
+Five new tables, all `app_*`, snake_case columns. Every table has
 `id uuid primary key default gen_random_uuid()`, `created_at timestamp`,
 `updated_at timestamp`. The single exception is `app_session_messages`, which
 is append-only (chat messages are never edited) — no `updated_at`.
 
-| Table                   | Purpose                                       | Notes |
-| ----------------------- | --------------------------------------------- | ----- |
-| `app_flows`             | Flow definitions                              | `status` is `'draft' \| 'published'`; only published flows appear in the New Chat modal |
-| `app_flow_nodes`        | Nodes belonging to a flow                     | `type` enum: `'conversational'` (MVP) `\| 'auto'` (Phase 5). `config jsonb` holds per-type data (see below) |
-| `app_flow_edges`        | Directed edges                                | `from_node_id`, `to_node_id`. Branching = multiple rows with the same `from_node_id` |
-| `app_flow_context_docs` | Flow-level uploaded reference documents       | `storage_path` references `/tmp` for MVP; durable storage is Phase 4+ |
-| `app_flow_permissions`  | Per-flow access (see ADR-005)                 | `permission` enum: `'owner' \| 'viewer'` |
-| `app_sessions`          | Live + completed user sessions                | `status` enum: `'active' \| 'complete' \| 'abandoned'`. `current_node_id` advances as steps complete. `graph_checkpoint jsonb` holds LangGraph state (see ADR-007) |
-| `app_session_messages`  | Append-only chat history                      | `role`: `'user' \| 'assistant' \| 'system'`. `confidence smallint` (0–100, null for user/system). `step_node_id` records which step produced the message |
-| `app_documents`         | Generated DOCX records                        | `summary text` is the AI-generated 2-line preview shown on the document card |
+Permissions, context documents, and generated document metadata are embedded
+as `jsonb` columns on their parent rows rather than in separate tables.
+This reduces join complexity and query count for the two most common reads
+(load a flow for canvas editing; reload a session for chat).
+
+| Table                  | Purpose                                        | Notes |
+| ---------------------- | ---------------------------------------------- | ----- |
+| `app_flows`            | Flow definitions + embedded permissions + context docs | `status` is `'draft' \| 'published'`. `permissions jsonb` holds `[{userId, role}]`. `context_docs jsonb` holds `[{id, filename, mimeType, sizeBytes, storagePath}]` |
+| `app_flow_nodes`       | Nodes belonging to a flow                      | `type` enum: `'conversational'` (MVP) `\| 'auto'` (Phase 5). `config jsonb` holds per-type data (see below) |
+| `app_flow_edges`       | Directed edges                                 | `from_node_id`, `to_node_id`. Branching = multiple rows with the same `from_node_id` |
+| `app_sessions`         | Live + completed user sessions                 | `status` enum: `'active' \| 'complete' \| 'abandoned'`. `current_node_id` advances as steps complete. `graph_checkpoint jsonb` holds LangGraph state (see ADR-007) |
+| `app_session_messages` | Append-only chat history + optional document   | `role`: `'user' \| 'assistant' \| 'system'`. `confidence smallint` (0–100, null for user/system). `step_node_id` records which step produced the message. `document jsonb` is non-null only on assistant messages that triggered document generation |
+
+### Embedded JSON shapes
+
+**`app_flows.permissions`** (default `[]`):
+```jsonc
+[
+  { "userId": "<uuid>", "role": "owner" },
+  { "userId": "<uuid>", "role": "viewer" }
+]
+```
+`owner_user_id` column remains the canonical creator. `permissions` holds
+additional grants. Permission check: `role === 'admin' OR flow.owner_user_id === userId OR flow.permissions[].userId === userId && role === 'owner'`.
+
+**`app_flows.context_docs`** (default `[]`):
+```jsonc
+[
+  {
+    "id": "<uuid>",
+    "filename": "CPR-summary.pdf",
+    "mimeType": "application/pdf",
+    "sizeBytes": 204800,
+    "storagePath": "/tmp/uploads/<uuid>.pdf"
+  }
+]
+```
+
+**`app_session_messages.document`** (default `null`):
+```jsonc
+{
+  "filename": "ProcurementFlow-StepName-<sessionId>-2026-05-19.docx",
+  "storagePath": "/tmp/docs/<uuid>.docx",
+  "summary": "Two-line AI-generated preview of the document content.",
+  "generatedAt": "2026-05-19T10:00:00.000Z"
+}
+```
 
 ### Node `config` JSON shape
 
@@ -63,48 +100,62 @@ For `type = 'auto'` (Phase 5):
 }
 ```
 
-### Why `jsonb` for node config?
+### Why `jsonb` for permissions, context docs, and documents?
 
-- At MVP we don't know which fields a future node type will need (auto-node,
-  decision-node, retrieval-node, ...).
-- Promoting fields to columns later is a straightforward migration.
-- Querying inside node config is rare — the canvas loads the whole node row
-  and the AI consumes the whole row at session start.
+- **Permissions** — a flow typically has 1–5 permission entries. A separate
+  table adds a join to every canvas mutation check. Embedding keeps the
+  permission check in the already-loaded flow row. If permission sets grow
+  large, promotion to a table is a straightforward migration.
+- **Context docs** — a flow typically has 1–10 reference documents. The whole
+  set is loaded together whenever a session starts (to build the AI context).
+  A separate table adds a join on every session start; embedding avoids it.
+- **Documents** — a generated document is logically the output of the specific
+  assistant message that triggered it. Embedding on the message row means the
+  chat history load (a single query) also retrieves document metadata. The
+  file is stored on disk (`/tmp` at MVP); the jsonb holds only the metadata.
+- **Node config** — same rationale as before; future node types have unknown
+  fields.
+
+The tradeoff: these fields are invisible to SQL indexes and TypeScript without
+Zod parsing. Discipline required — all reads go through typed helpers in the
+domain layer.
 
 ### Indexes
 
-| Table                   | Index                                              | Why |
-| ----------------------- | -------------------------------------------------- | --- |
-| `app_flow_nodes`        | `(flow_id)`                                        | Canvas load |
-| `app_flow_edges`        | `(flow_id)`, `(from_node_id)`                      | Canvas load + advance lookup |
-| `app_flow_permissions`  | `(flow_id, user_id)` unique                        | Permission check per request |
-| `app_sessions`          | `(user_id, created_at desc)`, `(flow_id)`          | Session list |
-| `app_session_messages`  | `(session_id, created_at asc)`                     | Chat reload |
-| `app_documents`         | `(session_id)`                                     | Document re-render on reload |
+| Table                  | Index                                         | Why |
+| ---------------------- | --------------------------------------------- | --- |
+| `app_flow_nodes`       | `(flow_id)`                                   | Canvas load |
+| `app_flow_edges`       | `(flow_id)`, `(from_node_id)`                 | Canvas load + advance lookup |
+| `app_sessions`         | `(user_id, created_at desc)`, `(flow_id)`     | Session list |
+| `app_session_messages` | `(session_id, created_at asc)`                | Chat reload |
 
 ## Consequences
 
 **Positive**
 
-- `jsonb` keeps the canvas-editor data model flexible without prematurely
-  carving columns.
-- Append-only `app_session_messages` makes audit trivial — no `UPDATE` path.
+- 5 tables instead of 8 — fewer joins, simpler migration, simpler repository
+  implementations.
+- Canvas load (flow + nodes + edges) and session reload (session + messages)
+  are each satisfied by 3 queries with no joins to auxiliary tables.
 - `graph_checkpoint` lets a session resume after a server restart without
   replaying messages.
+- `document` on the message row keeps the chat history and document cards in
+  a single query.
 
 **Negative**
 
-- `jsonb` config is invisible to ESLint and TypeScript without parsing
-  through Zod. Discipline required: every `flow_nodes.config` read passes
-  through a `parseConversationalConfig(node)` helper in the domain layer.
-- Branching logic (edges out from one node) is correct in the schema but
-  needs careful UI to prevent orphans. Canvas tests cover this.
+- `permissions` and `context_docs` cannot be efficiently queried by userId or
+  filename without loading the whole flow row. Acceptable at MVP scale.
+- `document` jsonb on a message is append-only; a "regenerate" action produces
+  a new assistant message rather than updating the old one.
+- All jsonb reads pass through Zod helpers — discipline required to avoid
+  silent type drift.
 
 ## Migration plan
 
-One Drizzle migration `app_wayfinder_schema.sql` in Phase 0 creates all
-eight tables in one go. Phase 4 ships the seed data migration with the AU
-Gov procurement flow rows.
+One Drizzle migration `0004_app_wayfinder_schema.sql` in Phase 0 creates all
+five tables in one go. Phase 4 ships the seed data migration with the AU Gov
+procurement flow rows.
 
 ## Naming sanity check
 

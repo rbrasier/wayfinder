@@ -26,9 +26,9 @@ specialist support for every workflow instance.
   and produce the artefacts (RFT, Evaluation Report, Contract Management Plan)
   with minimal rework.
 - **Business Analyst / Policy Owner (Flow Owner)** — designs and maintains
-  workflow configurations on the canvas. Authors AI instructions, document
-  templates, and uploads context documents (CPR summary, delegation registers,
-  policy summaries).
+  workflow configurations on the canvas. Authors AI instructions, uploads `.docx`
+  document templates, and uploads context documents (CPR summary, delegation
+  registers, policy summaries).
 - **Admin** — manages users, flows, and sessions across the organisation. Can
   assign flow ownership and view all sessions for oversight.
 
@@ -40,7 +40,7 @@ specialist support for every workflow instance.
   in under 30 minutes — no code, no JSON editing.
 - Steps with a document template generate a download-ready DOCX automatically
   when confidence ≥ 90 and the AI signals `readyToAdvance`. Templates are
-  `.docx` files uploaded by the flow admin; the AI fills in `{{placeholder}}`
+  `.docx` files uploaded by the flow admin; the AI fills in `{{variable_name}}`
   markers from the session transcript (see ADR-009).
 - A shared session URL is viewable read-only by any authenticated user with the
   link.
@@ -48,8 +48,9 @@ specialist support for every workflow instance.
   (no new auth code required for MVP). Both admins and regular users authenticate
   via `/admin/login`.
 - Fresh installs have no seed flow — admins create flows from scratch via the
-  canvas. The quickstart demo path is: create flow → add nodes → upload template
-  → start chat → complete step → download DOCX.
+  canvas. Example `.docx` templates (RFT, Evaluation Report, Contract Management
+  Plan) are committed to `docs/templates/` and uploaded to flow nodes via the
+  admin canvas.
 
 ## 4. Non-goals
 
@@ -59,7 +60,9 @@ specialist support for every workflow instance.
 - No PDF output, no real-time collaborative session editing, no email
   notifications, no flow versioning, no analytics dashboard at MVP — all listed
   in Section 11.
-- No seed flows on fresh install — admins create flows from scratch.
+- No seeded AU Gov Procurement flow — the example templates in `docs/templates/`
+  are committed in Phase 3; flow owners create and configure flows manually via
+  the admin canvas.
 - No new authentication code paths. MVP reuses `AUTH_METHOD=magic-link` from
   v0.5.0. PKI/SAML/Entra mapping is Phase 6.
 - No mobile-optimised canvas — canvas is desktop-only and documented as such.
@@ -77,8 +80,9 @@ specialist support for every workflow instance.
 | FlowPermission    | `packages/domain/src/entities/flow-permission.ts`     | new            | user_id, flow_id, permission (`owner`/`viewer`) |
 | INodeExecutor port| `packages/domain/src/ports/node-executor.ts`          | new            | `MockNodeExecutor` MVP; `N8nNodeExecutor` Phase 5 |
 | FlowSessionGraph  | `packages/adapters/src/agents/flow-session-graph.ts`  | new            | LangGraph instance per session, extends ADR-004 |
-| IDocumentGenerator| `packages/domain/src/ports/document-generator.ts`     | new            | Port: `generate(templateBuffer, placeholders, filename)` + `extractPlaceholders(templateBuffer)` |
-| DocxTemplateGenerator| `packages/adapters/src/documents/docx-template-generator.ts` | new   | `docxtemplater` + `pizzip` implementation — substitutes `{{key}}` markers in uploaded `.docx` templates |
+| IDocumentGenerator| `packages/domain/src/ports/document-generator.ts`     | new            | Port: `generate(template, jsonData, filename)` + dry-run tag extraction |
+| DocxGenerator     | `packages/adapters/src/documents/docx-generator.ts`   | new            | `docxtemplater` + `pizzip` — fills uploaded `.docx` template with AI-generated JSON values |
+| IObjectStorage    | `packages/domain/src/ports/object-storage.ts`         | new (Phase 4)  | Abstracts file storage; `MinioStorageAdapter` in Phase 4, `LocalDocumentStorageAdapter` in Phase 3 |
 
 All new tables use the `app_` prefix (Wayfinder is the application built on the
 template, not core or AI infrastructure). Columns are snake_case. Every table has
@@ -93,7 +97,7 @@ template, not core or AI infrastructure). Columns are snake_case. Every table ha
    with a downloadable RFT.
 3. As a **flow owner**, I open my flow on the canvas, drag from a node's right
    handle to a blank area to create a new step, configure its AI instruction and
-   done-when criteria, optionally attach a Markdown document template, and save.
+   done-when criteria, optionally upload a `.docx` document template, and save.
 4. As a **flow owner**, I upload context documents (CPR summary, delegation
    register) to the flow so the AI cites them during every session.
 5. As an **admin**, I view every session in the organisation, filter by user and
@@ -142,21 +146,22 @@ template, not core or AI infrastructure). Columns are snake_case. Every table ha
 
 ## 8. Database changes
 
+Five new tables (consolidated from an earlier 8-table design — see ADR-006).
+Permissions, context documents, and generated document metadata are embedded
+as `jsonb` columns rather than separate tables, reducing join complexity.
+
 | Table                  | Change                                                          | Prefix valid? |
 | ---------------------- | --------------------------------------------------------------- | ------------- |
-| `app_flows`            | NEW — id, name, description, icon, owner_user_id, status (`draft`/`published`), created_at, updated_at | yes (app_) |
+| `app_flows`            | NEW — id, name, description, icon, owner_user_id, status (`draft`/`published`), permissions jsonb, context_docs jsonb, created_at, updated_at | yes (app_) |
 | `app_flow_nodes`       | NEW — id, flow_id, type, name, colour, position_x, position_y, config jsonb, created_at, updated_at | yes |
 | `app_flow_edges`       | NEW — id, flow_id, from_node_id, to_node_id, created_at, updated_at | yes |
-| `app_flow_context_docs`| NEW — id, flow_id, filename, mime_type, size_bytes, storage_path, created_at, updated_at | yes |
-| `app_flow_permissions` | NEW — id, flow_id, user_id, permission (`owner`/`viewer`), created_at, updated_at | yes |
 | `app_sessions`         | NEW — id, flow_id, user_id, status (`active`/`complete`/`abandoned`), title, current_node_id, graph_checkpoint jsonb, created_at, updated_at | yes |
-| `app_session_messages` | NEW — id, session_id, role (`user`/`assistant`/`system`), content, confidence smallint, step_node_id, created_at | yes |
-| `app_documents`        | NEW — id, session_id, node_id, filename, storage_path, summary, generated_at, created_at, updated_at | yes |
+| `app_session_messages` | NEW — id, session_id, role (`user`/`assistant`/`system`), content, confidence smallint, step_node_id, document jsonb, created_at | yes |
 
 All in the `app_` group (Wayfinder is the application built on the template).
 `ai_conversations` and `ai_messages` from v0.1 remain for the `/sample` demo and
 are not reused for session messages — sessions have a richer schema
-(`step_node_id`, `confidence`).
+(`step_node_id`, `confidence`, `document`).
 
 ## 9. Architectural decisions
 
@@ -182,11 +187,14 @@ are not reused for session messages — sessions have a richer schema
   built from the flow config at session start, checkpointed to Postgres.
 - **ADR-008 Canvas Builder on React Flow** — `@xyflow/react` as the canvas
   library; custom `ConversationalNode` component.
-- **ADR-009 Document Generation: docx-js + Markdown Templates** — server-side
-  generation, `/tmp` storage at MVP, documented limitation.
+- **ADR-009 Document Generation: docxtemplater + Uploaded DOCX Templates** —
+  flow owners upload a `.docx` template per node; AI fills `{{variable}}`
+  placeholders; `docxtemplater` preserves template formatting. Local
+  filesystem storage in Phases 1–3; MinIO (`IObjectStorage`) from Phase 4.
 - **ADR-010 External Workflow Integration via INodeExecutor** — port shape
-  includes `userId` / `userRole` from day one; `MockNodeExecutor` ships at MVP,
-  `N8nNodeExecutor` is Phase 5. Express webhook receiver lives in `apps/api`.
+  includes `userId`, `userRole`, `flowSlug`, and `sessionTitle` from day one;
+  `MockNodeExecutor` ships at MVP, `N8nNodeExecutor` is Phase 5. Express
+  webhook receiver lives in `apps/api`.
 - **ADR-011 Functional Source Licence** — adopted for the Wayfinder
   repository, matching n8n. Converts to Apache 2.0 after 2 years.
 
@@ -211,11 +219,11 @@ during `/build`. Each phase doc references the subset it satisfies.
 - [ ] When confidence ≥ 90 and `readyToAdvance` is true, the step badge in the
       progress rail flips to complete (green checkmark) and the next node's
       prompt streams in.
-- [ ] When a step with `output_type='generate_document'` completes, the server
-      fills the node's uploaded `.docx` template with AI-extracted placeholder
-      values; a document card renders inline with a Download button that
-      delivers the filled DOCX named
-      `[FlowName]-[NodeName]-[SessionId8]-[YYYY-MM-DD].docx`.
+- [ ] When a step with `output_type='generate_document'` completes (and a
+      `.docx` template has been uploaded for that node), a document card
+      renders inline with a Download button that delivers a DOCX file named
+      `[FlowName]-[NodeName]-[SessionId8]-[YYYY-MM-DD].docx`. The DOCX matches
+      the uploaded template's formatting with `{{variable}}` tags replaced.
 - [ ] An admin viewing `/admin/sessions` sees every session in the
       organisation; user badges (name + initials) appear on each card.
 - [ ] Sharing a session URL copies `[base_url]/chats/[sessionId]?shared=true`;
@@ -264,16 +272,17 @@ Captured to prevent scope creep — these are deliberately deferred.
   per turn. Mitigation: run conversation `streamText` and confidence
   `streamObject` in parallel; render text immediately, update confidence when it
   resolves.
-- **`/tmp` document storage lost on restart** — documented limitation. Document
-  rows in `app_documents` reference `storage_path`; on missing file the
-  download endpoint returns 410 with a "regenerate" hint. Phase 4 considers
-  durable storage.
+- **File storage lost if `DOCUMENT_STORAGE_PATH` not volume-mounted** —
+  documented limitation for Phases 1–3. Document rows in `app_documents`
+  reference `storage_path`; on missing file the download endpoint returns 410
+  with a "regenerate" hint. Phase 4 resolves this with MinIO (`IObjectStorage`
+  port) backed by a named Docker volume.
 - **Drag-to-connect on React Flow with custom node** — handle position and
   pointer-events must be carefully styled to avoid orphaned edges. Risk
   addressed in Phase 1b acceptance criteria.
-- **`docx-js` table rendering** — Markdown tables require explicit conversion
-  to `docx.Table`. Phase 3 templates avoid tables in v1 (use headed sections
-  with bullet lists); table support is a Phase 4 polish item if needed.
+- **docxtemplater tag validation** — malformed `{{` tags in an uploaded
+  template cause a parse error at generation time. Mitigated by a dry-run
+  validation on template upload that surfaces the error before saving.
 - **n8n payload contract stability** — `NodeExecutionInput` includes `userId`,
   `userRole`, `flowSlug`, and `sessionTitle` from day one (ADR-010) so Phase 5
   is an adapter swap with no port-breaking change. Resolved: all four fields

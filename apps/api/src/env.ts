@@ -4,6 +4,7 @@ const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   API_PORT: z.coerce.number().int().default(3001),
   DATABASE_URL: z.string().url(),
+  N8N_WEBHOOK_SECRET: z.string().optional(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral"]).default("anthropic"),
   ANTHROPIC_API_KEY: z.string().optional(),
