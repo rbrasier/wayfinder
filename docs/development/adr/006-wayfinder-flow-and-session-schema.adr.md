@@ -24,8 +24,8 @@ Per CLAUDE.md, application-specific tables use the `app_` prefix.
 
 Eight new tables, all `app_*`, snake_case columns, every table has
 `id uuid primary key default gen_random_uuid()`, `created_at timestamp`,
-`updated_at timestamp` (except `app_session_messages` which is append-only —
-no `updated_at`).
+`updated_at timestamp`. The single exception is `app_session_messages`, which
+is append-only (chat messages are never edited) — no `updated_at`.
 
 | Table                   | Purpose                                       | Notes |
 | ----------------------- | --------------------------------------------- | ----- |

@@ -41,6 +41,7 @@ shells under which Phase 1 and Phase 2 will hang their pages.
 ## 3. Non-goals
 
 - No canvas behaviour (drag, connect, modal) — Phase 1.
+- No `(user)/flows/[id]/config` route shell (flow-owner canvas) — Phase 1.
 - No chat UI or AI calls — Phase 2.
 - No document generation — Phase 3.
 - No seed data beyond admin user — Phase 4.
@@ -89,9 +90,9 @@ Single Drizzle migration `00NN_app_wayfinder_schema.sql` adds:
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `app_flows`             | `id`, `name`, `description`, `icon`, `owner_user_id` (fk core_users), `status` (`draft`/`published`), `created_at`, `updated_at` |
 | `app_flow_nodes`        | `id`, `flow_id` (fk), `type`, `name`, `colour`, `position_x int`, `position_y int`, `config jsonb`, `created_at`, `updated_at`   |
-| `app_flow_edges`        | `id`, `flow_id` (fk), `from_node_id` (fk), `to_node_id` (fk), `created_at`                                               |
-| `app_flow_context_docs` | `id`, `flow_id` (fk), `filename`, `mime_type`, `size_bytes`, `storage_path`, `created_at`                                |
-| `app_flow_permissions`  | `id`, `flow_id` (fk), `user_id` (fk core_users), `permission` (`owner`/`viewer`), `created_at`. Unique `(flow_id, user_id)` |
+| `app_flow_edges`        | `id`, `flow_id` (fk), `from_node_id` (fk), `to_node_id` (fk), `created_at`, `updated_at`                                               |
+| `app_flow_context_docs` | `id`, `flow_id` (fk), `filename`, `mime_type`, `size_bytes`, `storage_path`, `created_at`, `updated_at`                                |
+| `app_flow_permissions`  | `id`, `flow_id` (fk), `user_id` (fk core_users), `permission` (`owner`/`viewer`), `created_at`, `updated_at`. Unique `(flow_id, user_id)` |
 | `app_sessions`          | `id`, `flow_id` (fk), `user_id` (fk), `status` (`active`/`complete`/`abandoned`), `title`, `current_node_id`, `graph_checkpoint jsonb`, `created_at`, `updated_at` |
 | `app_session_messages`  | `id`, `session_id` (fk), `role`, `content`, `confidence smallint`, `step_node_id`, `created_at`. Append-only (no `updated_at`) |
 | `app_documents`         | `id`, `session_id` (fk), `node_id` (fk), `filename`, `storage_path`, `summary`, `generated_at`, `created_at`, `updated_at` |

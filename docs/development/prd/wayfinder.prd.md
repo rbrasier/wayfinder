@@ -138,9 +138,9 @@ template, not core or AI infrastructure). Columns are snake_case. Every table ha
 | ---------------------- | --------------------------------------------------------------- | ------------- |
 | `app_flows`            | NEW — id, name, description, icon, owner_user_id, status (`draft`/`published`), created_at, updated_at | yes (app_) |
 | `app_flow_nodes`       | NEW — id, flow_id, type, name, colour, position_x, position_y, config jsonb, created_at, updated_at | yes |
-| `app_flow_edges`       | NEW — id, flow_id, from_node_id, to_node_id, created_at | yes |
-| `app_flow_context_docs`| NEW — id, flow_id, filename, mime_type, size_bytes, storage_path, created_at | yes |
-| `app_flow_permissions` | NEW — id, flow_id, user_id, permission (`owner`/`viewer`), created_at | yes |
+| `app_flow_edges`       | NEW — id, flow_id, from_node_id, to_node_id, created_at, updated_at | yes |
+| `app_flow_context_docs`| NEW — id, flow_id, filename, mime_type, size_bytes, storage_path, created_at, updated_at | yes |
+| `app_flow_permissions` | NEW — id, flow_id, user_id, permission (`owner`/`viewer`), created_at, updated_at | yes |
 | `app_sessions`         | NEW — id, flow_id, user_id, status (`active`/`complete`/`abandoned`), title, current_node_id, graph_checkpoint jsonb, created_at, updated_at | yes |
 | `app_session_messages` | NEW — id, session_id, role (`user`/`assistant`/`system`), content, confidence smallint, step_node_id, created_at | yes |
 | `app_documents`        | NEW — id, session_id, node_id, filename, storage_path, summary, generated_at, created_at, updated_at | yes |
