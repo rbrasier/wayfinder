@@ -48,6 +48,11 @@ generated document.
 - Docker Compose runs the full stack (Next.js + Express API + Postgres +
   MinIO) with one command.
 - GitHub Actions CI pipeline (lint, type-check, test, validate.sh).
+- Setup guides for local development (without docker-compose) and Railway
+  hosting so developers can run Wayfinder outside of Docker.
+- `restart.sh` checks that all locally-configured services (MinIO, Postgres)
+  are healthy before proceeding, with a clear error message if any are
+  unreachable.
 
 ## 3. Non-goals
 
@@ -81,6 +86,9 @@ generated document.
 | Updated `.env.example`                       | repo root                                                                | edit |
 | Updated `CLAUDE.md`                          | repo root                                                                | edit |
 | GitHub Actions: `ci.yml`                     | `.github/workflows/ci.yml`                                               | yes |
+| `docs/guides/setup-local.md`                 | `docs/guides/setup-local.md`                                             | yes |
+| `docs/guides/setup-railway.md`               | `docs/guides/setup-railway.md`                                           | yes |
+| `restart.sh` service readiness checks        | `restart.sh`                                                             | edit |
 
 ## 5. Pages / surfaces
 
@@ -183,6 +191,42 @@ When a branching node returns `branchChoice: null` three consecutive times:
   and resumes the session from that node.
 - Non-admins see only the system message with no override affordance.
 
+### Setup guides
+
+Two new guides in `docs/guides/`:
+
+**`setup-local.md`** — running Wayfinder on a local machine without docker-compose:
+- Prerequisites: Node 20+, pnpm, Postgres (local or cloud), MinIO (local
+  binary or cloud-hosted, e.g. MinIO Cloud or Backblaze B2).
+- Step-by-step: clone, `pnpm install`, copy `.env.example` to `.env` and fill
+  in vars, `pnpm db:migrate`, `pnpm db:seed` (creates the first admin),
+  `pnpm dev`.
+- Troubleshooting table for the three most common failures (missing env var,
+  Postgres connection refused, MinIO bucket not found).
+
+**`setup-railway.md`** — one-click deploy to Railway:
+- Deploy button (or manual: New Project → Deploy from GitHub repo).
+- Required Railway services: Postgres plugin, MinIO plugin (or external S3).
+- Environment variable mapping table: which Railway-injected vars map to which
+  Wayfinder `.env` keys.
+- `ADMIN_SEED_EMAIL` must be set before first deploy so the seed runs.
+- Post-deploy: navigate to the Railway-assigned URL, request a magic link,
+  verify login, create the first flow.
+
+### `restart.sh` service readiness
+
+`restart.sh` is updated to wait for all locally-configured backing services
+before starting the application processes:
+
+- If `MINIO_ENDPOINT` and `MINIO_PORT` are set, poll
+  `http://$MINIO_ENDPOINT:$MINIO_PORT/minio/health/live` until a 200 response
+  is received (max 30 s, then exit 1 with a clear message: "MinIO not reachable
+  at $MINIO_ENDPOINT:$MINIO_PORT — is it running?").
+- If `DATABASE_URL` is set, verify the Postgres connection is accepting
+  connections (existing behaviour extended to cover the MinIO check).
+- Both checks use a short `sleep 2` poll loop so the script remains dependency-free
+  (no `wait-for-it.sh` or extra tools required).
+
 ### Open source prep
 
 - `README.md`: project overview, screenshots (link to mockups), stack,
@@ -254,6 +298,14 @@ they were written with.
       app reachable at `http://localhost:3000` without further config.
 - [ ] `LICENSE` file is present at repo root; README links to it.
 - [ ] CI workflow runs on PR and passes for a clean main branch.
+- [ ] Following `docs/guides/setup-local.md` from a clean clone produces a
+      running app at `http://localhost:3000` without docker-compose.
+- [ ] Following `docs/guides/setup-railway.md` deploys Wayfinder to Railway
+      with `MINIO_*` vars pointing to an external object store; the app is
+      reachable at the Railway-assigned URL and admin login works.
+- [ ] `restart.sh` with `MINIO_ENDPOINT`/`MINIO_PORT` set but MinIO
+      unreachable exits non-zero within 30 s and prints
+      "MinIO not reachable at …"; with MinIO healthy it proceeds normally.
 - [ ] `VERSION` and root `package.json#version` = `1.5.0`.
       `validate.sh` passes.
 
@@ -282,6 +334,8 @@ Two sessions:
 - Mobile chat improvements.
 - README, LICENSE, CONTRIBUTING, docker-compose (finalise), .env.example,
   CLAUDE.md edits.
+- `docs/guides/setup-local.md` and `docs/guides/setup-railway.md`.
+- `restart.sh` service readiness checks (MinIO + Postgres).
 - CI workflow.
 
 ## 9. Risks / open questions
