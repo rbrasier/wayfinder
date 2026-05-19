@@ -5,6 +5,7 @@
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 011 (FSL licence); all earlier ADRs assumed
 - **Depends on**: Phase 3 (v1.4.0)
+- **Mockups**: [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html), [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>), [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>) — all three; Phase 4 polishes every surface to match the mockups exactly
 
 ## 1. Problem
 
@@ -66,6 +67,11 @@ generated document.
 | GitHub Actions: `ci.yml`                     | `.github/workflows/ci.yml`                                               | yes |
 
 ## 5. Pages / surfaces
+
+> **Mockup references** (polish target — all surfaces should match by end of Phase 4):
+> - [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html) — My Chats (empty states, skeletons, session cards)
+> - [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) — Chat (mobile layout, document card, milestone pill polish)
+> - [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>) — Configure (minimap, controls, empty canvas state)
 
 ### First-admin provisioning
 

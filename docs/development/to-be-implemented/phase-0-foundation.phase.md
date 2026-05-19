@@ -4,6 +4,7 @@
 - **Target version**: `1.1.0`  (bump: MINOR — schema add + new dependencies + new port)
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 005 (route groups), 006 (schema), 010 (INodeExecutor)
+- **Mockups**: [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html) (My Chats — target state for the `/chats` shell), [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) (Chat — target state for the `/chats/[sessionId]` shell), [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>) (Configure — target state for the `/admin/flows/[id]` canvas shell)
 
 ## 1. Problem
 

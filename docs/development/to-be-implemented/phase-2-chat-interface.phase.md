@@ -5,6 +5,7 @@
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 005 (route groups), 006 (schema), 007 (session-scoped LangGraph), 010 (INodeExecutor)
 - **Depends on**: Phase 0 (v1.1.0), Phase 1 (v1.2.0)
+- **Mockups**: [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html) (My Chats — session listing, New Chat modal), [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) (Chat — message feed, step rail, composer, confidence bar, share)
 
 ## 1. Problem
 
@@ -63,6 +64,10 @@ generation pending (Phase 3)" pill is shown. Phase 3 fills it in.
 | UI components: `SessionCard`, `StepProgressRail`, `MessageFeed`, `ConfidenceBar`, `MilestonePill`, `ChatComposer`, `NewChatModal`, `ShareButton` | `apps/web/src/components/chat/`                          | yes |
 
 ## 5. Pages / surfaces
+
+> **Mockup references**:
+> - [`../mockups/FlowAgent.html`](../mockups/FlowAgent.html) — session listing, session cards, New Chat modal
+> - [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) — chat header, step rail, message bubbles, confidence bar, milestone pill, composer, share mode
 
 ### `/chats`
 

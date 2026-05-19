@@ -5,6 +5,7 @@
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 009 (docxtemplater + placeholder substitution), 007 (session-scoped LangGraph)
 - **Depends on**: Phase 2 (v1.3.0)
+- **Mockups**: [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>) — document card (`.doc-card` component in the message feed, below the milestone pill)
 
 ## 1. Problem
 
@@ -50,6 +51,11 @@ a Download button.
 | `DocumentCard` component                                        | `apps/web/src/components/chat/document-card.tsx`                    | yes |
 
 ## 5. Pages / surfaces
+
+> **Mockup reference**: [`../mockups/FlowAgent Chat.html`](<../mockups/FlowAgent Chat.html>)
+> The `.doc-card` component (document icon, filename, summary, Download button)
+> appears in the message feed below the milestone pill — see the chat mockup
+> for the exact layout and styling.
 
 ### Port shape
 

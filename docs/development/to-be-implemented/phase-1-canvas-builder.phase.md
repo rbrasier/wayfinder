@@ -5,6 +5,7 @@
 - **PRD**: [`../prd/wayfinder.prd.md`](../prd/wayfinder.prd.md)
 - **ADRs**: 005 (route groups), 006 (schema), 008 (React Flow), 010 (INodeExecutor)
 - **Depends on**: Phase 0 (v1.1.0)
+- **Mockups**: [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>) — primary reference for all canvas and node config UI
 
 ## 1. Problem
 
@@ -58,6 +59,10 @@ All entities already exist from Phase 0. Phase 1 adds:
 | Use cases in `packages/application/src/use-cases/flow/` | `create-flow.ts`, `list-flows.ts`, `update-node.ts`, etc.      | yes |
 
 ## 5. Pages / surfaces
+
+> **Mockup reference**: [`../mockups/FlowAgent Configure.html`](<../mockups/FlowAgent Configure.html>)
+> Open in a browser for the full interactive reference. All canvas, node card,
+> node config modal, and context document strip designs come from this file.
 
 ### `/admin/flows`
 
