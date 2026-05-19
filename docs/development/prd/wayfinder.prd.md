@@ -134,21 +134,22 @@ template, not core or AI infrastructure). Columns are snake_case. Every table ha
 
 ## 8. Database changes
 
+Five new tables (consolidated from an earlier 8-table design — see ADR-006).
+Permissions, context documents, and generated document metadata are embedded
+as `jsonb` columns rather than separate tables, reducing join complexity.
+
 | Table                  | Change                                                          | Prefix valid? |
 | ---------------------- | --------------------------------------------------------------- | ------------- |
-| `app_flows`            | NEW — id, name, description, icon, owner_user_id, status (`draft`/`published`), created_at, updated_at | yes (app_) |
+| `app_flows`            | NEW — id, name, description, icon, owner_user_id, status (`draft`/`published`), permissions jsonb, context_docs jsonb, created_at, updated_at | yes (app_) |
 | `app_flow_nodes`       | NEW — id, flow_id, type, name, colour, position_x, position_y, config jsonb, created_at, updated_at | yes |
 | `app_flow_edges`       | NEW — id, flow_id, from_node_id, to_node_id, created_at, updated_at | yes |
-| `app_flow_context_docs`| NEW — id, flow_id, filename, mime_type, size_bytes, storage_path, created_at, updated_at | yes |
-| `app_flow_permissions` | NEW — id, flow_id, user_id, permission (`owner`/`viewer`), created_at, updated_at | yes |
 | `app_sessions`         | NEW — id, flow_id, user_id, status (`active`/`complete`/`abandoned`), title, current_node_id, graph_checkpoint jsonb, created_at, updated_at | yes |
-| `app_session_messages` | NEW — id, session_id, role (`user`/`assistant`/`system`), content, confidence smallint, step_node_id, created_at | yes |
-| `app_documents`        | NEW — id, session_id, node_id, filename, storage_path, summary, generated_at, created_at, updated_at | yes |
+| `app_session_messages` | NEW — id, session_id, role (`user`/`assistant`/`system`), content, confidence smallint, step_node_id, document jsonb, created_at | yes |
 
 All in the `app_` group (Wayfinder is the application built on the template).
 `ai_conversations` and `ai_messages` from v0.1 remain for the `/sample` demo and
 are not reused for session messages — sessions have a richer schema
-(`step_node_id`, `confidence`).
+(`step_node_id`, `confidence`, `document`).
 
 ## 9. Architectural decisions
 

@@ -13,10 +13,10 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@rbrasier/adapters": "^1.0.3",
-    "@rbrasier/application": "^1.0.3",
-    "@rbrasier/domain": "^1.0.3",
-    "@rbrasier/shared": "^1.0.3",
+    "@rbrasier/adapters": "workspace:*",
+    "@rbrasier/application": "workspace:*",
+    "@rbrasier/domain": "workspace:*",
+    "@rbrasier/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.2",

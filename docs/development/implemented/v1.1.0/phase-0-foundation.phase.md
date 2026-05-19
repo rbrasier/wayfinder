@@ -54,10 +54,11 @@ shells under which Phase 1 and Phase 2 will hang their pages.
 | `Flow`                | `packages/domain/src/entities/flow.ts`                            | new    |
 | `FlowNode`            | `packages/domain/src/entities/flow-node.ts`                       | new    |
 | `FlowEdge`            | `packages/domain/src/entities/flow-edge.ts`                       | new    |
-| `FlowPermission`      | `packages/domain/src/entities/flow-permission.ts`                 | new    |
+| `FlowPermission`      | embedded type in `flow.ts` (jsonb on `app_flows`)                 | new    |
+| `FlowContextDoc`      | embedded type in `flow.ts` (jsonb on `app_flows`)                 | new    |
 | `Session`             | `packages/domain/src/entities/session.ts`                         | new    |
 | `SessionMessage`      | `packages/domain/src/entities/session-message.ts`                 | new    |
-| `Document`            | `packages/domain/src/entities/document.ts`                        | new    |
+| `SessionDocument`     | embedded type in `session-message.ts` (jsonb on `app_session_messages`) | new |
 | `INodeExecutor` port  | `packages/domain/src/ports/node-executor.ts`                      | new    |
 | `MockNodeExecutor`    | `packages/adapters/src/node-executors/mock-node-executor.ts`      | new    |
 
@@ -84,18 +85,16 @@ authenticated `admin` → `/admin/flows`.
 
 ## 6. Database changes
 
-Single Drizzle migration `00NN_app_wayfinder_schema.sql` adds:
+Single Drizzle migration `0004_app_wayfinder_schema.sql` adds five tables
+(consolidated from the original eight — see ADR-006 revision):
 
-| Table                   | Columns                                                                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `app_flows`             | `id`, `name`, `description`, `icon`, `owner_user_id` (fk core_users), `status` (`draft`/`published`), `created_at`, `updated_at` |
-| `app_flow_nodes`        | `id`, `flow_id` (fk), `type`, `name`, `colour`, `position_x int`, `position_y int`, `config jsonb`, `created_at`, `updated_at`   |
-| `app_flow_edges`        | `id`, `flow_id` (fk), `from_node_id` (fk), `to_node_id` (fk), `created_at`, `updated_at`                                               |
-| `app_flow_context_docs` | `id`, `flow_id` (fk), `filename`, `mime_type`, `size_bytes`, `storage_path`, `created_at`, `updated_at`                                |
-| `app_flow_permissions`  | `id`, `flow_id` (fk), `user_id` (fk core_users), `permission` (`owner`/`viewer`), `created_at`, `updated_at`. Unique `(flow_id, user_id)` |
-| `app_sessions`          | `id`, `flow_id` (fk), `user_id` (fk), `status` (`active`/`complete`/`abandoned`), `title`, `current_node_id`, `graph_checkpoint jsonb`, `created_at`, `updated_at` |
-| `app_session_messages`  | `id`, `session_id` (fk), `role`, `content`, `confidence smallint`, `step_node_id`, `created_at`. Append-only (no `updated_at`) |
-| `app_documents`         | `id`, `session_id` (fk), `node_id` (fk), `filename`, `storage_path`, `summary`, `generated_at`, `created_at`, `updated_at` |
+| Table                  | Columns                                                                                                                                                              |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app_flows`            | `id`, `name`, `description`, `icon`, `owner_user_id` (fk core_users), `status` (`draft`/`published`), `permissions jsonb DEFAULT '[]'`, `context_docs jsonb DEFAULT '[]'`, `created_at`, `updated_at` |
+| `app_flow_nodes`       | `id`, `flow_id` (fk), `type`, `name`, `colour`, `position_x int`, `position_y int`, `config jsonb`, `created_at`, `updated_at`                                      |
+| `app_flow_edges`       | `id`, `flow_id` (fk), `from_node_id` (fk), `to_node_id` (fk), `created_at`, `updated_at`                                                                           |
+| `app_sessions`         | `id`, `flow_id` (fk), `user_id` (fk), `status` (`active`/`complete`/`abandoned`), `title`, `current_node_id`, `graph_checkpoint jsonb`, `created_at`, `updated_at` |
+| `app_session_messages` | `id`, `session_id` (fk), `role`, `content`, `confidence smallint`, `step_node_id`, `document jsonb DEFAULT NULL`, `created_at`. Append-only (no `updated_at`)       |
 
 Indexes per ADR-006. Foreign keys `ON DELETE CASCADE` for child rows under
 `app_flows` and `app_sessions`.
