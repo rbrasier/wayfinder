@@ -43,8 +43,8 @@ module.exports = {
             patterns: [
               {
                 group: [
-                  "@template/adapters",
-                  "@template/adapters/*",
+                  "@rbrasier/adapters",
+                  "@rbrasier/adapters/*",
                   "drizzle-orm",
                   "drizzle-orm/*",
                   "ai",
@@ -56,7 +56,7 @@ module.exports = {
                   "express",
                 ],
                 message:
-                  "packages/application may only import @template/domain and @template/shared.",
+                  "packages/application may only import @rbrasier/domain and @rbrasier/shared.",
               },
             ],
           },

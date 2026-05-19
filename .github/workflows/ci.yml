@@ -82,28 +82,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Coverage — domain
-        run: pnpm --filter "@template/domain" test:coverage
+        run: pnpm --filter "@rbrasier/domain" test:coverage
 
       - name: Coverage — application
-        run: pnpm --filter "@template/application" test:coverage
-
-  framework-updates:
-    name: Check for framework updates
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check for framework updates (dry-run)
-        run: ./scripts/update-framework.sh --dry-run
-        continue-on-error: true
+        run: pnpm --filter "@rbrasier/application" test:coverage
