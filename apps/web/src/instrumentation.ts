@@ -1,5 +1,5 @@
 export async function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs") {
+  if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NODE_ENV === "production") {
     // Lazy import to avoid bundling issues at startup
     const { getContainer } = await import("@/lib/container");
 
