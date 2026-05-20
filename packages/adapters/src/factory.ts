@@ -12,7 +12,6 @@ import type {
 import { AiHealthChecker } from "./health/ai-health-checker";
 import { CompositeHealthChecker } from "./health/composite-health-checker";
 import { DbHealthChecker } from "./health/db-health-checker";
-import { RedisHealthChecker } from "./health/redis-health-checker";
 import { withOptionalLangfuse } from "./observability/langfuse-tracing-adapter";
 import { withUsageTracking } from "./observability/usage-tracking-adapter";
 import { DrizzleAuditLogger } from "./audit/drizzle-audit-logger";
@@ -31,7 +30,6 @@ import type { Database } from "./db/client";
 export interface AdaptersConfig {
   aiProvider: "anthropic" | "openai" | "mistral";
   nodeEnv?: string;
-  redisUrl?: string;
   langfuse?: {
     publicKey?: string;
     secretKey?: string;
@@ -82,7 +80,6 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
   const {
     aiProvider,
     nodeEnv = "production",
-    redisUrl = "redis://localhost:6379",
     langfuse = {},
     aiKeys = {},
     overrides = {},
@@ -111,14 +108,13 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
   const agent = new LangGraphAgentRunner(llm);
 
   const dbChecker = new DbHealthChecker(db);
-  const redisChecker = new RedisHealthChecker(redisUrl);
   const aiChecker = new AiHealthChecker({
     provider: aiProvider,
     anthropicKey: aiKeys.anthropic,
     openaiKey: aiKeys.openai,
     mistralKey: aiKeys.mistral,
   });
-  const health = new CompositeHealthChecker(dbChecker, redisChecker, aiChecker, jobRepo);
+  const health = new CompositeHealthChecker(dbChecker, aiChecker, jobRepo);
 
   return {
     logger,

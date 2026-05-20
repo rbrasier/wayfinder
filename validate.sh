@@ -122,7 +122,6 @@ fi
 section "9. health checker adapters exist in codebase"
 HEALTH_FILES=(
   "packages/adapters/src/health/db-health-checker.ts"
-  "packages/adapters/src/health/redis-health-checker.ts"
   "packages/adapters/src/health/ai-health-checker.ts"
   "packages/adapters/src/health/composite-health-checker.ts"
 )
@@ -161,21 +160,6 @@ if command -v pg_isready &>/dev/null && [ -n "${DATABASE_URL:-}" ]; then
   fi
 else
   warn "postgres connectivity skipped (pg_isready not found or DATABASE_URL not set)"
-fi
-
-# Redis
-REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
-REDIS_HOST=$(echo "$REDIS_URL" | sed -E 's|redis://([^:/]+).*|\1|')
-REDIS_PORT=$(echo "$REDIS_URL" | sed -E 's|redis://[^:]+:([0-9]+).*|\1|')
-REDIS_PORT="${REDIS_PORT:-6379}"
-if command -v redis-cli &>/dev/null; then
-  if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping 2>/dev/null | grep -q PONG; then
-    pass "redis reachable ($REDIS_HOST:$REDIS_PORT)"
-  else
-    warn "redis not reachable at $REDIS_HOST:$REDIS_PORT (expected in CI — ignore if no Redis)"
-  fi
-else
-  warn "redis connectivity skipped (redis-cli not found)"
 fi
 
 # AI provider key

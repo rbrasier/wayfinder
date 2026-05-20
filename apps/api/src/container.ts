@@ -32,7 +32,6 @@ import {
   DrizzleUserRepository,
   LanguageModelAdapter,
   PinoLogger,
-  RedisHealthChecker,
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
@@ -56,14 +55,13 @@ export const buildContainer = (env: Env) => {
   const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
 
   const dbChecker = new DbHealthChecker(db);
-  const redisChecker = new RedisHealthChecker(env.REDIS_URL);
   const aiChecker = new AiHealthChecker({
     provider: env.AI_DEFAULT_PROVIDER,
     anthropicKey: env.ANTHROPIC_API_KEY,
     openaiKey: env.OPENAI_API_KEY,
     mistralKey: env.MISTRAL_API_KEY,
   });
-  const healthChecker = new CompositeHealthChecker(dbChecker, redisChecker, aiChecker, jobRepo);
+  const healthChecker = new CompositeHealthChecker(dbChecker, aiChecker, jobRepo);
 
   return {
     env,

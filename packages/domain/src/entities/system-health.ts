@@ -18,7 +18,6 @@ export interface SystemHealth {
   readonly timestamp: string;
   readonly services: {
     readonly db: ServiceStatus;
-    readonly redis: ServiceStatus;
     readonly ai: AiStatus;
     readonly jobs: JobsStatus;
   };

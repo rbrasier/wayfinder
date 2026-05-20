@@ -61,7 +61,7 @@ Edit `.env` and fill in the required values:
 | `LANGFUSE_PUBLIC_KEY` | Optional | Omit to disable observability (adapters no-op without it) |
 | `LANGFUSE_SECRET_KEY` | Optional | Omit to disable observability |
 
-Leave `DATABASE_URL`, `REDIS_URL`, and the Langfuse ports as their defaults if
+Leave `DATABASE_URL` and the Langfuse ports as their defaults if
 you are using the docker-compose setup below.
 
 ---
@@ -77,7 +77,6 @@ This starts:
 | Service | Default port | Notes |
 |---|---|---|
 | Postgres 16 + pgvector | 5432 | Required |
-| Redis 7 | 6379 | Required (queues, caching) |
 | Langfuse 2 | 3030 | Optional — skip if Langfuse keys are not set |
 
 Wait a few seconds for Postgres to be healthy before continuing.

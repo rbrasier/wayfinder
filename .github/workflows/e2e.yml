@@ -1,0 +1,225 @@
+name: E2E Tests (Playwright)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      use_real_ai:
+        description: 'Use real Anthropic API (costs credits — needs ANTHROPIC_API_KEY secret)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wayfinder_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_e2e
+      MINIO_ENDPOINT: localhost
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: wayfinder-documents
+      MINIO_USE_SSL: "false"
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET || 'e2e-test-secret-must-be-at-least-32-chars-long' }}
+      BETTER_AUTH_URL: http://localhost:3000
+      AI_DEFAULT_PROVIDER: anthropic
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ADMIN_SEED_EMAIL: admin@example.com
+      TEST_AUTH_BYPASS: "true"
+      TEST_ADMIN_EMAIL: admin@example.com
+      USE_REAL_AI: ${{ inputs.use_real_ai == true && 'true' || 'false' }}
+      BASE_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        run: pnpm db:migrate
+
+      - name: Install Playwright browsers
+        run: npm install && npx playwright install --with-deps chromium
+        working-directory: tests/e2e
+
+      - name: Start app
+        run: pnpm --filter @wayfinder/web dev &
+
+      - name: Wait for app to be ready
+        run: npx wait-on http://localhost:3000 --timeout 60000
+
+      - name: Run Playwright tests
+        run: npm test
+        working-directory: tests/e2e
+
+      # ── Job summary ────────────────────────────────────────────────────────
+      # Parses playwright-results.json and writes a pass/fail table + failure
+      # list to the GitHub Actions job summary (visible in the Actions UI and
+      # the GitHub mobile app).
+      - name: Write job summary
+        if: always()
+        working-directory: tests/e2e
+        run: |
+          node -e "
+          const fs = require('fs');
+          if (!fs.existsSync('playwright-results.json')) {
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## ⚠️ Playwright E2E\n\nNo results file found — tests may not have run.\n');
+            process.exit(0);
+          }
+
+          const r = JSON.parse(fs.readFileSync('playwright-results.json', 'utf8'));
+          const s = r.stats;
+          const ok = s.unexpected === 0;
+          const icon = ok ? '✅' : '❌';
+          const dur = (s.duration / 1000).toFixed(1);
+
+          let md = '## ' + icon + ' Playwright E2E — ' + (ok ? 'All passed' : s.unexpected + ' failed') + '\n\n';
+          md += '| ✅ Passed | ❌ Failed | ⏭️ Skipped | 🔁 Flaky | ⏱️ Duration |\n';
+          md += '|-----------|-----------|------------|----------|-------------|\n';
+          md += '| ' + s.expected + ' | ' + s.unexpected + ' | ' + s.skipped + ' | ' + s.flaky + ' | ' + dur + 's |\n\n';
+
+          const failures = [];
+          function walk(suite, parents) {
+            for (const spec of suite.specs || []) {
+              if (!spec.ok) {
+                const err = spec.tests?.[0]?.results?.[0]?.error?.message || '';
+                failures.push({ title: [...parents, spec.title].join(' › '), error: err.split('\n')[0] });
+              }
+            }
+            for (const child of suite.suites || []) walk(child, [...parents, child.title]);
+          }
+          for (const suite of r.suites || []) walk(suite, [suite.title]);
+
+          if (failures.length) {
+            md += '### Failed tests\n\n';
+            for (const f of failures) {
+              md += '- **' + f.title + '**' + (f.error ? ': \`' + f.error + '\`' : '') + '\n';
+            }
+            md += '\n';
+          }
+
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+          "
+
+      # ── Netlify deploy ─────────────────────────────────────────────────────
+      # Deploys the HTML report to a unique Netlify preview URL.
+      # Requires two GitHub secrets:
+      #   NETLIFY_AUTH_TOKEN  — Personal access token from netlify.com/user/applications
+      #   NETLIFY_SITE_ID     — Site ID from Site Settings → General on netlify.com
+      #
+      # Both are optional: if either secret is absent the step is skipped gracefully.
+      - name: Deploy report to Netlify
+        id: netlify
+        if: always()
+        continue-on-error: true
+        working-directory: tests/e2e
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "Netlify secrets not configured — skipping deploy"
+            exit 0
+          fi
+          if [ ! -d "playwright-report" ]; then
+            echo "No report directory — skipping deploy"
+            exit 0
+          fi
+          npm install --global netlify-cli --silent
+          netlify deploy \
+            --dir playwright-report \
+            --message "E2E run #${{ github.run_number }}" \
+            --json > /tmp/netlify-output.json
+          URL=$(node -e "try{process.stdout.write(JSON.parse(require('fs').readFileSync('/tmp/netlify-output.json','utf8')).deploy_url||'')}catch{}")
+          if [ -n "$URL" ]; then
+            echo "url=$URL" >> $GITHUB_OUTPUT
+            echo "### 📊 [Playwright report]($URL)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # ── PR comment ─────────────────────────────────────────────────────────
+      # Posts (or updates) a comment on the PR with the Netlify report link.
+      # Finds any existing bot comment and replaces it so the thread stays tidy.
+      - name: Comment report link on PR
+        if: always() && github.event_name == 'pull_request' && steps.netlify.outputs.url != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const url = '${{ steps.netlify.outputs.url }}';
+            const marker = '<!-- playwright-report -->';
+            const body = `${marker}\n## 📊 Playwright E2E Report\n\n[View full report with screenshots and traces](${url})\n\nRun [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # ── Artifacts ──────────────────────────────────────────────────────────
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_number }}
+          path: tests/e2e/playwright-report/
+          retention-days: 30
+
+      - name: Upload traces and videos (failures only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results-${{ github.run_number }}
+          path: tests/e2e/test-results/
+          retention-days: 7

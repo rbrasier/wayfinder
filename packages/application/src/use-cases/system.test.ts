@@ -103,7 +103,6 @@ const healthySystem: SystemHealth = {
   timestamp: new Date().toISOString(),
   services: {
     db: { ok: true },
-    redis: { ok: true },
     ai: { ok: true, provider: "anthropic", keyConfigured: true },
     jobs: { ok: true, jobs: [] },
   },

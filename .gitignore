@@ -41,3 +41,11 @@ drizzle/meta
 # .template-version and .framework-scope are intentionally tracked in git
 !.template-version
 !.framework-scope
+
+# Playwright E2E artifacts
+tests/e2e/playwright-report/
+tests/e2e/playwright-results.json
+tests/e2e/test-results/
+tests/e2e/screenshots/
+tests/e2e/playwright/.auth/
+tests/e2e/node_modules/

@@ -2,21 +2,18 @@ import type { IHealthChecker, IJobRepository, Result, SystemHealth } from "@rbra
 import { ok, err, domainError } from "@rbrasier/domain";
 import type { AiHealthChecker } from "./ai-health-checker";
 import type { DbHealthChecker } from "./db-health-checker";
-import type { RedisHealthChecker } from "./redis-health-checker";
 
 export class CompositeHealthChecker implements IHealthChecker {
   constructor(
     private readonly db: DbHealthChecker,
-    private readonly redis: RedisHealthChecker,
     private readonly ai: AiHealthChecker,
     private readonly jobs: IJobRepository,
   ) {}
 
   async check(): Promise<Result<SystemHealth>> {
     try {
-      const [dbStatus, redisStatus, jobsResult] = await Promise.all([
+      const [dbStatus, jobsResult] = await Promise.all([
         this.db.check(),
-        this.redis.check(),
         this.jobs.list(),
       ]);
 
@@ -36,14 +33,13 @@ export class CompositeHealthChecker implements IHealthChecker {
         ...(jobsResult.error && { error: "Could not load job registry" }),
       };
 
-      const allOk = dbStatus.ok && redisStatus.ok && aiStatus.ok && jobsOk;
+      const allOk = dbStatus.ok && aiStatus.ok && jobsOk;
 
       return ok({
         ok: allOk,
         timestamp: new Date().toISOString(),
         services: {
           db: dbStatus,
-          redis: redisStatus,
           ai: aiStatus,
           jobs: jobsStatus,
         },

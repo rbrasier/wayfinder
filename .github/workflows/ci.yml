@@ -31,7 +31,6 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_test
-      REDIS_URL: redis://localhost:6379
       MINIO_ENDPOINT: localhost
       MINIO_PORT: "9000"
       MINIO_ACCESS_KEY: minioadmin
