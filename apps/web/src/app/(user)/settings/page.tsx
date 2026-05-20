@@ -2,7 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function SettingsPage() {
   return (
-    <main className="container max-w-2xl py-12">
+    <div className="h-full overflow-auto">
+    <main className="container max-w-2xl py-12 pb-24 md:pb-12">
       <div className="mb-8 space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage your account preferences.</p>
@@ -37,5 +38,6 @@ export default function SettingsPage() {
         </Card>
       </div>
     </main>
+    </div>
   );
 }

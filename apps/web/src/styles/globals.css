@@ -4,44 +4,66 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Warm off-white surface — matches mockup #f7f6f3 */
+    --background: 40 20% 96%;
+    --foreground: 35 12% 10%;
+
+    /* Cards stay pure white on the warm background */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --card-foreground: 35 12% 10%;
+
+    /* Vivid indigo primary — matches mockup #3a5fd9 */
+    --primary: 226 67% 54%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 40 15% 92%;
+    --secondary-foreground: 35 12% 10%;
+
+    --muted: 40 15% 92%;
+    --muted-foreground: 35 8% 46%;
+
+    --accent: 40 15% 88%;
+    --accent-foreground: 35 12% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Warm sand border — matches mockup #dedad2 */
+    --border: 38 16% 83%;
+    --input: 38 16% 83%;
+
+    --ring: 226 67% 54%;
     --radius: 0.5rem;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 35 12% 8%;
+      --foreground: 40 20% 94%;
+
+      --card: 35 10% 11%;
+      --card-foreground: 40 20% 94%;
+
+      --primary: 226 67% 64%;
+      --primary-foreground: 0 0% 100%;
+
+      --secondary: 35 10% 16%;
+      --secondary-foreground: 40 20% 94%;
+
+      --muted: 35 10% 16%;
+      --muted-foreground: 40 12% 58%;
+
+      --accent: 35 10% 20%;
+      --accent-foreground: 40 20% 94%;
+
+      --destructive: 0 62% 40%;
+      --destructive-foreground: 0 0% 100%;
+
+      --border: 35 10% 20%;
+      --input: 35 10% 20%;
+
+      --ring: 226 67% 64%;
+    }
   }
 }
 

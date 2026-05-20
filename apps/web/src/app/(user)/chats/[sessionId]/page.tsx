@@ -164,7 +164,7 @@ export default function SessionPage({ params }: SessionPageProps) {
   const { session, flow } = sessionData;
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden">
+    <main className="flex h-full flex-col overflow-hidden">
       <header className="flex min-w-0 items-center justify-between border-b bg-background px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <Link href="/chats" className="shrink-0 text-sm text-muted-foreground hover:text-foreground">

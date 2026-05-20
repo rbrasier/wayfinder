@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function AdminIndexPage() {
   return (
+    <div className="h-full overflow-auto">
+    <div className="container py-8">
     <div className="grid gap-4 sm:grid-cols-2">
       <Link href="/admin/users">
         <Card className="transition-shadow hover:shadow-md">
@@ -34,6 +36,8 @@ export default function AdminIndexPage() {
           </CardContent>
         </Card>
       </Link>
+    </div>
+    </div>
     </div>
   );
 }

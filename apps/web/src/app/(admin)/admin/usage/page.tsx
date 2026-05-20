@@ -23,6 +23,8 @@ export default function AdminUsagePage() {
     ) ?? 0;
 
   return (
+    <div className="h-full overflow-auto">
+    <div className="container py-8">
     <div className="space-y-4">
       <div className="grid grid-cols-3 gap-4">
         <Card>
@@ -96,6 +98,8 @@ export default function AdminUsagePage() {
           )}
         </CardContent>
       </Card>
+    </div>
+    </div>
     </div>
   );
 }

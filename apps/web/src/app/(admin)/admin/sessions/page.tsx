@@ -41,6 +41,8 @@ export default function AdminSessionsPage() {
   };
 
   return (
+    <div className="h-full overflow-auto">
+    <div className="container py-8">
     <Card>
       <CardHeader>
         <CardTitle>All Sessions</CardTitle>
@@ -119,5 +121,7 @@ export default function AdminSessionsPage() {
         )}
       </CardContent>
     </Card>
+    </div>
+    </div>
   );
 }

@@ -3,11 +3,15 @@
 import {
   Background,
   BackgroundVariant,
+  Controls,
   MarkerType,
+  MiniMap,
   ReactFlow,
+  ReactFlowProvider,
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
+  useReactFlow,
   type Connection,
   type Edge,
   type EdgeChange,
@@ -19,6 +23,7 @@ import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
@@ -59,10 +64,8 @@ const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): E
   markerEnd: { type: MarkerType.ArrowClosed },
 });
 
-export default function FlowCanvasPage() {
-  const params = useParams<{ id: string }>();
-  const flowId = params.id;
-
+function CanvasInner({ flowId }: { flowId: string }) {
+  const { fitView } = useReactFlow();
   const utils = trpc.useUtils();
   const canvasQuery = trpc.flow.getCanvas.useQuery({ flowId });
 
@@ -98,7 +101,10 @@ export default function FlowCanvasPage() {
     setContextDocs(data.flow.contextDocs);
     setFlowName(data.flow.name);
     setFlowStatus(data.flow.status);
-  }, [canvasQuery.data]);
+    if (data.nodes.length > 3) {
+      setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
+    }
+  }, [canvasQuery.data, fitView]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     setRfNodes((nds) => applyNodeChanges(changes, nds));
@@ -106,7 +112,6 @@ export default function FlowCanvasPage() {
 
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     setRfEdges((eds) => applyEdgeChanges(changes, eds));
-
     const deletions = changes.filter((c) => c.type === "remove");
     for (const del of deletions) {
       void deleteEdgeMutation.mutateAsync({ edgeId: del.id, flowId });
@@ -147,14 +152,11 @@ export default function FlowCanvasPage() {
     if (!paneEl) return;
     const paneRect = paneEl.getBoundingClientRect();
 
-    const newX = target.clientX - paneRect.left;
-    const newY = target.clientY - paneRect.top;
-
     const tempId = `temp-${Date.now()}`;
     const tempNode: Node<ConversationalNodeData> = {
       id: tempId,
       type: "conversationalNode",
-      position: { x: newX - 112, y: newY - 40 },
+      position: { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
       data: { name: "New step", colour: "#6366f1", aiInstruction: null },
     };
 
@@ -268,6 +270,7 @@ export default function FlowCanvasPage() {
     );
     setConfigOpen(false);
     setEditingNodeId(null);
+    toast.success("Step deleted");
   }, [editingNodeId, deleteNodeMutation, flowId]);
 
   const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
@@ -284,12 +287,12 @@ export default function FlowCanvasPage() {
     : undefined;
 
   if (canvasQuery.isLoading) {
-    return <div className="flex items-center justify-center h-96 text-muted-foreground">Loading canvas…</div>;
+    return <div className="flex h-96 items-center justify-center text-muted-foreground">Loading canvas…</div>;
   }
 
   return (
-    <div className="flex flex-col" style={{ height: "calc(100vh - 56px)" }}>
-      <div className="flex items-center gap-3 border-b bg-white px-4 py-3 shrink-0">
+    <div className="flex h-full flex-col">
+      <div className="flex shrink-0 items-center gap-3 border-b bg-white px-4 py-3">
         <Link href="/admin/flows" className="text-sm text-muted-foreground hover:text-foreground">
           ← Flows
         </Link>
@@ -298,13 +301,15 @@ export default function FlowCanvasPage() {
         {editingName ? (
           <input
             autoFocus
-            className="rounded border px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-300"
+            className="rounded border px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30"
             value={flowName}
             onChange={(e) => setFlowName(e.target.value)}
             onBlur={() => {
               setEditingName(false);
               if (flowName.trim()) {
-                void updateFlowMutation.mutateAsync({ flowId, name: flowName.trim() });
+                void updateFlowMutation.mutateAsync({ flowId, name: flowName.trim() }).then(() => {
+                  toast.success("Flow saved");
+                });
               }
             }}
             onKeyDown={(e) => {
@@ -318,7 +323,7 @@ export default function FlowCanvasPage() {
         ) : (
           <button
             type="button"
-            className="text-sm font-semibold hover:text-indigo-600"
+            className="text-sm font-semibold hover:text-primary"
             onClick={() => setEditingName(true)}
           >
             {flowName || "Untitled flow"}
@@ -336,22 +341,20 @@ export default function FlowCanvasPage() {
             onClick={() => {
               const target = flowStatus === "published" ? "draft" : "published";
               setFlowStatus(target);
-              void updateFlowMutation.mutateAsync({ flowId, status: target });
+              void updateFlowMutation.mutateAsync({ flowId, status: target }).then(() => {
+                toast.success(target === "published" ? "Flow published" : "Flow unpublished");
+              });
             }}
           >
             {flowStatus === "published" ? "Unpublish" : "Publish"}
           </Button>
-          <Button
-            size="sm"
-            disabled
-            title="Available in Phase 2"
-          >
-            Open Chat
+          <Button size="sm" asChild>
+            <Link href="/chats">Open Chat</Link>
           </Button>
         </div>
       </div>
 
-      <div className="flex-1 relative">
+      <div className="relative flex-1">
         <ReactFlow
           nodes={rfNodes}
           edges={rfEdges}
@@ -366,6 +369,8 @@ export default function FlowCanvasPage() {
           deleteKeyCode="Backspace"
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+          <Controls />
+          <MiniMap zoomable pannable />
         </ReactFlow>
       </div>
 
@@ -384,5 +389,14 @@ export default function FlowCanvasPage() {
         isSaving={isSavingConfig}
       />
     </div>
+  );
+}
+
+export default function FlowCanvasPage() {
+  const params = useParams<{ id: string }>();
+  return (
+    <ReactFlowProvider>
+      <CanvasInner flowId={params.id} />
+    </ReactFlowProvider>
   );
 }

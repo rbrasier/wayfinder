@@ -61,6 +61,8 @@ export default function AdminUsersPage() {
   };
 
   return (
+    <div className="h-full overflow-auto">
+    <div className="container py-8">
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>Users</CardTitle>
@@ -197,5 +199,7 @@ export default function AdminUsersPage() {
         </DialogContent>
       </Dialog>
     </Card>
+    </div>
+    </div>
   );
 }

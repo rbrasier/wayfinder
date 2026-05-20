@@ -261,6 +261,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setRfEdges((eds) => eds.filter((e) => e.source !== editingNodeId && e.target !== editingNodeId));
     setConfigOpen(false);
     setEditingNodeId(null);
+    toast.success("Step deleted");
   }, [editingNodeId, deleteNodeMutation, flowId]);
 
   if (canvasQuery.isLoading) {
@@ -292,7 +293,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     : undefined;
 
   return (
-    <div className="flex flex-col" style={{ height: "100vh" }}>
+    <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b bg-white px-4 py-3 shrink-0">
         <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Home</Link>
         <div className="h-4 w-px bg-border" />

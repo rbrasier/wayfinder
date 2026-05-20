@@ -34,6 +34,8 @@ export default function AdminFlagsPage() {
   };
 
   return (
+    <div className="h-full overflow-auto">
+    <div className="container py-8">
     <Card>
       <CardHeader>
         <CardTitle>Feature Flags</CardTitle>
@@ -93,5 +95,7 @@ export default function AdminFlagsPage() {
         )}
       </CardContent>
     </Card>
+    </div>
+    </div>
   );
 }
