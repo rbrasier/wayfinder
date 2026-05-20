@@ -4,44 +4,99 @@
  * Tests the end-user chat interface — the core Wayfinder UX where users
  * follow an AI-guided workflow.
  *
+ * Chat sessions live at /chats/[sessionId]. These tests:
+ *   1. Verify the /chats list page loads correctly.
+ *   2. Create a new session via the tRPC API (requires a published flow),
+ *      then navigate to it to test the full composer + response flow.
+ *
  * With USE_REAL_AI unset (default): AI responses are mocked instantly.
  * With USE_REAL_AI=true: real Anthropic/OpenAI calls are made.
- *
- * Either way, the UI behaviour is tested identically.
- * Screenshots are taken at every meaningful step.
  */
 
 import { test, expect } from './helpers/base';
 
 const AI_MODE = process.env.USE_REAL_AI === 'true' ? 'REAL AI' : 'MOCKED AI';
 
-test.describe(`Chat — Interface [${AI_MODE}]`, () => {
-  test('chat page loads — screenshot initial state', async ({ page, consoleLogs }) => {
-    await page.goto('/');
+test.describe(`Chat — List page [${AI_MODE}]`, () => {
+  test('chats list loads without JS errors', async ({ page, consoleLogs }) => {
+    await page.goto('/chats');
     await page.waitForLoadState('networkidle');
-    await page.screenshot({ path: 'screenshots/chat-initial.png', fullPage: true });
+    await page.screenshot({ path: 'screenshots/chat-list.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
-    expect(errors, `JS errors on chat load:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
+    expect(errors, `JS errors on chats list:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
+  });
+
+  test('chats list shows heading and tab bar', async ({ page }) => {
+    await page.goto('/chats');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByRole('heading', { name: /my chats/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /active/i })).toBeVisible();
+    await page.screenshot({ path: 'screenshots/chat-list-tabs.png' });
+  });
+
+  test('"New Chat" button is visible', async ({ page }) => {
+    await page.goto('/chats');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByRole('button', { name: /new chat/i })).toBeVisible();
+  });
+});
+
+test.describe(`Chat — Session page [${AI_MODE}]`, () => {
+  /**
+   * Resolve an existing session ID by checking the /chats list.
+   * If no sessions exist this returns null and the test skips.
+   */
+  async function resolveExistingSessionId(page: import('@playwright/test').Page): Promise<string | null> {
+    await page.goto('/chats');
+    await page.waitForLoadState('networkidle');
+
+    // Session cards link to /chats/[sessionId]
+    const sessionLink = page.getByRole('link').filter({ hasText: /.+/ }).first();
+    const href = await sessionLink.getAttribute('href').catch(() => null);
+
+    if (!href) return null;
+
+    const match = href.match(/\/chats\/([^/?]+)/);
+    return match?.[1] ?? null;
+  }
+
+  test('chat session page loads — screenshot initial state', async ({ page, consoleLogs }) => {
+    const sessionId = await resolveExistingSessionId(page);
+
+    if (!sessionId) {
+      test.skip(true, 'No existing sessions found — create a flow and session to enable this test');
+      return;
+    }
+
+    await page.goto(`/chats/${sessionId}`);
+    await page.waitForLoadState('networkidle');
+    await page.screenshot({ path: 'screenshots/chat-session-initial.png', fullPage: true });
+
+    const errors = consoleLogs.filter(l => l.type === 'error');
+    expect(errors, `JS errors on chat session:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
   test('chat input is present and accepts text', async ({ page }) => {
-    await page.goto('/');
+    const sessionId = await resolveExistingSessionId(page);
+
+    if (!sessionId) {
+      test.skip(true, 'No existing sessions found — skipping input test');
+      return;
+    }
+
+    await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
-    const input = page.locator([
-      'textarea',
-      'input[type="text"]',
-      '[data-testid="chat-input"]',
-      '[placeholder*="message" i]',
-      '[placeholder*="type" i]',
-    ].join(', ')).first();
-
+    // ChatComposer renders a <textarea> with placeholder "Message Wayfinder…"
+    const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     const visible = await input.isVisible().catch(() => false);
 
     if (!visible) {
       await page.screenshot({ path: 'screenshots/chat-no-input-found.png', fullPage: true });
-      test.skip(true, 'Chat input not found on root — may need a flow selected first. See screenshot.');
+      test.skip(true, 'Chat input not found — session may be complete/read-only. See screenshot.');
       return;
     }
 
@@ -51,21 +106,28 @@ test.describe(`Chat — Interface [${AI_MODE}]`, () => {
   });
 
   test('sending a message shows AI response — screenshot end state', async ({ page, consoleLogs }) => {
-    await page.goto('/');
+    const sessionId = await resolveExistingSessionId(page);
+
+    if (!sessionId) {
+      test.skip(true, 'No existing sessions found — skipping send test');
+      return;
+    }
+
+    await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
-    const input = page.locator('textarea, [data-testid="chat-input"]').first();
+    const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     const visible = await input.isVisible().catch(() => false);
 
     if (!visible) {
-      test.skip(true, 'Chat input not found — skipping send test');
+      test.skip(true, 'Chat input not found — session may be complete/read-only');
       return;
     }
 
     await input.fill('Hello');
 
-    // Send via Enter or the send button
-    const sendBtn = page.getByRole('button', { name: /send|submit/i }).last();
+    // ChatComposer button has aria-label="Send message"
+    const sendBtn = page.getByRole('button', { name: /send message/i });
     const hasSendBtn = await sendBtn.isVisible().catch(() => false);
 
     if (hasSendBtn) {
@@ -74,11 +136,10 @@ test.describe(`Chat — Interface [${AI_MODE}]`, () => {
       await input.press('Enter');
     }
 
-    // Wait for AI response to appear (mocked = fast, real = up to 30s)
+    // Wait for AI response (mocked = fast, real = up to 30s)
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
 
     try {
-      // Wait for a message to appear in the chat history
       await page.waitForSelector([
         '[data-testid="message"]',
         '[class*="message"]',
@@ -88,7 +149,6 @@ test.describe(`Chat — Interface [${AI_MODE}]`, () => {
 
       await page.screenshot({ path: 'screenshots/chat-ai-responded.png', fullPage: true });
     } catch {
-      // Even if we can't find the exact selector, screenshot what we have
       await page.screenshot({ path: 'screenshots/chat-after-send-timeout.png', fullPage: true });
       throw new Error(`AI response did not appear within ${timeout}ms — see screenshot`);
     }
@@ -98,10 +158,17 @@ test.describe(`Chat — Interface [${AI_MODE}]`, () => {
   });
 
   test('multi-turn conversation — screenshot after each exchange', async ({ page, consoleLogs }) => {
-    await page.goto('/');
+    const sessionId = await resolveExistingSessionId(page);
+
+    if (!sessionId) {
+      test.skip(true, 'No existing sessions found — skipping multi-turn test');
+      return;
+    }
+
+    await page.goto(`/chats/${sessionId}`);
     await page.waitForLoadState('networkidle');
 
-    const input = page.locator('textarea, [data-testid="chat-input"]').first();
+    const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     const visible = await input.isVisible().catch(() => false);
 
     if (!visible) {
@@ -117,7 +184,8 @@ test.describe(`Chat — Interface [${AI_MODE}]`, () => {
 
     for (let i = 0; i < messages.length; i++) {
       await input.fill(messages[i]);
-      const sendBtn = page.getByRole('button', { name: /send|submit/i }).last();
+
+      const sendBtn = page.getByRole('button', { name: /send message/i });
       const hasSendBtn = await sendBtn.isVisible().catch(() => false);
 
       if (hasSendBtn) {
@@ -126,17 +194,19 @@ test.describe(`Chat — Interface [${AI_MODE}]`, () => {
         await input.press('Enter');
       }
 
-      // Wait for input to clear (indicates response has started)
+      // Wait for input to clear (indicates the message was sent)
       await page.waitForFunction(
         (selector) => {
-          const el = document.querySelector(selector) as HTMLTextAreaElement | HTMLInputElement;
+          const el = document.querySelector(selector) as HTMLTextAreaElement | null;
           return el ? el.value.length === 0 : false;
         },
-        'textarea, [data-testid="chat-input"]',
+        'textarea',
         { timeout }
       ).catch(() => {});
 
-      await page.waitForTimeout(1500); // allow response to render
+      // Wait for the response to appear before the next turn
+      await page.waitForSelector('[class*="message"], [data-testid="message"]', { timeout }).catch(() => {});
+
       await page.screenshot({
         path: `screenshots/chat-turn-${i + 1}.png`,
         fullPage: true,

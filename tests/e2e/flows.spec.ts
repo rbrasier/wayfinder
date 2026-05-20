@@ -20,29 +20,29 @@ test.describe('Flows — List page', () => {
     expect(errors, `Errors on flows list: ${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('create new flow button is visible and clickable', async ({ page }) => {
+  test('"New Flow" button is visible and clickable', async ({ page }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const createBtn = page.getByRole('button', { name: /new flow|create flow|add flow/i });
+    // AdminFlowsPage renders <Button onClick={...}>New Flow</Button>
+    const createBtn = page.getByRole('button', { name: /new flow/i });
     await expect(createBtn).toBeVisible();
     await page.screenshot({ path: 'screenshots/flows-create-button-visible.png' });
   });
 });
 
 test.describe('Flows — Create flow', () => {
-  test('opening create dialog/modal — screenshot the result', async ({ page, consoleLogs }) => {
+  test('opening create dialog — screenshot the result', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const createBtn = page.getByRole('button', { name: /new flow|create flow|add flow/i });
+    const createBtn = page.getByRole('button', { name: /new flow/i });
     await createBtn.click();
 
-    // Wait briefly for any animation
-    await page.waitForTimeout(500);
+    // Wait for the dialog to open
+    await expect(page.getByRole('dialog')).toBeVisible();
     await page.screenshot({ path: 'screenshots/flows-create-opened.png', fullPage: true });
 
-    // Check for errors triggered by opening the dialog
     const errors = consoleLogs.filter(l => l.type === 'error');
     expect(errors, `Errors after clicking create: ${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
@@ -51,11 +51,14 @@ test.describe('Flows — Create flow', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const createBtn = page.getByRole('button', { name: /new flow|create flow|add flow/i });
+    const createBtn = page.getByRole('button', { name: /new flow/i });
     await createBtn.click();
-    await page.waitForTimeout(300);
 
-    const nameInput = page.getByLabel(/name|title/i).first();
+    // Wait for dialog to open
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    // AdminFlowsPage uses <Label htmlFor="flow-name">Name</Label> + <Input id="flow-name" />
+    const nameInput = page.locator('#flow-name');
     const hasInput = await nameInput.isVisible().catch(() => false);
 
     if (!hasInput) {
@@ -67,11 +70,12 @@ test.describe('Flows — Create flow', () => {
     const flowName = `E2E Test Flow ${Date.now()}`;
     await nameInput.fill(flowName);
 
-    const submitBtn = page.getByRole('button', { name: /create|save|submit/i });
+    // Button text is "Create flow" (disabled until name is non-empty)
+    const submitBtn = page.getByRole('button', { name: /create flow/i });
     await submitBtn.click();
 
-    // Wait for navigation or state change
-    await page.waitForTimeout(1000);
+    // Wait for dialog to close — indicates the mutation completed
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
     await page.screenshot({ path: 'screenshots/flows-after-create.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
@@ -84,8 +88,9 @@ test.describe('Flows — Canvas editor', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    const flowLinks = page.locator('table tbody tr a, [data-testid="flow-card"] a, [data-testid="flow-item"]');
-    const count = await flowLinks.count();
+    // The flows table renders an "Edit" link (<Button asChild><Link href="/admin/flows/[id]">Edit</Link></Button>)
+    const editLink = page.getByRole('link', { name: 'Edit' }).first();
+    const count = await editLink.count();
 
     if (count === 0) {
       await page.screenshot({ path: 'screenshots/flows-canvas-no-flows.png', fullPage: true });
@@ -93,7 +98,7 @@ test.describe('Flows — Canvas editor', () => {
       return;
     }
 
-    await flowLinks.first().click();
+    await editLink.click();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000); // allow canvas to render
 

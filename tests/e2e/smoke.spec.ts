@@ -55,7 +55,9 @@ test.describe('Smoke — App health', () => {
 test.describe('Smoke — Key pages', () => {
   const PAGES = [
     { name: 'Admin Flows', path: '/admin/flows', screenshot: 'smoke-admin-flows.png' },
-    { name: 'Dashboard / Home', path: '/', screenshot: 'smoke-dashboard.png' },
+    { name: 'Admin Users', path: '/admin/users', screenshot: 'smoke-admin-users.png' },
+    { name: 'Admin Sessions', path: '/admin/sessions', screenshot: 'smoke-admin-sessions.png' },
+    { name: 'My Chats', path: '/chats', screenshot: 'smoke-chats.png' },
   ];
 
   for (const { name, path: pagePath, screenshot } of PAGES) {
@@ -71,4 +73,20 @@ test.describe('Smoke — Key pages', () => {
       ).toHaveLength(0);
     });
   }
+});
+
+test.describe('Auth — redirect behaviour', () => {
+  test('unauthenticated request to protected route redirects to login', async ({ browser }) => {
+    // Use a fresh context with no stored session so we test the actual redirect
+    const context = await browser.newContext({ storageState: undefined });
+    const page = await context.newPage();
+
+    await page.goto('/admin/flows');
+    await page.waitForLoadState('networkidle');
+
+    await expect(page).toHaveURL(/admin\/login|api\/auth\/cert/);
+    await page.screenshot({ path: 'screenshots/auth-redirect.png', fullPage: true });
+
+    await context.close();
+  });
 });

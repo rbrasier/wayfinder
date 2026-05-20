@@ -53,6 +53,7 @@ export function ChatComposer({ value, onChange, onSubmit, disabled = false, read
         <Button
           type="button"
           size="sm"
+          aria-label="Send message"
           onClick={onSubmit}
           disabled={!value.trim() || disabled}
           className="shrink-0 rounded-lg"
