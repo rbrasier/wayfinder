@@ -142,20 +142,30 @@ jobs:
       # Both are optional: if either secret is absent the step is skipped gracefully.
       - name: Deploy report to Netlify
         id: netlify
-        if: always() && secrets.NETLIFY_AUTH_TOKEN != '' && secrets.NETLIFY_SITE_ID != ''
+        if: always()
         continue-on-error: true
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "Netlify secrets not configured — skipping deploy"
+            exit 0
+          fi
+          if [ ! -d "tests/e2e/playwright-report" ]; then
+            echo "No report directory — skipping deploy"
+            exit 0
+          fi
           npm install --global netlify-cli --silent
-          OUTPUT=$(netlify deploy \
+          netlify deploy \
             --dir tests/e2e/playwright-report \
-            --message "E2E run #${{ github.run_number }} — ${{ github.event_name }}" \
-            --json)
-          URL=$(echo "$OUTPUT" | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).deploy_url || '')")
-          echo "url=$URL" >> $GITHUB_OUTPUT
-          echo "### 📊 [Playwright report]($URL)" >> $GITHUB_STEP_SUMMARY
+            --message "E2E run #${{ github.run_number }}" \
+            --json > /tmp/netlify-output.json
+          URL=$(node -e "try{process.stdout.write(JSON.parse(require('fs').readFileSync('/tmp/netlify-output.json','utf8')).deploy_url||'')}catch{}")
+          if [ -n "$URL" ]; then
+            echo "url=$URL" >> $GITHUB_OUTPUT
+            echo "### 📊 [Playwright report]($URL)" >> $GITHUB_STEP_SUMMARY
+          fi
 
       # ── PR comment ─────────────────────────────────────────────────────────
       # Posts (or updates) a comment on the PR with the Netlify report link.
