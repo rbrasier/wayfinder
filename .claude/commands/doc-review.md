@@ -9,7 +9,7 @@ says "let's build this."
 ## Workflow
 
 1. Read all referenced PRD, ADR, and phase documents in full.
-2. Extract and present a bulleted list of the key elements that would be implemented as a result of these documents (features, DB changes, API endpoints, integrations, UI changes, etc.). Use `AskUserQuestion` to ask the user: "Is anything missing from this list, or would you like to alter any of these elements before proceeding?" Wait for their response before continuing.
+2. Extract the key elements that would be implemented as a result of these documents (features, DB changes, API endpoints, integrations, UI changes, etc.). Output this as a bulleted list directly to the chat as regular text — do NOT embed it inside the `AskUserQuestion` UI. Then use `AskUserQuestion` to ask only the confirmation question: "Is anything missing from this list, or would you like to alter any of these elements before proceeding?" Wait for their response before continuing.
 3. Incorporate any feedback from step 2 as additional context, then check each item below and output `PASS`, `WARN`, or `FAIL` with a reason:
 
 ### Checks

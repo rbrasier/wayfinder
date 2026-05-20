@@ -6,12 +6,14 @@ Use this skill when the user wants to change or extend something already built.
 
 ## Required Clarifying Questions
 
-Ask before proceeding:
+Ask all of these via `AskUserQuestion` before proceeding:
 
 1. What's changing, and why?
 2. Which entities or use cases are affected?
 3. Are DB changes needed?
 4. Is this a MINOR or PATCH bump?
+
+**After gathering answers:** Output a bulleted plan to the chat covering the likely changes — entities and use cases touched, files to modify, DB migrations needed, API or UI changes, and the version bump target. Do this as regular chat text — do NOT put it inside `AskUserQuestion`. Then use `AskUserQuestion` to ask: "Does this plan look right?" Wait for confirmation before starting the workflow.
 
 ---
 

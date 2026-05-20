@@ -10,7 +10,7 @@ template.
 
 ## Required Clarifying Questions
 
-Ask all of these before proceeding:
+Ask all of these via `AskUserQuestion` before proceeding:
 
 1. What problem does this solve? Who uses it?
 2. What are the key entities involved?
@@ -21,6 +21,8 @@ Ask all of these before proceeding:
    - Are there existing files to integrate with rather than overwrite?
    - Which LLM provider should be the default? (`anthropic` / `openai` / `mistral`)
    - Should Langfuse observability be enabled day one or stubbed out?
+
+**After gathering answers:** Output a bulleted summary to the chat covering: the docs that will be generated (PRD, ADRs, phase doc), the key entities and features to be covered, any DB changes and their table prefix, and the planned version bump. Do this as regular chat text — do NOT put it inside `AskUserQuestion`. Then use `AskUserQuestion` to ask: "Does this look right before I generate the docs?" Wait for confirmation before starting the workflow.
 
 ---
 
