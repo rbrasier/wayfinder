@@ -19,6 +19,20 @@ const config: NextConfig = {
     "@opentelemetry/instrumentation-pg",
     "require-in-the-middle",
   ],
+  webpack: (config) => {
+    // require-in-the-middle uses dynamic require() calls that webpack cannot
+    // statically analyse, producing "Critical dependency" build warnings.
+    // The package is already excluded from bundling via serverExternalPackages;
+    // noParse tells webpack to skip parsing it so the warning is not emitted.
+    const existing = config.module?.noParse;
+    const existing_rules: (RegExp | string)[] = Array.isArray(existing)
+      ? existing
+      : existing != null
+        ? [existing as RegExp | string]
+        : [];
+    config.module.noParse = [...existing_rules, /node_modules[\\/]require-in-the-middle[\\/]/];
+    return config;
+  },
 };
 
 export default config;
