@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 interface ShareButtonProps {
@@ -8,18 +8,15 @@ interface ShareButtonProps {
 }
 
 export function ShareButton({ sessionId }: ShareButtonProps) {
-  const [copied, setCopied] = useState(false);
-
   const handleShare = async () => {
     const url = `${window.location.origin}/chats/${sessionId}?shared=true`;
     await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    toast.success("Link copied");
   };
 
   return (
     <Button variant="outline" size="sm" onClick={handleShare}>
-      {copied ? "Copied!" : "Share"}
+      Share
     </Button>
   );
 }

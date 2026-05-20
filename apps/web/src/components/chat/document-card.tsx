@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FileText } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { SessionDocument } from "@rbrasier/domain";
 
@@ -32,6 +33,7 @@ export function DocumentCard({ messageId, document, onRegenerate }: DocumentCard
       a.download = document.filename;
       a.click();
       URL.revokeObjectURL(url);
+      toast.success("Downloading…");
     } finally {
       setIsDownloading(false);
     }
@@ -39,15 +41,15 @@ export function DocumentCard({ messageId, document, onRegenerate }: DocumentCard
 
   return (
     <div className="my-3 flex justify-center">
-      <div className="w-full max-w-sm rounded-xl border border-indigo-100 bg-white shadow-sm p-4">
+      <div className="w-full max-w-sm rounded-xl border border-primary/10 bg-white shadow-sm p-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <FileText className="h-5 w-5" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-gray-900 truncate">{document.filename}</p>
+            <p className="truncate text-sm font-medium text-gray-900">{document.filename}</p>
             {document.summary && (
-              <p className="mt-0.5 text-xs text-gray-500 leading-snug line-clamp-2">
+              <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-gray-500">
                 {document.summary}
               </p>
             )}
@@ -61,8 +63,7 @@ export function DocumentCard({ messageId, document, onRegenerate }: DocumentCard
           {isUnavailable ? (
             <div className="flex-1 space-y-2">
               <p className="text-xs text-amber-600">
-                File no longer available — <span className="italic">DOCUMENT_STORAGE_PATH</span> may
-                not be volume-mounted. Phase 4 moves to durable object storage.
+                File no longer available. Try regenerating.
               </p>
               {onRegenerate && (
                 <Button size="sm" variant="outline" onClick={() => onRegenerate(messageId)} className="w-full">
@@ -81,13 +82,6 @@ export function DocumentCard({ messageId, document, onRegenerate }: DocumentCard
             </Button>
           )}
         </div>
-
-        <p
-          className="mt-2 text-[10px] text-gray-400 leading-snug"
-          title="Documents require DOCUMENT_STORAGE_PATH to be volume-mounted; Phase 4 moves to durable object storage."
-        >
-          Requires volume-mounted storage · Phase 4 moves to durable object storage
-        </p>
       </div>
     </div>
   );

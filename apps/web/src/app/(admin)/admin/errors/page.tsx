@@ -45,6 +45,8 @@ export default function AdminErrorsPage() {
   );
 
   return (
+    <div className="h-full overflow-auto">
+    <div className="container py-8">
     <Card>
       <CardHeader>
         <CardTitle>Errors</CardTitle>
@@ -138,5 +140,7 @@ export default function AdminErrorsPage() {
         )}
       </CardContent>
     </Card>
+    </div>
+    </div>
   );
 }

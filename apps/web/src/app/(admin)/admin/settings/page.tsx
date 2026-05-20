@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function AppSettingsPage() {
   return (
+    <div className="h-full overflow-auto">
+    <div className="container py-8">
     <div className="space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Application Settings</h1>
@@ -47,6 +49,8 @@ export default function AppSettingsPage() {
           </CardContent>
         </Card>
       </div>
+    </div>
+    </div>
     </div>
   );
 }

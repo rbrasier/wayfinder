@@ -37,7 +37,8 @@ export default function ChatsPage() {
   ];
 
   return (
-    <main className="container py-8">
+    <div className="h-full overflow-auto">
+    <main className="container py-8 pb-24 md:pb-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-semibold">My Chats</h1>
         <Button onClick={() => setNewChatOpen(true)}>New Chat</Button>
@@ -88,5 +89,6 @@ export default function ChatsPage() {
         publishedFlows={publishedFlowsQuery.data ?? []}
       />
     </main>
+    </div>
   );
 }

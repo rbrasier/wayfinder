@@ -44,7 +44,7 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="flex min-h-[80vh] items-center justify-center">
+    <div className="flex h-full items-center justify-center">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Admin sign-in</CardTitle>

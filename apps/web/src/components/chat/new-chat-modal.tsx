@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import type { Flow } from "@rbrasier/domain";
 import {
   Dialog,
@@ -24,6 +25,7 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
     onSuccess: (session) => {
       void utils.session.list.invalidate();
       onClose();
+      toast.success("Chat started");
       router.push(`/chats/${session.id}`);
     },
   });

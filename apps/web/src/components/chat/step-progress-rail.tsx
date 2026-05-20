@@ -11,7 +11,7 @@ interface StepProgressRailProps {
 }
 
 const stateClass: Record<StepState, string> = {
-  complete: "bg-emerald-500 text-white border-emerald-500",
+  complete: "bg-[#2e9e6a] text-white border-[#2e9e6a]",
   current: "bg-indigo-600 text-white border-indigo-600",
   pending: "bg-white text-gray-400 border-gray-300",
 };
@@ -51,7 +51,7 @@ export function StepProgressRail({
                     state === "current"
                       ? "font-semibold text-indigo-700"
                       : state === "complete"
-                      ? "text-emerald-600"
+                      ? "text-[#2e9e6a]"
                       : "text-gray-400"
                   }`}
                   title={node.name}
@@ -62,7 +62,7 @@ export function StepProgressRail({
               {index < nodes.length - 1 && (
                 <div
                   className={`mx-1 h-0.5 w-8 ${
-                    completedNodeIds.includes(node.id) ? "bg-emerald-400" : "bg-gray-200"
+                    completedNodeIds.includes(node.id) ? "bg-[#2e9e6a]/70" : "bg-gray-200"
                   }`}
                 />
               )}
