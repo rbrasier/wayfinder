@@ -1,0 +1,120 @@
+name: E2E Tests (Playwright)
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      use_real_ai:
+        description: 'Use real Anthropic API (costs credits — needs ANTHROPIC_API_KEY secret)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wayfinder_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        ports:
+          - 9000:9000
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_e2e
+      REDIS_URL: redis://localhost:6379
+      MINIO_ENDPOINT: localhost
+      MINIO_PORT: "9000"
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: wayfinder-documents
+      MINIO_USE_SSL: "false"
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET || 'e2e-test-secret-must-be-at-least-32-chars-long' }}
+      BETTER_AUTH_URL: http://localhost:3000
+      AI_DEFAULT_PROVIDER: anthropic
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ADMIN_SEED_EMAIL: admin@example.com
+      TEST_AUTH_BYPASS: "true"
+      TEST_ADMIN_EMAIL: admin@example.com
+      USE_REAL_AI: ${{ inputs.use_real_ai == true && 'true' || 'false' }}
+      BASE_URL: http://localhost:3000
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run database migrations
+        run: pnpm db:migrate
+
+      - name: Install Playwright browsers
+        run: npm ci && npx playwright install --with-deps chromium
+        working-directory: tests/e2e
+
+      - name: Start app
+        run: pnpm --filter @wayfinder/web dev &
+
+      - name: Wait for app to be ready
+        run: npx wait-on http://localhost:3000 --timeout 60000
+
+      - name: Run Playwright tests
+        run: npm test
+        working-directory: tests/e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_number }}
+          path: tests/e2e/playwright-report/
+          retention-days: 30
+
+      - name: Upload traces and videos (failures only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results-${{ github.run_number }}
+          path: tests/e2e/test-results/
+          retention-days: 7
