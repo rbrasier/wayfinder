@@ -6,12 +6,14 @@ Use this skill when the user reports something broken or not working as expected
 
 ## Required Clarifying Questions
 
-Ask before proceeding:
+Ask all of these via `AskUserQuestion` before proceeding:
 
 1. What's the symptom?
 2. How do you reproduce it?
 3. Which page or feature is affected?
 4. Severity: blocker / major / minor?
+
+**After gathering answers:** Output a bulleted plan to the chat covering the suspected area of the codebase, files likely involved, and the planned diagnostic approach. Do this as regular chat text — do NOT put it inside `AskUserQuestion`. Then use `AskUserQuestion` to ask: "Does this plan look right?" Wait for confirmation before starting the workflow.
 
 ---
 
