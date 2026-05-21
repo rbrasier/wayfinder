@@ -161,10 +161,11 @@ test.describe('Flow lifecycle — Create new flow', () => {
     await expect(editLink).toBeVisible({ timeout: 5_000 });
     await editLink.click();
 
+    // Wait for navigation rather than asserting the URL after a fixed delay
+    await page.waitForURL(/\/admin\/flows\/[^/]+$/, { timeout: 10_000 });
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1200);
+    await page.waitForTimeout(1200); // allow ReactFlow canvas to mount
 
-    expect(page.url()).toMatch(/\/admin\/flows\/[^/]+$/);
     await page.screenshot({ path: 'screenshots/flow-lifecycle-new-canvas.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
@@ -177,7 +178,11 @@ test.describe('Flow lifecycle — Publish and use', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
+    // tRPC populates the list asynchronously — wait for the first Edit link or
+    // an empty-state indicator before deciding whether to skip
     const editLink = page.getByRole('link', { name: 'Edit' }).first();
+    await editLink.waitFor({ timeout: 5_000 }).catch(() => {});
+
     if (!await editLink.isVisible().catch(() => false)) {
       test.skip(true, 'No flows available to publish');
       return;
@@ -231,10 +236,10 @@ test.describe('Flow lifecycle — Publish and use', () => {
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 
-    // Pick the first selectable flow option
-    const flowOption = dialog.locator('button:not([disabled])').first()
-      .or(dialog.locator('[role="option"]').first())
-      .or(dialog.locator('li').first());
+    // Flow option buttons display "Start →" text (see new-chat-modal.tsx).
+    // Using has-text avoids accidentally matching the dialog's own close button,
+    // which is also a button:not([disabled]) and appears first in the DOM.
+    const flowOption = dialog.locator('button:has-text("Start")').first();
 
     const hasOption = await flowOption.isVisible().catch(() => false);
 
