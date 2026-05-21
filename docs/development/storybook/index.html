@@ -1,0 +1,1934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wayfinder — Storybook</title>
+  <style>
+    /* ── Design Tokens ─────────────────────────────────────────────────── */
+    :root {
+      --bg:           #f7f6f3;
+      --surface:      #ffffff;
+      --primary:      #3a5fd9;
+      --primary-light:#eef1fc;
+      --primary-dim:  #c5d0f7;
+      --border:       #dedad2;
+      --border-dark:  #ccc8bf;
+      --text:         #1a1814;
+      --text-muted:   rgba(26,24,20,0.5);
+      --text-subtle:  rgba(26,24,20,0.35);
+      --success:      #2e9e6a;
+      --success-bg:   #eaf6f0;
+      --warning:      #d97706;
+      --warning-bg:   #fdf3e3;
+      --sand:         #efede8;
+      --sand-mid:     #e6e3dc;
+      --sand-light:   #f3f1ec;
+      --purple-light: #f3eeff;
+      --radius-sm:    6px;
+      --radius:       10px;
+      --radius-lg:    14px;
+      --shadow-sm:    0 1px 3px rgba(0,0,0,0.08);
+      --shadow:       0 2px 8px rgba(0,0,0,0.10);
+      --shadow-lg:    0 8px 24px rgba(0,0,0,0.12);
+      --font:         -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --sidebar-w:    56px;
+    }
+
+    /* ── Reset ─────────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      font-family: var(--font);
+      color: var(--text);
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ── Shell layout ──────────────────────────────────────────────────── */
+    .shell-sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .shell-sidebar header {
+      padding: 20px 16px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .shell-sidebar header .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .shell-sidebar header .wordmark .logo {
+      width: 28px; height: 28px;
+      background: var(--primary);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: #fff;
+    }
+    .shell-sidebar header .wordmark h1 {
+      font-size: 14px; font-weight: 700; color: var(--text);
+    }
+    .shell-sidebar header .sub {
+      font-size: 11px; color: var(--text-muted); margin-top: 3px; padding-left: 38px;
+    }
+    .shell-nav {
+      flex: 1;
+      padding: 12px 8px;
+    }
+    .nav-group {
+      margin-bottom: 20px;
+    }
+    .nav-group-label {
+      font-size: 10px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--text-subtle);
+      padding: 0 8px 6px;
+    }
+    .nav-item {
+      display: block;
+      padding: 7px 8px;
+      border-radius: var(--radius-sm);
+      font-size: 13px; color: var(--text-muted);
+      text-decoration: none;
+      transition: background 0.12s, color 0.12s;
+      cursor: pointer;
+    }
+    .nav-item:hover { background: var(--sand); color: var(--text); }
+    .nav-item.active { background: var(--primary-light); color: var(--primary); font-weight: 600; }
+
+    /* ── Main content ──────────────────────────────────────────────────── */
+    .main {
+      flex: 1;
+      padding: 40px 48px;
+      max-width: 900px;
+    }
+    .page-title {
+      font-size: 24px; font-weight: 700; margin-bottom: 4px;
+    }
+    .page-subtitle {
+      font-size: 14px; color: var(--text-muted); margin-bottom: 40px;
+    }
+
+    /* ── Section ───────────────────────────────────────────────────────── */
+    .section {
+      margin-bottom: 60px;
+    }
+    .section-title {
+      font-size: 18px; font-weight: 700; margin-bottom: 4px;
+    }
+    .section-desc {
+      font-size: 13px; color: var(--text-muted); margin-bottom: 24px;
+      line-height: 1.5;
+    }
+    .subsection-title {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-subtle);
+      margin-bottom: 12px; margin-top: 24px;
+    }
+
+    /* ── Story card ────────────────────────────────────────────────────── */
+    .story {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .story-label {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      padding: 8px 14px;
+      background: var(--sand-light);
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .story-canvas {
+      padding: 28px 24px;
+      background: var(--bg);
+    }
+    .story-canvas.white { background: var(--surface); }
+    .story-canvas.dark  { background: #1a1814; }
+    .story-row {
+      display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 1 ── TOKENS                                                         */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .token-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 12px;
+    }
+    .swatch {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .swatch-color {
+      height: 48px;
+    }
+    .swatch-info {
+      padding: 8px 10px;
+      background: var(--surface);
+    }
+    .swatch-name { font-size: 11px; font-weight: 600; }
+    .swatch-value { font-size: 10px; color: var(--text-muted); margin-top: 2px; font-family: 'Courier New', monospace; }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 2 ── HEADER                                                         */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .app-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+    }
+    .app-header .brand {
+      width: 30px; height: 30px;
+      background: var(--primary);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700; color: #fff;
+      flex-shrink: 0;
+    }
+    .app-header .flow-name {
+      font-size: 15px; font-weight: 600; flex: 1;
+    }
+    .header-actions {
+      display: flex; gap: 8px; align-items: center;
+    }
+    .status-pill {
+      font-size: 11px; font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+    }
+    .status-pill.draft    { background: var(--sand);        color: var(--text-muted); }
+    .status-pill.published{ background: var(--success-bg);  color: var(--success); }
+    .status-pill.in-progress { background: var(--primary-light); color: var(--primary); }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 3 ── BUTTONS                                                        */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font);
+      font-size: 13px; font-weight: 600;
+      border: 1px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+      line-height: 1;
+    }
+    .btn-primary   { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+    .btn-ghost     { background: transparent;    color: var(--text-muted); border-color: transparent; }
+    .btn-danger    { background: #fee2e2;        color: #b91c1c; border-color: #fecaca; }
+    .btn-sm {  padding: 5px 10px; font-size: 12px; }
+    .btn-icon {
+      width: 32px; height: 32px;
+      padding: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      cursor: pointer;
+      color: var(--text-muted);
+    }
+    .btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 4 ── SIDEBAR                                                        */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .icon-sidebar {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 12px 0;
+      gap: 4px;
+    }
+    .icon-sidebar .brand-mark {
+      width: 32px; height: 32px;
+      background: var(--primary);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 800; color: #fff;
+      margin-bottom: 12px;
+    }
+    .icon-sidebar-divider {
+      width: 32px; height: 1px;
+      background: var(--border);
+      margin: 6px 0;
+    }
+    .nav-icon {
+      width: 38px; height: 38px;
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+    .nav-icon:hover  { background: var(--sand); }
+    .nav-icon.active { background: var(--primary-light); }
+    .nav-icon svg    { width: 18px; height: 18px; stroke: var(--text-muted); stroke-width: 1.8; fill: none; }
+    .nav-icon.active svg { stroke: var(--primary); }
+    .nav-icon-spacer { flex: 1; }
+    .sidebar-demo-wrap {
+      display: flex;
+      height: 300px;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .sidebar-demo-content {
+      flex: 1;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; color: var(--text-subtle);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 5 ── SESSION CARDS                                                  */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .session-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+      width: 100%;
+      max-width: 480px;
+      cursor: pointer;
+      transition: box-shadow 0.12s, border-color 0.12s;
+    }
+    .session-card:hover {
+      border-color: var(--primary-dim);
+      box-shadow: var(--shadow);
+    }
+    .session-icon {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .session-icon.blue   { background: var(--primary-light); }
+    .session-icon.green  { background: var(--success-bg); }
+    .session-icon.amber  { background: var(--warning-bg); }
+    .session-icon.purple { background: var(--purple-light); }
+    .session-body { flex: 1; min-width: 0; }
+    .session-header-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .session-title { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-time  { font-size: 11px; color: var(--text-subtle); flex-shrink: 0; }
+    .session-snippet { font-size: 12px; color: var(--text-muted); line-height: 1.4; margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-progress { display: flex; align-items: center; gap: 6px; }
+    .progress-bar-track {
+      flex: 1; height: 4px;
+      background: var(--sand-mid);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: var(--success);
+    }
+    .progress-label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+    .user-badge {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 20px; height: 20px;
+      background: var(--sand-mid);
+      border-radius: 50%;
+      font-size: 9px; font-weight: 700;
+      color: var(--text-muted);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 6 ── STEP PROGRESS RAIL                                             */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .step-rail {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      padding: 10px 16px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .step-rail-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .step-badge {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700;
+    }
+    .step-badge.complete { background: var(--success); color: #fff; }
+    .step-badge.current  { background: var(--primary); color: #fff; }
+    .step-badge.pending  { background: var(--sand-mid); color: var(--text-muted); }
+    .step-label {
+      font-size: 12px; font-weight: 500;
+    }
+    .step-label.complete { color: var(--success); }
+    .step-label.current  { color: var(--primary); font-weight: 600; }
+    .step-label.pending  { color: var(--text-muted); }
+    .step-connector {
+      width: 28px; height: 1px;
+      background: var(--border);
+      flex-shrink: 0;
+    }
+    .step-connector.done { background: var(--success); }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 7 ── CHAT INTERFACE                                                 */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .chat-wrap {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .chat-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      height: 52px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .chat-header .flow-title { font-size: 14px; font-weight: 600; flex: 1; }
+    .chat-messages {
+      flex: 1;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      min-height: 280px;
+    }
+    .message-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .message-row.user {
+      flex-direction: row-reverse;
+    }
+    .avatar {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .avatar.agent { background: var(--primary); color: #fff; }
+    .avatar.user  { background: var(--sand-mid); color: var(--text); }
+    .message-bubble {
+      max-width: 68%;
+      border-radius: 14px;
+    }
+    .message-bubble.agent {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 12px 16px;
+    }
+    .message-bubble.user {
+      background: var(--primary);
+      color: #fff;
+      padding: 12px 16px;
+    }
+    .message-text { font-size: 13px; line-height: 1.55; }
+    .message-bubble.user .message-text { color: rgba(255,255,255,0.92); }
+    .confidence-bar-wrap {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: 8px;
+    }
+    .confidence-track {
+      flex: 1; height: 4px;
+      background: var(--sand-mid);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .confidence-fill {
+      height: 100%;
+      border-radius: 2px;
+    }
+    .confidence-fill.high   { background: var(--success); }
+    .confidence-fill.medium { background: var(--warning); }
+    .confidence-fill.low    { background: var(--sand-mid); }
+    .confidence-label {
+      font-size: 10px; color: var(--text-subtle); white-space: nowrap;
+    }
+    .milestone-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid #c0e8d5;
+      border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+      padding: 4px 10px;
+    }
+    .milestone-pill svg { width: 12px; height: 12px; fill: var(--success); }
+    .chat-composer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 12px 16px;
+      display: flex;
+      align-items: flex-end;
+      gap: 10px;
+    }
+    .composer-textarea {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-family: var(--font);
+      font-size: 13px;
+      color: var(--text);
+      resize: none;
+      min-height: 40px;
+      max-height: 120px;
+      line-height: 1.45;
+    }
+    .composer-textarea:focus { outline: none; border-color: var(--primary-dim); }
+    .composer-textarea::placeholder { color: var(--text-subtle); }
+    .composer-send {
+      width: 36px; height: 36px;
+      background: var(--primary);
+      border: none;
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .composer-send svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 2; }
+
+    /* ── Document card ─────────────────────────────────────────────────── */
+    .document-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      max-width: 380px;
+    }
+    .doc-icon {
+      width: 36px; height: 36px;
+      background: var(--primary-light);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .doc-icon svg { width: 18px; height: 18px; stroke: var(--primary); stroke-width: 1.8; fill: none; }
+    .doc-info { flex: 1; min-width: 0; }
+    .doc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .doc-summary { font-size: 11px; color: var(--text-muted); margin-top: 2px; line-height: 1.35; }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 8 ── MODALS                                                         */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .modal-backdrop {
+      background: rgba(20,18,15,0.45);
+      border-radius: var(--radius-lg);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .modal {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      width: 100%;
+      max-width: 420px;
+      overflow: hidden;
+    }
+    .modal-header {
+      padding: 20px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 15px; font-weight: 700; }
+    .modal-close {
+      width: 26px; height: 26px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+    .modal-body { padding: 20px; }
+    .modal-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      display: flex; gap: 8px; justify-content: flex-end;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-label {
+      display: block;
+      font-size: 12px; font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font);
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface);
+    }
+    .form-input:focus { outline: none; border-color: var(--primary-dim); box-shadow: 0 0 0 3px rgba(58,95,217,0.08); }
+    .form-textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-family: var(--font);
+      font-size: 13px;
+      color: var(--text);
+      resize: none;
+      min-height: 72px;
+      line-height: 1.5;
+    }
+    .form-textarea:focus { outline: none; border-color: var(--primary-dim); }
+    .icon-picker {
+      display: flex; gap: 8px;
+    }
+    .icon-swatch {
+      width: 38px; height: 38px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+    .icon-swatch.selected { border-color: var(--primary); }
+    .flow-select-list { display: flex; flex-direction: column; gap: 8px; }
+    .flow-option {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: border-color 0.12s, background 0.12s;
+    }
+    .flow-option:hover { border-color: var(--primary-dim); background: var(--primary-light); }
+    .flow-option.selected { border-color: var(--primary); background: var(--primary-light); }
+    .flow-option-icon {
+      width: 36px; height: 36px;
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .flow-option-info .name  { font-size: 13px; font-weight: 600; }
+    .flow-option-info .desc  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .toggle-group {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .toggle-btn {
+      flex: 1;
+      padding: 7px 0;
+      font-size: 12px; font-weight: 500;
+      text-align: center;
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      font-family: var(--font);
+      color: var(--text-muted);
+    }
+    .toggle-btn.active { background: var(--primary); color: #fff; font-weight: 600; }
+    .color-swatches { display: flex; gap: 8px; }
+    .color-swatch {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+    }
+    .color-swatch.selected { border-color: var(--text); }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 9 ── FLOW DIAGRAM (CANVAS)                                          */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .canvas-shell {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+    .canvas-toolbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 12px; color: var(--text-muted);
+    }
+    .canvas-surface {
+      position: relative;
+      background: var(--bg);
+      height: 380px;
+      overflow: hidden;
+    }
+    .canvas-dot-bg {
+      position: absolute; inset: 0;
+    }
+    .canvas-controls {
+      position: absolute;
+      bottom: 12px; right: 12px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .canvas-minimap {
+      position: absolute;
+      bottom: 12px; left: 12px;
+      width: 100px; height: 68px;
+      background: rgba(255,255,255,0.88);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+    /* Nodes */
+    .flow-node {
+      position: absolute;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow-sm);
+      padding: 12px 14px;
+      width: 170px;
+      display: flex; gap: 10px; align-items: center;
+      cursor: grab;
+    }
+    .flow-node:hover { border-color: var(--primary-dim); box-shadow: var(--shadow); }
+    .flow-node.selected { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(58,95,217,0.15); }
+    .node-badge {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .node-info .node-name    { font-size: 12px; font-weight: 700; }
+    .node-info .node-sub     { font-size: 10px; color: var(--text-muted); margin-top: 2px; line-height: 1.3; }
+    .node-handle {
+      position: absolute;
+      right: -5px; top: 50%;
+      transform: translateY(-50%);
+      width: 10px; height: 10px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      cursor: crosshair;
+    }
+    .flow-node:hover .node-handle { border-color: var(--primary); }
+
+    /* ═══════════════════════════════════════════════════════════════════ */
+    /* 10 ── TOASTS & MISC                                                 */
+    /* ═══════════════════════════════════════════════════════════════════ */
+    .toast {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-lg);
+      padding: 12px 16px;
+      font-size: 13px;
+      max-width: 320px;
+    }
+    .toast-icon {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      font-size: 11px;
+    }
+    .toast.success .toast-icon { background: var(--success-bg); color: var(--success); }
+    .toast.error   .toast-icon { background: #fee2e2; color: #b91c1c; }
+    .toast.info    .toast-icon { background: var(--primary-light); color: var(--primary); }
+    .empty-state {
+      text-align: center;
+      padding: 48px 24px;
+    }
+    .empty-state-icon { font-size: 36px; margin-bottom: 12px; }
+    .empty-state-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .empty-state-body { font-size: 13px; color: var(--text-muted); margin-bottom: 20px; }
+    .badge {
+      display: inline-flex; align-items: center;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge.blue   { background: var(--primary-light); color: var(--primary); }
+    .badge.green  { background: var(--success-bg);    color: var(--success); }
+    .badge.amber  { background: var(--warning-bg);    color: var(--warning); }
+    .badge.grey   { background: var(--sand);           color: var(--text-muted); }
+    .badge.purple { background: var(--purple-light);  color: #7c3aed; }
+    hr.story-hr { border: none; border-top: 1px solid var(--border); margin: 28px 0; }
+  </style>
+</head>
+<body>
+
+<!-- ── Navigation shell ─────────────────────────────────────────────── -->
+<aside class="shell-sidebar">
+  <header>
+    <div class="wordmark">
+      <div class="logo">W</div>
+      <h1>Wayfinder</h1>
+    </div>
+    <div class="sub">Component Storybook</div>
+  </header>
+  <nav class="shell-nav">
+    <div class="nav-group">
+      <div class="nav-group-label">Foundation</div>
+      <a class="nav-item" href="#tokens">Design Tokens</a>
+      <a class="nav-item" href="#typography">Typography</a>
+      <a class="nav-item" href="#buttons">Buttons &amp; Inputs</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">Layout</div>
+      <a class="nav-item" href="#header">Header</a>
+      <a class="nav-item" href="#sidebar">Sidebar</a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">Components</div>
+      <a class="nav-item" href="#session-cards">Session Cards</a>
+      <a class="nav-item" href="#step-rail">Step Progress Rail</a>
+      <a class="nav-item" href="#chat">Chat Interface</a>
+      <a class="nav-item" href="#modals">Modals</a>
+      <a class="nav-item" href="#flow-diagram">Flow Diagram</a>
+      <a class="nav-item" href="#toasts">Toasts &amp; Badges</a>
+    </div>
+  </nav>
+</aside>
+
+<!-- ── Main content ──────────────────────────────────────────────────── -->
+<main class="main">
+  <h1 class="page-title">Wayfinder — Component Storybook</h1>
+  <p class="page-subtitle">Visual reference for all UI components, compiled from mockup designs.</p>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 1 — DESIGN TOKENS
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="tokens">
+    <h2 class="section-title">Design Tokens</h2>
+    <p class="section-desc">Core colour palette and surfaces shared across all pages.</p>
+
+    <p class="subsection-title">Colour Palette</p>
+    <div class="token-grid">
+      <div class="swatch">
+        <div class="swatch-color" style="background:#3a5fd9"></div>
+        <div class="swatch-info"><div class="swatch-name">Primary</div><div class="swatch-value">#3a5fd9</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#eef1fc"></div>
+        <div class="swatch-info"><div class="swatch-name">Primary Light</div><div class="swatch-value">#eef1fc</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#c5d0f7"></div>
+        <div class="swatch-info"><div class="swatch-name">Primary Dim</div><div class="swatch-value">#c5d0f7</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#2e9e6a"></div>
+        <div class="swatch-info"><div class="swatch-name">Success</div><div class="swatch-value">#2e9e6a</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#eaf6f0"></div>
+        <div class="swatch-info"><div class="swatch-name">Success Light</div><div class="swatch-value">#eaf6f0</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#d97706"></div>
+        <div class="swatch-info"><div class="swatch-name">Warning</div><div class="swatch-value">#d97706</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#f7f6f3; border:1px solid #dedad2"></div>
+        <div class="swatch-info"><div class="swatch-name">Background</div><div class="swatch-value">#f7f6f3</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#ffffff; border:1px solid #dedad2"></div>
+        <div class="swatch-info"><div class="swatch-name">Surface</div><div class="swatch-value">#ffffff</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#dedad2"></div>
+        <div class="swatch-info"><div class="swatch-name">Border</div><div class="swatch-value">#dedad2</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#efede8"></div>
+        <div class="swatch-info"><div class="swatch-name">Sand</div><div class="swatch-value">#efede8</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#e6e3dc"></div>
+        <div class="swatch-info"><div class="swatch-name">Sand Mid</div><div class="swatch-value">#e6e3dc</div></div>
+      </div>
+      <div class="swatch">
+        <div class="swatch-color" style="background:#1a1814"></div>
+        <div class="swatch-info"><div class="swatch-name">Text</div><div class="swatch-value">#1a1814</div></div>
+      </div>
+    </div>
+
+    <p class="subsection-title">Node Accent Colours</p>
+    <div class="story-row">
+      <span class="node-badge" style="background:#eef1fc">📋</span>
+      <span class="node-badge" style="background:#eaf6f0">🔍</span>
+      <span class="node-badge" style="background:#fdf3e3">📝</span>
+      <span class="node-badge" style="background:#f3eeff">🎯</span>
+      <span class="node-badge" style="background:#fce8e8">⚠️</span>
+      <span class="node-badge" style="background:#e8f4fc">💬</span>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 2 — TYPOGRAPHY
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="typography">
+    <h2 class="section-title">Typography</h2>
+    <p class="section-desc">Type scale used across the application. System font stack: <code>-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif</code>.</p>
+
+    <div class="story">
+      <div class="story-label">Type Scale</div>
+      <div class="story-canvas white">
+        <div style="font-size:24px;font-weight:700;margin-bottom:12px;color:#1a1814">Page Title — 24px 700</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:12px;color:#1a1814">Section Heading — 18px 700</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:12px;color:#1a1814">Modal Title / Card Header — 15px 600</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:#1a1814">Body Bold — 14px 600</div>
+        <div style="font-size:14px;font-weight:400;margin-bottom:12px;color:#1a1814">Body Regular — 14px 400</div>
+        <div style="font-size:13px;font-weight:400;margin-bottom:12px;color:#1a1814">Chat / Form — 13px 400</div>
+        <div style="font-size:12px;font-weight:500;margin-bottom:12px;color:rgba(26,24,20,0.5)">Label / Caption — 12px 500 muted</div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:rgba(26,24,20,0.35)">Nav Group Label — 11px 600 uppercase</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 3 — BUTTONS & INPUTS
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="buttons">
+    <h2 class="section-title">Buttons &amp; Inputs</h2>
+    <p class="section-desc">Interactive controls with their visual states.</p>
+
+    <div class="story">
+      <div class="story-label">Button Variants</div>
+      <div class="story-canvas">
+        <div class="story-row">
+          <button class="btn btn-primary">New Chat</button>
+          <button class="btn btn-secondary">Save Draft</button>
+          <button class="btn btn-ghost">Cancel</button>
+          <button class="btn btn-danger">Remove Step</button>
+          <button class="btn btn-primary" disabled>Disabled</button>
+        </div>
+        <div class="story-row" style="margin-top:14px">
+          <button class="btn btn-primary btn-sm">Publish</button>
+          <button class="btn btn-secondary btn-sm">Open Chat</button>
+          <button class="btn-icon">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M8 3v10M3 8l5-5 5 5"/></svg>
+          </button>
+          <button class="btn-icon">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="8" cy="8" r="5"/><path d="M8 6v2.5L9.5 10"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Form Inputs</div>
+      <div class="story-canvas white" style="max-width:400px">
+        <div class="form-group">
+          <label class="form-label">Flow Name</label>
+          <input class="form-input" type="text" value="Procurement — Open Tender" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">AI Instructions</label>
+          <textarea class="form-textarea" rows="3">Ask the officer about the contract scope and collect project background...</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Output Type</label>
+          <div class="toggle-group" style="max-width:260px">
+            <button class="toggle-btn active">Conversation only</button>
+            <button class="toggle-btn">Generate document</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Step Colour</label>
+          <div class="color-swatches">
+            <div class="color-swatch selected" style="background:#3a5fd9"></div>
+            <div class="color-swatch" style="background:#2e9e6a"></div>
+            <div class="color-swatch" style="background:#d97706"></div>
+            <div class="color-swatch" style="background:#7c3aed"></div>
+            <div class="color-swatch" style="background:#dc2626"></div>
+            <div class="color-swatch" style="background:#0891b2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 4 — HEADER
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="header">
+    <h2 class="section-title">Header</h2>
+    <p class="section-desc">Top application bar. Shows brand mark, page title or flow name, status pill, and contextual action buttons.</p>
+
+    <div class="story">
+      <div class="story-label">Chat page — In Progress</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="app-header">
+          <div class="brand">W</div>
+          <span class="flow-name">Procurement — Open Tender</span>
+          <div class="header-actions">
+            <span class="status-pill in-progress">Step 3 of 5</span>
+            <button class="btn btn-secondary btn-sm">Share</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Canvas builder — Published</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="app-header">
+          <div class="brand">W</div>
+          <span class="flow-name">Procurement — Open Tender</span>
+          <div class="header-actions">
+            <span class="status-pill published">Published</span>
+            <button class="btn btn-secondary btn-sm">Save Draft</button>
+            <button class="btn btn-primary btn-sm">Unpublish</button>
+            <button class="btn btn-secondary btn-sm">Open Chat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Canvas builder — Draft</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="app-header">
+          <div class="brand">W</div>
+          <span class="flow-name">Contract Management Plan</span>
+          <div class="header-actions">
+            <span class="status-pill draft">Draft</span>
+            <button class="btn btn-secondary btn-sm">Save Draft</button>
+            <button class="btn btn-primary btn-sm">Publish</button>
+            <button class="btn btn-secondary btn-sm" disabled>Open Chat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Session listing page</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="app-header">
+          <div class="brand">W</div>
+          <span class="flow-name">My Chats</span>
+          <div class="header-actions">
+            <button class="btn btn-primary">+ New Chat</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 5 — SIDEBAR
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="sidebar">
+    <h2 class="section-title">Sidebar</h2>
+    <p class="section-desc">Persistent 56 px icon sidebar visible on all user and admin pages at md+ viewports. Collapses to a bottom nav bar on mobile.</p>
+
+    <div class="story">
+      <div class="story-label">Icon Sidebar — User Routes</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="sidebar-demo-wrap">
+          <div class="icon-sidebar">
+            <div class="brand-mark">W</div>
+            <!-- Chats (active) -->
+            <div class="nav-icon active" title="My Chats">
+              <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <!-- Flows -->
+            <div class="nav-icon" title="Flows">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7M17.5 14v7"/></svg>
+            </div>
+            <div class="icon-sidebar-divider"></div>
+            <!-- Settings -->
+            <div class="nav-icon" title="Settings">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </div>
+            <div class="nav-icon-spacer"></div>
+            <!-- User avatar -->
+            <div class="nav-icon" style="margin-bottom:4px" title="Account">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--sand-mid);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text-muted)">RB</div>
+            </div>
+          </div>
+          <div class="sidebar-demo-content">Page content area</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Icon Sidebar — Admin Routes</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="sidebar-demo-wrap">
+          <div class="icon-sidebar">
+            <div class="brand-mark">W</div>
+            <!-- Flows (active) -->
+            <div class="nav-icon active" title="Flows">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7M17.5 14v7"/></svg>
+            </div>
+            <!-- Sessions -->
+            <div class="nav-icon" title="Sessions">
+              <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+            <!-- Users -->
+            <div class="nav-icon" title="Users">
+              <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </div>
+            <div class="icon-sidebar-divider"></div>
+            <div class="nav-icon" title="Settings">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </div>
+            <div class="nav-icon-spacer"></div>
+            <div class="nav-icon" style="margin-bottom:4px" title="Account">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--sand-mid);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--text-muted)">AD</div>
+            </div>
+          </div>
+          <div class="sidebar-demo-content">Admin content area</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 6 — SESSION CARDS
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="session-cards">
+    <h2 class="section-title">Session Cards</h2>
+    <p class="section-desc">Cards on the <code>/chats</code> listing page. Each card links to an active or completed chat session.</p>
+
+    <div class="story">
+      <div class="story-label">In Progress</div>
+      <div class="story-canvas">
+        <div class="session-card">
+          <div class="session-icon blue">📋</div>
+          <div class="session-body">
+            <div class="session-header-row">
+              <span class="session-title">Procurement — ASD-2024-Q4 Security Software</span>
+              <span class="session-time">2 min ago</span>
+            </div>
+            <div class="session-snippet">Step 3: Please describe the evaluation criteria and weighting…</div>
+            <div class="session-progress">
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" style="width:60%"></div>
+              </div>
+              <span class="progress-label">Step 3 of 5</span>
+              <span class="status-pill in-progress" style="margin-left:4px">In Progress</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Completed</div>
+      <div class="story-canvas">
+        <div class="session-card">
+          <div class="session-icon green">🔍</div>
+          <div class="session-body">
+            <div class="session-header-row">
+              <span class="session-title">Evaluation Report — Tender #2024-107</span>
+              <span class="session-time">Yesterday</span>
+            </div>
+            <div class="session-snippet">All steps complete. Document generated and ready for download.</div>
+            <div class="session-progress">
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" style="width:100%"></div>
+              </div>
+              <span class="progress-label">5 of 5</span>
+              <span class="status-pill published" style="margin-left:4px">Complete</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Draft / Not started</div>
+      <div class="story-canvas">
+        <div class="session-card">
+          <div class="session-icon amber">📝</div>
+          <div class="session-body">
+            <div class="session-header-row">
+              <span class="session-title">Contract Management Plan — IT Refresh</span>
+              <span class="session-time">3 days ago</span>
+            </div>
+            <div class="session-snippet">New chat — no messages yet.</div>
+            <div class="session-progress">
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" style="width:0%"></div>
+              </div>
+              <span class="progress-label">0 of 4</span>
+              <span class="status-pill draft" style="margin-left:4px">Not started</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Admin view — with user badge</div>
+      <div class="story-canvas">
+        <div class="session-card">
+          <div class="session-icon purple">🎯</div>
+          <div class="session-body">
+            <div class="session-header-row">
+              <span class="session-title">Procurement — Cloud Platform Migration</span>
+              <span class="session-time">1 hr ago</span>
+            </div>
+            <div class="session-snippet">Step 2: Please provide the business justification for this procurement…</div>
+            <div class="session-progress">
+              <div class="progress-bar-track">
+                <div class="progress-bar-fill" style="width:40%"></div>
+              </div>
+              <span class="progress-label">Step 2 of 5</span>
+              <span class="user-badge" style="margin-left:8px" title="Sarah M.">SM</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 7 — STEP PROGRESS RAIL
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="step-rail">
+    <h2 class="section-title">Step Progress Rail</h2>
+    <p class="section-desc">Horizontal rail shown below the header in the chat view. Each badge maps to one flow node (step).</p>
+
+    <div class="story">
+      <div class="story-label">Step 3 active — 2 complete</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="step-rail">
+          <div class="step-rail-item">
+            <div class="step-badge complete">✓</div>
+            <span class="step-label complete">Background</span>
+          </div>
+          <div class="step-connector done"></div>
+          <div class="step-rail-item">
+            <div class="step-badge complete">✓</div>
+            <span class="step-label complete">Scope</span>
+          </div>
+          <div class="step-connector done"></div>
+          <div class="step-rail-item">
+            <div class="step-badge current">3</div>
+            <span class="step-label current">Evaluation</span>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-rail-item">
+            <div class="step-badge pending">4</div>
+            <span class="step-label pending">Risk</span>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-rail-item">
+            <div class="step-badge pending">5</div>
+            <span class="step-label pending">Final Review</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">All complete</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="step-rail">
+          <div class="step-rail-item">
+            <div class="step-badge complete">✓</div>
+            <span class="step-label complete">Background</span>
+          </div>
+          <div class="step-connector done"></div>
+          <div class="step-rail-item">
+            <div class="step-badge complete">✓</div>
+            <span class="step-label complete">Scope</span>
+          </div>
+          <div class="step-connector done"></div>
+          <div class="step-rail-item">
+            <div class="step-badge complete">✓</div>
+            <span class="step-label complete">Evaluation</span>
+          </div>
+          <div class="step-connector done"></div>
+          <div class="step-rail-item">
+            <div class="step-badge complete">✓</div>
+            <span class="step-label complete">Risk</span>
+          </div>
+          <div class="step-connector done"></div>
+          <div class="step-rail-item">
+            <div class="step-badge complete">✓</div>
+            <span class="step-label complete">Final Review</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">First step active</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="step-rail">
+          <div class="step-rail-item">
+            <div class="step-badge current">1</div>
+            <span class="step-label current">Background</span>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-rail-item">
+            <div class="step-badge pending">2</div>
+            <span class="step-label pending">Scope</span>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step-rail-item">
+            <div class="step-badge pending">3</div>
+            <span class="step-label pending">Evaluation</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 8 — CHAT INTERFACE
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="chat">
+    <h2 class="section-title">Chat Interface</h2>
+    <p class="section-desc">Full chat view composed of: header, step progress rail, message feed, confidence bars, milestone pills, document cards, and the composer.</p>
+
+    <div class="story">
+      <div class="story-label">Full Chat View</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="chat-wrap">
+          <!-- Header -->
+          <div class="app-header" style="border-radius:0">
+            <div class="brand">W</div>
+            <span class="flow-name">Procurement — Open Tender</span>
+            <div class="header-actions">
+              <span class="status-pill in-progress">Step 3 of 5</span>
+              <button class="btn btn-secondary btn-sm">Share</button>
+            </div>
+          </div>
+          <!-- Step rail -->
+          <div class="step-rail">
+            <div class="step-rail-item">
+              <div class="step-badge complete">✓</div>
+              <span class="step-label complete">Background</span>
+            </div>
+            <div class="step-connector done"></div>
+            <div class="step-rail-item">
+              <div class="step-badge complete">✓</div>
+              <span class="step-label complete">Scope</span>
+            </div>
+            <div class="step-connector done"></div>
+            <div class="step-rail-item">
+              <div class="step-badge current">3</div>
+              <span class="step-label current">Evaluation</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-rail-item">
+              <div class="step-badge pending">4</div>
+              <span class="step-label pending">Risk</span>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-rail-item">
+              <div class="step-badge pending">5</div>
+              <span class="step-label pending">Review</span>
+            </div>
+          </div>
+          <!-- Messages -->
+          <div class="chat-messages">
+            <!-- Agent message with high confidence -->
+            <div class="message-row">
+              <div class="avatar agent">FA</div>
+              <div>
+                <div class="message-bubble agent">
+                  <div class="message-text">Thanks for that background. Now let's define the evaluation criteria. Please describe each criterion and its weighting — for example, "Technical capability: 40%, Price: 30%, Local content: 20%, Implementation plan: 10%".</div>
+                </div>
+                <div class="confidence-bar-wrap" style="max-width:68%">
+                  <div class="confidence-track">
+                    <div class="confidence-fill high" style="width:92%"></div>
+                  </div>
+                  <span class="confidence-label">92% confidence</span>
+                </div>
+              </div>
+            </div>
+            <!-- User message -->
+            <div class="message-row user">
+              <div class="avatar user">RB</div>
+              <div class="message-bubble user">
+                <div class="message-text">Technical capability 40%, Price 35%, Local industry participation 15%, Transition plan 10%.</div>
+              </div>
+            </div>
+            <!-- Agent message — medium confidence -->
+            <div class="message-row">
+              <div class="avatar agent">FA</div>
+              <div>
+                <div class="message-bubble agent">
+                  <div class="message-text">Got it. One clarification: does "Local industry participation" refer to Australian-owned suppliers, or to any supplier with local delivery resources?</div>
+                </div>
+                <div class="confidence-bar-wrap" style="max-width:68%">
+                  <div class="confidence-track">
+                    <div class="confidence-fill medium" style="width:67%"></div>
+                  </div>
+                  <span class="confidence-label">67% confidence</span>
+                </div>
+              </div>
+            </div>
+            <!-- Milestone pill -->
+            <div style="display:flex;justify-content:center">
+              <div class="milestone-pill">
+                <svg viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="#2e9e6a" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+                Step complete — Scope (88%)
+              </div>
+            </div>
+            <!-- Document card -->
+            <div class="message-row">
+              <div class="avatar agent">FA</div>
+              <div>
+                <div class="message-bubble agent" style="padding:10px 12px">
+                  <div class="message-text" style="margin-bottom:10px">I've generated your Evaluation Report based on this session.</div>
+                  <div class="document-card" style="max-width:100%">
+                    <div class="doc-icon">
+                      <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+                    </div>
+                    <div class="doc-info">
+                      <div class="doc-name">evaluation-report-tender-107.docx</div>
+                      <div class="doc-summary">Tender evaluation report with panel recommendations and scoring matrix</div>
+                    </div>
+                    <button class="btn btn-primary btn-sm" style="flex-shrink:0">Download</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Composer -->
+          <div class="chat-composer">
+            <textarea class="composer-textarea" rows="1" placeholder="Reply to Wayfinder… (Enter to send, Shift+Enter for new line)"></textarea>
+            <button class="composer-send">
+              <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22,2 15,22 11,13 2,9"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="subsection-title">Confidence Bar States</p>
+    <div class="story">
+      <div class="story-label">High / Medium / Low confidence</div>
+      <div class="story-canvas white">
+        <div style="display:flex;flex-direction:column;gap:14px;max-width:320px">
+          <div>
+            <div class="confidence-bar-wrap">
+              <div class="confidence-track"><div class="confidence-fill high" style="width:92%"></div></div>
+              <span class="confidence-label">92% — high</span>
+            </div>
+          </div>
+          <div>
+            <div class="confidence-bar-wrap">
+              <div class="confidence-track"><div class="confidence-fill medium" style="width:67%"></div></div>
+              <span class="confidence-label">67% — medium</span>
+            </div>
+          </div>
+          <div>
+            <div class="confidence-bar-wrap">
+              <div class="confidence-track"><div class="confidence-fill low" style="width:38%"></div></div>
+              <span class="confidence-label">38% — low</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="subsection-title">Milestone Pill</p>
+    <div class="story">
+      <div class="story-label">Step complete inline event</div>
+      <div class="story-canvas">
+        <div class="milestone-pill">
+          <svg viewBox="0 0 12 12" width="12" height="12"><path d="M2 6l3 3 5-5" stroke="#2e9e6a" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          Step complete — Evaluation Criteria (91%)
+        </div>
+      </div>
+    </div>
+
+    <p class="subsection-title">Document Card</p>
+    <div class="story">
+      <div class="story-label">Generated document</div>
+      <div class="story-canvas white">
+        <div class="document-card">
+          <div class="doc-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="#3a5fd9" stroke-width="1.8" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
+          </div>
+          <div class="doc-info">
+            <div class="doc-name">evaluation-report-tender-2024-107.docx</div>
+            <div class="doc-summary">Tender evaluation with scoring matrix and panel recommendations</div>
+          </div>
+          <button class="btn btn-primary btn-sm">Download</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 9 — MODALS
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="modals">
+    <h2 class="section-title">Modals</h2>
+    <p class="section-desc">Dialog overlays used for creating chats, configuring flow nodes, and creating new flows.</p>
+
+    <div class="story">
+      <div class="story-label">New Chat Modal — Flow selector</div>
+      <div class="story-canvas">
+        <div class="modal-backdrop" style="min-height:400px">
+          <div class="modal">
+            <div class="modal-header">
+              <span class="modal-title">Start a new chat</span>
+              <button class="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group" style="margin-bottom:12px">
+                <label class="form-label">Select a workflow</label>
+              </div>
+              <div class="flow-select-list">
+                <div class="flow-option selected">
+                  <div class="flow-option-icon" style="background:#eef1fc">📋</div>
+                  <div class="flow-option-info">
+                    <div class="name">Procurement — Open Tender</div>
+                    <div class="desc">5 steps · Generates RFT document</div>
+                  </div>
+                </div>
+                <div class="flow-option">
+                  <div class="flow-option-icon" style="background:#eaf6f0">🔍</div>
+                  <div class="flow-option-info">
+                    <div class="name">Tender Evaluation Report</div>
+                    <div class="desc">4 steps · Generates evaluation report</div>
+                  </div>
+                </div>
+                <div class="flow-option">
+                  <div class="flow-option-icon" style="background:#fdf3e3">📝</div>
+                  <div class="flow-option-info">
+                    <div class="name">Contract Management Plan</div>
+                    <div class="desc">4 steps · Generates CMP document</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary">Cancel</button>
+              <button class="btn btn-primary">Start Chat</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Node Config Modal</div>
+      <div class="story-canvas">
+        <div class="modal-backdrop" style="min-height:520px">
+          <div class="modal">
+            <div class="modal-header">
+              <span class="modal-title">Configure Step</span>
+              <button class="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label class="form-label">Step name</label>
+                <input class="form-input" type="text" value="Evaluation Criteria" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Step colour</label>
+                <div class="color-swatches">
+                  <div class="color-swatch selected" style="background:#3a5fd9"></div>
+                  <div class="color-swatch" style="background:#2e9e6a"></div>
+                  <div class="color-swatch" style="background:#d97706"></div>
+                  <div class="color-swatch" style="background:#7c3aed"></div>
+                  <div class="color-swatch" style="background:#dc2626"></div>
+                  <div class="color-swatch" style="background:#0891b2"></div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Instructions for the AI</label>
+                <textarea class="form-textarea" rows="3">Ask the officer about the evaluation criteria and weighting for each criterion. Collect at least 3 criteria totalling 100%.</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Done when…</label>
+                <textarea class="form-textarea" rows="2">The officer has provided all criteria with weightings that sum to 100%.</textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Output type</label>
+                <div class="toggle-group">
+                  <button class="toggle-btn active">Conversation only</button>
+                  <button class="toggle-btn">Generate document</button>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-danger btn-sm" style="margin-right:auto">Remove step</button>
+              <button class="btn btn-secondary">Cancel</button>
+              <button class="btn btn-primary">Save step</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">New Flow Modal</div>
+      <div class="story-canvas">
+        <div class="modal-backdrop" style="min-height:380px">
+          <div class="modal">
+            <div class="modal-header">
+              <span class="modal-title">Create new flow</span>
+              <button class="modal-close">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label class="form-label">Flow name</label>
+                <input class="form-input" type="text" placeholder="e.g. Procurement — Open Tender" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Description</label>
+                <input class="form-input" type="text" placeholder="Short description for officers" />
+              </div>
+              <div class="form-group">
+                <label class="form-label">Icon</label>
+                <div class="icon-picker">
+                  <div class="icon-swatch selected" style="background:#eef1fc">📋</div>
+                  <div class="icon-swatch" style="background:#eaf6f0">🔍</div>
+                  <div class="icon-swatch" style="background:#fdf3e3">📝</div>
+                  <div class="icon-swatch" style="background:#f3eeff">🎯</div>
+                  <div class="icon-swatch" style="background:#fce8e8">⚠️</div>
+                  <div class="icon-swatch" style="background:#e8f4fc">💬</div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary">Cancel</button>
+              <button class="btn btn-primary">Create Flow</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 10 — FLOW DIAGRAM (CANVAS)
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="flow-diagram">
+    <h2 class="section-title">Flow Diagram</h2>
+    <p class="section-desc">React Flow canvas for building and viewing workflow graphs. Uses a dot-grid background, custom <code>ConversationalNode</code> cards, smoothstep edges with arrowheads, zoom controls, and a minimap.</p>
+
+    <div class="story">
+      <div class="story-label">Canvas — 5-node Procurement Flow</div>
+      <div class="story-canvas" style="padding:0">
+        <div class="canvas-shell">
+          <!-- Canvas header -->
+          <div class="app-header" style="border-radius:0">
+            <div class="brand">W</div>
+            <span class="flow-name">Procurement — Open Tender</span>
+            <div class="header-actions">
+              <span class="status-pill published">Published</span>
+              <button class="btn btn-secondary btn-sm">Save Draft</button>
+              <button class="btn btn-primary btn-sm">Unpublish</button>
+              <button class="btn btn-secondary btn-sm">Open Chat</button>
+            </div>
+          </div>
+          <!-- Toolbar -->
+          <div class="canvas-toolbar">
+            <span>Drag nodes to reposition · Connect handles to link steps · Click node to configure</span>
+            <div style="margin-left:auto;display:flex;gap:6px">
+              <button class="btn btn-secondary btn-sm">Auto Layout</button>
+            </div>
+          </div>
+          <!-- Surface -->
+          <div class="canvas-surface">
+            <!-- Dot grid via SVG pattern -->
+            <svg class="canvas-dot-bg" width="100%" height="100%">
+              <defs>
+                <pattern id="dot-grid" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
+                  <circle cx="1" cy="1" r="1" fill="#dedad2" opacity="0.7"/>
+                </pattern>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#dot-grid)"/>
+              <!-- Edges (SVG paths) -->
+              <!-- Background → Scope -->
+              <path d="M 210 80 C 245 80 245 130 280 130" stroke="#dedad2" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+              <!-- Scope → Evaluation -->
+              <path d="M 450 130 C 485 130 485 180 520 180" stroke="#dedad2" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+              <!-- Evaluation → Risk -->
+              <path d="M 450 180 C 485 180 485 240 520 240" stroke="#3a5fd9" stroke-width="1.5" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-blue)"/>
+              <!-- Risk → Review -->
+              <path d="M 690 240 C 725 240 725 180 760 180" stroke="#dedad2" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+              <defs>
+                <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L6,3 z" fill="#dedad2"/>
+                </marker>
+                <marker id="arrow-blue" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L6,3 z" fill="#3a5fd9"/>
+                </marker>
+              </defs>
+            </svg>
+
+            <!-- Node 1: Background -->
+            <div class="flow-node" style="left:40px;top:60px">
+              <div class="node-badge" style="background:#eef1fc">📋</div>
+              <div class="node-info">
+                <div class="node-name">Background</div>
+                <div class="node-sub">Collect project background &amp; justification…</div>
+              </div>
+              <div class="node-handle"></div>
+            </div>
+
+            <!-- Node 2: Scope -->
+            <div class="flow-node" style="left:260px;top:110px">
+              <div class="node-badge" style="background:#eaf6f0">🔍</div>
+              <div class="node-info">
+                <div class="node-name">Scope</div>
+                <div class="node-sub">Define contract scope and deliverables…</div>
+              </div>
+              <div class="node-handle"></div>
+            </div>
+
+            <!-- Node 3: Evaluation (selected) -->
+            <div class="flow-node selected" style="left:480px;top:160px">
+              <div class="node-badge" style="background:#fdf3e3">📊</div>
+              <div class="node-info">
+                <div class="node-name">Evaluation</div>
+                <div class="node-sub">Criteria and weightings for tender…</div>
+              </div>
+              <div class="node-handle"></div>
+            </div>
+
+            <!-- Node 4: Risk -->
+            <div class="flow-node" style="left:260px;top:220px">
+              <div class="node-badge" style="background:#fce8e8">⚠️</div>
+              <div class="node-info">
+                <div class="node-name">Risk Assessment</div>
+                <div class="node-sub">Identify procurement risks and mitigations…</div>
+              </div>
+              <div class="node-handle"></div>
+            </div>
+
+            <!-- Node 5: Final Review -->
+            <div class="flow-node" style="left:540px;top:220px">
+              <div class="node-badge" style="background:#f3eeff">🎯</div>
+              <div class="node-info">
+                <div class="node-name">Final Review</div>
+                <div class="node-sub">Summarise and generate RFT document…</div>
+              </div>
+              <div class="node-handle"></div>
+            </div>
+
+            <!-- MiniMap -->
+            <div class="canvas-minimap">
+              <svg width="100%" height="100%" viewBox="0 0 300 200">
+                <rect width="300" height="200" fill="#f7f6f3"/>
+                <rect x="10" y="20" width="40" height="24" rx="4" fill="#eef1fc" stroke="#dedad2" stroke-width="1"/>
+                <rect x="70" y="45" width="40" height="24" rx="4" fill="#eaf6f0" stroke="#dedad2" stroke-width="1"/>
+                <rect x="130" y="65" width="40" height="24" rx="4" fill="#fdf3e3" stroke="#3a5fd9" stroke-width="1.5"/>
+                <rect x="70" y="90" width="40" height="24" rx="4" fill="#fce8e8" stroke="#dedad2" stroke-width="1"/>
+                <rect x="150" y="90" width="40" height="24" rx="4" fill="#f3eeff" stroke="#dedad2" stroke-width="1"/>
+                <!-- Viewport indicator -->
+                <rect x="0" y="0" width="300" height="200" fill="none" stroke="#3a5fd9" stroke-width="1.5" rx="2" opacity="0.4"/>
+              </svg>
+            </div>
+
+            <!-- Controls -->
+            <div class="canvas-controls">
+              <button class="btn-icon" title="Zoom in">+</button>
+              <button class="btn-icon" title="Zoom out">−</button>
+              <button class="btn-icon" title="Fit view" style="font-size:10px">⊡</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="subsection-title">Conversational Node — States</p>
+    <div class="story">
+      <div class="story-label">Default / Hover / Selected</div>
+      <div class="story-canvas">
+        <div class="story-row" style="flex-wrap:nowrap;gap:20px">
+          <div>
+            <div style="font-size:10px;color:var(--text-subtle);margin-bottom:6px;text-align:center">Default</div>
+            <div class="flow-node" style="position:relative">
+              <div class="node-badge" style="background:#eef1fc">📋</div>
+              <div class="node-info">
+                <div class="node-name">Background</div>
+                <div class="node-sub">Collect project background…</div>
+              </div>
+              <div class="node-handle"></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-subtle);margin-bottom:6px;text-align:center">Selected</div>
+            <div class="flow-node selected" style="position:relative">
+              <div class="node-badge" style="background:#eef1fc">📋</div>
+              <div class="node-info">
+                <div class="node-name">Background</div>
+                <div class="node-sub">Collect project background…</div>
+              </div>
+              <div class="node-handle" style="border-color:var(--primary)"></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--text-subtle);margin-bottom:6px;text-align:center">With subtitle</div>
+            <div class="flow-node" style="position:relative">
+              <div class="node-badge" style="background:#fdf3e3">📊</div>
+              <div class="node-info">
+                <div class="node-name">Evaluation Criteria</div>
+                <div class="node-sub">Define criteria and weightings…</div>
+              </div>
+              <div class="node-handle"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       SECTION 11 — TOASTS & BADGES
+  ══════════════════════════════════════════════════════════════════ -->
+  <section class="section" id="toasts">
+    <h2 class="section-title">Toasts &amp; Badges</h2>
+    <p class="section-desc">Ephemeral feedback toasts and inline status badges used throughout the UI.</p>
+
+    <div class="story">
+      <div class="story-label">Toast Variants</div>
+      <div class="story-canvas">
+        <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start">
+          <div class="toast success">
+            <div class="toast-icon">✓</div>
+            <span>Link copied to clipboard</span>
+          </div>
+          <div class="toast success">
+            <div class="toast-icon">✓</div>
+            <span>Chat started</span>
+          </div>
+          <div class="toast success">
+            <div class="toast-icon">✓</div>
+            <span>Flow saved</span>
+          </div>
+          <div class="toast success">
+            <div class="toast-icon">✓</div>
+            <span>Step deleted</span>
+          </div>
+          <div class="toast info">
+            <div class="toast-icon">↓</div>
+            <span>Downloading evaluation-report.docx…</span>
+          </div>
+          <div class="toast error">
+            <div class="toast-icon">!</div>
+            <span>Something went wrong. Please try again.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Status Badges</div>
+      <div class="story-canvas">
+        <div class="story-row">
+          <span class="badge blue">In Progress</span>
+          <span class="badge green">Published</span>
+          <span class="badge green">Complete</span>
+          <span class="badge grey">Draft</span>
+          <span class="badge amber">Pending Review</span>
+          <span class="badge purple">Owner</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Status Pills (larger, used in header)</div>
+      <div class="story-canvas">
+        <div class="story-row">
+          <span class="status-pill draft">Draft</span>
+          <span class="status-pill published">Published</span>
+          <span class="status-pill in-progress">Step 3 of 5</span>
+          <span class="status-pill published">Complete</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Empty State</div>
+      <div class="story-canvas white">
+        <div class="empty-state">
+          <div class="empty-state-icon">💬</div>
+          <div class="empty-state-title">No chats yet</div>
+          <div class="empty-state-body">Start a chat to begin a guided procurement workflow.</div>
+          <button class="btn btn-primary">+ New Chat</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // Smooth scroll for nav links
+  document.querySelectorAll('.nav-item').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      const href = this.getAttribute('href');
+      if (href && href.startsWith('#')) {
+        e.preventDefault();
+        const target = document.querySelector(href);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+        this.classList.add('active');
+      }
+    });
+  });
+
+  // Highlight active nav item on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        const id = entry.target.getAttribute('id');
+        document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+        const active = document.querySelector('.nav-item[href="#' + id + '"]');
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { threshold: 0.25 });
+  sections.forEach(function(s) { observer.observe(s); });
+</script>
+</body>
+</html>
