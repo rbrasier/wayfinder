@@ -8,10 +8,16 @@ import { TRPCError } from "@trpc/server";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 
 export const userRouter = router({
-  me: authenticatedProcedure.query(({ ctx }) => ({
-    userId: ctx.userId,
-    isAdmin: ctx.isAdmin,
-  })),
+  me: authenticatedProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.repos.users.findById(ctx.userId);
+    const user = result.error ? null : result.data;
+    return {
+      userId: ctx.userId,
+      isAdmin: ctx.isAdmin,
+      name: user?.name ?? null,
+      email: user?.email ?? null,
+    };
+  }),
 
   list: adminProcedure.input(listUsersInputSchema).query(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.listUsers.execute(input);
