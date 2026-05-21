@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   AlertCircle,
   BarChart2,
@@ -11,6 +11,8 @@ import {
   Menu,
   MessageSquare,
   Settings,
+  ShieldOff,
+  ShieldCheck,
   Users,
   X,
 } from "lucide-react";
@@ -25,6 +27,7 @@ interface NavItem {
 
 const userNav: NavItem[] = [
   { href: "/chats", icon: MessageSquare, label: "My Chats" },
+  { href: "/flows", icon: GitBranch, label: "Flows" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -44,6 +47,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const { mobileOpen, openMobile, closeMobile } = useSidebar();
 
   const userQuery = trpc.user.me.useQuery();
@@ -133,10 +137,22 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       {/* Footer */}
       <div className="border-t border-[#dedad2] px-[10px] py-[12px]">
         {isAdmin && (
-          <div className="mb-[10px] flex items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#c17a1a]">
-            <span>⚠</span>
-            <span>Admin mode active</span>
-          </div>
+          <button
+            onClick={() => router.push("/chats")}
+            className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#c17a1a] transition-colors hover:border-[#d4a265] hover:bg-[#fae8ce]"
+          >
+            <ShieldOff className="h-[13px] w-[13px] shrink-0" />
+            <span>Exit admin mode</span>
+          </button>
+        )}
+        {!isAdmin && user?.isAdmin && (
+          <button
+            onClick={() => router.push("/admin/sessions")}
+            className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#c5d0f7] bg-[#eef1fc] px-[10px] py-[8px] text-[12px] font-medium text-[#3a5fd9] transition-colors hover:border-[#a8b9f0] hover:bg-[#dde5fb]"
+          >
+            <ShieldCheck className="h-[13px] w-[13px] shrink-0" />
+            <span>Enter admin mode</span>
+          </button>
         )}
         {user && (
           <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px] hover:bg-[#efede8]">
@@ -229,6 +245,24 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
               )}
             </nav>
             <div className="border-t border-[#dedad2] px-[10px] py-[12px]">
+              {isAdmin && (
+                <button
+                  onClick={() => { closeMobile(); router.push("/chats"); }}
+                  className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#c17a1a] transition-colors hover:border-[#d4a265] hover:bg-[#fae8ce]"
+                >
+                  <ShieldOff className="h-[13px] w-[13px] shrink-0" />
+                  <span>Exit admin mode</span>
+                </button>
+              )}
+              {!isAdmin && user?.isAdmin && (
+                <button
+                  onClick={() => { closeMobile(); router.push("/admin/sessions"); }}
+                  className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#c5d0f7] bg-[#eef1fc] px-[10px] py-[8px] text-[12px] font-medium text-[#3a5fd9] transition-colors hover:border-[#a8b9f0] hover:bg-[#dde5fb]"
+                >
+                  <ShieldCheck className="h-[13px] w-[13px] shrink-0" />
+                  <span>Enter admin mode</span>
+                </button>
+              )}
               {user && (
                 <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px]">
                   <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[10px] font-bold text-white">

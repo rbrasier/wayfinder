@@ -146,7 +146,13 @@ export const flowRouter = router({
     return result.data;
   }),
 
-  create: adminProcedure
+  listMine: authenticatedProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.listFlowsForUser.execute(ctx.userId);
+    if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+    return result.data;
+  }),
+
+  create: authenticatedProcedure
     .input(
       z.object({
         name: z.string().min(1),
@@ -155,7 +161,6 @@ export const flowRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.userId) throw new TRPCError({ code: "UNAUTHORIZED" });
       const result = await ctx.container.useCases.createFlow.execute({
         name: input.name,
         description: input.description,
