@@ -10,9 +10,7 @@ export class FlowSessionGraph implements ISessionAgent {
   buildSystemPrompt(input: BuildSystemPromptInput): Result<string> {
     const { nodeConfig, contextDocs, gatheredContext, workflowName, organisationName, expertRole } = input;
 
-    const roleBlock = expertRole
-      ? buildExpertRoleBlock(expertRole, organisationName, workflowName)
-      : buildFallbackRoleBlock(workflowName);
+    const roleBlock = buildRoleBlock(expertRole, organisationName, workflowName);
 
     const gatheredBlock = gatheredContext.trim()
       ? `\n  <gathered_context>\n    ${gatheredContext.trim()}\n    You may ask nuanced follow-up questions to clarify or deepen anything captured here if it would help complete this step more accurately.\n  </gathered_context>`
@@ -83,18 +81,15 @@ Return only: { "branchChoice": "<nodeId>" }`;
   }
 }
 
-const buildExpertRoleBlock = (
-  expertRole: string,
+const buildRoleBlock = (
+  expertRole: string | null,
   organisationName: string | null,
   workflowName: string,
 ): string => {
-  const orgClause = organisationName ? ` at ${organisationName}` : "";
+  const expertSentences = expertRole
+    ? `You are a world-class ${expertRole} with over 20 years of experience${organisationName ? ` at ${organisationName}` : ""}. You understand its processes, culture, and requirements intimately. `
+    : "";
   return `<role>
-  You are a world-class ${expertRole} with over 20 years of experience${orgClause}. You understand its processes, culture, and requirements intimately. You are currently helping a colleague complete the "${workflowName}" workflow, guiding them through it step by step. Stay focused on this step only — do not anticipate future steps.
+  ${expertSentences}You are currently helping a colleague complete the "${workflowName}" workflow, guiding them through it step by step. Stay focused on this step only — do not anticipate future steps.
 </role>`;
 };
-
-const buildFallbackRoleBlock = (workflowName: string): string =>
-  `<role>
-  You are an AI assistant helping a colleague complete the "${workflowName}" workflow, guiding them through it step by step. Stay focused on this step only — do not anticipate future steps.
-</role>`;

@@ -22,12 +22,12 @@ const baseInput = {
 // ── buildSystemPrompt ────────────────────────────────────────────────────────
 
 describe("FlowSessionGraph.buildSystemPrompt", () => {
-  it("includes <role> fallback text when expertRole is null", () => {
+  it("omits expert sentences when expertRole is null but still names the workflow", () => {
     const result = agent.buildSystemPrompt(baseInput);
     expect(result.error).toBeUndefined();
-    expect(result.data).toContain("AI assistant");
     expect(result.data).toContain("Procurement Request");
     expect(result.data).not.toContain("world-class");
+    expect(result.data).not.toContain("AI assistant");
   });
 
   it("includes expert persona when expertRole is set", () => {
