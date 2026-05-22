@@ -252,6 +252,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
     }
   }, [editingNodeId, flowId, rfNodes, pendingEdge, createNodeMutation, updateNodeMutation, createEdgeMutation]);
 
+  const handleAddStep = useCallback(() => {
+    const tempId = `temp-${Date.now()}`;
+    const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
+    const tempNode: Node<ConversationalNodeData> = {
+      id: tempId,
+      type: "conversationalNode",
+      position: { x: xOffset, y: 200 },
+      data: { name: "New step", colour: "#6366f1", aiInstruction: null },
+    };
+    setRfNodes((nds) => [...nds, tempNode]);
+    setEditingNodeId(tempId);
+    setConfigOpen(true);
+  }, [rfNodes]);
+
   const handleConfigClose = useCallback(() => {
     if (editingNodeId?.startsWith("temp-")) {
       setRfNodes((nds) => nds.filter((n) => n.id !== editingNodeId));
@@ -335,6 +349,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
         </Badge>
 
         <div className="ml-auto flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={handleAddStep}>
+            + Add step
+          </Button>
           <Button
             size="sm"
             variant="outline"
