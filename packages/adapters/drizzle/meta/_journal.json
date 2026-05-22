@@ -36,6 +36,13 @@
       "when": 1747612800000,
       "tag": "0004_app_wayfinder_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1748304000000,
+      "tag": "0005_structured_ai_turn",
+      "breakpoints": true
     }
   ]
 }

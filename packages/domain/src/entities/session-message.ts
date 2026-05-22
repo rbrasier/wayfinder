@@ -9,6 +9,13 @@ export interface SessionDocument {
   generatedAt: string;
 }
 
+export interface AiTurnPayload {
+  response: string;
+  rationale: string;
+  stepCompleteConfidence: number;
+  contextGathered: { key: string; value: string }[];
+}
+
 export interface SessionMessage {
   id: string;
   sessionId: string;
@@ -17,6 +24,7 @@ export interface SessionMessage {
   confidence: number | null;
   stepNodeId: string | null;
   document: SessionDocument | null;
+  aiPayload: AiTurnPayload | null;
   createdAt: Date;
 }
 
@@ -27,4 +35,5 @@ export interface NewSessionMessage {
   confidence?: number | null;
   stepNodeId?: string | null;
   document?: SessionDocument | null;
+  aiPayload?: AiTurnPayload | null;
 }

@@ -158,6 +158,7 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
       confidence: input.confidence ?? null,
       stepNodeId: input.stepNodeId ?? null,
       document: input.document ?? null,
+      aiPayload: input.aiPayload ?? null,
       createdAt: new Date(),
     };
     this.messages.set(message.id, message);
@@ -180,6 +181,7 @@ const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
   name: "Test Flow",
   description: null,
   icon: null,
+  expertRole: null,
   ownerUserId: "user-1",
   status: "published",
   permissions: [],
@@ -372,6 +374,13 @@ describe("GetSession", () => {
 
 // ── RunTurn ──────────────────────────────────────────────────────────────────
 
+const makeAiPayload = (stepCompleteConfidence: number) => ({
+  response: "Here is my response",
+  rationale: "Testing",
+  stepCompleteConfidence,
+  contextGathered: [],
+});
+
 describe("RunTurn", () => {
   let sessions: FakeSessionRepository;
   let sessionMessages: FakeSessionMessageRepository;
@@ -388,18 +397,23 @@ describe("RunTurn", () => {
     useCase = new RunTurn(sessions, sessionMessages, edges);
   });
 
-  it("persists user and assistant messages", async () => {
+  it("persists user and assistant messages with aiPayload", async () => {
+    const aiPayload = makeAiPayload(50);
     const result = await useCase.execute({
       session,
       flowId: "flow-1",
       userMessage: "Hello",
       assistantMessage: "Hi there",
-      confidence: { score: 50, readyToAdvance: false, missingInformation: [] },
+      aiPayload,
       branchChoice: null,
     });
 
     expect(result.error).toBeUndefined();
-    expect([...sessionMessages.messages.values()]).toHaveLength(2);
+    const messages = [...sessionMessages.messages.values()];
+    expect(messages).toHaveLength(2);
+    const assistantMsg = messages.find((m) => m.role === "assistant");
+    expect(assistantMsg?.aiPayload).toEqual(aiPayload);
+    expect(assistantMsg?.confidence).toBe(50);
   });
 
   it("does not advance when confidence is below threshold", async () => {
@@ -408,7 +422,7 @@ describe("RunTurn", () => {
       flowId: "flow-1",
       userMessage: "Not enough",
       assistantMessage: "Keep going",
-      confidence: { score: 70, readyToAdvance: false, missingInformation: ["More info"] },
+      aiPayload: makeAiPayload(70),
       branchChoice: null,
     });
 
@@ -416,7 +430,7 @@ describe("RunTurn", () => {
     expect(result.data?.newNodeId).toBeNull();
   });
 
-  it("advances to next node when confidence >= 90 and readyToAdvance", async () => {
+  it("advances to next node when stepCompleteConfidence >= 90", async () => {
     edges.edges.set("edge-1", {
       id: "edge-1",
       flowId: "flow-1",
@@ -431,7 +445,7 @@ describe("RunTurn", () => {
       flowId: "flow-1",
       userMessage: "All done",
       assistantMessage: "Great, advancing",
-      confidence: { score: 95, readyToAdvance: true, missingInformation: [] },
+      aiPayload: makeAiPayload(95),
       branchChoice: null,
     });
 
@@ -462,7 +476,7 @@ describe("RunTurn", () => {
       flowId: "flow-1",
       userMessage: "Choose B",
       assistantMessage: "Going to B",
-      confidence: { score: 92, readyToAdvance: true, missingInformation: [] },
+      aiPayload: makeAiPayload(92),
       branchChoice: "node-b",
     });
 
@@ -493,7 +507,7 @@ describe("RunTurn", () => {
       flowId: "flow-1",
       userMessage: "Hmm",
       assistantMessage: "What type?",
-      confidence: { score: 90, readyToAdvance: true, missingInformation: [] },
+      aiPayload: makeAiPayload(90),
       branchChoice: null,
     });
 
@@ -507,7 +521,7 @@ describe("RunTurn", () => {
       flowId: "flow-1",
       userMessage: "Finished",
       assistantMessage: "Flow complete",
-      confidence: { score: 95, readyToAdvance: true, missingInformation: [] },
+      aiPayload: makeAiPayload(95),
       branchChoice: null,
     });
 

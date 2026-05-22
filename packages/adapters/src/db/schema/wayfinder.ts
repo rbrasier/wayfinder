@@ -7,10 +7,11 @@ import {
   smallint,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { FlowContextDoc, FlowPermission } from "@rbrasier/domain";
-import type { SessionDocument } from "@rbrasier/domain";
+import type { AiTurnPayload, SessionDocument } from "@rbrasier/domain";
 import { core_users } from "./core";
 
 export const app_flows = pgTable(
@@ -20,6 +21,7 @@ export const app_flows = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     icon: text("icon"),
+    expert_role: text("expert_role"),
     owner_user_id: uuid("owner_user_id")
       .notNull()
       .references(() => core_users.id, { onDelete: "restrict" }),
@@ -111,6 +113,7 @@ export const app_session_messages = pgTable(
     confidence: smallint("confidence"),
     step_node_id: uuid("step_node_id"),
     document: jsonb("document").$type<SessionDocument>(),
+    ai_payload: jsonb("ai_payload").$type<AiTurnPayload>(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -118,5 +121,19 @@ export const app_session_messages = pgTable(
       t.session_id,
       t.created_at,
     ),
+  }),
+);
+
+export const admin_system_settings = pgTable(
+  "admin_system_settings",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    key_unique: unique("admin_system_settings_key_unique").on(t.key),
   }),
 );

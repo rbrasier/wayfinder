@@ -1,7 +1,7 @@
-import { createDataStreamResponse, generateText, streamObject, streamText } from "ai";
+import { createDataStreamResponse, generateObject, generateText, streamObject } from "ai";
 import { resolveModel } from "@rbrasier/adapters";
-import type { ConversationalNodeConfig, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
-import { turnSchema } from "@rbrasier/shared";
+import type { AiTurnPayload, ConversationalNodeConfig, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
+import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 
 const getSessionToken = (req: Request): string | null => {
@@ -9,6 +9,18 @@ const getSessionToken = (req: Request): string | null => {
   if (!cookie) return null;
   const pair = cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("better-auth.session_token="));
   return pair ? pair.slice("better-auth.session_token=".length) : null;
+};
+
+const buildGatheredContext = (
+  messages: SessionMessage[],
+  stepNodeId: string | null,
+): string => {
+  if (!stepNodeId) return "";
+  const items = messages
+    .filter((m) => m.role === "assistant" && m.stepNodeId === stepNodeId && m.aiPayload)
+    .flatMap((m) => m.aiPayload!.contextGathered);
+  if (items.length === 0) return "";
+  return items.map((item) => `- ${item.key}: ${item.value}`).join("\n");
 };
 
 export async function POST(
@@ -51,25 +63,26 @@ export async function POST(
 
   const nodeConfig = currentNode.config as unknown as ConversationalNodeConfig;
 
+  const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
+  const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
+
+  const gatheredContext = buildGatheredContext(dbMessages, session.currentNodeId);
+
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
     contextDocs: flow.contextDocs,
-    gatheredContext: "",
+    gatheredContext,
+    workflowName: flow.name,
+    organisationName,
+    expertRole: flow.expertRole,
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 
-  const confSystemResult = container.services.sessionAgent.buildConfidenceSystemPrompt({ nodeConfig });
-  if (confSystemResult.error) return new Response("Failed to build confidence prompt", { status: 500 });
-
   const outgoingEdges = edges.filter((e) => e.fromNodeId === session.currentNodeId);
   const branchNodeIds = outgoingEdges.map((e) => e.toNodeId);
-  const branchNodeNames = nodes
+  const branchNodes = nodes
     .filter((n) => branchNodeIds.includes(n.id))
-    .map((n) => `${n.id} (${n.name})`);
-
-  const branchHint = branchNodeNames.length > 1
-    ? `\n\nAvailable branch targets for branchChoice: ${branchNodeNames.join(", ")}`
-    : "";
+    .map((n) => ({ id: n.id, name: n.name }));
 
   const coreMessages = dbMessages.map((m) => ({
     role: m.role as "user" | "assistant" | "system",
@@ -83,50 +96,65 @@ export async function POST(
 
   const env = container.env;
   const provider = env.AI_DEFAULT_PROVIDER;
-
-  const textModel = resolveModel(provider, provider === "anthropic" ? "claude-sonnet-4-20250514" : undefined);
-  const confModel = resolveModel(provider, provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined);
+  const haikuModel = resolveModel(provider, provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined);
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
-      const textStream = streamText({
-        model: textModel,
+      const turnStream = streamObject({
+        model: haikuModel,
+        schema: turnResponseSchema,
         system: systemPromptResult.data,
         messages: messagesWithNew,
       });
 
-      const confStream = streamObject({
-        model: confModel,
-        schema: turnSchema,
-        system: confSystemResult.data + branchHint,
-        messages: messagesWithNew,
-      });
+      let previousResponseLength = 0;
+      for await (const partial of turnStream.partialObjectStream) {
+        const currentResponse = partial.response ?? "";
+        if (currentResponse.length > previousResponseLength) {
+          const newChars = currentResponse.slice(previousResponseLength);
+          dataStream.write(`0:${JSON.stringify(newChars)}\n`);
+          previousResponseLength = currentResponse.length;
+        }
+      }
 
-      textStream.mergeIntoDataStream(dataStream);
-
-      const [fullText, turn] = await Promise.all([
-        textStream.text,
-        confStream.object,
-      ]);
+      const turnResult = await turnStream.object;
+      const aiPayload: AiTurnPayload = {
+        response: turnResult.response,
+        rationale: turnResult.rationale,
+        stepCompleteConfidence: turnResult.stepCompleteConfidence,
+        contextGathered: turnResult.contextGathered,
+      };
 
       dataStream.writeMessageAnnotation({
         type: "confidence",
-        score: turn.confidence.score,
-        readyToAdvance: turn.confidence.readyToAdvance,
-        missingInformation: turn.confidence.missingInformation,
+        score: aiPayload.stepCompleteConfidence,
       });
 
-      const turnResult = await container.useCases.runTurn.execute({
+      let branchChoice: string | null = null;
+      if (aiPayload.stepCompleteConfidence >= 90 && branchNodes.length > 1) {
+        const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
+        if (!branchPromptResult.error) {
+          const branchResult = await generateObject({
+            model: haikuModel,
+            schema: branchChoiceSchema,
+            system: branchPromptResult.data,
+            messages: messagesWithNew,
+          }).catch(() => null);
+          branchChoice = branchResult?.object.branchChoice ?? null;
+        }
+      }
+
+      const runResult = await container.useCases.runTurn.execute({
         session,
         flowId: flow.id,
         userMessage: lastUserMessage,
-        assistantMessage: fullText,
-        confidence: turn.confidence,
-        branchChoice: turn.branchChoice,
-        advanceThreshold: (nodeConfig.advanceConfidenceThreshold ?? 90),
+        assistantMessage: aiPayload.response,
+        aiPayload,
+        branchChoice,
+        advanceThreshold: nodeConfig.advanceConfidenceThreshold ?? 90,
       });
 
-      if (!turnResult.error && turnResult.data.advanced) {
+      if (!runResult.error && runResult.data.advanced) {
         const assistantMessages = await container.repos.sessionMessages.listBySession(session.id);
         if (!assistantMessages.error) {
           const milestone = [...assistantMessages.data].reverse().find(

@@ -10,8 +10,6 @@ import { MilestonePill } from "./milestone-pill";
 interface ConfidenceAnnotation {
   type: "confidence";
   score: number;
-  readyToAdvance: boolean;
-  missingInformation: string[];
 }
 
 const toConfidenceAnnotation = (a: unknown): ConfidenceAnnotation | null => {

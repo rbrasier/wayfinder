@@ -9,3 +9,4 @@ export * from "./drizzle-flow-node-repository";
 export * from "./drizzle-flow-edge-repository";
 export * from "./drizzle-session-repository";
 export * from "./drizzle-session-message-repository";
+export * from "./drizzle-system-settings-repository";

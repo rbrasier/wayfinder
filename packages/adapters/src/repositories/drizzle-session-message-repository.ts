@@ -3,6 +3,7 @@ import {
   domainError,
   err,
   ok,
+  type AiTurnPayload,
   type ISessionMessageRepository,
   type NewSessionMessage,
   type Result,
@@ -20,6 +21,7 @@ const toEntity = (row: typeof app_session_messages.$inferSelect): SessionMessage
   confidence: row.confidence,
   stepNodeId: row.step_node_id,
   document: row.document ?? null,
+  aiPayload: (row.ai_payload as AiTurnPayload | null) ?? null,
   createdAt: row.created_at,
 });
 
@@ -37,6 +39,7 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
           confidence: input.confidence ?? null,
           step_node_id: input.stepNodeId ?? null,
           document: input.document ?? undefined,
+          ai_payload: input.aiPayload ?? undefined,
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Message insert returned no row."));

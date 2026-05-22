@@ -1,15 +1,20 @@
 import { z } from "zod";
 
-export const confidenceSchema = z.object({
-  score: z.number().min(0).max(100).describe("Confidence score 0–100 that the done-when criteria are met"),
-  readyToAdvance: z.boolean().describe("Whether the step is ready to advance"),
-  missingInformation: z.array(z.string()).describe("List of what is still needed"),
+export const turnResponseSchema = z.object({
+  response: z.string().describe("Conversational reply to the user"),
+  rationale: z.string().describe("Why you are asking this or why the step is complete"),
+  stepCompleteConfidence: z.number().int().min(0).max(100).describe("Confidence 0-100 that completion criteria are fully met"),
+  contextGathered: z.array(
+    z.object({
+      key: z.string().describe("Descriptive label for the information"),
+      value: z.string().describe("What the user provided"),
+    }),
+  ).describe("New context items gathered in this turn"),
 });
 
-export const turnSchema = z.object({
-  confidence: confidenceSchema,
-  branchChoice: z.string().nullable().describe("Node ID of the chosen branch when multiple outgoing edges exist, null otherwise"),
+export const branchChoiceSchema = z.object({
+  branchChoice: z.string().describe("Node ID of the chosen next step"),
 });
 
-export type ConfidenceReading = z.infer<typeof confidenceSchema>;
-export type TurnReading = z.infer<typeof turnSchema>;
+export type TurnResponse = z.infer<typeof turnResponseSchema>;
+export type BranchChoice = z.infer<typeof branchChoiceSchema>;

@@ -52,6 +52,7 @@ import {
   DrizzleJobRepository,
   DrizzleSessionMessageRepository,
   DrizzleSessionRepository,
+  DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
   DrizzleUserRepository,
   FlowSessionGraph,
@@ -89,6 +90,7 @@ const build = () => {
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessions = new DrizzleSessionRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
+  const systemSettings = new DrizzleSystemSettingsRepository(db);
 
   const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER);
   const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
@@ -153,7 +155,7 @@ const build = () => {
     objectStorage,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, systemSettings },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages),
       createUser: new CreateUser(users),

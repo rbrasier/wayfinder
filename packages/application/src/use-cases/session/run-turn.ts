@@ -1,5 +1,6 @@
 import {
   ok,
+  type AiTurnPayload,
   type IFlowEdgeRepository,
   type ISessionMessageRepository,
   type ISessionRepository,
@@ -7,18 +8,12 @@ import {
   type Session,
 } from "@rbrasier/domain";
 
-export interface ConfidenceScore {
-  score: number;
-  readyToAdvance: boolean;
-  missingInformation: string[];
-}
-
 export interface RunTurnInput {
   session: Session;
   flowId: string;
   userMessage: string;
   assistantMessage: string;
-  confidence: ConfidenceScore;
+  aiPayload: AiTurnPayload;
   branchChoice: string | null;
   advanceThreshold?: number;
 }
@@ -37,7 +32,7 @@ export class RunTurn {
   ) {}
 
   async execute(input: RunTurnInput): Promise<Result<RunTurnOutput>> {
-    const { session, flowId, confidence } = input;
+    const { session, flowId, aiPayload } = input;
     const threshold = input.advanceThreshold ?? 90;
 
     const userResult = await this.sessionMessages.create({
@@ -52,12 +47,13 @@ export class RunTurn {
       sessionId: session.id,
       role: "assistant",
       content: input.assistantMessage,
-      confidence: Math.round(confidence.score),
+      confidence: Math.round(aiPayload.stepCompleteConfidence),
       stepNodeId: session.currentNodeId,
+      aiPayload,
     });
     if (assistantResult.error) return assistantResult;
 
-    const shouldAdvance = confidence.score >= threshold && confidence.readyToAdvance;
+    const shouldAdvance = aiPayload.stepCompleteConfidence >= threshold;
     if (!shouldAdvance) {
       return ok({ session, advanced: false, newNodeId: null });
     }
@@ -90,7 +86,7 @@ export class RunTurn {
       graphCheckpoint: {
         currentNodeId: newNodeId,
         advancedFrom: session.currentNodeId,
-        confidenceAtAdvance: confidence.score,
+        confidenceAtAdvance: aiPayload.stepCompleteConfidence,
       },
     });
     if (updated.error) return updated;

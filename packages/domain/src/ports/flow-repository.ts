@@ -5,6 +5,7 @@ export interface FlowUpdate {
   name?: string;
   description?: string | null;
   icon?: string | null;
+  expertRole?: string | null;
   status?: FlowStatus;
   ownerUserId?: string;
 }

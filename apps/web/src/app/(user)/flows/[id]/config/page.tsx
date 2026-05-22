@@ -76,6 +76,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [contextDocs, setContextDocs] = useState<FlowContextDoc[]>([]);
   const [flowName, setFlowName] = useState("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
+  const [expertRole, setExpertRole] = useState<string>("");
+  const [expertRoleFocused, setExpertRoleFocused] = useState(false);
+  const expertRoleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [configOpen, setConfigOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -100,6 +103,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setContextDocs(data.flow.contextDocs);
     setFlowName(data.flow.name);
     setFlowStatus(data.flow.status);
+    setExpertRole(data.flow.expertRole ?? "");
     if (data.nodes.length > 3) {
       setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
     }
@@ -301,6 +305,25 @@ function CanvasInner({ flowId }: { flowId: string }) {
         <Badge variant={flowStatus === "published" ? "default" : "secondary"}>
           {flowStatus === "published" ? "Published" : "Draft"}
         </Badge>
+        <div className="h-4 w-px bg-border" />
+        <span className="text-xs text-[#918d87]">Expert role</span>
+        <input
+          type="text"
+          value={expertRole}
+          placeholder="e.g. procurement specialist"
+          className={`h-7 rounded-md border px-2 text-xs text-[#1a1814] outline-none transition-colors ${expertRoleFocused ? "border-[#3a5fd9]" : "border-[#dedad2]"} bg-[#f7f6f3]`}
+          style={{ width: "180px" }}
+          onFocus={() => setExpertRoleFocused(true)}
+          onBlur={() => setExpertRoleFocused(false)}
+          onChange={(e) => {
+            const value = e.target.value;
+            setExpertRole(value);
+            if (expertRoleTimer.current) clearTimeout(expertRoleTimer.current);
+            expertRoleTimer.current = setTimeout(() => {
+              void updateFlowMutation.mutateAsync({ flowId, expertRole: value || null });
+            }, 800);
+          }}
+        />
         <div className="ml-auto flex items-center gap-2">
           <Button
             size="sm"

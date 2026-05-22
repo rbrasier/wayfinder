@@ -1,0 +1,165 @@
+import { describe, it, expect } from "vitest";
+import { FlowSessionGraph } from "./flow-session-graph";
+
+const agent = new FlowSessionGraph();
+
+const baseInput = {
+  nodeConfig: {
+    aiInstruction: "Help the user describe their procurement need.",
+    doneWhen: "The user has described what they need to buy and approximate budget.",
+    outputType: "conversation_only" as const,
+    documentTemplateMarkdown: null,
+    documentTemplatePath: null,
+    documentTemplateFilename: null,
+  },
+  contextDocs: [],
+  gatheredContext: "",
+  workflowName: "Procurement Request",
+  organisationName: null,
+  expertRole: null,
+};
+
+// ── buildSystemPrompt ────────────────────────────────────────────────────────
+
+describe("FlowSessionGraph.buildSystemPrompt", () => {
+  it("omits expert sentences when expertRole is null but still names the workflow", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("Procurement Request");
+    expect(result.data).not.toContain("world-class");
+    expect(result.data).not.toContain("AI assistant");
+  });
+
+  it("includes expert persona when expertRole is set", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      expertRole: "procurement specialist",
+      organisationName: null,
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("world-class procurement specialist");
+    expect(result.data).not.toMatch(/experience at \w/);
+  });
+
+  it("includes organisation name in role when set", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      expertRole: "procurement specialist",
+      organisationName: "Acme Corp",
+    });
+    expect(result.data).toContain("at Acme Corp");
+  });
+
+  it("omits organisation clause when organisationName is null", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      expertRole: "procurement specialist",
+      organisationName: null,
+    });
+    expect(result.data).not.toMatch(/experience at \w/);
+  });
+
+  it("includes <instructions> with aiInstruction", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).toContain("<instructions>");
+    expect(result.data).toContain("Help the user describe their procurement need.");
+  });
+
+  it("includes <completion_criteria> with doneWhen", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).toContain("<completion_criteria>");
+    expect(result.data).toContain("described what they need to buy");
+  });
+
+  it("omits <gathered_context> when gatheredContext is empty", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).not.toContain("<gathered_context>");
+  });
+
+  it("includes <gathered_context> when gatheredContext is non-empty", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      gatheredContext: "- Item needed: laptops\n- Budget: $5000",
+    });
+    expect(result.data).toContain("<gathered_context>");
+    expect(result.data).toContain("laptops");
+  });
+
+  it("omits <reference_documents> when contextDocs is empty", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).not.toContain("<reference_documents>");
+  });
+
+  it("includes <reference_documents> when contextDocs are present", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      contextDocs: [
+        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf" },
+      ],
+    });
+    expect(result.data).toContain("<reference_documents>");
+    expect(result.data).toContain("policy.pdf");
+  });
+
+  it("omits <document_template> when outputType is conversation_only", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).not.toContain("<document_template>");
+  });
+
+  it("omits <document_template> when documentTemplateMarkdown is null even if outputType is generate_document", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateMarkdown: null,
+      },
+    });
+    expect(result.data).not.toContain("<document_template>");
+  });
+
+  it("includes <document_template> when outputType is generate_document and template is set", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateMarkdown: "# Procurement Brief\n## Item: {{item}}",
+      },
+    });
+    expect(result.data).toContain("<document_template>");
+    expect(result.data).toContain("Procurement Brief");
+  });
+
+  it("includes <output> section with JSON schema", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).toContain("<output>");
+    expect(result.data).toContain("stepCompleteConfidence");
+    expect(result.data).toContain("contextGathered");
+  });
+});
+
+// ── buildBranchChoicePrompt ──────────────────────────────────────────────────
+
+describe("FlowSessionGraph.buildBranchChoicePrompt", () => {
+  it("lists all branch nodes", () => {
+    const result = agent.buildBranchChoicePrompt({
+      branchNodes: [
+        { id: "node-a", name: "Standard Route" },
+        { id: "node-b", name: "Escalation Route" },
+      ],
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("node-a");
+    expect(result.data).toContain("Standard Route");
+    expect(result.data).toContain("node-b");
+    expect(result.data).toContain("Escalation Route");
+  });
+
+  it("includes branchChoice in the output schema description", () => {
+    const result = agent.buildBranchChoicePrompt({
+      branchNodes: [{ id: "node-a", name: "Route A" }],
+    });
+    expect(result.data).toContain("branchChoice");
+  });
+});

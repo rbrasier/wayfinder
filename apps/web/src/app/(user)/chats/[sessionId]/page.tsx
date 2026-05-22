@@ -107,7 +107,7 @@ export default function SessionPage({ params }: SessionPageProps) {
       role: m.role as "user" | "assistant" | "system",
       content: m.content,
       annotations: m.confidence !== null
-        ? [{ type: "confidence", score: m.confidence, readyToAdvance: false, missingInformation: [] }]
+        ? [{ type: "confidence", score: m.confidence }]
         : undefined,
     })),
     experimental_prepareRequestBody: ({ messages: msgs }) => ({

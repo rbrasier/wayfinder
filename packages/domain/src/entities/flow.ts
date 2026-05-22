@@ -19,6 +19,7 @@ export interface Flow {
   name: string;
   description: string | null;
   icon: string | null;
+  expertRole: string | null;
   ownerUserId: string;
   status: FlowStatus;
   permissions: FlowPermission[];
@@ -31,5 +32,6 @@ export interface NewFlow {
   name: string;
   description?: string | null;
   icon?: string | null;
+  expertRole?: string | null;
   ownerUserId: string;
 }

@@ -56,6 +56,7 @@ export class GenerateDocument {
 
     const dataResult = await this.languageModel.generateObject<Record<string, string>>({
       purpose: "document-generation",
+      model: "claude-sonnet-4-20250514",
       system: config.aiInstruction,
       prompt: [
         `Return a JSON object with exactly these keys: ${JSON.stringify(tags)}.`,

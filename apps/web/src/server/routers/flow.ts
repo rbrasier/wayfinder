@@ -43,7 +43,10 @@ const nodeRouter = router({
         throw new TRPCError({ code: "NOT_FOUND", message: "Flow not found." });
       }
 
-      const contextDocs = canvasResult.data.flow.contextDocs;
+      const { flow } = canvasResult.data;
+
+      const orgSettingResult = await ctx.container.repos.systemSettings.get("organisation_name");
+      const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
 
       const promptResult = ctx.container.services.sessionAgent.buildSystemPrompt({
         nodeConfig: {
@@ -51,8 +54,11 @@ const nodeRouter = router({
           doneWhen: input.doneWhen,
           outputType: "conversation_only",
         },
-        contextDocs,
+        contextDocs: flow.contextDocs,
         gatheredContext: "",
+        workflowName: flow.name,
+        organisationName,
+        expertRole: flow.expertRole,
       });
 
       if (promptResult.error) {
@@ -236,6 +242,7 @@ export const flowRouter = router({
         name: z.string().min(1).optional(),
         description: z.string().nullable().optional(),
         icon: z.string().nullable().optional(),
+        expertRole: z.string().nullable().optional(),
         status: z.enum(["draft", "published"]).optional(),
       }),
     )
