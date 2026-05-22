@@ -30,7 +30,7 @@ step is never accumulated or threaded back into subsequent turns.
 
 ## 3. Non-goals
 
-- Document content extraction / RAG (covered by `phase-context-document-extraction.md`).
+- Document content extraction / RAG (covered by the context document extraction phase).
 - Admin UI for managing system settings (the setting is written directly to DB
   in this phase; UI is a separate task).
 - Changes to the document generation prompt or logic beyond model selection.

@@ -55,6 +55,6 @@ Restructured the AI turn model from two parallel calls (streamText + streamObjec
 
 ## Known limitations
 
-- Document content is still filename-only in prompts (deferred to `phase-context-document-extraction.md`).
+- Document content is still filename-only in prompts (deferred to the context document extraction phase).
 - Admin UI to set `organisation_name` is not built; value must be inserted directly into the DB.
 - `expertRole` input on the canvas page has no save confirmation — it auto-saves after 800 ms debounce.
