@@ -3,7 +3,15 @@
 import type { ErrorLogStatus } from "@rbrasier/domain";
 import React, { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -37,7 +45,15 @@ export function AdminErrorsContent() {
       void utils.error.listInGroup.invalidate();
     },
   });
+  const deleteAllMutation = trpc.error.deleteAll.useMutation({
+    onSuccess: () => {
+      void utils.error.listGrouped.invalidate();
+      void utils.error.listInGroup.invalidate();
+      setConfirmDeleteAll(false);
+    },
+  });
 
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [open, setOpen] = useState<OpenGroup | null>(null);
   const groupQuery = trpc.error.listInGroup.useQuery(
     open ? { message: open.message, page: open.page } : { message: "", page: null },
@@ -48,8 +64,16 @@ export function AdminErrorsContent() {
     <div className="h-full overflow-auto">
     <div className="container py-8">
     <Card>
-      <CardHeader>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>Errors</CardTitle>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => setConfirmDeleteAll(true)}
+          disabled={deleteAllMutation.isPending}
+        >
+          Delete all
+        </Button>
       </CardHeader>
       <CardContent>
         {groupsQuery.isLoading ? (
@@ -139,6 +163,28 @@ export function AdminErrorsContent() {
           </Table>
         )}
       </CardContent>
+      <Dialog open={confirmDeleteAll} onOpenChange={(o) => !o && setConfirmDeleteAll(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete all errors?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently delete all error log entries. This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDeleteAll(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteAllMutation.isPending}
+              onClick={() => deleteAllMutation.mutate()}
+            >
+              {deleteAllMutation.isPending ? "Deleting…" : "Delete all"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
     </div>
     </div>

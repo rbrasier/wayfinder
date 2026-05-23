@@ -8,6 +8,7 @@ export * from "./list-users";
 export * from "./log-error";
 export * from "./list-errors";
 export * from "./update-error-status";
+export * from "./delete-all-errors";
 export * from "./send-message";
 export * from "./log-audit-event";
 export * from "./get-feature-flag";

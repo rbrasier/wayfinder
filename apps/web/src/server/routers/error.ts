@@ -43,6 +43,13 @@ export const errorRouter = router({
       return result.data;
     }),
 
+  deleteAll: adminProcedure.mutation(async ({ ctx }) => {
+    const result = await ctx.container.useCases.deleteAllErrors.execute();
+    if (result.error)
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+    return { deleted: result.data };
+  }),
+
   updateStatus: adminProcedure
     .input(updateErrorStatusInputSchema)
     .mutation(async ({ ctx, input }) => {

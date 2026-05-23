@@ -131,6 +131,15 @@ export class DrizzleErrorLogRepository implements IErrorLogRepository {
     }
   }
 
+  async deleteAll(): Promise<Result<number>> {
+    try {
+      const rows = await this.db.delete(app_error_log).returning({ id: app_error_log.id });
+      return ok(rows.length);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to delete all errors.", cause));
+    }
+  }
+
   async updateGroupStatus(
     message: string,
     page: string | null,

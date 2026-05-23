@@ -19,6 +19,7 @@ import { LogError } from "./log-error";
 import { LogAuditEvent } from "./log-audit-event";
 import { ListErrors } from "./list-errors";
 import { UpdateErrorStatus } from "./update-error-status";
+import { DeleteAllErrors } from "./delete-all-errors";
 
 function makeErrorLog(overrides: Partial<ErrorLog> = {}): ErrorLog {
   const now = new Date();
@@ -119,6 +120,12 @@ class InMemoryErrorLogRepo implements IErrorLogRepository {
     }
     return ok(count);
   }
+
+  async deleteAll(): Promise<Result<number>> {
+    const count = this.logs.size;
+    this.logs.clear();
+    return ok(count);
+  }
 }
 
 describe("LogError", () => {
@@ -208,5 +215,29 @@ describe("UpdateErrorStatus", () => {
 
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("DeleteAllErrors", () => {
+  it("deletes all error logs and returns the count", async () => {
+    const repo = new InMemoryErrorLogRepo();
+    repo.seed({ message: "err 1" });
+    repo.seed({ message: "err 2" });
+    const sut = new DeleteAllErrors(repo);
+
+    const result = await sut.execute();
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe(2);
+  });
+
+  it("returns zero when no errors exist", async () => {
+    const repo = new InMemoryErrorLogRepo();
+    const sut = new DeleteAllErrors(repo);
+
+    const result = await sut.execute();
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe(0);
   });
 });

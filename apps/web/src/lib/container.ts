@@ -1,5 +1,6 @@
 import {
   AddContextDoc,
+  DeleteAllErrors,
   CreateFlow,
   CreateFlowEdge,
   CreateFlowNode,
@@ -167,6 +168,7 @@ const build = () => {
       logError: new LogError(errorLogger),
       listErrors: new ListErrors(errorLogs),
       updateErrorStatus: new UpdateErrorStatus(errorLogs),
+      deleteAllErrors: new DeleteAllErrors(errorLogs),
       sendMessage: new SendMessage(llm, conversations),
       logAuditEvent: new LogAuditEvent(auditLogger),
       getFeatureFlag: new GetFeatureFlag(featureFlags),

@@ -18,4 +18,5 @@ export interface IErrorLogRepository {
     page: string | null,
     status: ErrorLogStatus,
   ): Promise<Result<number>>;
+  deleteAll(): Promise<Result<number>>;
 }
