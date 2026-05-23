@@ -202,6 +202,7 @@ export const flowRouter = router({
     .input(
       z.object({
         name: z.string().min(1),
+        expertRole: z.string().min(1),
         description: z.string().nullable().optional(),
         icon: z.string().nullable().optional(),
       }),
@@ -209,6 +210,7 @@ export const flowRouter = router({
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.createFlow.execute({
         name: input.name,
+        expertRole: input.expertRole,
         description: input.description,
         icon: input.icon,
         ownerUserId: ctx.userId,

@@ -27,6 +27,7 @@ const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
   name: "Test Flow",
   description: null,
   icon: null,
+  expertRole: null,
   ownerUserId: "user-1",
   status: "draft",
   permissions: [{ userId: "user-1", role: "owner" }],
@@ -70,6 +71,7 @@ class FakeFlowRepository implements IFlowRepository {
       name: input.name,
       description: input.description ?? null,
       icon: input.icon ?? null,
+      expertRole: input.expertRole ?? null,
       ownerUserId: input.ownerUserId,
       status: "draft",
       permissions: [{ userId: input.ownerUserId, role: "owner" }],
@@ -227,6 +229,14 @@ describe("CreateFlow", () => {
     expect(result.data?.status).toBe("draft");
     expect(result.data?.ownerUserId).toBe("user-1");
     expect(result.data?.permissions).toEqual([{ userId: "user-1", role: "owner" }]);
+    expect(result.data?.expertRole).toBeNull();
+  });
+
+  it("stores expertRole when provided", async () => {
+    const input: NewFlow = { name: "Legal Review", ownerUserId: "user-1", expertRole: "Senior Solicitor" };
+    const result = await useCase.execute(input);
+
+    expect(result.data?.expertRole).toBe("Senior Solicitor");
   });
 
   it("propagates repository errors", async () => {
