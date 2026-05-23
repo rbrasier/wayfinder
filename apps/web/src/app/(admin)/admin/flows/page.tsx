@@ -27,6 +27,7 @@ const ICONS = ["🗂️", "🏗️", "💬", "📋", "🔄", "⚙️"];
 
 interface NewFlowForm {
   name: string;
+  expertRole: string;
   description: string;
   icon: string;
 }
@@ -36,7 +37,7 @@ interface AssignOwnerState {
   userId: string;
 }
 
-const emptyForm = (): NewFlowForm => ({ name: "", description: "", icon: ICONS[0] ?? "🗂️" });
+const emptyForm = (): NewFlowForm => ({ name: "", expertRole: "", description: "", icon: ICONS[0] ?? "🗂️" });
 
 export default function AdminFlowsPage() {
   const utils = trpc.useUtils();
@@ -63,9 +64,10 @@ export default function AdminFlowsPage() {
   const [assignOwner, setAssignOwner] = useState<AssignOwnerState | null>(null);
 
   const handleCreate = async () => {
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || !form.expertRole.trim()) return;
     await createMutation.mutateAsync({
       name: form.name.trim(),
+      expertRole: form.expertRole.trim(),
       description: form.description.trim() || null,
       icon: form.icon || null,
     });
@@ -183,6 +185,16 @@ export default function AdminFlowsPage() {
                   />
                 </div>
                 <div className="space-y-1">
+                  <Label htmlFor="flow-expert-role">Expert role</Label>
+                  <Input
+                    id="flow-expert-role"
+                    required
+                    value={form.expertRole}
+                    onChange={(e) => setForm({ ...form, expertRole: e.target.value })}
+                    placeholder="e.g. Senior employment lawyer"
+                  />
+                </div>
+                <div className="space-y-1">
                   <Label htmlFor="flow-desc">Description</Label>
                   <Input
                     id="flow-desc"
@@ -215,7 +227,7 @@ export default function AdminFlowsPage() {
                 <Button variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
                 <Button
                   onClick={handleCreate}
-                  disabled={createMutation.isPending || !form.name.trim()}
+                  disabled={createMutation.isPending || !form.name.trim() || !form.expertRole.trim()}
                 >
                   {createMutation.isPending ? "Creating…" : "Create flow"}
                 </Button>
