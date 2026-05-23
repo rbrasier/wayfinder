@@ -149,6 +149,12 @@ test.describe('Flow lifecycle — Create new flow', () => {
     const flowName = `E2E Lifecycle Flow ${Date.now()}`;
     await nameInput.fill(flowName);
 
+    // Expert role is required — fill it so the submit button becomes enabled
+    const expertRoleInput = page.locator('#flow-expert-role');
+    if (await expertRoleInput.isVisible().catch(() => false)) {
+      await expertRoleInput.fill('E2E Lifecycle Expert');
+    }
+
     await page.getByRole('button', { name: /create flow/i }).click();
 
     // Dialog closes when the mutation succeeds

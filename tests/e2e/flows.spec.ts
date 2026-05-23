@@ -70,7 +70,13 @@ test.describe('Flows — Create flow', () => {
     const flowName = `E2E Test Flow ${Date.now()}`;
     await nameInput.fill(flowName);
 
-    // Button text is "Create flow" (disabled until name is non-empty)
+    // Expert role is required — fill it so the submit button becomes enabled
+    const expertRoleInput = page.locator('#flow-expert-role');
+    if (await expertRoleInput.isVisible().catch(() => false)) {
+      await expertRoleInput.fill('E2E Test Expert');
+    }
+
+    // Button text is "Create flow" (disabled until name and expertRole are non-empty)
     const submitBtn = page.getByRole('button', { name: /create flow/i });
     await submitBtn.click();
 
