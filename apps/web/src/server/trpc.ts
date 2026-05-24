@@ -2,6 +2,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 import { getContainer, type Container } from "@/lib/container";
+import { causeToMetadata } from "./error-metadata";
 
 export interface TrpcContext {
   readonly container: Container;
@@ -52,12 +53,15 @@ const t = initTRPC.context<TrpcContext>().create({
 const errorLogging = t.middleware(async ({ ctx, path, type, next }) => {
   const result = await next();
   if (!result.ok) {
+    const cause = causeToMetadata(result.error.cause);
+    const metadata: Record<string, unknown> = { code: result.error.code };
+    if (cause) metadata.cause = cause;
     void ctx.container.services.errorLogger.log({
       level: "error",
       message: result.error.message,
       stack: result.error.stack ?? null,
       page: `trpc:${type}:${path}`,
-      metadata: { code: result.error.code },
+      metadata,
     });
   }
   return result;

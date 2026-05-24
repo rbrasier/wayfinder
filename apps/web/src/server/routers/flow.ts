@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { toTrpcError } from "../trpc-errors";
 
 const flowIdInput = z.object({ flowId: z.string().uuid() });
 
@@ -37,7 +38,7 @@ const nodeRouter = router({
 
       const canvasResult = await ctx.container.useCases.getFlowCanvas.execute(input.flowId);
       if (canvasResult.error) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: canvasResult.error.message });
+        throw toTrpcError(canvasResult.error);
       }
       if (!canvasResult.data) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Flow not found." });
@@ -62,7 +63,7 @@ const nodeRouter = router({
       });
 
       if (promptResult.error) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: promptResult.error.message });
+        throw toTrpcError(promptResult.error);
       }
 
       return { systemPrompt: promptResult.data };
@@ -92,7 +93,7 @@ const nodeRouter = router({
         positionY: input.positionY,
         config: input.config,
       });
-      if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
@@ -115,10 +116,7 @@ const nodeRouter = router({
         colour: input.colour,
         config: input.config,
       });
-      if (result.error) {
-        const code = result.error.code === "NOT_FOUND" ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR";
-        throw new TRPCError({ code, message: result.error.message });
-      }
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
@@ -136,10 +134,7 @@ const nodeRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.updateFlowNodePosition.execute(input.nodeId, input.x, input.y);
-      if (result.error) {
-        const code = result.error.code === "NOT_FOUND" ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR";
-        throw new TRPCError({ code, message: result.error.message });
-      }
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
@@ -150,7 +145,7 @@ const nodeRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.deleteFlowNode.execute(input.nodeId);
-      if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       return { ok: true };
     }),
 });
@@ -169,7 +164,7 @@ const edgeRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.createFlowEdge.execute(input);
-      if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
@@ -180,7 +175,7 @@ const edgeRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.deleteFlowEdge.execute(input.edgeId);
-      if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       return { ok: true };
     }),
 });
@@ -188,13 +183,13 @@ const edgeRouter = router({
 export const flowRouter = router({
   list: adminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFlows.execute();
-    if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+    if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
   listMine: authenticatedProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFlowsForUser.execute(ctx.userId);
-    if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+    if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
@@ -215,7 +210,7 @@ export const flowRouter = router({
         icon: input.icon,
         ownerUserId: ctx.userId,
       });
-      if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
@@ -223,7 +218,7 @@ export const flowRouter = router({
     .input(flowIdInput)
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getFlowCanvas.execute(input.flowId);
-      if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       if (!result.data) throw new TRPCError({ code: "NOT_FOUND", message: "Flow not found." });
 
       const { flow } = result.data;
@@ -254,10 +249,7 @@ export const flowRouter = router({
       }
       const { flowId, ...patch } = input;
       const result = await ctx.container.useCases.updateFlow.execute(flowId, patch);
-      if (result.error) {
-        const code = result.error.code === "NOT_FOUND" ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR";
-        throw new TRPCError({ code, message: result.error.message });
-      }
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
@@ -265,10 +257,7 @@ export const flowRouter = router({
     .input(z.object({ flowId: z.string().uuid(), userId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.grantFlowOwner.execute(input.flowId, input.userId);
-      if (result.error) {
-        const code = result.error.code === "NOT_FOUND" ? "NOT_FOUND" : "INTERNAL_SERVER_ERROR";
-        throw new TRPCError({ code, message: result.error.message });
-      }
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
@@ -280,7 +269,7 @@ export const flowRouter = router({
           throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
         }
         const result = await ctx.container.useCases.removeContextDoc.execute(input.flowId, input.docId);
-        if (result.error) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+        if (result.error) throw toTrpcError(result.error);
         return { ok: true };
       }),
   }),

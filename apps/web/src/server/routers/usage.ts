@@ -1,6 +1,6 @@
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure, router } from "../trpc";
+import { toTrpcError } from "../trpc-errors";
 
 export const usageRouter = router({
   summary: adminProcedure
@@ -17,8 +17,7 @@ export const usageRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getUsageSummary.execute(input);
-      if (result.error)
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 });

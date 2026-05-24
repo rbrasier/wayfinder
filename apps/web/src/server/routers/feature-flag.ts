@@ -1,12 +1,11 @@
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure, router } from "../trpc";
+import { toTrpcError } from "../trpc-errors";
 
 export const featureFlagRouter = router({
   list: adminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFeatureFlags.execute();
-    if (result.error)
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+    if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
@@ -21,8 +20,7 @@ export const featureFlagRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.upsertFeatureFlag.execute(input);
-      if (result.error)
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 });

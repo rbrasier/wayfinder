@@ -13,6 +13,7 @@ import {
 import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_flows } from "../db/schema/wayfinder";
+import { logRepoError } from "./log-repo-error";
 
 const toEntity = (row: typeof app_flows.$inferSelect): Flow => ({
   id: row.id,
@@ -49,6 +50,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       if (!row) return err(domainError("INFRA_FAILURE", "Flow insert returned no row."));
       return ok(toEntity(row));
     } catch (cause) {
+      logRepoError("DrizzleFlowRepository.create", cause);
       return err(domainError("INFRA_FAILURE", "Failed to create flow.", cause));
     }
   }
@@ -58,6 +60,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       const [row] = await this.db.select().from(app_flows).where(eq(app_flows.id, id));
       return ok(row ? toEntity(row) : null);
     } catch (cause) {
+      logRepoError("DrizzleFlowRepository.findById", cause);
       return err(domainError("INFRA_FAILURE", "Failed to find flow.", cause));
     }
   }
@@ -67,6 +70,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       const rows = await this.db.select().from(app_flows).orderBy(desc(app_flows.updated_at));
       return ok(rows.map(toEntity));
     } catch (cause) {
+      logRepoError("DrizzleFlowRepository.list", cause);
       return err(domainError("INFRA_FAILURE", "Failed to list flows.", cause));
     }
   }
@@ -76,6 +80,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       const rows = await this.db.select().from(app_flows).where(eq(app_flows.owner_user_id, userId));
       return ok(rows.map(toEntity));
     } catch (cause) {
+      logRepoError("DrizzleFlowRepository.listForUser", cause);
       return err(domainError("INFRA_FAILURE", "Failed to list flows for user.", cause));
     }
   }
@@ -98,6 +103,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       if (!row) return err(domainError("NOT_FOUND", `Flow ${id} not found.`));
       return ok(toEntity(row));
     } catch (cause) {
+      logRepoError("DrizzleFlowRepository.update", cause);
       return err(domainError("INFRA_FAILURE", "Failed to update flow.", cause));
     }
   }
@@ -114,6 +120,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       if (!row) return err(domainError("INFRA_FAILURE", "Context doc update returned no row."));
       return ok(toEntity(row));
     } catch (cause) {
+      logRepoError("DrizzleFlowRepository.addContextDoc", cause);
       return err(domainError("INFRA_FAILURE", "Failed to add context doc.", cause));
     }
   }
@@ -130,6 +137,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       if (!row) return err(domainError("INFRA_FAILURE", "Context doc remove returned no row."));
       return ok(toEntity(row));
     } catch (cause) {
+      logRepoError("DrizzleFlowRepository.removeContextDoc", cause);
       return err(domainError("INFRA_FAILURE", "Failed to remove context doc.", cause));
     }
   }
@@ -148,6 +156,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
       if (!row) return err(domainError("INFRA_FAILURE", "Permission update returned no row."));
       return ok(toEntity(row));
     } catch (cause) {
+      logRepoError("DrizzleFlowRepository.setPermission", cause);
       return err(domainError("INFRA_FAILURE", "Failed to set permission.", cause));
     }
   }

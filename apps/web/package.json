@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "next build",
-    "dev": "next dev -p 3000",
-    "start": "next start -p 3000",
+    "dev": "../../scripts/migrate-if-configured.sh && next dev -p 3000",
+    "start": "../../scripts/migrate-if-configured.sh && next start -p 3000",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "next lint",
     "test": "vitest run --passWithNoTests"

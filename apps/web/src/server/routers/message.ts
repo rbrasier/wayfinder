@@ -1,6 +1,6 @@
 import { sendMessageInputSchema, type SampleResponse } from "@rbrasier/shared";
-import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../trpc";
+import { toTrpcError } from "../trpc-errors";
 
 /**
  * `message.send` is implemented as an async-generator mutation. tRPC v11
@@ -17,9 +17,7 @@ export const messageRouter = router({
       userId: ctx.userId,
       conversationId: input.conversationId,
     });
-    if (result.error) {
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
-    }
+    if (result.error) throw toTrpcError(result.error);
 
     yield { type: "meta" as const, conversationId: result.data.conversationId };
 

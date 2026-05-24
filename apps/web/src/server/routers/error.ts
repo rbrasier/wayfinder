@@ -5,6 +5,7 @@ import {
 } from "@rbrasier/shared";
 import { TRPCError } from "@trpc/server";
 import { adminProcedure, publicProcedure, router } from "../trpc";
+import { toTrpcError } from "../trpc-errors";
 
 export const errorRouter = router({
   // Public: clients (and the global error boundary) can write errors.
@@ -17,15 +18,13 @@ export const errorRouter = router({
       page: input.page ?? null,
       metadata: input.metadata ?? null,
     });
-    if (result.error)
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+    if (result.error) throw toTrpcError(result.error);
     return { ok: true };
   }),
 
   listGrouped: adminProcedure.input(listErrorsInputSchema).query(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.listErrors.listGrouped(input);
-    if (result.error)
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+    if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
@@ -38,15 +37,13 @@ export const errorRouter = router({
         input.message,
         input.page ?? null,
       );
-      if (result.error)
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
   deleteAll: adminProcedure.mutation(async ({ ctx }) => {
     const result = await ctx.container.useCases.deleteAllErrors.execute();
-    if (result.error)
-      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: result.error.message });
+    if (result.error) throw toTrpcError(result.error);
     return { deleted: result.data };
   }),
 
@@ -55,8 +52,7 @@ export const errorRouter = router({
     .mutation(async ({ ctx, input }) => {
       if (input.id) {
         const r = await ctx.container.useCases.updateErrorStatus.byId(input.id, input.status);
-        if (r.error)
-          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: r.error.message });
+        if (r.error) throw toTrpcError(r.error);
         return { updated: 1 };
       }
       if (!input.message)
@@ -66,8 +62,7 @@ export const errorRouter = router({
         input.page ?? null,
         input.status,
       );
-      if (r.error)
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: r.error.message });
+      if (r.error) throw toTrpcError(r.error);
       return { updated: r.data };
     }),
 });
