@@ -25,7 +25,7 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
   await page.goto('/admin/flows');
   await page.waitForLoadState('networkidle');
 
-  await page.getByRole('button', { name: /new flow/i }).click();
+  await page.getByRole('button', { name: /new flow/i }).first().click();
   await expect(page.getByRole('dialog')).toBeVisible();
 
   await page.locator('#flow-name').fill(name);
@@ -68,9 +68,15 @@ async function addAndConfigureStep(
 }
 
 async function connectNodes(page: Page, srcIndex: number, tgtIndex: number): Promise<void> {
+  // Click the empty pane to deselect any active node. After a successful drag
+  // ReactFlow leaves the source node [active]; its ring overlay intercepts
+  // pointer events on adjacent handles when the next drag begins.
+  await page.locator('.react-flow__pane').click({ position: { x: 10, y: 10 }, force: true });
+  await page.waitForTimeout(200);
+
   const src = page.locator('.react-flow__node').nth(srcIndex).locator('.react-flow__handle-right');
   const tgt = page.locator('.react-flow__node').nth(tgtIndex).locator('.react-flow__handle-left');
-  await src.dragTo(tgt);
+  await src.dragTo(tgt, { force: true });
   await page.waitForTimeout(800);
 }
 
