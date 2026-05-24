@@ -24,8 +24,8 @@ async function resolveSessionId(page: import('@playwright/test').Page): Promise<
   return match?.[1] ?? null;
 }
 
-test.describe('Sharing — Share button', () => {
-  test('share button is visible on a session page', async ({ page, consoleLogs }) => {
+test.describe('Sharing: Share Button', () => {
+  test('share button is visible on session', async ({ page, consoleLogs }) => {
     const sessionId = await resolveSessionId(page);
 
     if (!sessionId) {
@@ -53,7 +53,7 @@ test.describe('Sharing — Share button', () => {
     expect(errors, `Errors on session page:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('clicking share copies a URL containing ?shared=true', async ({ page, context }) => {
+  test('share button copies URL to clipboard', async ({ page, context }) => {
     const sessionId = await resolveSessionId(page);
 
     if (!sessionId) {
@@ -91,8 +91,8 @@ test.describe('Sharing — Share button', () => {
   });
 });
 
-test.describe('Sharing — Read-only view', () => {
-  test('shared URL renders without the chat composer', async ({ page, consoleLogs }) => {
+test.describe('Sharing: Read-only View', () => {
+  test('shared view hides composer', async ({ page, consoleLogs }) => {
     const sessionId = await resolveSessionId(page);
 
     if (!sessionId) {
@@ -115,7 +115,7 @@ test.describe('Sharing — Read-only view', () => {
     expect(errors, `Errors in shared view:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('shared view preserves existing messages', async ({ page, consoleLogs }) => {
+  test('shared view shows messages', async ({ page, consoleLogs }) => {
     const sessionId = await resolveSessionId(page);
 
     if (!sessionId) {
@@ -148,7 +148,7 @@ test.describe('Sharing — Read-only view', () => {
     expect(errors, `Errors in shared view:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('shared view page loads without JS errors', async ({ page, consoleLogs }) => {
+  test('shared view loads clean', async ({ page, consoleLogs }) => {
     const sessionId = await resolveSessionId(page);
 
     if (!sessionId) {

@@ -8,7 +8,7 @@
 
 import { test, expect } from './helpers/base';
 
-test.describe('Smoke — App health', () => {
+test.describe('App: Smoke', () => {
   test('homepage loads without JS errors', async ({ page, consoleLogs }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
@@ -18,19 +18,19 @@ test.describe('Smoke — App health', () => {
     expect(jsErrors, `JS errors on homepage:\n${jsErrors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('authenticated user does not land on login page', async ({ page }) => {
+  test('admin stays logged in on homepage', async ({ page }) => {
     await page.goto('/');
     await page.waitForLoadState('networkidle');
     await expect(page).not.toHaveURL(/login/);
   });
 
-  test('page has a valid title', async ({ page }) => {
+  test('homepage has a page title', async ({ page }) => {
     await page.goto('/');
     const title = await page.title();
     expect(title.trim().length, 'Page title should not be empty').toBeGreaterThan(0);
   });
 
-  test('no failed network requests (4xx/5xx)', async ({ page }) => {
+  test('homepage has no 4xx/5xx requests', async ({ page }) => {
     const failedRequests: string[] = [];
 
     page.on('response', (response) => {
@@ -52,7 +52,7 @@ test.describe('Smoke — App health', () => {
   });
 });
 
-test.describe('Smoke — Key pages', () => {
+test.describe('Admin: Page Smoke', () => {
   const PAGES = [
     { name: 'Admin Flows', path: '/admin/flows', screenshot: 'smoke-admin-flows.png' },
     { name: 'Admin Users', path: '/admin/users', screenshot: 'smoke-admin-users.png' },
@@ -75,8 +75,8 @@ test.describe('Smoke — Key pages', () => {
   }
 });
 
-test.describe('Auth — redirect behaviour', () => {
-  test('unauthenticated request to protected route redirects to login', async ({ browser }) => {
+test.describe('Auth', () => {
+  test('unauthenticated user is redirected to login', async ({ browser }) => {
     // Use a fresh context with no stored session so we test the actual redirect
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();

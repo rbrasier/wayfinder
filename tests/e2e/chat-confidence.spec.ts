@@ -27,8 +27,8 @@ async function resolveActiveSessionId(page: import('@playwright/test').Page): Pr
   return match?.[1] ?? null;
 }
 
-test.describe('Chat — Step progress rail', () => {
-  test('step progress rail is present on a session page', async ({ page, consoleLogs }) => {
+test.describe('Chat: Step Rail', () => {
+  test('step rail is visible', async ({ page, consoleLogs }) => {
     const sessionId = await resolveActiveSessionId(page);
 
     if (!sessionId) {
@@ -45,7 +45,7 @@ test.describe('Chat — Step progress rail', () => {
     expect(errors, `JS errors on session page:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('step progress rail shows numbered steps', async ({ page }) => {
+  test('step rail shows numbered steps', async ({ page }) => {
     const sessionId = await resolveActiveSessionId(page);
 
     if (!sessionId) {
@@ -77,8 +77,8 @@ test.describe('Chat — Step progress rail', () => {
   });
 });
 
-test.describe('Chat — Confidence scoring', () => {
-  test('confidence bar appears after AI response', async ({ page, consoleLogs }) => {
+test.describe('Chat: Confidence', () => {
+  test('confidence bar appears after response', async ({ page, consoleLogs }) => {
     const sessionId = await resolveActiveSessionId(page);
 
     if (!sessionId) {
@@ -120,7 +120,7 @@ test.describe('Chat — Confidence scoring', () => {
     expect(errors, `Errors during confidence test:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('multi-turn conversation builds up message history', async ({ page, consoleLogs }) => {
+  test('multi-turn chat builds message history', async ({ page, consoleLogs }) => {
     const sessionId = await resolveActiveSessionId(page);
 
     if (!sessionId) {
@@ -180,8 +180,8 @@ test.describe('Chat — Confidence scoring', () => {
   });
 });
 
-test.describe('Chat — Document generation', () => {
-  test('document card is present for sessions with completed document steps', async ({ page, consoleLogs }) => {
+test.describe('Chat: Document Generation', () => {
+  test('document card shows download button', async ({ page, consoleLogs }) => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 

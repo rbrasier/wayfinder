@@ -15,8 +15,8 @@
 
 import { test, expect } from './helpers/base';
 
-test.describe('Flow lifecycle — Canvas editor', () => {
-  test('canvas loads for an existing flow', async ({ page, consoleLogs }) => {
+test.describe('Admin: Flow Canvas Editor', () => {
+  test('canvas loads for existing flow', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
@@ -72,7 +72,7 @@ test.describe('Flow lifecycle — Canvas editor', () => {
     expect(errors, `Errors on canvas:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('clicking a node opens the configure modal', async ({ page, consoleLogs }) => {
+  test('clicking a node opens configure dialog', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
@@ -127,8 +127,8 @@ test.describe('Flow lifecycle — Canvas editor', () => {
   });
 });
 
-test.describe('Flow lifecycle — Create new flow', () => {
-  test('creates a flow and navigates to its canvas', async ({ page, consoleLogs }) => {
+test.describe('Admin: Create Flow', () => {
+  test('admin creates flow and lands on canvas', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
@@ -179,8 +179,8 @@ test.describe('Flow lifecycle — Create new flow', () => {
   });
 });
 
-test.describe('Flow lifecycle — Publish and use', () => {
-  test('publishing a flow makes it appear in the New Chat modal', async ({ page, consoleLogs }) => {
+test.describe('Admin: Publish Flow', () => {
+  test('published flow appears in New Chat modal', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
@@ -233,7 +233,7 @@ test.describe('Flow lifecycle — Publish and use', () => {
     expect(errors, `Errors in new chat modal:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('selecting a flow in New Chat creates a session and opens it', async ({ page, consoleLogs }) => {
+  test('starting a flow from New Chat opens a session', async ({ page, consoleLogs }) => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 

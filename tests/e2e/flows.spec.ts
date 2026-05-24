@@ -8,8 +8,8 @@
 
 import { test, expect } from './helpers/base';
 
-test.describe('Flows — List page', () => {
-  test('flows list loads and shows heading', async ({ page, consoleLogs }) => {
+test.describe('Admin: Flows List', () => {
+  test('flows list loads', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
@@ -20,7 +20,7 @@ test.describe('Flows — List page', () => {
     expect(errors, `Errors on flows list: ${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('"New Flow" button is visible and clickable', async ({ page }) => {
+  test('New Flow button is visible', async ({ page }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
@@ -31,8 +31,8 @@ test.describe('Flows — List page', () => {
   });
 });
 
-test.describe('Flows — Create flow', () => {
-  test('opening create dialog — screenshot the result', async ({ page, consoleLogs }) => {
+test.describe('Admin: Create Flow', () => {
+  test('create flow dialog opens', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
@@ -47,7 +47,7 @@ test.describe('Flows — Create flow', () => {
     expect(errors, `Errors after clicking create: ${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('create a flow with a name — screenshot after save', async ({ page, consoleLogs }) => {
+  test('admin creates a flow', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
@@ -89,8 +89,8 @@ test.describe('Flows — Create flow', () => {
   });
 });
 
-test.describe('Flows — Canvas editor', () => {
-  test('opening a flow shows the canvas — screenshot the result', async ({ page, consoleLogs }) => {
+test.describe('Admin: Flow Canvas', () => {
+  test('admin opens flow canvas', async ({ page, consoleLogs }) => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 

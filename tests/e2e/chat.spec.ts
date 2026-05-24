@@ -17,8 +17,8 @@ import { test, expect } from './helpers/base';
 
 const AI_MODE = process.env.USE_REAL_AI === 'true' ? 'REAL AI' : 'MOCKED AI';
 
-test.describe(`Chat — List page [${AI_MODE}]`, () => {
-  test('chats list loads without JS errors', async ({ page, consoleLogs }) => {
+test.describe('Chat: List', () => {
+  test('chats list loads', async ({ page, consoleLogs }) => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
     await page.screenshot({ path: 'screenshots/chat-list.png', fullPage: true });
@@ -27,7 +27,7 @@ test.describe(`Chat — List page [${AI_MODE}]`, () => {
     expect(errors, `JS errors on chats list:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('chats list shows heading and tab bar', async ({ page }) => {
+  test('chats list shows heading and tabs', async ({ page }) => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 
@@ -36,7 +36,7 @@ test.describe(`Chat — List page [${AI_MODE}]`, () => {
     await page.screenshot({ path: 'screenshots/chat-list-tabs.png' });
   });
 
-  test('"New Chat" button is visible', async ({ page }) => {
+  test('New Chat button is visible', async ({ page }) => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 
@@ -44,7 +44,7 @@ test.describe(`Chat — List page [${AI_MODE}]`, () => {
   });
 });
 
-test.describe(`Chat — Session page [${AI_MODE}]`, () => {
+test.describe('Chat: Session', () => {
   /**
    * Resolve an existing session ID by checking the /chats list.
    * If no sessions exist this returns null and the test skips.
@@ -63,7 +63,7 @@ test.describe(`Chat — Session page [${AI_MODE}]`, () => {
     return match?.[1] ?? null;
   }
 
-  test('chat session page loads — screenshot initial state', async ({ page, consoleLogs }) => {
+  test('session page loads', async ({ page, consoleLogs }) => {
     const sessionId = await resolveExistingSessionId(page);
 
     if (!sessionId) {
@@ -79,7 +79,7 @@ test.describe(`Chat — Session page [${AI_MODE}]`, () => {
     expect(errors, `JS errors on chat session:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('chat input is present and accepts text', async ({ page }) => {
+  test('message input accepts text', async ({ page }) => {
     const sessionId = await resolveExistingSessionId(page);
 
     if (!sessionId) {
@@ -105,7 +105,7 @@ test.describe(`Chat — Session page [${AI_MODE}]`, () => {
     await expect(input).toHaveValue('Hello, I need help with a workflow');
   });
 
-  test('sending a message shows AI response — screenshot end state', async ({ page, consoleLogs }) => {
+  test('sending a message shows AI response', async ({ page, consoleLogs }) => {
     const sessionId = await resolveExistingSessionId(page);
 
     if (!sessionId) {
@@ -157,7 +157,7 @@ test.describe(`Chat — Session page [${AI_MODE}]`, () => {
     expect(errors, `Errors during chat:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
-  test('multi-turn conversation — screenshot after each exchange', async ({ page, consoleLogs }) => {
+  test('multi-turn conversation works', async ({ page, consoleLogs }) => {
     const sessionId = await resolveExistingSessionId(page);
 
     if (!sessionId) {
