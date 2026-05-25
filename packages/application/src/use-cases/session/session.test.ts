@@ -530,4 +530,54 @@ describe("RunTurn", () => {
     const updatedSession = sessions.sessions.get("session-1");
     expect(updatedSession?.status).toBe("complete");
   });
+
+  it("persistUserMessage inserts a new user row", async () => {
+    const result = await useCase.persistUserMessage({
+      session,
+      userMessage: "Hello",
+    });
+
+    expect(result.error).toBeUndefined();
+    const messages = [...sessionMessages.messages.values()];
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.role).toBe("user");
+    expect(messages[0]!.content).toBe("Hello");
+  });
+
+  it("persistUserMessage is idempotent when last message matches (retry)", async () => {
+    const first = await useCase.persistUserMessage({
+      session,
+      userMessage: "Hello",
+    });
+    const second = await useCase.persistUserMessage({
+      session,
+      userMessage: "Hello",
+    });
+
+    expect(second.error).toBeUndefined();
+    expect(second.data?.id).toBe(first.data?.id);
+    expect([...sessionMessages.messages.values()]).toHaveLength(1);
+  });
+
+  it("persistUserMessage inserts a new row when content differs", async () => {
+    await useCase.persistUserMessage({ session, userMessage: "First" });
+    await useCase.persistUserMessage({ session, userMessage: "Second" });
+
+    expect([...sessionMessages.messages.values()]).toHaveLength(2);
+  });
+
+  it("persistAssistantTurn persists only the assistant message", async () => {
+    const result = await useCase.persistAssistantTurn({
+      session,
+      flowId: "flow-1",
+      assistantMessage: "Reply",
+      aiPayload: makeAiPayload(40),
+      branchChoice: null,
+    });
+
+    expect(result.error).toBeUndefined();
+    const messages = [...sessionMessages.messages.values()];
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.role).toBe("assistant");
+  });
 });

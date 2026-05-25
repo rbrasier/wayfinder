@@ -24,6 +24,8 @@ interface MessageFeedProps {
   streamingMessages: UIMessage[];
   nodes: FlowNode[];
   isStreaming: boolean;
+  error?: Error | null;
+  onRetry?: () => void;
   onRegenerateDocument?: (messageId: string) => void;
 }
 
@@ -40,6 +42,8 @@ export function MessageFeed({
   streamingMessages,
   nodes,
   isStreaming,
+  error,
+  onRetry,
   onRegenerateDocument,
 }: MessageFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -190,7 +194,26 @@ export function MessageFeed({
           );
         })}
 
-      {dbMessages.length === 0 && !isStreaming && (
+      {error && !isStreaming && (
+        <div className="flex justify-start">
+          <div className="flex items-center gap-3 rounded-[10px] border border-[#f3c5b8] bg-[#fdf0eb] px-3 py-2">
+            <p className="text-[12px] text-[#a8462a]">
+              The assistant couldn’t reply — please try again.
+            </p>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="rounded-[6px] border border-[#a8462a] bg-white px-2 py-1 text-[11px] font-semibold text-[#a8462a] hover:bg-[#a8462a] hover:text-white"
+              >
+                Retry
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {dbMessages.length === 0 && !isStreaming && !error && (
         <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#918d87]">
           <p>The conversation will begin once you send your first message.</p>
         </div>

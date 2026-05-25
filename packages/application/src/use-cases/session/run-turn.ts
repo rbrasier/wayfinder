@@ -6,6 +6,7 @@ import {
   type ISessionRepository,
   type Result,
   type Session,
+  type SessionMessage,
 } from "@rbrasier/domain";
 
 export interface RunTurnInput {
@@ -24,6 +25,20 @@ export interface RunTurnOutput {
   newNodeId: string | null;
 }
 
+export interface PersistUserMessageInput {
+  session: Session;
+  userMessage: string;
+}
+
+export interface PersistAssistantTurnInput {
+  session: Session;
+  flowId: string;
+  assistantMessage: string;
+  aiPayload: AiTurnPayload;
+  branchChoice: string | null;
+  advanceThreshold?: number;
+}
+
 export class RunTurn {
   constructor(
     private readonly sessions: ISessionRepository,
@@ -31,17 +46,35 @@ export class RunTurn {
     private readonly flowEdges: IFlowEdgeRepository,
   ) {}
 
-  async execute(input: RunTurnInput): Promise<Result<RunTurnOutput>> {
-    const { session, flowId, aiPayload } = input;
-    const threshold = input.advanceThreshold ?? 90;
+  // Persists the user message before the AI call runs, so it survives any
+  // model/network failure. Idempotent: if the most recent message for the
+  // session is already a user message with identical content, returns it
+  // instead of inserting a duplicate — this lets a Retry resend the same
+  // payload without creating two rows.
+  async persistUserMessage(
+    input: PersistUserMessageInput,
+  ): Promise<Result<SessionMessage>> {
+    const existing = await this.sessionMessages.listBySession(input.session.id);
+    if (existing.error) return existing;
 
-    const userResult = await this.sessionMessages.create({
-      sessionId: session.id,
+    const last = existing.data.at(-1);
+    if (last && last.role === "user" && last.content === input.userMessage) {
+      return ok(last);
+    }
+
+    return this.sessionMessages.create({
+      sessionId: input.session.id,
       role: "user",
       content: input.userMessage,
-      stepNodeId: session.currentNodeId,
+      stepNodeId: input.session.currentNodeId,
     });
-    if (userResult.error) return userResult;
+  }
+
+  async persistAssistantTurn(
+    input: PersistAssistantTurnInput,
+  ): Promise<Result<RunTurnOutput>> {
+    const { session, flowId, aiPayload } = input;
+    const threshold = input.advanceThreshold ?? 90;
 
     const assistantResult = await this.sessionMessages.create({
       sessionId: session.id,
@@ -92,5 +125,22 @@ export class RunTurn {
     if (updated.error) return updated;
 
     return ok({ session: updated.data, advanced: true, newNodeId });
+  }
+
+  async execute(input: RunTurnInput): Promise<Result<RunTurnOutput>> {
+    const userResult = await this.persistUserMessage({
+      session: input.session,
+      userMessage: input.userMessage,
+    });
+    if (userResult.error) return userResult;
+
+    return this.persistAssistantTurn({
+      session: input.session,
+      flowId: input.flowId,
+      assistantMessage: input.assistantMessage,
+      aiPayload: input.aiPayload,
+      branchChoice: input.branchChoice,
+      advanceThreshold: input.advanceThreshold,
+    });
   }
 }

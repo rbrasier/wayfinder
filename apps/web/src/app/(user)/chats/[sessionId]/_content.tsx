@@ -95,7 +95,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       return { nodeId: e.toNodeId, nodeName: node?.name ?? e.toNodeId };
     });
 
-  const { messages, input, handleSubmit, isLoading, setInput } = useChat({
+  const { messages, input, handleSubmit, isLoading, setInput, error, reload } = useChat({
     api: `/api/chat/${sessionId}/stream`,
     initialMessages: dbMessages.map((m) => ({
       id: m.id,
@@ -109,6 +109,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       messages: msgs.slice(-20),
     }),
     onFinish: () => {
+      void utils.session.get.invalidate({ sessionId });
+    },
+    onError: () => {
       void utils.session.get.invalidate({ sessionId });
     },
   });
@@ -188,6 +191,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         streamingMessages={messages}
         nodes={nodes}
         isStreaming={isLoading}
+        error={error ?? null}
+        onRetry={!isShared ? () => void reload() : undefined}
         onRegenerateDocument={!isShared ? handleRegenerateDocument : undefined}
       />
 
