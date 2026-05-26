@@ -17,7 +17,16 @@ export interface GenerateDocxOutput {
   docxBytes: Buffer;
 }
 
+export interface ExtractFullTextInput {
+  templateBytes: Buffer;
+}
+
+export interface ExtractFullTextOutput {
+  text: string;
+}
+
 export interface IDocumentGenerator {
   extractTags(input: ExtractTagsInput): Result<ExtractTagsOutput>;
+  extractFullText(input: ExtractFullTextInput): Result<ExtractFullTextOutput>;
   generate(input: GenerateDocxInput): Result<GenerateDocxOutput>;
 }

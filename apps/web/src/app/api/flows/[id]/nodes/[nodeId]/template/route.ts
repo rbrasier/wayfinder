@@ -91,11 +91,15 @@ export async function POST(
     return NextResponse.json({ error: "Failed to store template" }, { status: 500 });
   }
 
+  const textResult = docxGenerator.extractFullText({ templateBytes: buffer });
+  const documentTemplateMarkdown = textResult.data?.text ?? null;
+
   const existingConfig = node.config as Record<string, unknown>;
   const updatedConfig = {
     ...existingConfig,
     documentTemplatePath: storageKey,
     documentTemplateFilename: safeFilename,
+    documentTemplateMarkdown,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {

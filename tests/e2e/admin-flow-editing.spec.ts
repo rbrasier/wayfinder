@@ -33,7 +33,7 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
   await page.getByRole('button', { name: /create flow/i }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
 
-  const editLink = page.getByRole('link', { name: 'Edit' }).first();
+  const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
   await expect(editLink).toBeVisible({ timeout: 5_000 });
   await editLink.click();
 
