@@ -25,9 +25,7 @@ export const ai_messages = pgTable("ai_messages", {
 export const ai_usage_events = pgTable("ai_usage_events", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   user_id: uuid("user_id").references(() => core_users.id, { onDelete: "set null" }),
-  conversation_id: uuid("conversation_id").references(() => ai_conversations.id, {
-    onDelete: "set null",
-  }),
+  conversation_id: uuid("conversation_id"),
   purpose: text("purpose").notNull().default(""),
   provider: text("provider").notNull(),
   model: text("model").notNull(),

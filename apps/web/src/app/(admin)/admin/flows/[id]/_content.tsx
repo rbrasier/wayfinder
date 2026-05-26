@@ -21,7 +21,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { trpc } from "@/trpc/client";
 import type { FlowContextDoc } from "@rbrasier/domain";
+import { computeStepNumbers } from "@/lib/flow-utils";
 
 const NODE_TYPES = { conversationalNode: ConversationalNode };
 
@@ -310,6 +311,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
     toast.success("Step deleted");
   }, [editingNodeId, deleteNodeMutation, flowId]);
 
+  const stepNumbers = useMemo(() => {
+    const adaptedEdges = rfEdges.map((e) => ({ fromNodeId: e.source, toNodeId: e.target }));
+    return computeStepNumbers(rfNodes, adaptedEdges);
+  }, [rfNodes, rfEdges]);
+
+  const rfNodesWithNumbers = useMemo(
+    () => rfNodes.map((n) => ({ ...n, data: { ...n.data, stepNumber: stepNumbers.get(n.id) ?? null } })),
+    [rfNodes, stepNumbers],
+  );
+
   const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
   const editingData = editingNode?.data as ConversationalNodeData | undefined;
 
@@ -400,7 +411,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
       <div className="relative flex-1">
         <ReactFlow
-          nodes={rfNodes}
+          nodes={rfNodesWithNumbers}
           edges={rfEdges}
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}

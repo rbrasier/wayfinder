@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
@@ -13,6 +13,7 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { MessageFeed } from "@/components/chat/message-feed";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
+import { topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
 
 const NULL_BRANCH_THRESHOLD = 3;
@@ -63,6 +64,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const closeMutation = trpc.session.close.useMutation({
     onSuccess: () => {
       toast.success("Chat closed");
+      void utils.session.list.invalidate();
       router.push("/chats");
     },
     onError: (error) => toast.error(error.message),
@@ -80,9 +82,14 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   });
 
   const dbMessages = sessionData?.messages ?? [];
-  const nodes: FlowNode[] = sessionData?.nodes ?? [];
+  const rawNodes: FlowNode[] = sessionData?.nodes ?? [];
   const edges: FlowEdge[] = sessionData?.edges ?? [];
   const currentNodeId = sessionData?.session.currentNodeId ?? null;
+
+  const nodes = useMemo(() => {
+    const edgesAsEdgeLike = edges.map((e) => ({ fromNodeId: e.fromNodeId, toNodeId: e.toNodeId }));
+    return topoSortNodes(rawNodes, edgesAsEdgeLike);
+  }, [rawNodes, edges]);
 
   const completedNodeIds: string[] = [];
   if (dbMessages.length > 0) {
@@ -136,6 +143,36 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     void utils.session.get.invalidate({ sessionId });
   }, [sessionId, utils.session.get]);
+
+  // Poll while a document is being generated so the spinner resolves automatically
+  const hasGeneratingDoc = useMemo(() => {
+    return dbMessages.some((msg) => {
+      if (msg.role !== "assistant" || (msg.confidence ?? 0) < 90) return false;
+      if (msg.stepNodeId === currentNodeId) return false;
+      const node = rawNodes.find((n) => n.id === msg.stepNodeId);
+      const config = node?.config as Record<string, unknown> | undefined;
+      return config?.["outputType"] === "generate_document" &&
+        Boolean(config?.["documentTemplatePath"]) &&
+        !msg.document;
+    });
+  }, [dbMessages, currentNodeId, rawNodes]);
+
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!hasGeneratingDoc) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+    pollingRef.current = setInterval(() => {
+      void utils.session.get.invalidate({ sessionId });
+    }, 3000);
+    return () => {
+      if (pollingRef.current) clearInterval(pollingRef.current);
+    };
+  }, [hasGeneratingDoc, sessionId, utils.session.get]);
 
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
@@ -231,6 +268,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         streamingMessages={messages}
         nodes={nodes}
         isStreaming={isLoading}
+        isComplete={session.status === "complete"}
         error={error ?? null}
         onRetry={!isShared ? () => void reload() : undefined}
         onRegenerateDocument={!isShared ? handleRegenerateDocument : undefined}

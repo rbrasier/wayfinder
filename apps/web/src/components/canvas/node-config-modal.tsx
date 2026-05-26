@@ -114,9 +114,26 @@ export function NodeConfigModal({
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
+  const isTemplateComplete = values.doneWhen === "__TEMPLATE_COMPLETE__";
+  const doneWhenMode = values.neverDone ? "never" : isTemplateComplete ? "template" : "condition";
+
+  const handleDoneWhenModeChange = (mode: string) => {
+    if (mode === "never") {
+      setValues((prev) => ({ ...prev, neverDone: true, doneWhen: "" }));
+    } else if (mode === "template") {
+      setValues((prev) => ({ ...prev, neverDone: false, doneWhen: "__TEMPLATE_COMPLETE__" }));
+    } else {
+      setValues((prev) => ({
+        ...prev,
+        neverDone: false,
+        doneWhen: prev.doneWhen === "__TEMPLATE_COMPLETE__" ? "" : prev.doneWhen,
+      }));
+    }
+  };
+
   const handleSave = () => {
     if (!values.name.trim() || !values.aiInstruction.trim()) return;
-    if (!values.neverDone && !values.doneWhen.trim()) return;
+    if (!values.neverDone && !isTemplateComplete && !values.doneWhen.trim()) return;
     onSave(values);
   };
 
@@ -289,13 +306,16 @@ export function NodeConfigModal({
                 <select
                   id="done-when-mode"
                   className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
-                  value={values.neverDone ? "never" : "condition"}
-                  onChange={(e) => set("neverDone", e.target.value === "never")}
+                  value={doneWhenMode}
+                  onChange={(e) => handleDoneWhenModeChange(e.target.value)}
                 >
                   <option value="condition">Specific condition</option>
-                  <option value="never">Never done. User can continue to interact indefinitely</option>
+                  {values.outputType === "generate_document" && (
+                    <option value="template">Template complete — when all template fields are gathered</option>
+                  )}
+                  <option value="never">Never done — user can continue to interact indefinitely</option>
                 </select>
-                {!values.neverDone && (
+                {doneWhenMode === "condition" && (
                   <Textarea
                     id="done-when"
                     required
@@ -304,6 +324,11 @@ export function NodeConfigModal({
                     onChange={(e) => set("doneWhen", e.target.value)}
                     placeholder="Describe the condition that marks this step complete…"
                   />
+                )}
+                {doneWhenMode === "template" && (
+                  <p className="rounded-[9px] border border-[#c5d0f7] bg-[#eef1fc] px-3 py-2 text-[12px] text-[#3a5fd9]">
+                    This step is complete when all required fields in the document template have been gathered from the user.
+                  </p>
                 )}
               </div>
 
@@ -411,7 +436,7 @@ export function NodeConfigModal({
                     isSaving ||
                     !values.name.trim() ||
                     !values.aiInstruction.trim() ||
-                    (!values.neverDone && !values.doneWhen.trim())
+                    (!values.neverDone && !isTemplateComplete && !values.doneWhen.trim())
                   }
                 >
                   {isSaving ? "Saving…" : "Save"}

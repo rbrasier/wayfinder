@@ -22,6 +22,7 @@ const MODEL_RATES: Record<string, ModelRates> = {
   // Anthropic — https://anthropic.com/pricing
   "claude-opus-4-7":            { prompt: 0.000015,    completion: 0.000075,   cacheRead: 0.0000015,    cacheWrite: 0.00001875 },
   "claude-sonnet-4-6":          { prompt: 0.000003,    completion: 0.000015,   cacheRead: 0.0000003,    cacheWrite: 0.000003750 },
+  "claude-sonnet-4-20250514":   { prompt: 0.000003,    completion: 0.000015,   cacheRead: 0.0000003,    cacheWrite: 0.000003750 },
   "claude-haiku-4-5":           { prompt: 0.00000025,  completion: 0.00000125, cacheRead: 0.000000025,  cacheWrite: 0.0000003125 },
   "claude-haiku-4-5-20251001":  { prompt: 0.00000025,  completion: 0.00000125, cacheRead: 0.000000025,  cacheWrite: 0.0000003125 },
   // OpenAI — https://openai.com/pricing (cache read = 50% of prompt)
@@ -51,7 +52,7 @@ export const recordTokenUsage = (
   usage: TokenUsage,
 ): void => {
   const model = input.model ?? defaultModelFor(input.provider);
-  void repo.create({
+  repo.create({
     userId: input.userId ?? null,
     conversationId: input.conversationId ?? null,
     purpose: input.purpose,
@@ -63,6 +64,12 @@ export const recordTokenUsage = (
     cacheReadTokens: usage.cacheReadTokens,
     cacheWriteTokens: usage.cacheWriteTokens,
     costUsd: estimateCost(model, usage),
+  }).then((result) => {
+    if (result.error) {
+      console.error(`[usage-tracking] Failed to record ${input.purpose} usage: ${result.error.message}`);
+    }
+  }).catch((error: unknown) => {
+    console.error(`[usage-tracking] Failed to record ${input.purpose} usage:`, error);
   });
 };
 

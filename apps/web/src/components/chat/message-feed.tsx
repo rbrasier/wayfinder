@@ -5,7 +5,7 @@ import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { DocumentCard } from "./document-card";
-import { MilestonePill } from "./milestone-pill";
+import { FlowCompletePill, MilestonePill } from "./milestone-pill";
 import { TypingIndicator } from "./typing-indicator";
 
 interface ConfidenceAnnotation {
@@ -25,6 +25,7 @@ interface MessageFeedProps {
   streamingMessages: UIMessage[];
   nodes: FlowNode[];
   isStreaming: boolean;
+  isComplete?: boolean;
   error?: Error | null;
   onRetry?: () => void;
   onRegenerateDocument?: (messageId: string) => void;
@@ -57,6 +58,7 @@ export function MessageFeed({
   streamingMessages,
   nodes,
   isStreaming,
+  isComplete,
   error,
   onRetry,
   onRegenerateDocument,
@@ -179,8 +181,6 @@ export function MessageFeed({
           {streamingMessages.map((msg) => {
             const confidenceAnnotation =
               msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
-            // Streaming messages don't yet have a stepNodeId; infer "never done" from the
-            // most recent persisted assistant message on the current step.
             const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
             const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
             const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
@@ -239,7 +239,7 @@ export function MessageFeed({
         <div className="flex justify-start">
           <div className="flex items-center gap-3 rounded-[10px] border border-[#f3c5b8] bg-[#fdf0eb] px-3 py-2">
             <p className="text-[12px] text-[#a8462a]">
-              The assistant couldn’t reply — please try again.
+              The assistant couldn't reply — please try again.
             </p>
             {onRetry && (
               <button
@@ -253,6 +253,8 @@ export function MessageFeed({
           </div>
         </div>
       )}
+
+      {isComplete && !isStreaming && <FlowCompletePill />}
 
       {dbMessages.length === 0 && !isStreaming && !error && (
         <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#918d87]">

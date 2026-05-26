@@ -21,10 +21,10 @@ const STATUS_LABEL: Record<string, string> = {
   abandoned: "Closed",
 };
 
-const STATUS_PILL: Record<string, string> = {
-  active: "bg-[#eef1fc] text-[#3a5fd9]",
-  complete: "bg-[#eaf6f0] text-[#2e9e6a]",
-  abandoned: "bg-[#efede8] text-[#918d87]",
+const STATUS_BADGE: Record<string, string> = {
+  active: "bg-[#eef1fc] text-[#3a5fd9] border border-[#c5d0f7]",
+  complete: "bg-[#eaf6f0] text-[#2e9e6a] border border-[#c0e8d5]",
+  abandoned: "bg-[#efede8] text-[#918d87] border border-[#dedad2]",
 };
 
 const formatRelativeTime = (date: Date): string => {
@@ -55,7 +55,7 @@ const computeProgress = (
 
 export function SessionCard({ session, flow, userBadge, stepInfo }: SessionCardProps) {
   const title = session.title ?? flow?.name ?? "Untitled session";
-  const pillClass = STATUS_PILL[session.status] ?? "bg-[#efede8] text-[#918d87]";
+  const badgeClass = STATUS_BADGE[session.status] ?? "bg-[#efede8] text-[#918d87] border border-[#dedad2]";
   const statusLabel = STATUS_LABEL[session.status] ?? session.status;
   const progress = computeProgress(session, stepInfo);
 
@@ -67,13 +67,18 @@ export function SessionCard({ session, flow, userBadge, stepInfo }: SessionCardP
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="mb-[3px] flex items-baseline justify-between gap-2">
+          <div className="mb-[3px] flex items-start justify-between gap-2">
             <span className="truncate text-[14px] font-semibold tracking-[-0.2px] text-[#1a1814]">
               {title}
             </span>
-            <span className="shrink-0 font-mono text-[11px] text-[#918d87]">
-              {formatRelativeTime(new Date(session.updatedAt))}
-            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className={`shrink-0 rounded-full px-[8px] py-[2px] text-[11px] font-semibold ${badgeClass}`}>
+                {statusLabel}
+              </span>
+              <span className="shrink-0 font-mono text-[11px] text-[#918d87]">
+                {formatRelativeTime(new Date(session.updatedAt))}
+              </span>
+            </div>
           </div>
 
           {flow && (
@@ -96,9 +101,6 @@ export function SessionCard({ session, flow, userBadge, stepInfo }: SessionCardP
                 Step {Math.max(1, stepInfo.currentIndex)}/{stepInfo.totalSteps} · {progress ?? 0}%
               </span>
             )}
-            <span className={`shrink-0 rounded-full px-[9px] py-[3px] text-[11px] font-semibold ${pillClass}`}>
-              {statusLabel}
-            </span>
           </div>
 
           {userBadge && (
