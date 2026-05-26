@@ -29,6 +29,11 @@ export class FlowSessionGraph implements ISessionAgent {
         ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${nodeConfig.documentTemplateContent}\n  </document_template>`
         : "";
 
+    const effectiveDoneWhen =
+      nodeConfig.doneWhen === "__TEMPLATE_COMPLETE__"
+        ? "All required fields in the document template have been gathered from the user and can be fully populated."
+        : nodeConfig.doneWhen;
+
     const prompt = `${roleBlock}
 
 <instructions>
@@ -38,7 +43,7 @@ export class FlowSessionGraph implements ISessionAgent {
 <goal>
   Your goal is to gather enough information to reach 90% confidence or above that the <completion_criteria> below has been fully satisfied. Continue asking questions until you are confident the criteria has been met.
 
-  <completion_criteria>${nodeConfig.doneWhen}</completion_criteria>${templateBlock}
+  <completion_criteria>${effectiveDoneWhen}</completion_criteria>${templateBlock}
 </goal>
 
 <constraints>

@@ -5,6 +5,19 @@ interface MilestonePillProps {
   onRegenerate?: () => void;
 }
 
+function Spinner() {
+  return (
+    <svg
+      className="h-3 w-3 animate-spin shrink-0"
+      viewBox="0 0 24 24"
+      fill="none"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
+
 export function MilestonePill({
   nodeName,
   confidence,
@@ -42,7 +55,7 @@ export function MilestonePill({
     return (
       <div className="my-3 flex justify-center">
         <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
-          <span className="animate-pulse">📄</span>
+          <Spinner />
           <span>Generating document — {nodeName}</span>
         </div>
       </div>
@@ -59,6 +72,20 @@ export function MilestonePill({
         <span>
           Step complete — {nodeName} ({confidence}%)
         </span>
+      </div>
+    </div>
+  );
+}
+
+export function FlowCompletePill() {
+  return (
+    <div className="my-4 flex justify-center">
+      <div className="inline-flex items-center gap-2 rounded-full border border-[#c0e8d5] bg-[#eaf6f0] px-4 py-[6px] text-[12px] font-semibold text-[#2e9e6a]">
+        <svg viewBox="0 0 16 16" width="16" height="16" className="shrink-0">
+          <circle cx="8" cy="8" r="8" fill="currentColor" />
+          <path d="M4.5 8l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <span>Flow complete</span>
       </div>
     </div>
   );

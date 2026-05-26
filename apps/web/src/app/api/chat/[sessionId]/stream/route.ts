@@ -1,4 +1,4 @@
-import { createDataStreamResponse, generateObject, generateText } from "ai";
+import { createDataStreamResponse, generateObject, generateText, type LanguageModel } from "ai";
 import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
 import type { AiTurnPayload, ConversationalNodeConfig, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
@@ -215,6 +215,23 @@ export async function POST(
             void generateDocument(container, milestone.id, session.id, flow, nodes, assistantMessages.data, currentNode);
           }
         }
+
+        if (runResult.data.newNodeId) {
+          const newNode = nodes.find((n) => n.id === runResult.data.newNodeId);
+          if (newNode) {
+            await generateInitialMessage(
+              container,
+              session.id,
+              runResult.data.newNodeId,
+              newNode,
+              flow,
+              haikuModel,
+              organisationName,
+              authSession.userId,
+              provider,
+            );
+          }
+        }
       }
 
       if (dbMessages.filter((m) => m.role === "user").length === 0) {
@@ -304,5 +321,80 @@ async function generateTitle(
   } catch {
     const fallback = firstUserMessage.slice(0, 80);
     await container.repos.sessions.update(sessionId, { title: fallback }).catch(() => undefined);
+  }
+}
+
+async function generateInitialMessage(
+  container: ReturnType<typeof getContainer>,
+  sessionId: string,
+  newNodeId: string,
+  newNode: FlowNode,
+  flow: Flow,
+  model: LanguageModel,
+  organisationName: string | null,
+  userId: string,
+  provider: string,
+): Promise<void> {
+  try {
+    const newNodeConfig = newNode.config as unknown as ConversationalNodeConfig;
+
+    const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
+      nodeConfig: newNodeConfig,
+      contextDocs: flow.contextDocs,
+      gatheredContext: "",
+      workflowName: flow.name,
+      organisationName,
+      expertRole: flow.expertRole,
+    });
+    if (systemPromptResult.error) return;
+
+    const result = await generateObject({
+      model,
+      schema: turnResponseSchema,
+      system: systemPromptResult.data,
+      messages: [{ role: "user", content: "Please begin." }],
+    });
+
+    const aiPayload: AiTurnPayload = {
+      response: result.object.response,
+      rationale: result.object.rationale,
+      stepCompleteConfidence: result.object.stepCompleteConfidence,
+      contextGathered: result.object.contextGathered,
+    };
+
+    await container.repos.sessionMessages.create({
+      sessionId,
+      role: "assistant",
+      content: result.object.response,
+      confidence: Math.round(result.object.stepCompleteConfidence),
+      stepNodeId: newNodeId,
+      aiPayload,
+    });
+
+    recordTokenUsage(
+      container.repos.usageRepo,
+      {
+        purpose: "chat-turn",
+        userId,
+        conversationId: sessionId,
+        model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
+        provider: provider as Parameters<typeof recordTokenUsage>[1]["provider"],
+      },
+      {
+        promptTokens: result.usage.promptTokens ?? 0,
+        completionTokens: result.usage.completionTokens ?? 0,
+        systemTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      },
+    );
+  } catch (cause) {
+    await container.services.errorLogger.log({
+      level: "error",
+      message: "Initial message generation failed",
+      stack: cause instanceof Error ? cause.stack ?? null : null,
+      page: `api/chat/${sessionId}/stream`,
+      metadata: { sessionId, newNodeId },
+    });
   }
 }

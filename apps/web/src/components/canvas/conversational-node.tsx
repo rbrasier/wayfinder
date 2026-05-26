@@ -7,6 +7,7 @@ export interface ConversationalNodeData {
   name: string;
   colour: string | null;
   aiInstruction: string | null;
+  stepNumber?: string | null;
   [key: string]: unknown;
 }
 
@@ -17,6 +18,10 @@ export function ConversationalNode({ data, selected }: NodeProps) {
   const subtitle = nodeData.aiInstruction
     ? nodeData.aiInstruction.slice(0, 60) + (nodeData.aiInstruction.length > 60 ? "…" : "")
     : "No instructions yet";
+
+  const displayName = nodeData.stepNumber
+    ? `${nodeData.stepNumber}. ${nodeData.name}`
+    : nodeData.name;
 
   return (
     <div
@@ -36,10 +41,10 @@ export function ConversationalNode({ data, selected }: NodeProps) {
           className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white text-xs font-bold"
           style={{ backgroundColor: nodeData.colour ?? DEFAULT_COLOUR }}
         >
-          {nodeData.name.charAt(0).toUpperCase()}
+          {nodeData.stepNumber ?? nodeData.name.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-gray-900">{nodeData.name}</p>
+          <p className="truncate text-sm font-semibold text-gray-900">{displayName}</p>
           <p className="mt-0.5 text-xs text-gray-500 leading-snug line-clamp-2">{subtitle}</p>
         </div>
       </div>

@@ -15,14 +15,14 @@ export function ChatsContent() {
   const [tab, setTab] = useState<Tab>("active");
   const [newChatOpen, setNewChatOpen] = useState(false);
 
-  const sessionsQuery = trpc.session.list.useQuery();
+  const sessionsQuery = trpc.session.list.useQuery(undefined, { refetchOnMount: "always" });
   const publishedFlowsQuery = trpc.session.listPublishedFlows.useQuery();
 
   const flowById = Object.fromEntries(
     (publishedFlowsQuery.data ?? []).map((f: Flow) => [f.id, f]),
   );
 
-  const sessions = sessionsQuery.data ?? [];
+  const sessions = (sessionsQuery.data ?? []).filter((s) => s.status !== "abandoned");
 
   const filtered = sessions.filter((s) => {
     if (tab === "active") return s.status === "active";

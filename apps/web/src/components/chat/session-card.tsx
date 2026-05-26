@@ -11,11 +11,13 @@ interface SessionCardProps {
 const STATUS_LABEL: Record<string, string> = {
   active: "In progress",
   complete: "Complete",
+  abandoned: "Abandoned",
 };
 
-const STATUS_PILL: Record<string, string> = {
-  active: "bg-[#eef1fc] text-[#3a5fd9]",
-  complete: "bg-[#eaf6f0] text-[#2e9e6a]",
+const STATUS_BADGE: Record<string, string> = {
+  active: "bg-[#eef1fc] text-[#3a5fd9] border border-[#c5d0f7]",
+  complete: "bg-[#eaf6f0] text-[#2e9e6a] border border-[#c0e8d5]",
+  abandoned: "bg-[#efede8] text-[#918d87] border border-[#dedad2]",
 };
 
 const formatRelativeTime = (date: Date): string => {
@@ -35,7 +37,7 @@ const formatRelativeTime = (date: Date): string => {
 
 export function SessionCard({ session, flow, userBadge, stepInfo }: SessionCardProps) {
   const title = session.title ?? flow?.name ?? "Untitled session";
-  const pillClass = STATUS_PILL[session.status] ?? "bg-[#efede8] text-[#918d87]";
+  const badgeClass = STATUS_BADGE[session.status] ?? "bg-[#efede8] text-[#918d87] border border-[#dedad2]";
   const statusLabel = STATUS_LABEL[session.status] ?? session.status;
   const progress =
     stepInfo != null
@@ -47,20 +49,23 @@ export function SessionCard({ session, flow, userBadge, stepInfo }: SessionCardP
   return (
     <Link href={`/chats/${session.id}`} className="block w-full">
       <div className="flex cursor-pointer items-start gap-[14px] rounded-[14px] border-[1.5px] border-[#dedad2] bg-white p-[16px_18px] transition-[border-color,box-shadow] hover:border-[#3a5fd9] hover:shadow-[0_2px_8px_rgba(0,0,0,.09),0_12px_36px_rgba(0,0,0,.07)]">
-        {/* Flow icon */}
         <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#eef1fc] text-[18px]">
           {flow?.icon ?? "💬"}
         </div>
 
-        {/* Body */}
         <div className="min-w-0 flex-1">
-          <div className="mb-[3px] flex items-baseline justify-between gap-2">
+          <div className="mb-[3px] flex items-start justify-between gap-2">
             <span className="truncate text-[14px] font-semibold tracking-[-0.2px] text-[#1a1814]">
               {title}
             </span>
-            <span className="shrink-0 font-mono text-[11px] text-[#918d87]">
-              {formatRelativeTime(new Date(session.updatedAt))}
-            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className={`shrink-0 rounded-full px-[8px] py-[2px] text-[11px] font-semibold ${badgeClass}`}>
+                {statusLabel}
+              </span>
+              <span className="shrink-0 font-mono text-[11px] text-[#918d87]">
+                {formatRelativeTime(new Date(session.updatedAt))}
+              </span>
+            </div>
           </div>
 
           {flow && (
@@ -83,9 +88,6 @@ export function SessionCard({ session, flow, userBadge, stepInfo }: SessionCardP
                 Step {stepInfo.current}/{stepInfo.total} · {Math.round((stepInfo.current / stepInfo.total) * 100)}%
               </span>
             )}
-            <span className={`shrink-0 rounded-full px-[9px] py-[3px] text-[11px] font-semibold ${pillClass}`}>
-              {statusLabel}
-            </span>
           </div>
 
           {userBadge && (
