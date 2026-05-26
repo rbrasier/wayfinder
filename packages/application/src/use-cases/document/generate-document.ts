@@ -4,6 +4,7 @@ import {
   ok,
   type ConversationalNodeConfig,
   type Flow,
+  type FlowContextDoc,
   type FlowNode,
   type IDocumentGenerator,
   type IObjectStorage,
@@ -14,6 +15,16 @@ import {
   type SessionMessage,
 } from "@rbrasier/domain";
 import { documentDataSchema, documentSummarySchema } from "@rbrasier/shared";
+
+const buildContextDocsSection = (docs: FlowContextDoc[]): string => {
+  if (docs.length === 0) return "";
+  const lines = docs.map((d) =>
+    d.extractionStatus === "complete" && d.extractedText
+      ? `\n[${d.filename}]\n${d.extractedText}`
+      : `- ${d.filename}`,
+  );
+  return `\nFlow context documents:\n${lines.join("\n")}`;
+};
 
 export interface GenerateDocumentInput {
   messageId: string;
@@ -50,9 +61,7 @@ export class GenerateDocument {
 
     const tags = tagsResult.data.tags;
     const transcript = this.buildTranscript(input.messages);
-    const contextDocsSummary = input.flow.contextDocs
-      .map((d) => `- ${d.filename}`)
-      .join("\n");
+    const contextDocsSection = buildContextDocsSection(input.flow.contextDocs);
 
     const dataResult = await this.languageModel.generateObject<Record<string, string>>({
       purpose: "documentGeneration",
@@ -60,9 +69,9 @@ export class GenerateDocument {
       prompt: [
         `Return a JSON object with exactly these keys: ${JSON.stringify(tags)}.`,
         `Fill each value using the session context below.`,
-        contextDocsSummary ? `\nFlow context documents:\n${contextDocsSummary}` : "",
+        contextDocsSection,
         `\nSession transcript:\n${transcript}`,
-      ].join("\n"),
+      ].filter(Boolean).join("\n"),
       schema: documentDataSchema,
       temperature: 0.3,
     });

@@ -21,3 +21,4 @@ export * from "./system-settings-repository";
 export * from "./document-storage";
 export * from "./document-generator";
 export * from "./object-storage";
+export * from "./document-extractor";

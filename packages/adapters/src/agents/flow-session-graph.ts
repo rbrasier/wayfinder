@@ -2,6 +2,7 @@ import {
   ok,
   type BuildBranchChoicePromptInput,
   type BuildSystemPromptInput,
+  type FlowContextDoc,
   type ISessionAgent,
   type Result,
 } from "@rbrasier/domain";
@@ -17,7 +18,7 @@ export class FlowSessionGraph implements ISessionAgent {
       : "";
 
     const docsBlock = contextDocs.length > 0
-      ? `\n  <reference_documents>\n${contextDocs.map((d) => `    - ${d.filename}`).join("\n")}\n    Consult these when the user's question touches on policy or process.\n  </reference_documents>`
+      ? buildDocsBlock(contextDocs)
       : "";
 
     const contextSection = gatheredBlock || docsBlock
@@ -85,6 +86,21 @@ Return only: { "branchChoice": "<nodeId>" }`;
     return ok(prompt);
   }
 }
+
+const buildDocsBlock = (contextDocs: FlowContextDoc[]): string => {
+  // Upload-time validation guarantees every newly-uploaded doc has status="complete"
+  // and that the flow-wide total stays within budget. Legacy rows may still have
+  // failed/unsupported status from before the validation existed — fall back to
+  // listing the filename so the AI knows the document exists but cannot be read.
+  const entries = contextDocs.map((doc) => {
+    if (doc.extractionStatus === "complete" && doc.extractedText) {
+      return `  <document name="${doc.filename}">\n${doc.extractedText}\n  </document>`;
+    }
+    return `  <document name="${doc.filename}" status="unreadable">\n    Document is attached to this flow but its contents could not be extracted. If the user asks about it, acknowledge that it exists and ask them to re-upload a readable version.\n  </document>`;
+  });
+
+  return `\n  <reference_documents>\n${entries.join("\n")}\n    Consult these when the user's question touches on policy or process.\n  </reference_documents>`;
+};
 
 const buildRoleBlock = (
   expertRole: string | null,

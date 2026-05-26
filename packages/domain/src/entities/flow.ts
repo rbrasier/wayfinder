@@ -1,5 +1,6 @@
 export type FlowStatus = "draft" | "published";
 export type FlowPermissionRole = "owner" | "viewer";
+export type ExtractionStatus = "pending" | "complete" | "failed" | "unsupported";
 
 export interface FlowPermission {
   userId: string;
@@ -12,6 +13,8 @@ export interface FlowContextDoc {
   mimeType: string;
   sizeBytes: number;
   storagePath: string;
+  extractedText: string | null;
+  extractionStatus: ExtractionStatus;
 }
 
 export interface Flow {

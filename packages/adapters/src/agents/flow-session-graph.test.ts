@@ -94,11 +94,46 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,
       contextDocs: [
-        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf" },
+        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: null, extractionStatus: "pending" as const },
       ],
     });
     expect(result.data).toContain("<reference_documents>");
     expect(result.data).toContain("policy.pdf");
+  });
+
+  it("injects extracted text inside <document> tags when status is complete", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      contextDocs: [
+        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: "All purchases must be approved.", extractionStatus: "complete" as const },
+      ],
+    });
+    expect(result.data).toContain('<document name="policy.pdf">');
+    expect(result.data).toContain("All purchases must be approved.");
+  });
+
+  it("marks legacy docs with non-complete status as unreadable so the AI knows they exist", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      contextDocs: [
+        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: null, extractionStatus: "failed" as const },
+      ],
+    });
+    expect(result.data).toContain('<document name="policy.pdf" status="unreadable">');
+    expect(result.data).toContain("could not be extracted");
+  });
+
+  it("injects full extracted text without truncation — limits are enforced at upload", () => {
+    const longText = "x".repeat(50_000);
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      contextDocs: [
+        { id: "doc-1", filename: "a.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/a.pdf", extractedText: longText, extractionStatus: "complete" as const },
+      ],
+    });
+    const prompt = result.data ?? "";
+    const match = prompt.match(/<document name="a\.pdf">\n([\s\S]*?)\n  <\/document>/);
+    expect(match?.[1]?.length).toBe(50_000);
   });
 
   it("omits <document_template> when outputType is conversation_only", () => {

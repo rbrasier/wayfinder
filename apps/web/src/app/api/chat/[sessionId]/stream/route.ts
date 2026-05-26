@@ -137,8 +137,8 @@ export async function POST(
           promptTokens: streamResult.usage.promptTokens,
           completionTokens: streamResult.usage.completionTokens,
           systemTokens: 0,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
+          cacheReadTokens: streamResult.usage.cacheReadTokens,
+          cacheWriteTokens: streamResult.usage.cacheWriteTokens,
         },
       );
 

@@ -10,9 +10,17 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { FlowContextDoc, FlowPermission } from "@rbrasier/domain";
+import type { FlowPermission } from "@rbrasier/domain";
 import type { AiTurnPayload, SessionDocument } from "@rbrasier/domain";
 import { core_users } from "./core";
+
+type StoredContextDoc = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+};
 
 export const app_flows = pgTable(
   "app_flows",
@@ -27,7 +35,7 @@ export const app_flows = pgTable(
       .references(() => core_users.id, { onDelete: "restrict" }),
     status: text("status", { enum: ["draft", "published"] }).notNull().default("draft"),
     permissions: jsonb("permissions").$type<FlowPermission[]>().notNull().default([]),
-    context_docs: jsonb("context_docs").$type<FlowContextDoc[]>().notNull().default([]),
+    context_docs: jsonb("context_docs").$type<StoredContextDoc[]>().notNull().default([]),
     deleted_at: timestamp("deleted_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -136,5 +144,26 @@ export const admin_system_settings = pgTable(
   },
   (t) => ({
     key_unique: unique("admin_system_settings_key_unique").on(t.key),
+  }),
+);
+
+export const kb_context_doc_content = pgTable(
+  "kb_context_doc_content",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    storage_path: text("storage_path").notNull(),
+    extracted_text: text("extracted_text"),
+    extraction_status: text("extraction_status", {
+      enum: ["pending", "complete", "failed", "unsupported"],
+    }).notNull().default("pending"),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    storage_path_unique: unique("kb_context_doc_content_storage_path_unique").on(t.storage_path),
+    by_flow: index("kb_context_doc_content_flow_id_idx").on(t.flow_id),
   }),
 );

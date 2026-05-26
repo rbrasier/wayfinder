@@ -1,4 +1,4 @@
-import { formatDataStreamPart, streamObject, type LanguageModel } from "ai";
+import { formatDataStreamPart, streamObject, type CoreMessage, type LanguageModel } from "ai";
 import type { z } from "zod";
 
 export interface StreamTurnWriter {
@@ -16,6 +16,8 @@ export interface StreamTurnInput<Schema extends z.ZodTypeAny> {
 export interface StreamTurnUsage {
   promptTokens: number;
   completionTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
 }
 
 export interface StreamTurnResult<Schema extends z.ZodTypeAny> {
@@ -23,16 +25,43 @@ export interface StreamTurnResult<Schema extends z.ZodTypeAny> {
   usage: StreamTurnUsage;
 }
 
+interface AnthropicProviderMeta {
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
+}
+
+const extractAnthropicCacheUsage = (
+  providerMetadata: Record<string, unknown> | undefined,
+): { cacheReadTokens: number; cacheWriteTokens: number } => {
+  const anthropic = providerMetadata?.["anthropic"] as AnthropicProviderMeta | undefined;
+  return {
+    cacheReadTokens: anthropic?.cacheReadInputTokens ?? 0,
+    cacheWriteTokens: anthropic?.cacheCreationInputTokens ?? 0,
+  };
+};
+
 export async function streamTurn<Schema extends z.ZodTypeAny>(
   input: StreamTurnInput<Schema>,
 ): Promise<StreamTurnResult<Schema>> {
   let streamError: unknown = null;
 
+  // Pass the system prompt as the first message with an Anthropic cache_control
+  // marker so the stable per-flow prefix (role, instructions, context docs,
+  // template) is cached across turns. Subsequent turns within the cache TTL
+  // pay ~10% of the input-token cost for the cached prefix.
+  const cachedMessages: CoreMessage[] = [
+    {
+      role: "system",
+      content: input.system,
+      providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+    },
+    ...input.messages,
+  ];
+
   const turnStream = streamObject({
     model: input.model,
     schema: input.schema,
-    system: input.system,
-    messages: input.messages,
+    messages: cachedMessages,
     // partialObjectStream silently swallows "error" chunks and `object` never
     // resolves on failure, so without this callback the route would hang
     // forever on any model/network/schema failure.
@@ -58,11 +87,17 @@ export async function streamTurn<Schema extends z.ZodTypeAny>(
 
   const object = (await turnStream.object) as z.infer<Schema>;
   const rawUsage = await turnStream.usage;
+  const providerMetadata = (await turnStream.providerMetadata) as
+    | Record<string, unknown>
+    | undefined;
+  const cacheUsage = extractAnthropicCacheUsage(providerMetadata);
+
   return {
     object,
     usage: {
       promptTokens: rawUsage.promptTokens ?? 0,
       completionTokens: rawUsage.completionTokens ?? 0,
+      ...cacheUsage,
     },
   };
 }
