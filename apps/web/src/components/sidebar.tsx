@@ -65,14 +65,18 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
 
   const recentChats = isAdmin
     ? []
-    : (sessionsQuery.data ?? []).slice(0, 8).map((session) => {
-        const flow = publishedFlowsQuery.data?.find((f) => f.id === session.flowId);
-        return {
-          id: session.id,
-          label: session.title ?? flow?.name ?? "Untitled chat",
-          icon: flow?.icon ?? "💬",
-        };
-      });
+    : (sessionsQuery.data ?? [])
+        .filter((session) => session.status !== "abandoned")
+        .slice(0, 8)
+        .map((session) => {
+          const flow = publishedFlowsQuery.data?.find((f) => f.id === session.flowId);
+          return {
+            id: session.id,
+            label: session.title ?? flow?.name ?? "Untitled chat",
+            icon: flow?.icon ?? "💬",
+            status: session.status,
+          };
+        });
 
   const user = userQuery.data;
   const displayName = user?.name ?? user?.email ?? "";
@@ -134,7 +138,17 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                 <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-[#eef1fc] text-[11px]">
                   {chat.icon}
                 </span>
-                <span className="overflow-hidden text-ellipsis whitespace-nowrap">{chat.label}</span>
+                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{chat.label}</span>
+                <span
+                  aria-label={chat.status === "complete" ? "Complete" : "In progress"}
+                  className={`shrink-0 rounded-full px-[7px] py-[1px] text-[9.5px] font-semibold ${
+                    chat.status === "complete"
+                      ? "bg-[#eaf6f0] text-[#2e9e6a]"
+                      : "bg-[#eef1fc] text-[#3a5fd9]"
+                  }`}
+                >
+                  {chat.status === "complete" ? "Done" : "Live"}
+                </span>
               </Link>
             ))}
           </>

@@ -1,0 +1,163 @@
+import {
+  AI_CONFIG_SETTING_KEY,
+  STORAGE_CONFIG_SETTING_KEY,
+  type AiConfig,
+  type AiPurpose,
+  type ISystemSettingsRepository,
+  type ProviderName,
+  type StorageConfig,
+} from "@rbrasier/domain";
+
+const ALL_PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
+const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral"];
+
+export const DEFAULT_MODELS_FOR: Record<ProviderName, Record<AiPurpose, string>> = {
+  anthropic: {
+    chat: "claude-haiku-4-5-20251001",
+    documentGeneration: "claude-sonnet-4-5-20251001",
+    branching: "claude-haiku-4-5-20251001",
+  },
+  openai: {
+    chat: "gpt-4o-mini",
+    documentGeneration: "gpt-4o",
+    branching: "gpt-4o-mini",
+  },
+  mistral: {
+    chat: "mistral-small-latest",
+    documentGeneration: "mistral-large-latest",
+    branching: "mistral-small-latest",
+  },
+};
+
+export interface EnvDefaults {
+  provider: ProviderName;
+  apiKeys: { anthropic: string | null; openai: string | null; mistral: string | null };
+  storage: StorageConfig;
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+const parseAiConfig = (raw: string, fallback: AiConfig): AiConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    const provider = ALL_PROVIDERS.includes(parsed.provider as ProviderName)
+      ? (parsed.provider as ProviderName)
+      : fallback.provider;
+    const rawKeys = isObject(parsed.apiKeys) ? parsed.apiKeys : {};
+    const apiKeys = {
+      anthropic: typeof rawKeys.anthropic === "string" && rawKeys.anthropic.length > 0 ? rawKeys.anthropic : fallback.apiKeys.anthropic,
+      openai: typeof rawKeys.openai === "string" && rawKeys.openai.length > 0 ? rawKeys.openai : fallback.apiKeys.openai,
+      mistral: typeof rawKeys.mistral === "string" && rawKeys.mistral.length > 0 ? rawKeys.mistral : fallback.apiKeys.mistral,
+    };
+    const rawModels = isObject(parsed.models) ? parsed.models : {};
+    const defaultModelsForProvider = DEFAULT_MODELS_FOR[provider];
+    const models = ALL_PURPOSES.reduce<Record<AiPurpose, string>>((acc, purpose) => {
+      const v = rawModels[purpose];
+      acc[purpose] = typeof v === "string" && v.length > 0 ? v : defaultModelsForProvider[purpose];
+      return acc;
+    }, {} as Record<AiPurpose, string>);
+    return { provider, apiKeys, models };
+  } catch {
+    return fallback;
+  }
+};
+
+const parseStorageConfig = (raw: string, fallback: StorageConfig): StorageConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    return {
+      endpoint: typeof parsed.endpoint === "string" && parsed.endpoint.length > 0 ? parsed.endpoint : fallback.endpoint,
+      port: typeof parsed.port === "number" && Number.isFinite(parsed.port) ? parsed.port : fallback.port,
+      useSSL: typeof parsed.useSSL === "boolean" ? parsed.useSSL : fallback.useSSL,
+      accessKey: typeof parsed.accessKey === "string" && parsed.accessKey.length > 0 ? parsed.accessKey : fallback.accessKey,
+      secretKey: typeof parsed.secretKey === "string" && parsed.secretKey.length > 0 ? parsed.secretKey : fallback.secretKey,
+      bucket: typeof parsed.bucket === "string" && parsed.bucket.length > 0 ? parsed.bucket : fallback.bucket,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+const buildEnvAiConfig = (env: EnvDefaults): AiConfig => ({
+  provider: env.provider,
+  apiKeys: env.apiKeys,
+  models: DEFAULT_MODELS_FOR[env.provider],
+});
+
+export class RuntimeConfigStore {
+  private aiCache: AiConfig | null = null;
+  private aiPending: Promise<AiConfig> | null = null;
+  private storageCache: StorageConfig | null = null;
+  private storagePending: Promise<StorageConfig> | null = null;
+  private storageVersion = 0;
+
+  constructor(
+    private readonly settingsRepo: ISystemSettingsRepository,
+    private readonly envDefaults: EnvDefaults,
+  ) {}
+
+  async getAiConfig(): Promise<AiConfig> {
+    if (this.aiCache) return this.aiCache;
+    if (this.aiPending) return this.aiPending;
+    this.aiPending = (async () => {
+      const fallback = buildEnvAiConfig(this.envDefaults);
+      const result = await this.settingsRepo.get(AI_CONFIG_SETTING_KEY);
+      const config = !result.error && result.data?.value ? parseAiConfig(result.data.value, fallback) : fallback;
+      this.aiCache = config;
+      this.aiPending = null;
+      return config;
+    })();
+    return this.aiPending;
+  }
+
+  async getStorageConfig(): Promise<StorageConfig> {
+    if (this.storageCache) return this.storageCache;
+    if (this.storagePending) return this.storagePending;
+    this.storagePending = (async () => {
+      const fallback = this.envDefaults.storage;
+      const result = await this.settingsRepo.get(STORAGE_CONFIG_SETTING_KEY);
+      const config = !result.error && result.data?.value ? parseStorageConfig(result.data.value, fallback) : fallback;
+      this.storageCache = config;
+      this.storagePending = null;
+      return config;
+    })();
+    return this.storagePending;
+  }
+
+  getStorageVersion(): number {
+    return this.storageVersion;
+  }
+
+  invalidateAi(): void {
+    this.aiCache = null;
+    this.aiPending = null;
+  }
+
+  invalidateStorage(): void {
+    this.storageCache = null;
+    this.storagePending = null;
+    this.storageVersion++;
+  }
+
+  /**
+   * Public helper: render the current AI config without secret material,
+   * for display on the admin settings page.
+   */
+  static redactAi(config: AiConfig): AiConfig {
+    return {
+      ...config,
+      apiKeys: {
+        anthropic: config.apiKeys.anthropic ? "••••••" : null,
+        openai: config.apiKeys.openai ? "••••••" : null,
+        mistral: config.apiKeys.mistral ? "••••••" : null,
+      },
+    };
+  }
+
+  static redactStorage(config: StorageConfig): StorageConfig {
+    return { ...config, secretKey: config.secretKey ? "••••••" : "" };
+  }
+}

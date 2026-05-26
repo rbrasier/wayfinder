@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ok, type ISystemSettingsRepository, type Result, type SystemSetting } from "@rbrasier/domain";
 import { MinioStorageAdapter } from "./minio-storage";
+import { RuntimeConfigStore } from "../config/runtime-config-store";
 
 const mockMakeBucket = vi.fn();
 const mockBucketExists = vi.fn();
@@ -19,16 +21,30 @@ vi.mock("minio", () => ({
   })),
 }));
 
-const makeAdapter = () =>
-  new MinioStorageAdapter({
-    endPoint: "localhost",
-    port: 9000,
-    useSSL: false,
-    accessKey: "minioadmin",
-    secretKey: "minioadmin",
-    bucket: "wayfinder-documents",
-    pathStyle: true,
+const stubSettingsRepo: ISystemSettingsRepository = {
+  async get(): Promise<Result<SystemSetting | null>> {
+    return ok(null);
+  },
+  async set(key: string, value: string): Promise<Result<SystemSetting>> {
+    return ok({ key, value, createdAt: new Date(), updatedAt: new Date() });
+  },
+};
+
+const makeAdapter = () => {
+  const store = new RuntimeConfigStore(stubSettingsRepo, {
+    provider: "anthropic",
+    apiKeys: { anthropic: null, openai: null, mistral: null },
+    storage: {
+      endpoint: "localhost",
+      port: 9000,
+      useSSL: false,
+      accessKey: "minioadmin",
+      secretKey: "minioadmin",
+      bucket: "wayfinder-documents",
+    },
   });
+  return new MinioStorageAdapter(store);
+};
 
 describe("MinioStorageAdapter", () => {
   beforeEach(() => {

@@ -6,9 +6,12 @@ import type {
   IJobRepository,
   ILanguageModel,
   ILogger,
+  ISystemSettingsRepository,
   IUsageRepository,
   IUserRepository,
 } from "@rbrasier/domain";
+import { DrizzleSystemSettingsRepository } from "./repositories/drizzle-system-settings-repository";
+import { RuntimeConfigStore } from "./config/runtime-config-store";
 import { AiHealthChecker } from "./health/ai-health-checker";
 import { CompositeHealthChecker } from "./health/composite-health-checker";
 import { DbHealthChecker } from "./health/db-health-checker";
@@ -50,6 +53,7 @@ export interface AdaptersConfig {
     jobRepo?: IJobRepository;
     auditLogger?: IAuditLogger;
     llm?: ILanguageModel;
+    systemSettingsRepo?: ISystemSettingsRepository;
   };
 }
 
@@ -96,8 +100,25 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
   const auditLogger = overrides.auditLogger ?? new DrizzleAuditLogger(db);
   const errorLogger = new DrizzleErrorLogger(errorLogs);
 
+  const systemSettings = overrides.systemSettingsRepo ?? new DrizzleSystemSettingsRepository(db);
+  const runtimeConfig = new RuntimeConfigStore(systemSettings, {
+    provider: aiProvider,
+    apiKeys: {
+      anthropic: aiKeys.anthropic ?? null,
+      openai: aiKeys.openai ?? null,
+      mistral: aiKeys.mistral ?? null,
+    },
+    storage: {
+      endpoint: "localhost",
+      port: 9000,
+      useSSL: false,
+      accessKey: "minioadmin",
+      secretKey: "minioadmin",
+      bucket: "wayfinder-documents",
+    },
+  });
   let llm: ILanguageModel =
-    overrides.llm ?? new LanguageModelAdapter(aiProvider);
+    overrides.llm ?? new LanguageModelAdapter(aiProvider, runtimeConfig);
   llm = withUsageTracking(llm, usageRepo);
   llm = withOptionalLangfuse(llm, {
     LANGFUSE_PUBLIC_KEY: langfuse.publicKey,

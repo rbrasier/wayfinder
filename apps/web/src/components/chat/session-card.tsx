@@ -1,17 +1,24 @@
 import Link from "next/link";
 import type { Flow, Session } from "@rbrasier/domain";
 
+export interface SessionCardStepInfo {
+  currentIndex: number;
+  totalSteps: number;
+  completedSteps: number;
+  currentConfidence: number;
+}
+
 interface SessionCardProps {
   session: Session;
   flow: Flow | undefined;
   userBadge?: { name: string; initials: string } | null;
-  stepInfo?: { current: number; total: number } | null;
+  stepInfo?: SessionCardStepInfo | null;
 }
 
 const STATUS_LABEL: Record<string, string> = {
   active: "In progress",
   complete: "Complete",
-  abandoned: "Abandoned",
+  abandoned: "Closed",
 };
 
 const STATUS_BADGE: Record<string, string> = {
@@ -35,16 +42,22 @@ const formatRelativeTime = (date: Date): string => {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 };
 
+const computeProgress = (
+  session: Session,
+  stepInfo: SessionCardStepInfo | null | undefined,
+): number | null => {
+  if (session.status === "complete") return 100;
+  if (!stepInfo || stepInfo.totalSteps === 0) return null;
+  const completedPortion = (stepInfo.completedSteps / stepInfo.totalSteps) * 100;
+  const raw = completedPortion + stepInfo.currentConfidence;
+  return Math.max(0, Math.min(100, Math.round(raw)));
+};
+
 export function SessionCard({ session, flow, userBadge, stepInfo }: SessionCardProps) {
   const title = session.title ?? flow?.name ?? "Untitled session";
   const badgeClass = STATUS_BADGE[session.status] ?? "bg-[#efede8] text-[#918d87] border border-[#dedad2]";
   const statusLabel = STATUS_LABEL[session.status] ?? session.status;
-  const progress =
-    stepInfo != null
-      ? Math.round((stepInfo.current / stepInfo.total) * 100)
-      : session.status === "complete"
-      ? 100
-      : null;
+  const progress = computeProgress(session, stepInfo);
 
   return (
     <Link href={`/chats/${session.id}`} className="block w-full">
@@ -83,9 +96,9 @@ export function SessionCard({ session, flow, userBadge, stepInfo }: SessionCardP
                 />
               )}
             </div>
-            {stepInfo && (
+            {stepInfo && stepInfo.totalSteps > 0 && (
               <span className="shrink-0 font-mono text-[11px] text-[#918d87]">
-                Step {stepInfo.current}/{stepInfo.total} · {Math.round((stepInfo.current / stepInfo.total) * 100)}%
+                Step {Math.max(1, stepInfo.currentIndex)}/{stepInfo.totalSteps} · {progress ?? 0}%
               </span>
             )}
           </div>

@@ -55,8 +55,7 @@ export class GenerateDocument {
       .join("\n");
 
     const dataResult = await this.languageModel.generateObject<Record<string, string>>({
-      purpose: "document-generation",
-      model: "claude-sonnet-4-20250514",
+      purpose: "documentGeneration",
       system: config.aiInstruction,
       prompt: [
         `Return a JSON object with exactly these keys: ${JSON.stringify(tags)}.`,
@@ -86,8 +85,7 @@ export class GenerateDocument {
     if (putResult.error) return putResult;
 
     const summaryResult = await this.languageModel.generateObject<{ summary: string }>({
-      purpose: "document-summary",
-      model: "claude-haiku-4-5-20251001",
+      purpose: "chat",
       prompt: `Write a 2-sentence summary of a document with these values: ${JSON.stringify(dataResult.data.object).slice(0, 2000)}`,
       schema: documentSummarySchema,
       temperature: 0.2,

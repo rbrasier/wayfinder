@@ -22,7 +22,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -44,18 +44,22 @@ import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
 import type { FlowContextDoc } from "@rbrasier/domain";
+import { orderStepIds } from "@/lib/step-order";
 
 const NODE_TYPES = { conversationalNode: ConversationalNode };
 const DEBOUNCE_MS = 600;
 
-const toRfNode = (node: {
-  id: string;
-  name: string;
-  colour: string | null;
-  positionX: number;
-  positionY: number;
-  config: Record<string, unknown>;
-}): Node<ConversationalNodeData> => ({
+const toRfNode = (
+  node: {
+    id: string;
+    name: string;
+    colour: string | null;
+    positionX: number;
+    positionY: number;
+    config: Record<string, unknown>;
+  },
+  stepNumber: number | null,
+): Node<ConversationalNodeData> => ({
   id: node.id,
   type: "conversationalNode",
   position: { x: node.positionX, y: node.positionY },
@@ -63,6 +67,7 @@ const toRfNode = (node: {
     name: node.name,
     colour: node.colour,
     aiInstruction: (node.config.aiInstruction as string | null) ?? null,
+    stepNumber,
     doneWhen: (node.config.doneWhen as string | null) ?? null,
     neverDone: Boolean(node.config.neverDone),
     outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
@@ -128,7 +133,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   useEffect(() => {
     const data = canvasQuery.data;
     if (!data) return;
-    setRfNodes(data.nodes.map(toRfNode));
+    setRfNodes(data.nodes.map((n) => toRfNode(n, null)));
     setRfEdges(data.edges.map(toRfEdge));
     setContextDocs(data.flow.contextDocs);
     setFlowName(data.flow.name);
@@ -256,7 +261,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
           config,
         });
         setRfNodes((nds) =>
-          nds.map((n) => (n.id === editingNodeId ? { ...toRfNode({ ...newNode, config }), id: newNode.id } : n)),
+          nds.map((n) => (n.id === editingNodeId ? { ...toRfNode({ ...newNode, config }, null), id: newNode.id } : n)),
         );
         if (pendingEdge) {
           const edge = await createEdgeMutation.mutateAsync({ flowId, fromNodeId: pendingEdge.fromNodeId, toNodeId: newNode.id });
@@ -344,6 +349,22 @@ function CanvasInner({ flowId }: { flowId: string }) {
     );
   }
 
+  const stepOrder = useMemo(() => {
+    const orderable = rfNodes.map((n) => ({ id: n.id, positionX: n.position.x }));
+    const edgeData = rfEdges.map((e) => ({ fromNodeId: e.source, toNodeId: e.target }));
+    const ids = orderStepIds(orderable, edgeData);
+    return new Map(ids.map((id, index) => [id, index + 1]));
+  }, [rfNodes, rfEdges]);
+
+  const displayNodes = useMemo(
+    () =>
+      rfNodes.map((n) => ({
+        ...n,
+        data: { ...(n.data as ConversationalNodeData), stepNumber: stepOrder.get(n.id) ?? null },
+      })),
+    [rfNodes, stepOrder],
+  );
+
   const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
   const editingData = editingNode?.data as ConversationalNodeData | undefined;
   const initialConfigValues = editingData
@@ -428,7 +449,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
       <div className="flex-1 relative">
         <ReactFlow
-          nodes={rfNodes}
+          nodes={displayNodes}
           edges={rfEdges}
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}

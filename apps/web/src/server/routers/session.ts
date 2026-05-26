@@ -2,12 +2,85 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { orderStepIds } from "@/lib/step-order";
+
+const COMPLETE_CONFIDENCE_THRESHOLD = 90;
 
 export const sessionRouter = router({
   list: authenticatedProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listSessions.execute(ctx.userId);
     if (result.error) throw toTrpcError(result.error);
-    return result.data;
+
+    const sessions = result.data;
+    const flowIds = Array.from(new Set(sessions.map((s) => s.flowId)));
+
+    const flowGraphs = new Map<string, { nodeIds: string[] }>();
+    await Promise.all(
+      flowIds.map(async (flowId) => {
+        const [nodesResult, edgesResult] = await Promise.all([
+          ctx.container.repos.flowNodes.listByFlow(flowId),
+          ctx.container.repos.flowEdges.listByFlow(flowId),
+        ]);
+        if (nodesResult.error || edgesResult.error) {
+          flowGraphs.set(flowId, { nodeIds: [] });
+          return;
+        }
+        const nodes = nodesResult.data.map((n) => ({ id: n.id, positionX: n.positionX }));
+        const edges = edgesResult.data.map((e) => ({ fromNodeId: e.fromNodeId, toNodeId: e.toNodeId }));
+        flowGraphs.set(flowId, { nodeIds: orderStepIds(nodes, edges) });
+      }),
+    );
+
+    const enriched = await Promise.all(
+      sessions.map(async (session) => {
+        const graph = flowGraphs.get(session.flowId);
+        if (!graph || graph.nodeIds.length === 0) return { ...session, stepInfo: null };
+
+        const totalSteps = graph.nodeIds.length;
+        const currentIndex = session.currentNodeId
+          ? graph.nodeIds.indexOf(session.currentNodeId)
+          : -1;
+
+        const messagesResult = await ctx.container.repos.sessionMessages.listBySession(session.id);
+        const messages = messagesResult.error ? [] : messagesResult.data;
+
+        const bestConfidenceByStep = new Map<string, number>();
+        for (const message of messages) {
+          if (message.role !== "assistant" || !message.stepNodeId || message.confidence === null) continue;
+          const previous = bestConfidenceByStep.get(message.stepNodeId) ?? -1;
+          if (message.confidence > previous) {
+            bestConfidenceByStep.set(message.stepNodeId, message.confidence);
+          }
+        }
+
+        let completedSteps = 0;
+        for (const [nodeId, confidence] of bestConfidenceByStep) {
+          if (confidence >= COMPLETE_CONFIDENCE_THRESHOLD && nodeId !== session.currentNodeId) {
+            completedSteps++;
+          }
+        }
+        if (session.status === "complete") completedSteps = totalSteps;
+
+        const currentConfidence =
+          session.status === "complete"
+            ? 0
+            : session.currentNodeId
+              ? bestConfidenceByStep.get(session.currentNodeId) ?? 0
+              : 0;
+
+        return {
+          ...session,
+          stepInfo: {
+            currentIndex: currentIndex >= 0 ? currentIndex + 1 : 0,
+            totalSteps,
+            completedSteps,
+            currentConfidence,
+          },
+        };
+      }),
+    );
+
+    return enriched;
   }),
 
   listAll: adminProcedure.query(async ({ ctx }) => {

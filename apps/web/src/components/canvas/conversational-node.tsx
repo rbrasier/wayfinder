@@ -7,7 +7,7 @@ export interface ConversationalNodeData {
   name: string;
   colour: string | null;
   aiInstruction: string | null;
-  stepNumber?: string | null;
+  stepNumber?: number | null;
   [key: string]: unknown;
 }
 

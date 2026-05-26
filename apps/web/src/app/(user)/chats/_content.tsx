@@ -79,6 +79,7 @@ export function ChatsContent() {
                   key={session.id}
                   session={session}
                   flow={flowById[session.flowId]}
+                  stepInfo={session.stepInfo ?? null}
                 />
               ))}
             </div>
