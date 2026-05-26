@@ -33,6 +33,7 @@ import {
   RunTurn,
   SendMessage,
   StartSession,
+  SummariseTemplate,
   TrackUsage,
   UpdateErrorStatus,
   UpdateFlow,
@@ -179,6 +180,7 @@ const build = () => {
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, systemSettings, contextDocContent },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages),
+      summariseTemplate: new SummariseTemplate(llm),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),
