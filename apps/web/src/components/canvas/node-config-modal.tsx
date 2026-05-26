@@ -37,6 +37,7 @@ export interface NodeConfigValues {
   outputType: "conversation_only" | "generate_document";
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
+  documentTemplateContent?: string | null;
 }
 
 interface NodeConfigModalProps {
@@ -47,7 +48,7 @@ interface NodeConfigModalProps {
   onDelete?: () => void;
   onClose: () => void;
   isSaving?: boolean;
-  onUploadTemplate?: (file: File) => Promise<{ path: string; filename: string } | { error: string }>;
+  onUploadTemplate?: (file: File) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string }>;
 }
 
 const DEFAULT_VALUES: NodeConfigValues = {
@@ -59,6 +60,7 @@ const DEFAULT_VALUES: NodeConfigValues = {
   outputType: "conversation_only",
   documentTemplatePath: null,
   documentTemplateFilename: null,
+  documentTemplateContent: null,
 };
 
 function CopyButton({ text }: { text: string }) {
@@ -164,6 +166,7 @@ export function NodeConfigModal({
       } else {
         set("documentTemplatePath", result.path);
         set("documentTemplateFilename", result.filename);
+        set("documentTemplateContent", result.documentTemplateContent ?? null);
       }
     } finally {
       setIsUploading(false);
@@ -359,6 +362,7 @@ export function NodeConfigModal({
                         onClick={() => {
                           set("documentTemplatePath", null);
                           set("documentTemplateFilename", null);
+                          set("documentTemplateContent", null);
                           setUploadError(null);
                         }}
                         disabled={isUploading}

@@ -92,14 +92,14 @@ export async function POST(
   }
 
   const textResult = docxGenerator.extractFullText({ templateBytes: buffer });
-  const documentTemplateMarkdown = textResult.data?.text ?? null;
+  const documentTemplateContent = textResult.data?.text ?? null;
 
   const existingConfig = node.config as Record<string, unknown>;
   const updatedConfig = {
     ...existingConfig,
     documentTemplatePath: storageKey,
     documentTemplateFilename: safeFilename,
-    documentTemplateMarkdown,
+    documentTemplateContent,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {
@@ -110,7 +110,7 @@ export async function POST(
   }
 
   return NextResponse.json(
-    { path: storageKey, filename: safeFilename, tagCount: validationResult.data.tags.length },
+    { path: storageKey, filename: safeFilename, tagCount: validationResult.data.tags.length, documentTemplateContent },
     { status: 200 },
   );
 }
@@ -155,6 +155,7 @@ export async function DELETE(
     ...existingConfig,
     documentTemplatePath: null,
     documentTemplateFilename: null,
+    documentTemplateContent: null,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {

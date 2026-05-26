@@ -25,8 +25,8 @@ export class FlowSessionGraph implements ISessionAgent {
       : "";
 
     const templateBlock =
-      nodeConfig.outputType === "generate_document" && nodeConfig.documentTemplateMarkdown
-        ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${nodeConfig.documentTemplateMarkdown}\n  </document_template>`
+      nodeConfig.outputType === "generate_document" && nodeConfig.documentTemplateContent
+        ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${nodeConfig.documentTemplateContent}\n  </document_template>`
         : "";
 
     const prompt = `${roleBlock}

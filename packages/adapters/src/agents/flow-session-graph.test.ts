@@ -8,7 +8,7 @@ const baseInput = {
     aiInstruction: "Help the user describe their procurement need.",
     doneWhen: "The user has described what they need to buy and approximate budget.",
     outputType: "conversation_only" as const,
-    documentTemplateMarkdown: null,
+    documentTemplateContent: null,
     documentTemplatePath: null,
     documentTemplateFilename: null,
   },
@@ -106,13 +106,13 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).not.toContain("<document_template>");
   });
 
-  it("omits <document_template> when documentTemplateMarkdown is null even if outputType is generate_document", () => {
+  it("omits <document_template> when documentTemplateContent is null even if outputType is generate_document", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,
       nodeConfig: {
         ...baseInput.nodeConfig,
         outputType: "generate_document" as const,
-        documentTemplateMarkdown: null,
+        documentTemplateContent: null,
       },
     });
     expect(result.data).not.toContain("<document_template>");
@@ -124,7 +124,7 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
       nodeConfig: {
         ...baseInput.nodeConfig,
         outputType: "generate_document" as const,
-        documentTemplateMarkdown: "# Procurement Brief\n## Item: {{item}}",
+        documentTemplateContent: "# Procurement Brief\n## Item: {{item}}",
       },
     });
     expect(result.data).toContain("<document_template>");

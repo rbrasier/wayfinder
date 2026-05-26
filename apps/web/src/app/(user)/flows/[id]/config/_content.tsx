@@ -68,6 +68,7 @@ const toRfNode = (node: {
     outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
     documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
     documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
+    documentTemplateContent: (node.config.documentTemplateContent as string | null) ?? null,
   },
 });
 
@@ -213,7 +214,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     positionTimers.current.set(node.id, timer);
   }, [updatePositionMutation, flowId]);
 
-  const handleUploadTemplate = useCallback(async (file: File): Promise<{ path: string; filename: string } | { error: string }> => {
+  const handleUploadTemplate = useCallback(async (file: File): Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string }> => {
     if (!editingNodeId || editingNodeId.startsWith("temp-")) {
       return { error: "Save the step first before uploading a template." };
     }
@@ -223,11 +224,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
       method: "POST",
       body: formData,
     });
-    const data = await res.json() as { path?: string; filename?: string; error?: string };
+    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; error?: string };
     if (!res.ok || data.error) {
       return { error: data.error ?? "Upload failed" };
     }
-    return { path: data.path!, filename: data.filename! };
+    return { path: data.path!, filename: data.filename!, documentTemplateContent: data.documentTemplateContent ?? null };
   }, [editingNodeId, flowId]);
 
   const handleConfigSave = useCallback(async (values: NodeConfigValues) => {
@@ -240,6 +241,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       outputType: values.outputType,
       documentTemplatePath: values.documentTemplatePath ?? null,
       documentTemplateFilename: values.documentTemplateFilename ?? null,
+      documentTemplateContent: values.documentTemplateContent ?? null,
     };
     const isTempNode = editingNodeId.startsWith("temp-");
 
@@ -281,6 +283,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
                     outputType: config.outputType,
                     documentTemplatePath: config.documentTemplatePath,
                     documentTemplateFilename: config.documentTemplateFilename,
+                    documentTemplateContent: config.documentTemplateContent,
                   },
                 }
               : n,
@@ -301,7 +304,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       id: tempId,
       type: "conversationalNode",
       position: { x: xOffset, y: 200 },
-      data: { name: "New step", colour: "#3a5fd9", aiInstruction: null, doneWhen: null, outputType: "conversation_only", documentTemplatePath: null, documentTemplateFilename: null },
+      data: { name: "New step", colour: "#3a5fd9", aiInstruction: null, doneWhen: null, neverDone: false, outputType: "conversation_only", documentTemplatePath: null, documentTemplateFilename: null, documentTemplateContent: null },
     };
     setRfNodes((nds) => [...nds, tempNode]);
     setEditingNodeId(tempId);
@@ -353,6 +356,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         outputType: (editingData.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
         documentTemplatePath: (editingData.documentTemplatePath as string | null) ?? null,
         documentTemplateFilename: (editingData.documentTemplateFilename as string | null) ?? null,
+        documentTemplateContent: (editingData.documentTemplateContent as string | null) ?? null,
       }
     : undefined;
 
