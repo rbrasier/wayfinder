@@ -28,6 +28,7 @@ export const app_flows = pgTable(
     status: text("status", { enum: ["draft", "published"] }).notNull().default("draft"),
     permissions: jsonb("permissions").$type<FlowPermission[]>().notNull().default([]),
     context_docs: jsonb("context_docs").$type<FlowContextDoc[]>().notNull().default([]),
+    deleted_at: timestamp("deleted_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

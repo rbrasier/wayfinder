@@ -1,4 +1,5 @@
 export * from "./create-flow";
+export * from "./delete-flow";
 export * from "./list-flows";
 export * from "./get-flow-canvas";
 export * from "./update-flow";

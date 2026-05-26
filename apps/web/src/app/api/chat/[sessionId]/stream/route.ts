@@ -59,6 +59,10 @@ export async function POST(
     return new Response("Session is not active", { status: 400 });
   }
 
+  if (flow.deletedAt !== null) {
+    return new Response("This flow has been deleted", { status: 410 });
+  }
+
   const currentNode = nodes.find((n) => n.id === session.currentNodeId);
   if (!currentNode) return new Response("Current node not found", { status: 500 });
 

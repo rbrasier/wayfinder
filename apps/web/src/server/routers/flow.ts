@@ -253,6 +253,17 @@ export const flowRouter = router({
       return result.data;
     }),
 
+  delete: authenticatedProcedure
+    .input(flowIdInput)
+    .mutation(async ({ ctx, input }) => {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to delete this flow." });
+      }
+      const result = await ctx.container.useCases.deleteFlow.execute(input.flowId);
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
   grantOwner: adminProcedure
     .input(z.object({ flowId: z.string().uuid(), userId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {

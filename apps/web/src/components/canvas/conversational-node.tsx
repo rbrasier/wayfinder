@@ -10,17 +10,7 @@ export interface ConversationalNodeData {
   [key: string]: unknown;
 }
 
-const NODE_COLOURS: Record<string, string> = {
-  "#6366f1": "bg-indigo-500",
-  "#10b981": "bg-emerald-500",
-  "#f59e0b": "bg-amber-500",
-  "#ef4444": "bg-red-500",
-  "#8b5cf6": "bg-violet-500",
-  "#06b6d4": "bg-cyan-500",
-};
-
-const getBadgeClass = (colour: string | null): string =>
-  (colour && NODE_COLOURS[colour]) ?? "bg-indigo-500";
+const DEFAULT_COLOUR = "#3a5fd9";
 
 export function ConversationalNode({ data, selected }: NodeProps) {
   const nodeData = data as ConversationalNodeData;
@@ -42,7 +32,10 @@ export function ConversationalNode({ data, selected }: NodeProps) {
       />
 
       <div className="flex items-start gap-3 p-3">
-        <div className={cn("mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white text-xs font-bold", getBadgeClass(nodeData.colour))}>
+        <div
+          className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white text-xs font-bold"
+          style={{ backgroundColor: nodeData.colour ?? DEFAULT_COLOUR }}
+        >
           {nodeData.name.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">

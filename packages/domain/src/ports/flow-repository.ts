@@ -16,6 +16,7 @@ export interface IFlowRepository {
   list(): Promise<Result<Flow[]>>;
   listForUser(userId: string): Promise<Result<Flow[]>>;
   update(id: string, patch: FlowUpdate): Promise<Result<Flow>>;
+  softDelete(id: string): Promise<Result<Flow>>;
   addContextDoc(flowId: string, doc: FlowContextDoc): Promise<Result<Flow>>;
   removeContextDoc(flowId: string, docId: string): Promise<Result<Flow>>;
   setPermission(flowId: string, userId: string, role: FlowPermissionRole): Promise<Result<Flow>>;

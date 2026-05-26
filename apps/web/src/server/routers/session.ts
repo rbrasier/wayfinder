@@ -48,6 +48,34 @@ export const sessionRouter = router({
     return result.data.filter((f) => f.status === "published");
   }),
 
+  rename: authenticatedProcedure
+    .input(z.object({ sessionId: z.string().uuid(), title: z.string().min(1).max(200) }))
+    .mutation(async ({ ctx, input }) => {
+      const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
+      if (sessionResult.error) throw toTrpcError(sessionResult.error);
+      if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
+      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+      }
+      const result = await ctx.container.repos.sessions.update(input.sessionId, { title: input.title });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  close: authenticatedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
+      if (sessionResult.error) throw toTrpcError(sessionResult.error);
+      if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
+      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+      }
+      const result = await ctx.container.repos.sessions.update(input.sessionId, { status: "abandoned" });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   overrideBranch: authenticatedProcedure
     .input(z.object({ sessionId: z.string().uuid(), targetNodeId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {

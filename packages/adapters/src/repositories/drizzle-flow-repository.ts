@@ -10,7 +10,7 @@ import {
   type NewFlow,
   type Result,
 } from "@rbrasier/domain";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, isNull } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_flows } from "../db/schema/wayfinder";
 import { logRepoError } from "./log-repo-error";
@@ -25,6 +25,7 @@ const toEntity = (row: typeof app_flows.$inferSelect): Flow => ({
   status: row.status,
   permissions: row.permissions,
   contextDocs: row.context_docs,
+  deletedAt: row.deleted_at ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -67,7 +68,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
 
   async list(): Promise<Result<Flow[]>> {
     try {
-      const rows = await this.db.select().from(app_flows).orderBy(desc(app_flows.updated_at));
+      const rows = await this.db.select().from(app_flows).where(isNull(app_flows.deleted_at)).orderBy(desc(app_flows.updated_at));
       return ok(rows.map(toEntity));
     } catch (cause) {
       logRepoError("DrizzleFlowRepository.list", cause);
@@ -77,11 +78,27 @@ export class DrizzleFlowRepository implements IFlowRepository {
 
   async listForUser(userId: string): Promise<Result<Flow[]>> {
     try {
-      const rows = await this.db.select().from(app_flows).where(eq(app_flows.owner_user_id, userId));
-      return ok(rows.map(toEntity));
+      const rows = await this.db.select().from(app_flows).where(eq(app_flows.owner_user_id, userId)).orderBy(desc(app_flows.updated_at));
+      const nonDeleted = rows.filter((r) => r.deleted_at === null);
+      return ok(nonDeleted.map(toEntity));
     } catch (cause) {
       logRepoError("DrizzleFlowRepository.listForUser", cause);
       return err(domainError("INFRA_FAILURE", "Failed to list flows for user.", cause));
+    }
+  }
+
+  async softDelete(id: string): Promise<Result<Flow>> {
+    try {
+      const [row] = await this.db
+        .update(app_flows)
+        .set({ deleted_at: new Date(), updated_at: new Date() })
+        .where(eq(app_flows.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", `Flow ${id} not found.`));
+      return ok(toEntity(row));
+    } catch (cause) {
+      logRepoError("DrizzleFlowRepository.softDelete", cause);
+      return err(domainError("INFRA_FAILURE", "Failed to delete flow.", cause));
     }
   }
 

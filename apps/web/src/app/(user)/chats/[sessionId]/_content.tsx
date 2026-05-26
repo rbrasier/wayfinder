@@ -2,16 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { toast } from "sonner";
 import type { FlowEdge, FlowNode } from "@rbrasier/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { MessageFeed } from "@/components/chat/message-feed";
-import { ShareButton } from "@/components/chat/share-button";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
 import { trpc } from "@/trpc/client";
 
@@ -39,6 +39,7 @@ function countStalls(
 }
 
 export function ChatSessionContent({ sessionId }: { sessionId: string }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const isShared = searchParams.get("shared") === "true";
 
@@ -50,6 +51,22 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   const [_regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const [overrideOpen, setOverrideOpen] = useState(false);
+
+  const renameMutation = trpc.session.rename.useMutation({
+    onSuccess: () => {
+      void utils.session.get.invalidate({ sessionId });
+      toast.success("Chat renamed");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const closeMutation = trpc.session.close.useMutation({
+    onSuccess: () => {
+      toast.success("Chat closed");
+      router.push("/chats");
+    },
+    onError: (error) => toast.error(error.message),
+  });
 
   const overrideMutation = trpc.session.overrideBranch.useMutation({
     onSuccess: () => {
@@ -165,6 +182,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const collaborateUrl = `${origin}/chats/${sessionId}?shared=true`;
   const me = meQuery.data;
   const userFirstInitial = me?.name?.trim()?.[0]?.toUpperCase() ?? "U";
+  const isFlowDeleted = flow.deletedAt !== null;
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
@@ -175,19 +193,22 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           </Link>
           <span className="text-[13px] text-[#dedad2]">|</span>
           <span className="text-[18px]">{flow.icon ?? "💬"}</span>
-          <h1 className="truncate text-[13px] font-semibold text-[#1a1814]">{flow.name}</h1>
+          <h1 className="truncate text-[13px] font-semibold text-[#1a1814]">
+            {session.title ?? flow.name}
+          </h1>
           <Badge variant={statusVariant(session.status)} className="shrink-0 capitalize">
             {session.status}
           </Badge>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {!isShared && (
-            <ShareButton
-              label="Share"
-              url={newChatUrl}
-              toastMessage="Link copied — share with a colleague to start a new chat session using this flow"
-            />
-          )}
+          <ChatActionsMenu
+            sessionTitle={session.title}
+            shareUrl={newChatUrl}
+            collaborateUrl={collaborateUrl}
+            onRename={(title) => renameMutation.mutate({ sessionId, title })}
+            onClose={() => closeMutation.mutate({ sessionId })}
+            isReadOnly={isShared}
+          />
         </div>
       </header>
 
@@ -195,16 +216,15 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         nodes={nodes}
         currentNodeId={session.currentNodeId}
         completedNodeIds={completedNodeIds}
-        rightSlot={
-          !isShared ? (
-            <ShareButton
-              label="Collaborate"
-              url={collaborateUrl}
-              toastMessage="Link copied, share it with a colleague to collaborate in this chat session"
-            />
-          ) : null
-        }
       />
+
+      {isFlowDeleted && (
+        <div className="flex justify-center border-b border-[#f5d0a9] bg-[#fdf3e3] px-4 py-2">
+          <p className="text-[13px] text-[#c17a1a]">
+            This flow has been deleted. You can read this chat but can no longer send new messages.
+          </p>
+        </div>
+      )}
 
       <MessageFeed
         dbMessages={dbMessages}
@@ -233,7 +253,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         value={input}
         onChange={(v) => setInput(v)}
         onSubmit={handleSend}
-        disabled={isLoading || session.status !== "active"}
+        disabled={isLoading || session.status !== "active" || isFlowDeleted}
         readOnly={isShared}
       />
 

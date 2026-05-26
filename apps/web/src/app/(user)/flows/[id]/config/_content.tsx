@@ -21,10 +21,21 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import { ConversationalNode } from "@/components/canvas/conversational-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
@@ -69,6 +80,7 @@ const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): E
 });
 
 function CanvasInner({ flowId }: { flowId: string }) {
+  const router = useRouter();
   const { fitView } = useReactFlow();
   const canvasQuery = trpc.flow.getCanvas.useQuery({ flowId });
 
@@ -86,10 +98,25 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [pendingEdge, setPendingEdge] = useState<{ fromNodeId: string; toNodeId: string } | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  const [flowMenuOpen, setFlowMenuOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const flowMenuRef = useRef<HTMLDivElement>(null);
 
   const positionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+  useEffect(() => {
+    if (!flowMenuOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (flowMenuRef.current && !flowMenuRef.current.contains(event.target as HTMLElement)) {
+        setFlowMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [flowMenuOpen]);
+
   const updateFlowMutation = trpc.flow.update.useMutation();
+  const deleteFlowMutation = trpc.flow.delete.useMutation();
   const createNodeMutation = trpc.flow.node.create.useMutation();
   const updateNodeMutation = trpc.flow.node.update.useMutation();
   const updatePositionMutation = trpc.flow.node.updatePosition.useMutation();
@@ -162,7 +189,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       id: tempId,
       type: "conversationalNode",
       position: { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
-      data: { name: "New step", colour: "#6366f1", aiInstruction: null },
+      data: { name: "New step", colour: "#3a5fd9", aiInstruction: null },
     };
 
     setRfNodes((nds) => [...nds, tempNode]);
@@ -274,7 +301,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       id: tempId,
       type: "conversationalNode",
       position: { x: xOffset, y: 200 },
-      data: { name: "New step", colour: "#6366f1", aiInstruction: null, doneWhen: null, outputType: "conversation_only", documentTemplatePath: null, documentTemplateFilename: null },
+      data: { name: "New step", colour: "#3a5fd9", aiInstruction: null, doneWhen: null, outputType: "conversation_only", documentTemplatePath: null, documentTemplateFilename: null },
     };
     setRfNodes((nds) => [...nds, tempNode]);
     setEditingNodeId(tempId);
@@ -342,22 +369,56 @@ function CanvasInner({ flowId }: { flowId: string }) {
           <Button size="sm" variant="outline" onClick={handleAddStep}>
             + Add step
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const target = flowStatus === "published" ? "draft" : "published";
-              setFlowStatus(target);
-              void updateFlowMutation.mutateAsync({ flowId, status: target }).then(() => {
-                toast.success(target === "published" ? "Flow published" : "Flow unpublished");
-              });
-            }}
-          >
-            {flowStatus === "published" ? "Unpublish" : "Publish"}
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => setEditingMetadata(true)}>
-            Edit
-          </Button>
+          <div className="relative" ref={flowMenuRef}>
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label="Flow actions"
+              onClick={() => setFlowMenuOpen((prev) => !prev)}
+              className="px-2"
+            >
+              <MoreHorizontal size={16} />
+            </Button>
+            {flowMenuOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  onClick={() => {
+                    setFlowMenuOpen(false);
+                    const target = flowStatus === "published" ? "draft" : "published";
+                    setFlowStatus(target);
+                    void updateFlowMutation.mutateAsync({ flowId, status: target }).then(() => {
+                      toast.success(target === "published" ? "Flow published" : "Flow unpublished");
+                    });
+                  }}
+                >
+                  {flowStatus === "published" ? "Unpublish" : "Publish"}
+                </button>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  onClick={() => {
+                    setFlowMenuOpen(false);
+                    setEditingMetadata(true);
+                  }}
+                >
+                  Edit
+                </button>
+                <div className="my-1 border-t border-[#dedad2]" />
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#c2385a] hover:bg-[#fdf3f5]"
+                  onClick={() => {
+                    setFlowMenuOpen(false);
+                    setDeleteConfirmOpen(true);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -424,6 +485,38 @@ function CanvasInner({ flowId }: { flowId: string }) {
         }}
         onClose={() => setEditingMetadata(false)}
       />
+
+      <Dialog open={deleteConfirmOpen} onOpenChange={(open) => !open && setDeleteConfirmOpen(false)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete flow?</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-[13px] leading-[1.55] text-[#5a5650]">
+              This flow will be deleted. Existing chats can still be viewed but no new messages
+              can be sent. This action cannot be undone.
+            </p>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={deleteFlowMutation.isPending}
+              onClick={() => {
+                void deleteFlowMutation.mutateAsync({ flowId }).then(() => {
+                  toast.success("Flow deleted");
+                  router.push("/");
+                });
+              }}
+            >
+              {deleteFlowMutation.isPending ? "Deleting…" : "Delete flow"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -38,6 +38,7 @@ class FakeFlowRepository implements IFlowRepository {
   async list(): Promise<Result<Flow[]>> { return ok([...this.flows.values()]); }
   async listForUser(): Promise<Result<Flow[]>> { return ok([]); }
   async update(): Promise<Result<Flow>> { return err(domainError("INFRA_FAILURE", "not used")); }
+  async softDelete(): Promise<Result<Flow>> { return err(domainError("INFRA_FAILURE", "not used")); }
   async addContextDoc(): Promise<Result<Flow>> { return err(domainError("INFRA_FAILURE", "not used")); }
   async removeContextDoc(): Promise<Result<Flow>> { return err(domainError("INFRA_FAILURE", "not used")); }
   async setPermission(): Promise<Result<Flow>> { return err(domainError("INFRA_FAILURE", "not used")); }
@@ -186,6 +187,7 @@ const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
   status: "published",
   permissions: [],
   contextDocs: [],
+  deletedAt: null,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),
   ...overrides,

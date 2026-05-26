@@ -24,6 +24,7 @@ export interface Flow {
   status: FlowStatus;
   permissions: FlowPermission[];
   contextDocs: FlowContextDoc[];
+  deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

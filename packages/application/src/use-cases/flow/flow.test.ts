@@ -12,6 +12,7 @@ import { domainError, err, ok } from "@rbrasier/domain";
 import type { FlowNodeUpdate, FlowUpdate } from "@rbrasier/domain";
 import type { IFlowEdgeRepository, IFlowNodeRepository, IFlowRepository } from "@rbrasier/domain";
 import { CreateFlow } from "./create-flow";
+import { DeleteFlow } from "./delete-flow";
 import { GetFlowCanvas } from "./get-flow-canvas";
 import { UpdateFlow } from "./update-flow";
 import { CreateFlowNode } from "./create-flow-node";
@@ -32,6 +33,7 @@ const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
   status: "draft",
   permissions: [{ userId: "user-1", role: "owner" }],
   contextDocs: [],
+  deletedAt: null,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),
   ...overrides,
@@ -119,6 +121,14 @@ class FakeFlowRepository implements IFlowRepository {
     if (!flow) return err(domainError("NOT_FOUND", `Flow ${flowId} not found.`));
     const updated = { ...flow, contextDocs: flow.contextDocs.filter((d) => d.id !== docId), updatedAt: new Date() };
     this.flows.set(flowId, updated);
+    return ok(updated);
+  }
+
+  async softDelete(id: string): Promise<Result<Flow>> {
+    const flow = this.flows.get(id);
+    if (!flow) return err(domainError("NOT_FOUND", `Flow ${id} not found.`));
+    const updated = { ...flow, deletedAt: new Date(), updatedAt: new Date() };
+    this.flows.set(id, updated);
     return ok(updated);
   }
 
@@ -436,5 +446,34 @@ describe("GrantFlowOwner", () => {
   it("returns NOT_FOUND when flow does not exist", async () => {
     const result = await useCase.execute("missing", "user-2");
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("DeleteFlow", () => {
+  let flows: FakeFlowRepository;
+  let useCase: DeleteFlow;
+
+  beforeEach(() => {
+    flows = new FakeFlowRepository();
+    flows.flows.set("flow-1", makeFlow());
+    useCase = new DeleteFlow(flows);
+  });
+
+  it("soft-deletes a flow by setting deletedAt", async () => {
+    const result = await useCase.execute("flow-1");
+    expect(result.error).toBeUndefined();
+    expect(result.data?.deletedAt).not.toBeNull();
+    expect(result.data?.id).toBe("flow-1");
+  });
+
+  it("returns NOT_FOUND when flow does not exist", async () => {
+    const result = await useCase.execute("missing");
+    expect(result.error?.code).toBe("NOT_FOUND");
+  });
+
+  it("propagates repository errors", async () => {
+    flows.softDelete = async () => err(domainError("INFRA_FAILURE", "DB down"));
+    const result = await useCase.execute("flow-1");
+    expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 });
