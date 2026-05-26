@@ -57,6 +57,7 @@ const toRfNode = (node: {
     outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
     documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
     documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
+    documentTemplateMarkdown: (node.config.documentTemplateMarkdown as string | null) ?? null,
   },
 });
 
@@ -213,6 +214,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       outputType: values.outputType,
       documentTemplatePath: values.documentTemplatePath ?? null,
       documentTemplateFilename: values.documentTemplateFilename ?? null,
+      documentTemplateMarkdown: values.documentTemplateMarkdown ?? null,
     };
     const isTempNode = editingNodeId.startsWith("temp-");
 
@@ -254,6 +256,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
                     outputType: config.outputType,
                     documentTemplatePath: config.documentTemplatePath,
                     documentTemplateFilename: config.documentTemplateFilename,
+                    documentTemplateMarkdown: config.documentTemplateMarkdown,
                   },
                 }
               : n,
@@ -274,7 +277,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       id: tempId,
       type: "conversationalNode",
       position: { x: xOffset, y: 200 },
-      data: { name: "New step", colour: "#6366f1", aiInstruction: null, doneWhen: null, outputType: "conversation_only", documentTemplatePath: null, documentTemplateFilename: null },
+      data: { name: "New step", colour: "#6366f1", aiInstruction: null, doneWhen: null, neverDone: false, outputType: "conversation_only", documentTemplatePath: null, documentTemplateFilename: null, documentTemplateMarkdown: null },
     };
     setRfNodes((nds) => [...nds, tempNode]);
     setEditingNodeId(tempId);
@@ -326,6 +329,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         outputType: (editingData.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
         documentTemplatePath: (editingData.documentTemplatePath as string | null) ?? null,
         documentTemplateFilename: (editingData.documentTemplateFilename as string | null) ?? null,
+        documentTemplateMarkdown: (editingData.documentTemplateMarkdown as string | null) ?? null,
       }
     : undefined;
 

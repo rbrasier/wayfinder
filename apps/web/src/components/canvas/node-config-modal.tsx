@@ -37,6 +37,7 @@ export interface NodeConfigValues {
   outputType: "conversation_only" | "generate_document";
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
+  documentTemplateMarkdown?: string | null;
 }
 
 interface NodeConfigModalProps {
@@ -59,6 +60,7 @@ const DEFAULT_VALUES: NodeConfigValues = {
   outputType: "conversation_only",
   documentTemplatePath: null,
   documentTemplateFilename: null,
+  documentTemplateMarkdown: null,
 };
 
 function CopyButton({ text }: { text: string }) {
