@@ -180,7 +180,7 @@ function AiProviderCard() {
             <DialogTitle>Edit AI configuration</DialogTitle>
             <DialogCloseButton />
           </DialogHeader>
-          <DialogBody className="space-y-4">
+          <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
             <div className="space-y-1">
               <Label htmlFor="ai-provider">Provider</Label>
               <select
