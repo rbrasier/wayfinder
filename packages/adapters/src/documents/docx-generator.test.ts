@@ -172,6 +172,93 @@ describe("DocxGenerator", () => {
     });
   });
 
+  describe("extractFullText", () => {
+    it("returns the plain text of a single-paragraph document", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Hello world"),
+      );
+
+      const result = generator.extractFullText({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.text).toBe("Hello world");
+    });
+
+    it("preserves {{variable}} placeholders in their sentence context", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("The employee {{full_name}} commences on {{start_date}}."),
+      );
+
+      const result = generator.extractFullText({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.text).toContain("{{full_name}}");
+      expect(result.data?.text).toContain("{{start_date}}");
+      expect(result.data?.text).toContain("The employee");
+      expect(result.data?.text).toContain("commences on");
+    });
+
+    it("joins multiple paragraphs with newlines and filters empty ones", () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    <w:p><w:r><w:t>First paragraph</w:t></w:r></w:p>
+    <w:p></w:p>
+    <w:p><w:r><w:t>Second paragraph</w:t></w:r></w:p>
+  </w:body>
+</w:document>`;
+      const templateBytes = buildTemplateBuffer(xml);
+
+      const result = generator.extractFullText({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.text).toBe("First paragraph\nSecond paragraph");
+    });
+
+    it("caps text at 32768 characters at a word boundary", () => {
+      const longWord = "word ";
+      const repeated = longWord.repeat(7000);
+      const templateBytes = buildTemplateBuffer(simpleDocXml(repeated));
+
+      const result = generator.extractFullText({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data!.text.length).toBeLessThanOrEqual(32_768);
+      expect(result.data!.text).not.toMatch(/\S$/);
+    });
+
+    it("returns an error for a malformed buffer", () => {
+      const result = generator.extractFullText({
+        templateBytes: Buffer.from("not a valid docx"),
+      });
+
+      expect(result.error).toBeDefined();
+      expect(result.data).toBeUndefined();
+    });
+
+    it("returns an error when word/document.xml is missing from the zip", () => {
+      const zip = new PizZip();
+      zip.file("other.xml", "<root/>");
+      const buffer = zip.generate({ type: "nodebuffer" }) as Buffer;
+
+      const result = generator.extractFullText({ templateBytes: buffer });
+
+      expect(result.error).toBeDefined();
+    });
+
+    it("handles split runs and still preserves placeholder text", () => {
+      const templateBytes = buildTemplateBuffer(
+        splitRunDocXml("Name: {{", "full_name", "}}"),
+      );
+
+      const result = generator.extractFullText({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.text).toContain("Name:");
+      expect(result.data?.text).toContain("full_name");
+    });
+  });
+
   describe("generate", () => {
     it("fills template placeholders with provided data", () => {
       const templateBytes = buildTemplateBuffer(

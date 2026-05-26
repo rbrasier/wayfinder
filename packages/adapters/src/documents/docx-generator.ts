@@ -2,7 +2,7 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import InspectModule from "docxtemplater/js/inspect-module.js";
 import { domainError, err, ok } from "@rbrasier/domain";
-import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, GenerateDocxInput, GenerateDocxOutput } from "@rbrasier/domain";
+import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateDocxInput, GenerateDocxOutput } from "@rbrasier/domain";
 import type { Result } from "@rbrasier/domain";
 
 interface RunInfo {
@@ -32,6 +32,23 @@ export class DocxGenerator implements IDocumentGenerator {
       return ok({ tags });
     } catch (cause) {
       return err(domainError("VALIDATION_FAILED", "Failed to parse DOCX template. Ensure the file is a valid .docx and all {{tags}} are correctly formed.", cause));
+    }
+  }
+
+  extractFullText(input: ExtractFullTextInput): Result<ExtractFullTextOutput> {
+    try {
+      const zip = new PizZip(input.templateBytes);
+      const file = zip.file("word/document.xml");
+      if (!file) {
+        return err(domainError("VALIDATION_FAILED", "word/document.xml not found in DOCX."));
+      }
+      const xml = file.asText();
+      const paragraphTexts = this.extractParagraphTexts(xml);
+      const fullText = paragraphTexts.filter((p) => p.trim()).join("\n");
+      const capped = this.capText(fullText, 32_768);
+      return ok({ text: capped });
+    } catch (cause) {
+      return err(domainError("VALIDATION_FAILED", "Failed to extract text from DOCX.", cause));
     }
   }
 
@@ -191,6 +208,24 @@ export class DocxGenerator implements IDocumentGenerator {
     const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     const spacePreserve = text.startsWith(" ") || text.endsWith(" ") ? ' xml:space="preserve"' : "";
     return `<w:r>${rPrXml}<w:t${spacePreserve}>${escapedText}</w:t></w:r>`;
+  }
+
+  private extractParagraphTexts(xml: string): string[] {
+    const paragraphs: string[] = [];
+    const paragraphPattern = /<w:p[ >][\s\S]*?<\/w:p>/g;
+    let match;
+    while ((match = paragraphPattern.exec(xml)) !== null) {
+      const textMatches = [...match[0].matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)];
+      paragraphs.push(textMatches.map((m) => m[1]).join(""));
+    }
+    return paragraphs;
+  }
+
+  private capText(text: string, maxChars: number): string {
+    if (text.length <= maxChars) return text;
+    const sliced = text.slice(0, maxChars);
+    const lastSpace = sliced.lastIndexOf(" ");
+    return lastSpace > 0 ? sliced.slice(0, lastSpace + 1) : sliced;
   }
 
   private normalizeTagName(description: string): string {
