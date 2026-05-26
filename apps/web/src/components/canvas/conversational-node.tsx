@@ -7,6 +7,7 @@ export interface ConversationalNodeData {
   name: string;
   colour: string | null;
   aiInstruction: string | null;
+  stepNumber?: number | null;
   [key: string]: unknown;
 }
 
@@ -39,7 +40,10 @@ export function ConversationalNode({ data, selected }: NodeProps) {
           {nodeData.name.charAt(0).toUpperCase()}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold text-gray-900">{nodeData.name}</p>
+          <p className="truncate text-sm font-semibold text-gray-900">
+            {typeof nodeData.stepNumber === "number" ? `${nodeData.stepNumber}. ` : ""}
+            {nodeData.name}
+          </p>
           <p className="mt-0.5 text-xs text-gray-500 leading-snug line-clamp-2">{subtitle}</p>
         </div>
       </div>

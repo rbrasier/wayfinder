@@ -12,3 +12,4 @@ export * from "./flow-edge";
 export * from "./session";
 export * from "./session-message";
 export * from "./system-setting";
+export * from "./runtime-config";

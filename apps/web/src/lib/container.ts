@@ -63,6 +63,7 @@ import {
   MinioStorageAdapter,
   PinoLogger,
   PkiCertAdapter,
+  RuntimeConfigStore,
   createAuth,
   createDatabase,
   resolveSession,
@@ -94,20 +95,29 @@ const build = () => {
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
-  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER);
+  const runtimeConfig = new RuntimeConfigStore(systemSettings, {
+    provider: env.AI_DEFAULT_PROVIDER,
+    apiKeys: {
+      anthropic: env.ANTHROPIC_API_KEY ?? null,
+      openai: env.OPENAI_API_KEY ?? null,
+      mistral: env.MISTRAL_API_KEY ?? null,
+    },
+    storage: {
+      endpoint: env.MINIO_ENDPOINT,
+      port: env.MINIO_PORT,
+      useSSL: env.MINIO_USE_SSL,
+      accessKey: env.MINIO_ACCESS_KEY,
+      secretKey: env.MINIO_SECRET_KEY,
+      bucket: env.MINIO_BUCKET,
+    },
+  });
+
+  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);
   const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
   const agent = new LangGraphAgentRunner(llm);
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
-  const objectStorage = new MinioStorageAdapter({
-    endPoint: env.MINIO_ENDPOINT,
-    port: env.MINIO_PORT,
-    useSSL: env.MINIO_USE_SSL,
-    accessKey: env.MINIO_ACCESS_KEY,
-    secretKey: env.MINIO_SECRET_KEY,
-    bucket: env.MINIO_BUCKET,
-    pathStyle: true,
-  });
+  const objectStorage = new MinioStorageAdapter(runtimeConfig);
   objectStorage.initialise().catch((error: unknown) => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
   });
@@ -157,6 +167,7 @@ const build = () => {
     pkiCertAdapter,
     logger,
     objectStorage,
+    runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger },
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, systemSettings },

@@ -12,13 +12,9 @@ const getSessionToken = (req: Request): string | null => {
   return pair ? pair.slice("better-auth.session_token=".length) : null;
 };
 
-const buildGatheredContext = (
-  messages: SessionMessage[],
-  stepNodeId: string | null,
-): string => {
-  if (!stepNodeId) return "";
+const buildGatheredContext = (messages: SessionMessage[]): string => {
   const items = messages
-    .filter((m) => m.role === "assistant" && m.stepNodeId === stepNodeId && m.aiPayload)
+    .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
     .flatMap((m) => m.aiPayload!.contextGathered);
   if (items.length === 0) return "";
   return items.map((item) => `- ${item.key}: ${item.value}`).join("\n");
@@ -72,7 +68,7 @@ export async function POST(
   const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
   const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
 
-  const gatheredContext = buildGatheredContext(dbMessages, session.currentNodeId);
+  const gatheredContext = buildGatheredContext(dbMessages);
 
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
@@ -100,9 +96,13 @@ export async function POST(
     { role: "user" as const, content: lastUserMessage },
   ];
 
-  const env = container.env;
-  const provider = env.AI_DEFAULT_PROVIDER;
-  const haikuModel = resolveModel(provider, provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined);
+  const aiConfig = await container.runtimeConfig.getAiConfig();
+  const provider = aiConfig.provider;
+  const apiKey = aiConfig.apiKeys[provider];
+  const chatModelName = aiConfig.models.chat;
+  const branchingModelName = aiConfig.models.branching;
+  const chatModel = resolveModel(provider, chatModelName, apiKey);
+  const branchingModel = resolveModel(provider, branchingModelName, apiKey);
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
@@ -116,7 +116,7 @@ export async function POST(
       }
 
       const streamResult = await streamTurn({
-        model: haikuModel,
+        model: chatModel,
         schema: turnResponseSchema,
         system: systemPromptResult.data,
         messages: messagesWithNew,
@@ -130,7 +130,7 @@ export async function POST(
           purpose: "chat-turn",
           userId: authSession.userId,
           conversationId: sessionId,
-          model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
+          model: chatModelName,
           provider,
         },
         {
@@ -159,7 +159,7 @@ export async function POST(
         const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
         if (!branchPromptResult.error) {
           const branchResult = await generateObject({
-            model: haikuModel,
+            model: branchingModel,
             schema: branchChoiceSchema,
             system: branchPromptResult.data,
             messages: messagesWithNew,
@@ -171,7 +171,7 @@ export async function POST(
                 purpose: "chat-branch-choice",
                 userId: authSession.userId,
                 conversationId: sessionId,
-                model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
+                model: branchingModelName,
                 provider,
               },
               {
@@ -218,7 +218,7 @@ export async function POST(
       }
 
       if (dbMessages.filter((m) => m.role === "user").length === 0) {
-        void generateTitle(container, session.id, lastUserMessage, provider, authSession.userId);
+        void generateTitle(container, session.id, lastUserMessage, provider, chatModelName, apiKey, authSession.userId);
       }
     },
     onError: (error) => {
@@ -266,14 +266,13 @@ async function generateTitle(
   container: ReturnType<typeof getContainer>,
   sessionId: string,
   firstUserMessage: string,
-  provider: string,
+  provider: Parameters<typeof resolveModel>[0],
+  modelName: string,
+  apiKey: string | null,
   userId: string,
 ): Promise<void> {
   try {
-    const cheapModel = resolveModel(
-      provider as Parameters<typeof resolveModel>[0],
-      provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
-    );
+    const cheapModel = resolveModel(provider, modelName, apiKey);
     const result = await generateText({
       model: cheapModel,
       system: "Generate a concise title (max 80 characters) for a workflow session based on the user's first message. Return only the title, no quotes or punctuation.",
@@ -286,8 +285,8 @@ async function generateTitle(
         purpose: "chat-title",
         userId,
         conversationId: sessionId,
-        model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
-        provider: provider as Parameters<typeof recordTokenUsage>[1]["provider"],
+        model: modelName,
+        provider,
       },
       {
         promptTokens: result.usage.promptTokens ?? 0,

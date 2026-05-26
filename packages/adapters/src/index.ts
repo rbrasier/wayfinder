@@ -12,4 +12,5 @@ export * from "./telemetry/index";
 export * from "./node-executors/index";
 export * from "./documents/index";
 export * from "./storage/index";
+export * from "./config/index";
 export * from "./factory";

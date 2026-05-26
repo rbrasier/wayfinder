@@ -28,10 +28,12 @@ import {
   DrizzleErrorLogger,
   DrizzleFeatureFlagRepository,
   DrizzleJobRepository,
+  DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
   DrizzleUserRepository,
   LanguageModelAdapter,
   PinoLogger,
+  RuntimeConfigStore,
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
@@ -50,8 +52,26 @@ export const buildContainer = (env: Env) => {
   const featureFlags = new DrizzleFeatureFlagRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
+  const systemSettings = new DrizzleSystemSettingsRepository(db);
 
-  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER);
+  const runtimeConfig = new RuntimeConfigStore(systemSettings, {
+    provider: env.AI_DEFAULT_PROVIDER,
+    apiKeys: {
+      anthropic: env.ANTHROPIC_API_KEY ?? null,
+      openai: env.OPENAI_API_KEY ?? null,
+      mistral: env.MISTRAL_API_KEY ?? null,
+    },
+    storage: {
+      endpoint: "localhost",
+      port: 9000,
+      useSSL: false,
+      accessKey: "minioadmin",
+      secretKey: "minioadmin",
+      bucket: "wayfinder-documents",
+    },
+  });
+
+  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);
   const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
 
   const dbChecker = new DbHealthChecker(db);
@@ -67,7 +87,8 @@ export const buildContainer = (env: Env) => {
     env,
     db,
     logger,
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo },
+    runtimeConfig,
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings },
     services: { llm, errorLogger, auditLogger },
     useCases: {
       createUser: new CreateUser(users),
