@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { DocxGenerator } from "@rbrasier/adapters";
+import { TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -94,12 +95,39 @@ export async function POST(
   const textResult = docxGenerator.extractFullText({ templateBytes: buffer });
   const documentTemplateContent = textResult.data?.text ?? null;
 
+  if (!documentTemplateContent) {
+    return NextResponse.json(
+      { error: "Could not extract text from template" },
+      { status: 422 },
+    );
+  }
+
+  const summariseResult = await container.useCases.summariseTemplate.execute({
+    fullExtractedText: documentTemplateContent,
+    tags: validationResult.data.tags,
+  });
+  if (summariseResult.error) {
+    return NextResponse.json({ error: "Failed to process template" }, { status: 500 });
+  }
+
+  const documentTemplateStructuredContent = summariseResult.data.structuredContent;
+
+  if (documentTemplateStructuredContent.length > TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS) {
+    return NextResponse.json(
+      {
+        error: `Template structural content (${documentTemplateStructuredContent.length} chars) exceeds limit of ${TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS} chars. Reduce template length and try again.`,
+      },
+      { status: 422 },
+    );
+  }
+
   const existingConfig = node.config as Record<string, unknown>;
   const updatedConfig = {
     ...existingConfig,
     documentTemplatePath: storageKey,
     documentTemplateFilename: safeFilename,
     documentTemplateContent,
+    documentTemplateStructuredContent,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {
@@ -110,7 +138,13 @@ export async function POST(
   }
 
   return NextResponse.json(
-    { path: storageKey, filename: safeFilename, tagCount: validationResult.data.tags.length, documentTemplateContent },
+    {
+      path: storageKey,
+      filename: safeFilename,
+      tagCount: validationResult.data.tags.length,
+      templateContentLength: documentTemplateStructuredContent.length,
+      documentTemplateContent,
+    },
     { status: 200 },
   );
 }
@@ -156,6 +190,7 @@ export async function DELETE(
     documentTemplatePath: null,
     documentTemplateFilename: null,
     documentTemplateContent: null,
+    documentTemplateStructuredContent: null,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {

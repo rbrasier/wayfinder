@@ -5,6 +5,7 @@ export interface ConversationalNodeConfig {
   doneWhen: string;
   outputType: "conversation_only" | "generate_document";
   documentTemplateContent?: string | null;
+  documentTemplateStructuredContent?: string | null;
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
   advanceConfidenceThreshold?: number;

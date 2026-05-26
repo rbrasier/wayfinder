@@ -25,9 +25,11 @@ export class FlowSessionGraph implements ISessionAgent {
       ? `\n<context>${gatheredBlock}${docsBlock}\n</context>`
       : "";
 
+    const templateContent =
+      nodeConfig.documentTemplateStructuredContent ?? nodeConfig.documentTemplateContent;
     const templateBlock =
-      nodeConfig.outputType === "generate_document" && nodeConfig.documentTemplateContent
-        ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${nodeConfig.documentTemplateContent}\n  </document_template>`
+      nodeConfig.outputType === "generate_document" && templateContent
+        ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${templateContent}\n  </document_template>`
         : "";
 
     const effectiveDoneWhen =
