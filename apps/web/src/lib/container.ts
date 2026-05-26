@@ -43,7 +43,9 @@ import {
 } from "@rbrasier/application";
 import {
   DocxGenerator,
+  DocumentExtractorService,
   DrizzleAuditLogger,
+  DrizzleContextDocContentRepository,
   DrizzleConversationRepository,
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
@@ -119,7 +121,9 @@ const build = () => {
   const agent = new LangGraphAgentRunner(llm);
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
+  const documentExtractor = new DocumentExtractorService(docxGenerator);
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
+  const contextDocContent = new DrizzleContextDocContentRepository(db);
   objectStorage.initialise().catch((error: unknown) => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
   });
@@ -171,8 +175,8 @@ const build = () => {
     objectStorage,
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, systemSettings },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, systemSettings, contextDocContent },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages),
       createUser: new CreateUser(users),

@@ -75,12 +75,26 @@ export async function POST(
     return NextResponse.json({ error: "Failed to store document" }, { status: 500 });
   }
 
+  const extractionResult = await container.services.documentExtractor.extract({ buffer, mimeType: file.type });
+  const extractionStatus = extractionResult.error
+    ? (extractionResult.error.code === "VALIDATION_FAILED" ? "unsupported" as const : "failed" as const)
+    : "complete" as const;
+
+  await container.repos.contextDocContent.upsert({
+    flowId,
+    storagePath: storageKey,
+    extractedText: extractionResult.data ?? null,
+    extractionStatus,
+  });
+
   const doc = {
     id: crypto.randomUUID(),
     filename: safeFilename,
     mimeType: file.type,
     sizeBytes: file.size,
     storagePath: storageKey,
+    extractedText: extractionResult.data ?? null,
+    extractionStatus,
   };
 
   const result = await container.useCases.addContextDoc.execute(flowId, doc);

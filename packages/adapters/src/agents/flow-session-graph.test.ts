@@ -94,11 +94,48 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,
       contextDocs: [
-        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf" },
+        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: null, extractionStatus: "pending" as const },
       ],
     });
     expect(result.data).toContain("<reference_documents>");
     expect(result.data).toContain("policy.pdf");
+  });
+
+  it("injects extracted text inside <document> tags when status is complete", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      contextDocs: [
+        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: "All purchases must be approved.", extractionStatus: "complete" as const },
+      ],
+    });
+    expect(result.data).toContain('<document name="policy.pdf">');
+    expect(result.data).toContain("All purchases must be approved.");
+  });
+
+  it("falls back to filename-only listing when extractionStatus is failed", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      contextDocs: [
+        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: null, extractionStatus: "failed" as const },
+      ],
+    });
+    expect(result.data).toContain("policy.pdf");
+    expect(result.data).not.toContain("<document name=");
+  });
+
+  it("applies total budget across multiple complete docs", () => {
+    const longText = "x".repeat(50_000);
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      contextDocs: [
+        { id: "doc-1", filename: "a.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/a.pdf", extractedText: longText, extractionStatus: "complete" as const },
+        { id: "doc-2", filename: "b.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/b.pdf", extractedText: longText, extractionStatus: "complete" as const },
+      ],
+    });
+    const prompt = result.data ?? "";
+    const docMatches = [...prompt.matchAll(/<document[^>]*>([\s\S]*?)<\/document>/g)];
+    const totalDocContentLength = docMatches.reduce((sum, m) => sum + (m[1] ?? "").trim().length, 0);
+    expect(totalDocContentLength).toBeLessThanOrEqual(65_536);
   });
 
   it("omits <document_template> when outputType is conversation_only", () => {
