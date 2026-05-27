@@ -1,0 +1,1 @@
+ALTER TABLE "app_session_messages" ADD COLUMN "document_status" text;

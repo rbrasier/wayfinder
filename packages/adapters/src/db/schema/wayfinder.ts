@@ -122,6 +122,7 @@ export const app_session_messages = pgTable(
     confidence: smallint("confidence"),
     step_node_id: uuid("step_node_id"),
     document: jsonb("document").$type<SessionDocument>(),
+    document_status: text("document_status", { enum: ["pending", "complete", "failed"] }),
     ai_payload: jsonb("ai_payload").$type<AiTurnPayload>(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -144,16 +144,20 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     void utils.session.get.invalidate({ sessionId });
   }, [sessionId, utils.session.get]);
 
-  // Poll while a document is being generated so the spinner resolves automatically
+  // Poll while a document is being generated so the spinner resolves automatically.
+  // "pending" means generation is in flight; null treated as pending so legacy rows
+  // (created before document_status existed) still trigger polling until they
+  // resolve one way or the other.
   const hasGeneratingDoc = useMemo(() => {
     return dbMessages.some((msg) => {
       if (msg.role !== "assistant" || (msg.confidence ?? 0) < 90) return false;
       if (msg.stepNodeId === currentNodeId) return false;
       const node = rawNodes.find((n) => n.id === msg.stepNodeId);
       const config = node?.config as Record<string, unknown> | undefined;
-      return config?.["outputType"] === "generate_document" &&
-        Boolean(config?.["documentTemplatePath"]) &&
-        !msg.document;
+      if (config?.["outputType"] !== "generate_document") return false;
+      if (!config?.["documentTemplatePath"]) return false;
+      if (msg.documentStatus === "complete" || msg.documentStatus === "failed") return false;
+      return !msg.document;
     });
   }, [dbMessages, currentNodeId, rawNodes]);
 

@@ -159,11 +159,16 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
       confidence: input.confidence ?? null,
       stepNodeId: input.stepNodeId ?? null,
       document: input.document ?? null,
+      documentStatus: input.documentStatus ?? null,
       aiPayload: input.aiPayload ?? null,
       createdAt: new Date(),
     };
     this.messages.set(message.id, message);
     return ok(message);
+  }
+
+  async findById(id: string): Promise<Result<SessionMessage | null>> {
+    return ok(this.messages.get(id) ?? null);
   }
 
   async listBySession(sessionId: string): Promise<Result<SessionMessage[]>> {
@@ -172,6 +177,22 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
         .filter((m) => m.sessionId === sessionId)
         .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
     );
+  }
+
+  async updateDocument(id: string, document: SessionMessage["document"]): Promise<Result<SessionMessage>> {
+    const existing = this.messages.get(id);
+    if (!existing) throw new Error(`Message not found: ${id}`);
+    const updated = { ...existing, document, documentStatus: "complete" as const };
+    this.messages.set(id, updated);
+    return ok(updated);
+  }
+
+  async updateDocumentStatus(id: string, status: SessionMessage["documentStatus"]): Promise<Result<SessionMessage>> {
+    const existing = this.messages.get(id);
+    if (!existing) throw new Error(`Message not found: ${id}`);
+    const updated = { ...existing, documentStatus: status };
+    this.messages.set(id, updated);
+    return ok(updated);
   }
 }
 

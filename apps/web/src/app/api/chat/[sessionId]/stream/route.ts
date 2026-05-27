@@ -1,23 +1,21 @@
-import { createDataStreamResponse, generateObject, generateText, type LanguageModel } from "ai";
+import { createDataStreamResponse, generateObject } from "ai";
 import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
-import type { AiTurnPayload, ConversationalNodeConfig, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
+import type { AiTurnPayload, ConversationalNodeConfig } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { streamTurn } from "./stream-turn";
+import {
+  buildGatheredContext,
+  generateDocument,
+  generateInitialMessage,
+  generateTitle,
+} from "./turn-helpers";
 
 const getSessionToken = (req: Request): string | null => {
   const cookie = req.headers.get("cookie");
   if (!cookie) return null;
   const pair = cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("better-auth.session_token="));
   return pair ? pair.slice("better-auth.session_token=".length) : null;
-};
-
-const buildGatheredContext = (messages: SessionMessage[]): string => {
-  const items = messages
-    .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
-    .flatMap((m) => m.aiPayload!.contextGathered);
-  if (items.length === 0) return "";
-  return items.map((item) => `- ${item.key}: ${item.value}`).join("\n");
 };
 
 export async function POST(
@@ -205,31 +203,47 @@ export async function POST(
         const assistantMessages = await container.repos.sessionMessages.listBySession(session.id);
         if (!assistantMessages.error) {
           const milestone = [...assistantMessages.data].reverse().find(
-            (m) => m.role === "assistant" && m.stepNodeId === session.currentNodeId,
+            (m) => m.role === "assistant" && m.stepNodeId === currentNode.id,
           );
           if (
             milestone &&
             nodeConfig.outputType === "generate_document" &&
             nodeConfig.documentTemplatePath
           ) {
-            void generateDocument(container, milestone.id, session.id, flow, nodes, assistantMessages.data, currentNode);
+            await container.repos.sessionMessages
+              .updateDocumentStatus(milestone.id, "pending")
+              .catch(() => undefined);
+            await generateDocument(
+              container,
+              milestone.id,
+              session.id,
+              flow,
+              nodes,
+              assistantMessages.data,
+              currentNode,
+            );
           }
         }
 
         if (runResult.data.newNodeId) {
           const newNode = nodes.find((n) => n.id === runResult.data.newNodeId);
           if (newNode) {
-            await generateInitialMessage(
+            const refreshed = await container.repos.sessionMessages.listBySession(session.id);
+            const nextStepContext = refreshed.error
+              ? gatheredContext
+              : buildGatheredContext(refreshed.data);
+            await generateInitialMessage({
               container,
-              session.id,
-              runResult.data.newNodeId,
+              sessionId: session.id,
+              newNodeId: runResult.data.newNodeId,
               newNode,
               flow,
-              branchingModel,
+              model: branchingModel,
               organisationName,
-              authSession.userId,
+              userId: authSession.userId,
               provider,
-            );
+              gatheredContext: nextStepContext,
+            });
           }
         }
       }
@@ -249,151 +263,4 @@ export async function POST(
       return "An error occurred during the AI response. Please try again.";
     },
   });
-}
-
-async function generateDocument(
-  container: ReturnType<typeof getContainer>,
-  messageId: string,
-  sessionId: string,
-  flow: Flow,
-  nodes: FlowNode[],
-  messages: SessionMessage[],
-  node: FlowNode,
-): Promise<void> {
-  try {
-    await container.useCases.generateDocument.execute({
-      messageId,
-      sessionId,
-      messages,
-      flow,
-      node,
-    });
-  } catch (cause) {
-    await container.services.errorLogger.log({
-      level: "error",
-      message: "Document generation failed",
-      stack: cause instanceof Error ? cause.stack ?? null : null,
-      page: `api/chat/${sessionId}/stream`,
-      metadata: { sessionId, messageId, nodeId: node.id },
-    });
-  }
-}
-
-async function generateTitle(
-  container: ReturnType<typeof getContainer>,
-  sessionId: string,
-  firstUserMessage: string,
-  provider: Parameters<typeof resolveModel>[0],
-  modelName: string,
-  apiKey: string | null,
-  userId: string,
-): Promise<void> {
-  try {
-    const cheapModel = resolveModel(provider, modelName, apiKey);
-    const result = await generateText({
-      model: cheapModel,
-      system: "Generate a concise title (max 80 characters) for a workflow session based on the user's first message. Return only the title, no quotes or punctuation.",
-      prompt: firstUserMessage,
-      maxTokens: 30,
-    });
-    recordTokenUsage(
-      container.repos.usageRepo,
-      {
-        purpose: "chat-title",
-        userId,
-        conversationId: sessionId,
-        model: modelName,
-        provider,
-      },
-      {
-        promptTokens: result.usage.promptTokens ?? 0,
-        completionTokens: result.usage.completionTokens ?? 0,
-        systemTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-    );
-    const title = result.text.trim().slice(0, 80);
-    if (title) {
-      await container.repos.sessions.update(sessionId, { title });
-    }
-  } catch {
-    const fallback = firstUserMessage.slice(0, 80);
-    await container.repos.sessions.update(sessionId, { title: fallback }).catch(() => undefined);
-  }
-}
-
-async function generateInitialMessage(
-  container: ReturnType<typeof getContainer>,
-  sessionId: string,
-  newNodeId: string,
-  newNode: FlowNode,
-  flow: Flow,
-  model: LanguageModel,
-  organisationName: string | null,
-  userId: string,
-  provider: string,
-): Promise<void> {
-  try {
-    const newNodeConfig = newNode.config as unknown as ConversationalNodeConfig;
-
-    const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
-      nodeConfig: newNodeConfig,
-      contextDocs: flow.contextDocs,
-      gatheredContext: "",
-      workflowName: flow.name,
-      organisationName,
-      expertRole: flow.expertRole,
-    });
-    if (systemPromptResult.error) return;
-
-    const result = await generateObject({
-      model,
-      schema: turnResponseSchema,
-      system: systemPromptResult.data,
-      messages: [{ role: "user", content: "Please begin." }],
-    });
-
-    const aiPayload: AiTurnPayload = {
-      response: result.object.response,
-      rationale: result.object.rationale,
-      stepCompleteConfidence: result.object.stepCompleteConfidence,
-      contextGathered: result.object.contextGathered,
-    };
-
-    await container.repos.sessionMessages.create({
-      sessionId,
-      role: "assistant",
-      content: result.object.response,
-      confidence: Math.round(result.object.stepCompleteConfidence),
-      stepNodeId: newNodeId,
-      aiPayload,
-    });
-
-    recordTokenUsage(
-      container.repos.usageRepo,
-      {
-        purpose: "chat-turn",
-        userId,
-        conversationId: sessionId,
-        model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
-        provider: provider as Parameters<typeof recordTokenUsage>[1]["provider"],
-      },
-      {
-        promptTokens: result.usage.promptTokens ?? 0,
-        completionTokens: result.usage.completionTokens ?? 0,
-        systemTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-    );
-  } catch (cause) {
-    await container.services.errorLogger.log({
-      level: "error",
-      message: "Initial message generation failed",
-      stack: cause instanceof Error ? cause.stack ?? null : null,
-      page: `api/chat/${sessionId}/stream`,
-      metadata: { sessionId, newNodeId },
-    });
-  }
 }

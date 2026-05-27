@@ -4,6 +4,7 @@ import {
   err,
   ok,
   type AiTurnPayload,
+  type DocumentStatus,
   type ISessionMessageRepository,
   type NewSessionMessage,
   type Result,
@@ -21,6 +22,7 @@ const toEntity = (row: typeof app_session_messages.$inferSelect): SessionMessage
   confidence: row.confidence,
   stepNodeId: row.step_node_id,
   document: row.document ?? null,
+  documentStatus: row.document_status ?? null,
   aiPayload: (row.ai_payload as AiTurnPayload | null) ?? null,
   createdAt: row.created_at,
 });
@@ -39,6 +41,7 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
           confidence: input.confidence ?? null,
           step_node_id: input.stepNodeId ?? null,
           document: input.document ?? undefined,
+          document_status: input.documentStatus ?? undefined,
           ai_payload: input.aiPayload ?? undefined,
         })
         .returning();
@@ -78,13 +81,27 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
     try {
       const [row] = await this.db
         .update(app_session_messages)
-        .set({ document })
+        .set({ document, document_status: "complete" })
         .where(eq(app_session_messages.id, id))
         .returning();
       if (!row) return err(domainError("NOT_FOUND", "Session message not found."));
       return ok(toEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update session message document.", cause));
+    }
+  }
+
+  async updateDocumentStatus(id: string, status: DocumentStatus): Promise<Result<SessionMessage>> {
+    try {
+      const [row] = await this.db
+        .update(app_session_messages)
+        .set({ document_status: status })
+        .where(eq(app_session_messages.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", "Session message not found."));
+      return ok(toEntity(row));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to update session message document status.", cause));
     }
   }
 }

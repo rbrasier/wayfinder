@@ -57,6 +57,13 @@
       "when": 1779820739565,
       "tag": "0007_peaceful_captain_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779880777748,
+      "tag": "0008_empty_joystick",
+      "breakpoints": true
     }
   ]
 }

@@ -110,6 +110,10 @@ export async function POST(
     return NextResponse.json({ error: "No template configured for this node" }, { status: 422 });
   }
 
+  await container.repos.sessionMessages
+    .updateDocumentStatus(documentId, "pending")
+    .catch(() => undefined);
+
   const result = await container.useCases.generateDocument.execute({
     messageId: documentId,
     sessionId: session.id,
@@ -119,6 +123,9 @@ export async function POST(
   });
 
   if (result.error) {
+    await container.repos.sessionMessages
+      .updateDocumentStatus(documentId, "failed")
+      .catch(() => undefined);
     return NextResponse.json({ error: result.error.message }, { status: 500 });
   }
 

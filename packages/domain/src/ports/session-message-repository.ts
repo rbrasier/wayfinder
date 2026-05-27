@@ -1,4 +1,4 @@
-import type { SessionDocument, SessionMessage, NewSessionMessage } from "../entities/session-message";
+import type { DocumentStatus, SessionDocument, SessionMessage, NewSessionMessage } from "../entities/session-message";
 import type { Result } from "../result";
 
 export interface ISessionMessageRepository {
@@ -6,4 +6,5 @@ export interface ISessionMessageRepository {
   findById(id: string): Promise<Result<SessionMessage | null>>;
   listBySession(sessionId: string): Promise<Result<SessionMessage[]>>;
   updateDocument(id: string, document: SessionDocument): Promise<Result<SessionMessage>>;
+  updateDocumentStatus(id: string, status: DocumentStatus): Promise<Result<SessionMessage>>;
 }

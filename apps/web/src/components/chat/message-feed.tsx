@@ -98,11 +98,13 @@ export function MessageFeed({
           type DocState = "generating" | "no_template" | "failed" | "done" | null;
           const docState: DocState =
             isAdvancingMsg && isDocNode
-              ? msg.document
+              ? !hasTemplate
+                ? "no_template"
+                : msg.documentStatus === "failed"
+                ? "failed"
+                : msg.document || msg.documentStatus === "complete"
                 ? "done"
-                : hasTemplate
-                ? "generating"
-                : "no_template"
+                : "generating"
               : null;
 
           return (
@@ -156,7 +158,7 @@ export function MessageFeed({
                     confidence={msg.confidence ?? 0}
                     documentState={docState}
                     onRegenerate={
-                      docState === "generating" && onRegenerateDocument
+                      docState === "failed" && onRegenerateDocument
                         ? () => onRegenerateDocument(msg.id)
                         : undefined
                     }
