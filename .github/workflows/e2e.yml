@@ -82,8 +82,11 @@ jobs:
         run: pnpm --filter @wayfinder/web dev &
 
       - name: Wait for app to be ready
-        run: ./node_modules/.bin/wait-on http://127.0.0.1:3000 --timeout 120000 --httpTimeout 30000
-        working-directory: tests/e2e
+        timeout-minutes: 3
+        run: |
+          until curl -sf --max-time 60 http://127.0.0.1:3000/ -o /dev/null; do
+            sleep 3
+          done
 
       - name: Run Playwright tests
         run: npm test
