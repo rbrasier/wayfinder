@@ -1,6 +1,6 @@
 {
-  "id": "2ff2475b-e6a1-4f30-9ec2-2c33724dfe55",
-  "prevId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "prevId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -588,6 +588,19 @@
           "tableTo": "core_users",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "ai_usage_events_conversation_id_ai_conversations_id_fk": {
+          "name": "ai_usage_events_conversation_id_ai_conversations_id_fk",
+          "tableFrom": "ai_usage_events",
+          "tableTo": "ai_conversations",
+          "columnsFrom": [
+            "conversation_id"
           ],
           "columnsTo": [
             "id"
@@ -1439,103 +1452,6 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.kb_context_doc_content": {
-      "name": "kb_context_doc_content",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "flow_id": {
-          "name": "flow_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "storage_path": {
-          "name": "storage_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "extracted_text": {
-          "name": "extracted_text",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "extraction_status": {
-          "name": "extraction_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "kb_context_doc_content_flow_id_idx": {
-          "name": "kb_context_doc_content_flow_id_idx",
-          "columns": [
-            {
-              "expression": "flow_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "kb_context_doc_content_flow_id_app_flows_id_fk": {
-          "name": "kb_context_doc_content_flow_id_app_flows_id_fk",
-          "tableFrom": "kb_context_doc_content",
-          "tableTo": "app_flows",
-          "columnsFrom": [
-            "flow_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "kb_context_doc_content_storage_path_unique": {
-          "name": "kb_context_doc_content_storage_path_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "storage_path"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
