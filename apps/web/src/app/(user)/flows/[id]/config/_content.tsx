@@ -219,7 +219,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     positionTimers.current.set(node.id, timer);
   }, [updatePositionMutation, flowId]);
 
-  const handleUploadTemplate = useCallback(async (file: File): Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string }> => {
+  const handleUploadTemplate = useCallback(async (file: File): Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }> => {
     if (!editingNodeId || editingNodeId.startsWith("temp-")) {
       return { error: "Save the step first before uploading a template." };
     }
@@ -229,9 +229,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
       method: "POST",
       body: formData,
     });
-    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; error?: string };
+    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; error?: string; code?: string };
     if (!res.ok || data.error) {
-      return { error: data.error ?? "Upload failed" };
+      return { error: data.error ?? "Upload failed", code: data.code };
     }
     return { path: data.path!, filename: data.filename!, documentTemplateContent: data.documentTemplateContent ?? null };
   }, [editingNodeId, flowId]);
