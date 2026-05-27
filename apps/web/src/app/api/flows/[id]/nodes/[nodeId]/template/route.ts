@@ -79,6 +79,17 @@ export async function POST(
     );
   }
 
+  if (validationResult.data.tags.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "This template has no {{ tag }} placeholders. Add at least one tag (e.g. {{ client_name }}) where you want the AI to fill in information, then re-upload.",
+        code: "NO_TEMPLATE_TAGS",
+      },
+      { status: 422 },
+    );
+  }
+
   const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const storageKey = `templates/${nodeId}/${timestamp}-${safeFilename}`;

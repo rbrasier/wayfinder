@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { Check, Copy, Eye, Pencil } from "lucide-react";
+import { Check, Copy, Eye, HelpCircle, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
+import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 
 const COLOURS = [
   { hex: "#3a5fd9", label: "Indigo" },
@@ -48,7 +49,7 @@ interface NodeConfigModalProps {
   onDelete?: () => void;
   onClose: () => void;
   isSaving?: boolean;
-  onUploadTemplate?: (file: File) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string }>;
+  onUploadTemplate?: (file: File) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
 }
 
 const DEFAULT_VALUES: NodeConfigValues = {
@@ -109,6 +110,7 @@ export function NodeConfigModal({
   const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
@@ -180,6 +182,9 @@ export function NodeConfigModal({
       const result = await onUploadTemplate(file);
       if ("error" in result) {
         setUploadError(result.error);
+        if (result.code === "NO_TEMPLATE_TAGS") {
+          setHelpDialogOpen(true);
+        }
       } else {
         set("documentTemplatePath", result.path);
         set("documentTemplateFilename", result.filename);
@@ -359,7 +364,17 @@ export function NodeConfigModal({
 
               {values.outputType === "generate_document" && (
                 <div className="space-y-1">
-                  <Label>DOCX template</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label>DOCX template</Label>
+                    <button
+                      type="button"
+                      aria-label="How template tags work"
+                      className="flex h-4 w-4 items-center justify-center rounded-full text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                      onClick={() => setHelpDialogOpen(true)}
+                    >
+                      <HelpCircle size={13} />
+                    </button>
+                  </div>
                   <p className="text-[12px] text-[#918d87]">
                     Works best using variables marked with tags (e.g{" "}
                     <code className="font-mono">{EXAMPLE_TAG}</code>)
@@ -448,6 +463,10 @@ export function NodeConfigModal({
           </>
         )}
       </DialogContent>
+      <TemplateTagsHelpDialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+      />
     </Dialog>
   );
 }
