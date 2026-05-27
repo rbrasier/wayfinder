@@ -28,6 +28,7 @@ setup('authenticate as admin', async ({ page, request }) => {
   // Hit the test-only endpoint that returns a session token for ADMIN_EMAIL
   const response = await request.post('/api/auth/test-session', {
     data: { email: ADMIN_EMAIL },
+    timeout: 60000,
   });
 
   if (!response.ok()) {
