@@ -37,8 +37,8 @@ export class DrizzleFlowNodeRepository implements IFlowNodeRepository {
           type: input.type,
           name: input.name,
           colour: input.colour ?? null,
-          position_x: input.positionX,
-          position_y: input.positionY,
+          position_x: Math.round(input.positionX),
+          position_y: Math.round(input.positionY),
           config: input.config,
         })
         .returning();
