@@ -1,4 +1,4 @@
-import type { Flow, FlowContextDoc, FlowPermissionRole, FlowStatus, NewFlow } from "../entities/flow";
+import type { Flow, FlowContextDoc, FlowPermissionRole, FlowStatus, FlowVisibility, NewFlow } from "../entities/flow";
 import type { Result } from "../result";
 
 export interface FlowUpdate {
@@ -7,6 +7,7 @@ export interface FlowUpdate {
   icon?: string | null;
   expertRole?: string | null;
   status?: FlowStatus;
+  visibility?: FlowVisibility;
   ownerUserId?: string;
 }
 

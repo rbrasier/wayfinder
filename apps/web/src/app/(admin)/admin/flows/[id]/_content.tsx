@@ -80,7 +80,10 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [contextDocs, setContextDocs] = useState<FlowContextDoc[]>([]);
   const [flowName, setFlowName] = useState("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
+  const [flowVisibility, setFlowVisibility] = useState<"private" | "global">("private");
+  const [publishMenuOpen, setPublishMenuOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  const publishMenuRef = useRef<HTMLDivElement>(null);
 
   const [configOpen, setConfigOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -92,6 +95,17 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const updateFlowMutation = trpc.flow.update.useMutation({
     onSuccess: () => utils.flow.getCanvas.invalidate({ flowId }),
   });
+
+  useEffect(() => {
+    if (!publishMenuOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (publishMenuRef.current && !publishMenuRef.current.contains(event.target as HTMLElement)) {
+        setPublishMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [publishMenuOpen]);
   const createNodeMutation = trpc.flow.node.create.useMutation();
   const updateNodeMutation = trpc.flow.node.update.useMutation();
   const updatePositionMutation = trpc.flow.node.updatePosition.useMutation();
@@ -107,6 +121,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setContextDocs(data.flow.contextDocs);
     setFlowName(data.flow.name);
     setFlowStatus(data.flow.status);
+    setFlowVisibility(data.flow.visibility.kind);
     if (data.nodes.length > 3) {
       setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
     }
@@ -383,26 +398,113 @@ function CanvasInner({ flowId }: { flowId: string }) {
         )}
 
         <Badge variant={flowStatus === "published" ? "default" : "secondary"}>
-          {flowStatus === "published" ? "Published" : "Draft"}
+          {flowStatus === "published"
+            ? `Published · ${flowVisibility === "global" ? "Everyone" : "Only you"}`
+            : "Draft"}
         </Badge>
 
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={handleAddStep}>
             + Add step
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const target = flowStatus === "published" ? "draft" : "published";
-              setFlowStatus(target);
-              void updateFlowMutation.mutateAsync({ flowId, status: target }).then(() => {
-                toast.success(target === "published" ? "Flow published" : "Flow unpublished");
-              });
-            }}
-          >
-            {flowStatus === "published" ? "Unpublish" : "Publish"}
-          </Button>
+          <div className="relative" ref={publishMenuRef}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setPublishMenuOpen((prev) => !prev)}
+            >
+              {flowStatus === "published" ? "Manage publish" : "Publish"}
+            </Button>
+            {publishMenuOpen && (
+              <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
+                {flowStatus !== "published" && (
+                  <>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                      onClick={() => {
+                        setPublishMenuOpen(false);
+                        setFlowStatus("published");
+                        setFlowVisibility("global");
+                        void updateFlowMutation
+                          .mutateAsync({
+                            flowId,
+                            status: "published",
+                            visibility: { kind: "global" },
+                          })
+                          .then(() => toast.success("Flow published globally"));
+                      }}
+                    >
+                      Publish globally (everyone)
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                      onClick={() => {
+                        setPublishMenuOpen(false);
+                        setFlowStatus("published");
+                        setFlowVisibility("private");
+                        void updateFlowMutation
+                          .mutateAsync({
+                            flowId,
+                            status: "published",
+                            visibility: { kind: "private" },
+                          })
+                          .then(() => toast.success("Flow published privately"));
+                      }}
+                    >
+                      Publish privately (only you)
+                    </button>
+                  </>
+                )}
+                {flowStatus === "published" && flowVisibility === "private" && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setPublishMenuOpen(false);
+                      setFlowVisibility("global");
+                      void updateFlowMutation
+                        .mutateAsync({ flowId, visibility: { kind: "global" } })
+                        .then(() => toast.success("Flow is now visible to everyone"));
+                    }}
+                  >
+                    Make global (everyone)
+                  </button>
+                )}
+                {flowStatus === "published" && flowVisibility === "global" && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setPublishMenuOpen(false);
+                      setFlowVisibility("private");
+                      void updateFlowMutation
+                        .mutateAsync({ flowId, visibility: { kind: "private" } })
+                        .then(() => toast.success("Flow is now private"));
+                    }}
+                  >
+                    Make private (only you)
+                  </button>
+                )}
+                {flowStatus === "published" && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setPublishMenuOpen(false);
+                      setFlowStatus("draft");
+                      void updateFlowMutation
+                        .mutateAsync({ flowId, status: "draft" })
+                        .then(() => toast.success("Flow unpublished"));
+                    }}
+                  >
+                    Unpublish
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
           <Button size="sm" asChild>
             <Link href="/chats">Open Chat</Link>
           </Button>

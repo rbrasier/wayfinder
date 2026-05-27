@@ -10,7 +10,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { FlowPermission } from "@rbrasier/domain";
+import type { FlowPermission, FlowVisibility } from "@rbrasier/domain";
 import type { AiTurnPayload, SessionDocument } from "@rbrasier/domain";
 import { core_users } from "./core";
 
@@ -34,6 +34,10 @@ export const app_flows = pgTable(
       .notNull()
       .references(() => core_users.id, { onDelete: "restrict" }),
     status: text("status", { enum: ["draft", "published"] }).notNull().default("draft"),
+    visibility: jsonb("visibility")
+      .$type<FlowVisibility>()
+      .notNull()
+      .default({ kind: "private" }),
     permissions: jsonb("permissions").$type<FlowPermission[]>().notNull().default([]),
     context_docs: jsonb("context_docs").$type<StoredContextDoc[]>().notNull().default([]),
     deleted_at: timestamp("deleted_at", { withTimezone: true }),

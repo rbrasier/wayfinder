@@ -2,6 +2,12 @@ export type FlowStatus = "draft" | "published";
 export type FlowPermissionRole = "owner" | "viewer";
 export type ExtractionStatus = "pending" | "complete" | "failed" | "unsupported";
 
+export type FlowVisibility =
+  | { kind: "private" }
+  | { kind: "global" };
+
+export type FlowVisibilityKind = FlowVisibility["kind"];
+
 export interface FlowPermission {
   userId: string;
   role: FlowPermissionRole;
@@ -25,6 +31,7 @@ export interface Flow {
   expertRole: string | null;
   ownerUserId: string;
   status: FlowStatus;
+  visibility: FlowVisibility;
   permissions: FlowPermission[];
   contextDocs: FlowContextDoc[];
   deletedAt: Date | null;

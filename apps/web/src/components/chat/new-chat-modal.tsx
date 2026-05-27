@@ -58,7 +58,7 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
 
           {publishedFlows.length === 0 ? (
             <p className="py-4 text-center text-[13px] text-[#918d87]">
-              No published flows available. Ask an admin to publish a flow.
+              No published flows available. Publish one of your own flows or ask an admin to publish one for everyone.
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-[10px] sm:grid-cols-2">
@@ -81,6 +81,9 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
                       {flow.description}
                     </p>
                   )}
+                  <span className="text-[10.5px] font-medium uppercase tracking-[0.04em] text-[#a8a39c]">
+                    {flow.visibility.kind === "global" ? "Everyone" : "Only you"}
+                  </span>
                   <span className="mt-auto text-[12px] font-semibold text-[#3a5fd9]">Start →</span>
                 </button>
               ))}

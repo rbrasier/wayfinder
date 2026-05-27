@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { isFlowDiscoverableBy } from "@rbrasier/domain";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { orderStepIds } from "@/lib/step-order";
@@ -122,7 +123,14 @@ export const sessionRouter = router({
   listPublishedFlows: authenticatedProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFlows.execute();
     if (result.error) throw toTrpcError(result.error);
-    return result.data.filter((f) => f.status === "published");
+    return result.data.filter(
+      (f) =>
+        f.status === "published" &&
+        isFlowDiscoverableBy(f.visibility, {
+          ownerUserId: f.ownerUserId,
+          viewerUserId: ctx.userId,
+        }),
+    );
   }),
 
   rename: authenticatedProcedure

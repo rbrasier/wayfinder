@@ -64,6 +64,13 @@
       "when": 1779880777748,
       "tag": "0008_empty_joystick",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779914647078,
+      "tag": "0009_bent_freak",
+      "breakpoints": true
     }
   ]
 }

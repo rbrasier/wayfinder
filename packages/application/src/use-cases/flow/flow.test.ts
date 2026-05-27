@@ -31,6 +31,7 @@ const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
   expertRole: null,
   ownerUserId: "user-1",
   status: "draft",
+  visibility: { kind: "private" },
   permissions: [{ userId: "user-1", role: "owner" }],
   contextDocs: [],
   deletedAt: null,
@@ -76,8 +77,10 @@ class FakeFlowRepository implements IFlowRepository {
       expertRole: input.expertRole ?? null,
       ownerUserId: input.ownerUserId,
       status: "draft",
+      visibility: { kind: "private" },
       permissions: [{ userId: input.ownerUserId, role: "owner" }],
       contextDocs: [],
+      deletedAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -279,6 +282,38 @@ describe("UpdateFlow", () => {
   it("returns NOT_FOUND when flow does not exist", async () => {
     const result = await useCase.execute("missing", { name: "X" });
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+
+  it("allows a non-admin to set visibility to private", async () => {
+    const result = await useCase.execute(
+      "flow-1",
+      { visibility: { kind: "private" } },
+      { isAdmin: false },
+    );
+    expect(result.data?.visibility).toEqual({ kind: "private" });
+  });
+
+  it("forbids a non-admin from setting visibility to global", async () => {
+    const result = await useCase.execute(
+      "flow-1",
+      { visibility: { kind: "global" } },
+      { isAdmin: false },
+    );
+    expect(result.error?.code).toBe("FORBIDDEN");
+  });
+
+  it("allows an admin to set visibility to global", async () => {
+    const result = await useCase.execute(
+      "flow-1",
+      { visibility: { kind: "global" } },
+      { isAdmin: true },
+    );
+    expect(result.data?.visibility).toEqual({ kind: "global" });
+  });
+
+  it("treats omitted caller context as non-admin", async () => {
+    const result = await useCase.execute("flow-1", { visibility: { kind: "global" } });
+    expect(result.error?.code).toBe("FORBIDDEN");
   });
 });
 

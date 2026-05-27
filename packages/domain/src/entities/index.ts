@@ -7,6 +7,7 @@ export * from "./usage-event";
 export * from "./job";
 export * from "./system-health";
 export * from "./flow";
+export * from "./flow-visibility";
 export * from "./flow-node";
 export * from "./flow-edge";
 export * from "./session";

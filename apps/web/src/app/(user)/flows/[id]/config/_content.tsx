@@ -97,7 +97,10 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [flowDescription, setFlowDescription] = useState<string>("");
   const [flowIcon, setFlowIcon] = useState<string>("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
+  const [flowVisibility, setFlowVisibility] = useState<"private" | "global">("private");
   const [expertRole, setExpertRole] = useState<string>("");
+  const meQuery = trpc.user.me.useQuery();
+  const isAdmin = meQuery.data?.isAdmin ?? false;
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -140,6 +143,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setFlowDescription(data.flow.description ?? "");
     setFlowIcon(data.flow.icon ?? "");
     setFlowStatus(data.flow.status);
+    setFlowVisibility(data.flow.visibility.kind);
     setExpertRole(data.flow.expertRole ?? "");
     if (data.nodes.length > 3) {
       setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
@@ -388,7 +392,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
         <div className="h-4 w-px bg-border" />
         <span className="text-sm font-semibold">{flowName}</span>
         <Badge variant={flowStatus === "published" ? "default" : "secondary"}>
-          {flowStatus === "published" ? "Published" : "Draft"}
+          {flowStatus === "published"
+            ? `Published · ${flowVisibility === "global" ? "Everyone" : "Only you"}`
+            : "Draft"}
         </Badge>
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={handleAddStep}>
@@ -405,21 +411,91 @@ function CanvasInner({ flowId }: { flowId: string }) {
               <MoreHorizontal size={16} />
             </Button>
             {flowMenuOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                  onClick={() => {
-                    setFlowMenuOpen(false);
-                    const target = flowStatus === "published" ? "draft" : "published";
-                    setFlowStatus(target);
-                    void updateFlowMutation.mutateAsync({ flowId, status: target }).then(() => {
-                      toast.success(target === "published" ? "Flow published" : "Flow unpublished");
-                    });
-                  }}
-                >
-                  {flowStatus === "published" ? "Unpublish" : "Publish"}
-                </button>
+              <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
+                {flowStatus === "published" ? (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setFlowMenuOpen(false);
+                      setFlowStatus("draft");
+                      void updateFlowMutation.mutateAsync({ flowId, status: "draft" }).then(() => {
+                        toast.success("Flow unpublished");
+                      });
+                    }}
+                  >
+                    Unpublish
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setFlowMenuOpen(false);
+                      setFlowStatus("published");
+                      setFlowVisibility("private");
+                      void updateFlowMutation
+                        .mutateAsync({
+                          flowId,
+                          status: "published",
+                          visibility: { kind: "private" },
+                        })
+                        .then(() => toast.success("Flow published privately"));
+                    }}
+                  >
+                    Publish privately (only you)
+                  </button>
+                )}
+                {flowStatus !== "published" && isAdmin && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setFlowMenuOpen(false);
+                      setFlowStatus("published");
+                      setFlowVisibility("global");
+                      void updateFlowMutation
+                        .mutateAsync({
+                          flowId,
+                          status: "published",
+                          visibility: { kind: "global" },
+                        })
+                        .then(() => toast.success("Flow published globally"));
+                    }}
+                  >
+                    Publish globally (everyone)
+                  </button>
+                )}
+                {flowStatus === "published" && isAdmin && flowVisibility === "private" && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setFlowMenuOpen(false);
+                      setFlowVisibility("global");
+                      void updateFlowMutation
+                        .mutateAsync({ flowId, visibility: { kind: "global" } })
+                        .then(() => toast.success("Flow is now visible to everyone"));
+                    }}
+                  >
+                    Make global (everyone)
+                  </button>
+                )}
+                {flowStatus === "published" && isAdmin && flowVisibility === "global" && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setFlowMenuOpen(false);
+                      setFlowVisibility("private");
+                      void updateFlowMutation
+                        .mutateAsync({ flowId, visibility: { kind: "private" } })
+                        .then(() => toast.success("Flow is now private"));
+                    }}
+                  >
+                    Make private (only you)
+                  </button>
+                )}
                 <button
                   type="button"
                   className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"

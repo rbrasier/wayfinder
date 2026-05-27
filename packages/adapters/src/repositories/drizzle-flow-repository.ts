@@ -39,6 +39,7 @@ const toEntity = (row: typeof app_flows.$inferSelect, contentRows: ContentRow[] 
     expertRole: row.expert_role ?? null,
     ownerUserId: row.owner_user_id,
     status: row.status,
+    visibility: row.visibility,
     permissions: row.permissions,
     contextDocs: row.context_docs.map((d) => toContextDoc(d, contentByPath.get(d.storagePath))),
     deletedAt: row.deleted_at ?? null,
@@ -70,6 +71,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
           expert_role: input.expertRole ?? null,
           owner_user_id: input.ownerUserId,
           status: "draft",
+          visibility: { kind: "private" },
           permissions: [{ userId: input.ownerUserId, role: "owner" }],
           context_docs: [],
         })
@@ -140,6 +142,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
           ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
           ...(patch.expertRole !== undefined ? { expert_role: patch.expertRole } : {}),
           ...(patch.status !== undefined ? { status: patch.status } : {}),
+          ...(patch.visibility !== undefined ? { visibility: patch.visibility } : {}),
           ...(patch.ownerUserId !== undefined ? { owner_user_id: patch.ownerUserId } : {}),
           updated_at: new Date(),
         })

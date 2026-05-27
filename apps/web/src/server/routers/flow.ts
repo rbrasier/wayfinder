@@ -241,6 +241,12 @@ export const flowRouter = router({
         icon: z.string().nullable().optional(),
         expertRole: z.string().nullable().optional(),
         status: z.enum(["draft", "published"]).optional(),
+        visibility: z
+          .discriminatedUnion("kind", [
+            z.object({ kind: z.literal("private") }),
+            z.object({ kind: z.literal("global") }),
+          ])
+          .optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -248,7 +254,9 @@ export const flowRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const { flowId, ...patch } = input;
-      const result = await ctx.container.useCases.updateFlow.execute(flowId, patch);
+      const result = await ctx.container.useCases.updateFlow.execute(flowId, patch, {
+        isAdmin: ctx.isAdmin,
+      });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
