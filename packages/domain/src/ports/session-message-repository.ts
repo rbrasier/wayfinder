@@ -1,4 +1,4 @@
-import type { DocumentStatus, SessionDocument, SessionMessage, NewSessionMessage } from "../entities/session-message";
+import type { AiTurnPayload, DocumentStatus, SessionDocument, SessionMessage, NewSessionMessage } from "../entities/session-message";
 import type { Result } from "../result";
 
 export interface ISessionMessageRepository {
@@ -7,4 +7,5 @@ export interface ISessionMessageRepository {
   listBySession(sessionId: string): Promise<Result<SessionMessage[]>>;
   updateDocument(id: string, document: SessionDocument): Promise<Result<SessionMessage>>;
   updateDocumentStatus(id: string, status: DocumentStatus): Promise<Result<SessionMessage>>;
+  updateAiPayload(id: string, aiPayload: AiTurnPayload): Promise<Result<SessionMessage>>;
 }

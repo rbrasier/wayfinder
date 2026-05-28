@@ -5,6 +5,7 @@ import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { DocumentCard } from "./document-card";
+import { MessageInfoModal } from "./message-info-modal";
 import { FlowCompletePill, MilestonePill } from "./milestone-pill";
 import { TypingIndicator } from "./typing-indicator";
 
@@ -121,7 +122,7 @@ export function MessageFeed({
                   </div>
                 )}
                 <div
-                  className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
+                  className={`relative max-w-[68%] rounded-[14px] px-4 py-3 ${
                     msg.role === "user"
                       ? "rounded-br-[4px] bg-[#3a5fd9]"
                       : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
@@ -143,6 +144,9 @@ export function MessageFeed({
                   </p>
                   {msg.role === "assistant" && !isNeverDone && (
                     <ConfidenceBar score={msg.confidence} />
+                  )}
+                  {msg.role === "assistant" && msg.aiPayload && (
+                    <MessageInfoModal message={msg} allMessages={dbMessages} />
                   )}
                 </div>
                 {msg.role === "user" && (
@@ -167,6 +171,7 @@ export function MessageFeed({
                     <DocumentCard
                       messageId={msg.id}
                       document={msg.document}
+                      documentGenerationConfidence={msg.aiPayload?.documentGenerationConfidence ?? null}
                       onRegenerate={
                         onRegenerateDocument ? () => onRegenerateDocument(msg.id) : undefined
                       }

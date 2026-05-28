@@ -1,0 +1,78 @@
+"use client";
+
+import { useState } from "react";
+import { Info } from "lucide-react";
+import { accumulateInsights } from "@rbrasier/application";
+import type { SessionMessage } from "@rbrasier/domain";
+import {
+  Dialog,
+  DialogBody,
+  DialogCloseButton,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ConfidenceBar } from "./confidence-bar";
+
+interface MessageInfoModalProps {
+  message: SessionMessage;
+  allMessages: SessionMessage[];
+}
+
+export function MessageInfoModal({ message, allMessages }: MessageInfoModalProps) {
+  const [open, setOpen] = useState(false);
+  const payload = message.aiPayload;
+  if (!payload) return null;
+
+  const insights = accumulateInsights(allMessages);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Show AI reasoning"
+        className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#5a5650]"
+      >
+        <Info className="h-3 w-3" strokeWidth={1.8} />
+      </button>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Why this response</DialogTitle>
+          <DialogCloseButton />
+        </DialogHeader>
+        <DialogBody>
+          <div>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+              Confidence rationale
+            </p>
+            <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-[#1a1814]">
+              {payload.rationale}
+            </p>
+            <ConfidenceBar score={message.confidence} />
+          </div>
+
+          <details className="rounded-[10px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 [&_summary]:cursor-pointer">
+            <summary className="text-[12px] font-semibold text-[#1a1814]">
+              Insights gathered so far ({insights.length})
+            </summary>
+            {insights.length === 0 ? (
+              <p className="mt-2 text-[12px] text-[#918d87]">No insights gathered yet.</p>
+            ) : (
+              <dl className="mt-2 space-y-1.5">
+                {insights.map((insight) => (
+                  <div key={insight.key} className="flex flex-col gap-0.5">
+                    <dt className="font-mono text-[10px] uppercase tracking-[0.06em] text-[#918d87]">
+                      {insight.key}
+                    </dt>
+                    <dd className="text-[12px] text-[#1a1814]">{insight.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </details>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}

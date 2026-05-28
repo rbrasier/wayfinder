@@ -16,5 +16,27 @@ export const branchChoiceSchema = z.object({
   branchChoice: z.string().describe("Node ID of the chosen next step"),
 });
 
+export const documentGenerationConfidenceSchema = z.object({
+  guidanceAlignmentConfidence: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .describe("Confidence 0-100 that the generated document aligns with the flow's guidance documentation"),
+  guidanceAlignmentRationale: z
+    .string()
+    .describe("Why the generated document does or does not align with the flow's guidance documentation"),
+  criteriaAlignmentConfidence: z
+    .number()
+    .int()
+    .min(0)
+    .max(100)
+    .describe("Confidence 0-100 that the generated document satisfies the step's completion criteria"),
+  criteriaAlignmentRationale: z
+    .string()
+    .describe("Why the generated document does or does not satisfy the step's completion criteria"),
+});
+
 export type TurnResponse = z.infer<typeof turnResponseSchema>;
 export type BranchChoice = z.infer<typeof branchChoiceSchema>;
+export type DocumentGenerationConfidenceData = z.infer<typeof documentGenerationConfidenceSchema>;

@@ -9,11 +9,19 @@ export interface SessionDocument {
   generatedAt: string;
 }
 
+export interface DocumentGenerationConfidence {
+  guidanceAlignmentConfidence: number;
+  guidanceAlignmentRationale: string;
+  criteriaAlignmentConfidence: number;
+  criteriaAlignmentRationale: string;
+}
+
 export interface AiTurnPayload {
   response: string;
   rationale: string;
   stepCompleteConfidence: number;
   contextGathered: { key: string; value: string }[];
+  documentGenerationConfidence?: DocumentGenerationConfidence | null;
 }
 
 export type DocumentStatus = "pending" | "complete" | "failed";
