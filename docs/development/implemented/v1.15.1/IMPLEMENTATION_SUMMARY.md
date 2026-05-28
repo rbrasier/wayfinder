@@ -1,4 +1,4 @@
-# v1.14.1 — Amazon Bedrock as an AI provider
+# v1.15.1 — Amazon Bedrock as an AI provider
 
 ## What was built
 
@@ -47,7 +47,7 @@ A fourth selectable AI provider, `"bedrock"`, plumbed end-to-end:
 
 ### Root
 - `.env.example` — documents `AI_DEFAULT_PROVIDER` options and adds the three new `AWS_BEDROCK_*` vars under the AI Providers block.
-- `VERSION`, `package.json` — bumped to `1.14.1`.
+- `VERSION`, `package.json` — bumped to `1.15.1`.
 
 ## Migrations run
 
@@ -75,4 +75,4 @@ back to env-provided defaults.
 
 ## Version bump
 
-`1.14.0` → `1.14.1` (PATCH).
+`1.15.0` → `1.15.1` (PATCH). Originally targeted `1.14.0` → `1.14.1`; rebased onto `1.15.0` after merging main.

@@ -163,4 +163,4 @@ back to whatever the AWS SDK can discover."
 
 ## Version bump
 
-`1.14.0` → `1.14.1` (PATCH, as confirmed during clarification).
+`1.15.0` → `1.15.1` (PATCH). Originally targeted `1.14.0` → `1.14.1`; rebased onto `1.15.0` after merging main.
