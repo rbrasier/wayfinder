@@ -2,7 +2,9 @@ import {
   domainError,
   err,
   ok,
+  type AiTurnPayload,
   type ConversationalNodeConfig,
+  type DocumentGenerationConfidence,
   type Flow,
   type FlowContextDoc,
   type FlowNode,
@@ -14,7 +16,11 @@ import {
   type SessionDocument,
   type SessionMessage,
 } from "@rbrasier/domain";
-import { documentDataSchema, documentSummarySchema } from "@rbrasier/shared";
+import {
+  documentDataSchema,
+  documentGenerationConfidenceSchema,
+  documentSummarySchema,
+} from "@rbrasier/shared";
 
 const buildContextDocsSection = (docs: FlowContextDoc[]): string => {
   if (docs.length === 0) return "";
@@ -112,7 +118,45 @@ export class GenerateDocument {
     const updateResult = await this.sessionMessages.updateDocument(input.messageId, document);
     if (updateResult.error) return updateResult;
 
+    await this.persistDocumentGrading({
+      messageId: input.messageId,
+      documentData: dataResult.data.object,
+      contextDocs: input.flow.contextDocs,
+      stepCriteria: config.doneWhen,
+    });
+
     return ok({ document });
+  }
+
+  private async persistDocumentGrading(input: {
+    messageId: string;
+    documentData: Record<string, string>;
+    contextDocs: FlowContextDoc[];
+    stepCriteria: string;
+  }): Promise<void> {
+    const existing = await this.sessionMessages.findById(input.messageId);
+    if (existing.error || !existing.data || !existing.data.aiPayload) return;
+
+    const gradingResult = await this.languageModel.generateObject<DocumentGenerationConfidence>({
+      purpose: "documentGrading",
+      prompt: [
+        "Grade the generated document against (a) the flow's guidance documentation and (b) the step's completion criteria.",
+        "Return integers 0-100 for each confidence and short rationale strings.",
+        `\nStep criteria:\n${input.stepCriteria}`,
+        buildContextDocsSection(input.contextDocs),
+        `\nGenerated document field values:\n${JSON.stringify(input.documentData).slice(0, 4000)}`,
+      ].filter(Boolean).join("\n"),
+      schema: documentGenerationConfidenceSchema,
+      temperature: 0.2,
+    });
+    if (gradingResult.error) return;
+
+    const mergedPayload: AiTurnPayload = {
+      ...existing.data.aiPayload,
+      documentGenerationConfidence: gradingResult.data.object,
+    };
+
+    await this.sessionMessages.updateAiPayload(input.messageId, mergedPayload);
   }
 
   private buildTranscript(messages: SessionMessage[]): string {

@@ -69,14 +69,30 @@ const makeObjectStorage = (): IObjectStorage => ({
   initialise: vi.fn().mockResolvedValue(undefined),
 });
 
+const usage = { promptTokens: 100, completionTokens: 50, systemTokens: 20, cacheReadTokens: 0, cacheWriteTokens: 0 };
+
 const makeLanguageModel = (): ILanguageModel => ({
   provider: "anthropic",
-  generateObject: vi.fn().mockResolvedValue(
-    ok({
-      object: { project_title: "Cloud Migration RFT", background: "Agency background" },
-      usage: { promptTokens: 100, completionTokens: 50, systemTokens: 20, cacheReadTokens: 0, cacheWriteTokens: 0 },
-    }),
-  ),
+  generateObject: vi.fn().mockImplementation(async (input: { purpose: string }) => {
+    if (input.purpose === "documentGeneration") {
+      return ok({
+        object: { project_title: "Cloud Migration RFT", background: "Agency background" },
+        usage,
+      });
+    }
+    if (input.purpose === "documentGrading") {
+      return ok({
+        object: {
+          guidanceAlignmentConfidence: 88,
+          guidanceAlignmentRationale: "Document references the CPR guidance closely.",
+          criteriaAlignmentConfidence: 92,
+          criteriaAlignmentRationale: "All required fields are populated from the transcript.",
+        },
+        usage,
+      });
+    }
+    return ok({ object: { summary: "A brief summary." }, usage });
+  }),
   streamText: vi.fn(),
   streamObject: vi.fn(),
 });
@@ -86,6 +102,8 @@ const makeSessionMessages = (): ISessionMessageRepository => ({
   findById: vi.fn().mockResolvedValue(ok(makeMessage())),
   listBySession: vi.fn().mockResolvedValue(ok([makeMessage({ role: "user", content: "I need an RFT for cloud migration" }), makeMessage()])),
   updateDocument: vi.fn().mockResolvedValue(ok(makeMessage({ document: { filename: "Procurement-Flow-Generate-RFT-sess1abc-2026-05-19.docx", storagePath: "generated/sess-1/doc.docx", summary: "A brief summary.", generatedAt: "2026-05-19T00:00:00.000Z" } }))),
+  updateDocumentStatus: vi.fn().mockResolvedValue(ok(makeMessage())),
+  updateAiPayload: vi.fn().mockResolvedValue(ok(makeMessage())),
 });
 
 describe("GenerateDocument", () => {
@@ -178,5 +196,108 @@ describe("GenerateDocument", () => {
     });
 
     expect(result.error).toBeDefined();
+  });
+
+  it("grades the generated document and merges confidence into the message aiPayload", async () => {
+    const sessionMessages = makeSessionMessages();
+    const existingPayload = {
+      response: "Step complete",
+      rationale: "All inputs gathered.",
+      stepCompleteConfidence: 95,
+      contextGathered: [{ key: "Project name", value: "Cloud migration" }],
+    };
+    (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(makeMessage({ aiPayload: existingPayload })),
+    );
+
+    const useCase = new GenerateDocument(
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+      makeLanguageModel(),
+      sessionMessages,
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(sessionMessages.updateAiPayload).toHaveBeenCalledWith("msg-1", {
+      ...existingPayload,
+      documentGenerationConfidence: {
+        guidanceAlignmentConfidence: 88,
+        guidanceAlignmentRationale: "Document references the CPR guidance closely.",
+        criteriaAlignmentConfidence: 92,
+        criteriaAlignmentRationale: "All required fields are populated from the transcript.",
+      },
+    });
+  });
+
+  it("returns the document even when the grader LLM call fails, and does not write a payload", async () => {
+    const languageModel = makeLanguageModel();
+    (languageModel.generateObject as ReturnType<typeof vi.fn>).mockImplementation(async (input: { purpose: string }) => {
+      if (input.purpose === "documentGrading") {
+        return err(domainError("INFRA_FAILURE", "Grader call failed."));
+      }
+      if (input.purpose === "documentGeneration") {
+        return ok({
+          object: { project_title: "Cloud Migration RFT", background: "Agency background" },
+          usage,
+        });
+      }
+      return ok({ object: { summary: "A brief summary." }, usage });
+    });
+    const sessionMessages = makeSessionMessages();
+    (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(makeMessage({ aiPayload: { response: "", rationale: "", stepCompleteConfidence: 95, contextGathered: [] } })),
+    );
+
+    const useCase = new GenerateDocument(
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+      languageModel,
+      sessionMessages,
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.document.filename).toMatch(/\.docx$/);
+    expect(sessionMessages.updateAiPayload).not.toHaveBeenCalled();
+  });
+
+  it("skips the payload write when the milestone message has no existing aiPayload", async () => {
+    const sessionMessages = makeSessionMessages();
+    (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(makeMessage({ aiPayload: null })),
+    );
+
+    const useCase = new GenerateDocument(
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+      makeLanguageModel(),
+      sessionMessages,
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(sessionMessages.updateAiPayload).not.toHaveBeenCalled();
   });
 });

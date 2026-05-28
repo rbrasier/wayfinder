@@ -194,6 +194,14 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
     this.messages.set(id, updated);
     return ok(updated);
   }
+
+  async updateAiPayload(id: string, aiPayload: SessionMessage["aiPayload"]): Promise<Result<SessionMessage>> {
+    const existing = this.messages.get(id);
+    if (!existing) throw new Error(`Message not found: ${id}`);
+    const updated = { ...existing, aiPayload };
+    this.messages.set(id, updated);
+    return ok(updated);
+  }
 }
 
 // ── Fixtures ────────────────────────────────────────────────────────────────

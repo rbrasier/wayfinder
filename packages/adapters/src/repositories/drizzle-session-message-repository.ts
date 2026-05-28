@@ -104,4 +104,18 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return err(domainError("INFRA_FAILURE", "Failed to update session message document status.", cause));
     }
   }
+
+  async updateAiPayload(id: string, aiPayload: AiTurnPayload): Promise<Result<SessionMessage>> {
+    try {
+      const [row] = await this.db
+        .update(app_session_messages)
+        .set({ ai_payload: aiPayload })
+        .where(eq(app_session_messages.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", "Session message not found."));
+      return ok(toEntity(row));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to update session message AI payload.", cause));
+    }
+  }
 }
