@@ -15,7 +15,7 @@ const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral", "bedroc
 export const DEFAULT_MODELS_FOR: Record<ProviderName, Record<AiPurpose, string>> = {
   anthropic: {
     chat: "claude-haiku-4-5-20251001",
-    documentGeneration: "claude-sonnet-4-5-20251001",
+    documentGeneration: "claude-sonnet-4-5-20250929",
     branching: "claude-haiku-4-5-20251001",
   },
   openai: {

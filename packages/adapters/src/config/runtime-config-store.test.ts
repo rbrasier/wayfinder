@@ -35,6 +35,17 @@ const makeRepo = (stored: string | null): ISystemSettingsRepository =>
     delete: vi.fn(),
   }) as unknown as ISystemSettingsRepository;
 
+describe("RuntimeConfigStore — anthropic defaults", () => {
+  it("uses a valid Claude Sonnet 4.5 snapshot for document generation", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv({ provider: "anthropic" }));
+
+    const config = await store.getAiConfig();
+
+    expect(config.provider).toBe("anthropic");
+    expect(config.models.documentGeneration).toBe("claude-sonnet-4-5-20250929");
+  });
+});
+
 describe("RuntimeConfigStore — bedrock defaults", () => {
   it("uses bedrock-specific default models when env provider is bedrock", async () => {
     const store = new RuntimeConfigStore(
