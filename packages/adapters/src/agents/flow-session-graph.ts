@@ -1,10 +1,12 @@
 import {
+  buildFieldConstraintsText,
   ok,
   type BuildBranchChoicePromptInput,
   type BuildSystemPromptInput,
   type FlowContextDoc,
   type ISessionAgent,
   type Result,
+  type TemplateField,
 } from "@rbrasier/domain";
 
 export class FlowSessionGraph implements ISessionAgent {
@@ -37,6 +39,12 @@ export class FlowSessionGraph implements ISessionAgent {
         ? "All required fields in the document template have been gathered from the user and can be fully populated."
         : nodeConfig.doneWhen;
 
+    const templateFields = input.templateFields ?? nodeConfig.documentTemplateFields ?? [];
+    const fieldFormatsBlock =
+      nodeConfig.outputType === "generate_document" && templateFields.length > 0
+        ? buildFieldFormatsBlock(templateFields)
+        : "";
+
     const prompt = `${roleBlock}
 
 <instructions>
@@ -55,7 +63,7 @@ export class FlowSessionGraph implements ISessionAgent {
   - Do not discuss future steps
   - Do not re-ask for information already in gathered_context unless clarification would meaningfully improve the output
   - If the user goes off-topic, gently redirect them back to this step
-</constraints>
+</constraints>${fieldFormatsBlock}
 
 <output>
   Respond only with valid JSON in this exact structure — no prose outside it:
@@ -88,6 +96,18 @@ Return only: { "branchChoice": "<nodeId>" }`;
     return ok(prompt);
   }
 }
+
+const buildFieldFormatsBlock = (templateFields: TemplateField[]): string => {
+  const indented = buildFieldConstraintsText(templateFields)
+    .split("\n")
+    .map((line) => `    ${line}`)
+    .join("\n");
+  return `\n\n<field_formats>
+  The document produced at this step has fields with required formats. When the user gives you information for a field, silently reformat it into the required format yourself whenever you reasonably can — for example, turn "next Tuesday" or "3rd of June" into DD-MM-YYYY, or "twelve hundred dollars" into $1,200.00. Only ask the user to clarify when you genuinely cannot determine or format a value. For (options) fields, map what the user says to the closest listed value; if none clearly fits, ask them to choose.
+
+${indented}
+</field_formats>`;
+};
 
 const buildDocsBlock = (contextDocs: FlowContextDoc[]): string => {
   // Upload-time validation guarantees every newly-uploaded doc has status="complete"

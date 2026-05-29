@@ -16,6 +16,7 @@ export * from "./flow-node-repository";
 export * from "./flow-edge-repository";
 export * from "./session-repository";
 export * from "./session-message-repository";
+export * from "./session-step-output-repository";
 export * from "./session-agent";
 export * from "./system-settings-repository";
 export * from "./document-storage";

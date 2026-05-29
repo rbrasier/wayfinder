@@ -1,5 +1,6 @@
 import type { FlowContextDoc } from "../entities/flow";
 import type { ConversationalNodeConfig } from "../entities/flow-node";
+import type { TemplateField } from "../entities/template-field";
 import type { Result } from "../result";
 
 export interface BuildSystemPromptInput {
@@ -9,6 +10,7 @@ export interface BuildSystemPromptInput {
   workflowName: string;
   organisationName: string | null;
   expertRole: string | null;
+  templateFields?: TemplateField[];
 }
 
 export interface BuildBranchChoicePromptInput {

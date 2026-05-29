@@ -1,3 +1,5 @@
+import type { TemplateField } from "./template-field";
+
 export type FlowNodeType = "conversational" | "auto";
 
 export interface ConversationalNodeConfig {
@@ -8,6 +10,7 @@ export interface ConversationalNodeConfig {
   documentTemplateStructuredContent?: string | null;
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
+  documentTemplateFields?: TemplateField[] | null;
   advanceConfidenceThreshold?: number;
 }
 

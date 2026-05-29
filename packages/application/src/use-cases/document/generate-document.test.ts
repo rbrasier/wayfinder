@@ -5,7 +5,9 @@ import type {
   IObjectStorage,
   ILanguageModel,
   ISessionMessageRepository,
+  ISessionStepOutputRepository,
   SessionMessage,
+  SessionStepOutput,
   FlowNode,
   Flow,
 } from "@rbrasier/domain";
@@ -58,7 +60,34 @@ const makeNode = (configOverrides: Record<string, unknown> = {}): FlowNode => ({
 
 const makeDocumentGenerator = (): IDocumentGenerator => ({
   extractTags: vi.fn().mockReturnValue(ok({ tags: ["project_title", "background"] })),
+  extractFields: vi.fn().mockReturnValue(
+    ok({
+      fields: [
+        { key: "project_title", label: "Project Title", type: "text", optional: false, raw: "Project Title" },
+        { key: "background", label: "Background", type: "text", optional: false, raw: "Background" },
+      ],
+    }),
+  ),
+  extractFullText: vi.fn().mockReturnValue(ok({ text: "template text" })),
   generate: vi.fn().mockReturnValue(ok({ docxBytes: Buffer.from("fake-docx") })),
+});
+
+const makeStepOutputs = (): ISessionStepOutputRepository => ({
+  create: vi.fn().mockImplementation(
+    async (input): Promise<{ data: SessionStepOutput }> => ({
+      data: {
+        id: "step-1",
+        sessionId: input.sessionId,
+        flowId: input.flowId,
+        nodeId: input.nodeId,
+        messageId: input.messageId ?? null,
+        fields: input.fields,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    }),
+  ),
+  listByFlow: vi.fn().mockResolvedValue(ok([])),
 });
 
 const makeObjectStorage = (): IObjectStorage => ({
@@ -113,7 +142,7 @@ describe("GenerateDocument", () => {
     const languageModel = makeLanguageModel();
     const sessionMessages = makeSessionMessages();
 
-    const useCase = new GenerateDocument(documentGenerator, objectStorage, languageModel, sessionMessages);
+    const useCase = new GenerateDocument(documentGenerator, objectStorage, languageModel, sessionMessages, makeStepOutputs());
 
     const result = await useCase.execute({
       messageId: "msg-1",
@@ -130,12 +159,45 @@ describe("GenerateDocument", () => {
     expect(sessionMessages.updateDocument).toHaveBeenCalledWith("msg-1", expect.objectContaining({ filename: expect.stringMatching(/\.docx$/) }));
   });
 
+  it("persists the generated field values as a step output for reporting", async () => {
+    const stepOutputs = makeStepOutputs();
+
+    const useCase = new GenerateDocument(
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+      makeLanguageModel(),
+      makeSessionMessages(),
+      stepOutputs,
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(stepOutputs.create).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      flowId: "flow-1",
+      nodeId: "node-1",
+      messageId: "msg-1",
+      fields: [
+        { key: "project_title", label: "Project Title", type: "text", value: "Cloud Migration RFT" },
+        { key: "background", label: "Background", type: "text", value: "Agency background" },
+      ],
+    });
+  });
+
   it("returns an error when node has no template configured", async () => {
     const useCase = new GenerateDocument(
       makeDocumentGenerator(),
       makeObjectStorage(),
       makeLanguageModel(),
       makeSessionMessages(),
+      makeStepOutputs(),
     );
 
     const result = await useCase.execute({
@@ -161,6 +223,7 @@ describe("GenerateDocument", () => {
       objectStorage,
       makeLanguageModel(),
       makeSessionMessages(),
+      makeStepOutputs(),
     );
 
     const result = await useCase.execute({
@@ -185,6 +248,7 @@ describe("GenerateDocument", () => {
       makeObjectStorage(),
       languageModel,
       makeSessionMessages(),
+      makeStepOutputs(),
     );
 
     const result = await useCase.execute({
@@ -215,6 +279,7 @@ describe("GenerateDocument", () => {
       makeObjectStorage(),
       makeLanguageModel(),
       sessionMessages,
+      makeStepOutputs(),
     );
 
     const result = await useCase.execute({
@@ -261,6 +326,7 @@ describe("GenerateDocument", () => {
       makeObjectStorage(),
       languageModel,
       sessionMessages,
+      makeStepOutputs(),
     );
 
     const result = await useCase.execute({
@@ -287,6 +353,7 @@ describe("GenerateDocument", () => {
       makeObjectStorage(),
       makeLanguageModel(),
       sessionMessages,
+      makeStepOutputs(),
     );
 
     const result = await useCase.execute({

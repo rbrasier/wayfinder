@@ -56,6 +56,7 @@ import {
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleSessionMessageRepository,
+  DrizzleSessionStepOutputRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
@@ -98,6 +99,7 @@ const build = () => {
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessions = new DrizzleSessionRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
+  const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
   const bedrockEnvCredentials =
@@ -184,9 +186,9 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, systemSettings, contextDocContent },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionStepOutputs, systemSettings, contextDocContent },
     useCases: {
-      generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages),
+      generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
