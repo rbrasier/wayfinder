@@ -307,37 +307,6 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label htmlFor="done-when-mode">Done when…</Label>
-                <select
-                  id="done-when-mode"
-                  className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
-                  value={doneWhenMode}
-                  onChange={(e) => handleDoneWhenModeChange(e.target.value)}
-                >
-                  <option value="condition">Specific condition</option>
-                  {values.outputType === "generate_document" && (
-                    <option value="template">Template complete — when all template fields are gathered</option>
-                  )}
-                  <option value="never">Never done — user can continue to interact indefinitely</option>
-                </select>
-                {doneWhenMode === "condition" && (
-                  <Textarea
-                    id="done-when"
-                    required
-                    rows={2}
-                    value={values.doneWhen}
-                    onChange={(e) => set("doneWhen", e.target.value)}
-                    placeholder="Describe the condition that marks this step complete…"
-                  />
-                )}
-                {doneWhenMode === "template" && (
-                  <p className="rounded-[9px] border border-[#c5d0f7] bg-[#eef1fc] px-3 py-2 text-[12px] text-[#3a5fd9]">
-                    This step is complete when all required fields in the document template have been gathered from the user.
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-1">
                 <Label>Output type</Label>
                 <div className="flex gap-3">
                   {(["conversation_only", "generate_document"] as const).map((type) => (
@@ -432,6 +401,37 @@ export function NodeConfigModal({
                   )}
                 </div>
               )}
+
+              <div className="space-y-1">
+                <Label htmlFor="done-when-mode">Done when…</Label>
+                <select
+                  id="done-when-mode"
+                  className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                  value={doneWhenMode}
+                  onChange={(e) => handleDoneWhenModeChange(e.target.value)}
+                >
+                  <option value="condition">Specific condition</option>
+                  {values.outputType === "generate_document" && (
+                    <option value="template">Template complete — when all template fields are gathered</option>
+                  )}
+                  <option value="never">Never done — user can continue to interact indefinitely</option>
+                </select>
+                {doneWhenMode === "condition" && (
+                  <Textarea
+                    id="done-when"
+                    required
+                    rows={2}
+                    value={values.doneWhen}
+                    onChange={(e) => set("doneWhen", e.target.value)}
+                    placeholder="Describe the condition that marks this step complete…"
+                  />
+                )}
+                {doneWhenMode === "template" && (
+                  <p className="rounded-[9px] border border-[#c5d0f7] bg-[#eef1fc] px-3 py-2 text-[12px] text-[#3a5fd9]">
+                    This step is complete when all required fields in the document template have been gathered from the user.
+                  </p>
+                )}
+              </div>
             </DialogBody>
 
             <DialogFooter className="flex-row items-center justify-between">
