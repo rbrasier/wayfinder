@@ -11,7 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { FlowPermission, FlowVisibility } from "@rbrasier/domain";
-import type { AiTurnPayload, SessionDocument } from "@rbrasier/domain";
+import type { AiTurnPayload, SessionDocument, StepOutputField } from "@rbrasier/domain";
 import { core_users } from "./core";
 
 type StoredContextDoc = {
@@ -135,6 +135,33 @@ export const app_session_messages = pgTable(
       t.session_id,
       t.created_at,
     ),
+  }),
+);
+
+export const app_session_step_outputs = pgTable(
+  "app_session_step_outputs",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    node_id: uuid("node_id")
+      .notNull()
+      .references(() => app_flow_nodes.id, { onDelete: "cascade" }),
+    message_id: uuid("message_id").references(() => app_session_messages.id, {
+      onDelete: "set null",
+    }),
+    fields: jsonb("fields").$type<StepOutputField[]>().notNull().default([]),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_flow: index("app_session_step_outputs_flow_id_idx").on(t.flow_id),
+    by_session: index("app_session_step_outputs_session_id_idx").on(t.session_id),
+    by_node: index("app_session_step_outputs_node_id_idx").on(t.node_id),
   }),
 );
 

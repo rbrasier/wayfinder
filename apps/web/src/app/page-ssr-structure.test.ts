@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 const serverPages = [
   "(admin)/admin/flows/page.tsx",
   "(admin)/admin/users/page.tsx",
+  "(admin)/admin/dashboards/overview/page.tsx",
+  "(admin)/admin/dashboards/flows/page.tsx",
   "(user)/flows/[id]/config/page.tsx",
 ];
 

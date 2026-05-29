@@ -59,6 +59,48 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).not.toMatch(/experience at \w/);
   });
 
+  it("omits <field_formats> for a conversation-only step", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).not.toContain("<field_formats>");
+  });
+
+  it("injects <field_formats> with each field's required format for a document step", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent: "Email: {{ Employee Email (email) }}",
+      },
+      templateFields: [
+        { key: "employee_email", label: "Employee Email", type: "email", optional: false, raw: "Employee Email (email)" },
+        { key: "approval_status", label: "Approval Status", type: "text", options: ["Approved", "Rejected"], optional: true, raw: "Approval Status (options: Approved, Rejected) (optional)" },
+      ],
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("<field_formats>");
+    expect(result.data).toContain('"Employee Email" (key: employee_email)');
+    expect(result.data).toContain("a valid email address");
+    expect(result.data).toContain("exactly one of: Approved, Rejected");
+    expect(result.data).toContain("DD-MM-YYYY");
+  });
+
+  it("falls back to nodeConfig.documentTemplateFields when templateFields is not supplied", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateFields: [
+          { key: "contract_value", label: "Contract Value", type: "currency", optional: false, raw: "Contract Value (currency)" },
+        ],
+      },
+    });
+    expect(result.data).toContain("<field_formats>");
+    expect(result.data).toContain('"Contract Value" (key: contract_value)');
+    expect(result.data).toContain("currency");
+  });
+
   it("includes <instructions> with aiInstruction", () => {
     const result = agent.buildSystemPrompt(baseInput);
     expect(result.data).toContain("<instructions>");

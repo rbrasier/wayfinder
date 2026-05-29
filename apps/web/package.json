@@ -36,6 +36,7 @@
     "pino": "^9.6.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "recharts": "^2.15.0",
     "sonner": "^2.0.7",
     "superjson": "^2.2.1",
     "tailwind-merge": "^2.5.4",

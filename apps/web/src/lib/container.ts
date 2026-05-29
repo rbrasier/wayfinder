@@ -13,6 +13,8 @@ import {
   GenerateDocument,
   GetFeatureFlag,
   GetFlowCanvas,
+  GetFlowDeepDive,
+  GetOverviewDashboard,
   GetSession,
   GetUsageSummary,
   GrantFlowOwner,
@@ -56,6 +58,8 @@ import {
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleSessionMessageRepository,
+  DrizzleSessionStepOutputRepository,
+  DrizzleAnalyticsRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
@@ -98,6 +102,8 @@ const build = () => {
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessions = new DrizzleSessionRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
+  const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  const analyticsRepo = new DrizzleAnalyticsRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
   const bedrockEnvCredentials =
@@ -184,9 +190,9 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, systemSettings, contextDocContent },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionStepOutputs, systemSettings, contextDocContent },
     useCases: {
-      generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages),
+      generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
@@ -228,6 +234,8 @@ const build = () => {
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
+      getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
+      getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs),
     },
   };
 };

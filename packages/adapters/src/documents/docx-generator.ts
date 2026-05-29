@@ -1,8 +1,8 @@
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import InspectModule from "docxtemplater/js/inspect-module.js";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateDocxInput, GenerateDocxOutput } from "@rbrasier/domain";
+import { domainError, err, ok, parseTemplateFields, templateFieldKey } from "@rbrasier/domain";
+import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateDocxInput, GenerateDocxOutput } from "@rbrasier/domain";
 import type { Result } from "@rbrasier/domain";
 
 interface RunInfo {
@@ -30,6 +30,17 @@ export class DocxGenerator implements IDocumentGenerator {
       const tagMap = inspectModule.getAllTags() as Record<string, unknown>;
       const tags = Object.keys(tagMap);
       return ok({ tags });
+    } catch (cause) {
+      return err(domainError("VALIDATION_FAILED", "Failed to parse DOCX template. Ensure the file is a valid .docx and all {{tags}} are correctly formed.", cause));
+    }
+  }
+
+  extractFields(input: ExtractFieldsInput): Result<ExtractFieldsOutput> {
+    try {
+      const rawTags = this.collectRawTags(input.templateBytes);
+      const parsed = parseTemplateFields(rawTags);
+      if (parsed.error) return parsed;
+      return ok({ fields: parsed.data });
     } catch (cause) {
       return err(domainError("VALIDATION_FAILED", "Failed to parse DOCX template. Ensure the file is a valid .docx and all {{tags}} are correctly formed.", cause));
     }
@@ -83,6 +94,32 @@ export class DocxGenerator implements IDocumentGenerator {
     }
 
     return zip.generate({ type: "nodebuffer" }) as Buffer;
+  }
+
+  // Collects the raw inner text of every {{ tag }} across the document body,
+  // headers and footers — reconstructing run-split tags — so annotations survive
+  // for field parsing (preprocessTemplate would otherwise normalise them away).
+  private collectRawTags(docxBytes: Buffer): string[] {
+    const zip = new PizZip(docxBytes);
+    const filenames = Object.keys(zip.files).filter(
+      (name) => name === "word/document.xml" || /^word\/(header|footer)\d*\.xml$/.test(name),
+    );
+
+    const rawTags: string[] = [];
+    for (const filename of filenames) {
+      const file = zip.file(filename);
+      if (!file) continue;
+      const paragraphs = file.asText().match(/<w:p[ >][\s\S]*?<\/w:p>/g) ?? [];
+      for (const paragraph of paragraphs) {
+        const fullText = this.extractRuns(paragraph)
+          .map((run) => run.text)
+          .join("");
+        for (const match of fullText.matchAll(/\{\{([\s\S]*?)\}\}/g)) {
+          rawTags.push((match[1] ?? "").trim());
+        }
+      }
+    }
+    return rawTags;
   }
 
   private fixTemplateXml(xml: string): string {
@@ -228,12 +265,9 @@ export class DocxGenerator implements IDocumentGenerator {
     return lastSpace > 0 ? sliced.slice(0, lastSpace + 1) : sliced;
   }
 
+  // Render key must match the parsed field key: annotations are stripped so
+  // {{ Employee Email (email) }} and the AI-supplied "employee_email" align.
   private normalizeTagName(description: string): string {
-    const normalized = description
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "_")
-      .replace(/^_+|_+$/g, "");
-    return normalized || "field";
+    return templateFieldKey(description);
   }
 }

@@ -172,6 +172,80 @@ describe("DocxGenerator", () => {
     });
   });
 
+  describe("extractFields", () => {
+    it("parses annotated tags into typed fields", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Email: {{ Employee Email (email) }} Fee: {{ Contract Value (currency) (optional) }}"),
+      );
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.fields).toEqual([
+        expect.objectContaining({ key: "employee_email", label: "Employee Email", type: "email" }),
+        expect.objectContaining({
+          key: "contract_value",
+          label: "Contract Value",
+          type: "currency",
+          optional: true,
+        }),
+      ]);
+    });
+
+    it("parses an options enum tag split across runs", () => {
+      const templateBytes = buildTemplateBuffer(
+        splitRunDocXml("Status: {{", " Approval Status (options: Approved, Rejected, Pending) ", "}}"),
+      );
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.error).toBeUndefined();
+      expect(result.data?.fields[0]).toMatchObject({ key: "approval_status" });
+      expect(result.data?.fields[0].options).toEqual(["Approved", "Rejected", "Pending"]);
+    });
+
+    it("returns a validation error for an unknown annotation", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{{ Name (frobnicate) }}"),
+      );
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(result.error?.message).toContain("frobnicate");
+    });
+
+    it("treats a bare tag as a free-text field", () => {
+      const templateBytes = buildTemplateBuffer(simpleDocXml("{{ client_name }}"));
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.data?.fields[0]).toMatchObject({ key: "client_name", type: "text" });
+    });
+  });
+
+  describe("annotation-aware rendering", () => {
+    it("fills an annotated tag using the annotation-stripped key", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Email: {{ Employee Email (email) }}"),
+      );
+
+      const result = generator.generate({
+        templateBytes,
+        data: { employee_email: "ada@example.com" },
+      });
+
+      expect(result.error).toBeUndefined();
+      const outputZip = new PizZip(result.data!.docxBytes);
+      const outputDoc = new Docxtemplater(outputZip, {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
+      });
+      expect(outputDoc.getFullText()).toContain("ada@example.com");
+    });
+  });
+
   describe("extractFullText", () => {
     it("returns the plain text of a single-paragraph document", () => {
       const templateBytes = buildTemplateBuffer(

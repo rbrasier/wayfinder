@@ -90,6 +90,14 @@ export async function POST(
     );
   }
 
+  const fieldsResult = docxGenerator.extractFields({ templateBytes: buffer });
+  if (fieldsResult.error) {
+    return NextResponse.json(
+      { error: fieldsResult.error.message, code: "INVALID_TEMPLATE_FIELDS" },
+      { status: 422 },
+    );
+  }
+
   const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const storageKey = `templates/${nodeId}/${timestamp}-${safeFilename}`;
@@ -139,6 +147,7 @@ export async function POST(
     documentTemplateFilename: safeFilename,
     documentTemplateContent,
     documentTemplateStructuredContent,
+    documentTemplateFields: fieldsResult.data.fields,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {
@@ -202,6 +211,7 @@ export async function DELETE(
     documentTemplateFilename: null,
     documentTemplateContent: null,
     documentTemplateStructuredContent: null,
+    documentTemplateFields: null,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {

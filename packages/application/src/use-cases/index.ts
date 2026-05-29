@@ -1,6 +1,7 @@
 export * from "./flow/index";
 export * from "./session/index";
 export * from "./document/index";
+export * from "./analytics/index";
 export * from "./create-user";
 export * from "./update-user";
 export * from "./delete-user";

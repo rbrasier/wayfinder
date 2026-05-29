@@ -78,6 +78,13 @@
       "when": 1779920605434,
       "tag": "0010_certain_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780087227256,
+      "tag": "0011_elite_lester",
+      "breakpoints": true
     }
   ]
 }

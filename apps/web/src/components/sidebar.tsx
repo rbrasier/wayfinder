@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Activity,
   AlertCircle,
   BarChart2,
   Flag,
@@ -10,6 +11,7 @@ import {
   LayoutGrid,
   Menu,
   MessageSquare,
+  PieChart,
   Settings,
   ShieldOff,
   ShieldCheck,
@@ -32,6 +34,8 @@ const userNav: NavItem[] = [
 ];
 
 const adminNav: NavItem[] = [
+  { href: "/admin/dashboards/overview", icon: Activity, label: "Overview" },
+  { href: "/admin/dashboards/flows", icon: PieChart, label: "Flow Insights" },
   { href: "/admin/sessions", icon: LayoutGrid, label: "All Sessions" },
   { href: "/admin/flows", icon: GitBranch, label: "Flows" },
   { href: "/admin/users", icon: Users, label: "Users" },

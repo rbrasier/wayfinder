@@ -1,3 +1,4 @@
+import { analyticsRouter } from "./routers/analytics";
 import { errorRouter } from "./routers/error";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
@@ -17,6 +18,7 @@ export const appRouter = router({
   flow: flowRouter,
   session: sessionRouter,
   settings: settingsRouter,
+  analytics: analyticsRouter,
 });
 
 export type AppRouter = typeof appRouter;

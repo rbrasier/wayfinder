@@ -1,4 +1,5 @@
 import {
+  buildFieldConstraintsText,
   domainError,
   err,
   ok,
@@ -12,9 +13,12 @@ import {
   type IObjectStorage,
   type ILanguageModel,
   type ISessionMessageRepository,
+  type ISessionStepOutputRepository,
   type Result,
   type SessionDocument,
   type SessionMessage,
+  type StepOutputField,
+  type TemplateField,
 } from "@rbrasier/domain";
 import {
   documentDataSchema,
@@ -50,6 +54,7 @@ export class GenerateDocument {
     private readonly objectStorage: IObjectStorage,
     private readonly languageModel: ILanguageModel,
     private readonly sessionMessages: ISessionMessageRepository,
+    private readonly sessionStepOutputs: ISessionStepOutputRepository,
   ) {}
 
   async execute(input: GenerateDocumentInput): Promise<Result<GenerateDocumentOutput>> {
@@ -62,10 +67,11 @@ export class GenerateDocument {
     const templateResult = await this.objectStorage.get(config.documentTemplatePath);
     if (templateResult.error) return templateResult;
 
-    const tagsResult = this.documentGenerator.extractTags({ templateBytes: templateResult.data });
-    if (tagsResult.error) return tagsResult;
+    const fieldsResult = this.resolveFields(config, templateResult.data);
+    if (fieldsResult.error) return fieldsResult;
 
-    const tags = tagsResult.data.tags;
+    const fields = fieldsResult.data;
+    const keys = fields.map((field) => field.key);
     const transcript = this.buildTranscript(input.messages);
     const contextDocsSection = buildContextDocsSection(input.flow.contextDocs);
 
@@ -73,8 +79,10 @@ export class GenerateDocument {
       purpose: "documentGeneration",
       system: config.aiInstruction,
       prompt: [
-        `Return a JSON object with exactly these keys: ${JSON.stringify(tags)}.`,
+        `Return a JSON object with exactly these keys: ${JSON.stringify(keys)}.`,
         `Fill each value using the session context below.`,
+        `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
+        `\n<field_constraints>\n${buildFieldConstraintsText(fields)}\n</field_constraints>`,
         contextDocsSection,
         `\nSession transcript:\n${transcript}`,
       ].filter(Boolean).join("\n"),
@@ -118,6 +126,15 @@ export class GenerateDocument {
     const updateResult = await this.sessionMessages.updateDocument(input.messageId, document);
     if (updateResult.error) return updateResult;
 
+    await this.persistStepOutput({
+      sessionId: input.sessionId,
+      flowId: input.flow.id,
+      nodeId: input.node.id,
+      messageId: input.messageId,
+      fields,
+      values: dataResult.data.object,
+    });
+
     await this.persistDocumentGrading({
       messageId: input.messageId,
       documentData: dataResult.data.object,
@@ -126,6 +143,45 @@ export class GenerateDocument {
     });
 
     return ok({ document });
+  }
+
+  private resolveFields(
+    config: ConversationalNodeConfig,
+    templateBytes: Buffer,
+  ): Result<TemplateField[]> {
+    if (config.documentTemplateFields && config.documentTemplateFields.length > 0) {
+      return ok(config.documentTemplateFields);
+    }
+    const fieldsResult = this.documentGenerator.extractFields({ templateBytes });
+    if (fieldsResult.error) return fieldsResult;
+    return ok(fieldsResult.data.fields);
+  }
+
+  // Captured for reporting (end-of-step structured data). Best-effort: a failure
+  // here must not fail document generation, which has already succeeded.
+  private async persistStepOutput(input: {
+    sessionId: string;
+    flowId: string;
+    nodeId: string;
+    messageId: string;
+    fields: TemplateField[];
+    values: Record<string, string>;
+  }): Promise<void> {
+    const fields: StepOutputField[] = input.fields.map((field) => ({
+      key: field.key,
+      label: field.label,
+      type: field.type,
+      options: field.options,
+      value: input.values[field.key] ?? "",
+    }));
+
+    await this.sessionStepOutputs.create({
+      sessionId: input.sessionId,
+      flowId: input.flowId,
+      nodeId: input.nodeId,
+      messageId: input.messageId,
+      fields,
+    });
   }
 
   private async persistDocumentGrading(input: {
