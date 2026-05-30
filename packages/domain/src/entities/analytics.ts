@@ -3,6 +3,13 @@ import type { MessageRole } from "./conversation";
 import type { StepOutputField } from "./session-step-output";
 import type { TemplateFieldType } from "./template-field";
 
+export const parseNumeric = (value: string): number | null => {
+  const cleaned = value.replace(/[^0-9.\-]/g, "");
+  if (cleaned === "" || cleaned === "-" || cleaned === ".") return null;
+  const parsed = Number(cleaned);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
 // ── Raw rows supplied by the analytics repository ────────────────────────────
 
 export interface AnalyticsSessionRow {
@@ -76,39 +83,27 @@ export interface NodeBreakdownRow {
   completionRate: number;
 }
 
-export interface FieldValueCount {
-  value: string;
-  count: number;
-}
-
-export interface FieldNumericStats {
-  count: number;
-  min: number;
-  max: number;
-  average: number;
-}
-
-export interface FieldReportSummary {
-  key: string;
+// Each column maps to a unique node+field combination, keyed as `${nodeId}:${fieldKey}`.
+export interface FieldReportColumn {
+  columnKey: string;
+  nodeId: string;
+  nodeName: string;
+  fieldKey: string;
   label: string;
   type: TemplateFieldType;
-  filledCount: number;
-  totalCount: number;
-  distribution?: FieldValueCount[];
-  numeric?: FieldNumericStats;
+  options?: string[];
 }
 
-export interface FieldReportRow {
+export interface FieldReportSessionRow {
   sessionId: string;
-  nodeId: string;
-  createdAt: Date;
+  startedAt: Date;
+  status: SessionStatus;
   values: Record<string, string>;
 }
 
 export interface FieldReport {
-  fields: { key: string; label: string; type: TemplateFieldType }[];
-  summaries: FieldReportSummary[];
-  rows: FieldReportRow[];
+  columns: FieldReportColumn[];
+  rows: FieldReportSessionRow[];
 }
 
 // ── Pure aggregation helpers ─────────────────────────────────────────────────
@@ -314,6 +309,17 @@ export const computeNodeBreakdown = (
   });
 };
 
+interface NodeForReport {
+  id: string;
+  name: string;
+}
+
+interface SessionForReport {
+  id: string;
+  status: SessionStatus;
+  createdAt: Date;
+}
+
 interface StepOutputForReport {
   sessionId: string;
   nodeId: string;
@@ -321,78 +327,60 @@ interface StepOutputForReport {
   fields: StepOutputField[];
 }
 
-const parseNumeric = (value: string): number | null => {
-  const cleaned = value.replace(/[^0-9.\-]/g, "");
-  if (cleaned === "" || cleaned === "-" || cleaned === ".") return null;
-  const parsed = Number(cleaned);
-  return Number.isNaN(parsed) ? null : parsed;
-};
+export const computeFieldReport = (
+  stepOutputs: StepOutputForReport[],
+  nodes: NodeForReport[],
+  sessions: SessionForReport[],
+): FieldReport => {
+  const nodeMap = new Map(nodes.map((node) => [node.id, node.name]));
+  const sessionMap = new Map(sessions.map((session) => [session.id, session]));
 
-export const computeFieldReport = (stepOutputs: StepOutputForReport[]): FieldReport => {
-  const fieldOrder: { key: string; label: string; type: TemplateFieldType }[] = [];
-  const seen = new Set<string>();
-  const categoricalKeys = new Set<string>();
-  const valuesByKey = new Map<string, string[]>();
+  const columns: FieldReportColumn[] = [];
+  const seenColumnKeys = new Set<string>();
+  const bySession = new Map<string, StepOutputForReport[]>();
 
-  const rows: FieldReportRow[] = stepOutputs.map((output) => {
-    const values: Record<string, string> = {};
+  for (const output of stepOutputs) {
     for (const field of output.fields) {
-      if (!seen.has(field.key)) {
-        seen.add(field.key);
-        fieldOrder.push({ key: field.key, label: field.label, type: field.type });
+      const columnKey = `${output.nodeId}:${field.key}`;
+      if (!seenColumnKeys.has(columnKey)) {
+        seenColumnKeys.add(columnKey);
+        columns.push({
+          columnKey,
+          nodeId: output.nodeId,
+          nodeName: nodeMap.get(output.nodeId) ?? output.nodeId,
+          fieldKey: field.key,
+          label: field.label,
+          type: field.type,
+          options: field.options,
+        });
       }
-      if (field.type === "yesno" || (field.options && field.options.length > 0)) {
-        categoricalKeys.add(field.key);
-      }
-      values[field.key] = field.value;
-      const list = valuesByKey.get(field.key) ?? [];
-      list.push(field.value);
-      valuesByKey.set(field.key, list);
     }
-    return {
-      sessionId: output.sessionId,
-      nodeId: output.nodeId,
-      createdAt: output.createdAt,
+    const list = bySession.get(output.sessionId) ?? [];
+    list.push(output);
+    bySession.set(output.sessionId, list);
+  }
+
+  const rows: FieldReportSessionRow[] = [];
+  for (const [sessionId, outputs] of bySession.entries()) {
+    const sessionData = sessionMap.get(sessionId);
+    const values: Record<string, string> = {};
+
+    const sorted = [...outputs].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    for (const output of sorted) {
+      for (const field of output.fields) {
+        values[`${output.nodeId}:${field.key}`] = field.value;
+      }
+    }
+
+    rows.push({
+      sessionId,
+      startedAt: sessionData?.createdAt ?? outputs[0]!.createdAt,
+      status: sessionData?.status ?? "active",
       values,
-    };
-  });
+    });
+  }
 
-  const summaries: FieldReportSummary[] = fieldOrder.map((field) => {
-    const allValues = valuesByKey.get(field.key) ?? [];
-    const filled = allValues.filter((value) => value.trim() !== "");
+  rows.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
 
-    const summary: FieldReportSummary = {
-      key: field.key,
-      label: field.label,
-      type: field.type,
-      filledCount: filled.length,
-      totalCount: allValues.length,
-    };
-
-    if (categoricalKeys.has(field.key)) {
-      const counts = new Map<string, number>();
-      for (const value of filled) counts.set(value, (counts.get(value) ?? 0) + 1);
-      summary.distribution = [...counts.entries()]
-        .map(([value, count]) => ({ value, count }))
-        .sort((a, b) => b.count - a.count);
-    }
-
-    if (field.type === "number" || field.type === "currency") {
-      const numbers = filled
-        .map(parseNumeric)
-        .filter((value): value is number => value !== null);
-      if (numbers.length > 0) {
-        summary.numeric = {
-          count: numbers.length,
-          min: Math.min(...numbers),
-          max: Math.max(...numbers),
-          average: numbers.reduce((sum, value) => sum + value, 0) / numbers.length,
-        };
-      }
-    }
-
-    return summary;
-  });
-
-  return { fields: fieldOrder, summaries, rows };
+  return { columns, rows };
 };

@@ -12,6 +12,13 @@ import {
   type Result,
 } from "@rbrasier/domain";
 
+export interface SessionSummary {
+  total: number;
+  completed: number;
+  active: number;
+  abandoned: number;
+}
+
 export interface FlowDeepDiveCard {
   flowId: string;
   flowName: string;
@@ -23,6 +30,7 @@ export interface FlowDeepDive {
   selectedFlowId: string | null;
   nodeBreakdown: NodeBreakdownRow[];
   fieldReport: FieldReport;
+  sessionSummary: SessionSummary;
 }
 
 export interface GetFlowDeepDiveInput {
@@ -30,7 +38,8 @@ export interface GetFlowDeepDiveInput {
   now?: Date;
 }
 
-const emptyFieldReport: FieldReport = { fields: [], summaries: [], rows: [] };
+const emptyFieldReport: FieldReport = { columns: [], rows: [] };
+const emptySessionSummary: SessionSummary = { total: 0, completed: 0, active: 0, abandoned: 0 };
 
 export class GetFlowDeepDive {
   constructor(
@@ -68,7 +77,13 @@ export class GetFlowDeepDive {
         : (cards[0]?.flowId ?? null);
 
     if (!selectedFlowId) {
-      return ok({ flows: cards, selectedFlowId: null, nodeBreakdown: [], fieldReport: emptyFieldReport });
+      return ok({
+        flows: cards,
+        selectedFlowId: null,
+        nodeBreakdown: [],
+        fieldReport: emptyFieldReport,
+        sessionSummary: emptySessionSummary,
+      });
     }
 
     const nodesResult = await this.flowNodes.listByFlow(selectedFlowId);
@@ -88,6 +103,13 @@ export class GetFlowDeepDive {
 
     const flowSessions = sessionsResult.data.filter((session) => session.flowId === selectedFlowId);
 
+    const sessionSummary: SessionSummary = {
+      total: flowSessions.length,
+      completed: flowSessions.filter((session) => session.status === "complete").length,
+      active: flowSessions.filter((session) => session.status === "active").length,
+      abandoned: flowSessions.filter((session) => session.status === "abandoned").length,
+    };
+
     return ok({
       flows: cards,
       selectedFlowId,
@@ -99,7 +121,10 @@ export class GetFlowDeepDive {
           createdAt: output.createdAt,
           fields: output.fields,
         })),
+        nodes,
+        flowSessions,
       ),
+      sessionSummary,
     });
   }
 }

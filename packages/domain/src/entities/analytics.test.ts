@@ -135,57 +135,120 @@ describe("computeNodeBreakdown", () => {
 });
 
 describe("computeFieldReport", () => {
-  it("aggregates distributions for enum fields and numeric stats for currency", () => {
-    const report = computeFieldReport([
-      {
-        sessionId: "s1",
-        nodeId: "n1",
-        createdAt: new Date("2026-05-20T00:00:00Z"),
-        fields: [
-          { key: "status", label: "Status", type: "text", options: ["Approved", "Rejected"], value: "Approved" },
-          { key: "fee", label: "Fee", type: "currency", value: "$1,200.00" },
-        ],
-      },
-      {
-        sessionId: "s2",
-        nodeId: "n1",
-        createdAt: new Date("2026-05-21T00:00:00Z"),
-        fields: [
-          { key: "status", label: "Status", type: "text", options: ["Approved", "Rejected"], value: "Approved" },
-          { key: "fee", label: "Fee", type: "currency", value: "$800.00" },
-        ],
-      },
-    ]);
+  const nodeIntake = { id: "n1", name: "Intake" };
+  const nodeApproval = { id: "n2", name: "Approval" };
+  const sessionS1 = { id: "s1", status: "complete" as const, createdAt: new Date("2026-05-20T00:00:00Z") };
+  const sessionS2 = { id: "s2", status: "active" as const, createdAt: new Date("2026-05-21T00:00:00Z") };
 
-    expect(report.fields.map((field) => field.key)).toEqual(["status", "fee"]);
-    expect(report.rows).toHaveLength(2);
+  it("merges multiple step outputs for the same session into one row", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date("2026-05-20T01:00:00Z"),
+          fields: [{ key: "vendor", label: "Vendor Name", type: "text", value: "Acme" }],
+        },
+        {
+          sessionId: "s1",
+          nodeId: "n2",
+          createdAt: new Date("2026-05-20T02:00:00Z"),
+          fields: [{ key: "approved", label: "Approved", type: "yesno", value: "Yes" }],
+        },
+      ],
+      [nodeIntake, nodeApproval],
+      [sessionS1],
+    );
 
-    const status = report.summaries.find((summary) => summary.key === "status");
-    expect(status?.distribution).toEqual([{ value: "Approved", count: 2 }]);
-
-    const fee = report.summaries.find((summary) => summary.key === "fee");
-    expect(fee?.numeric).toEqual({ count: 2, min: 800, max: 1200, average: 1000 });
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0]?.sessionId).toBe("s1");
+    expect(report.rows[0]?.status).toBe("complete");
+    expect(report.rows[0]?.startedAt).toEqual(new Date("2026-05-20T00:00:00Z"));
+    expect(report.rows[0]?.values["n1:vendor"]).toBe("Acme");
+    expect(report.rows[0]?.values["n2:approved"]).toBe("Yes");
+    expect(report.columns).toHaveLength(2);
+    expect(report.columns[0]?.nodeId).toBe("n1");
+    expect(report.columns[0]?.nodeName).toBe("Intake");
+    expect(report.columns[1]?.nodeName).toBe("Approval");
   });
 
-  it("tracks fill rate for free-text fields", () => {
-    const report = computeFieldReport([
-      {
-        sessionId: "s1",
-        nodeId: "n1",
-        createdAt: new Date(),
-        fields: [{ key: "notes", label: "Notes", type: "text", value: "" }],
-      },
-      {
-        sessionId: "s2",
-        nodeId: "n1",
-        createdAt: new Date(),
-        fields: [{ key: "notes", label: "Notes", type: "text", value: "Hello" }],
-      },
-    ]);
+  it("produces one column per distinct nodeId+fieldKey combination when two nodes share a key", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "vendor", label: "Vendor Name", type: "text", value: "Acme" }],
+        },
+        {
+          sessionId: "s1",
+          nodeId: "n2",
+          createdAt: new Date(),
+          fields: [{ key: "vendor", label: "Vendor Name", type: "text", value: "Buildco" }],
+        },
+      ],
+      [nodeIntake, nodeApproval],
+      [sessionS1],
+    );
 
-    const notes = report.summaries.find((summary) => summary.key === "notes");
-    expect(notes?.filledCount).toBe(1);
-    expect(notes?.totalCount).toBe(2);
-    expect(notes?.distribution).toBeUndefined();
+    expect(report.columns).toHaveLength(2);
+    expect(report.columns[0]?.columnKey).toBe("n1:vendor");
+    expect(report.columns[1]?.columnKey).toBe("n2:vendor");
+    expect(report.rows[0]?.values["n1:vendor"]).toBe("Acme");
+    expect(report.rows[0]?.values["n2:vendor"]).toBe("Buildco");
+  });
+
+  it("uses session status and startedAt from the sessions list", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s2",
+          nodeId: "n1",
+          createdAt: new Date("2026-05-21T01:00:00Z"),
+          fields: [{ key: "fee", label: "Fee", type: "currency", value: "$500.00" }],
+        },
+      ],
+      [nodeIntake],
+      [sessionS2],
+    );
+
+    expect(report.rows[0]?.status).toBe("active");
+    expect(report.rows[0]?.startedAt).toEqual(new Date("2026-05-21T00:00:00Z"));
+  });
+
+  it("returns empty columns and rows when there are no step outputs", () => {
+    const report = computeFieldReport([], [nodeIntake], [sessionS1, sessionS2]);
+
+    expect(report.rows).toHaveLength(0);
+    expect(report.columns).toHaveLength(0);
+  });
+
+  it("produces one row per session even across two separate sessions", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date("2026-05-20T01:00:00Z"),
+          fields: [{ key: "fee", label: "Fee", type: "currency", value: "$1,200.00" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n1",
+          createdAt: new Date("2026-05-21T01:00:00Z"),
+          fields: [{ key: "fee", label: "Fee", type: "currency", value: "$800.00" }],
+        },
+      ],
+      [nodeIntake],
+      [sessionS1, sessionS2],
+    );
+
+    expect(report.rows).toHaveLength(2);
+    expect(report.columns).toHaveLength(1);
+    expect(report.columns[0]?.columnKey).toBe("n1:fee");
+    // rows are sorted descending by startedAt — s2 (2026-05-21) comes first
+    expect(report.rows[0]?.values["n1:fee"]).toBe("$800.00");
+    expect(report.rows[1]?.values["n1:fee"]).toBe("$1,200.00");
   });
 });

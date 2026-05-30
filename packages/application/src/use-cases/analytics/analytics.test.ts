@@ -149,7 +149,31 @@ describe("GetFlowDeepDive", () => {
     expect(result.data?.selectedFlowId).toBe("f2");
     expect(result.data?.flows[0]).toEqual({ flowId: "f2", flowName: "Two", sessionCount: 2 });
     expect(result.data?.nodeBreakdown[0]?.nodeName).toBe("Intake");
-    expect(result.data?.fieldReport.fields[0]?.key).toBe("fee");
+    expect(result.data?.fieldReport.columns[0]?.fieldKey).toBe("fee");
+    expect(result.data?.fieldReport.columns[0]?.columnKey).toBe("n1:fee");
+  });
+
+  it("returns correct sessionSummary counts", async () => {
+    const analytics = new FakeAnalytics([
+      makeSession({ id: "s1", flowId: "f1", status: "complete" }),
+      makeSession({ id: "s2", flowId: "f1", status: "active" }),
+      makeSession({ id: "s3", flowId: "f1", status: "abandoned" }),
+    ]);
+    const useCase = new GetFlowDeepDive(
+      makeFlows([{ id: "f1", name: "One" }]),
+      makeFlowNodes([]),
+      analytics,
+      makeStepOutputs([]),
+    );
+
+    const result = await useCase.execute({ now });
+
+    expect(result.data?.sessionSummary).toEqual({
+      total: 3,
+      completed: 1,
+      active: 1,
+      abandoned: 1,
+    });
   });
 
   it("honours an explicit flow selection", async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/trpc/client";
+import { FieldReportSection } from "@/components/admin/field-report-section";
 
 const AXIS_STYLE = { fontSize: 11, fill: "#918d87" };
 
@@ -204,114 +205,15 @@ export function AdminFlowDeepDive() {
           </CardContent>
         </Card>
 
-        <FieldReportSection report={data.fieldReport} />
+        <Suspense>
+          <FieldReportSection
+            report={data.fieldReport}
+            flowId={activeFlowId ?? ""}
+            sessionSummary={data.sessionSummary}
+          />
+        </Suspense>
       </div>
     </div>
-  );
-}
-
-function FieldReportSection({
-  report,
-}: {
-  report: {
-    fields: { key: string; label: string; type: string }[];
-    summaries: {
-      key: string;
-      label: string;
-      type: string;
-      filledCount: number;
-      totalCount: number;
-      distribution?: { value: string; count: number }[];
-      numeric?: { count: number; min: number; max: number; average: number };
-    }[];
-    rows: { sessionId: string; nodeId: string; createdAt: string | Date; values: Record<string, string> }[];
-  };
-}) {
-  if (report.fields.length === 0) {
-    return (
-      <Card>
-        <CardHeader className="pb-1">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Template field reporting
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="text-[13px] text-[#918d87]">
-          No template field values captured yet. Add validation annotations to your template tags
-          (e.g. <code className="font-mono">{"{{ Approval Status (options: Approved, Rejected) }}"}</code>)
-          and generate documents — captured values will appear here for reporting.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader className="pb-1">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          Template field reporting
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {report.summaries.map((summary) => (
-            <div key={summary.key} className="rounded-[9px] border border-[#dedad2] p-3">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[13px] font-medium text-[#1a1814]">{summary.label}</span>
-                <span className="text-[11px] uppercase tracking-wide text-[#918d87]">
-                  {summary.type}
-                </span>
-              </div>
-              <p className="mt-1 text-[12px] text-[#918d87]">
-                {summary.filledCount} of {summary.totalCount} filled
-              </p>
-              {summary.distribution && (
-                <ul className="mt-2 space-y-1">
-                  {summary.distribution.map((entry) => (
-                    <li key={entry.value} className="flex justify-between text-[12px] text-[#5a5650]">
-                      <span className="truncate">{entry.value}</span>
-                      <span className="font-medium">{entry.count}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {summary.numeric && (
-                <p className="mt-2 text-[12px] text-[#5a5650]">
-                  min {summary.numeric.min} · avg {Math.round(summary.numeric.average * 100) / 100} ·
-                  max {summary.numeric.max}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                {report.fields.map((field) => (
-                  <TableHead key={field.key}>{field.label}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {report.rows.map((row, index) => (
-                <TableRow key={`${row.sessionId}-${row.nodeId}-${index}`}>
-                  <TableCell className="whitespace-nowrap text-[12px] text-[#918d87]">
-                    {new Date(row.createdAt).toISOString().slice(0, 10)}
-                  </TableCell>
-                  {report.fields.map((field) => (
-                    <TableCell key={field.key} className="max-w-[220px] truncate">
-                      {row.values[field.key] || "—"}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
   );
 }
 
