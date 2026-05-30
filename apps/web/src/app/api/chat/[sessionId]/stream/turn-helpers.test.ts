@@ -223,8 +223,8 @@ describe("generateDocument wrapper", () => {
   });
 });
 
-describe("sequence: document generation before initial message", () => {
-  it("awaits document generation before initial message is generated", async () => {
+describe("sequence: document generation is fire-and-forget", () => {
+  it("does not block initial message generation on document generation", async () => {
     const sequence: string[] = [];
     let resolveDocGen: (() => void) | null = null;
     const docGenPromise = new Promise<void>((resolve) => {
@@ -242,21 +242,23 @@ describe("sequence: document generation before initial message", () => {
       sequence.push("initial-end");
     });
 
+    // Fire-and-forget: void the doc gen promise, do NOT await it
     const runAdvance = async () => {
-      await generateDocFn();
+      void generateDocFn();
       await generateInitialFn();
     };
 
-    const promise = runAdvance();
+    await runAdvance();
 
-    await new Promise((r) => setTimeout(r, 10));
-    expect(sequence).toEqual(["doc-start"]);
-    expect(generateInitialFn).not.toHaveBeenCalled();
+    // Initial message finished without waiting for doc gen
+    expect(sequence).toContain("initial-start");
+    expect(sequence).toContain("initial-end");
+    expect(sequence).toContain("doc-start");
+    expect(sequence).not.toContain("doc-end");
 
+    // Clean up the dangling promise
     resolveDocGen!();
-    await promise;
-
-    expect(sequence).toEqual(["doc-start", "doc-end", "initial-start", "initial-end"]);
+    await docGenPromise;
   });
 });
 
