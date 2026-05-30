@@ -101,11 +101,45 @@ export const sessionRouter = router({
       if (result.error) throw toTrpcError(result.error);
       if (!result.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
 
-      const { session } = result.data;
+      const { session, messages } = result.data;
       if (!ctx.isAdmin && session.userId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
       }
 
+      const senderIds = new Set<string>([session.userId]);
+      for (const message of messages) {
+        if (message.senderUserId) senderIds.add(message.senderUserId);
+      }
+      const participants = await Promise.all(
+        [...senderIds].map(async (id) => {
+          const userResult = await ctx.container.repos.users.findById(id);
+          const name = userResult.error ? null : userResult.data?.name ?? null;
+          return { id, name };
+        }),
+      );
+
+      return { ...result.data, participants };
+    }),
+
+  heartbeatTyping: authenticatedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.heartbeatTyping.execute({
+        sessionId: input.sessionId,
+        userId: ctx.userId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true as const };
+    }),
+
+  typingUsers: authenticatedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.listTypingUsers.execute({
+        sessionId: input.sessionId,
+        excludeUserId: ctx.userId,
+      });
+      if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 

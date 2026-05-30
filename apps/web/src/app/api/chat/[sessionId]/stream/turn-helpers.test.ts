@@ -12,6 +12,7 @@ const makeAssistantMessage = (overrides: Partial<SessionMessage> = {}): SessionM
   sessionId: "sess-1",
   role: "assistant",
   content: "ok",
+  senderUserId: null,
   confidence: 95,
   stepNodeId: "node-1",
   document: null,

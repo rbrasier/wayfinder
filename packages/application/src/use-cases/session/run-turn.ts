@@ -28,6 +28,7 @@ export interface RunTurnOutput {
 export interface PersistUserMessageInput {
   session: Session;
   userMessage: string;
+  senderUserId?: string;
 }
 
 export interface PersistAssistantTurnInput {
@@ -47,18 +48,25 @@ export class RunTurn {
   ) {}
 
   // Persists the user message before the AI call runs, so it survives any
-  // model/network failure. Idempotent: if the most recent message for the
-  // session is already a user message with identical content, returns it
-  // instead of inserting a duplicate — this lets a Retry resend the same
-  // payload without creating two rows.
+  // model/network failure. Idempotent for retries: if the most recent message
+  // is already a user message with identical content *from the same sender*,
+  // returns it instead of inserting a duplicate. The sender scope matters in
+  // collaborative sessions — two participants sending the same text must not be
+  // collapsed into one row.
   async persistUserMessage(
     input: PersistUserMessageInput,
   ): Promise<Result<SessionMessage>> {
     const existing = await this.sessionMessages.listBySession(input.session.id);
     if (existing.error) return existing;
 
+    const senderUserId = input.senderUserId ?? null;
     const last = existing.data.at(-1);
-    if (last && last.role === "user" && last.content === input.userMessage) {
+    if (
+      last &&
+      last.role === "user" &&
+      last.content === input.userMessage &&
+      last.senderUserId === senderUserId
+    ) {
       return ok(last);
     }
 
@@ -67,6 +75,7 @@ export class RunTurn {
       role: "user",
       content: input.userMessage,
       stepNodeId: input.session.currentNodeId,
+      senderUserId,
     });
   }
 

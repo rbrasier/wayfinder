@@ -18,6 +18,7 @@ import {
   GetSession,
   GetUsageSummary,
   GrantFlowOwner,
+  HeartbeatTyping,
   ListAllSessions,
   ListErrors,
   ListFeatureFlags,
@@ -25,6 +26,7 @@ import {
   ListFlowsForUser,
   ListJobs,
   ListSessions,
+  ListTypingUsers,
   ListUsers,
   LogAuditEvent,
   LogError,
@@ -58,6 +60,7 @@ import {
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleSessionMessageRepository,
+  DrizzleSessionTypingRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleAnalyticsRepository,
   DrizzleSessionRepository,
@@ -102,6 +105,7 @@ const build = () => {
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessions = new DrizzleSessionRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
+  const sessionTyping = new DrizzleSessionTypingRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
   const analyticsRepo = new DrizzleAnalyticsRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
@@ -190,7 +194,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionStepOutputs, systemSettings, contextDocContent },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionTyping, sessionStepOutputs, systemSettings, contextDocContent },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -234,6 +238,8 @@ const build = () => {
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
+      heartbeatTyping: new HeartbeatTyping(sessionTyping),
+      listTypingUsers: new ListTypingUsers(sessionTyping, users),
       getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs),
     },

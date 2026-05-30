@@ -13,6 +13,7 @@ export * from "./template-field";
 export * from "./flow-edge";
 export * from "./session";
 export * from "./session-message";
+export * from "./session-typing";
 export * from "./session-step-output";
 export * from "./analytics";
 export * from "./system-setting";

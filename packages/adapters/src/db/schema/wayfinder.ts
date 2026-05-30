@@ -123,6 +123,9 @@ export const app_session_messages = pgTable(
       .references(() => app_sessions.id, { onDelete: "cascade" }),
     role: text("role", { enum: ["user", "assistant", "system"] }).notNull(),
     content: text("content").notNull(),
+    sender_user_id: uuid("sender_user_id").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
     confidence: smallint("confidence"),
     step_node_id: uuid("step_node_id"),
     document: jsonb("document").$type<SessionDocument>(),
@@ -134,6 +137,36 @@ export const app_session_messages = pgTable(
     by_session: index("app_session_messages_session_id_created_at_idx").on(
       t.session_id,
       t.created_at,
+    ),
+  }),
+);
+
+export const app_session_typing = pgTable(
+  "app_session_typing",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "cascade" }),
+    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    session_user_unique: unique("app_session_typing_session_id_user_id_unique").on(
+      t.session_id,
+      t.user_id,
+    ),
+    by_session_expires: index("app_session_typing_session_id_expires_at_idx").on(
+      t.session_id,
+      t.expires_at,
+    ),
+    by_user_expires: index("app_session_typing_user_id_expires_at_idx").on(
+      t.user_id,
+      t.expires_at,
     ),
   }),
 );

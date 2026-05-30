@@ -156,6 +156,7 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
       sessionId: input.sessionId,
       role: input.role,
       content: input.content,
+      senderUserId: input.senderUserId ?? null,
       confidence: input.confidence ?? null,
       stepNodeId: input.stepNodeId ?? null,
       document: input.document ?? null,
@@ -593,6 +594,23 @@ describe("RunTurn", () => {
   it("persistUserMessage inserts a new row when content differs", async () => {
     await useCase.persistUserMessage({ session, userMessage: "First" });
     await useCase.persistUserMessage({ session, userMessage: "Second" });
+
+    expect([...sessionMessages.messages.values()]).toHaveLength(2);
+  });
+
+  it("persistUserMessage stamps the sending user id", async () => {
+    const result = await useCase.persistUserMessage({
+      session,
+      userMessage: "Hello",
+      senderUserId: "user-7",
+    });
+
+    expect(result.data?.senderUserId).toBe("user-7");
+  });
+
+  it("persistUserMessage keeps two participants' identical text as separate rows", async () => {
+    await useCase.persistUserMessage({ session, userMessage: "Same text", senderUserId: "user-1" });
+    await useCase.persistUserMessage({ session, userMessage: "Same text", senderUserId: "user-2" });
 
     expect([...sessionMessages.messages.values()]).toHaveLength(2);
   });

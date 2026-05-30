@@ -31,6 +31,9 @@ export interface SessionMessage {
   sessionId: string;
   role: MessageRole;
   content: string;
+  // The human who sent this message. Null for assistant/system messages and
+  // for legacy rows created before collaborative sessions existed.
+  senderUserId: string | null;
   confidence: number | null;
   stepNodeId: string | null;
   document: SessionDocument | null;
@@ -43,6 +46,7 @@ export interface NewSessionMessage {
   sessionId: string;
   role: MessageRole;
   content: string;
+  senderUserId?: string | null;
   confidence?: number | null;
   stepNodeId?: string | null;
   document?: SessionDocument | null;

@@ -45,10 +45,8 @@ export async function POST(
 
   const { session, flow, nodes, edges, messages: dbMessages } = sessionResult.data;
 
-  if (session.userId !== authSession.userId) {
-    return new Response("Forbidden", { status: 403 });
-  }
-
+  // Collaborative sessions: any authenticated user holding the link may send.
+  // The session UUID is the shared secret, identical to the read-only share model.
   if (session.status !== "active") {
     return new Response("Session is not active", { status: 400 });
   }
@@ -107,6 +105,7 @@ export async function POST(
       const userMsgResult = await container.useCases.runTurn.persistUserMessage({
         session,
         userMessage: lastUserMessage,
+        senderUserId: authSession.userId,
       });
       if (userMsgResult.error) {
         const cause = userMsgResult.error.cause;

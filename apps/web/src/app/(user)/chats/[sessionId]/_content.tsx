@@ -13,6 +13,7 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { MessageFeed } from "@/components/chat/message-feed";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
+import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
 
@@ -49,6 +50,17 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const meQuery = trpc.user.me.useQuery();
   const sessionData = sessionQuery.data;
   const isAdmin = meQuery.data?.isAdmin ?? false;
+
+  const heartbeatMutation = trpc.session.heartbeatTyping.useMutation();
+  const lastTypingHeartbeatRef = useRef(0);
+  const typingUsersQuery = trpc.session.typingUsers.useQuery(
+    { sessionId },
+    {
+      refetchInterval: 2000,
+      refetchIntervalInBackground: false,
+      enabled: sessionData?.session.status === "active",
+    },
+  );
 
   const [_regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -90,6 +102,14 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     const edgesAsEdgeLike = edges.map((e) => ({ fromNodeId: e.fromNodeId, toNodeId: e.toNodeId }));
     return topoSortNodes(rawNodes, edgesAsEdgeLike);
   }, [rawNodes, edges]);
+
+  const senderNamesById = useMemo(() => {
+    const namesById: Record<string, string> = {};
+    for (const participant of sessionData?.participants ?? []) {
+      if (participant.name) namesById[participant.id] = participant.name;
+    }
+    return namesById;
+  }, [sessionData?.participants]);
 
   const completedNodeIds: string[] = [];
   if (dbMessages.length > 0) {
@@ -161,22 +181,40 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     });
   }, [dbMessages, currentNodeId, rawNodes]);
 
+  // Poll session.get so collaborators' messages and AI replies appear while the
+  // session is active, and so the document spinner still resolves once generation
+  // finishes. Polling pauses while the tab is hidden to limit load.
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionStatus = sessionData?.session.status ?? null;
   useEffect(() => {
-    if (!hasGeneratingDoc) {
+    const shouldPoll = hasGeneratingDoc || sessionStatus === "active";
+    const stop = () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
         pollingRef.current = null;
       }
+    };
+    if (!shouldPoll) {
+      stop();
       return;
     }
-    pollingRef.current = setInterval(() => {
-      void utils.session.get.invalidate({ sessionId });
-    }, 3000);
-    return () => {
-      if (pollingRef.current) clearInterval(pollingRef.current);
+    const start = () => {
+      if (pollingRef.current) return;
+      pollingRef.current = setInterval(() => {
+        void utils.session.get.invalidate({ sessionId });
+      }, 3000);
     };
-  }, [hasGeneratingDoc, sessionId, utils.session.get]);
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") stop();
+      else start();
+    };
+    if (document.visibilityState !== "hidden") start();
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [hasGeneratingDoc, sessionStatus, sessionId, utils.session.get]);
 
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
@@ -224,6 +262,17 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const me = meQuery.data;
   const userFirstInitial = me?.name?.trim()?.[0]?.toUpperCase() ?? "U";
   const isFlowDeleted = flow.deletedAt !== null;
+
+  const typingUsers = typingUsersQuery.data ?? [];
+  const firstTyperName = typingUsers[0]?.name?.trim();
+  const typingLabel =
+    typingUsers.length === 0
+      ? null
+      : typingUsers.length === 1
+        ? firstTyperName
+          ? `${firstTyperName} is typing`
+          : "Someone is typing"
+        : "Several people are typing";
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
@@ -278,6 +327,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         onRegenerateDocument={!isShared ? handleRegenerateDocument : undefined}
         expertRole={flow.expertRole ?? null}
         userFirstInitial={userFirstInitial}
+        senderNamesById={senderNamesById}
       />
 
       {showBranchOverride && (
@@ -291,12 +341,25 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
+      {typingLabel && (
+        <div className="flex shrink-0 items-center gap-2 border-t border-[#dedad2] bg-white px-5 pt-2">
+          <TypingIndicator />
+          <span className="text-[12px] text-[#918d87]">{typingLabel}</span>
+        </div>
+      )}
+
       <ChatComposer
         value={input}
-        onChange={(v) => setInput(v)}
+        onChange={(value) => {
+          setInput(value);
+          if (session.status !== "active") return;
+          const now = Date.now();
+          if (now - lastTypingHeartbeatRef.current < 2000) return;
+          lastTypingHeartbeatRef.current = now;
+          heartbeatMutation.mutate({ sessionId });
+        }}
         onSubmit={handleSend}
         disabled={isLoading || session.status !== "active" || isFlowDeleted}
-        readOnly={isShared}
       />
 
       <BranchOverrideModal

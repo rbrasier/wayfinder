@@ -32,6 +32,7 @@ interface MessageFeedProps {
   onRegenerateDocument?: (messageId: string) => void;
   expertRole?: string | null;
   userFirstInitial?: string;
+  senderNamesById?: Record<string, string>;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -65,6 +66,7 @@ export function MessageFeed({
   onRegenerateDocument,
   expertRole,
   userFirstInitial,
+  senderNamesById,
 }: MessageFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -84,6 +86,10 @@ export function MessageFeed({
           const prevMsg = dbMessages[index - 1];
           const isNewStep = msg.stepNodeId && prevMsg?.stepNodeId !== msg.stepNodeId && index > 0;
           const node = msg.stepNodeId ? nodeById[msg.stepNodeId] : null;
+
+          const senderName =
+            msg.role === "user" && msg.senderUserId ? senderNamesById?.[msg.senderUserId] ?? null : null;
+          const messageUserInitials = senderName ? getRoleInitials(senderName, userInitials) : userInitials;
 
           const isAdvancingMsg =
             msg.role === "assistant" &&
@@ -128,6 +134,9 @@ export function MessageFeed({
                       : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                   }`}
                 >
+                  {senderName && (
+                    <p className="mb-1 text-[10px] font-semibold text-white/70">{senderName}</p>
+                  )}
                   <p
                     className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
                       msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
@@ -150,8 +159,11 @@ export function MessageFeed({
                   )}
                 </div>
                 {msg.role === "user" && (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
-                    {userInitials}
+                  <div
+                    title={senderName ?? undefined}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]"
+                  >
+                    {messageUserInitials}
                   </div>
                 )}
               </div>
