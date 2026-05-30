@@ -213,7 +213,7 @@ export async function POST(
             await container.repos.sessionMessages
               .updateDocumentStatus(milestone.id, "pending")
               .catch(() => undefined);
-            const docGenSucceeded = await generateDocument(
+            void generateDocument(
               container,
               milestone.id,
               session.id,
@@ -222,7 +222,6 @@ export async function POST(
               assistantMessages.data,
               currentNode,
             );
-            if (!docGenSucceeded) return;
           }
         }
 
