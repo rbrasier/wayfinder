@@ -1,10 +1,10 @@
-# Implementation Summary — v1.17.0
+# Implementation Summary — v1.18.0
 
 **Phase**: Auto Node Type + n8n Sub-Workflow Integration
 **Phase doc**: `phase-5-auto-node-n8n.md` (this folder)
 **PRD**: `docs/development/prd/phase-5-auto-node-n8n.prd.md`
 **ADR**: `docs/development/adr/013-auto-node-structured-data.adr.md`
-**Version bump**: **MINOR** — `1.16.2` → `1.17.0` (new jsonb column + new behaviour, no
+**Version bump**: **MINOR** — `1.16.2` → `1.18.0` (new jsonb column + new behaviour, no
 breaking domain change).
 
 ## What was built
