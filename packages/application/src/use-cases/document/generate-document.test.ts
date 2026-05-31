@@ -191,6 +191,52 @@ describe("GenerateDocument", () => {
     });
   });
 
+  it("passes section gates to the renderer as booleans while persisting Yes/No for reporting", async () => {
+    const documentGenerator = makeDocumentGenerator();
+    (documentGenerator.extractFields as ReturnType<typeof vi.fn>).mockReturnValue(
+      ok({
+        fields: [
+          { key: "background", label: "Background", type: "narrative", optional: false, raw: "Background" },
+          { key: "risk_section", label: "Risk Section", type: "section", optional: true, raw: "#Risk Section" },
+        ],
+      }),
+    );
+    const languageModel = makeLanguageModel();
+    (languageModel.generateObject as ReturnType<typeof vi.fn>).mockImplementation(async (input: { purpose: string }) => {
+      if (input.purpose === "documentGeneration") {
+        return ok({ object: { background: "Three paragraphs of context.", risk_section: "Yes" }, usage });
+      }
+      return ok({ object: { summary: "A brief summary." }, usage });
+    });
+    const stepOutputs = makeStepOutputs();
+
+    const useCase = new GenerateDocument(
+      documentGenerator,
+      makeObjectStorage(),
+      languageModel,
+      makeSessionMessages(),
+      stepOutputs,
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+    });
+
+    expect(result.error).toBeUndefined();
+    const renderCall = (documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(renderCall.data.risk_section).toBe(true);
+    expect(renderCall.data.background).toBe("Three paragraphs of context.");
+
+    const persisted = (stepOutputs.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(persisted.fields).toContainEqual(
+      expect.objectContaining({ key: "risk_section", type: "section", value: "Yes" }),
+    );
+  });
+
   it("returns an error when node has no template configured", async () => {
     const useCase = new GenerateDocument(
       makeDocumentGenerator(),

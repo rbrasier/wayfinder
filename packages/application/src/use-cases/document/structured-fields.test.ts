@@ -80,6 +80,41 @@ describe("extractStructuredFields", () => {
     expect(call.prompt).toContain("The threshold is $80,000.");
   });
 
+  it("adds compose / decide guidance when narrative and section fields are present", async () => {
+    const fields = [
+      field({ key: "background", label: "Background", type: "narrative", instruction: "Explain the gap" }),
+      field({ key: "risk_section", label: "Risk Section", type: "section", optional: true }),
+    ];
+    const languageModel = makeLanguageModel({ background: "…", risk_section: "Yes" });
+
+    await extractStructuredFields(languageModel, {
+      fields,
+      transcript: "User: hi",
+      contextDocs: [],
+      instruction: "x",
+      purpose: "documentGeneration",
+    });
+
+    const call = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.prompt.toLowerCase()).toContain("compose");
+    expect(call.prompt.toLowerCase()).toContain("include");
+  });
+
+  it("omits the compose / decide guidance when only scalar fields are present", async () => {
+    const languageModel = makeLanguageModel({ field: "value" });
+
+    await extractStructuredFields(languageModel, {
+      fields: [field({})],
+      transcript: "User: hi",
+      contextDocs: [],
+      instruction: "x",
+      purpose: "documentGeneration",
+    });
+
+    const call = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.prompt.toLowerCase()).not.toContain("narrative prose you compose");
+  });
+
   it("propagates a model failure as an error", async () => {
     const languageModel = makeLanguageModel({});
     (languageModel.generateObject as ReturnType<typeof vi.fn>).mockResolvedValue(
@@ -112,6 +147,13 @@ describe("coerceStructuredFields", () => {
       { key: "vendor", label: "Vendor", type: "text", options: undefined, value: "Acme Pty Ltd" },
       { key: "approved", label: "Approved", type: "yesno", options: undefined, value: "Yes" },
     ]);
+  });
+
+  it("coerces a section gate value to Yes or No", () => {
+    const fields = [field({ key: "risk_section", label: "Risk Section", type: "section", optional: true })];
+
+    expect(coerceStructuredFields(fields, { risk_section: "yes" })[0]!.value).toBe("Yes");
+    expect(coerceStructuredFields(fields, { risk_section: "No" })[0]!.value).toBe("No");
   });
 
   it("blanks missing keys instead of failing", () => {

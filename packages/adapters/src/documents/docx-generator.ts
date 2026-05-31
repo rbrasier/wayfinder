@@ -267,7 +267,14 @@ export class DocxGenerator implements IDocumentGenerator {
 
   // Render key must match the parsed field key: annotations are stripped so
   // {{ Employee Email (email) }} and the AI-supplied "employee_email" align.
+  // Section markers (#/^ open, / close) keep their sigil so docxtemplater still
+  // recognises the block; only the name portion is normalised.
   private normalizeTagName(description: string): string {
+    const trimmed = description.trim();
+    const sigilMatch = trimmed.match(/^([#/^])\s*([\s\S]*)$/);
+    if (sigilMatch) {
+      return `${sigilMatch[1]}${templateFieldKey(sigilMatch[2] ?? "")}`;
+    }
     return templateFieldKey(description);
   }
 }

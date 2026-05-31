@@ -19,7 +19,9 @@ export interface ExtractFieldsOutput {
 
 export interface GenerateDocxInput {
   templateBytes: Buffer;
-  data: Record<string, string>;
+  // Boolean values gate optional {{#section}} … {{/section}} blocks; string
+  // values fill {{placeholder}} tags.
+  data: Record<string, string | boolean>;
 }
 
 export interface GenerateDocxOutput {

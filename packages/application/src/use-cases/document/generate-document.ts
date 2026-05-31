@@ -75,7 +75,7 @@ export class GenerateDocument {
 
     const generateResult = this.documentGenerator.generate({
       templateBytes: templateResult.data,
-      data: fieldValues,
+      data: this.buildRenderData(fields, fieldValues),
     });
     if (generateResult.error) return generateResult;
 
@@ -125,6 +125,21 @@ export class GenerateDocument {
     });
 
     return ok({ document });
+  }
+
+  // docxtemplater gates {{#section}} blocks on truthiness, and every non-empty
+  // string is truthy — so a section's "Yes"/"No" must become a real boolean,
+  // while ordinary placeholders stay strings.
+  private buildRenderData(
+    fields: TemplateField[],
+    values: Record<string, string>,
+  ): Record<string, string | boolean> {
+    const renderData: Record<string, string | boolean> = {};
+    for (const field of fields) {
+      const value = values[field.key] ?? "";
+      renderData[field.key] = field.type === "section" ? value === "Yes" : value;
+    }
+    return renderData;
   }
 
   private resolveFields(

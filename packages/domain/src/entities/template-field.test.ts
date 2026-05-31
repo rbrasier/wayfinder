@@ -264,4 +264,94 @@ describe("parseTemplateFields", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(result.error?.message).toContain("nope");
   });
+
+  it("collapses a section open and close tag into one gate field", () => {
+    const result = parseTemplateFields(["#Risk Section", "Mitigation (text)", "/Risk Section"]);
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(2);
+    expect(result.data?.[0]).toMatchObject({
+      key: "risk_section",
+      label: "Risk Section",
+      type: "section",
+    });
+    expect(result.data?.[1]?.key).toBe("mitigation");
+  });
+});
+
+describe("narrative fields", () => {
+  it("parses a bare (narrative) annotation", () => {
+    const result = parseTemplateField("Background (narrative)");
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({
+      key: "background",
+      label: "Background",
+      type: "narrative",
+    });
+    expect(result.data?.instruction).toBeUndefined();
+  });
+
+  it("captures the instruction text from (narrative: \"…\")", () => {
+    const result = parseTemplateField('Background (narrative: "Summarise the rationale and context")');
+    expect(result.error).toBeUndefined();
+    expect(result.data?.type).toBe("narrative");
+    expect(result.data?.label).toBe("Background");
+    expect(result.data?.instruction).toBe("Summarise the rationale and context");
+  });
+
+  it("allows (narrative) combined with (optional)", () => {
+    const result = parseTemplateField("Background (narrative) (optional)");
+    expect(result.data?.type).toBe("narrative");
+    expect(result.data?.optional).toBe(true);
+  });
+
+  it("rejects combining (narrative) with a scalar type", () => {
+    expect(parseTemplateField("X (date) (narrative)").error?.code).toBe("VALIDATION_FAILED");
+    expect(parseTemplateField("X (narrative) (date)").error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects combining (narrative) with (options: …)", () => {
+    expect(parseTemplateField("X (narrative) (options: A, B)").error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("describes a narrative field with its instruction", () => {
+    const field = parseTemplateField('Background (narrative: "Explain the funding gap")').data!;
+    const description = describeTemplateFieldFormat(field);
+    expect(description).toContain("narrative prose");
+    expect(description).toContain("Explain the funding gap");
+  });
+});
+
+describe("section gate fields", () => {
+  it("parses a section open tag into a Yes/No gate", () => {
+    const result = parseTemplateField("#Risk Section");
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({
+      key: "risk_section",
+      label: "Risk Section",
+      type: "section",
+      optional: true,
+    });
+  });
+
+  it("treats an inverted-section tag the same as an open tag", () => {
+    const result = parseTemplateField("^Risk Section");
+    expect(result.data?.key).toBe("risk_section");
+    expect(result.data?.type).toBe("section");
+  });
+
+  it("derives the same key from the matching close tag", () => {
+    expect(parseTemplateField("/Risk Section").data?.key).toBe("risk_section");
+  });
+
+  it("rejects a section tag with no name", () => {
+    expect(parseTemplateField("#").error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("describes a section gate as an include/omit decision", () => {
+    const field = parseTemplateField("#Risk Section").data!;
+    const description = describeTemplateFieldFormat(field);
+    expect(description).toContain("Risk Section");
+    expect(description.toLowerCase()).toContain("include");
+    expect(description).not.toContain("may be left blank");
+  });
 });

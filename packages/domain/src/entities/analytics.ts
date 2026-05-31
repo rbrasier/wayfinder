@@ -341,6 +341,9 @@ export const computeFieldReport = (
 
   for (const output of stepOutputs) {
     for (const field of output.fields) {
+      // Narrative prose is rendered into the document but never reported on — it
+      // is unbounded free text with no comparable value across sessions.
+      if (field.type === "narrative") continue;
       const columnKey = `${output.nodeId}:${field.key}`;
       if (!seenColumnKeys.has(columnKey)) {
         seenColumnKeys.add(columnKey);
@@ -368,6 +371,7 @@ export const computeFieldReport = (
     const sorted = [...outputs].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     for (const output of sorted) {
       for (const field of output.fields) {
+        if (field.type === "narrative") continue;
         values[`${output.nodeId}:${field.key}`] = field.value;
       }
     }

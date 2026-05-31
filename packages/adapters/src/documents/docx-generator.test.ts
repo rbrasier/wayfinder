@@ -401,6 +401,49 @@ describe("DocxGenerator", () => {
       expect(fullText).toContain("Bob Jones");
     });
 
+    it("renders a section's body when its gate is true and omits it when false", () => {
+      const sectionXml = simpleDocXml(
+        "Risk: {{#Risk Section}}{{ Mitigation Detail }}{{/Risk Section}} End",
+      );
+
+      const included = generator.generate({
+        templateBytes: buildTemplateBuffer(sectionXml),
+        data: { risk_section: true, mitigation_detail: "Patch the gap" },
+      });
+      expect(included.error).toBeUndefined();
+      const includedText = new Docxtemplater(new PizZip(included.data!.docxBytes), {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
+      }).getFullText();
+      expect(includedText).toContain("Patch the gap");
+
+      const omitted = generator.generate({
+        templateBytes: buildTemplateBuffer(sectionXml),
+        data: { risk_section: false, mitigation_detail: "Patch the gap" },
+      });
+      expect(omitted.error).toBeUndefined();
+      const omittedText = new Docxtemplater(new PizZip(omitted.data!.docxBytes), {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
+      }).getFullText();
+      expect(omittedText).not.toContain("Patch the gap");
+      expect(omittedText).toContain("End");
+    });
+
+    it("extracts a section open tag as a gate field and ignores the close tag", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{{#Risk Section}}{{ Mitigation Detail }}{{/Risk Section}}"),
+      );
+
+      const result = generator.extractFields({ templateBytes });
+      expect(result.error).toBeUndefined();
+      const sectionField = result.data!.fields.find((field) => field.key === "risk_section");
+      expect(sectionField?.type).toBe("section");
+      expect(result.data!.fields.filter((field) => field.key === "risk_section")).toHaveLength(1);
+    });
+
     it("returns an error when given a malformed template buffer", () => {
       const result = generator.generate({
         templateBytes: Buffer.from("invalid"),

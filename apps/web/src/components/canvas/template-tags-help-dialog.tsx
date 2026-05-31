@@ -31,6 +31,24 @@ const TYPE_ROWS: AnnotationRow[] = [
   { annotation: "(yesno)", meaning: "Shorthand for a Yes / No answer" },
 ];
 
+const NARRATIVE_ROWS: AnnotationRow[] = [
+  {
+    annotation: "(narrative)",
+    meaning: "The AI composes prose for this field — for open-ended sections like a background or rationale. Excluded from reporting.",
+  },
+  {
+    annotation: '(narrative: "brief")',
+    meaning: "Same, with an instruction telling the AI what to write, e.g. (narrative: \"Summarise the strategic rationale in 2–3 paragraphs\"). The brief cannot contain brackets.",
+  },
+];
+
+const SECTION_ROWS: AnnotationRow[] = [
+  {
+    annotation: "{{#Section Name}} … {{/Section Name}}",
+    meaning: "Wraps an optional section. The AI decides Yes/No whether to include it; if No, the whole block is omitted. The decision is reportable.",
+  },
+];
+
 const OPTION_ROWS: AnnotationRow[] = [
   { annotation: "(options: A, B, C)", meaning: "AI must return exactly one of the listed values" },
   { annotation: "(multi-options: A, B, C)", meaning: "Shorthand — AI may return one or more of the listed values (comma-separated)" },
@@ -51,6 +69,8 @@ const COMBINED_EXAMPLES = [
   "{{ Contract Value (currency) (optional) }}",
   "{{ Employee Email (email) }}",
   "{{ Notes (text) (maxlen: 200) (optional) }}",
+  '{{ Background (narrative: "Summarise the rationale in 2–3 paragraphs") }}',
+  "{{#Risk Section}} … {{ Risk Narrative (narrative) }} … {{/Risk Section}}",
 ];
 
 function AnnotationTable({ rows }: { rows: AnnotationRow[] }) {
@@ -121,6 +141,26 @@ Fee: {{ Contract Value (currency) (optional) }}`}
           <div className="space-y-2">
             <SectionHeading>Constraints</SectionHeading>
             <AnnotationTable rows={CONSTRAINT_ROWS} />
+          </div>
+
+          <div className="space-y-2">
+            <SectionHeading>Narrative prose</SectionHeading>
+            <p className="text-[12px] leading-[1.55] text-[#5a5650]">
+              Use these for open-ended, narrative-driven documents — committee papers, business
+              cases, board reports — where the AI should write the content rather than slot in a
+              value. Narrative fields are filled into the document but kept out of reporting.
+            </p>
+            <AnnotationTable rows={NARRATIVE_ROWS} />
+          </div>
+
+          <div className="space-y-2">
+            <SectionHeading>Optional sections</SectionHeading>
+            <p className="text-[12px] leading-[1.55] text-[#5a5650]">
+              Wrap a block of the template between matching open / close tags to make it
+              optional. The names must match exactly, and a section pairs well with narrative
+              fields inside it.
+            </p>
+            <AnnotationTable rows={SECTION_ROWS} />
           </div>
 
           <div className="space-y-2">

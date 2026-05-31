@@ -26,6 +26,24 @@ export interface ExtractStructuredFieldsInput {
   purpose: string;
 }
 
+// Narrative and section fields invert the default "extract what the user said"
+// behaviour: narrative asks the model to compose prose, section asks it to make
+// an include/omit decision. Only emitted when such fields exist.
+const buildGenerationGuidance = (fields: TemplateField[]): string => {
+  const lines: string[] = [];
+  if (fields.some((field) => field.type === "narrative")) {
+    lines.push(
+      `\nSome fields are "narrative prose you compose" — write the finished prose yourself, grounded in the session context and any flow guidance. Do not echo the instruction back. Only leave one blank when its field is optional and the section is clearly not applicable.`,
+    );
+  }
+  if (fields.some((field) => field.type === "section")) {
+    lines.push(
+      `\nSome fields decide whether to include a section — answer exactly "Yes" to include the section or "No" to omit it, based on whether the session warrants it.`,
+    );
+  }
+  return lines.join("\n");
+};
+
 // Shared gather-into-JSON helper used by document generation and auto nodes.
 // Builds the <field_constraints> block and asks the model for a flat record
 // keyed by TemplateField.key.
@@ -35,6 +53,7 @@ export const extractStructuredFields = async (
 ): Promise<Result<Record<string, string>>> => {
   const keys = input.fields.map((field) => field.key);
   const contextDocsSection = buildContextDocsSection(input.contextDocs);
+  const generationGuidance = buildGenerationGuidance(input.fields);
 
   const result = await languageModel.generateObject<Record<string, string>>({
     purpose: input.purpose,
@@ -44,6 +63,7 @@ export const extractStructuredFields = async (
       `Fill each value using the session context below.`,
       `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
       `\n<field_constraints>\n${buildFieldConstraintsText(input.fields)}\n</field_constraints>`,
+      generationGuidance,
       contextDocsSection,
       `\nSession transcript:\n${input.transcript}`,
     ]
@@ -76,6 +96,7 @@ const coerceValue = (field: TemplateField, raw: unknown): string => {
     case "email":
       return /.+@.+\..+/.test(value) ? value : "";
     case "yesno":
+    case "section":
       return coerceYesNo(value);
     default:
       return value;

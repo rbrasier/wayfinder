@@ -246,7 +246,7 @@ export function FieldReportSection({
               if (filterOperator === "lte" && rowValue > threshold) return false;
             }
           }
-        } else if (filterColumn.type === "yesno" || filterColumn.options) {
+        } else if (filterColumn.type === "yesno" || filterColumn.type === "section" || filterColumn.options) {
           if (filterThreshold !== "" && rawValue !== filterThreshold) return false;
         }
       }
@@ -408,7 +408,7 @@ export function FieldReportSection({
             </div>
           )}
 
-          {filterColumn && filterColumn.type === "yesno" && (
+          {filterColumn && (filterColumn.type === "yesno" || filterColumn.type === "section") && (
             <div>
               <span className={labelStyle}>Value</span>
               <select

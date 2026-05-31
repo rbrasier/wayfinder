@@ -2,7 +2,15 @@ import { domainError } from "../errors/domain-error";
 import { err, ok } from "../result";
 import type { Result } from "../result";
 
-export type TemplateFieldType = "text" | "date" | "currency" | "number" | "email" | "yesno";
+export type TemplateFieldType =
+  | "text"
+  | "date"
+  | "currency"
+  | "number"
+  | "email"
+  | "yesno"
+  | "narrative"
+  | "section";
 
 export interface TemplateField {
   key: string;
@@ -14,6 +22,8 @@ export interface TemplateField {
   maxLength?: number;
   max?: number;
   min?: number;
+  // Generation brief for a narrative field — what prose the AI should compose.
+  instruction?: string;
   raw: string;
 }
 
@@ -46,12 +56,45 @@ export const templateFieldKey = (rawTag: string): string => {
   return deriveFieldKey(label || rawTag);
 };
 
+const stripWrappingQuotes = (value: string): string => {
+  const trimmed = value.trim();
+  const first = trimmed.at(0);
+  const last = trimmed.at(-1);
+  const quotes = ['"', "'", "“", "”", "‘", "’"];
+  if (trimmed.length >= 2 && first && last && quotes.includes(first) && quotes.includes(last)) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
 const applyAnnotation = (
   field: TemplateField,
   annotation: string,
   rawTag: string,
 ): Result<TemplateField> => {
   const lower = annotation.toLowerCase();
+
+  if (lower === "narrative" || lower.startsWith("narrative:")) {
+    if (field.options) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" combines (narrative) with (options: …). Use one or the other.`,
+        ),
+      );
+    }
+    if (field.type !== "text" && field.type !== "narrative") {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" declares more than one type. Pick a single type keyword.`,
+        ),
+      );
+    }
+    const colonIndex = annotation.indexOf(":");
+    const instruction = colonIndex >= 0 ? stripWrappingQuotes(annotation.slice(colonIndex + 1)) : "";
+    return ok({ ...field, type: "narrative", ...(instruction ? { instruction } : {}) });
+  }
 
   if (SCALAR_TYPES.includes(lower as TemplateFieldType)) {
     if (field.options) {
@@ -191,7 +234,36 @@ const applyAnnotation = (
   );
 };
 
+// docxtemplater section markers: {{#name}} opens, {{/name}} closes, {{^name}}
+// is an inverted section. All three map to the same Yes/No gate field — a close
+// tag dedupes against its open by key in parseTemplateFields.
+const SECTION_SIGIL = /^([#/^])\s*([\s\S]*)$/;
+
+const parseSectionTag = (remainder: string, rawTag: string): Result<TemplateField> => {
+  const label = stripAnnotations(remainder);
+  if (!label) {
+    return err(
+      domainError(
+        "VALIDATION_FAILED",
+        `Section tag "{{${rawTag}}}" is missing a name. Use {{#Section Name}} … {{/Section Name}}.`,
+      ),
+    );
+  }
+  return ok({
+    key: deriveFieldKey(label),
+    label,
+    type: "section",
+    optional: true,
+    raw: rawTag,
+  });
+};
+
 export const parseTemplateField = (rawTag: string): Result<TemplateField> => {
+  const sectionMatch = rawTag.trim().match(SECTION_SIGIL);
+  if (sectionMatch) {
+    return parseSectionTag(sectionMatch[2] ?? "", rawTag.trim());
+  }
+
   const label = stripAnnotations(rawTag);
   if (!label) {
     return err(
@@ -229,6 +301,15 @@ export const parseTemplateField = (rawTag: string): Result<TemplateField> => {
 };
 
 const describeType = (field: TemplateField): string => {
+  if (field.type === "section") {
+    return `decide whether to include the "${field.label}" section — answer exactly "Yes" to include it or "No" to omit it`;
+  }
+  if (field.type === "narrative") {
+    const instruction = field.instruction?.trim();
+    return instruction
+      ? `narrative prose you compose for this section — ${instruction}`
+      : `narrative prose you compose for this section`;
+  }
   if (field.options && field.options.length > 0) {
     const prefix = field.multiple ? "one or more of" : "exactly one of";
     return `${prefix}: ${field.options.join(", ")}`;
@@ -250,6 +331,10 @@ const describeType = (field: TemplateField): string => {
 };
 
 export const describeTemplateFieldFormat = (field: TemplateField): string => {
+  // A section gate is a pure include/omit decision — numeric and optionality
+  // notes would only confuse the model, so describe it on its own.
+  if (field.type === "section") return describeType(field);
+
   const parts = [describeType(field)];
   if (field.maxLength !== undefined) parts.push(`max length ${field.maxLength} characters`);
   if (field.min !== undefined) parts.push(`minimum ${field.min}`);

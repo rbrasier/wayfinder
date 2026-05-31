@@ -172,6 +172,32 @@ describe("computeFieldReport", () => {
     expect(report.columns[1]?.nodeName).toBe("Approval");
   });
 
+  it("excludes narrative fields from columns and rows but keeps section gates", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date("2026-05-20T01:00:00Z"),
+          fields: [
+            { key: "vendor", label: "Vendor Name", type: "text", value: "Acme" },
+            { key: "background", label: "Background", type: "narrative", value: "Three long paragraphs…" },
+            { key: "risk_section", label: "Risk Section", type: "section", value: "Yes" },
+          ],
+        },
+      ],
+      [nodeIntake],
+      [sessionS1],
+    );
+
+    const columnKeys = report.columns.map((column) => column.columnKey);
+    expect(columnKeys).toContain("n1:vendor");
+    expect(columnKeys).toContain("n1:risk_section");
+    expect(columnKeys).not.toContain("n1:background");
+    expect(report.rows[0]?.values["n1:background"]).toBeUndefined();
+    expect(report.rows[0]?.values["n1:risk_section"]).toBe("Yes");
+  });
+
   it("produces one column per distinct nodeId+fieldKey combination when two nodes share a key", () => {
     const report = computeFieldReport(
       [
