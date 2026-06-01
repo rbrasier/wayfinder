@@ -36,11 +36,19 @@ List them before starting so the user can see the plan.
 - Fix every failure before moving to the next sub-component
 - Do not proceed until `validate.sh` exits 0
 
-### Step 3 — On completion
+### Step 3 — Playwright e2e test
+
+Once all sub-components pass validation, write at least one Playwright e2e test that exercises the completed feature end-to-end through the UI or API surface:
+- Place tests under `apps/web/e2e/` (or `apps/api/e2e/`) in a file named after the phase (e.g. `phase-<slug>.spec.ts`)
+- Cover the primary happy path and at least one error path visible to the user
+- The test must pass before proceeding to Step 4
+
+### Step 4 — On completion
 
 - Move phase doc: `to-be-implemented/<name>.md` → `implemented/v[version]/<name>.md`
 - Write an implementation summary in `implemented/v[version]/` covering:
-  what was built, files created/modified, migrations run, known limitations
+  what was built, files created/modified, migrations run, known limitations, e2e tests added
 - Update `VERSION` file and root `package.json` `version` (they must match)
 - Run `./validate.sh` one final time — fix all failures before declaring done
 - State the version bump applied (MAJOR / MINOR / PATCH)
+- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` so CI runs automatically. Include in the PR body: phase summary, files changed, version bump, and which e2e tests cover the new functionality.

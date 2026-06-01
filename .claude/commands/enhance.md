@@ -26,8 +26,13 @@ Ask all of these via `AskUserQuestion` before proceeding:
    - Decompose into sub-components
    - Write tests before implementation for each sub-component
    - Run `./validate.sh` after each sub-component
-4. On completion:
+4. Write at least one Playwright e2e test that exercises the changed or extended functionality end-to-end:
+   - Place tests under `apps/web/e2e/` (or `apps/api/e2e/`) in a file named after the enhancement (e.g. `enhance-<slug>.spec.ts`)
+   - Cover the primary user-facing behaviour introduced or modified by this enhancement
+   - The test must pass against the updated code before moving on
+5. On completion:
    - Move phase doc to `implemented/v[version]/`
-   - Write implementation summary
+   - Write implementation summary (include which e2e test covers the change)
    - Apply the version bump
    - Run `./validate.sh`
+   - Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` so CI runs automatically. Include in the PR body: what changed, why, and which e2e test covers the new behaviour.
