@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   AI_CONFIG_SETTING_KEY,
   REGISTRATION_ENABLED_SETTING_KEY,
+  SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   type AiConfig,
   type AiPurpose,
@@ -46,6 +47,11 @@ const storageConfigInputSchema = z.object({
   accessKey: z.string().min(1),
   secretKey: z.string().min(1),
   bucket: z.string().min(1),
+});
+
+const sessionUploadConfigInputSchema = z.object({
+  maxFileSizeBytes: z.number().int().positive(),
+  totalBudgetChars: z.number().int().positive(),
 });
 
 const PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
@@ -189,6 +195,22 @@ export const settingsRouter = router({
         input.enabled ? "true" : "false",
       );
       if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
+  getSessionUploadConfig: adminProcedure.query(async ({ ctx }) => {
+    return ctx.container.runtimeConfig.getSessionUploadConfig();
+  }),
+
+  setSessionUploadConfig: adminProcedure
+    .input(sessionUploadConfigInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.repos.systemSettings.set(
+        SESSION_UPLOAD_CONFIG_SETTING_KEY,
+        JSON.stringify(input),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      ctx.container.runtimeConfig.invalidateSessionUpload();
       return { ok: true };
     }),
 });

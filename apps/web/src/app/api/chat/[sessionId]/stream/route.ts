@@ -68,6 +68,9 @@ export async function POST(
 
   const gatheredContext = buildGatheredContext(dbMessages);
 
+  const sessionUploadsResult = await container.repos.sessionUploads.listBySession(sessionId);
+  const sessionUploads = sessionUploadsResult.error ? [] : sessionUploadsResult.data;
+
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
     contextDocs: flow.contextDocs,
@@ -75,6 +78,7 @@ export async function POST(
     workflowName: flow.name,
     organisationName,
     expertRole: flow.expertRole,
+    sessionUploads,
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 

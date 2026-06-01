@@ -1,13 +1,19 @@
 import {
   AI_CONFIG_SETTING_KEY,
+  SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   type AiConfig,
   type AiPurpose,
   type BedrockCredentials,
   type ISystemSettingsRepository,
   type ProviderName,
+  type SessionUploadConfig,
   type StorageConfig,
 } from "@rbrasier/domain";
+import {
+  SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
+  SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
+} from "@rbrasier/shared";
 
 const ALL_PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
 const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral", "bedrock"];
@@ -118,6 +124,34 @@ const parseStorageConfig = (raw: string, fallback: StorageConfig): StorageConfig
   }
 };
 
+const DEFAULT_SESSION_UPLOAD_CONFIG: SessionUploadConfig = {
+  maxFileSizeBytes: SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
+  totalBudgetChars: SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
+};
+
+const isPositiveInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value > 0;
+
+const parseSessionUploadConfig = (
+  raw: string,
+  fallback: SessionUploadConfig,
+): SessionUploadConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    return {
+      maxFileSizeBytes: isPositiveInteger(parsed.maxFileSizeBytes)
+        ? parsed.maxFileSizeBytes
+        : fallback.maxFileSizeBytes,
+      totalBudgetChars: isPositiveInteger(parsed.totalBudgetChars)
+        ? parsed.totalBudgetChars
+        : fallback.totalBudgetChars,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 const buildEnvAiConfig = (env: EnvDefaults): AiConfig => ({
   provider: env.provider,
   apiKeys: env.apiKeys,
@@ -130,6 +164,8 @@ export class RuntimeConfigStore {
   private storageCache: StorageConfig | null = null;
   private storagePending: Promise<StorageConfig> | null = null;
   private storageVersion = 0;
+  private sessionUploadCache: SessionUploadConfig | null = null;
+  private sessionUploadPending: Promise<SessionUploadConfig> | null = null;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -164,6 +200,22 @@ export class RuntimeConfigStore {
     return this.storagePending;
   }
 
+  async getSessionUploadConfig(): Promise<SessionUploadConfig> {
+    if (this.sessionUploadCache) return this.sessionUploadCache;
+    if (this.sessionUploadPending) return this.sessionUploadPending;
+    this.sessionUploadPending = (async () => {
+      const result = await this.settingsRepo.get(SESSION_UPLOAD_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseSessionUploadConfig(result.data.value, DEFAULT_SESSION_UPLOAD_CONFIG)
+          : DEFAULT_SESSION_UPLOAD_CONFIG;
+      this.sessionUploadCache = config;
+      this.sessionUploadPending = null;
+      return config;
+    })();
+    return this.sessionUploadPending;
+  }
+
   getStorageVersion(): number {
     return this.storageVersion;
   }
@@ -177,6 +229,11 @@ export class RuntimeConfigStore {
     this.storageCache = null;
     this.storagePending = null;
     this.storageVersion++;
+  }
+
+  invalidateSessionUpload(): void {
+    this.sessionUploadCache = null;
+    this.sessionUploadPending = null;
   }
 
   /**

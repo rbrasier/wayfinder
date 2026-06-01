@@ -1,5 +1,6 @@
 import {
   AddContextDoc,
+  AddSessionUpload,
   DeleteAllErrors,
   CreateFlow,
   CreateFlowEdge,
@@ -34,6 +35,7 @@ import {
   PingJob,
   RegisterJob,
   RemoveContextDoc,
+  RemoveSessionUpload,
   RunAutoNode,
   RunTurn,
   SendMessage,
@@ -61,6 +63,7 @@ import {
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleSessionMessageRepository,
+  DrizzleSessionUploadRepository,
   DrizzleSessionTypingRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleAnalyticsRepository,
@@ -107,6 +110,7 @@ const build = () => {
   const flowEdges = new DrizzleFlowEdgeRepository(db);
   const sessions = new DrizzleSessionRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
+  const sessionUploads = new DrizzleSessionUploadRepository(db);
   const sessionTyping = new DrizzleSessionTypingRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
   const analyticsRepo = new DrizzleAnalyticsRepository(db);
@@ -197,7 +201,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionTyping, sessionStepOutputs, systemSettings, contextDocContent },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, systemSettings, contextDocContent },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -234,6 +238,8 @@ const build = () => {
       deleteFlowEdge: new DeleteFlowEdge(flowEdges),
       addContextDoc: new AddContextDoc(flows),
       removeContextDoc: new RemoveContextDoc(flows),
+      addSessionUpload: new AddSessionUpload(sessionUploads),
+      removeSessionUpload: new RemoveSessionUpload(sessionUploads),
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges),
       listSessions: new ListSessions(sessions),

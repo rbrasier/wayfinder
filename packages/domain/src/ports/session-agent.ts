@@ -1,5 +1,6 @@
 import type { FlowContextDoc } from "../entities/flow";
 import type { ConversationalNodeConfig } from "../entities/flow-node";
+import type { SessionUpload } from "../entities/session-upload";
 import type { TemplateField } from "../entities/template-field";
 import type { Result } from "../result";
 
@@ -11,6 +12,7 @@ export interface BuildSystemPromptInput {
   organisationName: string | null;
   expertRole: string | null;
   templateFields?: TemplateField[];
+  sessionUploads?: SessionUpload[];
 }
 
 export interface BuildBranchChoicePromptInput {
