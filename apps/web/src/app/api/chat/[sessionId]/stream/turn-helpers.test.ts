@@ -108,6 +108,10 @@ describe("generateInitialMessage", () => {
       }),
     });
 
+    const retrieveDocumentChunks = {
+      execute: vi.fn().mockResolvedValue({ data: [], error: null }),
+    };
+
     const container = {
       services: {
         sessionAgent: { buildSystemPrompt },
@@ -116,6 +120,9 @@ describe("generateInitialMessage", () => {
       repos: {
         sessionMessages: { create },
         usageRepo: {},
+      },
+      useCases: {
+        retrieveDocumentChunks,
       },
     } as unknown as Parameters<typeof generateInitialMessage>[0]["container"];
 

@@ -12,7 +12,6 @@ const baseInput = {
     documentTemplatePath: null,
     documentTemplateFilename: null,
   },
-  contextDocs: [],
   gatheredContext: "",
   workflowName: "Procurement Request",
   organisationName: null,
@@ -148,110 +147,56 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("laptops");
   });
 
-  it("omits <reference_documents> when contextDocs is empty", () => {
-    const result = agent.buildSystemPrompt(baseInput);
-    expect(result.data).not.toContain("<reference_documents>");
+  it("omits <reference_documents> when retrievedChunks is absent or empty", () => {
+    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<reference_documents>");
+    expect(
+      agent.buildSystemPrompt({ ...baseInput, retrievedChunks: [] }).data,
+    ).not.toContain("<reference_documents>");
   });
 
-  it("includes <reference_documents> when contextDocs are present", () => {
+  it("renders <reference_documents> with a <chunk> tag per retrieved chunk", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,
-      contextDocs: [
-        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: null, extractionStatus: "pending" as const },
+      retrievedChunks: [
+        {
+          filename: "policy.pdf",
+          chunkIndex: 3,
+          chunkText: "All purchases must be approved.",
+          sourceType: "flow_context_doc" as const,
+          similarity: 0.82,
+        },
+        {
+          filename: "spec.pdf",
+          chunkIndex: 0,
+          chunkText: "The widget must be blue.",
+          sourceType: "session_upload" as const,
+          similarity: 0.71,
+        },
       ],
     });
+    expect(result.error).toBeUndefined();
     expect(result.data).toContain("<reference_documents>");
-    expect(result.data).toContain("policy.pdf");
-  });
-
-  it("injects extracted text inside <document> tags when status is complete", () => {
-    const result = agent.buildSystemPrompt({
-      ...baseInput,
-      contextDocs: [
-        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: "All purchases must be approved.", extractionStatus: "complete" as const },
-      ],
-    });
-    expect(result.data).toContain('<document name="policy.pdf">');
+    expect(result.data).toContain('<chunk source="policy.pdf" chunk="3">');
     expect(result.data).toContain("All purchases must be approved.");
+    expect(result.data).toContain('<chunk source="spec.pdf" chunk="0">');
+    expect(result.data).toContain("The widget must be blue.");
   });
 
-  it("marks legacy docs with non-complete status as unreadable so the AI knows they exist", () => {
+  it("places <reference_documents> after the <output> section so the structural prompt stays cacheable", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,
-      contextDocs: [
-        { id: "doc-1", filename: "policy.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/docs/policy.pdf", extractedText: null, extractionStatus: "failed" as const },
-      ],
-    });
-    expect(result.data).toContain('<document name="policy.pdf" status="unreadable">');
-    expect(result.data).toContain("could not be extracted");
-  });
-
-  it("injects full extracted text without truncation — limits are enforced at upload", () => {
-    const longText = "x".repeat(50_000);
-    const result = agent.buildSystemPrompt({
-      ...baseInput,
-      contextDocs: [
-        { id: "doc-1", filename: "a.pdf", mimeType: "application/pdf", sizeBytes: 1024, storagePath: "/a.pdf", extractedText: longText, extractionStatus: "complete" as const },
+      retrievedChunks: [
+        {
+          filename: "policy.pdf",
+          chunkIndex: 0,
+          chunkText: "Relevant excerpt.",
+          sourceType: "flow_context_doc" as const,
+          similarity: 0.9,
+        },
       ],
     });
     const prompt = result.data ?? "";
-    const match = prompt.match(/<document name="a\.pdf">\n([\s\S]*?)\n  <\/document>/);
-    expect(match?.[1]?.length).toBe(50_000);
-  });
-
-  it("omits <session_uploads> when sessionUploads is absent or empty", () => {
-    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<session_uploads>");
-    expect(
-      agent.buildSystemPrompt({ ...baseInput, sessionUploads: [] }).data,
-    ).not.toContain("<session_uploads>");
-  });
-
-  it("includes <session_uploads> with extracted text when a user upload is present", () => {
-    const result = agent.buildSystemPrompt({
-      ...baseInput,
-      sessionUploads: [
-        {
-          id: "up-1",
-          sessionId: "s-1",
-          messageId: null,
-          filename: "spec.pdf",
-          mimeType: "application/pdf",
-          sizeBytes: 2048,
-          storagePath: "session/s-1/spec.pdf",
-          extractedText: "The widget must be blue.",
-          extractionStatus: "complete" as const,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ],
-    });
-    expect(result.data).toContain("<session_uploads>");
-    expect(result.data).toContain('<document name="spec.pdf">');
-    expect(result.data).toContain("The widget must be blue.");
-    // Provenance: framed as user-supplied, not authoritative reference material.
-    expect(result.data).toContain("uploaded");
-  });
-
-  it("marks an unreadable session upload so the AI knows it exists", () => {
-    const result = agent.buildSystemPrompt({
-      ...baseInput,
-      sessionUploads: [
-        {
-          id: "up-1",
-          sessionId: "s-1",
-          messageId: null,
-          filename: "scan.pdf",
-          mimeType: "application/pdf",
-          sizeBytes: 2048,
-          storagePath: "session/s-1/scan.pdf",
-          extractedText: null,
-          extractionStatus: "failed" as const,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        },
-      ],
-    });
-    expect(result.data).toContain('<document name="scan.pdf" status="unreadable">');
+    expect(prompt.indexOf("<output>")).toBeLessThan(prompt.indexOf("<reference_documents>"));
   });
 
   it("omits <document_template> when outputType is conversation_only", () => {

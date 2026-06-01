@@ -74,18 +74,21 @@ export async function POST(
 
   const gatheredContext = buildGatheredContext(dbMessages);
 
-  const sessionUploadsResult = await container.repos.sessionUploads.listBySession(sessionId);
-  const sessionUploads = sessionUploadsResult.error ? [] : sessionUploadsResult.data;
+  const retrievalResult = await container.useCases.retrieveDocumentChunks.execute({
+    flowId: flow.id,
+    sessionId,
+    query: lastUserMessage,
+  });
+  const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
-    contextDocs: flow.contextDocs,
+    retrievedChunks,
     gatheredContext,
     workflowName: flow.name,
     organisationName,
     expertRole: flow.expertRole,
     userProfile,
-    sessionUploads,
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 

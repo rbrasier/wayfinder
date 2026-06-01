@@ -141,6 +141,7 @@ export async function POST(
   }
 
   const existingConfig = node.config as Record<string, unknown>;
+  const previousTemplatePath = existingConfig.documentTemplatePath as string | null;
   const updatedConfig = {
     ...existingConfig,
     documentTemplatePath: storageKey,
@@ -157,6 +158,32 @@ export async function POST(
     return NextResponse.json({ error: "Failed to save template reference" }, { status: 500 });
   }
 
+  // A re-upload gets a fresh storage key, so the previous template's chunks would
+  // otherwise linger and keep being retrieved — drop them.
+  if (previousTemplatePath && previousTemplatePath !== storageKey) {
+    await container.repos.documentChunks.deleteByStoragePath(previousTemplatePath);
+  }
+
+  // Index the template prose for retrieval. {{ placeholder }} tags are stripped
+  // during chunking (phase doc §7) since they add no semantic signal.
+  const indexResult = await container.services.documentIndexer.indexDocument({
+    flowId,
+    sessionId: null,
+    sourceType: "template",
+    storagePath: storageKey,
+    filename: safeFilename,
+    text: documentTemplateContent,
+  });
+  if (indexResult.error) {
+    container.services.errorLogger.log({
+      level: "warn",
+      message: "Template stored but embedding failed",
+      stack: null,
+      page: `api/flows/${flowId}/nodes/${nodeId}/template`,
+      metadata: { flowId, nodeId, storagePath: storageKey, error: indexResult.error.message },
+    });
+  }
+
   return NextResponse.json(
     {
       path: storageKey,
@@ -164,6 +191,8 @@ export async function POST(
       tagCount: validationResult.data.tags.length,
       templateContentLength: documentTemplateStructuredContent.length,
       documentTemplateContent,
+      indexed: !indexResult.error,
+      chunkCount: indexResult.error ? 0 : indexResult.data.chunkCount,
     },
     { status: 200 },
   );
@@ -202,6 +231,7 @@ export async function DELETE(
   const templateKey = existingConfig.documentTemplatePath as string | null;
 
   if (templateKey) {
+    await container.repos.documentChunks.deleteByStoragePath(templateKey);
     await container.objectStorage.delete(templateKey);
   }
 

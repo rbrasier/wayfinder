@@ -90,19 +90,10 @@ export async function POST(
     );
   }
 
+  // Retrieval (RAG) controls what reaches the prompt now, so the full extracted
+  // text is always stored — no per-flow character budget guard.
   const currentTotalChars = sumExtractedChars(flow.contextDocs);
   const newTotalChars = currentTotalChars + extractedText.length;
-  if (newTotalChars > CONTEXT_DOCS_TOTAL_BUDGET_CHARS) {
-    return NextResponse.json(
-      {
-        error: `Adding this document would exceed the flow's context budget (${newTotalChars.toLocaleString()} / ${CONTEXT_DOCS_TOTAL_BUDGET_CHARS.toLocaleString()} chars). Remove or shrink an existing document first.`,
-        extractedChars: extractedText.length,
-        flowTotalChars: currentTotalChars,
-        flowBudgetChars: CONTEXT_DOCS_TOTAL_BUDGET_CHARS,
-      },
-      { status: 413 },
-    );
-  }
 
   const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -140,12 +131,35 @@ export async function POST(
     return NextResponse.json({ error: result.error.message }, { status: 500 });
   }
 
+  const indexResult = await container.services.documentIndexer.indexDocument({
+    flowId,
+    sessionId: null,
+    sourceType: "flow_context_doc",
+    storagePath: storageKey,
+    filename: safeFilename,
+    text: extractedText,
+  });
+  if (indexResult.error) {
+    // The document is stored; only its embeddings are missing. Surface a warning
+    // rather than failing the upload — chunks can be regenerated from the stored
+    // extracted text (ADR-016 Decision 4).
+    container.services.errorLogger.log({
+      level: "warn",
+      message: "Context document stored but embedding failed",
+      stack: null,
+      page: `api/flows/${flowId}/context-docs`,
+      metadata: { flowId, storagePath: storageKey, error: indexResult.error.message },
+    });
+  }
+
   return NextResponse.json(
     {
       ...doc,
       extractedChars: extractedText.length,
       flowTotalChars: newTotalChars,
       flowBudgetChars: CONTEXT_DOCS_TOTAL_BUDGET_CHARS,
+      indexed: !indexResult.error,
+      chunkCount: indexResult.error ? 0 : indexResult.data.chunkCount,
     },
     { status: 201 },
   );

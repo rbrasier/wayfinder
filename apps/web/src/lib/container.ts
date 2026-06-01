@@ -36,6 +36,7 @@ import {
   RegisterJob,
   RemoveContextDoc,
   RemoveSessionUpload,
+  RetrieveDocumentChunks,
   RunAutoNode,
   RunTurn,
   SendMessage,
@@ -52,9 +53,11 @@ import {
 import {
   DocxGenerator,
   DocumentExtractorService,
+  DocumentIndexingService,
   DrizzleAuditLogger,
   DrizzleContextDocContentRepository,
   DrizzleConversationRepository,
+  DrizzleDocumentChunksRepository,
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
   DrizzleFeatureFlagRepository,
@@ -74,6 +77,7 @@ import {
   FlowSessionGraph,
   LangGraphAgentRunner,
   LanguageModelAdapter,
+  createOpenAIEmbeddingsAdapter,
   MinioStorageAdapter,
   NodemailerEmailSender,
   PinoLogger,
@@ -154,6 +158,9 @@ const build = () => {
   const emailSender = new NodemailerEmailSender(systemSettings);
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const contextDocContent = new DrizzleContextDocContentRepository(db);
+  const documentChunks = new DrizzleDocumentChunksRepository(db);
+  const embeddings = createOpenAIEmbeddingsAdapter(env.OPENAI_API_KEY ?? null);
+  const documentIndexer = new DocumentIndexingService(embeddings, documentChunks);
   objectStorage.initialise().catch((error: unknown) => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
   });
@@ -202,8 +209,8 @@ const build = () => {
     objectStorage,
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, emailSender },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, systemSettings, contextDocContent },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, systemSettings, contextDocContent, documentChunks },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -242,6 +249,7 @@ const build = () => {
       removeContextDoc: new RemoveContextDoc(flows),
       addSessionUpload: new AddSessionUpload(sessionUploads),
       removeSessionUpload: new RemoveSessionUpload(sessionUploads),
+      retrieveDocumentChunks: new RetrieveDocumentChunks(embeddings, documentChunks),
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges),
       listSessions: new ListSessions(sessions),

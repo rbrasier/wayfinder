@@ -55,7 +55,6 @@ const nodeRouter = router({
           doneWhen: input.doneWhen,
           outputType: "conversation_only",
         },
-        contextDocs: flow.contextDocs,
         gatheredContext: "",
         workflowName: flow.name,
         organisationName,
@@ -290,8 +289,14 @@ export const flowRouter = router({
         if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
         }
+        const flowResult = await ctx.container.repos.flows.findById(input.flowId);
+        const removedDoc = flowResult.data?.contextDocs.find((doc) => doc.id === input.docId);
         const result = await ctx.container.useCases.removeContextDoc.execute(input.flowId, input.docId);
         if (result.error) throw toTrpcError(result.error);
+        // Drop the document's chunks so its content is no longer retrievable.
+        if (removedDoc) {
+          await ctx.container.repos.documentChunks.deleteByStoragePath(removedDoc.storagePath);
+        }
         return { ok: true };
       }),
   }),

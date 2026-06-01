@@ -1,6 +1,5 @@
-import type { FlowContextDoc } from "../entities/flow";
+import type { RetrievedChunk } from "../entities/document-chunk";
 import type { ConversationalNodeConfig } from "../entities/flow-node";
-import type { SessionUpload } from "../entities/session-upload";
 import type { TemplateField } from "../entities/template-field";
 import type { Result } from "../result";
 
@@ -12,14 +11,16 @@ export interface PromptUserProfile {
 
 export interface BuildSystemPromptInput {
   nodeConfig: ConversationalNodeConfig;
-  contextDocs: FlowContextDoc[];
+  // Chunks retrieved per turn by cosine similarity to the user's latest message
+  // (see ADR-016). Empty when nothing scores above the similarity threshold, in
+  // which case no reference-documents block is rendered.
+  retrievedChunks?: RetrievedChunk[];
   gatheredContext: string;
   workflowName: string;
   organisationName: string | null;
   expertRole: string | null;
   userProfile?: PromptUserProfile | null;
   templateFields?: TemplateField[];
-  sessionUploads?: SessionUpload[];
 }
 
 export interface BuildBranchChoicePromptInput {
