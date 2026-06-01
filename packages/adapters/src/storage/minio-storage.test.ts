@@ -11,14 +11,17 @@ const mockRemoveObject = vi.fn();
 const mockStatObject = vi.fn();
 
 vi.mock("minio", () => ({
-  Client: vi.fn().mockImplementation(() => ({
-    makeBucket: mockMakeBucket,
-    bucketExists: mockBucketExists,
-    putObject: mockPutObject,
-    getObject: mockGetObject,
-    removeObject: mockRemoveObject,
-    statObject: mockStatObject,
-  })),
+  // Regular function (not an arrow) so vitest can invoke it with `new`.
+  Client: vi.fn(function () {
+    return {
+      makeBucket: mockMakeBucket,
+      bucketExists: mockBucketExists,
+      putObject: mockPutObject,
+      getObject: mockGetObject,
+      removeObject: mockRemoveObject,
+      statObject: mockStatObject,
+    };
+  }),
 }));
 
 const stubSettingsRepo: ISystemSettingsRepository = {

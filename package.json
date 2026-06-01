@@ -1,6 +1,6 @@
 {
   "name": "wayfinder",
-  "version": "1.21.0",
+  "version": "1.21.1",
   "private": true,
   "description": "Wayfinder — AI-guided workflow agent for document-heavy processes.",
   "packageManager": "pnpm@9.12.0",
@@ -25,12 +25,9 @@
   },
   "pnpm": {
     "overrides": {
-      "langsmith": ">=0.6.0"
-    },
-    "auditConfig": {
-      "ignoreGhsas": [
-        "GHSA-5xrq-8626-4rwp"
-      ]
+      "langsmith": ">=0.6.0",
+      "vitest": "^4.1.0",
+      "vite": "^6"
     }
   },
   "devDependencies": {
