@@ -58,6 +58,8 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   id: "user-1",
   email: "user@example.com",
   name: "Alex Stone",
+  role: null,
+  team: null,
   isAdmin: false,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),

@@ -127,6 +127,7 @@ describe("generateInitialMessage", () => {
       flow: makeFlow(),
       model,
       organisationName: "Acme",
+      userProfile: { name: "Ada Lovelace", role: "Analyst", team: "Risk" },
       userId: "user-1",
       provider: "anthropic",
       gatheredContext: "- Full Name: John Dutton\n- Department: Sales",

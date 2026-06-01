@@ -14,4 +14,5 @@ export * from "./documents/index";
 export * from "./extraction/index";
 export * from "./storage/index";
 export * from "./config/index";
+export * from "./email/index";
 export * from "./factory";

@@ -26,3 +26,4 @@ export * from "./document-storage";
 export * from "./document-generator";
 export * from "./object-storage";
 export * from "./document-extractor";
+export * from "./email-sender";

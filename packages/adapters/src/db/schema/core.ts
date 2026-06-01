@@ -5,6 +5,8 @@ export const core_users = pgTable("core_users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   name: text("name"),
+  role: text("role"),
+  team: text("team"),
   is_admin: boolean("is_admin").notNull().default(false),
   email_verified: boolean("email_verified").notNull().default(false),
   image: text("image"),

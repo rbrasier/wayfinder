@@ -33,7 +33,18 @@ export interface SessionUploadConfig {
   totalBudgetChars: number;
 }
 
+export interface EmailConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password: string;
+  fromAddress: string;
+  fromName: string | null;
+}
+
 export const AI_CONFIG_SETTING_KEY = "ai_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
 export const REGISTRATION_ENABLED_SETTING_KEY = "registration_enabled";
 export const SESSION_UPLOAD_CONFIG_SETTING_KEY = "session_upload_config";
+export const EMAIL_CONFIG_SETTING_KEY = "email_config";

@@ -75,6 +75,7 @@ import {
   LangGraphAgentRunner,
   LanguageModelAdapter,
   MinioStorageAdapter,
+  NodemailerEmailSender,
   PinoLogger,
   PkiCertAdapter,
   RuntimeConfigStore,
@@ -150,6 +151,7 @@ const build = () => {
   const docxGenerator = new DocxGenerator();
   const documentExtractor = new DocumentExtractorService(docxGenerator);
   const nodeExecutor = createNodeExecutor(env.N8N_WEBHOOK_SECRET);
+  const emailSender = new NodemailerEmailSender(systemSettings);
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   objectStorage.initialise().catch((error: unknown) => {
@@ -200,7 +202,7 @@ const build = () => {
     objectStorage,
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, emailSender },
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, systemSettings, contextDocContent },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),

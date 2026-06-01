@@ -5,6 +5,7 @@ import type {
   ConversationalNodeConfig,
   Flow,
   FlowNode,
+  PromptUserProfile,
   Session,
   SessionMessage,
 } from "@rbrasier/domain";
@@ -190,6 +191,7 @@ export interface GenerateInitialMessageInput {
   flow: Flow;
   model: LanguageModel;
   organisationName: string | null;
+  userProfile: PromptUserProfile | null;
   userId: string;
   provider: string;
   gatheredContext: string;
@@ -204,6 +206,7 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     flow,
     model,
     organisationName,
+    userProfile,
     userId,
     provider,
     gatheredContext,
@@ -218,6 +221,7 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
       workflowName: flow.name,
       organisationName,
       expertRole: flow.expertRole,
+      userProfile,
     });
     if (systemPromptResult.error) return;
 

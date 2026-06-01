@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
 
 export default function SettingsPage() {
   return (
@@ -10,14 +11,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Profile</CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Update your name, email address, and profile information.
-          </CardContent>
-        </Card>
+        <ProfileSettingsForm />
 
         <Card>
           <CardHeader>

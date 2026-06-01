@@ -24,7 +24,12 @@ export function MessageInfoModal({ message, allMessages }: MessageInfoModalProps
   const payload = message.aiPayload;
   if (!payload) return null;
 
-  const insights = accumulateInsights(allMessages);
+  // Only count insights that existed when this message was generated — that is,
+  // every message up to and including this one. Accumulating the whole thread
+  // would surface insights gathered in later turns that weren't yet known here.
+  const messageIndex = allMessages.findIndex((candidate) => candidate.id === message.id);
+  const messagesSoFar = messageIndex === -1 ? allMessages : allMessages.slice(0, messageIndex + 1);
+  const insights = accumulateInsights(messagesSoFar);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>

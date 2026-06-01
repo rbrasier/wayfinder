@@ -1,12 +1,14 @@
 import { z } from "zod";
 import {
   AI_CONFIG_SETTING_KEY,
+  EMAIL_CONFIG_SETTING_KEY,
   REGISTRATION_ENABLED_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   type AiConfig,
   type AiPurpose,
   type BedrockCredentials,
+  type EmailConfig,
   type ProviderName,
   type StorageConfig,
 } from "@rbrasier/domain";
@@ -53,6 +55,39 @@ const sessionUploadConfigInputSchema = z.object({
   maxFileSizeBytes: z.number().int().positive(),
   totalBudgetChars: z.number().int().positive(),
 });
+
+const emailConfigInputSchema = z.object({
+  host: z.string().min(1),
+  port: z.number().int().min(1).max(65535),
+  secure: z.boolean(),
+  username: z.string().min(1),
+  // Empty password means "keep the stored one" — admins can't read it back.
+  password: z.string().nullable().optional(),
+  fromAddress: z.string().email(),
+  fromName: z.string().nullable().optional(),
+});
+
+const DEFAULT_EMAIL_CONFIG: EmailConfig = {
+  host: "",
+  port: 587,
+  secure: false,
+  username: "",
+  password: "",
+  fromAddress: "",
+  fromName: null,
+};
+
+const loadEmailConfig = async (
+  systemSettings: { get: (key: string) => Promise<{ data?: { value: string } | null; error?: unknown }> },
+): Promise<EmailConfig> => {
+  const result = await systemSettings.get(EMAIL_CONFIG_SETTING_KEY);
+  if (result.error || !result.data) return DEFAULT_EMAIL_CONFIG;
+  try {
+    return { ...DEFAULT_EMAIL_CONFIG, ...(JSON.parse(result.data.value) as Partial<EmailConfig>) };
+  } catch {
+    return DEFAULT_EMAIL_CONFIG;
+  }
+};
 
 const PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
 
@@ -211,6 +246,52 @@ export const settingsRouter = router({
       );
       if (result.error) throw toTrpcError(result.error);
       ctx.container.runtimeConfig.invalidateSessionUpload();
+      return { ok: true };
+    }),
+
+  getEmailConfig: adminProcedure.query(async ({ ctx }) => {
+    const config = await loadEmailConfig(ctx.container.repos.systemSettings);
+    return {
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      username: config.username,
+      fromAddress: config.fromAddress,
+      fromName: config.fromName,
+      password: apiKeyState(config.password ?? null),
+    };
+  }),
+
+  setEmailConfig: adminProcedure
+    .input(emailConfigInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const current = await loadEmailConfig(ctx.container.repos.systemSettings);
+      const merged: EmailConfig = {
+        host: input.host,
+        port: input.port,
+        secure: input.secure,
+        username: input.username,
+        password: input.password && input.password.length > 0 ? input.password : current.password,
+        fromAddress: input.fromAddress,
+        fromName: input.fromName && input.fromName.length > 0 ? input.fromName : null,
+      };
+      const result = await ctx.container.repos.systemSettings.set(
+        EMAIL_CONFIG_SETTING_KEY,
+        JSON.stringify(merged),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
+  sendTestEmail: adminProcedure
+    .input(z.object({ to: z.string().email() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.services.emailSender.send({
+        to: input.to,
+        subject: "Wayfinder test email",
+        text: "This is a test email from Wayfinder. Your SMTP configuration is working.",
+      });
+      if (result.error) throw toTrpcError(result.error);
       return { ok: true };
     }),
 });

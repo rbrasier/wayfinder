@@ -646,6 +646,193 @@ function SessionUploadsCard() {
   );
 }
 
+function EmailCard() {
+  const utils = trpc.useUtils();
+  const configQuery = trpc.settings.getEmailConfig.useQuery();
+  const saveMutation = trpc.settings.setEmailConfig.useMutation({
+    onSuccess: async () => {
+      toast.success("Email settings saved");
+      await utils.settings.getEmailConfig.invalidate();
+      setOpen(false);
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to save email settings"),
+  });
+  const testMutation = trpc.settings.sendTestEmail.useMutation({
+    onSuccess: () => toast.success("Test email sent"),
+    onError: (error) => toast.error(error.message ?? "Failed to send test email"),
+  });
+
+  const [open, setOpen] = useState(false);
+  const [host, setHost] = useState("");
+  const [port, setPort] = useState("587");
+  const [secure, setSecure] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [fromAddress, setFromAddress] = useState("");
+  const [fromName, setFromName] = useState("");
+  const [testTo, setTestTo] = useState("");
+
+  const config = configQuery.data;
+  const isConfigured = Boolean(config?.host && config?.username && config?.fromAddress);
+
+  useEffect(() => {
+    if (!open || !config) return;
+    setHost(config.host);
+    setPort(String(config.port));
+    setSecure(config.secure);
+    setUsername(config.username);
+    setPassword("");
+    setFromAddress(config.fromAddress);
+    setFromName(config.fromName ?? "");
+  }, [open, config]);
+
+  const handleSave = () => {
+    const portNumber = Number(port);
+    if (!Number.isInteger(portNumber) || portNumber <= 0 || portNumber > 65535) {
+      toast.error("Port must be a whole number between 1 and 65535");
+      return;
+    }
+    if (host.trim() === "" || username.trim() === "" || fromAddress.trim() === "") {
+      toast.error("Host, username, and from address are required");
+      return;
+    }
+    saveMutation.mutate({
+      host: host.trim(),
+      port: portNumber,
+      secure,
+      username: username.trim(),
+      password: password.length > 0 ? password : null,
+      fromAddress: fromAddress.trim(),
+      fromName: fromName.trim().length > 0 ? fromName.trim() : null,
+    });
+  };
+
+  const handleSendTest = () => {
+    if (testTo.trim() === "") {
+      toast.error("Enter an address to send the test to");
+      return;
+    }
+    testMutation.mutate({ to: testTo.trim() });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">Email</CardTitle>
+        <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={!config}>
+          Edit
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <p className="text-muted-foreground">
+          SMTP settings used to send outbound email from Wayfinder.
+        </p>
+        {!config ? (
+          <p className="text-muted-foreground">Loading…</p>
+        ) : !isConfigured ? (
+          <p className="text-muted-foreground">Not configured yet.</p>
+        ) : (
+          <>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">SMTP host</span>
+              <span className="font-mono text-xs">
+                {config.host}:{config.port}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">From</span>
+              <span className="font-mono text-xs">{config.fromAddress}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Password</span>
+              <span className="font-mono text-xs">{config.password === "set" ? "•••• set" : "unset"}</span>
+            </div>
+          </>
+        )}
+
+        {isConfigured && (
+          <div className="flex items-end gap-2 border-t border-[#ece9e3] pt-3">
+            <div className="flex-1 space-y-1">
+              <Label htmlFor="email-test-to">Send a test email to</Label>
+              <Input
+                id="email-test-to"
+                value={testTo}
+                onChange={(e) => setTestTo(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </div>
+            <Button variant="secondary" onClick={handleSendTest} disabled={testMutation.isPending}>
+              {testMutation.isPending ? "Sending…" : "Send test"}
+            </Button>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit email settings</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <DialogBody className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="email-host">SMTP host</Label>
+              <Input id="email-host" value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.example.com" />
+            </div>
+            <div className="flex gap-3">
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="email-port">Port</Label>
+                <Input id="email-port" value={port} onChange={(e) => setPort(e.target.value)} placeholder="587" />
+              </div>
+              <div className="flex items-center gap-2 pt-6">
+                <input
+                  id="email-secure"
+                  type="checkbox"
+                  checked={secure}
+                  onChange={(e) => setSecure(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <Label htmlFor="email-secure">Use TLS/SSL</Label>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="email-username">Username</Label>
+              <Input id="email-username" value={username} onChange={(e) => setUsername(e.target.value)} placeholder="apikey" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="email-password">Password</Label>
+              <p className="text-xs text-muted-foreground">Leave blank to keep the stored password.</p>
+              <Input
+                id="email-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={config?.password === "set" ? "•••••• (unchanged)" : ""}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="email-from-address">From address</Label>
+              <Input id="email-from-address" value={fromAddress} onChange={(e) => setFromAddress(e.target.value)} placeholder="no-reply@example.com" />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="email-from-name">From name (optional)</Label>
+              <Input id="email-from-name" value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="Wayfinder" />
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 export default function AppSettingsPage() {
   return (
     <div className="h-full overflow-auto">
@@ -664,6 +851,7 @@ export default function AppSettingsPage() {
             <AiProviderCard />
             <StorageCard />
             <SessionUploadsCard />
+            <EmailCard />
           </div>
         </div>
       </div>

@@ -14,7 +14,7 @@ import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { MessageFeed } from "@/components/chat/message-feed";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
-import { topoSortNodes } from "@/lib/flow-utils";
+import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
 
 const NULL_BRANCH_THRESHOLD = 3;
@@ -128,6 +128,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       }
     }
   }
+
+  const railSteps = buildStepRail(nodes, edges, currentNodeId, completedNodeIds);
 
   const stallCount = countStalls(dbMessages, currentNodeId, edges);
   const showBranchOverride = isAdmin && !isShared && stallCount >= NULL_BRANCH_THRESHOLD;
@@ -303,7 +305,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       </header>
 
       <StepProgressRail
-        nodes={nodes}
+        steps={railSteps}
         currentNodeId={session.currentNodeId}
         completedNodeIds={completedNodeIds}
       />

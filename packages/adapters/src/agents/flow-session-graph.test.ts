@@ -30,6 +30,27 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).not.toContain("AI assistant");
   });
 
+  it("addresses a generic colleague when no user profile is provided", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).toContain("helping a colleague complete");
+  });
+
+  it("names the user and their role and team when a profile is provided", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      userProfile: { name: "Ada Lovelace", role: "Analyst", team: "Risk" },
+    });
+    expect(result.data).toContain("helping Ada Lovelace, Analyst on the Risk team complete");
+  });
+
+  it("uses the name alone when role and team are absent", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      userProfile: { name: "Ada Lovelace", role: null, team: null },
+    });
+    expect(result.data).toContain("helping Ada Lovelace complete");
+  });
+
   it("includes expert persona when expertRole is set", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,

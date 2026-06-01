@@ -66,6 +66,12 @@ export async function POST(
   const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
   const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
 
+  const userResult = await container.repos.users.findById(authSession.userId);
+  const userProfile =
+    userResult.error || !userResult.data
+      ? null
+      : { name: userResult.data.name, role: userResult.data.role, team: userResult.data.team };
+
   const gatheredContext = buildGatheredContext(dbMessages);
 
   const sessionUploadsResult = await container.repos.sessionUploads.listBySession(sessionId);
@@ -78,6 +84,7 @@ export async function POST(
     workflowName: flow.name,
     organisationName,
     expertRole: flow.expertRole,
+    userProfile,
     sessionUploads,
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
@@ -265,6 +272,7 @@ export async function POST(
                 flow,
                 model: branchingModel,
                 organisationName,
+                userProfile,
                 userId: authSession.userId,
                 provider,
                 gatheredContext: nextStepContext,

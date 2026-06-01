@@ -20,6 +20,8 @@ class InMemoryUsers implements IUserRepository {
       id: crypto.randomUUID(),
       email: input.email,
       name: input.name ?? null,
+      role: input.role ?? null,
+      team: input.team ?? null,
       isAdmin: input.isAdmin ?? false,
       createdAt: now,
       updatedAt: now,

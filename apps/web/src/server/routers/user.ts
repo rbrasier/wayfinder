@@ -2,6 +2,7 @@ import {
   createUserInputSchema,
   deleteUserInputSchema,
   listUsersInputSchema,
+  updateProfileInputSchema,
   updateUserInputSchema,
 } from "@rbrasier/shared";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
@@ -15,9 +16,24 @@ export const userRouter = router({
       userId: ctx.userId,
       isAdmin: ctx.isAdmin,
       name: user?.name ?? null,
+      role: user?.role ?? null,
+      team: user?.team ?? null,
       email: user?.email ?? null,
     };
   }),
+
+  updateProfile: authenticatedProcedure
+    .input(updateProfileInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.updateUser.execute(ctx.userId, input);
+      if (result.error) throw toTrpcError(result.error);
+      return {
+        name: result.data.name,
+        role: result.data.role,
+        team: result.data.team,
+        email: result.data.email,
+      };
+    }),
 
   list: adminProcedure.input(listUsersInputSchema).query(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.listUsers.execute(input);
