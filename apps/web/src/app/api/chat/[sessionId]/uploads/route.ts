@@ -1,0 +1,163 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { sumSessionUploadChars } from "@rbrasier/domain";
+import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@rbrasier/shared";
+import { getContainer } from "@/lib/container";
+
+const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(SESSION_UPLOADS_ALLOWED_MIME_TYPES);
+
+const getSessionToken = (req: NextRequest): string | null => {
+  const cookie = req.headers.get("cookie");
+  if (!cookie) return null;
+  const pair = cookie
+    .split(";")
+    .map((c) => c.trim())
+    .find((c) => c.startsWith("better-auth.session_token="));
+  return pair ? pair.slice("better-auth.session_token=".length) : null;
+};
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> },
+): Promise<NextResponse> {
+  const { sessionId } = await params;
+  const container = getContainer();
+
+  const token = getSessionToken(req);
+  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const authSession = await container.resolveSession(token);
+  if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const result = await container.repos.sessionUploads.listBySession(sessionId);
+  if (result.error) return NextResponse.json({ error: "Server error" }, { status: 500 });
+
+  return NextResponse.json(
+    result.data.map((upload) => ({
+      id: upload.id,
+      filename: upload.filename,
+      mimeType: upload.mimeType,
+      sizeBytes: upload.sizeBytes,
+    })),
+  );
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> },
+): Promise<NextResponse> {
+  const { sessionId } = await params;
+  const container = getContainer();
+
+  const token = getSessionToken(req);
+  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const authSession = await container.resolveSession(token);
+  if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const sessionResult = await container.useCases.getSession.execute(sessionId);
+  if (sessionResult.error) return NextResponse.json({ error: "Server error" }, { status: 500 });
+  if (!sessionResult.data) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+
+  const { session } = sessionResult.data;
+  if (session.status !== "active") {
+    return NextResponse.json({ error: "Session is not active" }, { status: 400 });
+  }
+
+  const limits = await container.runtimeConfig.getSessionUploadConfig();
+
+  const formData = await req.formData();
+  const file = formData.get("file");
+
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "No file provided" }, { status: 400 });
+  }
+  if (file.size > limits.maxFileSizeBytes) {
+    const limitMb = limits.maxFileSizeBytes / (1024 * 1024);
+    return NextResponse.json({ error: `File exceeds ${limitMb} MB limit` }, { status: 400 });
+  }
+  if (!ALLOWED_MIME_TYPES.has(file.type)) {
+    return NextResponse.json(
+      { error: "Only PDF, DOCX, TXT, and Markdown files are supported." },
+      { status: 400 },
+    );
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const extractionResult = await container.services.documentExtractor.extract({
+    buffer,
+    mimeType: file.type,
+  });
+  if (extractionResult.error) {
+    return NextResponse.json(
+      {
+        error:
+          "Could not read text from this document. If it is a scanned PDF, run OCR first and re-upload. Otherwise check the file is not corrupted.",
+      },
+      { status: 422 },
+    );
+  }
+
+  const extractedText = extractionResult.data.trim();
+  if (extractedText.length === 0) {
+    return NextResponse.json(
+      {
+        error:
+          "No readable text was found in this document. Scanned PDFs need OCR before upload.",
+      },
+      { status: 422 },
+    );
+  }
+
+  const existingResult = await container.repos.sessionUploads.listBySession(sessionId);
+  const existingUploads = existingResult.error ? [] : existingResult.data;
+  const currentTotalChars = sumSessionUploadChars(existingUploads);
+  const newTotalChars = currentTotalChars + extractedText.length;
+  if (newTotalChars > limits.totalBudgetChars) {
+    return NextResponse.json(
+      {
+        error: `Adding this document would exceed this session's context budget (${newTotalChars.toLocaleString()} / ${limits.totalBudgetChars.toLocaleString()} chars). Remove an existing upload or shrink this file first.`,
+        extractedChars: extractedText.length,
+        sessionTotalChars: currentTotalChars,
+        sessionBudgetChars: limits.totalBudgetChars,
+      },
+      { status: 413 },
+    );
+  }
+
+  const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const storageKey = `session/${sessionId}/${timestamp}-${safeFilename}`;
+
+  const putResult = await container.objectStorage.put(storageKey, buffer, file.type);
+  if (putResult.error) {
+    return NextResponse.json({ error: "Failed to store document" }, { status: 500 });
+  }
+
+  const result = await container.useCases.addSessionUpload.execute({
+    sessionId,
+    filename: safeFilename,
+    mimeType: file.type,
+    sizeBytes: file.size,
+    storagePath: storageKey,
+    extractedText,
+    extractionStatus: "complete",
+  });
+  if (result.error) {
+    await container.objectStorage.delete(storageKey).catch(() => undefined);
+    return NextResponse.json({ error: result.error.message }, { status: 500 });
+  }
+
+  return NextResponse.json(
+    {
+      id: result.data.id,
+      filename: result.data.filename,
+      mimeType: result.data.mimeType,
+      sizeBytes: result.data.sizeBytes,
+      extractedChars: extractedText.length,
+      sessionTotalChars: newTotalChars,
+      sessionBudgetChars: limits.totalBudgetChars,
+    },
+    { status: 201 },
+  );
+}

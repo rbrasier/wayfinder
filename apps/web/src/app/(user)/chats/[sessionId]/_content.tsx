@@ -349,6 +349,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       )}
 
       <ChatComposer
+        sessionId={sessionId}
         value={input}
         onChange={(value) => {
           setInput(value);

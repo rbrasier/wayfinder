@@ -145,6 +145,33 @@ export const app_session_messages = pgTable(
   }),
 );
 
+export const app_session_uploads = pgTable(
+  "app_session_uploads",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    message_id: uuid("message_id").references(() => app_session_messages.id, {
+      onDelete: "set null",
+    }),
+    filename: text("filename").notNull(),
+    mime_type: text("mime_type").notNull(),
+    size_bytes: integer("size_bytes").notNull(),
+    storage_path: text("storage_path").notNull(),
+    extracted_text: text("extracted_text"),
+    extraction_status: text("extraction_status", {
+      enum: ["pending", "complete", "failed", "unsupported"],
+    }).notNull().default("pending"),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    storage_path_unique: unique("app_session_uploads_storage_path_unique").on(t.storage_path),
+    by_session: index("app_session_uploads_session_id_idx").on(t.session_id),
+  }),
+);
+
 export const app_session_typing = pgTable(
   "app_session_typing",
   {

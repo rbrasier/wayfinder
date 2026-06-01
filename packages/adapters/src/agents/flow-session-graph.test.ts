@@ -178,6 +178,61 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(match?.[1]?.length).toBe(50_000);
   });
 
+  it("omits <session_uploads> when sessionUploads is absent or empty", () => {
+    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<session_uploads>");
+    expect(
+      agent.buildSystemPrompt({ ...baseInput, sessionUploads: [] }).data,
+    ).not.toContain("<session_uploads>");
+  });
+
+  it("includes <session_uploads> with extracted text when a user upload is present", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      sessionUploads: [
+        {
+          id: "up-1",
+          sessionId: "s-1",
+          messageId: null,
+          filename: "spec.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 2048,
+          storagePath: "session/s-1/spec.pdf",
+          extractedText: "The widget must be blue.",
+          extractionStatus: "complete" as const,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    expect(result.data).toContain("<session_uploads>");
+    expect(result.data).toContain('<document name="spec.pdf">');
+    expect(result.data).toContain("The widget must be blue.");
+    // Provenance: framed as user-supplied, not authoritative reference material.
+    expect(result.data).toContain("uploaded");
+  });
+
+  it("marks an unreadable session upload so the AI knows it exists", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      sessionUploads: [
+        {
+          id: "up-1",
+          sessionId: "s-1",
+          messageId: null,
+          filename: "scan.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 2048,
+          storagePath: "session/s-1/scan.pdf",
+          extractedText: null,
+          extractionStatus: "failed" as const,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    expect(result.data).toContain('<document name="scan.pdf" status="unreadable">');
+  });
+
   it("omits <document_template> when outputType is conversation_only", () => {
     const result = agent.buildSystemPrompt(baseInput);
     expect(result.data).not.toContain("<document_template>");

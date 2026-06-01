@@ -5,6 +5,10 @@ import {
   type ISystemSettingsRepository,
   type StorageConfig,
 } from "@rbrasier/domain";
+import {
+  SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
+  SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
+} from "@rbrasier/shared";
 import { DEFAULT_MODELS_FOR, RuntimeConfigStore, type EnvDefaults } from "./runtime-config-store";
 
 const baseStorage: StorageConfig = {
@@ -189,5 +193,50 @@ describe("RuntimeConfigStore.redactAi — bedrock", () => {
     const redacted = RuntimeConfigStore.redactAi(config);
 
     expect(redacted.apiKeys.bedrock).toBeNull();
+  });
+});
+
+describe("RuntimeConfigStore.getSessionUploadConfig", () => {
+  it("returns built-in defaults when no value is stored", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getSessionUploadConfig();
+
+    expect(config).toEqual({
+      maxFileSizeBytes: SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
+      totalBudgetChars: SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
+    });
+  });
+
+  it("parses a stored configuration", async () => {
+    const stored = JSON.stringify({ maxFileSizeBytes: 1024, totalBudgetChars: 5000 });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getSessionUploadConfig();
+
+    expect(config).toEqual({ maxFileSizeBytes: 1024, totalBudgetChars: 5000 });
+  });
+
+  it("falls back to defaults for non-positive or non-numeric values", async () => {
+    const stored = JSON.stringify({ maxFileSizeBytes: 0, totalBudgetChars: "lots" });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getSessionUploadConfig();
+
+    expect(config).toEqual({
+      maxFileSizeBytes: SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
+      totalBudgetChars: SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
+    });
+  });
+
+  it("re-reads after invalidateSessionUpload", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getSessionUploadConfig();
+    store.invalidateSessionUpload();
+    await store.getSessionUploadConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(2);
   });
 });
