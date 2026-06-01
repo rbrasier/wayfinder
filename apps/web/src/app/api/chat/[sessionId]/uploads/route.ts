@@ -109,21 +109,12 @@ export async function POST(
     );
   }
 
+  // Retrieval (RAG) controls what reaches the prompt now, so the full extracted
+  // text is always stored — no per-session character budget guard.
   const existingResult = await container.repos.sessionUploads.listBySession(sessionId);
   const existingUploads = existingResult.error ? [] : existingResult.data;
   const currentTotalChars = sumSessionUploadChars(existingUploads);
   const newTotalChars = currentTotalChars + extractedText.length;
-  if (newTotalChars > limits.totalBudgetChars) {
-    return NextResponse.json(
-      {
-        error: `Adding this document would exceed this session's context budget (${newTotalChars.toLocaleString()} / ${limits.totalBudgetChars.toLocaleString()} chars). Remove an existing upload or shrink this file first.`,
-        extractedChars: extractedText.length,
-        sessionTotalChars: currentTotalChars,
-        sessionBudgetChars: limits.totalBudgetChars,
-      },
-      { status: 413 },
-    );
-  }
 
   const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -148,6 +139,24 @@ export async function POST(
     return NextResponse.json({ error: result.error.message }, { status: 500 });
   }
 
+  const indexResult = await container.services.documentIndexer.indexDocument({
+    flowId: null,
+    sessionId,
+    sourceType: "session_upload",
+    storagePath: storageKey,
+    filename: safeFilename,
+    text: extractedText,
+  });
+  if (indexResult.error) {
+    container.services.errorLogger.log({
+      level: "warn",
+      message: "Session upload stored but embedding failed",
+      stack: null,
+      page: `api/chat/${sessionId}/uploads`,
+      metadata: { sessionId, storagePath: storageKey, error: indexResult.error.message },
+    });
+  }
+
   return NextResponse.json(
     {
       id: result.data.id,
@@ -157,6 +166,8 @@ export async function POST(
       extractedChars: extractedText.length,
       sessionTotalChars: newTotalChars,
       sessionBudgetChars: limits.totalBudgetChars,
+      indexed: !indexResult.error,
+      chunkCount: indexResult.error ? 0 : indexResult.data.chunkCount,
     },
     { status: 201 },
   );

@@ -27,3 +27,5 @@ export * from "./document-generator";
 export * from "./object-storage";
 export * from "./document-extractor";
 export * from "./email-sender";
+export * from "./embeddings";
+export * from "./document-chunk-repository";

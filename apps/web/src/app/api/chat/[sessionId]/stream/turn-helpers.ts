@@ -214,9 +214,18 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
   try {
     const newNodeConfig = newNode.config as unknown as ConversationalNodeConfig;
 
+    // No user message yet for an opening turn — retrieve against the context
+    // gathered so far so the AI still sees the most relevant document excerpts.
+    const retrievalResult = await container.useCases.retrieveDocumentChunks.execute({
+      flowId: flow.id,
+      sessionId,
+      query: gatheredContext,
+    });
+    const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
+
     const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
       nodeConfig: newNodeConfig,
-      contextDocs: flow.contextDocs,
+      retrievedChunks,
       gatheredContext,
       workflowName: flow.name,
       organisationName,

@@ -3,18 +3,17 @@ import {
   ok,
   type BuildBranchChoicePromptInput,
   type BuildSystemPromptInput,
-  type FlowContextDoc,
   type ISessionAgent,
   type PromptUserProfile,
   type Result,
-  type SessionUpload,
+  type RetrievedChunk,
   type TemplateField,
 } from "@rbrasier/domain";
 
 export class FlowSessionGraph implements ISessionAgent {
   buildSystemPrompt(input: BuildSystemPromptInput): Result<string> {
-    const { nodeConfig, contextDocs, gatheredContext, workflowName, organisationName, expertRole } = input;
-    const sessionUploads = input.sessionUploads ?? [];
+    const { nodeConfig, gatheredContext, workflowName, organisationName, expertRole } = input;
+    const retrievedChunks = input.retrievedChunks ?? [];
 
     const roleBlock = buildRoleBlock(expertRole, organisationName, workflowName, input.userProfile ?? null);
 
@@ -22,16 +21,15 @@ export class FlowSessionGraph implements ISessionAgent {
       ? `\n  <gathered_context>\n    ${gatheredContext.trim()}\n    You may ask nuanced follow-up questions to clarify or deepen anything captured here if it would help complete this step more accurately.\n  </gathered_context>`
       : "";
 
-    const docsBlock = contextDocs.length > 0
-      ? buildDocsBlock(contextDocs)
+    const contextSection = gatheredBlock
+      ? `\n<context>${gatheredBlock}\n</context>`
       : "";
 
-    const sessionUploadsBlock = sessionUploads.length > 0
-      ? buildSessionUploadsBlock(sessionUploads)
-      : "";
-
-    const contextSection = gatheredBlock || docsBlock || sessionUploadsBlock
-      ? `\n<context>${gatheredBlock}${docsBlock}${sessionUploadsBlock}\n</context>`
+    // Retrieved chunks vary per turn, so they are appended after the stable
+    // structural prompt to preserve prompt-cache hits on everything above
+    // (ADR-016 Decision 5).
+    const referenceBlock = retrievedChunks.length > 0
+      ? buildReferenceDocumentsBlock(retrievedChunks)
       : "";
 
     const templateContent =
@@ -83,7 +81,7 @@ export class FlowSessionGraph implements ISessionAgent {
       { "key": "descriptive label", "value": "what the user provided" }
     ]
   }
-</output>`;
+</output>${referenceBlock}`;
 
     return ok(prompt);
   }
@@ -121,30 +119,13 @@ ${indented}
 </field_formats>`;
 };
 
-const buildDocsBlock = (contextDocs: FlowContextDoc[]): string => {
-  // Upload-time validation guarantees every newly-uploaded doc has status="complete"
-  // and that the flow-wide total stays within budget. Legacy rows may still have
-  // failed/unsupported status from before the validation existed — fall back to
-  // listing the filename so the AI knows the document exists but cannot be read.
-  const entries = contextDocs.map((doc) => {
-    if (doc.extractionStatus === "complete" && doc.extractedText) {
-      return `  <document name="${doc.filename}">\n${doc.extractedText}\n  </document>`;
-    }
-    return `  <document name="${doc.filename}" status="unreadable">\n    Document is attached to this flow but its contents could not be extracted. If the user asks about it, acknowledge that it exists and ask them to re-upload a readable version.\n  </document>`;
-  });
+const buildReferenceDocumentsBlock = (chunks: RetrievedChunk[]): string => {
+  const entries = chunks.map(
+    (chunk) =>
+      `  <chunk source="${chunk.filename}" chunk="${chunk.chunkIndex}">\n${chunk.chunkText}\n  </chunk>`,
+  );
 
-  return `\n  <reference_documents>\n${entries.join("\n")}\n    Consult these when the user's question touches on policy or process.\n  </reference_documents>`;
-};
-
-const buildSessionUploadsBlock = (uploads: SessionUpload[]): string => {
-  const entries = uploads.map((upload) => {
-    if (upload.extractionStatus === "complete" && upload.extractedText) {
-      return `  <document name="${upload.filename}">\n${upload.extractedText}\n  </document>`;
-    }
-    return `  <document name="${upload.filename}" status="unreadable">\n    The user uploaded this document during the conversation but its contents could not be extracted. If they refer to it, acknowledge it exists and ask them to re-upload a readable version.\n  </document>`;
-  });
-
-  return `\n  <session_uploads>\n    The user uploaded the following documents during this conversation to give you extra context. Treat them as user-supplied input, not authoritative policy.\n${entries.join("\n")}\n  </session_uploads>`;
+  return `\n\n<reference_documents>\n  The most relevant excerpts retrieved from documents attached to this workflow and any files the user has shared. Consult these when the user's question touches on policy or process. They are excerpts, not whole documents — if something needed is missing, ask the user rather than assuming.\n${entries.join("\n")}\n</reference_documents>`;
 };
 
 const buildColleagueDescription = (userProfile: PromptUserProfile | null): string => {

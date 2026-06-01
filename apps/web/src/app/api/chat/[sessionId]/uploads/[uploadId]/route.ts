@@ -33,6 +33,9 @@ export async function DELETE(
   const removeResult = await container.useCases.removeSessionUpload.execute(uploadId);
   if (removeResult.error) return NextResponse.json({ error: "Failed to remove upload" }, { status: 500 });
 
+  // Drop the upload's chunks so its content is no longer retrievable.
+  await container.repos.documentChunks.deleteByStoragePath(upload.storagePath);
+
   // Best-effort blob cleanup — the row is already gone, so a storage failure must
   // not surface as an error to the user.
   await container.objectStorage.delete(upload.storagePath).catch(() => undefined);

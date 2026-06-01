@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   jsonb,
@@ -9,6 +10,7 @@ import {
   timestamp,
   unique,
   uuid,
+  vector,
 } from "drizzle-orm/pg-core";
 import type { FlowPermission, FlowVisibility } from "@rbrasier/domain";
 import type { AiTurnPayload, PendingExecutions, SessionDocument, StepOutputField } from "@rbrasier/domain";
@@ -261,5 +263,38 @@ export const kb_context_doc_content = pgTable(
   (t) => ({
     storage_path_unique: unique("kb_context_doc_content_storage_path_unique").on(t.storage_path),
     by_flow: index("kb_context_doc_content_flow_id_idx").on(t.flow_id),
+  }),
+);
+
+export const kb_document_chunks = pgTable(
+  "kb_document_chunks",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id").references(() => app_flows.id, { onDelete: "cascade" }),
+    session_id: uuid("session_id").references(() => app_sessions.id, { onDelete: "cascade" }),
+    source_type: text("source_type", {
+      enum: ["flow_context_doc", "session_upload", "template"],
+    }).notNull(),
+    storage_path: text("storage_path").notNull(),
+    filename: text("filename").notNull(),
+    chunk_index: integer("chunk_index").notNull(),
+    chunk_text: text("chunk_text").notNull(),
+    embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_flow_source: index("kb_document_chunks_flow_id_source_type_idx").on(t.flow_id, t.source_type),
+    by_session: index("kb_document_chunks_session_id_idx").on(t.session_id),
+    by_storage_path: index("kb_document_chunks_storage_path_idx").on(t.storage_path),
+    embedding_hnsw: index("kb_document_chunks_embedding_hnsw_idx")
+      .using("hnsw", t.embedding.op("vector_cosine_ops"))
+      .with({ m: 16, ef_construction: 64 }),
+    // Exactly one scope per chunk: flow-scoped sources carry flow_id, session
+    // uploads carry session_id (phase doc §6).
+    scope_check: check(
+      "kb_document_chunks_scope_check",
+      sql`num_nonnulls("flow_id", "session_id") = 1`,
+    ),
   }),
 );
