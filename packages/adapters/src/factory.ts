@@ -10,6 +10,7 @@ import type {
   IUsageRepository,
   IUserRepository,
 } from "@rbrasier/domain";
+import { EMBEDDINGS_DEFAULT_PROVIDER } from "@rbrasier/shared";
 import { DrizzleSystemSettingsRepository } from "./repositories/drizzle-system-settings-repository";
 import { RuntimeConfigStore } from "./config/runtime-config-store";
 import { AiHealthChecker } from "./health/ai-health-checker";
@@ -122,6 +123,7 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
       secretKey: "minioadmin",
       bucket: "wayfinder-documents",
     },
+    embeddingsProvider: EMBEDDINGS_DEFAULT_PROVIDER,
   });
   let llm: ILanguageModel =
     overrides.llm ?? new LanguageModelAdapter(aiProvider, runtimeConfig);

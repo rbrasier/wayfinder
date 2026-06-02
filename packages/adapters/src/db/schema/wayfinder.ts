@@ -279,7 +279,9 @@ export const kb_document_chunks = pgTable(
     filename: text("filename").notNull(),
     chunk_index: integer("chunk_index").notNull(),
     chunk_text: text("chunk_text").notNull(),
-    embedding: vector("embedding", { dimensions: 1536 }).notNull(),
+    // 384 dims (ADR-017): shared by the local all-MiniLM model and OpenAI
+    // text-embedding-3-small reduced via its `dimensions` parameter.
+    embedding: vector("embedding", { dimensions: 384 }).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -527,6 +527,114 @@ function StorageCard() {
   );
 }
 
+type EmbeddingsProviderChoice = "local" | "openai";
+
+const EMBEDDINGS_PROVIDER_LABEL: Record<EmbeddingsProviderChoice, string> = {
+  local: "Local (in-process)",
+  openai: "OpenAI",
+};
+
+function RagEmbeddingsCard() {
+  const utils = trpc.useUtils();
+  const configQuery = trpc.settings.getEmbeddingsConfig.useQuery();
+  const saveMutation = trpc.settings.setEmbeddingsConfig.useMutation({
+    onSuccess: async () => {
+      toast.success("Embedding provider saved — re-index documents to use it");
+      await utils.settings.getEmbeddingsConfig.invalidate();
+      setOpen(false);
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to save embedding provider"),
+  });
+
+  const [open, setOpen] = useState(false);
+  const [provider, setProvider] = useState<EmbeddingsProviderChoice>("local");
+
+  const config = configQuery.data;
+
+  useEffect(() => {
+    if (!open || !config) return;
+    setProvider(config.provider as EmbeddingsProviderChoice);
+  }, [open, config]);
+
+  const handleSave = () => {
+    saveMutation.mutate({ provider });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">RAG Embeddings</CardTitle>
+        <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={!config}>
+          Edit
+        </Button>
+      </CardHeader>
+      <CardContent className="space-y-2 text-sm">
+        <p className="text-muted-foreground">
+          Which model embeds uploaded documents for retrieval. Local runs in-process with no
+          external API; OpenAI uses the hosted model.
+        </p>
+        {!config ? (
+          <p className="text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Provider</span>
+              <span className="font-medium">
+                {EMBEDDINGS_PROVIDER_LABEL[config.provider as EmbeddingsProviderChoice] ??
+                  config.provider}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Model</span>
+              <span className="font-mono text-xs">{config.model}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Dimensions</span>
+              <span className="font-mono text-xs">{config.dimension}</span>
+            </div>
+          </>
+        )}
+      </CardContent>
+
+      <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit embedding provider</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <DialogBody className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="embeddings-provider">Provider</Label>
+              <select
+                id="embeddings-provider"
+                value={provider}
+                onChange={(e) => setProvider(e.target.value as EmbeddingsProviderChoice)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="local">Local (in-process)</option>
+                <option value="openai">OpenAI</option>
+              </select>
+            </div>
+            <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+              Changing the provider changes how documents are embedded. Existing chunks stay embedded
+              with the previous model and will not match queries until each document is re-uploaded or
+              re-indexed. OpenAI also requires an OpenAI API key to be configured.
+            </p>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+              {saveMutation.isPending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 function SessionUploadsCard() {
   const utils = trpc.useUtils();
   const configQuery = trpc.settings.getSessionUploadConfig.useQuery();
@@ -849,6 +957,7 @@ export default function AppSettingsPage() {
             <OrganisationNameCard />
             <RegistrationToggleCard />
             <AiProviderCard />
+            <RagEmbeddingsCard />
             <StorageCard />
             <SessionUploadsCard />
             <EmailCard />

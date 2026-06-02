@@ -10,6 +10,10 @@ const config: NextConfig = {
     "@rbrasier/shared",
   ],
   serverExternalPackages: [
+    // Local embeddings (ADR-017): native onnxruntime-node binary + dynamic
+    // requires that webpack must not bundle.
+    "@huggingface/transformers",
+    "onnxruntime-node",
     "pino",
     "pino-pretty",
     "@opentelemetry/sdk-node",

@@ -24,6 +24,7 @@ const makeEnv = (overrides: Partial<EnvDefaults> = {}): EnvDefaults => ({
   provider: "anthropic",
   apiKeys: { anthropic: null, openai: null, mistral: null, bedrock: null },
   storage: baseStorage,
+  embeddingsProvider: "local",
   ...overrides,
 });
 
@@ -236,6 +237,52 @@ describe("RuntimeConfigStore.getSessionUploadConfig", () => {
     await store.getSessionUploadConfig();
     store.invalidateSessionUpload();
     await store.getSessionUploadConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("RuntimeConfigStore — embeddings config", () => {
+  it("falls back to the env default provider + its default model when nothing is stored", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv({ embeddingsProvider: "local" }));
+
+    const config = await store.getEmbeddingsConfig();
+
+    expect(config.provider).toBe("local");
+    expect(config.model).toBe("onnx-community/all-MiniLM-L6-v2-ONNX");
+  });
+
+  it("returns the stored provider and model", async () => {
+    const store = new RuntimeConfigStore(
+      makeRepo(JSON.stringify({ provider: "openai", model: "text-embedding-3-small" })),
+      makeEnv(),
+    );
+
+    const config = await store.getEmbeddingsConfig();
+
+    expect(config).toEqual({ provider: "openai", model: "text-embedding-3-small" });
+  });
+
+  it("falls back to the env provider when the stored provider is invalid", async () => {
+    const store = new RuntimeConfigStore(
+      makeRepo(JSON.stringify({ provider: "voyage", model: "" })),
+      makeEnv({ embeddingsProvider: "openai" }),
+    );
+
+    const config = await store.getEmbeddingsConfig();
+
+    expect(config.provider).toBe("openai");
+    expect(config.model).toBe("text-embedding-3-small");
+  });
+
+  it("caches until invalidated", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getEmbeddingsConfig();
+    await store.getEmbeddingsConfig();
+    store.invalidateEmbeddings();
+    await store.getEmbeddingsConfig();
 
     expect(repo.get).toHaveBeenCalledTimes(2);
   });

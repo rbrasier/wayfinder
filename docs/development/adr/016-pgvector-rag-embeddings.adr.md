@@ -1,7 +1,14 @@
 # ADR-016 — pgvector for RAG: Embedding Model, Index Type, and Retrieval Strategy
 
-- **Status**: Accepted
+- **Status**: Accepted (Decisions 2 & 3 superseded in part by ADR-017)
 - **Date**: 2026-06-01
+
+> **Superseded in part by [ADR-017](./017-configurable-embedding-providers.adr.md)
+> (2026-06-02):** Decision 2's single OpenAI provider at 1536 dims and Decision
+> 3's fixed 1536 index dimensionality are revised. Embeddings are now a selectable
+> provider (`local` in-process model, default; or `openai`), standardised on
+> **384 dimensions**. All other decisions here (pgvector over a dedicated store,
+> HNSW index type, re-embedding strategy, prompt-caching interaction) still stand.
 
 ## Context
 

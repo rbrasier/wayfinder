@@ -1,18 +1,23 @@
 import {
   AI_CONFIG_SETTING_KEY,
+  EMBEDDINGS_CONFIG_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   type AiConfig,
   type AiPurpose,
   type BedrockCredentials,
+  type EmbeddingsConfig,
   type ISystemSettingsRepository,
   type ProviderName,
   type SessionUploadConfig,
   type StorageConfig,
 } from "@rbrasier/domain";
 import {
+  EMBEDDINGS_DEFAULT_MODELS,
+  isEmbeddingsProvider,
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
+  type EmbeddingsProvider,
 } from "@rbrasier/shared";
 
 const ALL_PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
@@ -50,6 +55,7 @@ export interface EnvDefaults {
     bedrock: BedrockCredentials | null;
   };
   storage: StorageConfig;
+  embeddingsProvider: EmbeddingsProvider;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -158,6 +164,28 @@ const buildEnvAiConfig = (env: EnvDefaults): AiConfig => ({
   models: DEFAULT_MODELS_FOR[env.provider],
 });
 
+const buildEnvEmbeddingsConfig = (env: EnvDefaults): EmbeddingsConfig => ({
+  provider: env.embeddingsProvider,
+  model: EMBEDDINGS_DEFAULT_MODELS[env.embeddingsProvider],
+});
+
+const parseEmbeddingsConfig = (raw: string, fallback: EmbeddingsConfig): EmbeddingsConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    const provider = isEmbeddingsProvider(parsed.provider) ? parsed.provider : fallback.provider;
+    const model =
+      typeof parsed.model === "string" && parsed.model.trim().length > 0
+        ? parsed.model
+        : isEmbeddingsProvider(provider)
+          ? EMBEDDINGS_DEFAULT_MODELS[provider]
+          : fallback.model;
+    return { provider, model };
+  } catch {
+    return fallback;
+  }
+};
+
 export class RuntimeConfigStore {
   private aiCache: AiConfig | null = null;
   private aiPending: Promise<AiConfig> | null = null;
@@ -166,6 +194,8 @@ export class RuntimeConfigStore {
   private storageVersion = 0;
   private sessionUploadCache: SessionUploadConfig | null = null;
   private sessionUploadPending: Promise<SessionUploadConfig> | null = null;
+  private embeddingsCache: EmbeddingsConfig | null = null;
+  private embeddingsPending: Promise<EmbeddingsConfig> | null = null;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -216,6 +246,23 @@ export class RuntimeConfigStore {
     return this.sessionUploadPending;
   }
 
+  async getEmbeddingsConfig(): Promise<EmbeddingsConfig> {
+    if (this.embeddingsCache) return this.embeddingsCache;
+    if (this.embeddingsPending) return this.embeddingsPending;
+    this.embeddingsPending = (async () => {
+      const fallback = buildEnvEmbeddingsConfig(this.envDefaults);
+      const result = await this.settingsRepo.get(EMBEDDINGS_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseEmbeddingsConfig(result.data.value, fallback)
+          : fallback;
+      this.embeddingsCache = config;
+      this.embeddingsPending = null;
+      return config;
+    })();
+    return this.embeddingsPending;
+  }
+
   getStorageVersion(): number {
     return this.storageVersion;
   }
@@ -234,6 +281,11 @@ export class RuntimeConfigStore {
   invalidateSessionUpload(): void {
     this.sessionUploadCache = null;
     this.sessionUploadPending = null;
+  }
+
+  invalidateEmbeddings(): void {
+    this.embeddingsCache = null;
+    this.embeddingsPending = null;
   }
 
   /**

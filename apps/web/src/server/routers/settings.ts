@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   AI_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
+  EMBEDDINGS_CONFIG_SETTING_KEY,
   REGISTRATION_ENABLED_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
@@ -12,6 +13,11 @@ import {
   type ProviderName,
   type StorageConfig,
 } from "@rbrasier/domain";
+import {
+  EMBEDDINGS_DEFAULT_MODELS,
+  EMBEDDINGS_DIMENSION,
+  EMBEDDINGS_PROVIDERS,
+} from "@rbrasier/shared";
 import { DEFAULT_MODELS_FOR, RuntimeConfigStore } from "@rbrasier/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
@@ -230,6 +236,26 @@ export const settingsRouter = router({
         input.enabled ? "true" : "false",
       );
       if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
+  getEmbeddingsConfig: adminProcedure.query(async ({ ctx }) => {
+    const config = await ctx.container.runtimeConfig.getEmbeddingsConfig();
+    return { ...config, dimension: EMBEDDINGS_DIMENSION };
+  }),
+
+  setEmbeddingsConfig: adminProcedure
+    .input(z.object({ provider: z.enum(EMBEDDINGS_PROVIDERS) }))
+    .mutation(async ({ ctx, input }) => {
+      // Model is derived from the provider; switching providers requires
+      // re-indexing existing documents (ADR-017 Decision 3).
+      const config = { provider: input.provider, model: EMBEDDINGS_DEFAULT_MODELS[input.provider] };
+      const result = await ctx.container.repos.systemSettings.set(
+        EMBEDDINGS_CONFIG_SETTING_KEY,
+        JSON.stringify(config),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      ctx.container.runtimeConfig.invalidateEmbeddings();
       return { ok: true };
     }),
 

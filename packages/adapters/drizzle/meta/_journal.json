@@ -120,6 +120,13 @@
       "when": 1780350363572,
       "tag": "0016_careless_misty_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780391802589,
+      "tag": "0017_stormy_gunslinger",
+      "breakpoints": true
     }
   ]
 }

@@ -43,8 +43,16 @@ export interface EmailConfig {
   fromName: string | null;
 }
 
+export interface EmbeddingsConfig {
+  // "local" | "openai" — kept as a plain string here so the domain entity stays
+  // free of the shared enum; validated at the config-store boundary.
+  provider: string;
+  model: string;
+}
+
 export const AI_CONFIG_SETTING_KEY = "ai_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
 export const REGISTRATION_ENABLED_SETTING_KEY = "registration_enabled";
 export const SESSION_UPLOAD_CONFIG_SETTING_KEY = "session_upload_config";
 export const EMAIL_CONFIG_SETTING_KEY = "email_config";
+export const EMBEDDINGS_CONFIG_SETTING_KEY = "embeddings_config";

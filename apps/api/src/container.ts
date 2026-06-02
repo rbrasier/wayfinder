@@ -43,6 +43,7 @@ import {
   withOptionalLangfuse,
   withUsageTracking,
 } from "@rbrasier/adapters";
+import { EMBEDDINGS_DEFAULT_PROVIDER } from "@rbrasier/shared";
 import type { Env } from "./env.js";
 
 export const buildContainer = (env: Env) => {
@@ -88,6 +89,7 @@ export const buildContainer = (env: Env) => {
       secretKey: "minioadmin",
       bucket: "wayfinder-documents",
     },
+    embeddingsProvider: EMBEDDINGS_DEFAULT_PROVIDER,
   });
 
   const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);

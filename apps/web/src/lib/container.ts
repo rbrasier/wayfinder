@@ -77,7 +77,7 @@ import {
   FlowSessionGraph,
   LangGraphAgentRunner,
   LanguageModelAdapter,
-  createOpenAIEmbeddingsAdapter,
+  createEmbeddingsProvider,
   MinioStorageAdapter,
   NodemailerEmailSender,
   PinoLogger,
@@ -146,6 +146,7 @@ const build = () => {
       secretKey: env.MINIO_SECRET_KEY,
       bucket: env.MINIO_BUCKET,
     },
+    embeddingsProvider: env.EMBEDDINGS_PROVIDER,
   });
 
   const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);
@@ -159,7 +160,14 @@ const build = () => {
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);
-  const embeddings = createOpenAIEmbeddingsAdapter(env.OPENAI_API_KEY ?? null);
+  const embeddings = createEmbeddingsProvider(() => runtimeConfig.getEmbeddingsConfig(), {
+    openaiApiKey: env.OPENAI_API_KEY ?? null,
+    localEnvOptions: {
+      allowRemoteModels: env.EMBEDDINGS_ALLOW_REMOTE_MODELS === "false" ? false : undefined,
+      localModelPath: env.EMBEDDINGS_LOCAL_MODEL_PATH,
+      cacheDir: env.EMBEDDINGS_CACHE_DIR,
+    },
+  });
   const documentIndexer = new DocumentIndexingService(embeddings, documentChunks);
   objectStorage.initialise().catch((error: unknown) => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
