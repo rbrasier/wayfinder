@@ -22,7 +22,16 @@ const redirectToLogin = (req: NextRequest, pathname: string): NextResponse => {
 export const middleware = (req: NextRequest): NextResponse => {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/admin/login") || pathname.startsWith("/admin/register")) {
+  if (pathname.startsWith("/admin/register")) {
+    if (getSessionCookie(req)?.value) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
+    }
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/admin/login")) {
     return NextResponse.next();
   }
 
