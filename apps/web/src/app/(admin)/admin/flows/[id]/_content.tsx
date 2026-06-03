@@ -22,45 +22,86 @@ import {
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import { ConversationalNode } from "@/components/canvas/conversational-node";
+import type { AutoNodeData } from "@/components/canvas/auto-node";
+import { AutoNode } from "@/components/canvas/auto-node";
+import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
+import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
 import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { trpc } from "@/trpc/client";
-import type { FlowContextDoc } from "@rbrasier/domain";
+import type { FlowContextDoc, TemplateField } from "@rbrasier/domain";
 import { computeStepNumbers } from "@/lib/flow-utils";
 
-const NODE_TYPES = { conversationalNode: ConversationalNode };
+const NODE_TYPES = {
+  conversationalNode: ConversationalNode,
+  autoNode: AutoNode,
+  scheduledNode: ScheduledNode,
+};
 
 const DEBOUNCE_MS = 600;
 
-const toRfNode = (node: {
+interface RawNode {
   id: string;
   name: string;
   colour: string | null;
+  type?: "conversational" | "auto" | "scheduled";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;
-}): Node<ConversationalNodeData> => ({
-  id: node.id,
-  type: "conversationalNode",
-  position: { x: node.positionX, y: node.positionY },
-  data: {
+}
+
+const readFields = (value: unknown): TemplateField[] =>
+  Array.isArray(value) ? (value as TemplateField[]) : [];
+
+const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
+  if (node.type === "auto") {
+    const data: AutoNodeData = {
+      name: node.name,
+      colour: node.colour,
+      instruction: (node.config.instruction as string | null) ?? null,
+      requestFieldCount: readFields(node.config.requestFields).length,
+      responseFieldCount: readFields(node.config.responseFields).length,
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "autoNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  if (node.type === "scheduled") {
+    const data: ScheduledNodeData = {
+      name: node.name,
+      colour: node.colour,
+      kind: (node.config.kind as string | null) ?? null,
+      spec: (node.config.spec as string | null) ?? null,
+      recurring: Boolean(node.config.recurring),
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "scheduledNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  const data: ConversationalNodeData = {
     name: node.name,
     colour: node.colour,
     aiInstruction: (node.config.aiInstruction as string | null) ?? null,
+    stepNumber,
     doneWhen: (node.config.doneWhen as string | null) ?? null,
     neverDone: Boolean(node.config.neverDone),
     outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
     documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
     documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
     documentTemplateContent: (node.config.documentTemplateContent as string | null) ?? null,
-  },
-});
+    config: node.config,
+  };
+  return { id: node.id, type: "conversationalNode", position: { x: node.positionX, y: node.positionY }, data };
+};
 
 const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): Edge => ({
   id: edge.id,
@@ -81,9 +122,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [flowName, setFlowName] = useState("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
   const [flowVisibility, setFlowVisibility] = useState<"private" | "global">("private");
-  const [publishMenuOpen, setPublishMenuOpen] = useState(false);
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [publishSubOpen, setPublishSubOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  const publishMenuRef = useRef<HTMLDivElement>(null);
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const autoNodeEnabled = trpc.featureFlag.isEnabled.useQuery({ key: "auto_node" }).data ?? false;
 
   const [configOpen, setConfigOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -97,15 +140,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
   });
 
   useEffect(() => {
-    if (!publishMenuOpen) return;
+    if (!actionsMenuOpen) return;
     const handler = (event: MouseEvent) => {
-      if (publishMenuRef.current && !publishMenuRef.current.contains(event.target as HTMLElement)) {
-        setPublishMenuOpen(false);
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target as HTMLElement)) {
+        setActionsMenuOpen(false);
+        setPublishSubOpen(false);
       }
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
-  }, [publishMenuOpen]);
+  }, [actionsMenuOpen]);
   const createNodeMutation = trpc.flow.node.create.useMutation();
   const updateNodeMutation = trpc.flow.node.update.useMutation();
   const updatePositionMutation = trpc.flow.node.updatePosition.useMutation();
@@ -116,7 +160,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   useEffect(() => {
     const data = canvasQuery.data;
     if (!data) return;
-    setRfNodes(data.nodes.map(toRfNode));
+    setRfNodes(data.nodes.map((n) => toRfNode(n, null)));
     setRfEdges(data.edges.map(toRfEdge));
     setContextDocs(data.flow.contextDocs);
     setFlowName(data.flow.name);
@@ -211,17 +255,27 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (!editingNodeId) return;
     setIsSavingConfig(true);
 
-    const config = {
-      aiInstruction: values.aiInstruction,
-      doneWhen: values.neverDone ? "" : values.doneWhen,
-      neverDone: values.neverDone,
-      outputType: values.outputType,
-      documentTemplatePath: values.documentTemplatePath ?? null,
-      documentTemplateFilename: values.documentTemplateFilename ?? null,
-      documentTemplateContent: values.documentTemplateContent ?? null,
-    };
+    const config: Record<string, unknown> =
+      values.type === "auto"
+        ? {
+            instruction: values.instruction,
+            executor: values.executor,
+            webhookUrl: values.webhookUrl,
+            requestFields: values.requestFields,
+            responseFields: values.responseFields,
+          }
+        : {
+            aiInstruction: values.aiInstruction,
+            doneWhen: values.neverDone ? "" : values.doneWhen,
+            neverDone: values.neverDone,
+            outputType: values.outputType,
+            documentTemplatePath: values.documentTemplatePath ?? null,
+            documentTemplateFilename: values.documentTemplateFilename ?? null,
+            documentTemplateContent: values.documentTemplateContent ?? null,
+          };
 
     const isTempNode = editingNodeId.startsWith("temp-");
+    const position = rfNodes.find((n) => n.id === editingNodeId)?.position ?? { x: 200, y: 200 };
 
     try {
       if (isTempNode) {
@@ -229,18 +283,14 @@ function CanvasInner({ flowId }: { flowId: string }) {
           flowId,
           name: values.name,
           colour: values.colour,
-          positionX: rfNodes.find((n) => n.id === editingNodeId)?.position.x ?? 200,
-          positionY: rfNodes.find((n) => n.id === editingNodeId)?.position.y ?? 200,
+          type: values.type,
+          positionX: position.x,
+          positionY: position.y,
           config,
         });
 
-        setRfNodes((nds) =>
-          nds.map((n) =>
-            n.id === editingNodeId
-              ? { ...toRfNode({ ...newNode, config }), id: newNode.id }
-              : n,
-          ),
-        );
+        const rebuilt = toRfNode({ id: newNode.id, name: values.name, colour: values.colour, type: values.type, positionX: position.x, positionY: position.y, config }, null);
+        setRfNodes((nds) => nds.map((n) => (n.id === editingNodeId ? rebuilt : n)));
 
         if (pendingEdge) {
           const edge = await createEdgeMutation.mutateAsync({
@@ -260,28 +310,14 @@ function CanvasInner({ flowId }: { flowId: string }) {
           flowId,
           name: values.name,
           colour: values.colour,
+          type: values.type,
           config,
         });
         setRfNodes((nds) =>
-          nds.map((n) =>
-            n.id === editingNodeId
-              ? {
-                  ...n,
-                  data: {
-                    ...n.data,
-                    name: values.name,
-                    colour: values.colour,
-                    aiInstruction: values.aiInstruction,
-                    doneWhen: config.doneWhen,
-                    neverDone: config.neverDone,
-                    outputType: config.outputType,
-                    documentTemplatePath: config.documentTemplatePath,
-                    documentTemplateFilename: config.documentTemplateFilename,
-                    documentTemplateContent: config.documentTemplateContent,
-                  },
-                }
-              : n,
-          ),
+          nds.map((n) => {
+            if (n.id !== editingNodeId) return n;
+            return toRfNode({ id: n.id, name: values.name, colour: values.colour, type: values.type, positionX: n.position.x, positionY: n.position.y, config }, null);
+          }),
         );
       }
       setConfigOpen(false);
@@ -299,6 +335,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
       type: "conversationalNode",
       position: { x: xOffset, y: 200 },
       data: { name: "New step", colour: "#6366f1", aiInstruction: null },
+    };
+    setRfNodes((nds) => [...nds, tempNode]);
+    setEditingNodeId(tempId);
+    setConfigOpen(true);
+  }, [rfNodes]);
+
+  const handleAddAutoNode = useCallback(() => {
+    const tempId = `temp-${Date.now()}`;
+    const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
+    const tempNode: Node<AutoNodeData> = {
+      id: tempId,
+      type: "autoNode",
+      position: { x: xOffset, y: 200 },
+      data: { name: "New step", colour: "#7c3aed", instruction: null },
     };
     setRfNodes((nds) => [...nds, tempNode]);
     setEditingNodeId(tempId);
@@ -340,7 +390,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       });
 
       setRfNodes((nds) =>
-        nds.map((n) => (n.id === tempId ? { ...toRfNode({ ...newNode, config: newNode.config as Record<string, unknown> }), id: newNode.id } : n)),
+        nds.map((n) => (n.id === tempId ? { ...toRfNode({ ...newNode, config: newNode.config as Record<string, unknown> }, null), id: newNode.id } : n)),
       );
       setEditingNodeId(newNode.id);
       nodeId = newNode.id;
@@ -395,19 +445,26 @@ function CanvasInner({ flowId }: { flowId: string }) {
   );
 
   const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
-  const editingData = editingNode?.data as ConversationalNodeData | undefined;
+  const editingData = editingNode?.data as (ConversationalNodeData & { config?: Record<string, unknown> }) | undefined;
+  const editingConfig = (editingData?.config ?? {}) as Record<string, unknown>;
 
-  const initialConfigValues = editingData
+  const initialConfigValues: Partial<NodeConfigValues> | undefined = editingData
     ? {
         name: editingData.name,
         colour: editingData.colour ?? "#6366f1",
-        aiInstruction: editingData.aiInstruction ?? "",
-        doneWhen: ((editingNode?.data as Record<string, unknown>)?.doneWhen as string | undefined) ?? "",
-        neverDone: Boolean((editingNode?.data as Record<string, unknown>)?.neverDone),
-        outputType: ((editingNode?.data as Record<string, unknown>)?.outputType as "conversation_only" | "generate_document" | undefined) ?? "conversation_only",
-        documentTemplatePath: ((editingNode?.data as Record<string, unknown>)?.documentTemplatePath as string | null) ?? null,
-        documentTemplateFilename: ((editingNode?.data as Record<string, unknown>)?.documentTemplateFilename as string | null) ?? null,
-        documentTemplateContent: ((editingNode?.data as Record<string, unknown>)?.documentTemplateContent as string | null) ?? null,
+        type: editingNode?.type === "autoNode" ? "auto" : "conversational",
+        aiInstruction: (editingConfig.aiInstruction as string | null) ?? editingData.aiInstruction ?? "",
+        doneWhen: (editingConfig.doneWhen as string | null) ?? "",
+        neverDone: Boolean(editingConfig.neverDone),
+        outputType: (editingConfig.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
+        documentTemplatePath: (editingConfig.documentTemplatePath as string | null) ?? null,
+        documentTemplateFilename: (editingConfig.documentTemplateFilename as string | null) ?? null,
+        documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
+        instruction: (editingConfig.instruction as string | null) ?? "",
+        executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
+        webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
+        requestFields: readFields(editingConfig.requestFields),
+        responseFields: readFields(editingConfig.responseFields),
       }
     : undefined;
 
@@ -465,107 +522,147 @@ function CanvasInner({ flowId }: { flowId: string }) {
           <Button size="sm" variant="outline" onClick={handleAddStep}>
             + Add step
           </Button>
-          <div className="relative" ref={publishMenuRef}>
+          <div className="relative" ref={actionsMenuRef}>
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setPublishMenuOpen((prev) => !prev)}
+              aria-label="Flow actions"
+              onClick={() => {
+                setActionsMenuOpen((prev) => !prev);
+                setPublishSubOpen(false);
+              }}
+              className="px-2"
             >
-              {flowStatus === "published" ? "Manage publish" : "Publish"}
+              <MoreHorizontal size={16} />
             </Button>
-            {publishMenuOpen && (
+            {actionsMenuOpen && (
               <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
-                {flowStatus !== "published" && (
+                {publishSubOpen ? (
+                  <>
+                    <button
+                      type="button"
+                      className="w-full px-3 py-2 text-left text-[13px] text-[#5a5650] hover:bg-[#efede8]"
+                      onClick={() => setPublishSubOpen(false)}
+                    >
+                      ← Back
+                    </button>
+                    <div className="my-1 border-t border-[#dedad2]" />
+                    {flowStatus !== "published" && (
+                      <>
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                          onClick={() => {
+                            setActionsMenuOpen(false);
+                            setPublishSubOpen(false);
+                            setFlowStatus("published");
+                            setFlowVisibility("global");
+                            void updateFlowMutation
+                              .mutateAsync({ flowId, status: "published", visibility: { kind: "global" } })
+                              .then(() => toast.success("Flow published globally"));
+                          }}
+                        >
+                          Publish globally (everyone)
+                        </button>
+                        <button
+                          type="button"
+                          className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                          onClick={() => {
+                            setActionsMenuOpen(false);
+                            setPublishSubOpen(false);
+                            setFlowStatus("published");
+                            setFlowVisibility("private");
+                            void updateFlowMutation
+                              .mutateAsync({ flowId, status: "published", visibility: { kind: "private" } })
+                              .then(() => toast.success("Flow published privately"));
+                          }}
+                        >
+                          Publish privately (only you)
+                        </button>
+                      </>
+                    )}
+                    {flowStatus === "published" && flowVisibility === "private" && (
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                        onClick={() => {
+                          setActionsMenuOpen(false);
+                          setPublishSubOpen(false);
+                          setFlowVisibility("global");
+                          void updateFlowMutation
+                            .mutateAsync({ flowId, visibility: { kind: "global" } })
+                            .then(() => toast.success("Flow is now visible to everyone"));
+                        }}
+                      >
+                        Make global (everyone)
+                      </button>
+                    )}
+                    {flowStatus === "published" && flowVisibility === "global" && (
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                        onClick={() => {
+                          setActionsMenuOpen(false);
+                          setPublishSubOpen(false);
+                          setFlowVisibility("private");
+                          void updateFlowMutation
+                            .mutateAsync({ flowId, visibility: { kind: "private" } })
+                            .then(() => toast.success("Flow is now private"));
+                        }}
+                      >
+                        Make private (only you)
+                      </button>
+                    )}
+                    {flowStatus === "published" && (
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                        onClick={() => {
+                          setActionsMenuOpen(false);
+                          setPublishSubOpen(false);
+                          setFlowStatus("draft");
+                          void updateFlowMutation
+                            .mutateAsync({ flowId, status: "draft" })
+                            .then(() => toast.success("Flow unpublished"));
+                        }}
+                      >
+                        Unpublish
+                      </button>
+                    )}
+                  </>
+                ) : (
                   <>
                     <button
                       type="button"
                       className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                      onClick={() => {
-                        setPublishMenuOpen(false);
-                        setFlowStatus("published");
-                        setFlowVisibility("global");
-                        void updateFlowMutation
-                          .mutateAsync({
-                            flowId,
-                            status: "published",
-                            visibility: { kind: "global" },
-                          })
-                          .then(() => toast.success("Flow published globally"));
-                      }}
+                      onClick={() => setPublishSubOpen(true)}
                     >
-                      Publish globally (everyone)
+                      Update published state
                     </button>
-                    <button
-                      type="button"
-                      className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                      onClick={() => {
-                        setPublishMenuOpen(false);
-                        setFlowStatus("published");
-                        setFlowVisibility("private");
-                        void updateFlowMutation
-                          .mutateAsync({
-                            flowId,
-                            status: "published",
-                            visibility: { kind: "private" },
-                          })
-                          .then(() => toast.success("Flow published privately"));
-                      }}
+                    <Link
+                      href="/chats"
+                      className="block w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                      onClick={() => setActionsMenuOpen(false)}
                     >
-                      Publish privately (only you)
-                    </button>
+                      Open Chat
+                    </Link>
+                    {autoNodeEnabled && (
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                        onClick={() => {
+                          setActionsMenuOpen(false);
+                          handleAddAutoNode();
+                        }}
+                      >
+                        Add Auto Node
+                      </button>
+                    )}
                   </>
-                )}
-                {flowStatus === "published" && flowVisibility === "private" && (
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                    onClick={() => {
-                      setPublishMenuOpen(false);
-                      setFlowVisibility("global");
-                      void updateFlowMutation
-                        .mutateAsync({ flowId, visibility: { kind: "global" } })
-                        .then(() => toast.success("Flow is now visible to everyone"));
-                    }}
-                  >
-                    Make global (everyone)
-                  </button>
-                )}
-                {flowStatus === "published" && flowVisibility === "global" && (
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                    onClick={() => {
-                      setPublishMenuOpen(false);
-                      setFlowVisibility("private");
-                      void updateFlowMutation
-                        .mutateAsync({ flowId, visibility: { kind: "private" } })
-                        .then(() => toast.success("Flow is now private"));
-                    }}
-                  >
-                    Make private (only you)
-                  </button>
-                )}
-                {flowStatus === "published" && (
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                    onClick={() => {
-                      setPublishMenuOpen(false);
-                      setFlowStatus("draft");
-                      void updateFlowMutation
-                        .mutateAsync({ flowId, status: "draft" })
-                        .then(() => toast.success("Flow unpublished"));
-                    }}
-                  >
-                    Unpublish
-                  </button>
                 )}
               </div>
             )}
           </div>
-          <Button size="sm" asChild>
-            <Link href="/chats">Open Chat</Link>
-          </Button>
         </div>
       </div>
 
@@ -603,6 +700,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onDelete={editingNodeId && !editingNodeId.startsWith("temp-") ? handleNodeDelete : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
+        autoNodeEnabled={autoNodeEnabled}
         onUploadTemplate={handleUploadTemplate}
       />
     </div>
