@@ -19,7 +19,13 @@ Before running tests, verify:
 
 ## How to run
 
-Execute from the `tests/e2e/` directory:
+Before executing the test suite, record the current timestamp in milliseconds:
+
+```javascript
+const TEST_START_MS = Date.now();
+```
+
+Then execute from the `tests/e2e/` directory:
 
 ```bash
 cd tests/e2e && npx playwright test --config=playwright.config.ts 2>&1
@@ -60,6 +66,76 @@ List each skipped test and categorise it:
 ### 4. Recommendations
 
 Actionable next steps only. Do not list "by design" skips as action items.
+
+---
+
+## Cleanup: delete test data
+
+After producing the results report, delete flows and sessions created during the
+run so they do not accumulate across repeated test executions.
+
+### 1. Delete E2E flows
+
+Navigate to `http://localhost:3000` to ensure fetch calls are on the correct
+origin (session cookies are origin-scoped), then use
+`mcp__playwright__browser_evaluate` to list and delete every flow whose name
+starts with `E2E ` (the prefix all test flows use):
+
+```javascript
+async () => {
+  const res = await fetch(
+    '/api/trpc/flow.listMine?batch=1&input=' +
+      encodeURIComponent(JSON.stringify({ "0": { "json": null } }))
+  );
+  const data = await res.json();
+  const flows = data[0]?.result?.data?.json ?? [];
+
+  const toDelete = flows.filter(f => f.name.startsWith('E2E '));
+  for (const flow of toDelete) {
+    await fetch('/api/trpc/flow.delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ "0": { "json": { flowId: flow.id } } }),
+    });
+  }
+  return toDelete.map(f => f.name);
+}
+```
+
+Log the returned names so the cleanup is visible.
+
+### 2. Close test sessions
+
+Close any sessions created at or after `TEST_START_MS` (the timestamp recorded
+before the run):
+
+```javascript
+async (testStartMs) => {
+  const res = await fetch(
+    '/api/trpc/session.list?batch=1&input=' +
+      encodeURIComponent(JSON.stringify({ "0": { "json": null } }))
+  );
+  const data = await res.json();
+  const sessions = data[0]?.result?.data?.json ?? [];
+
+  const toClose = sessions.filter(
+    s => new Date(s.createdAt).getTime() >= testStartMs
+  );
+  for (const session of toClose) {
+    await fetch('/api/trpc/session.close', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ "0": { "json": { sessionId: session.id } } }),
+    });
+  }
+  return toClose.length;
+}
+```
+
+Pass `TEST_START_MS` as the argument. Log the count of sessions closed.
+
+> The tRPC endpoints use a superjson transformer. For plain UUID inputs no
+> extra `meta` wrapper is needed — `{"0":{"json":{...}}}` is sufficient.
 
 ---
 
