@@ -84,7 +84,9 @@ and continue only once they approve. The `pending_approval` status exists in the
 ## 7. Pages / surfaces affected
 
 - `/approvals` (web) — approver inbox.
-- `/admin/hr` (web) — upload HR file; review detected columns; set the mapping.
+- `/admin/settings` (web) — HR file upload, detected-column review, mapping, and
+  Entra/Graph configuration are surfaced here as modals, following the existing
+  admin settings pattern (no standalone `/admin/hr` page).
 - Flow canvas — `approval` node with the `approverSource` dropdown + config.
 - Session chat — a "confirm approver" card (suggestion + "Someone else"
   auto-suggest), then "awaiting approval" / decision result.
@@ -118,7 +120,8 @@ confirmed user), `approver_email` (text — for a free-typed address),
 `status` (`active`|`archived`), `created_at`, `updated_at`.
 
 **`admin_hr_rows`**: `id`, `dataset_id` FK, `row_index`, `data` (jsonb — the row
-keyed by original headers), `created_at`. GIN index on `data` for search.
+keyed by original headers), `created_at`, `updated_at`. GIN index on `data` for
+search.
 
 The earlier `core_users.supervisor_user_id` column is **dropped** from scope —
 hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).

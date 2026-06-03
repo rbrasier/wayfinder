@@ -67,8 +67,8 @@ See ADR-018.
 | apps/web | `apps/web/.../trpc/routers/approval.ts` | `suggest`, `confirmAndSend`, `decide`, `listPending`. |
 | apps/web | `apps/web/.../trpc/routers/people.ts` | `search`. |
 | apps/web | `apps/web/.../trpc/routers/hr.ts` | `upload`, `setMapping`, `list`. |
-| apps/web | `apps/web/app/(user)/approvals/page.tsx` | Approver inbox. |
-| apps/web | `apps/web/app/(admin)/hr/page.tsx` | HR upload + column mapping. |
+| apps/web | `apps/web/src/app/(user)/approvals/page.tsx` | Approver inbox. |
+| apps/web | `apps/web/src/app/(admin)/admin/settings/` | HR upload + column mapping + Entra/Graph config as modals on the existing admin settings page (no standalone `/admin/hr` page). |
 | apps/web | session chat components | Confirm-approver card (suggestion + "Someone else" auto-suggest); decision card. |
 | apps/web | canvas node config | `approval` node + `approverSource` dropdown. |
 | apps/web | session-advance path | Halt on `pending_approval`; resume on approve. |
@@ -109,7 +109,7 @@ email/name/manager/position/band/unit), `row_count`, `status`
 ### New table: `admin_hr_rows`
 
 `id`, `dataset_id` FK → `admin_hr_datasets`, `row_index`, `data` (jsonb — row
-keyed by original headers), `created_at`. GIN index on `data`.
+keyed by original headers), `created_at`, `updated_at`. GIN index on `data`.
 
 No `core_users` change (the earlier `supervisor_user_id` is dropped from scope).
 
@@ -145,8 +145,8 @@ pick.
    (per-mode suggestion, mandatory confirm, override flag, free email,
    no double-decision, advance vs route-back) → use-cases.
 7. Halt-on-`pending_approval` in the advance path; resume on approve.
-8. tRPC routers + approvals inbox + admin HR page + confirm-approver chat card +
-   canvas node config.
+8. tRPC routers + approvals inbox + `/admin/settings` HR/Entra modals +
+   confirm-approver chat card + canvas node config.
 
 Write the test file before each implementation file (CLAUDE.md rule).
 
