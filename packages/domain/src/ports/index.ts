@@ -31,4 +31,5 @@ export * from "./embeddings";
 export * from "./document-chunk-repository";
 export * from "./clock";
 export * from "./schedule-repository";
+export * from "./schedule-run-repository";
 export * from "./schedule-fire-handler";

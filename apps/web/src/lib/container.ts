@@ -26,6 +26,7 @@ import {
   ListFlows,
   ListFlowsForUser,
   ListJobs,
+  ListScheduleRuns,
   ListSessions,
   ListTypingUsers,
   ListUsers,
@@ -71,6 +72,7 @@ import {
   DrizzleSessionTypingRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleScheduleRepository,
+  DrizzleScheduleRunRepository,
   DrizzleAnalyticsRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
@@ -122,6 +124,7 @@ const build = () => {
   const sessionTyping = new DrizzleSessionTypingRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
   const schedules = new DrizzleScheduleRepository(db);
+  const scheduleRuns = new DrizzleScheduleRunRepository(db);
   const clock = new SystemClock();
   const analyticsRepo = new DrizzleAnalyticsRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
@@ -223,7 +226,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, systemSettings, contextDocContent, documentChunks },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -271,6 +274,7 @@ const build = () => {
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
       runAutoNode: new RunAutoNode(sessions, llm, nodeExecutor),
       scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock),
+      listScheduleRuns: new ListScheduleRuns(scheduleRuns),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       heartbeatTyping: new HeartbeatTyping(sessionTyping),
       listTypingUsers: new ListTypingUsers(sessionTyping, users),
