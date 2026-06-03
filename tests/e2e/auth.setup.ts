@@ -18,13 +18,6 @@ const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL || 'admin@example.com';
 setup('authenticate as admin', async ({ page, request }) => {
   fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
 
-  if (process.env.TEST_AUTH_BYPASS !== 'true') {
-    throw new Error(
-      'TEST_AUTH_BYPASS=true must be set in your .env for E2E tests.\n' +
-      'This enables the /api/auth/test-session endpoint used by the test auth setup.'
-    );
-  }
-
   // Hit the test-only endpoint that returns a session token for ADMIN_EMAIL
   const response = await request.post('/api/auth/test-session', {
     data: { email: ADMIN_EMAIL },

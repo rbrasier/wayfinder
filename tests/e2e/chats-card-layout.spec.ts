@@ -21,7 +21,9 @@ test.describe('Chat: Session card layout', () => {
     const errors = consoleLogs.filter(l => l.type === 'error');
     expect(errors, `JS errors on /chats:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
 
-    const sessionCard = page.locator('a[href^="/chats/"]').first();
+    // Sidebar also contains /chats/ links — filter to cards that include step
+    // progress text so we only match the main-content card list, not the nav.
+    const sessionCard = page.locator('a[href^="/chats/"]').filter({ hasText: /step\s+\d+/i }).first();
     if (!(await sessionCard.isVisible().catch(() => false))) {
       test.skip(true, 'No sessions found — create a flow and session to enable this test');
       return;

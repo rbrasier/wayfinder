@@ -69,9 +69,10 @@ export const test = base.extend<WayfinderFixtures>({
       await page.route('**/api.openai.com/v1/chat/completions**', mockOpenAIRoute);
       await page.route('**/api.mistral.ai/v1/chat/completions**', mockOpenAIRoute);
 
-      // Intercept Wayfinder's internal API route that proxies AI calls
-      // (Next.js route handlers call the AI SDK which then calls the provider)
-      await page.route('**/api/chat**', mockInternalChatRoute);
+      // Intercept Wayfinder's internal streaming endpoint only.
+      // Must NOT match /api/chat/[id]/uploads (called by ChatComposer on mount
+      // to list existing context files — expects JSON, not a stream).
+      await page.route(/\/api\/chat\/[^/]+\/stream(\?.*)?$/, mockInternalChatRoute);
       await page.route('**/api/ai/**', mockInternalChatRoute);
     }
 

@@ -101,7 +101,9 @@ test.describe('Chat: Composer file upload', () => {
       buffer: Buffer.from('Some background context for the AI to use.'),
     });
 
-    await expect(page.getByText('context-notes.txt')).toBeVisible();
+    // Use .first() because the outer pill <span> and the inner text <span> both
+    // contain this string — strict mode requires a single-element locator.
+    await expect(page.getByText('context-notes.txt').first()).toBeVisible();
     await expect(page.getByRole('button', { name: /remove context-notes\.txt/i })).toBeVisible();
     await page.screenshot({ path: 'screenshots/chat-composer-upload-pill.png', fullPage: true });
   });

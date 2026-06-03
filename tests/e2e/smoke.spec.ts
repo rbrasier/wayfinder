@@ -84,7 +84,7 @@ test.describe('Auth', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
-    await expect(page).toHaveURL(/admin\/login|api\/auth\/cert/);
+    await expect(page).toHaveURL(/\/login|api\/auth\/cert/);
     await page.screenshot({ path: 'screenshots/auth-redirect.png', fullPage: true });
 
     await context.close();

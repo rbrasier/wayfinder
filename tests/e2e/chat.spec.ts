@@ -53,8 +53,9 @@ test.describe('Chat: Session', () => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 
-    // Session cards link to /chats/[sessionId]
-    const sessionLink = page.getByRole('link').filter({ hasText: /.+/ }).first();
+    // Session cards link to /chats/[sessionId]. Nav links use bare "/chats"
+    // (no trailing slash + UUID) so a[href^="/chats/"] skips them safely.
+    const sessionLink = page.locator('a[href^="/chats/"]').first();
     const href = await sessionLink.getAttribute('href').catch(() => null);
 
     if (!href) return null;
@@ -126,15 +127,9 @@ test.describe('Chat: Session', () => {
 
     await input.fill('Hello');
 
-    // ChatComposer button has aria-label="Send message"
-    const sendBtn = page.getByRole('button', { name: /send message/i });
-    const hasSendBtn = await sendBtn.isVisible().catch(() => false);
-
-    if (hasSendBtn) {
-      await sendBtn.click();
-    } else {
-      await input.press('Enter');
-    }
+    // The Next.js dev overlay portal covers the send button in headless mode.
+    // Use Enter on the textarea — same handler, no pointer-event coverage issue.
+    await input.press('Enter');
 
     // Wait for AI response (mocked = fast, real = up to 30s)
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
@@ -185,14 +180,8 @@ test.describe('Chat: Session', () => {
     for (let i = 0; i < messages.length; i++) {
       await input.fill(messages[i]);
 
-      const sendBtn = page.getByRole('button', { name: /send message/i });
-      const hasSendBtn = await sendBtn.isVisible().catch(() => false);
-
-      if (hasSendBtn) {
-        await sendBtn.click();
-      } else {
-        await input.press('Enter');
-      }
+      // Same headless-mode portal issue — use Enter consistently.
+      await input.press('Enter');
 
       // Wait for input to clear (indicates the message was sent)
       await page.waitForFunction(

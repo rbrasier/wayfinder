@@ -94,12 +94,11 @@ async function sendMessage(page: Page, message: string): Promise<void> {
 
   await input.fill(message);
 
-  const sendBtn = page.getByRole('button', { name: /send message/i });
-  if (await sendBtn.isVisible().catch(() => false)) {
-    await sendBtn.click();
-  } else {
-    await input.press('Enter');
-  }
+  // Use Enter on the textarea rather than clicking the send button.
+  // The Next.js dev overlay portal covers the bottom-right of the viewport
+  // in headless mode, intercepting pointer events on the send button.
+  // The textarea's keydown handler is identical in behaviour.
+  await input.press('Enter');
 
   // Wait for the input to clear — confirms the message was accepted
   await page.waitForFunction(
