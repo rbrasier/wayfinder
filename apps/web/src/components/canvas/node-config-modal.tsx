@@ -31,7 +31,10 @@ const COLOURS = [
 
 const EXAMPLE_TAG = "{{First name}}";
 
-export type NodeConfigType = "conversational" | "auto";
+export type NodeConfigType = "conversational" | "auto" | "scheduled";
+
+export type ScheduleKind = "relative" | "cron" | "at";
+export type ScheduleAnchor = "node_reached" | "step_metadata";
 
 export interface NodeConfigValues {
   name: string;
@@ -49,6 +52,12 @@ export interface NodeConfigValues {
   webhookUrl: string;
   requestFields: TemplateField[];
   responseFields: TemplateField[];
+  scheduleKind: ScheduleKind;
+  scheduleSpec: string;
+  scheduleRecurring: boolean;
+  scheduleMaxOccurrences: string;
+  scheduleAnchor: ScheduleAnchor;
+  scheduleMetadataKey: string;
 }
 
 interface NodeConfigModalProps {
@@ -60,6 +69,7 @@ interface NodeConfigModalProps {
   onClose: () => void;
   isSaving?: boolean;
   autoNodeEnabled?: boolean;
+  scheduledNodeEnabled?: boolean;
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
 }
 
@@ -79,6 +89,12 @@ const DEFAULT_VALUES: NodeConfigValues = {
   webhookUrl: "",
   requestFields: [],
   responseFields: [],
+  scheduleKind: "relative",
+  scheduleSpec: "",
+  scheduleRecurring: false,
+  scheduleMaxOccurrences: "",
+  scheduleAnchor: "node_reached",
+  scheduleMetadataKey: "",
 };
 
 function CopyButton({ text }: { text: string }) {
@@ -111,6 +127,7 @@ export function NodeConfigModal({
   onClose,
   isSaving = false,
   autoNodeEnabled = false,
+  scheduledNodeEnabled = false,
   onUploadTemplate,
 }: NodeConfigModalProps) {
   const utils = trpc.useUtils();
@@ -159,6 +176,8 @@ export function NodeConfigModal({
   };
 
   const isAuto = values.type === "auto";
+  const isScheduled = values.type === "scheduled";
+  const isConversational = values.type === "conversational";
   const requestParsed = parseFieldLines(requestLines);
   const responseParsed = parseFieldLines(responseLines);
 
@@ -174,7 +193,12 @@ export function NodeConfigModal({
     requestParsed.valid &&
     responseParsed.valid;
 
-  const canSave = isAuto ? autoValid : conversationalValid;
+  const scheduledValid =
+    Boolean(values.name.trim()) &&
+    Boolean(values.scheduleSpec.trim()) &&
+    (values.scheduleAnchor !== "step_metadata" || Boolean(values.scheduleMetadataKey.trim()));
+
+  const canSave = isAuto ? autoValid : isScheduled ? scheduledValid : conversationalValid;
 
   const handleSave = () => {
     if (!canSave) return;
@@ -269,7 +293,7 @@ export function NodeConfigModal({
           <>
             <DialogHeader>
               <DialogTitle>Configure step</DialogTitle>
-              {!isAuto && (
+              {isConversational && (
                 <button
                   type="button"
                   aria-label={view === "edit" ? "Preview prompt" : "Back to edit"}
@@ -342,11 +366,17 @@ export function NodeConfigModal({
                 </div>
               </div>
 
-              {autoNodeEnabled && (
+              {(autoNodeEnabled || scheduledNodeEnabled) && (
                 <div className="space-y-1">
                   <Label>Step type</Label>
                   <div className="flex gap-3">
-                    {(["conversational", "auto"] as const).map((type) => (
+                    {(
+                      [
+                        "conversational",
+                        ...(autoNodeEnabled ? (["auto"] as const) : []),
+                        ...(scheduledNodeEnabled ? (["scheduled"] as const) : []),
+                      ] as NodeConfigType[]
+                    ).map((type) => (
                       <label
                         key={type}
                         className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] transition-colors ${
@@ -362,19 +392,25 @@ export function NodeConfigModal({
                           checked={values.type === type}
                           onChange={() => set("type", type)}
                         />
-                        {type === "conversational" ? "Conversational" : "Automated (n8n)"}
+                        {type === "conversational"
+                          ? "Conversational"
+                          : type === "auto"
+                            ? "Automated (n8n)"
+                            : "Scheduled"}
                       </label>
                     ))}
                   </div>
                   <p className="text-[12px] text-[#918d87]">
                     {isAuto
                       ? "Runs automatically via an n8n sub-workflow — no conversation. Completes when n8n calls back."
-                      : "A human takes a turn with the AI to complete this step."}
+                      : isScheduled
+                        ? "Pauses the session and resumes (once or recurring) at a computed time."
+                        : "A human takes a turn with the AI to complete this step."}
                   </p>
                 </div>
               )}
 
-              {!isAuto && (
+              {isConversational && (
               <>
               <div className="space-y-1">
                 <Label htmlFor="ai-instruction">Instructions for the AI</Label>
@@ -582,6 +618,94 @@ export function NodeConfigModal({
                 lines={responseLines}
                 onChange={setResponseLines}
               />
+              </>
+              )}
+
+              {isScheduled && (
+              <>
+              <div className="space-y-1">
+                <Label htmlFor="schedule-kind">Schedule kind</Label>
+                <select
+                  id="schedule-kind"
+                  className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                  value={values.scheduleKind}
+                  onChange={(e) => set("scheduleKind", e.target.value as ScheduleKind)}
+                >
+                  <option value="relative">Relative (e.g. 30d after the anchor)</option>
+                  <option value="at">At a specific timestamp</option>
+                  <option value="cron">Cron (recurring schedule)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="schedule-spec">
+                  {values.scheduleKind === "relative"
+                    ? "Duration (e.g. 30d, 2h, 15m)"
+                    : values.scheduleKind === "cron"
+                      ? "Cron expression (e.g. 0 9 * * 1)"
+                      : "ISO timestamp (leave blank to use the anchor)"}
+                </Label>
+                <Input
+                  id="schedule-spec"
+                  value={values.scheduleSpec}
+                  onChange={(e) => set("scheduleSpec", e.target.value)}
+                  placeholder={
+                    values.scheduleKind === "relative"
+                      ? "30d"
+                      : values.scheduleKind === "cron"
+                        ? "0 9 * * 1"
+                        : "2026-12-25T09:00:00.000Z"
+                  }
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="schedule-anchor">Anchor</Label>
+                <select
+                  id="schedule-anchor"
+                  className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                  value={values.scheduleAnchor}
+                  onChange={(e) => set("scheduleAnchor", e.target.value as ScheduleAnchor)}
+                >
+                  <option value="node_reached">When this node is reached</option>
+                  <option value="step_metadata">A step&apos;s completion metadata</option>
+                </select>
+              </div>
+
+              {values.scheduleAnchor === "step_metadata" && (
+                <div className="space-y-1">
+                  <Label htmlFor="schedule-metadata-key">Metadata key (ISO timestamp)</Label>
+                  <Input
+                    id="schedule-metadata-key"
+                    value={values.scheduleMetadataKey}
+                    onChange={(e) => set("scheduleMetadataKey", e.target.value)}
+                    placeholder="approvedAt"
+                  />
+                </div>
+              )}
+
+              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-[#1a1814]">
+                <input
+                  type="checkbox"
+                  checked={values.scheduleRecurring}
+                  onChange={(e) => set("scheduleRecurring", e.target.checked)}
+                />
+                Recurring
+              </label>
+
+              {values.scheduleRecurring && (
+                <div className="space-y-1">
+                  <Label htmlFor="schedule-max">Max occurrences (blank = unbounded)</Label>
+                  <Input
+                    id="schedule-max"
+                    type="number"
+                    min="1"
+                    value={values.scheduleMaxOccurrences}
+                    onChange={(e) => set("scheduleMaxOccurrences", e.target.value)}
+                    placeholder="e.g. 4"
+                  />
+                </div>
+              )}
               </>
               )}
             </DialogBody>

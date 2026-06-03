@@ -16,3 +16,4 @@ export * from "./drizzle-session-typing-repository";
 export * from "./drizzle-session-step-output-repository";
 export * from "./drizzle-analytics-repository";
 export * from "./drizzle-system-settings-repository";
+export * from "./drizzle-schedule-repository";

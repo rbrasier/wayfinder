@@ -39,6 +39,7 @@ import {
   RetrieveDocumentChunks,
   RunAutoNode,
   RunTurn,
+  ScheduleNodeEvent,
   SendMessage,
   StartSession,
   SummariseTemplate,
@@ -69,6 +70,7 @@ import {
   DrizzleSessionUploadRepository,
   DrizzleSessionTypingRepository,
   DrizzleSessionStepOutputRepository,
+  DrizzleScheduleRepository,
   DrizzleAnalyticsRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
@@ -83,6 +85,7 @@ import {
   PinoLogger,
   PkiCertAdapter,
   RuntimeConfigStore,
+  SystemClock,
   createAuth,
   createDatabase,
   createNodeExecutor,
@@ -118,6 +121,8 @@ const build = () => {
   const sessionUploads = new DrizzleSessionUploadRepository(db);
   const sessionTyping = new DrizzleSessionTypingRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  const schedules = new DrizzleScheduleRepository(db);
+  const clock = new SystemClock();
   const analyticsRepo = new DrizzleAnalyticsRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
@@ -218,7 +223,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, systemSettings, contextDocContent, documentChunks },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, systemSettings, contextDocContent, documentChunks },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -265,6 +270,7 @@ const build = () => {
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges),
       runAutoNode: new RunAutoNode(sessions, llm, nodeExecutor),
+      scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       heartbeatTyping: new HeartbeatTyping(sessionTyping),
       listTypingUsers: new ListTypingUsers(sessionTyping, users),

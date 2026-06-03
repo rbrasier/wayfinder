@@ -183,6 +183,82 @@ export async function dispatchAutoNode(input: DispatchAutoNodeInput): Promise<vo
   }
 }
 
+// True only when the scheduled_node feature flag exists and is enabled. Mirrors
+// the auto_node gate so the scheduled node type stays hidden until released.
+export async function isScheduledNodeEnabled(container: Container): Promise<boolean> {
+  const flag = await container.useCases.getFeatureFlag.execute("scheduled_node");
+  return !flag.error && flag.data?.enabled === true;
+}
+
+// Flatten the context gathered across the conversation into a key/value map so a
+// scheduled node can anchor its fire time to an earlier step's metadata.
+const buildSessionMetadata = (messages: SessionMessage[]): Record<string, string> => {
+  const metadata: Record<string, string> = {};
+  for (const message of messages) {
+    if (message.role !== "assistant" || !message.aiPayload) continue;
+    for (const item of message.aiPayload.contextGathered) {
+      metadata[item.key] = item.value;
+    }
+  }
+  return metadata;
+};
+
+export interface DispatchScheduledNodeInput {
+  container: Container;
+  session: Session;
+  node: FlowNode;
+  messages: SessionMessage[];
+}
+
+// Reaching a scheduled node creates an active schedule row and pauses the
+// session (no initial message is generated). The worker resumes it when due.
+export async function dispatchScheduledNode(input: DispatchScheduledNodeInput): Promise<void> {
+  const { container, session, node, messages } = input;
+  try {
+    const result = await container.useCases.scheduleNodeEvent.execute({
+      session,
+      node,
+      metadata: buildSessionMetadata(messages),
+    });
+
+    let content: string;
+    if (result.error) {
+      content = `This scheduled step (${node.name}) could not be scheduled: ${result.error.message}`;
+    } else if (result.data.status === "failed") {
+      const reason =
+        typeof result.data.payload.reason === "string" ? result.data.payload.reason : "unknown reason";
+      content = `Scheduled step "${node.name}" could not start: ${reason}`;
+    } else {
+      content = `Scheduled step: ${node.name}. Next: ${result.data.nextFireAt.toISOString()}.`;
+    }
+
+    await container.repos.sessionMessages.create({
+      sessionId: session.id,
+      role: "system",
+      content,
+      stepNodeId: node.id,
+    });
+
+    if (result.error) {
+      await container.services.errorLogger.log({
+        level: "error",
+        message: `Scheduled node dispatch failed: ${result.error.message}`,
+        stack: result.error.cause instanceof Error ? result.error.cause.stack ?? null : null,
+        page: `api/chat/${session.id}/stream`,
+        metadata: { sessionId: session.id, nodeId: node.id, errorCode: result.error.code },
+      });
+    }
+  } catch (cause) {
+    await container.services.errorLogger.log({
+      level: "error",
+      message: "Scheduled node dispatch threw",
+      stack: cause instanceof Error ? cause.stack ?? null : null,
+      page: `api/chat/${session.id}/stream`,
+      metadata: { sessionId: session.id, nodeId: node.id },
+    });
+  }
+}
+
 export interface GenerateInitialMessageInput {
   container: Container;
   sessionId: string;

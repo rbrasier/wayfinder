@@ -30,6 +30,8 @@ import type { ConversationalNodeData } from "@/components/canvas/conversational-
 import { ConversationalNode } from "@/components/canvas/conversational-node";
 import type { AutoNodeData } from "@/components/canvas/auto-node";
 import { AutoNode } from "@/components/canvas/auto-node";
+import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
+import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
 import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
@@ -37,7 +39,11 @@ import { trpc } from "@/trpc/client";
 import type { FlowContextDoc, TemplateField } from "@rbrasier/domain";
 import { computeStepNumbers } from "@/lib/flow-utils";
 
-const NODE_TYPES = { conversationalNode: ConversationalNode, autoNode: AutoNode };
+const NODE_TYPES = {
+  conversationalNode: ConversationalNode,
+  autoNode: AutoNode,
+  scheduledNode: ScheduledNode,
+};
 
 const DEBOUNCE_MS = 600;
 
@@ -45,7 +51,7 @@ interface RawNode {
   id: string;
   name: string;
   colour: string | null;
-  type?: "conversational" | "auto";
+  type?: "conversational" | "auto" | "scheduled";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;
@@ -66,6 +72,19 @@ const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
       config: node.config,
     };
     return { id: node.id, type: "autoNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  if (node.type === "scheduled") {
+    const data: ScheduledNodeData = {
+      name: node.name,
+      colour: node.colour,
+      kind: (node.config.kind as string | null) ?? null,
+      spec: (node.config.spec as string | null) ?? null,
+      recurring: Boolean(node.config.recurring),
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "scheduledNode", position: { x: node.positionX, y: node.positionY }, data };
   }
 
   const data: ConversationalNodeData = {

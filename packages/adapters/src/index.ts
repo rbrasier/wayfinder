@@ -15,4 +15,5 @@ export * from "./extraction/index";
 export * from "./storage/index";
 export * from "./config/index";
 export * from "./email/index";
+export * from "./scheduling/index";
 export * from "./factory";

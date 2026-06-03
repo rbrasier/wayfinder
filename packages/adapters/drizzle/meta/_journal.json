@@ -127,6 +127,13 @@
       "when": 1780391802589,
       "tag": "0017_stormy_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780484350532,
+      "tag": "0018_purple_epoch",
+      "breakpoints": true
     }
   ]
 }

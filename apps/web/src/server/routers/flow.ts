@@ -74,7 +74,7 @@ const nodeRouter = router({
         flowId: z.string().uuid(),
         name: z.string().min(1),
         colour: z.string().nullable().optional(),
-        type: z.enum(["conversational", "auto"]).optional(),
+        type: z.enum(["conversational", "auto", "scheduled"]).optional(),
         positionX: z.number(),
         positionY: z.number(),
         config: z.record(z.unknown()).default({}),
@@ -104,7 +104,7 @@ const nodeRouter = router({
         flowId: z.string().uuid(),
         name: z.string().min(1).optional(),
         colour: z.string().nullable().optional(),
-        type: z.enum(["conversational", "auto"]).optional(),
+        type: z.enum(["conversational", "auto", "scheduled"]).optional(),
         config: z.record(z.unknown()).optional(),
       }),
     )

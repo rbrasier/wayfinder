@@ -7,10 +7,12 @@ import { streamTurn } from "./stream-turn";
 import {
   buildGatheredContext,
   dispatchAutoNode,
+  dispatchScheduledNode,
   generateDocument,
   generateInitialMessage,
   generateTitle,
   isAutoNodeEnabled,
+  isScheduledNodeEnabled,
 } from "./turn-helpers";
 
 const getSessionToken = (req: Request): string | null => {
@@ -256,7 +258,14 @@ export async function POST(
               ? gatheredContext
               : buildGatheredContext(refreshed.data);
 
-            if (newNode.type === "auto" && (await isAutoNodeEnabled(container))) {
+            if (newNode.type === "scheduled" && (await isScheduledNodeEnabled(container))) {
+              await dispatchScheduledNode({
+                container,
+                session: runResult.data.session,
+                node: newNode,
+                messages: refreshed.error ? dbMessages : refreshed.data,
+              });
+            } else if (newNode.type === "auto" && (await isAutoNodeEnabled(container))) {
               await dispatchAutoNode({
                 container,
                 session: runResult.data.session,

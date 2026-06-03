@@ -29,3 +29,6 @@ export * from "./document-extractor";
 export * from "./email-sender";
 export * from "./embeddings";
 export * from "./document-chunk-repository";
+export * from "./clock";
+export * from "./schedule-repository";
+export * from "./schedule-fire-handler";

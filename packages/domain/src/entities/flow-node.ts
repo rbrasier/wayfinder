@@ -1,6 +1,7 @@
+import type { ScheduleAnchor, ScheduleKind } from "./session-schedule";
 import type { TemplateField } from "./template-field";
 
-export type FlowNodeType = "conversational" | "auto";
+export type FlowNodeType = "conversational" | "auto" | "scheduled";
 
 export interface ConversationalNodeConfig {
   aiInstruction: string;
@@ -22,6 +23,17 @@ export interface AutoNodeConfig {
   webhookUrl: string;
   requestFields?: TemplateField[];
   responseFields?: TemplateField[];
+}
+
+export interface ScheduledNodeConfig {
+  kind: ScheduleKind;
+  spec: string;
+  recurring?: boolean;
+  maxOccurrences?: number | null;
+  // Defaults to `node_reached`. When `step_metadata`, `metadataKey` names the
+  // ISO-timestamp field on session metadata used as the fire anchor.
+  anchor?: ScheduleAnchor;
+  metadataKey?: string | null;
 }
 
 export interface FlowNode {

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   index,
   integer,
@@ -55,7 +56,9 @@ export const app_flow_nodes = pgTable(
     flow_id: uuid("flow_id")
       .notNull()
       .references(() => app_flows.id, { onDelete: "cascade" }),
-    type: text("type", { enum: ["conversational", "auto"] }).notNull().default("conversational"),
+    type: text("type", { enum: ["conversational", "auto", "scheduled"] })
+      .notNull()
+      .default("conversational"),
     name: text("name").notNull(),
     colour: text("colour"),
     position_x: integer("position_x").notNull().default(0),
@@ -117,6 +120,39 @@ export const app_sessions = pgTable(
   (t) => ({
     by_user: index("app_sessions_user_id_created_at_idx").on(t.user_id, t.created_at),
     by_flow: index("app_sessions_flow_id_idx").on(t.flow_id),
+  }),
+);
+
+export const app_session_schedules = pgTable(
+  "app_session_schedules",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    node_id: uuid("node_id")
+      .notNull()
+      .references(() => app_flow_nodes.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["relative", "cron", "at"] }).notNull(),
+    spec: text("spec").notNull(),
+    recurring: boolean("recurring").notNull().default(false),
+    next_fire_at: timestamp("next_fire_at", { withTimezone: true }).notNull(),
+    last_fired_at: timestamp("last_fired_at", { withTimezone: true }),
+    occurrence_count: integer("occurrence_count").notNull().default(0),
+    max_occurrences: integer("max_occurrences"),
+    status: text("status", { enum: ["active", "completed", "cancelled", "failed"] })
+      .notNull()
+      .default("active"),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_due: index("app_session_schedules_status_next_fire_at_idx").on(t.status, t.next_fire_at),
+    by_session: index("app_session_schedules_session_id_idx").on(t.session_id),
   }),
 );
 
