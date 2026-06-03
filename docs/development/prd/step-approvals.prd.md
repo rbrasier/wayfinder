@@ -3,82 +3,93 @@
 - **Status**: Draft
 - **Date**: 2026-06-03
 - **Author**: Richy Brasier
-- **Target version**: 1.24.0  (bump: **MINOR** — new node type, new table, new
+- **Target version**: 1.24.0  (bump: **MINOR** — new node type, new tables, new
   domain ports; additive)
 
 ## 1. Problem
 
 Document-heavy processes routinely reach a point where work cannot proceed until
-a named authority signs off — typically the operator's first-line supervisor.
-Today a Wayfinder flow advances through every node automatically; there is no way
-to *pause* a flow at a step, route it to the right person, and only continue once
-that person has approved. The `pending_approval` status exists in the
-`INodeExecutor` contract and the n8n webhook schema but is unused — the gate was
-deliberately deferred (ADR-010).
+the right authority signs off. Sometimes that authority is the operator's own
+manager; often it is a *policy-defined* role (e.g. "the SES Band 1 delegate per
+the Delegations Instrument"). Today a Wayfinder flow advances through every node
+automatically; there is no way to pause a flow, route it to the correct person,
+and continue only once they approve. The `pending_approval` status exists in the
+`INodeExecutor` contract and the n8n webhook schema but is unused (ADR-010).
 
 ## 2. Users / Personas
 
-- **Operator** — runs a flow to produce a record; needs to submit a step for
-  approval and see where it is.
-- **Supervisor / Approver** — the person holding the position the step requires;
-  needs an inbox of pending requests and a way to approve, reject, or request
-  changes with a comment.
-- **Flow author** — designs the flow; needs to drop an approval step onto the
-  canvas and declare *which position* approves it.
+- **Operator** — runs a flow; needs to submit a step for approval, confirm/adjust
+  who it goes to, and see where it is.
+- **Approver** — the confirmed authority; needs an inbox of pending requests and a
+  way to approve, reject, or request changes with a comment.
+- **Flow author** — designs the flow; needs to drop an approval step on the canvas
+  and pick *how* the approver is resolved.
+- **Administrator** — maintains org/HR data so resolution works; uploads an HR
+  spreadsheet and (optionally) maps its columns.
 
 ## 3. Goals
 
-- A flow author can place an **`approval` node** on the canvas and configure the
-  required position (e.g. `first_line_supervisor`).
-- When a session reaches an approval node, it **pauses** in a pending state and
-  does not advance until a decision is recorded.
-- The approver is **resolved at runtime** from the operator's reporting line;
-  when it cannot be resolved, the operator **picks an approver manually**.
-- The approver receives an **email notification** (existing mail provider) and
-  can approve / reject / request changes with a comment.
-- Every request and decision is written to `core_audit_log`.
-- On approval, the approved record snapshot is recorded so the
-  record-regeneration procedure (see Scheduling PRD) can pick it up.
+- A flow author can place an **`approval` node** and choose an `approverSource`
+  from a dropdown: **first-level supervisor**, **second-level supervisor**, or
+  **dynamic** (resolved from policy/context).
+- When a session reaches the node it **pauses** and does not advance until a
+  decision is recorded.
+- The resolver only ever **suggests** an approver; for *every* mode the operator
+  **must confirm**, and can always choose **"Someone else"** via type-ahead
+  auto-suggest.
+- Auto-suggest federates **three sources** — Microsoft Entra (Graph), an
+  uploaded HR dataset, and any free-text email address.
+- Administrators can **upload an HR file (CSV/XLSX)** in configuration, stored in
+  the structure it was uploaded (original columns preserved), with a column
+  mapping for resolution.
+- The approver is notified by email; decisions are audited in `core_audit_log`.
+- On approval, the approved record snapshot is recorded for the
+  record-regeneration procedure (Scheduling PRD).
 
 ## 4. Non-goals
 
-- Multi-stage / parallel approval chains (single approver per node this phase).
-- Delegation, out-of-office, or vacation routing.
-- Approving *outside* Wayfinder (e.g. approve-by-email-reply). Decisions happen
-  in-app.
-- Defining the org chart UI. We add the minimum reporting-line data needed to
-  resolve "first-line supervisor"; bulk org management is future work.
+- Multi-stage / parallel approval chains or quorum (single approver per node).
+- Delegation / out-of-office routing.
+- Building the org chart; we sync hierarchy from Entra and accept an HR upload,
+  but do not provide org-management CRUD.
+- Two-way HR sync or writing back to Entra/HR systems.
 
 ## 5. Key entities
 
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
-| `Approval` | `packages/domain/src/entities/approval.ts` | new | One request + its decision. |
-| `FlowNode` (type `approval`) | `packages/domain/src/entities/flow-node.ts` | existing | Add `approval` to the type union + config shape. |
+| `Approval` | `packages/domain/src/entities/approval.ts` | new | Request + suggestion + decision. |
+| `FlowNode` (type `approval`) | `packages/domain/src/entities/flow-node.ts` | existing | Add `approval` to union + `ApprovalNodeConfig`. |
 | `IApprovalRepository` | `packages/domain/src/ports/approval-repository.ts` | new | CRUD + `listPendingForApprover`. |
-| `IReportingLineResolver` | `packages/domain/src/ports/reporting-line-resolver.ts` | new | position + requester → approver user. |
-| `User` | `packages/domain/src/entities/user.ts` | existing | Add `supervisorUserId`. |
+| `IPeopleDirectory` | `packages/domain/src/ports/people-directory.ts` | new | Federated people search (Entra + HR + email). |
+| `IReportingLineResolver` | `packages/domain/src/ports/reporting-line-resolver.ts` | new | Walks N levels; returns a *suggestion*. |
+| `HrDataset` / `HrRow` | `packages/domain/src/entities/hr-dataset.ts` | new | Uploaded spreadsheet + raw rows. |
+| `IHrDatasetRepository` | `packages/domain/src/ports/hr-dataset-repository.ts` | new | Store dataset + rows + mapping; search. |
 
 ## 6. User stories
 
-1. As a flow author, I can add an approval step and set its required position,
-   so a flow halts for sign-off at the right point.
-2. As an operator, when I complete the step before an approval node, the flow
-   tells me it is **awaiting approval** and from whom.
-3. As an operator, if no supervisor can be resolved, I can pick my approver,
-   so the flow is never stuck without a route.
-4. As a supervisor, I see a list of requests awaiting me and can approve,
-   reject, or request changes with a comment.
-5. As an operator, when my step is approved, the flow continues; when changes
-   are requested, I see the feedback and can revise.
+1. As a flow author, I pick the approver source from a dropdown so the flow halts
+   for the right kind of sign-off.
+2. As an operator, when I reach an approval node I'm shown a *suggested* approver
+   and must confirm or choose someone else before it's sent.
+3. As an operator, when I choose "Someone else" I can search my org (Entra), the
+   uploaded HR list, or just type any email address.
+4. As an administrator, I upload our HR spreadsheet and it's usable for search
+   immediately, with a mapping for first/second-level resolution.
+5. As an approver, I see requests awaiting me and can approve, reject, or request
+   changes with a comment.
+6. As an operator, approval advances the flow; changes-requested shows me the
+   feedback to revise.
 
 ## 7. Pages / surfaces affected
 
-- `/approvals` (web) — approver inbox of pending requests.
-- Flow canvas — new `approval` node type in the palette + config panel.
-- Session chat — an inline "awaiting approval / manual-approver picker / decision
-  result" card.
-- tRPC: `approval.listPending`, `approval.decide`, `approval.pickApprover` — new.
+- `/approvals` (web) — approver inbox.
+- `/admin/hr` (web) — upload HR file; review detected columns; set the mapping.
+- Flow canvas — `approval` node with the `approverSource` dropdown + config.
+- Session chat — a "confirm approver" card (suggestion + "Someone else"
+  auto-suggest), then "awaiting approval" / decision result.
+- tRPC: `approval.suggest`, `approval.confirmAndSend`, `approval.decide`,
+  `people.search`, `hr.upload`, `hr.setMapping` — new.
 - `apps/api` — no new external route; approvals are in-app.
 
 ## 8. Database changes
@@ -86,53 +97,72 @@ deliberately deferred (ADR-010).
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
 | `app_session_approvals` | NEW | yes (app_) |
-| `core_users` | add column `supervisor_user_id uuid` (nullable, self-FK) | n/a |
+| `admin_hr_datasets` | NEW | yes (admin_) |
+| `admin_hr_rows` | NEW | yes (admin_) |
 | `app_flow_nodes` | no schema change; `type` gains `approval`, `config` gains approval shape (JSONB) | n/a |
 
-`app_session_approvals` columns: `id`, `session_id`, `flow_id`, `node_id`,
-`message_id` (nullable), `requested_by_user_id`, `position`,
-`resolved_approver_user_id` (nullable), `is_manual_fallback` (bool),
+**`app_session_approvals`**: `id`, `session_id`, `flow_id`, `node_id`,
+`message_id` (nullable), `requested_by_user_id`, `approver_source`
+(`first_level_supervisor`|`second_level_supervisor`|`dynamic`),
+`suggested_approver_user_id` (nullable), `approver_user_id` (nullable, the
+confirmed user), `approver_email` (text — for a free-typed address),
+`is_override` (bool — operator chose someone other than the suggestion),
 `status` (`pending`|`approved`|`rejected`|`changes_requested`),
 `decided_by_user_id` (nullable), `decided_at` (nullable), `comment` (nullable),
-`record_snapshot` (jsonb — the step outputs under review), `created_at`,
-`updated_at`. Index on `(resolved_approver_user_id, status)` for the inbox.
+`record_snapshot` (jsonb), `created_at`, `updated_at`. Index on
+`(approver_user_id, status)` for the inbox.
+
+**`admin_hr_datasets`**: `id`, `filename`, `source_format` (`csv`|`xlsx`),
+`uploaded_by_user_id`, `columns` (jsonb — original headers), `column_mapping`
+(jsonb — header → email/name/manager/position/band/unit), `row_count`,
+`status` (`active`|`archived`), `created_at`, `updated_at`.
+
+**`admin_hr_rows`**: `id`, `dataset_id` FK, `row_index`, `data` (jsonb — the row
+keyed by original headers), `created_at`. GIN index on `data` for search.
+
+The earlier `core_users.supervisor_user_id` column is **dropped** from scope —
+hierarchy comes from Entra/HR and every route is operator-confirmed (ADR-018).
 
 ## 9. Architectural decisions
 
-- **ADR-018 — Approval step type & approver resolution** (new): approval as a
-  dedicated node type (not step config); reuse of `pending_approval`; the
-  reporting-line model and the position-with-manual-fallback rule.
-- Assumes ADR-010 (`INodeExecutor` / `pending_approval`) and the
-  `INotificationSender` from the Email Notifications feature.
-- Hands the approved snapshot to the Scheduling feature's record-regeneration
-  procedure — see `record-regeneration` contract in the Scheduling PRD.
+- **ADR-018 — Approval step type & approver resolution** (rewritten): approval as
+  a node type; `approverSource` dropdown; suggest-then-always-confirm; the
+  federated `IPeopleDirectory` over Entra + HR upload + free email; schema-as-
+  uploaded HR storage with a mapping; the `dynamic` (policy + RAG + lookup) flow.
+- Assumes ADR-010 (`pending_approval`), ADR-016/017 (RAG over `kb_`), and the
+  Email Notifications `INotificationSender` + M365 app registration.
+- Hands the approved snapshot to the Scheduling record-regeneration procedure.
 
 ## 10. Acceptance criteria
 
-- [ ] An `approval` node can be added, configured with a position, and saved.
-- [ ] Reaching an approval node creates a `pending` `app_session_approvals` row
-      and the session does not advance.
-- [ ] The approver is resolved from `supervisor_user_id`; when null, the operator
-      is prompted to pick one and `is_manual_fallback` is set.
-- [ ] Approve advances the session and records the approved snapshot; reject /
-      request-changes surface the comment and do not advance.
-- [ ] Approver gets an email on request; operator gets an email on decision.
-- [ ] Request and decision both write `core_audit_log` rows.
-- [ ] No double-decision: deciding an already-decided approval is rejected.
+- [ ] An `approval` node with an `approverSource` dropdown can be added and saved.
+- [ ] Reaching the node creates a `pending` row, computes a *suggestion*, and the
+      session does not advance.
+- [ ] The operator must confirm; choosing "Someone else" searches Entra + HR +
+      accepts any typed email; overrides set `is_override`.
+- [ ] First/second-level suggestions come from Entra (HR upload as fallback);
+      `dynamic` retrieves the policy clause and proposes the position holder.
+- [ ] Admin can upload a CSV/XLSX; rows are stored as-uploaded and searchable;
+      a column mapping can be set.
+- [ ] Approve advances + snapshots; reject/changes surface the comment and hold.
+- [ ] Approver emailed on request; requester emailed on decision; audit on both.
+- [ ] No double-decision; deciding an already-decided approval is rejected.
 - [ ] `./validate.sh` passes; `VERSION` and `package.json#version` match.
 
 ## 11. Out of scope / future work
 
-- Multi-stage approval chains, quorum, and delegation.
-- A full org-chart admin surface (only `supervisor_user_id` ships now).
-- Approve-by-email and mobile push.
+- Multi-stage chains, quorum, delegation.
+- Auto-detecting HR column mappings (manual mapping for v1).
+- Magic-link approvals for approvers who are not Wayfinder users (see §12).
+- Scheduled HR re-import / live HR sync.
 
 ## 12. Risks / open questions
 
-- **Reporting-line data is the riskiest dependency.** `supervisor_user_id` must
-  be populated for resolution to work; until then every approval falls back to
-  manual pick. ADR-018 weighs a column vs a `core_reporting_lines` table.
-- Position vocabulary: free-text key vs an enum/admin-managed list. Starting with
-  a small documented key set (`first_line_supervisor`).
-- What happens to an in-flight approval if the flow is versioned/edited
-  underneath it — resolved by snapshotting the record under review.
+- **Approver who is not a known user.** A free-typed email may match no account.
+  Decision needed: restrict to authenticable users vs send a secure magic-link
+  approval. Flagged in ADR-018 for `/doc-review`.
+- **Graph scopes.** `Directory.Read.All` is privileged and needs tenant admin
+  consent; until granted, resolution falls back to the HR upload / manual pick.
+- HR mapping UX: require explicit mapping before a dataset is usable for
+  resolution (search works regardless of mapping).
+- Flow edited under an open approval — mitigated by `record_snapshot`.
