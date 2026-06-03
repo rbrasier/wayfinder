@@ -333,6 +333,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setConfigOpen(true);
   }, [rfNodes]);
 
+  const handleAddAutoNode = useCallback(() => {
+    const tempId = `temp-${Date.now()}`;
+    const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
+    const tempNode: Node<AutoNodeData> = {
+      id: tempId,
+      type: "autoNode",
+      position: { x: xOffset, y: 200 },
+      data: { name: "New step", colour: "#7c3aed", instruction: null },
+    };
+    setRfNodes((nds) => [...nds, tempNode]);
+    setEditingNodeId(tempId);
+    setConfigOpen(true);
+  }, [rfNodes]);
+
   const handleConfigClose = useCallback(() => {
     if (editingNodeId?.startsWith("temp-")) {
       setRfNodes((nds) => nds.filter((n) => n.id !== editingNodeId));
@@ -528,6 +542,18 @@ function CanvasInner({ flowId }: { flowId: string }) {
                 >
                   Edit
                 </button>
+                {autoNodeEnabled && (
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                    onClick={() => {
+                      setFlowMenuOpen(false);
+                      handleAddAutoNode();
+                    }}
+                  >
+                    Add Auto Node
+                  </button>
+                )}
                 <div className="my-1 border-t border-[#dedad2]" />
                 <button
                   type="button"
