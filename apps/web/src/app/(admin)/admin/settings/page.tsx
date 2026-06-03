@@ -548,8 +548,29 @@ function RagEmbeddingsCard() {
 
   const [open, setOpen] = useState(false);
   const [provider, setProvider] = useState<EmbeddingsProviderChoice>("local");
+  // Only badge runs that completed while this card was on screen, so navigating
+  // away and back does not re-surface a stale "Completed" badge.
+  const [mountedAt] = useState(() => Date.now());
+
+  const reindexStatusQuery = trpc.settings.reindexStatus.useQuery(undefined, {
+    refetchInterval: (query) => (query.state.data?.status === "running" ? 5000 : false),
+  });
+  const startReindexMutation = trpc.settings.startReindex.useMutation({
+    onSuccess: async (result) => {
+      if (!result.started) toast.info("A re-index is already running");
+      await utils.settings.reindexStatus.invalidate();
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to start re-indexing"),
+  });
 
   const config = configQuery.data;
+  const reindexStatus = reindexStatusQuery.data;
+  const isReindexing = reindexStatus?.status === "running";
+  const finishedAfterMount =
+    reindexStatus?.finishedAt != null &&
+    new Date(reindexStatus.finishedAt).getTime() >= mountedAt;
+  const showReindexComplete = reindexStatus?.status === "complete" && finishedAfterMount;
+  const showReindexFailed = reindexStatus?.status === "failed" && finishedAfterMount;
 
   useEffect(() => {
     if (!open || !config) return;
@@ -594,6 +615,47 @@ function RagEmbeddingsCard() {
             </div>
           </>
         )}
+
+        <div className="space-y-2 border-t pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-muted-foreground">
+              Re-embed every stored document (templates, flow context docs, session
+              uploads) with the current provider.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid="reindex-button"
+              onClick={() => startReindexMutation.mutate()}
+              disabled={startReindexMutation.isPending || isReindexing}
+            >
+              {isReindexing ? "Re-indexing…" : "Re-index all documents"}
+            </Button>
+          </div>
+          {isReindexing && reindexStatus ? (
+            <p data-testid="reindex-progress" className="text-xs text-muted-foreground">
+              In progress — {reindexStatus.processed} of {reindexStatus.total} documents
+              {reindexStatus.failed > 0 ? ` (${reindexStatus.failed} failed)` : ""}…
+            </p>
+          ) : null}
+          {showReindexComplete && reindexStatus ? (
+            <p
+              data-testid="reindex-complete"
+              className="inline-flex rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-900"
+            >
+              Completed — re-indexed {reindexStatus.succeeded} of {reindexStatus.total} documents
+              {reindexStatus.failed > 0 ? `, ${reindexStatus.failed} failed` : ""}.
+            </p>
+          ) : null}
+          {showReindexFailed && reindexStatus ? (
+            <p
+              data-testid="reindex-failed"
+              className="inline-flex rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-900"
+            >
+              Re-index failed{reindexStatus.error ? `: ${reindexStatus.error}` : ""}.
+            </p>
+          ) : null}
+        </div>
       </CardContent>
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>

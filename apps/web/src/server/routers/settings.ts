@@ -21,6 +21,7 @@ import {
 import { DEFAULT_MODELS_FOR, RuntimeConfigStore } from "@rbrasier/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
 const providerSchema = z.enum(["anthropic", "openai", "mistral", "bedrock"]);
 
@@ -258,6 +259,12 @@ export const settingsRouter = router({
       ctx.container.runtimeConfig.invalidateEmbeddings();
       return { ok: true };
     }),
+
+  startReindex: adminProcedure.mutation(async ({ ctx }) => {
+    return startReindex(ctx.container.useCases.reindexAllDocuments);
+  }),
+
+  reindexStatus: adminProcedure.query(() => getReindexStatus()),
 
   getSessionUploadConfig: adminProcedure.query(async ({ ctx }) => {
     return ctx.container.runtimeConfig.getSessionUploadConfig();

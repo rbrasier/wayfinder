@@ -1,26 +1,20 @@
 import { err, ok } from "@rbrasier/domain";
 import type {
-  ChunkSourceType,
   IDocumentChunkRepository,
+  IDocumentIndexer,
   IEmbeddingsProvider,
+  IndexDocumentInput,
   NewDocumentChunk,
   Result,
 } from "@rbrasier/domain";
 import { chunkText } from "./text-chunker";
 
-export interface IndexDocumentInput {
-  flowId: string | null;
-  sessionId: string | null;
-  sourceType: ChunkSourceType;
-  storagePath: string;
-  filename: string;
-  text: string;
-}
+export type { IndexDocumentInput };
 
 // Turns an extracted document into embedded chunks ready for retrieval. Owns the
 // chunk → embed → insert pipeline so the upload routes stay thin. Re-indexing the
 // same storage path replaces its chunks (ADR-016 Decision 4).
-export class DocumentIndexingService {
+export class DocumentIndexingService implements IDocumentIndexer {
   constructor(
     private readonly embeddings: IEmbeddingsProvider,
     private readonly chunks: IDocumentChunkRepository,

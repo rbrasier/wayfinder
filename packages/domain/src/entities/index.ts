@@ -16,6 +16,7 @@ export * from "./session";
 export * from "./session-message";
 export * from "./session-upload";
 export * from "./document-chunk";
+export * from "./reindexable-document";
 export * from "./session-typing";
 export * from "./session-step-output";
 export * from "./analytics";

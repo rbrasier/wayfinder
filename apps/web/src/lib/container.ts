@@ -34,6 +34,7 @@ import {
   OverrideBranch,
   PingJob,
   RegisterJob,
+  ReindexAllDocuments,
   RemoveContextDoc,
   RemoveSessionUpload,
   RetrieveDocumentChunks,
@@ -66,6 +67,7 @@ import {
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
   DrizzleJobRepository,
+  DrizzleReindexSourceRepository,
   DrizzleSessionMessageRepository,
   DrizzleSessionUploadRepository,
   DrizzleSessionTypingRepository,
@@ -174,6 +176,7 @@ const build = () => {
     },
   });
   const documentIndexer = new DocumentIndexingService(embeddings, documentChunks);
+  const reindexSource = new DrizzleReindexSourceRepository(db);
   objectStorage.initialise().catch((error: unknown) => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
   });
@@ -223,7 +226,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, systemSettings, contextDocContent, documentChunks },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, systemSettings, contextDocContent, documentChunks, reindexSource },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -263,6 +266,7 @@ const build = () => {
       addSessionUpload: new AddSessionUpload(sessionUploads),
       removeSessionUpload: new RemoveSessionUpload(sessionUploads),
       retrieveDocumentChunks: new RetrieveDocumentChunks(embeddings, documentChunks),
+      reindexAllDocuments: new ReindexAllDocuments(reindexSource, documentIndexer, jobRepo),
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges),
       listSessions: new ListSessions(sessions),
