@@ -1,103 +1,76 @@
-# v1.27.0 — n8n Workflow Directory + Step-Context Field Values — Implementation Summary
+# v1.27.0 — Schedule Run Logging & Admin History — Implementation Summary
 
-- **Version bump**: **MINOR** (`1.26.1` → `1.27.0`) — new behaviour + domain port
-  additions; no new table. n8n credentials reuse `admin_system_settings`; field
-  value bindings ride the existing `app_flow_nodes.config` jsonb.
-- **Phase doc**: `phase-n8n-workflow-context-mapping.md` (this directory).
-- **Feature flags**: gated behind the existing `auto_node` / `scheduled_node`
-  DB flags — existing flows behave exactly as before.
+- **Version bump**: **MINOR** (`1.26.0` → `1.27.0`) — new append-only audit
+  table + new admin page, additive.
+- **Phase doc**: `schedule-run-logging.phase.md` (this directory).
+- **Builds on**: Scheduling (v1.26.0).
+
+## Problem
+
+Recurring/scheduled fires left **no history**. `FireDueSchedules` overwrote the
+single `app_session_schedules` row on every fire (`markFired` /
+`complete` / `fail`), so you could see *that* a schedule last fired and *how
+many times*, but never the per-fire record: when each fire happened, whether it
+succeeded or failed, and why. There was nothing to audit.
 
 ## What was built
 
-Auto-node request fields and the scheduled-node fire time can now draw their
-**value** from one of three sources — AI decides (default), an earlier step's
-field, or a specific literal — and n8n auto nodes are configured by **picking a
-workflow** from a directory fetched over the n8n REST API instead of typing a
-webhook URL. The mock executor now produces an AI-generated response for
-testing.
+An append-only **`app_session_schedule_runs`** table written once per fire, plus
+a new **`/admin/schedules`** page listing recent runs across all sessions with
+flow, step (node), outcome, occurrence, fire time, next-fire time, and error.
 
 ### Domain (`packages/domain`)
-- `entities/field-value-source.ts` — `FieldValueSource` (`ai` | `step_field` |
-  `literal`) and `PriorStepField`.
-- `entities/n8n-workflow.ts` — `N8nWorkflowSummary`, `N8nTrigger`.
-- `entities/flow-node.ts` — `AutoNodeConfig` gains `workflowId`,
-  `requestFieldValues`; `ScheduledNodeConfig` gains `specSource`.
-- `entities/runtime-config.ts` — `N8nConfig` + `N8N_CONFIG_SETTING_KEY`.
-- `ports/n8n-workflow-directory.ts` — `IN8nWorkflowDirectory`.
-- `ports/node-executor.ts` — `NodeExecutionInput.responseFields?`.
-- `ports/session-step-output-repository.ts` — `listBySession`.
+- `entities/schedule-run.ts` — `ScheduleRun`, `NewScheduleRun`,
+  `ScheduleRunOutcome` (`recurred` | `completed` | `failed`), and a
+  `ScheduleRunView` (run joined to flow/step/session names) for the admin list.
+- `ports/schedule-run-repository.ts` — `IScheduleRunRepository`
+  (`record`, `listRecent`).
 
-### Application (`packages/application`)
-- `services/resolve-field-values.ts` — resolves `literal`/`step_field` directly
-  and routes only `ai` fields to the model; exports `lookupStepField`.
-- `use-cases/document/structured-fields.ts` — `extractStructuredFields` now
-  accepts prior step outputs + insights as higher-priority context than the
-  transcript (priority: step outputs → insights → transcript). Document
-  generation prompt unchanged when these are absent.
-- `use-cases/session/run-auto-node.ts` — uses the resolver, reads prior outputs
-  via `listBySession`, passes `responseFields`, selects the executor by
-  `config.executor` (`NodeExecutors` map), and returns the executor's data.
-- `use-cases/scheduling/schedule-node-event.ts` — resolves `at`-kind `specSource`
-  (literal/step-field directly; `ai` via a single-field extraction); injects an
-  optional language model.
+### Application (`packages/application/src/use-cases/scheduling`)
+- `fire-due-schedules.ts` — now takes an `IScheduleRunRepository` and records a
+  run after each branch: `failed` (handler error or next-fire-time computation
+  error, with reason), `completed`, or `recurred` (with the new `next_fire_at`).
+  `occurrence` is the attempt number (`occurrenceCount + 1`). Run-logging is
+  **best-effort** — a record failure never aborts the fire loop or changes a
+  schedule's lifecycle.
+- `list-schedule-runs.ts` — `ListScheduleRuns` admin use case; clamps the limit
+  (default 100, max 500).
 
 ### Adapters (`packages/adapters`)
-- `n8n/n8n-workflow-directory.ts` — `N8nHttpWorkflowDirectory`: paginated
-  `GET /api/v1/workflows` with `X-N8N-API-KEY`; maps each workflow to
-  `{ id, name, active, trigger, webhookUrl, inputs, outputs }` by convention
-  (webhook trigger metadata; an `Inputs`/`Outputs` Edit-Fields `Set` node;
-  `respondToWebhook` body fallback). Never throws on a malformed workflow.
-- `node-executors/mock-node-executor.ts` — AI-generates a response shaped by
-  `responseFields` using the configured chat model; echoes request fields when
-  none are declared. `index.ts` exposes `createNodeExecutors`.
-- `config/runtime-config-store.ts` — `getN8nConfig` / `invalidateN8n` /
-  `redactN8n` (DB-over-env).
-- `repositories/drizzle-session-step-output-repository.ts` — `listBySession`.
+- `db/schema/wayfinder.ts` — new `app_session_schedule_runs` table (indexes on
+  `created_at` and `schedule_id`; cascade FKs to schedules/sessions/flows/nodes).
+- `drizzle/0019_confused_jetstream.sql` — generated migration (+ snapshot/journal).
+- `repositories/drizzle-schedule-run-repository.ts` —
+  `DrizzleScheduleRunRepository`; `listRecent` left-joins flows/nodes/sessions
+  for the view, newest first.
 
-### Web (`apps/web`) + API
-- `/admin/settings` — new **n8n Integration** card (base URL + API key, redacted,
-  blank-key-keeps-stored) via `settings.getN8nConfig` / `setN8nConfig`.
-- `server/routers/n8n.ts` — `n8n.listWorkflows` (admin) feeding the dropdown.
-- `components/canvas/field-value-selector.tsx` — `FieldValueSelector`,
-  `FieldValueList`, `ReadOnlyFieldList` + encode/decode helpers.
-- `components/canvas/node-config-modal.tsx` — n8n executor shows a workflow
-  dropdown (replacing the URL input), renders the selected workflow's
-  inputs/outputs read-only, a per-request-field value selector, and the same
-  selector on the scheduled `at` timestamp; **Add field** and the mock free-form
-  path are retained.
-- `flows/[id]/config/_content.tsx` and `admin/flows/[id]/_content.tsx` — compute
-  topology-scoped `priorStepFields`, build/read the new config keys.
-- `lib/container.ts` — wires `N8nHttpWorkflowDirectory`, the mock-model
-  injection, `ApplyAutoNodeResult`, and `ScheduleNodeEvent`'s language model.
-- chat stream `turn-helpers.ts` / `route.ts` — applies a synchronous (mock)
-  completion inline so the session advances, and threads `specSource` context
-  into the scheduled dispatch.
-
-## Migrations run
-- **None.** n8n credentials use the existing `admin_system_settings` KV table;
-  field bindings and `workflowId` ride `app_flow_nodes.config` jsonb.
+### Web app (`apps/web`)
+- `lib/container.ts` — wired `DrizzleScheduleRunRepository` (`repos.scheduleRuns`)
+  and `ListScheduleRuns` (`useCases.listScheduleRuns`).
+- `server/routers/schedule.ts` — `listRecentRuns` (`adminProcedure`).
+- `app/(admin)/admin/schedules/page.tsx` + `_content.tsx` — new admin history
+  page (table + empty state), mirroring the All Sessions page.
+- `components/sidebar.tsx` — `/admin/schedules` nav item ("Schedules", Clock icon).
 
 ## Tests
-- Tests-first per sub-component: `resolve-field-values.test.ts`,
-  extended `run-auto-node.test.ts` and `schedule-node-event.test.ts`
-  (application); `n8n-workflow-directory.test.ts`, rewritten
-  `mock-node-executor.test.ts`, `runtime-config-store` n8n cases (adapters).
-  `./validate.sh` passes (typecheck, lint, full unit suite, domain purity,
-  table naming, version sync, coverage ≥ thresholds).
-- **E2E**: `tests/e2e/enhance-n8n-workflow-context-mapping.spec.ts` — the admin
-  n8n Integration settings card/dialog, and (behind `auto_node`) configuring an
-  auto step with the Mock executor and binding a request field to a specific
-  value. Skips gracefully when the surface/DB is unavailable, matching the
-  suite's conventions.
+- Tests-first (application): extended `fire-due-schedules.test.ts` (records the
+  right outcome/occurrence/next-fire/error for recurred/completed/handler-failure/
+  compute-failure, and proves a run-repo write failure does not abort firing);
+  new `list-schedule-runs.test.ts`. Full suite green; `./validate.sh` passes all
+  14 checks (typecheck, lint, tests, domain purity, table naming, version sync,
+  coverage, …).
+- E2E: `tests/e2e/phase-schedule-run-logging.spec.ts` — admin loads
+  `/admin/schedules` (table or empty state, no JS errors) and reaches it from the
+  sidebar. Skips gracefully when the surface is unavailable, matching suite
+  conventions.
+
+## Migrations run
+- `0019_confused_jetstream.sql` — creates `app_session_schedule_runs`. (Schema
+  check is skipped locally without `DATABASE_URL`; apply on deploy.)
 
 ## Known limitations / deferred
-- **Input/output inference is convention-based.** Fields are read only from a
-  webhook trigger + an `Inputs`/`Outputs` Edit-Fields `Set` node (or the
-  `respondToWebhook` body); workflows without that convention surface empty
-  lists and rely on **Add field**.
-- **Triggering is unchanged** — selecting a workflow only sources its webhook
-  URL; the signed-POST + async callback path is reused. `manual_or_scheduled`
-  workflows have no webhook URL and are flagged as not auto-callable.
-- **Single shared n8n instance** (no per-node credentials / multiple instances).
-- **SSRF note**: the admin-authored base URL is a server-side fetch target —
-  appropriate for an admin-only setting; revisit if non-admins gain access.
+- The standalone scheduler worker process and concrete session-advance fire
+  handler remain deferred (v1.26.0 known limitation). This phase wires the
+  run-log repository into `FireDueSchedules` and the container so runs are
+  recorded wherever/whenever the worker is started; it does not start a worker.
+  Until the worker runs, the admin page shows its empty state.

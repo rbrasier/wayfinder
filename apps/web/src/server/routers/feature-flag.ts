@@ -6,9 +6,9 @@ export const featureFlagRouter = router({
   isEnabled: authenticatedProcedure
     .input(z.object({ key: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.getFeatureFlag.execute(input.key);
+      const result = await ctx.container.useCases.isFeatureEnabled.execute(input.key);
       if (result.error) throw toTrpcError(result.error);
-      return result.data?.enabled === true;
+      return result.data;
     }),
 
   list: adminProcedure.query(async ({ ctx }) => {

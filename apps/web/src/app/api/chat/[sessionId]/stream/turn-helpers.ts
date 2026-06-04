@@ -120,11 +120,9 @@ export async function generateTitle(
   }
 }
 
-// True only when the auto_node feature flag exists and is enabled. Admins toggle
-// it on to use and test auto nodes before the feature is fully released.
 export async function isAutoNodeEnabled(container: Container): Promise<boolean> {
-  const flag = await container.useCases.getFeatureFlag.execute("auto_node");
-  return !flag.error && flag.data?.enabled === true;
+  const flag = await container.useCases.isFeatureEnabled.execute("auto_node");
+  return !flag.error && flag.data === true;
 }
 
 export interface DispatchAutoNodeInput {
@@ -197,11 +195,9 @@ export async function dispatchAutoNode(input: DispatchAutoNodeInput): Promise<vo
   }
 }
 
-// True only when the scheduled_node feature flag exists and is enabled. Mirrors
-// the auto_node gate so the scheduled node type stays hidden until released.
 export async function isScheduledNodeEnabled(container: Container): Promise<boolean> {
-  const flag = await container.useCases.getFeatureFlag.execute("scheduled_node");
-  return !flag.error && flag.data?.enabled === true;
+  const flag = await container.useCases.isFeatureEnabled.execute("scheduled_node");
+  return !flag.error && flag.data === true;
 }
 
 // Flatten the context gathered across the conversation into a key/value map so a

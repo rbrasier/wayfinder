@@ -131,6 +131,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [editingName, setEditingName] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const autoNodeEnabled = trpc.featureFlag.isEnabled.useQuery({ key: "auto_node" }).data ?? false;
+  const scheduledNodeEnabled =
+    trpc.featureFlag.isEnabled.useQuery({ key: "scheduled_node" }).data ?? false;
 
   const [configOpen, setConfigOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -781,6 +783,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         autoNodeEnabled={autoNodeEnabled}
+        scheduledNodeEnabled={scheduledNodeEnabled}
         priorStepFields={priorStepFields}
         onUploadTemplate={handleUploadTemplate}
       />

@@ -1,7 +1,7 @@
 # Phase — n8n Workflow Directory + Step-Context Field Values
 
 - **Status**: Awaiting review
-- **Target version**: 1.27.0  (bump: **MINOR** — new behaviour + port additions;
+- **Target version**: 1.30.0  (bump: **MINOR** — new behaviour + port additions;
   no new table. n8n instance settings reuse `admin_system_settings`; field value
   bindings ride the existing `app_flow_nodes.config` jsonb.)
 - **PRD**: _none — this phase doc is the spec; promote to a PRD only if scope grows._
@@ -186,8 +186,8 @@ summary with empty `inputs`/`outputs`.
     `apps/web/e2e/enhance-n8n-workflow-context-mapping.spec.ts`: with `auto_node`
     enabled, configure an auto node by picking a workflow and setting a request
     field to a prior-step value + a literal, and save. Bump `VERSION` +
-    `package.json#version` to `1.27.0`. Run `./validate.sh`; fix all failures.
-    Move this phase doc to `docs/development/implemented/v1.27.0/` with an
+    `package.json#version` to `1.30.0`. Run `./validate.sh`; fix all failures.
+    Move this phase doc to `docs/development/implemented/v1.30.0/` with an
     implementation summary.
 
 ## 7. Acceptance criteria
@@ -213,7 +213,7 @@ summary with empty `inputs`/`outputs`.
 - [ ] Architecture boundaries intact (types/ports in domain, n8n HTTP +
       inference in adapters, Result pattern at every boundary); no new table.
 - [ ] One Playwright e2e covers the workflow-pick + value-source path.
-- [ ] `VERSION` = `package.json#version` = `1.27.0`; `./validate.sh` passes.
+- [ ] `VERSION` = `package.json#version` = `1.30.0`; `./validate.sh` passes.
 
 ## 8. Risks / open questions
 

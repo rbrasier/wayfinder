@@ -34,4 +34,5 @@ export * from "./document-indexer";
 export * from "./reindex-source-repository";
 export * from "./clock";
 export * from "./schedule-repository";
+export * from "./schedule-run-repository";
 export * from "./schedule-fire-handler";

@@ -1,5 +1,6 @@
 import {
   AddContextDoc,
+  AdvanceScheduledNode,
   AddSessionUpload,
   DeleteAllErrors,
   CreateFlow,
@@ -20,12 +21,14 @@ import {
   GetUsageSummary,
   GrantFlowOwner,
   HeartbeatTyping,
+  IsFeatureEnabled,
   ListAllSessions,
   ListErrors,
   ListFeatureFlags,
   ListFlows,
   ListFlowsForUser,
   ListJobs,
+  ListScheduleRuns,
   ListSessions,
   ListTypingUsers,
   ListUsers,
@@ -74,6 +77,7 @@ import {
   DrizzleSessionTypingRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleScheduleRepository,
+  DrizzleScheduleRunRepository,
   DrizzleAnalyticsRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
@@ -126,6 +130,7 @@ const build = () => {
   const sessionTyping = new DrizzleSessionTypingRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
   const schedules = new DrizzleScheduleRepository(db);
+  const scheduleRuns = new DrizzleScheduleRunRepository(db);
   const clock = new SystemClock();
   const analyticsRepo = new DrizzleAnalyticsRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
@@ -229,7 +234,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, systemSettings, contextDocContent, documentChunks, reindexSource },
+    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -244,6 +249,7 @@ const build = () => {
       sendMessage: new SendMessage(llm, conversations),
       logAuditEvent: new LogAuditEvent(auditLogger),
       getFeatureFlag: new GetFeatureFlag(featureFlags),
+      isFeatureEnabled: new IsFeatureEnabled(featureFlags),
       upsertFeatureFlag: new UpsertFeatureFlag(featureFlags),
       listFeatureFlags: new ListFeatureFlags(featureFlags),
       trackUsage: new TrackUsage(usageRepo),
@@ -279,6 +285,8 @@ const build = () => {
       runAutoNode: new RunAutoNode(sessions, llm, nodeExecutors, sessionStepOutputs),
       applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs),
       scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock, llm),
+      advanceScheduledNode: new AdvanceScheduledNode(sessions, flowEdges),
+      listScheduleRuns: new ListScheduleRuns(scheduleRuns),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       heartbeatTyping: new HeartbeatTyping(sessionTyping),
       listTypingUsers: new ListTypingUsers(sessionTyping, users),
