@@ -33,7 +33,11 @@ import { AutoNode } from "@/components/canvas/auto-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
-import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
+import type {
+  NodeConfigValues,
+  ScheduleAnchor,
+  ScheduleKind,
+} from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { trpc } from "@/trpc/client";
 import type { FlowContextDoc, TemplateField } from "@rbrasier/domain";
@@ -127,6 +131,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [editingName, setEditingName] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const autoNodeEnabled = trpc.featureFlag.isEnabled.useQuery({ key: "auto_node" }).data ?? false;
+  const scheduledNodeEnabled =
+    trpc.featureFlag.isEnabled.useQuery({ key: "scheduled_node" }).data ?? false;
 
   const [configOpen, setConfigOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
@@ -255,24 +261,37 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (!editingNodeId) return;
     setIsSavingConfig(true);
 
-    const config: Record<string, unknown> =
-      values.type === "auto"
-        ? {
-            instruction: values.instruction,
-            executor: values.executor,
-            webhookUrl: values.webhookUrl,
-            requestFields: values.requestFields,
-            responseFields: values.responseFields,
-          }
-        : {
-            aiInstruction: values.aiInstruction,
-            doneWhen: values.neverDone ? "" : values.doneWhen,
-            neverDone: values.neverDone,
-            outputType: values.outputType,
-            documentTemplatePath: values.documentTemplatePath ?? null,
-            documentTemplateFilename: values.documentTemplateFilename ?? null,
-            documentTemplateContent: values.documentTemplateContent ?? null,
-          };
+    const buildConfig = (): Record<string, unknown> => {
+      if (values.type === "auto") {
+        return {
+          instruction: values.instruction,
+          executor: values.executor,
+          webhookUrl: values.webhookUrl,
+          requestFields: values.requestFields,
+          responseFields: values.responseFields,
+        };
+      }
+      if (values.type === "scheduled") {
+        return {
+          kind: values.scheduleKind,
+          spec: values.scheduleSpec,
+          recurring: values.scheduleRecurring,
+          maxOccurrences: values.scheduleMaxOccurrences ? Number(values.scheduleMaxOccurrences) : null,
+          anchor: values.scheduleAnchor,
+          metadataKey: values.scheduleAnchor === "step_metadata" ? values.scheduleMetadataKey : null,
+        };
+      }
+      return {
+        aiInstruction: values.aiInstruction,
+        doneWhen: values.neverDone ? "" : values.doneWhen,
+        neverDone: values.neverDone,
+        outputType: values.outputType,
+        documentTemplatePath: values.documentTemplatePath ?? null,
+        documentTemplateFilename: values.documentTemplateFilename ?? null,
+        documentTemplateContent: values.documentTemplateContent ?? null,
+      };
+    };
+    const config = buildConfig();
 
     const isTempNode = editingNodeId.startsWith("temp-");
     const position = rfNodes.find((n) => n.id === editingNodeId)?.position ?? { x: 200, y: 200 };
@@ -452,7 +471,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
     ? {
         name: editingData.name,
         colour: editingData.colour ?? "#6366f1",
-        type: editingNode?.type === "autoNode" ? "auto" : "conversational",
+        type:
+          editingNode?.type === "autoNode"
+            ? "auto"
+            : editingNode?.type === "scheduledNode"
+              ? "scheduled"
+              : "conversational",
         aiInstruction: (editingConfig.aiInstruction as string | null) ?? editingData.aiInstruction ?? "",
         doneWhen: (editingConfig.doneWhen as string | null) ?? "",
         neverDone: Boolean(editingConfig.neverDone),
@@ -465,6 +489,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
         webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
         requestFields: readFields(editingConfig.requestFields),
         responseFields: readFields(editingConfig.responseFields),
+        scheduleKind: (editingConfig.kind as ScheduleKind | undefined) ?? "relative",
+        scheduleSpec: (editingConfig.spec as string | null) ?? "",
+        scheduleRecurring: Boolean(editingConfig.recurring),
+        scheduleMaxOccurrences:
+          editingConfig.maxOccurrences != null ? String(editingConfig.maxOccurrences) : "",
+        scheduleAnchor: (editingConfig.anchor as ScheduleAnchor | undefined) ?? "node_reached",
+        scheduleMetadataKey: (editingConfig.metadataKey as string | null) ?? "",
       }
     : undefined;
 
@@ -701,6 +732,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         autoNodeEnabled={autoNodeEnabled}
+        scheduledNodeEnabled={scheduledNodeEnabled}
         onUploadTemplate={handleUploadTemplate}
       />
     </div>

@@ -11,7 +11,7 @@ import {
   type SystemHealth,
   ok,
 } from "@rbrasier/domain";
-import { GetFeatureFlag, ListFeatureFlags, UpsertFeatureFlag } from "./get-feature-flag";
+import { GetFeatureFlag, IsFeatureEnabled, ListFeatureFlags, UpsertFeatureFlag } from "./get-feature-flag";
 import { GetSystemHealth } from "./get-system-health";
 import { FailJob, ListJobs, PingJob, RegisterJob } from "./job-health";
 
@@ -142,6 +142,37 @@ describe("GetFeatureFlag", () => {
   });
 });
 
+describe("IsFeatureEnabled", () => {
+  it("defaults scheduled_node to enabled when no flag row exists", async () => {
+    const sut = new IsFeatureEnabled(new InMemoryFeatureFlags());
+
+    const result = await sut.execute("scheduled_node");
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe(true);
+  });
+
+  it("uses an explicit scheduled_node flag row when present", async () => {
+    const repo = new InMemoryFeatureFlags();
+    repo.seed({ key: "scheduled_node", enabled: false });
+    const sut = new IsFeatureEnabled(repo);
+
+    const result = await sut.execute("scheduled_node");
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe(false);
+  });
+
+  it("keeps other missing flags disabled by default", async () => {
+    const sut = new IsFeatureEnabled(new InMemoryFeatureFlags());
+
+    const result = await sut.execute("auto_node");
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe(false);
+  });
+});
+
 describe("UpsertFeatureFlag", () => {
   it("creates a flag when it does not exist", async () => {
     const repo = new InMemoryFeatureFlags();
@@ -165,7 +196,27 @@ describe("ListFeatureFlags", () => {
     const result = await sut.execute();
 
     expect(result.error).toBeUndefined();
-    expect(result.data).toHaveLength(2);
+    expect(result.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: "flag-a" }),
+        expect.objectContaining({ key: "flag-b" }),
+      ]),
+    );
+  });
+
+  it("includes scheduled_node as a default-on flag when it is not persisted", async () => {
+    const sut = new ListFeatureFlags(new InMemoryFeatureFlags());
+
+    const result = await sut.execute();
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContainEqual(
+      expect.objectContaining({
+        key: "scheduled_node",
+        enabled: true,
+        rolloutPct: 100,
+      }),
+    );
   });
 });
 
