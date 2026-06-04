@@ -11,7 +11,22 @@
  *     per step", "Node breakdown") once a flow is selected.
  */
 
+import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
+
+// The flow-insights dashboard is client-fetched: it shows "Loading…" until the
+// tRPC query resolves, then settles into either its empty state ("No flows
+// yet") or the "Flow insights" heading. `networkidle` can fire mid-load, so wait
+// for one of the terminal states before deciding whether to skip.
+async function waitForFlowInsightsSettled(page: Page): Promise<void> {
+  await page
+    .waitForFunction(
+      () => /no flows yet/i.test(document.body.innerText) || /flow insights/i.test(document.body.innerText),
+      undefined,
+      { timeout: 15_000 },
+    )
+    .catch(() => undefined);
+}
 
 test.describe('Admin: Analytics Dashboards', () => {
   test('overview dashboard renders without errors', async ({ page, consoleLogs }) => {
@@ -29,6 +44,7 @@ test.describe('Admin: Analytics Dashboards', () => {
   test('flow insights dashboard shows heading and description', async ({ page, consoleLogs }) => {
     await page.goto('/admin/dashboards/flows');
     await page.waitForLoadState('networkidle');
+    await waitForFlowInsightsSettled(page);
     await page.screenshot({ path: 'screenshots/admin-dashboard-flows.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
@@ -51,6 +67,7 @@ test.describe('Admin: Analytics Dashboards', () => {
   test('selecting a flow reveals node-level breakdown charts', async ({ page }) => {
     await page.goto('/admin/dashboards/flows');
     await page.waitForLoadState('networkidle');
+    await waitForFlowInsightsSettled(page);
 
     if (await page.getByText(/no flows yet/i).isVisible().catch(() => false)) {
       test.skip(true, 'No flows yet — nothing to drill into on the insights dashboard');

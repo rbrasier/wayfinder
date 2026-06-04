@@ -37,9 +37,20 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
   await expect(editLink).toBeVisible({ timeout: 5_000 });
   await editLink.click();
 
-  await page.waitForURL(/\/admin\/flows\/[^/]+$/, { timeout: 10_000 });
+  // The canvas route is heavy (ReactFlow). In dev mode the first navigation
+  // also triggers on-demand compilation, so allow the full navigation timeout.
+  await page.waitForURL(/\/admin\/flows\/[^/]+$/, { timeout: 30_000 });
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1_200);
+}
+
+// Publishing moved off the toolbar into the "⋯" Flow actions menu:
+// Flow actions → Update published state → Publish globally (everyone).
+async function publishGlobally(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Flow actions' }).click();
+  await page.getByRole('button', { name: /update published state/i }).click();
+  await page.getByRole('button', { name: /publish globally/i }).click();
+  await page.waitForTimeout(1_000);
 }
 
 async function addAndConfigureStep(
@@ -149,8 +160,7 @@ test.describe('Admin: Two-Step Linear Flow', () => {
     await page.screenshot({ path: 'screenshots/two-step-04-connected.png', fullPage: true });
     await expect(page.locator('.react-flow__edge')).toHaveCount(1);
 
-    await page.getByRole('button', { name: /^Publish$/i }).click();
-    await page.waitForTimeout(1_000);
+    await publishGlobally(page);
     await page.screenshot({ path: 'screenshots/two-step-05-published.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
@@ -210,8 +220,7 @@ test.describe('Admin: Branching Flow', () => {
     await expect(page.locator('.react-flow__edge')).toHaveCount(3);
     await page.screenshot({ path: 'screenshots/branch-09-full-canvas.png', fullPage: true });
 
-    await page.getByRole('button', { name: /^Publish$/i }).click();
-    await page.waitForTimeout(1_000);
+    await publishGlobally(page);
     await page.screenshot({ path: 'screenshots/branch-10-published.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');

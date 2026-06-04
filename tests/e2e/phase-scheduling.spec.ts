@@ -108,7 +108,10 @@ test.describe('Scheduling: scheduled node behind the scheduled_node flag', () =>
     await page.getByRole('button', { name: /^Save$/i }).click();
     await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });
 
-    await expect(page.getByText(/Scheduled/i).first()).toBeVisible({ timeout: 5_000 });
+    // The scheduled node renders its name and a schedule subtitle (e.g.
+    // "relative: 30d") on the canvas.
+    await expect(page.getByText('Wait 30 days')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/relative: 30d/i)).toBeVisible({ timeout: 5_000 });
     await page.screenshot({ path: 'screenshots/scheduling-node-on-canvas.png', fullPage: true });
   });
 

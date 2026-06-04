@@ -54,9 +54,15 @@ export const scheduledValuesFromConfig = (
   config: Record<string, unknown>,
 ): Partial<NodeConfigValues> => {
   const storedKind = config.kind as string | undefined;
-  // Legacy `cron` rows have no plain-language equivalent — open them as a
-  // recurrence so the author re-expresses the schedule in the new builder.
-  const kind: ScheduleKind = storedKind === "relative" || storedKind === "at" ? storedKind : "recurrence";
+  // A new node has no stored kind yet — start it on the simplest "run after a
+  // delay" (relative) option. Only an existing non-plain-language kind (legacy
+  // `cron`, or an already-stored `recurrence`) opens in the recurrence builder.
+  const kind: ScheduleKind =
+    storedKind === "relative" || storedKind === "at"
+      ? storedKind
+      : storedKind
+        ? "recurrence"
+        : "relative";
 
   const base: Partial<NodeConfigValues> = {
     scheduleKind: kind,
