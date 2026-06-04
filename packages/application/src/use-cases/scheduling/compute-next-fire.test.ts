@@ -1,7 +1,17 @@
+import { serializeRecurrenceRule, type RecurrenceRule } from "@rbrasier/domain";
 import { describe, expect, it } from "vitest";
-import { computeNextFireAt, parseRelativeDuration } from "./compute-next-fire";
+import { computeNextFireAt, computeNextRecurrence, parseRelativeDuration } from "./compute-next-fire";
 
 const anchor = new Date("2026-06-03T10:00:00.000Z");
+
+const utcRule = (overrides: Partial<RecurrenceRule>): RecurrenceRule => ({
+  frequency: "daily",
+  interval: 1,
+  hour: 9,
+  minute: 0,
+  timezone: "UTC",
+  ...overrides,
+});
 
 describe("parseRelativeDuration", () => {
   it("parses days, hours, minutes, weeks and seconds", () => {
@@ -51,5 +61,73 @@ describe("computeNextFireAt", () => {
   it("fails on an unparseable `at` timestamp", () => {
     const result = computeNextFireAt({ kind: "at", spec: "not-a-date", anchor });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("computes the next daily recurrence forward from the anchor", () => {
+    const result = computeNextFireAt({
+      kind: "recurrence",
+      spec: serializeRecurrenceRule(utcRule({})),
+      anchor,
+    });
+    expect(result.data?.toISOString()).toBe("2026-06-04T09:00:00.000Z");
+  });
+
+  it("anchors a recurrence interval to `start`, not to the from-instant", () => {
+    const result = computeNextFireAt({
+      kind: "recurrence",
+      spec: serializeRecurrenceRule(utcRule({ interval: 2 })),
+      anchor: new Date("2026-06-06T09:30:00.000Z"),
+      start: anchor,
+    });
+    // start = 06-03, interval 2 → 06-05, 06-07, ...; the next slot after 06-06 09:30.
+    expect(result.data?.toISOString()).toBe("2026-06-07T09:00:00.000Z");
+  });
+
+  it("fails on an unparseable recurrence spec", () => {
+    const result = computeNextFireAt({ kind: "recurrence", spec: "0 9 * * *", anchor });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("computeNextRecurrence", () => {
+  const start = new Date("2026-06-03T10:00:00.000Z"); // Wednesday
+
+  it("skips a slot that has already passed today", () => {
+    const result = computeNextRecurrence(utcRule({}), start, start);
+    expect(result.data?.toISOString()).toBe("2026-06-04T09:00:00.000Z");
+  });
+
+  it("honours a multi-day interval counted from the start", () => {
+    const result = computeNextRecurrence(utcRule({ interval: 2 }), start, start);
+    expect(result.data?.toISOString()).toBe("2026-06-05T09:00:00.000Z");
+  });
+
+  it("picks the next listed weekday for a weekly rule", () => {
+    const result = computeNextRecurrence(
+      utcRule({ frequency: "weekly", weekdays: [1, 3] }),
+      start,
+      start,
+    );
+    expect(result.data?.toISOString()).toBe("2026-06-08T09:00:00.000Z");
+  });
+
+  it("picks the configured day for a monthly rule", () => {
+    const result = computeNextRecurrence(
+      utcRule({ frequency: "monthly", monthDay: 15, hour: 8, minute: 5 }),
+      start,
+      start,
+    );
+    expect(result.data?.toISOString()).toBe("2026-06-15T08:05:00.000Z");
+  });
+
+  it("keeps the wall-clock time across a DST spring-forward", () => {
+    const newYorkStart = new Date("2026-03-07T18:00:00.000Z");
+    const result = computeNextRecurrence(
+      { frequency: "daily", interval: 1, hour: 9, minute: 0, timezone: "America/New_York" },
+      newYorkStart,
+      newYorkStart,
+    );
+    // 9am on 2026-03-08 is EDT (UTC-4) → 13:00Z, not 14:00Z.
+    expect(result.data?.toISOString()).toBe("2026-03-08T13:00:00.000Z");
   });
 });

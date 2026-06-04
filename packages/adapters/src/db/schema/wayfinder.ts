@@ -136,7 +136,7 @@ export const app_session_schedules = pgTable(
     node_id: uuid("node_id")
       .notNull()
       .references(() => app_flow_nodes.id, { onDelete: "cascade" }),
-    kind: text("kind", { enum: ["relative", "cron", "at"] }).notNull(),
+    kind: text("kind", { enum: ["relative", "cron", "at", "recurrence"] }).notNull(),
     spec: text("spec").notNull(),
     recurring: boolean("recurring").notNull().default(false),
     next_fire_at: timestamp("next_fire_at", { withTimezone: true }).notNull(),

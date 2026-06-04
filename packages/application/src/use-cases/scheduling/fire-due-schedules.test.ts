@@ -171,6 +171,32 @@ describe("FireDueSchedules", () => {
     expect(calls.fired[0]?.update.nextFireAt.toISOString()).toBe("2026-07-04T09:00:00.000Z");
   });
 
+  it("recurs a recurrence schedule using the preserved start anchor", async () => {
+    const rule = JSON.stringify({
+      frequency: "daily",
+      interval: 2,
+      hour: 9,
+      minute: 0,
+      timezone: "UTC",
+    });
+    const { repo, calls } = makeRepo([
+      makeSchedule({
+        kind: "recurrence",
+        spec: rule,
+        recurring: true,
+        maxOccurrences: null,
+        payload: { anchorAt: "2026-07-03T08:00:00.000Z" },
+      }),
+    ]);
+    const { runs } = makeRunRepo();
+    const useCase = new FireDueSchedules(repo, runs, makeHandler(), fixedClock);
+
+    await useCase.execute();
+
+    // Anchor 07-03, interval 2 → 07-03, 07-05, ...; next slot after NOW (07-03 10:00).
+    expect(calls.fired[0]?.update.nextFireAt.toISOString()).toBe("2026-07-05T09:00:00.000Z");
+  });
+
   it("marks a schedule failed when the fire handler errors and records the run", async () => {
     const { repo, calls } = makeRepo([makeSchedule()]);
     const { runs, recorded } = makeRunRepo();

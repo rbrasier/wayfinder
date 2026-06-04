@@ -101,7 +101,7 @@ export class ScheduleNodeEvent {
       nodeId: input.node.id,
       kind: config.kind,
       spec: spec.data,
-      recurring: config.recurring ?? false,
+      recurring: config.kind === "recurrence" ? true : config.recurring ?? false,
       maxOccurrences: config.maxOccurrences ?? null,
       nextFireAt: nextFireAt.data,
       status: "active",

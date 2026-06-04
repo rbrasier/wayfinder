@@ -20,9 +20,19 @@ export interface FireDueSchedulesOutput {
 const DEFAULT_BATCH_SIZE = 50;
 
 // `at` schedules name a single absolute instant; recurring only makes sense for
-// relative/cron, which can compute a fresh next time forward from the last fire.
+// the kinds that can compute a fresh next time forward from the last fire.
 const canRecur = (schedule: SessionSchedule): boolean =>
-  schedule.recurring && (schedule.kind === "relative" || schedule.kind === "cron");
+  schedule.recurring &&
+  (schedule.kind === "relative" || schedule.kind === "cron" || schedule.kind === "recurrence");
+
+// `recurrence` intervals are counted from the original node-reached anchor,
+// preserved in the payload when the schedule was created.
+const recurrenceStart = (schedule: SessionSchedule): Date | undefined => {
+  const raw = schedule.payload.anchorAt;
+  if (typeof raw !== "string") return undefined;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+};
 
 const reachedMaxOccurrences = (schedule: SessionSchedule, nextOccurrence: number): boolean =>
   schedule.maxOccurrences !== null && nextOccurrence >= schedule.maxOccurrences;
@@ -74,6 +84,7 @@ export class FireDueSchedules {
         kind: schedule.kind,
         spec: schedule.spec,
         anchor: now,
+        start: recurrenceStart(schedule) ?? now,
       });
       if (nextFireAt.error) {
         await this.schedules.fail(schedule.id, nextFireAt.error.message);

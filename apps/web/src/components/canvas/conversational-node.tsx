@@ -2,6 +2,7 @@
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { cn } from "@/lib/utils";
+import { NodeTypeBadge } from "./node-styles";
 
 export interface ConversationalNodeData {
   name: string;
@@ -27,16 +28,17 @@ export function ConversationalNode({ data, selected }: NodeProps) {
     <div
       className={cn(
         "relative w-56 rounded-lg border bg-white shadow-sm transition-shadow",
-        selected ? "border-indigo-400 shadow-md ring-2 ring-indigo-200" : "border-gray-200",
+        selected ? "border-blue-500 shadow-md ring-2 ring-blue-200" : "border-blue-200",
       )}
     >
+      <NodeTypeBadge type="conversational" />
       <Handle
         type="target"
         position={Position.Left}
         className="!h-3 !w-3 !border-2 !border-white !bg-gray-400"
       />
 
-      <div className="flex items-start gap-3 p-3">
+      <div className="flex items-start gap-3 p-3 pr-8">
         <div
           className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white text-xs font-bold"
           style={{ backgroundColor: nodeData.colour ?? DEFAULT_COLOUR }}

@@ -1,7 +1,10 @@
 // A scheduled or recurring fire instance for a single session, created when a
 // `scheduled` flow node is reached. Persisted in `app_session_schedules`.
 
-export type ScheduleKind = "relative" | "cron" | "at";
+// `cron` is retained so schedules authored before plain-language recurrence
+// keep firing; new flows author `recurrence` (a structured `RecurrenceRule`
+// serialised into `spec`) instead of hand-written cron.
+export type ScheduleKind = "relative" | "cron" | "at" | "recurrence";
 
 // Where the fire time is anchored before `kind`/`spec` is applied:
 // `node_reached` = the moment the node is reached; `step_metadata` = an ISO

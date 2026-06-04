@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 
@@ -25,9 +26,19 @@ interface FieldValueSelectorProps {
   value: FieldValueSource;
   onChange: (next: FieldValueSource) => void;
   priorStepFields: PriorStepField[];
+  // Overrides how the "Specific value" case is edited. The scheduled `at`
+  // timestamp uses this to swap the plain text box for a calendar/time picker.
+  renderLiteral?: (value: string, onChange: (next: string) => void) => ReactNode;
+  literalLabel?: string;
 }
 
-export function FieldValueSelector({ value, onChange, priorStepFields }: FieldValueSelectorProps) {
+export function FieldValueSelector({
+  value,
+  onChange,
+  priorStepFields,
+  renderLiteral,
+  literalLabel = "Specific value",
+}: FieldValueSelectorProps) {
   return (
     <div className="space-y-1">
       <select
@@ -45,15 +56,18 @@ export function FieldValueSelector({ value, onChange, priorStepFields }: FieldVa
             ))}
           </optgroup>
         )}
-        <option value="literal">Specific value</option>
+        <option value="literal">{literalLabel}</option>
       </select>
-      {value.kind === "literal" && (
-        <Input
-          value={value.value}
-          onChange={(e) => onChange({ kind: "literal", value: e.target.value })}
-          placeholder="Enter a specific value"
-        />
-      )}
+      {value.kind === "literal" &&
+        (renderLiteral ? (
+          renderLiteral(value.value, (next) => onChange({ kind: "literal", value: next }))
+        ) : (
+          <Input
+            value={value.value}
+            onChange={(e) => onChange({ kind: "literal", value: e.target.value })}
+            placeholder="Enter a specific value"
+          />
+        ))}
     </div>
   );
 }

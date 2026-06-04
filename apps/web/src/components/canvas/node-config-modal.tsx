@@ -12,14 +12,29 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
+import { describeRecurrenceRule } from "@rbrasier/domain";
+import type {
+  FieldValueSource,
+  PriorStepField,
+  RecurrenceFrequency,
+  TemplateField,
+} from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CalendarPicker, type YearMonth } from "@/components/ui/calendar-picker";
+import { TimeWheel } from "@/components/ui/time-wheel";
 import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 import { TemplateFieldEditor, parseFieldLines } from "./template-field-editor";
 import { FieldValueList, FieldValueSelector, ReadOnlyFieldList } from "./field-value-selector";
+import { STEP_TYPE_ACCENT } from "./node-styles";
+import {
+  browserTimezone,
+  buildRecurrenceRule,
+  isoToLocalParts,
+  localPartsToIso,
+} from "./scheduled-config";
 
 const COLOURS = [
   { hex: "#3a5fd9", label: "Indigo" },
@@ -34,7 +49,9 @@ const EXAMPLE_TAG = "{{First name}}";
 
 export type NodeConfigType = "conversational" | "auto" | "scheduled";
 
-export type ScheduleKind = "relative" | "cron" | "at";
+// Authoring offers plain-language kinds only; legacy `cron` rows are mapped to
+// `recurrence` when a node is opened.
+export type ScheduleKind = "relative" | "at" | "recurrence";
 export type ScheduleAnchor = "node_reached" | "step_metadata";
 
 export interface NodeConfigValues {
@@ -62,6 +79,14 @@ export interface NodeConfigValues {
   scheduleMaxOccurrences: string;
   scheduleAnchor: ScheduleAnchor;
   scheduleMetadataKey: string;
+  // Structured recurrence (kind === "recurrence").
+  recurrenceFrequency: RecurrenceFrequency;
+  recurrenceInterval: string;
+  recurrenceWeekdays: number[];
+  recurrenceMonthDay: string;
+  recurrenceHour: number;
+  recurrenceMinute: number;
+  recurrenceTimezone: string;
 }
 
 interface NodeConfigModalProps {
@@ -104,7 +129,85 @@ const DEFAULT_VALUES: NodeConfigValues = {
   scheduleMaxOccurrences: "",
   scheduleAnchor: "node_reached",
   scheduleMetadataKey: "",
+  recurrenceFrequency: "weekly",
+  recurrenceInterval: "1",
+  recurrenceWeekdays: [1],
+  recurrenceMonthDay: "1",
+  recurrenceHour: 9,
+  recurrenceMinute: 0,
+  recurrenceTimezone: "",
 };
+
+const WEEKDAY_TOGGLES = [
+  { value: 0, label: "S" },
+  { value: 1, label: "M" },
+  { value: 2, label: "T" },
+  { value: 3, label: "W" },
+  { value: 4, label: "T" },
+  { value: 5, label: "F" },
+  { value: 6, label: "S" },
+];
+
+const SCHEDULED_ACCENT = STEP_TYPE_ACCENT.scheduled;
+
+const SCHEDULE_SELECT_CLASS =
+  "flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#1f8a4c] focus:bg-white focus:outline-none";
+
+const formatLocalDateTime = (iso: string): string => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+// Calendar + iOS-style time wheels editing a single absolute instant, stored as
+// an ISO string. The author picks in their local timezone.
+function DateTimePicker({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
+  const now = new Date();
+  const parts =
+    isoToLocalParts(value) ?? {
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      day: now.getDate(),
+      hour: 9,
+      minute: 0,
+    };
+  const [view, setView] = useState<YearMonth>({ year: parts.year, month: parts.month });
+
+  // A freshly chosen "specific" source starts blank; seed it so the picker
+  // reflects a concrete instant and the step validates.
+  useEffect(() => {
+    if (!value) onChange(localPartsToIso(parts));
+  }, [value, parts, onChange]);
+
+  const emit = (next: Partial<typeof parts>) => onChange(localPartsToIso({ ...parts, ...next }));
+
+  return (
+    <div className="space-y-2">
+      <CalendarPicker
+        year={view.year}
+        month={view.month}
+        day={parts.day}
+        onSelect={(picked) => emit({ year: picked.year, month: picked.month, day: picked.day })}
+        onMonthChange={setView}
+      />
+      <TimeWheel
+        hour={parts.hour}
+        minute={parts.minute}
+        onChange={(time) => emit({ hour: time.hour, minute: time.minute })}
+      />
+      {value && (
+        <p className="text-center text-[12px] font-medium text-[#5a5650]">{formatLocalDateTime(value)}</p>
+      )}
+    </div>
+  );
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -230,17 +333,22 @@ export function NodeConfigModal({
     (usesN8n || responseParsed.valid);
 
   // For an `at` schedule the time lives in the value source; a literal one still
-  // needs a value. Relative/cron always require their spec string.
+  // needs a value. Relative requires its duration; recurrence always has a
+  // valid default (interval 1, time 9am).
   const scheduleSpecSatisfied =
     values.scheduleKind === "at"
       ? values.scheduleSpecSource.kind !== "literal" ||
         Boolean(values.scheduleSpecSource.value.trim())
-      : Boolean(values.scheduleSpec.trim());
+      : values.scheduleKind === "recurrence"
+        ? true
+        : Boolean(values.scheduleSpec.trim());
 
   const scheduledValid =
     Boolean(values.name.trim()) &&
     scheduleSpecSatisfied &&
-    (values.scheduleAnchor !== "step_metadata" || Boolean(values.scheduleMetadataKey.trim()));
+    (values.scheduleKind !== "relative" ||
+      values.scheduleAnchor !== "step_metadata" ||
+      Boolean(values.scheduleMetadataKey.trim()));
 
   const canSave = isAuto ? autoValid : isScheduled ? scheduledValid : conversationalValid;
 
@@ -434,20 +542,28 @@ export function NodeConfigModal({
                         ...(autoNodeEnabled ? (["auto"] as const) : []),
                         ...(scheduledNodeEnabled ? (["scheduled"] as const) : []),
                       ] as NodeConfigType[]
-                    ).map((type) => (
+                    ).map((type) => {
+                      const accent = STEP_TYPE_ACCENT[type];
+                      const isSelected = values.type === type;
+                      return (
                       <label
                         key={type}
-                        className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] transition-colors ${
-                          values.type === type
-                            ? "border-[#7c3aed] bg-[#f3eefc] font-medium text-[#7c3aed]"
-                            : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
+                        className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] font-medium transition-colors ${
+                          isSelected
+                            ? ""
+                            : "border-[#dedad2] font-normal text-[#5a5650] hover:bg-[#efede8]"
                         }`}
+                        style={
+                          isSelected
+                            ? { borderColor: accent, backgroundColor: `${accent}14`, color: accent }
+                            : undefined
+                        }
                       >
                         <input
                           type="radio"
                           className="sr-only"
                           value={type}
-                          checked={values.type === type}
+                          checked={isSelected}
                           onChange={() => set("type", type)}
                         />
                         {type === "conversational"
@@ -456,7 +572,8 @@ export function NodeConfigModal({
                             ? "Automated (n8n)"
                             : "Scheduled"}
                       </label>
-                    ))}
+                      );
+                    })}
                   </div>
                   <p className="text-[12px] text-[#918d87]">
                     {isAuto
@@ -733,94 +850,213 @@ export function NodeConfigModal({
               {isScheduled && (
               <>
               <div className="space-y-1">
-                <Label htmlFor="schedule-kind">Schedule kind</Label>
+                <Label htmlFor="schedule-kind">When should this run?</Label>
                 <select
                   id="schedule-kind"
-                  className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
+                  className={SCHEDULE_SELECT_CLASS}
                   value={values.scheduleKind}
                   onChange={(e) => set("scheduleKind", e.target.value as ScheduleKind)}
                 >
-                  <option value="relative">Relative (e.g. 30d after the anchor)</option>
-                  <option value="at">At a specific timestamp</option>
-                  <option value="cron">Cron (recurring schedule)</option>
+                  <option value="relative">Run after a delay</option>
+                  <option value="at">At a specific date &amp; time</option>
+                  <option value="recurrence">Repeat on a schedule</option>
                 </select>
               </div>
 
-              {values.scheduleKind === "at" ? (
+              {values.scheduleKind === "relative" && (
+                <>
+                  <div className="space-y-1">
+                    <Label htmlFor="schedule-spec">Run after</Label>
+                    <Input
+                      id="schedule-spec"
+                      value={values.scheduleSpec}
+                      onChange={(e) => set("scheduleSpec", e.target.value)}
+                      placeholder="30d"
+                    />
+                    <p className="text-[12px] text-[#918d87]">
+                      A duration, e.g. 30d (days), 2h (hours), 15m (minutes), 1w (weeks).
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="schedule-anchor">Counting from</Label>
+                    <select
+                      id="schedule-anchor"
+                      className={SCHEDULE_SELECT_CLASS}
+                      value={values.scheduleAnchor}
+                      onChange={(e) => set("scheduleAnchor", e.target.value as ScheduleAnchor)}
+                    >
+                      <option value="node_reached">When this step is reached</option>
+                      <option value="step_metadata">A date carried from an earlier step</option>
+                    </select>
+                  </div>
+                  {values.scheduleAnchor === "step_metadata" && (
+                    <div className="space-y-1">
+                      <Label htmlFor="schedule-metadata-key">Which earlier-step date?</Label>
+                      <Input
+                        id="schedule-metadata-key"
+                        value={values.scheduleMetadataKey}
+                        onChange={(e) => set("scheduleMetadataKey", e.target.value)}
+                        placeholder="approvedAt"
+                      />
+                      <p className="text-[12px] text-[#918d87]">
+                        The name of the date field captured earlier in the flow.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {values.scheduleKind === "at" && (
                 <div className="space-y-1">
-                  <Label>Fire date/time</Label>
+                  <Label>Fire date &amp; time</Label>
                   <p className="text-[12px] text-[#918d87]">
-                    Choose where the timestamp comes from: the AI, an earlier step&apos;s field, or a specific ISO
-                    timestamp (e.g. 2026-12-25T09:00:00.000Z).
+                    Let the AI decide, take it from an earlier step, or pick a specific date &amp; time
+                    (in your timezone).
                   </p>
                   <FieldValueSelector
                     value={values.scheduleSpecSource}
                     onChange={(next) => set("scheduleSpecSource", next)}
                     priorStepFields={priorStepFields}
-                  />
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <Label htmlFor="schedule-spec">
-                    {values.scheduleKind === "relative"
-                      ? "Duration (e.g. 30d, 2h, 15m)"
-                      : "Cron expression (e.g. 0 9 * * 1)"}
-                  </Label>
-                  <Input
-                    id="schedule-spec"
-                    value={values.scheduleSpec}
-                    onChange={(e) => set("scheduleSpec", e.target.value)}
-                    placeholder={values.scheduleKind === "relative" ? "30d" : "0 9 * * 1"}
+                    literalLabel="A specific date & time"
+                    renderLiteral={(literal, onChange) => (
+                      <DateTimePicker value={literal} onChange={onChange} />
+                    )}
                   />
                 </div>
               )}
 
-              <div className="space-y-1">
-                <Label htmlFor="schedule-anchor">Anchor</Label>
-                <select
-                  id="schedule-anchor"
-                  className="flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#3a5fd9] focus:bg-white focus:outline-none"
-                  value={values.scheduleAnchor}
-                  onChange={(e) => set("scheduleAnchor", e.target.value as ScheduleAnchor)}
-                >
-                  <option value="node_reached">When this node is reached</option>
-                  <option value="step_metadata">A step&apos;s completion metadata</option>
-                </select>
-              </div>
+              {values.scheduleKind === "recurrence" && (
+                <>
+                  <div className="space-y-1">
+                    <Label htmlFor="recurrence-frequency">Repeats</Label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] text-[#5a5650]">Every</span>
+                      <Input
+                        id="recurrence-interval"
+                        type="number"
+                        min="1"
+                        className="w-16"
+                        value={values.recurrenceInterval}
+                        onChange={(e) => set("recurrenceInterval", e.target.value)}
+                      />
+                      <select
+                        id="recurrence-frequency"
+                        className={SCHEDULE_SELECT_CLASS}
+                        value={values.recurrenceFrequency}
+                        onChange={(e) =>
+                          set("recurrenceFrequency", e.target.value as RecurrenceFrequency)
+                        }
+                      >
+                        <option value="daily">
+                          {Number(values.recurrenceInterval) === 1 ? "day" : "days"}
+                        </option>
+                        <option value="weekly">
+                          {Number(values.recurrenceInterval) === 1 ? "week" : "weeks"}
+                        </option>
+                        <option value="monthly">
+                          {Number(values.recurrenceInterval) === 1 ? "month" : "months"}
+                        </option>
+                      </select>
+                    </div>
+                  </div>
 
-              {values.scheduleAnchor === "step_metadata" && (
-                <div className="space-y-1">
-                  <Label htmlFor="schedule-metadata-key">Metadata key (ISO timestamp)</Label>
-                  <Input
-                    id="schedule-metadata-key"
-                    value={values.scheduleMetadataKey}
-                    onChange={(e) => set("scheduleMetadataKey", e.target.value)}
-                    placeholder="approvedAt"
-                  />
-                </div>
-              )}
+                  {values.recurrenceFrequency === "weekly" && (
+                    <div className="space-y-1">
+                      <Label>On these days</Label>
+                      <div className="flex gap-1.5">
+                        {WEEKDAY_TOGGLES.map((weekday) => {
+                          const active = values.recurrenceWeekdays.includes(weekday.value);
+                          return (
+                            <button
+                              key={weekday.value}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() =>
+                                set(
+                                  "recurrenceWeekdays",
+                                  active
+                                    ? values.recurrenceWeekdays.filter((day) => day !== weekday.value)
+                                    : [...values.recurrenceWeekdays, weekday.value].sort(),
+                                )
+                              }
+                              className="h-9 w-9 rounded-full border text-[13px] font-medium transition-colors"
+                              style={
+                                active
+                                  ? {
+                                      borderColor: SCHEDULED_ACCENT,
+                                      backgroundColor: `${SCHEDULED_ACCENT}14`,
+                                      color: SCHEDULED_ACCENT,
+                                    }
+                                  : { borderColor: "#dedad2", color: "#5a5650" }
+                              }
+                            >
+                              {weekday.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[12px] text-[#918d87]">
+                        Leave all unselected to repeat on the day the step is first reached.
+                      </p>
+                    </div>
+                  )}
 
-              <label className="flex cursor-pointer items-center gap-2 text-[13px] text-[#1a1814]">
-                <input
-                  type="checkbox"
-                  checked={values.scheduleRecurring}
-                  onChange={(e) => set("scheduleRecurring", e.target.checked)}
-                />
-                Recurring
-              </label>
+                  {values.recurrenceFrequency === "monthly" && (
+                    <div className="space-y-1">
+                      <Label htmlFor="recurrence-month-day">On day of the month</Label>
+                      <Input
+                        id="recurrence-month-day"
+                        type="number"
+                        min="1"
+                        max="31"
+                        className="w-20"
+                        value={values.recurrenceMonthDay}
+                        onChange={(e) => set("recurrenceMonthDay", e.target.value)}
+                      />
+                    </div>
+                  )}
 
-              {values.scheduleRecurring && (
-                <div className="space-y-1">
-                  <Label htmlFor="schedule-max">Max occurrences (blank = unbounded)</Label>
-                  <Input
-                    id="schedule-max"
-                    type="number"
-                    min="1"
-                    value={values.scheduleMaxOccurrences}
-                    onChange={(e) => set("scheduleMaxOccurrences", e.target.value)}
-                    placeholder="e.g. 4"
-                  />
-                </div>
+                  <div className="space-y-1">
+                    <Label>At</Label>
+                    <TimeWheel
+                      hour={values.recurrenceHour}
+                      minute={values.recurrenceMinute}
+                      onChange={(time) => {
+                        set("recurrenceHour", time.hour);
+                        set("recurrenceMinute", time.minute);
+                      }}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="schedule-max">Stop after (blank = repeat forever)</Label>
+                    <Input
+                      id="schedule-max"
+                      type="number"
+                      min="1"
+                      value={values.scheduleMaxOccurrences}
+                      onChange={(e) => set("scheduleMaxOccurrences", e.target.value)}
+                      placeholder="e.g. 4 occurrences"
+                    />
+                  </div>
+
+                  <p
+                    className="rounded-[9px] px-3 py-2 text-[13px] font-medium"
+                    style={{ backgroundColor: `${SCHEDULED_ACCENT}14`, color: SCHEDULED_ACCENT }}
+                  >
+                    {describeRecurrenceRule(
+                      buildRecurrenceRule({
+                        frequency: values.recurrenceFrequency,
+                        interval: Number(values.recurrenceInterval) || 1,
+                        weekdays: values.recurrenceWeekdays,
+                        monthDay: Number(values.recurrenceMonthDay) || 1,
+                        hour: values.recurrenceHour,
+                        minute: values.recurrenceMinute,
+                        timezone: values.recurrenceTimezone || browserTimezone(),
+                      }),
+                    )}
+                  </p>
+                </>
               )}
               </>
               )}

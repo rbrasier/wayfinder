@@ -43,12 +43,12 @@ import { AutoNode } from "@/components/canvas/auto-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
-import type {
-  NodeConfigValues,
-  ScheduleAnchor,
-  ScheduleKind,
-} from "@/components/canvas/node-config-modal";
+import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
+import {
+  scheduledConfigFromValues,
+  scheduledValuesFromConfig,
+} from "@/components/canvas/scheduled-node-config";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
 import type { FieldValueSource, FlowContextDoc, PriorStepField, TemplateField } from "@rbrasier/domain";
@@ -299,22 +299,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         };
       }
       if (values.type === "scheduled") {
-        const specSource = values.scheduleSpecSource;
-        const spec =
-          values.scheduleKind === "at"
-            ? specSource.kind === "literal"
-              ? specSource.value
-              : ""
-            : values.scheduleSpec;
-        return {
-          kind: values.scheduleKind,
-          spec,
-          specSource: values.scheduleKind === "at" ? values.scheduleSpecSource : undefined,
-          recurring: values.scheduleRecurring,
-          maxOccurrences: values.scheduleMaxOccurrences ? Number(values.scheduleMaxOccurrences) : null,
-          anchor: values.scheduleAnchor,
-          metadataKey: values.scheduleAnchor === "step_metadata" ? values.scheduleMetadataKey : null,
-        };
+        return scheduledConfigFromValues(values);
       }
       return {
         aiInstruction: values.aiInstruction,
@@ -510,20 +495,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         requestFieldValues:
           (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},
         responseFields: readFields(editingConfig.responseFields),
-        scheduleKind: (editingConfig.kind as ScheduleKind | undefined) ?? "relative",
-        scheduleSpec: (editingConfig.spec as string | null) ?? "",
-        // Legacy `at` nodes stored a literal ISO in `spec` without a specSource —
-        // surface those as a literal source so the value remains editable.
-        scheduleSpecSource:
-          (editingConfig.specSource as FieldValueSource | undefined) ??
-          (editingConfig.kind === "at" && editingConfig.spec
-            ? { kind: "literal", value: String(editingConfig.spec) }
-            : { kind: "ai" }),
-        scheduleRecurring: Boolean(editingConfig.recurring),
-        scheduleMaxOccurrences:
-          editingConfig.maxOccurrences != null ? String(editingConfig.maxOccurrences) : "",
-        scheduleAnchor: (editingConfig.anchor as ScheduleAnchor | undefined) ?? "node_reached",
-        scheduleMetadataKey: (editingConfig.metadataKey as string | null) ?? "",
+        ...scheduledValuesFromConfig(editingConfig),
       }
     : undefined;
 
