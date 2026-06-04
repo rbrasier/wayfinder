@@ -39,10 +39,12 @@ import {
   LanguageModelAdapter,
   PinoLogger,
   RuntimeConfigStore,
+  SchedulerWorker,
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
 } from "@rbrasier/adapters";
+import { HttpTickFirer } from "./scheduler/http-tick-firer.js";
 import { EMBEDDINGS_DEFAULT_PROVIDER } from "@rbrasier/shared";
 import type { Env } from "./env.js";
 
@@ -107,11 +109,26 @@ export const buildContainer = (env: Env) => {
   });
   const healthChecker = new CompositeHealthChecker(dbChecker, aiChecker, jobRepo);
 
+  // The scheduler heartbeat: a tick loop (cron) that POSTs the web tick endpoint
+  // each interval and reports health to job_registry. The firing logic itself
+  // lives behind that endpoint (where the AI turn machinery is). Only started
+  // when both the URL and shared secret are configured.
+  const schedulerWorker =
+    env.SCHEDULER_TICK_URL && env.SCHEDULER_TICK_SECRET
+      ? new SchedulerWorker(
+          new HttpTickFirer(env.SCHEDULER_TICK_URL, env.SCHEDULER_TICK_SECRET),
+          jobRepo,
+          logger,
+          { tickIntervalMs: env.SCHEDULER_TICK_MS },
+        )
+      : null;
+
   return {
     env,
     db,
     logger,
     runtimeConfig,
+    schedulerWorker,
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {

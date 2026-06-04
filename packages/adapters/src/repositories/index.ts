@@ -18,3 +18,4 @@ export * from "./drizzle-session-step-output-repository";
 export * from "./drizzle-analytics-repository";
 export * from "./drizzle-system-settings-repository";
 export * from "./drizzle-schedule-repository";
+export * from "./drizzle-schedule-run-repository";

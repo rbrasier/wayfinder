@@ -17,6 +17,17 @@ const envSchema = z.object({
   LANGFUSE_HOST: z.string().url().optional(),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
   OTEL_SERVICE_NAME: z.string().default("template-api"),
+  // The scheduler heartbeat runs in this long-lived API server and POSTs the
+  // web tick endpoint each interval. Disabled only by an explicit "false".
+  SCHEDULER_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== "false"),
+  SCHEDULER_TICK_MS: z.coerce.number().int().positive().optional(),
+  // Full URL of the web app's internal scheduler tick endpoint and the shared
+  // secret it requires. The heartbeat only starts when both are set.
+  SCHEDULER_TICK_URL: z.string().url().optional(),
+  SCHEDULER_TICK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

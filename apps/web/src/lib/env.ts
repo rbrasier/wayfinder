@@ -7,6 +7,9 @@ const serverEnvSchema = z.object({
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_SEED_EMAIL: z.string().email().optional(),
   N8N_WEBHOOK_SECRET: z.string().optional(),
+  // Shared secret the API scheduler heartbeat presents to the internal tick
+  // endpoint. The endpoint refuses to fire unless this is set and matches.
+  SCHEDULER_TICK_SECRET: z.string().optional(),
   AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral", "bedrock"]).default("anthropic"),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),

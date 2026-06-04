@@ -156,6 +156,38 @@ export const app_session_schedules = pgTable(
   }),
 );
 
+// Append-only audit of every schedule fire. Rows are never updated; this is the
+// per-fire history that app_session_schedules (current state only) cannot give.
+export const app_session_schedule_runs = pgTable(
+  "app_session_schedule_runs",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    schedule_id: uuid("schedule_id")
+      .notNull()
+      .references(() => app_session_schedules.id, { onDelete: "cascade" }),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    node_id: uuid("node_id")
+      .notNull()
+      .references(() => app_flow_nodes.id, { onDelete: "cascade" }),
+    outcome: text("outcome", { enum: ["recurred", "completed", "failed"] }).notNull(),
+    occurrence: integer("occurrence").notNull(),
+    fired_at: timestamp("fired_at", { withTimezone: true }).notNull(),
+    next_fire_at: timestamp("next_fire_at", { withTimezone: true }),
+    error: text("error"),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_created: index("app_session_schedule_runs_created_at_idx").on(t.created_at),
+    by_schedule: index("app_session_schedule_runs_schedule_id_idx").on(t.schedule_id),
+  }),
+);
+
 export const app_session_messages = pgTable(
   "app_session_messages",
   {

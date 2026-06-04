@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, router } from "../trpc";
+import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const assertOwnsSession = async (
@@ -38,6 +38,14 @@ export const scheduleRouter = router({
       }
 
       const result = await ctx.container.repos.schedules.cancel(input.scheduleId);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  listRecentRuns: adminProcedure
+    .input(z.object({ limit: z.number().int().positive().max(500).optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.listScheduleRuns.execute({ limit: input?.limit });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),

@@ -3,6 +3,8 @@ import {
   type IClock,
   type IScheduleFireHandler,
   type IScheduleRepository,
+  type IScheduleRunRepository,
+  type NewScheduleRun,
   type Result,
   type SessionSchedule,
 } from "@rbrasier/domain";
@@ -28,6 +30,7 @@ const reachedMaxOccurrences = (schedule: SessionSchedule, nextOccurrence: number
 export class FireDueSchedules {
   constructor(
     private readonly schedules: IScheduleRepository,
+    private readonly runs: IScheduleRunRepository,
     private readonly handler: IScheduleFireHandler,
     private readonly clock: IClock,
     private readonly batchSize: number = DEFAULT_BATCH_SIZE,
@@ -46,18 +49,23 @@ export class FireDueSchedules {
     };
 
     for (const schedule of claimed.data) {
+      // The attempt number is independent of whether the fire succeeds, so it is
+      // computed once and reused for the audit record below.
+      const occurrence = schedule.occurrenceCount + 1;
+
       const fired = await this.handler.fire(schedule);
       if (fired.error) {
         await this.schedules.fail(schedule.id, fired.error.message);
+        await this.recordRun(schedule, now, occurrence, "failed", { error: fired.error.message });
         output.failedCount += 1;
         continue;
       }
 
       output.firedCount += 1;
-      const nextOccurrence = schedule.occurrenceCount + 1;
 
-      if (!canRecur(schedule) || reachedMaxOccurrences(schedule, nextOccurrence)) {
+      if (!canRecur(schedule) || reachedMaxOccurrences(schedule, occurrence)) {
         await this.schedules.complete(schedule.id, now);
+        await this.recordRun(schedule, now, occurrence, "completed", {});
         output.completedCount += 1;
         continue;
       }
@@ -69,6 +77,9 @@ export class FireDueSchedules {
       });
       if (nextFireAt.error) {
         await this.schedules.fail(schedule.id, nextFireAt.error.message);
+        await this.recordRun(schedule, now, occurrence, "failed", {
+          error: nextFireAt.error.message,
+        });
         output.failedCount += 1;
         continue;
       }
@@ -76,11 +87,35 @@ export class FireDueSchedules {
       await this.schedules.markFired(schedule.id, {
         nextFireAt: nextFireAt.data,
         lastFiredAt: now,
-        occurrenceCount: nextOccurrence,
+        occurrenceCount: occurrence,
       });
+      await this.recordRun(schedule, now, occurrence, "recurred", { nextFireAt: nextFireAt.data });
       output.recurredCount += 1;
     }
 
     return ok(output);
+  }
+
+  // Audit logging is best-effort: a failure here must never abort the firing
+  // loop or change a schedule's lifecycle, so the result is intentionally
+  // ignored.
+  private async recordRun(
+    schedule: SessionSchedule,
+    firedAt: Date,
+    occurrence: number,
+    outcome: NewScheduleRun["outcome"],
+    extra: { nextFireAt?: Date; error?: string },
+  ): Promise<void> {
+    await this.runs.record({
+      scheduleId: schedule.id,
+      sessionId: schedule.sessionId,
+      flowId: schedule.flowId,
+      nodeId: schedule.nodeId,
+      outcome,
+      occurrence,
+      firedAt,
+      nextFireAt: extra.nextFireAt ?? null,
+      error: extra.error ?? null,
+    });
   }
 }

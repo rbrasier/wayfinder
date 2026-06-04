@@ -10,6 +10,7 @@ export * from "./flow";
 export * from "./flow-visibility";
 export * from "./flow-node";
 export * from "./session-schedule";
+export * from "./schedule-run";
 export * from "./template-field";
 export * from "./flow-edge";
 export * from "./session";
