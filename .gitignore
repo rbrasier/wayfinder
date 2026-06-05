@@ -48,6 +48,7 @@ tests/e2e/playwright-results.json
 tests/e2e/test-results/
 tests/e2e/screenshots/
 tests/e2e/playwright/.auth/
+tests/e2e/playwright/.seed/
 tests/e2e/node_modules/
 # Throwaway local config used by the /e2e-cc-web sandbox recipe — never committed
 tests/e2e/playwright.local.config.ts

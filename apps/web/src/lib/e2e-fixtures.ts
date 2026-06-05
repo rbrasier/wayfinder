@@ -8,6 +8,7 @@ import type { Container } from "./container";
 // whole E2E database (seed + anything the specs themselves created).
 
 const SEED_FLOW_NAME = "E2E SEED Onboarding Flow";
+const SEED_SESSION_TITLE = "E2E SEED Session";
 
 const unwrap = <T>(result: Result<T>, context: string): T => {
   if (result.error) {
@@ -104,6 +105,11 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const session = unwrap(
     await container.useCases.startSession.execute({ flowId: flow.id, userId: ownerUserId }),
     "start seed session",
+  );
+
+  unwrap(
+    await container.repos.sessions.update(session.id, { title: SEED_SESSION_TITLE }),
+    "set seed session title",
   );
 
   // ── Conversation history across both steps ────────────────────────────────

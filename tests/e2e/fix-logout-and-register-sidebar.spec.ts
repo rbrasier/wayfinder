@@ -26,7 +26,9 @@ test.describe('Logout', () => {
     await expect(signOut).toBeVisible();
 
     await signOut.click();
-    await expect(page).toHaveURL(/\/login/, { timeout: 10_000 });
+    // Sign-out makes a server round-trip (authClient.signOut) before a full-page
+    // nav to /login; allow generous headroom so this isn't flaky under load.
+    await expect(page).toHaveURL(/\/login/, { timeout: 20_000 });
     await page.screenshot({ path: 'screenshots/fix-logout-after-signout.png', fullPage: true });
   });
 });

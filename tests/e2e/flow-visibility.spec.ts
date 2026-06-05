@@ -15,19 +15,7 @@
  */
 
 import { test, expect } from './helpers/base';
-
-async function openFirstFlowCanvas(page: import('@playwright/test').Page): Promise<boolean> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  const flowLink = page.getByRole('link').filter({ hasText: /.+/ }).first();
-  const href = await flowLink.getAttribute('href').catch(() => null);
-  if (!href || !/\/admin\/flows\//.test(href)) return false;
-
-  await flowLink.click();
-  await page.waitForLoadState('networkidle');
-  return true;
-}
+import { openFlowCanvas as openFirstFlowCanvas } from './helpers/seed';
 
 test.describe('Admin: Flow Visibility', () => {
   test('flow header exposes a publish control with private/global options', async ({ page, consoleLogs }) => {

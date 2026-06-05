@@ -14,22 +14,14 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openFlowCanvas } from './helpers/seed';
 
 test.describe('Admin: Flow Canvas Editor', () => {
   test('canvas loads for existing flow', async ({ page, consoleLogs }) => {
-    await page.goto('/admin/flows');
-    await page.waitForLoadState('networkidle');
-
-    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-    const hasEdit = await editLink.isVisible().catch(() => false);
-
-    if (!hasEdit) {
+    if (!(await openFlowCanvas(page))) {
       test.skip(true, 'No flows in list — create a flow first');
       return;
     }
-
-    await editLink.click();
-    await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1200); // allow ReactFlow to mount and render nodes
 
     await page.screenshot({ path: 'screenshots/flow-lifecycle-canvas.png', fullPage: true });
@@ -42,17 +34,10 @@ test.describe('Admin: Flow Canvas Editor', () => {
   });
 
   test('canvas has at least one node', async ({ page, consoleLogs }) => {
-    await page.goto('/admin/flows');
-    await page.waitForLoadState('networkidle');
-
-    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-    if (!await editLink.isVisible().catch(() => false)) {
+    if (!(await openFlowCanvas(page))) {
       test.skip(true, 'No flows available');
       return;
     }
-
-    await editLink.click();
-    await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1200);
 
     // ReactFlow renders each node as a .react-flow__node element
@@ -73,17 +58,10 @@ test.describe('Admin: Flow Canvas Editor', () => {
   });
 
   test('clicking a node opens configure dialog', async ({ page, consoleLogs }) => {
-    await page.goto('/admin/flows');
-    await page.waitForLoadState('networkidle');
-
-    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-    if (!await editLink.isVisible().catch(() => false)) {
+    if (!(await openFlowCanvas(page))) {
       test.skip(true, 'No flows available');
       return;
     }
-
-    await editLink.click();
-    await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1200);
 
     const firstNode = page.locator('.react-flow__node').first();

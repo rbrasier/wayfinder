@@ -15,17 +15,11 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openFlowCanvas } from './helpers/seed';
 
 async function openFirstNodeConfig(page: import('@playwright/test').Page): Promise<boolean> {
-  await page.goto('/admin/flows');
-  await page.waitForLoadState('networkidle');
-
-  const flowLink = page.getByRole('link').filter({ hasText: /.+/ }).first();
-  const href = await flowLink.getAttribute('href').catch(() => null);
-  if (!href || !/\/admin\/flows\//.test(href)) return false;
-
-  await flowLink.click();
-  await page.waitForLoadState('networkidle');
+  if (!(await openFlowCanvas(page))) return false;
+  await page.waitForTimeout(1200);
 
   // React Flow renders nodes as .react-flow__node; click the first one.
   const node = page.locator('.react-flow__node').first();

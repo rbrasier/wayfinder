@@ -7,6 +7,7 @@
  */
 
 import { test as setup, expect } from '@playwright/test';
+import { writeSeedFixtures } from './helpers/seed';
 
 setup('seed e2e fixtures', async ({ request }) => {
   const response = await request.post('/api/test/seed');
@@ -16,5 +17,6 @@ setup('seed e2e fixtures', async ({ request }) => {
   ).toBeTruthy();
 
   const result = await response.json();
+  writeSeedFixtures({ flowId: result.flowId, sessionId: result.sessionId });
   console.log(`✅ Seed: flow=${result.flowId} session=${result.sessionId}`);
 });

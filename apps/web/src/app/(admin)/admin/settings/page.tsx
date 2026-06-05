@@ -62,6 +62,10 @@ function OrganisationNameCard() {
             onChange={(e) => setValue(e.target.value)}
             placeholder="e.g. Acme Legal"
             disabled={orgNameQuery.isLoading}
+            // Password managers / autofill inject attributes (e.g. caret-color,
+            // fdprocessedid) onto inputs after SSR, producing a benign dev-mode
+            // hydration warning. Suppress it for this field only.
+            suppressHydrationWarning
           />
         </div>
         <Button

@@ -14,8 +14,12 @@
  */
 
 import { test, expect } from './helpers/base';
+import { loadSeedFixtures } from './helpers/seed';
 
 async function resolveActiveSessionId(page: import('@playwright/test').Page): Promise<string | null> {
+  const seeded = loadSeedFixtures()?.sessionId;
+  if (seeded) return seeded;
+
   await page.goto('/chats');
   await page.waitForLoadState('networkidle');
 
@@ -182,24 +186,32 @@ test.describe('Chat: Confidence', () => {
 
 test.describe('Chat: Document Generation', () => {
   test('document card shows download button', async ({ page, consoleLogs }) => {
-    await page.goto('/chats');
-    await page.waitForLoadState('networkidle');
+    // Prefer the seeded session, which has a completed document-generation step.
+    const seededSessionId = loadSeedFixtures()?.sessionId;
+    const candidateIds: string[] = [];
+    if (seededSessionId) {
+      candidateIds.push(seededSessionId);
+    } else {
+      await page.goto('/chats');
+      await page.waitForLoadState('networkidle');
+      const sessionLinks = page.getByRole('link').filter({ hasText: /.+/ });
+      const linkCount = await sessionLinks.count();
+      for (let i = 0; i < Math.min(linkCount, 5); i++) {
+        const href = await sessionLinks.nth(i).getAttribute('href').catch(() => null);
+        const id = href?.match(/\/chats\/([^/?]+)/)?.[1];
+        if (id) candidateIds.push(id);
+      }
+    }
 
-    const sessionLinks = page.getByRole('link').filter({ hasText: /.+/ });
-    const linkCount = await sessionLinks.count();
-
-    if (linkCount === 0) {
+    if (candidateIds.length === 0) {
       test.skip(true, 'No sessions available — create a flow with a document-generation step and complete it');
       return;
     }
 
     let foundDocument = false;
 
-    for (let i = 0; i < Math.min(linkCount, 5); i++) {
-      const href = await sessionLinks.nth(i).getAttribute('href').catch(() => null);
-      if (!href?.match(/\/chats\/[^/?]+/)) continue;
-
-      await page.goto(href);
+    for (const candidateId of candidateIds) {
+      await page.goto(`/chats/${candidateId}`);
       await page.waitForLoadState('networkidle');
 
       // DocumentCard renders with download/regenerate controls

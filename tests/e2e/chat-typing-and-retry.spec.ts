@@ -18,18 +18,22 @@
 
 import { test, expect } from './helpers/base';
 import { delayChatStream, failChatStream } from './helpers/chat-mock';
+import { loadSeedFixtures } from './helpers/seed';
 
 async function openSessionWithComposer(
   page: import('@playwright/test').Page,
 ): Promise<import('@playwright/test').Locator | null> {
-  await page.goto('/chats');
-  await page.waitForLoadState('networkidle');
+  let sessionId = loadSeedFixtures()?.sessionId;
+  if (!sessionId) {
+    await page.goto('/chats');
+    await page.waitForLoadState('networkidle');
 
-  const sessionLink = page.locator('a[href^="/chats/"]').first();
-  const href = await sessionLink.getAttribute('href').catch(() => null);
-  if (!href) return null;
+    const sessionLink = page.locator('a[href^="/chats/"]').first();
+    const href = await sessionLink.getAttribute('href').catch(() => null);
+    if (!href) return null;
 
-  const sessionId = href.match(/\/chats\/([^/?]+)/)?.[1];
+    sessionId = href.match(/\/chats\/([^/?]+)/)?.[1];
+  }
   if (!sessionId) return null;
 
   await page.goto(`/chats/${sessionId}`);

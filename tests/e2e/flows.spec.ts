@@ -7,6 +7,7 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openFlowCanvas } from './helpers/seed';
 
 test.describe('Admin: Flows List', () => {
   test('flows list loads', async ({ page, consoleLogs }) => {
@@ -91,21 +92,11 @@ test.describe('Admin: Create Flow', () => {
 
 test.describe('Admin: Flow Canvas', () => {
   test('admin opens flow canvas', async ({ page, consoleLogs }) => {
-    await page.goto('/admin/flows');
-    await page.waitForLoadState('networkidle');
-
-    // The flows table renders an "Edit" link (<Button asChild><Link href="/admin/flows/[id]">Edit</Link></Button>)
-    const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
-    const count = await editLink.count();
-
-    if (count === 0) {
+    if (!(await openFlowCanvas(page))) {
       await page.screenshot({ path: 'screenshots/flows-canvas-no-flows.png', fullPage: true });
       test.skip(true, 'No flows in list to open — create one first');
       return;
     }
-
-    await editLink.click();
-    await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1000); // allow canvas to render
 
     await page.screenshot({ path: 'screenshots/flows-canvas.png', fullPage: true });
