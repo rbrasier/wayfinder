@@ -40,7 +40,9 @@ test.describe('Chat: List', () => {
     await page.goto('/chats');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByRole('button', { name: /new chat/i })).toBeVisible();
+    await expect(
+      page.getByRole('banner').getByRole('button', { name: /new chat/i }),
+    ).toBeVisible();
   });
 });
 

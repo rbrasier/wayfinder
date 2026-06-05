@@ -33,7 +33,7 @@ async function findPublishedFlowInModal(
   await page.goto('/chats');
   await page.waitForLoadState('networkidle');
 
-  await page.getByRole('button', { name: /new chat/i }).click();
+  await page.getByRole('banner').getByRole('button', { name: /new chat/i }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
 
@@ -48,7 +48,7 @@ async function startSessionFromModal(
   await page.goto('/chats');
   await page.waitForLoadState('networkidle');
 
-  await page.getByRole('button', { name: /new chat/i }).click();
+  await page.getByRole('banner').getByRole('button', { name: /new chat/i }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
 

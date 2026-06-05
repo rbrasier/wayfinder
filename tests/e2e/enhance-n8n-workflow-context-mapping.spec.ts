@@ -126,9 +126,18 @@ test.describe('n8n workflow directory + step-context field values', () => {
     // Use the Mock executor so the test needs no live n8n instance.
     await page.locator('label', { hasText: /Mock \(testing\)/ }).click();
 
+    // The Mock executor renders both the request- and response-field editors,
+    // each with its own "Add field" button and "Preferred Vendor" input — scope
+    // every field interaction to the request-fields editor so the value binding
+    // applies to a request field (the only group with a Field values section).
+    const requestEditor = page
+      .locator('div.space-y-1')
+      .filter({ hasText: 'Fields sent with the request' })
+      .last();
+
     // Add a request field, then bind its value to a specific literal.
-    await page.getByRole('button', { name: /Add field/i }).click();
-    await page.getByPlaceholder(/Preferred Vendor/i).last().fill('Region (text)');
+    await requestEditor.getByRole('button', { name: /Add field/i }).click();
+    await requestEditor.getByPlaceholder(/Preferred Vendor/i).last().fill('Region (text)');
 
     const valueSelect = page.locator('select').filter({ hasText: /AI decides or asks/i }).last();
     await expect(valueSelect).toBeVisible({ timeout: 5_000 });
