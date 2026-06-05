@@ -10,7 +10,7 @@ import type { Container } from "./container";
 const SEED_FLOW_NAME = "E2E SEED Onboarding Flow";
 
 const unwrap = <T>(result: Result<T>, context: string): T => {
-  if ("error" in result) {
+  if (result.error) {
     throw new Error(`${context}: ${result.error.message}`);
   }
   return result.data;
