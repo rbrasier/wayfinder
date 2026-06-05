@@ -8,7 +8,9 @@
 import { test as teardown, expect } from '@playwright/test';
 
 teardown('remove e2e fixtures and test data', async ({ request }) => {
-  const response = await request.post('/api/test/teardown');
+  // Deleting every flow/session row on a loaded dev server can exceed the
+  // default 15s request timeout.
+  const response = await request.post('/api/test/teardown', { timeout: 60_000 });
   expect(
     response.ok(),
     `Teardown failed (${response.status()}): ${await response.text()}`,
