@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
 
 export default function SettingsPage() {

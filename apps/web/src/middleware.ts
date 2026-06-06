@@ -22,19 +22,6 @@ const redirectToLogin = (req: NextRequest, pathname: string): NextResponse => {
 export const middleware = (req: NextRequest): NextResponse => {
   const { pathname } = req.nextUrl;
 
-  if (pathname.startsWith("/register")) {
-    if (getSessionCookie(req)?.value) {
-      const url = req.nextUrl.clone();
-      url.pathname = "/admin";
-      return NextResponse.redirect(url);
-    }
-    return NextResponse.next();
-  }
-
-  if (pathname.startsWith("/login")) {
-    return NextResponse.next();
-  }
-
   if (pathname.startsWith("/admin") || pathname.startsWith("/chats") || pathname.startsWith("/flows")) {
     const sessionCookie = getSessionCookie(req);
     if (!sessionCookie?.value) {

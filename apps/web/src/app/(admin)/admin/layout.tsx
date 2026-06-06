@@ -1,9 +1,26 @@
 import type { ReactNode } from "react";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { createServerHelpers } from "@/trpc/server";
+import { getContainer } from "@/lib/container";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore
+    .getAll()
+    .find((c) => c.name.endsWith(".session_token") || c.name === "better-auth.session_token");
+
+  if (!sessionCookie?.value) {
+    redirect("/login");
+  }
+
+  const session = await getContainer().resolveSession(sessionCookie.value);
+  if (!session) {
+    redirect("/login?expired=true");
+  }
+
   const { trpc, HydrateClient } = await createServerHelpers();
 
   void trpc.user.me.prefetch();

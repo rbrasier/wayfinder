@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,10 @@ import { authClient } from "@/lib/auth-client";
 
 const isDev = process.env.NODE_ENV === "development";
 
-export default function AdminLoginPage() {
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const isExpired = searchParams.get("expired") === "true";
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -67,6 +71,11 @@ export default function AdminLoginPage() {
           <CardTitle>Sign in</CardTitle>
         </CardHeader>
         <CardContent>
+          {isExpired && (
+            <p className="mb-4 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              Your session has expired, please sign in again.
+            </p>
+          )}
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -116,5 +125,13 @@ export default function AdminLoginPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }
