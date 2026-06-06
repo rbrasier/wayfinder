@@ -36,13 +36,13 @@ export function RegisterForm() {
         email,
         password,
         name: name.trim() || email,
-        callbackURL: "/admin",
+        callbackURL: "/chats",
       });
       if (result.error) {
         setError(result.error.message ?? "Registration failed");
         return;
       }
-      window.location.href = "/admin";
+      window.location.href = "/chats";
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {

@@ -12,7 +12,7 @@ export default async function RegisterPage() {
   if (sessionCookie?.value) {
     const session = await getContainer().resolveSession(sessionCookie.value);
     if (session) {
-      redirect("/admin");
+      redirect("/chats");
     }
   }
 
