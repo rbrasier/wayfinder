@@ -13,7 +13,7 @@ export default function SettingsPage() {
       <div className="space-y-4">
         <ProfileSettingsForm />
 
-        <Card>
+        {/* <Card>
           <CardHeader>
             <CardTitle className="text-base">Notifications</CardTitle>
           </CardHeader>
@@ -29,7 +29,7 @@ export default function SettingsPage() {
           <CardContent className="text-sm text-muted-foreground">
             Manage active sessions and authentication methods.
           </CardContent>
-        </Card>
+        </Card>*/}
       </div>
     </main>
     </div>
