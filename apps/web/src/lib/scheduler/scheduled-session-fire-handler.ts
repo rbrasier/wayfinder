@@ -74,13 +74,20 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
 
     const advancedSession = advance.data.session;
     const gatheredContext = buildGatheredContext(messages);
+    const ownerIsAdmin = await this.resolveIsAdmin(session.userId);
 
-    if (newNode.type === "scheduled" && (await isScheduledNodeEnabled(this.container))) {
+    if (
+      newNode.type === "scheduled" &&
+      (await isScheduledNodeEnabled(this.container, session.userId, ownerIsAdmin))
+    ) {
       await dispatchScheduledNode({ container: this.container, session: advancedSession, flow, node: newNode, messages });
       return ok(undefined);
     }
 
-    if (newNode.type === "auto" && (await isAutoNodeEnabled(this.container))) {
+    if (
+      newNode.type === "auto" &&
+      (await isAutoNodeEnabled(this.container, session.userId, ownerIsAdmin))
+    ) {
       await dispatchAutoNode({
         container: this.container,
         session: advancedSession,
@@ -188,5 +195,10 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
     const user = await this.container.repos.users.findById(userId);
     if (user.error || !user.data) return "user";
     return user.data.role === "admin" ? "admin" : "user";
+  }
+
+  private async resolveIsAdmin(userId: string): Promise<boolean> {
+    const user = await this.container.repos.users.findById(userId);
+    return !user.error && (user.data?.isAdmin ?? false);
   }
 }

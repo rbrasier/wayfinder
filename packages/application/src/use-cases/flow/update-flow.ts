@@ -9,7 +9,7 @@ import {
 } from "@rbrasier/domain";
 
 export interface UpdateFlowCaller {
-  isAdmin: boolean;
+  canPublishToEveryone: boolean;
 }
 
 export class UpdateFlow {
@@ -18,13 +18,13 @@ export class UpdateFlow {
   async execute(
     id: string,
     patch: FlowUpdate,
-    caller: UpdateFlowCaller = { isAdmin: false },
+    caller: UpdateFlowCaller = { canPublishToEveryone: false },
   ): Promise<Result<Flow>> {
     if (patch.visibility && !canPublishWithVisibility(patch.visibility, caller)) {
       return err(
         domainError(
           "FORBIDDEN",
-          "Only admins can publish flows with non-private visibility.",
+          "You do not have permission to publish flows with non-private visibility.",
         ),
       );
     }

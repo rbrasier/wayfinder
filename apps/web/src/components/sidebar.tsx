@@ -43,6 +43,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/schedules", icon: Clock, label: "Schedules" },
   { href: "/admin/flows", icon: GitBranch, label: "Flows" },
   { href: "/admin/users", icon: Users, label: "Users" },
+  { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
   { href: "/admin/usage", icon: BarChart2, label: "Usage" },
   { href: "/admin/flags", icon: Flag, label: "Flags" },
   { href: "/admin/errors", icon: AlertCircle, label: "Errors" },

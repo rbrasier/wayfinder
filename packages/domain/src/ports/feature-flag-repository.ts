@@ -6,3 +6,8 @@ export interface IFeatureFlagRepository {
   upsert(flag: NewFeatureFlag): Promise<Result<FeatureFlag>>;
   list(): Promise<Result<FeatureFlag[]>>;
 }
+
+export interface IFeatureFlagRoleRepository {
+  listRoleIdsForFlag(flagKey: string): Promise<Result<string[]>>;
+  replaceRolesForFlag(flagKey: string, roleIds: string[]): Promise<Result<void>>;
+}

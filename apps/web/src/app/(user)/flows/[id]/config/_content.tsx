@@ -51,7 +51,7 @@ import {
 } from "@/components/canvas/scheduled-node-config";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
-import type { FieldValueSource, FlowContextDoc, PriorStepField, TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, FlowContextDoc, PermissionKey, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { orderStepIds } from "@/lib/step-order";
 
 const NODE_TYPES = {
@@ -141,9 +141,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [expertRole, setExpertRole] = useState<string>("");
   const meQuery = trpc.user.me.useQuery();
   const isAdmin = meQuery.data?.isAdmin ?? false;
-  const autoNodeEnabled = trpc.featureFlag.isEnabled.useQuery({ key: "auto_node" }).data ?? false;
+  const canPublishToEveryone =
+    isAdmin ||
+    ((meQuery.data?.permissions ?? []) as PermissionKey[]).includes("workflow:publish_to_everyone");
+  const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
   const scheduledNodeEnabled =
-    trpc.featureFlag.isEnabled.useQuery({ key: "scheduled_node" }).data ?? false;
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -560,7 +563,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
                     Publish privately (only you)
                   </button>
                 )}
-                {flowStatus !== "published" && isAdmin && (
+                {flowStatus !== "published" && canPublishToEveryone && (
                   <button
                     type="button"
                     className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
@@ -580,7 +583,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
                     Publish globally (everyone)
                   </button>
                 )}
-                {flowStatus === "published" && isAdmin && flowVisibility === "private" && (
+                {flowStatus === "published" && canPublishToEveryone && flowVisibility === "private" && (
                   <button
                     type="button"
                     className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
@@ -595,7 +598,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
                     Make global (everyone)
                   </button>
                 )}
-                {flowStatus === "published" && isAdmin && flowVisibility === "global" && (
+                {flowStatus === "published" && canPublishToEveryone && flowVisibility === "global" && (
                   <button
                     type="button"
                     className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"

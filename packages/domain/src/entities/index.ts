@@ -3,6 +3,8 @@ export * from "./error-log";
 export * from "./conversation";
 export * from "./audit-log";
 export * from "./feature-flag";
+export * from "./role";
+export * from "./permission";
 export * from "./usage-event";
 export * from "./job";
 export * from "./system-health";

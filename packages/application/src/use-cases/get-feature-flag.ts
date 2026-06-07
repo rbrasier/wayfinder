@@ -1,4 +1,11 @@
-import type { FeatureFlag, IFeatureFlagRepository, NewFeatureFlag, Result } from "@rbrasier/domain";
+import type {
+  FeatureFlag,
+  IFeatureFlagRepository,
+  IFeatureFlagRoleRepository,
+  IUserRoleRepository,
+  NewFeatureFlag,
+  Result,
+} from "@rbrasier/domain";
 import { ok } from "@rbrasier/domain";
 
 const DEFAULT_ENABLED_FLAGS = new Set(["scheduled_node"]);
@@ -29,6 +36,58 @@ export class IsFeatureEnabled {
     const flag = await this.repo.findByKey(key);
     if (flag.error) return flag;
     return ok(flag.data?.enabled ?? DEFAULT_ENABLED_FLAGS.has(key));
+  }
+}
+
+export class IsFeatureEnabledForUser {
+  constructor(
+    private readonly repo: IFeatureFlagRepository,
+    private readonly flagRoles: IFeatureFlagRoleRepository,
+    private readonly userRoles: IUserRoleRepository,
+  ) {}
+
+  async execute(userId: string, key: string, isAdmin: boolean): Promise<Result<boolean>> {
+    const flag = await this.repo.findByKey(key);
+    if (flag.error) return flag;
+
+    const enabled = flag.data?.enabled ?? DEFAULT_ENABLED_FLAGS.has(key);
+    if (!enabled) return ok(false);
+
+    const allowlist = await this.flagRoles.listRoleIdsForFlag(key);
+    if (allowlist.error) return allowlist;
+    if (allowlist.data.length === 0) return ok(true);
+    if (isAdmin) return ok(true);
+
+    const userRoleResult = await this.userRoles.listRolesForUser(userId);
+    if (userRoleResult.error) return userRoleResult;
+
+    const allowed = new Set(allowlist.data);
+    return ok(userRoleResult.data.some((role) => allowed.has(role.id)));
+  }
+}
+
+export class SetFeatureFlagRoles {
+  constructor(
+    private readonly repo: IFeatureFlagRepository,
+    private readonly flagRoles: IFeatureFlagRoleRepository,
+  ) {}
+
+  // Upsert the flag row first so `enabled` is explicit (ADR-022), then replace the
+  // allowlist. An empty array clears scoping (⇒ available to everyone).
+  async execute(key: string, roleIds: string[]): Promise<Result<void>> {
+    const existing = await this.repo.findByKey(key);
+    if (existing.error) return existing;
+
+    const enabled = existing.data?.enabled ?? DEFAULT_ENABLED_FLAGS.has(key);
+    const upserted = await this.repo.upsert({
+      key,
+      enabled,
+      rolloutPct: existing.data?.rolloutPct ?? 100,
+      description: existing.data?.description ?? null,
+    });
+    if (upserted.error) return upserted;
+
+    return this.flagRoles.replaceRolesForFlag(key, roleIds);
   }
 }
 

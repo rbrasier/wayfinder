@@ -1,7 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { adminProcedure, authenticatedProcedure, permissionProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const flowIdInput = z.object({ flowId: z.string().uuid() });
@@ -195,7 +195,7 @@ export const flowRouter = router({
     return result.data;
   }),
 
-  create: authenticatedProcedure
+  create: permissionProcedure("workflow:create_own")
     .input(
       z.object({
         name: z.string().min(1),
@@ -257,7 +257,8 @@ export const flowRouter = router({
       }
       const { flowId, ...patch } = input;
       const result = await ctx.container.useCases.updateFlow.execute(flowId, patch, {
-        isAdmin: ctx.isAdmin,
+        canPublishToEveryone:
+          ctx.isAdmin || ctx.permissions.has("workflow:publish_to_everyone"),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

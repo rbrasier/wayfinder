@@ -1,3 +1,4 @@
+import type { PermissionKey } from "@rbrasier/domain";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
@@ -8,6 +9,7 @@ export interface TrpcContext {
   readonly container: Container;
   readonly userId: string | null;
   readonly isAdmin: boolean;
+  readonly permissions: Set<PermissionKey>;
   readonly headers: Headers;
 }
 
@@ -16,6 +18,16 @@ const getSessionToken = (req: Request): string | null => {
   if (!cookie) return null;
   const pair = cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("better-auth.session_token="));
   return pair ? pair.slice("better-auth.session_token=".length) : null;
+};
+
+export const resolvePermissions = async (
+  container: Container,
+  userId: string | null,
+  isAdmin: boolean,
+): Promise<Set<PermissionKey>> => {
+  if (!userId) return new Set();
+  const result = await container.useCases.getEffectivePermissions.execute(userId, isAdmin);
+  return result.error ? new Set() : result.data;
 };
 
 export const createTrpcContext = async (req: Request): Promise<TrpcContext> => {
@@ -33,7 +45,9 @@ export const createTrpcContext = async (req: Request): Promise<TrpcContext> => {
     }
   }
 
-  return { container, userId, isAdmin, headers: req.headers };
+  const permissions = await resolvePermissions(container, userId, isAdmin);
+
+  return { container, userId, isAdmin, permissions, headers: req.headers };
 };
 
 const t = initTRPC.context<TrpcContext>().create({
@@ -84,3 +98,12 @@ export const adminProcedure = publicProcedure.use(({ ctx, next }) => {
   }
   return next();
 });
+
+// Guards a procedure behind an effective permission. Admins always pass (ADR-021).
+export const permissionProcedure = (key: PermissionKey) =>
+  authenticatedProcedure.use(({ ctx, next }) => {
+    if (!ctx.isAdmin && !ctx.permissions.has(key)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to do this." });
+    }
+    return next();
+  });

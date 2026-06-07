@@ -2,6 +2,7 @@ import {
   AddContextDoc,
   AdvanceScheduledNode,
   AddSessionUpload,
+  AssignUserRole,
   DeleteAllErrors,
   CreateFlow,
   CreateFlowEdge,
@@ -13,6 +14,7 @@ import {
   DeleteUser,
   FailJob,
   GenerateDocument,
+  GetEffectivePermissions,
   GetFeatureFlag,
   GetFlowCanvas,
   GetFlowDeepDive,
@@ -22,16 +24,19 @@ import {
   GrantFlowOwner,
   HeartbeatTyping,
   IsFeatureEnabled,
+  IsFeatureEnabledForUser,
   ListAllSessions,
   ListErrors,
   ListFeatureFlags,
   ListFlows,
   ListFlowsForUser,
   ListJobs,
+  ListRoles,
   ListScheduleRuns,
   ListSessions,
   ListTypingUsers,
   ListUsers,
+  ListUsersForRole,
   LogAuditEvent,
   LogError,
   OverrideBranch,
@@ -40,12 +45,14 @@ import {
   ReindexAllDocuments,
   RemoveContextDoc,
   RemoveSessionUpload,
+  RemoveUserRole,
   RetrieveDocumentChunks,
   ApplyAutoNodeResult,
   RunAutoNode,
   RunTurn,
   ScheduleNodeEvent,
   SendMessage,
+  SetFeatureFlagRoles,
   StartSession,
   SummariseTemplate,
   TrackUsage,
@@ -53,6 +60,7 @@ import {
   UpdateFlow,
   UpdateFlowNode,
   UpdateFlowNodePosition,
+  UpdateRolePermissions,
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
@@ -67,11 +75,13 @@ import {
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
   DrizzleFeatureFlagRepository,
+  DrizzleFeatureFlagRoleRepository,
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleReindexSourceRepository,
+  DrizzleRoleRepository,
   DrizzleSessionMessageRepository,
   DrizzleSessionUploadRepository,
   DrizzleSessionTypingRepository,
@@ -83,6 +93,7 @@ import {
   DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
   DrizzleUserRepository,
+  DrizzleUserRoleRepository,
   FlowSessionGraph,
   LangGraphAgentRunner,
   LanguageModelAdapter,
@@ -98,6 +109,8 @@ import {
   createDatabase,
   createNodeExecutors,
   resolveSession,
+  seedAdmin,
+  seedRoles,
   withOptionalLangfuse,
   withUsageTracking,
   type AuthMethod,
@@ -119,6 +132,9 @@ const build = () => {
   const errorLogger = new DrizzleErrorLogger(errorLogs);
   const auditLogger = new DrizzleAuditLogger(db);
   const featureFlags = new DrizzleFeatureFlagRepository(db);
+  const featureFlagRoles = new DrizzleFeatureFlagRoleRepository(db);
+  const roles = new DrizzleRoleRepository(db);
+  const userRoles = new DrizzleUserRoleRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
   const flows = new DrizzleFlowRepository(db);
@@ -189,6 +205,15 @@ const build = () => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
   });
 
+  // Promote the seeded admin and seed the system roles once, post-migration.
+  // Idempotent; both safely no-op on re-run and never overwrite admin edits.
+  void (async () => {
+    await seedAdmin(users, env.ADMIN_SEED_EMAIL);
+    await seedRoles(roles, featureFlagRoles);
+  })().catch((error: unknown) => {
+    logger.warn("Role/admin seeding failed — will retry on next server start", { error });
+  });
+
   const pkiConfig = {
     trustedProxyIps: (env.PKI_TRUSTED_PROXY_IPS ?? "")
       .split(",")
@@ -234,7 +259,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory },
-    repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -250,8 +275,16 @@ const build = () => {
       logAuditEvent: new LogAuditEvent(auditLogger),
       getFeatureFlag: new GetFeatureFlag(featureFlags),
       isFeatureEnabled: new IsFeatureEnabled(featureFlags),
+      isFeatureEnabledForUser: new IsFeatureEnabledForUser(featureFlags, featureFlagRoles, userRoles),
+      setFeatureFlagRoles: new SetFeatureFlagRoles(featureFlags, featureFlagRoles),
       upsertFeatureFlag: new UpsertFeatureFlag(featureFlags),
       listFeatureFlags: new ListFeatureFlags(featureFlags),
+      listRoles: new ListRoles(roles),
+      updateRolePermissions: new UpdateRolePermissions(roles),
+      assignUserRole: new AssignUserRole(roles, userRoles),
+      removeUserRole: new RemoveUserRole(roles, userRoles),
+      getEffectivePermissions: new GetEffectivePermissions(roles, userRoles),
+      listUsersForRole: new ListUsersForRole(roles, userRoles),
       trackUsage: new TrackUsage(usageRepo),
       getUsageSummary: new GetUsageSummary(usageRepo),
       registerJob: new RegisterJob(jobRepo),

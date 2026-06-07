@@ -3,10 +3,14 @@ import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export const featureFlagRouter = router({
-  isEnabled: authenticatedProcedure
+  isEnabledForMe: authenticatedProcedure
     .input(z.object({ key: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.isFeatureEnabled.execute(input.key);
+      const result = await ctx.container.useCases.isFeatureEnabledForUser.execute(
+        ctx.userId,
+        input.key,
+        ctx.isAdmin,
+      );
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
@@ -14,7 +18,14 @@ export const featureFlagRouter = router({
   list: adminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFeatureFlags.execute();
     if (result.error) throw toTrpcError(result.error);
-    return result.data;
+
+    const withRoles = await Promise.all(
+      result.data.map(async (flag) => {
+        const allowlist = await ctx.container.repos.featureFlagRoles.listRoleIdsForFlag(flag.key);
+        return { ...flag, roleIds: allowlist.error ? [] : allowlist.data };
+      }),
+    );
+    return withRoles;
   }),
 
   upsert: adminProcedure
@@ -30,5 +41,13 @@ export const featureFlagRouter = router({
       const result = await ctx.container.useCases.upsertFeatureFlag.execute(input);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
+    }),
+
+  setRoles: adminProcedure
+    .input(z.object({ key: z.string().min(1), roleIds: z.array(z.string().uuid()) }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.setFeatureFlagRoles.execute(input.key, input.roleIds);
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
     }),
 });

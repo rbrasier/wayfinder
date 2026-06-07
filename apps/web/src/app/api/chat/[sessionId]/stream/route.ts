@@ -258,7 +258,10 @@ export async function POST(
               ? gatheredContext
               : buildGatheredContext(refreshed.data);
 
-            if (newNode.type === "scheduled" && (await isScheduledNodeEnabled(container))) {
+            if (
+              newNode.type === "scheduled" &&
+              (await isScheduledNodeEnabled(container, authSession.userId, authSession.isAdmin))
+            ) {
               await dispatchScheduledNode({
                 container,
                 session: runResult.data.session,
@@ -266,7 +269,10 @@ export async function POST(
                 node: newNode,
                 messages: refreshed.error ? dbMessages : refreshed.data,
               });
-            } else if (newNode.type === "auto" && (await isAutoNodeEnabled(container))) {
+            } else if (
+              newNode.type === "auto" &&
+              (await isAutoNodeEnabled(container, authSession.userId, authSession.isAdmin))
+            ) {
               await dispatchAutoNode({
                 container,
                 session: runResult.data.session,

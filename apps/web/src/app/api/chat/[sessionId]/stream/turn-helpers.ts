@@ -120,8 +120,12 @@ export async function generateTitle(
   }
 }
 
-export async function isAutoNodeEnabled(container: Container): Promise<boolean> {
-  const flag = await container.useCases.isFeatureEnabled.execute("auto_node");
+export async function isAutoNodeEnabled(
+  container: Container,
+  userId: string,
+  isAdmin: boolean,
+): Promise<boolean> {
+  const flag = await container.useCases.isFeatureEnabledForUser.execute(userId, "auto_node", isAdmin);
   return !flag.error && flag.data === true;
 }
 
@@ -195,8 +199,16 @@ export async function dispatchAutoNode(input: DispatchAutoNodeInput): Promise<vo
   }
 }
 
-export async function isScheduledNodeEnabled(container: Container): Promise<boolean> {
-  const flag = await container.useCases.isFeatureEnabled.execute("scheduled_node");
+export async function isScheduledNodeEnabled(
+  container: Container,
+  userId: string,
+  isAdmin: boolean,
+): Promise<boolean> {
+  const flag = await container.useCases.isFeatureEnabledForUser.execute(
+    userId,
+    "scheduled_node",
+    isAdmin,
+  );
   return !flag.error && flag.data === true;
 }
 

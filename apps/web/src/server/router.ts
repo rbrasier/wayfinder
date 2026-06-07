@@ -4,6 +4,7 @@ import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
+import { roleRouter } from "./routers/role";
 import { scheduleRouter } from "./routers/schedule";
 import { sessionRouter } from "./routers/session";
 import { settingsRouter } from "./routers/settings";
@@ -18,6 +19,7 @@ export const appRouter = router({
   featureFlag: featureFlagRouter,
   usage: usageRouter,
   flow: flowRouter,
+  role: roleRouter,
   session: sessionRouter,
   schedule: scheduleRouter,
   settings: settingsRouter,

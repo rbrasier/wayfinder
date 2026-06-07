@@ -19,3 +19,6 @@ export * from "./drizzle-analytics-repository";
 export * from "./drizzle-system-settings-repository";
 export * from "./drizzle-schedule-repository";
 export * from "./drizzle-schedule-run-repository";
+export * from "./drizzle-role-repository";
+export * from "./drizzle-user-role-repository";
+export * from "./drizzle-feature-flag-role-repository";

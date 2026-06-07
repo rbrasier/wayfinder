@@ -29,6 +29,31 @@ const empty: FormState = { email: "", name: "", isAdmin: false };
 export function AdminUsersContent() {
   const utils = trpc.useUtils();
   const usersQuery = trpc.user.list.useQuery({});
+  const rolesQuery = trpc.role.list.useQuery();
+  const powerUsersRole = (rolesQuery.data ?? []).find(
+    (entry) => entry.role.key === "power_users",
+  )?.role;
+  const powerUsersRoleId = powerUsersRole?.id ?? "";
+  const membersQuery = trpc.role.listUsers.useQuery(
+    { roleId: powerUsersRoleId },
+    { enabled: powerUsersRoleId !== "" },
+  );
+  const assignRole = trpc.role.assignUser.useMutation({
+    onSuccess: () => void utils.role.listUsers.invalidate({ roleId: powerUsersRoleId }),
+  });
+  const removeRole = trpc.role.removeUser.useMutation({
+    onSuccess: () => void utils.role.listUsers.invalidate({ roleId: powerUsersRoleId }),
+  });
+  const powerUserIds = new Set(membersQuery.data ?? []);
+
+  const togglePowerUser = (userId: string, isMember: boolean): void => {
+    if (!powerUsersRoleId) return;
+    if (isMember) {
+      removeRole.mutate({ userId, roleId: powerUsersRoleId });
+    } else {
+      assignRole.mutate({ userId, roleId: powerUsersRoleId });
+    }
+  };
   const createMutation = trpc.user.create.useMutation({
     onSuccess: () => utils.user.list.invalidate(),
   });
@@ -78,6 +103,7 @@ export function AdminUsersContent() {
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Admin</TableHead>
+                <TableHead>Power User</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -89,6 +115,19 @@ export function AdminUsersContent() {
                   <TableCell className="font-mono text-xs">{u.email}</TableCell>
                   <TableCell>
                     {u.isAdmin && <Badge>admin</Badge>}
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      type="checkbox"
+                      checked={u.isAdmin || powerUserIds.has(u.id)}
+                      disabled={
+                        u.isAdmin ||
+                        !powerUsersRoleId ||
+                        assignRole.isPending ||
+                        removeRole.isPending
+                      }
+                      onChange={() => togglePowerUser(u.id, powerUserIds.has(u.id))}
+                    />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {new Date(u.createdAt).toLocaleDateString()}

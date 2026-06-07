@@ -284,34 +284,34 @@ describe("UpdateFlow", () => {
     expect(result.error?.code).toBe("NOT_FOUND");
   });
 
-  it("allows a non-admin to set visibility to private", async () => {
+  it("allows a user without the publish permission to set visibility to private", async () => {
     const result = await useCase.execute(
       "flow-1",
       { visibility: { kind: "private" } },
-      { isAdmin: false },
+      { canPublishToEveryone: false },
     );
     expect(result.data?.visibility).toEqual({ kind: "private" });
   });
 
-  it("forbids a non-admin from setting visibility to global", async () => {
+  it("forbids a user without the publish permission from setting visibility to global", async () => {
     const result = await useCase.execute(
       "flow-1",
       { visibility: { kind: "global" } },
-      { isAdmin: false },
+      { canPublishToEveryone: false },
     );
     expect(result.error?.code).toBe("FORBIDDEN");
   });
 
-  it("allows an admin to set visibility to global", async () => {
+  it("allows a holder of the publish permission to set visibility to global", async () => {
     const result = await useCase.execute(
       "flow-1",
       { visibility: { kind: "global" } },
-      { isAdmin: true },
+      { canPublishToEveryone: true },
     );
     expect(result.data?.visibility).toEqual({ kind: "global" });
   });
 
-  it("treats omitted caller context as non-admin", async () => {
+  it("treats omitted caller context as not permitted", async () => {
     const result = await useCase.execute("flow-1", { visibility: { kind: "global" } });
     expect(result.error?.code).toBe("FORBIDDEN");
   });

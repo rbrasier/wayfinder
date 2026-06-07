@@ -36,22 +36,22 @@ describe("isFlowDiscoverableBy", () => {
 
 describe("canPublishWithVisibility", () => {
   it("allows any user to publish a private flow", () => {
-    const allowed = canPublishWithVisibility({ kind: "private" }, { isAdmin: false });
+    const allowed = canPublishWithVisibility({ kind: "private" }, { canPublishToEveryone: false });
     expect(allowed).toBe(true);
   });
 
-  it("allows admins to publish a global flow", () => {
-    const allowed = canPublishWithVisibility({ kind: "global" }, { isAdmin: true });
+  it("allows holders of the publish permission to publish a global flow", () => {
+    const allowed = canPublishWithVisibility({ kind: "global" }, { canPublishToEveryone: true });
     expect(allowed).toBe(true);
   });
 
-  it("rejects non-admins publishing a global flow", () => {
-    const allowed = canPublishWithVisibility({ kind: "global" }, { isAdmin: false });
+  it("rejects users without the publish permission publishing a global flow", () => {
+    const allowed = canPublishWithVisibility({ kind: "global" }, { canPublishToEveryone: false });
     expect(allowed).toBe(false);
   });
 
-  it("allows admins to publish a private flow", () => {
-    const allowed = canPublishWithVisibility({ kind: "private" }, { isAdmin: true });
+  it("allows any user to publish a private flow regardless of permission", () => {
+    const allowed = canPublishWithVisibility({ kind: "private" }, { canPublishToEveryone: true });
     expect(allowed).toBe(true);
   });
 });

@@ -1,4 +1,5 @@
 export * from "./flow/index";
+export * from "./role/index";
 export * from "./session/index";
 export * from "./scheduling/index";
 export * from "./document/index";

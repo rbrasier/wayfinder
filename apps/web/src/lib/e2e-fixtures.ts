@@ -97,7 +97,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     await container.useCases.updateFlow.execute(
       flow.id,
       { status: "published", visibility: { kind: "global" } },
-      { isAdmin: true },
+      { canPublishToEveryone: true },
     ),
     "publish seed flow",
   );

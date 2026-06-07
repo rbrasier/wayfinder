@@ -7,6 +7,7 @@ export * from "./error-logger";
 export * from "./logger";
 export * from "./audit-logger";
 export * from "./feature-flag-repository";
+export * from "./role-repository";
 export * from "./usage-repository";
 export * from "./job-repository";
 export * from "./health-checker";

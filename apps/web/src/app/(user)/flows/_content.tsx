@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/empty-state";
 import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { ShareFlowDialog } from "@/components/flow/share-flow-dialog";
+import { usePermissions } from "@/lib/use-permissions";
 import { trpc } from "@/trpc/client";
 
 interface EditState {
@@ -20,6 +21,8 @@ interface EditState {
 
 export function UserFlowsContent() {
   const utils = trpc.useUtils();
+  const permissions = usePermissions();
+  const canCreate = permissions.has("workflow:create_own");
   const flowsQuery = trpc.flow.listMine.useQuery();
 
   const createMutation = trpc.flow.create.useMutation({
@@ -68,7 +71,7 @@ export function UserFlowsContent() {
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle>Flows</CardTitle>
-            <Button onClick={() => setCreating(true)}>New Flow</Button>
+            {canCreate && <Button onClick={() => setCreating(true)}>New Flow</Button>}
           </CardHeader>
           <CardContent>
             {flowsQuery.isLoading ? (
@@ -78,8 +81,8 @@ export function UserFlowsContent() {
                 icon="🗂️"
                 heading="No flows yet"
                 body="Create a flow to define a guided workflow."
-                ctaLabel="New Flow"
-                onCta={() => setCreating(true)}
+                ctaLabel={canCreate ? "New Flow" : undefined}
+                onCta={canCreate ? () => setCreating(true) : undefined}
               />
             ) : (
               <Table>

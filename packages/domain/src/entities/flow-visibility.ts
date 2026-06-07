@@ -15,8 +15,8 @@ export const isFlowDiscoverableBy = (
 
 export const canPublishWithVisibility = (
   visibility: FlowVisibility,
-  context: { isAdmin: boolean },
+  context: { canPublishToEveryone: boolean },
 ): boolean => {
   if (visibility.kind === "private") return true;
-  return context.isAdmin;
+  return context.canPublishToEveryone;
 };

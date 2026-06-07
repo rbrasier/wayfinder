@@ -19,6 +19,7 @@ export const userRouter = router({
       role: user?.role ?? null,
       team: user?.team ?? null,
       email: user?.email ?? null,
+      permissions: [...ctx.permissions],
     };
   }),
 
