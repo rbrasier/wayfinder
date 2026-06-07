@@ -73,7 +73,7 @@ export function FieldValueSelector({
         value={encodeSource(value)}
         onChange={(event) => onChange(decodeSource(event.target.value, value))}
       >
-        <option value="ai">AI decides (or asks the user)</option>
+        <option value="ai">AI decides (or asks the user if uncertain)</option>
         {groups.map((group) => (
           <optgroup key={group.stepNumber} label={`${group.stepNumber}. ${group.stepName}`}>
             {group.fields.map((prior) => (
