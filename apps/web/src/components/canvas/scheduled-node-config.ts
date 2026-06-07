@@ -1,52 +1,80 @@
-import {
-  parseRecurrenceRule,
-  serializeRecurrenceRule,
-  type FieldValueSource,
-} from "@rbrasier/domain";
-import type { NodeConfigValues, ScheduleAnchor, ScheduleKind } from "./node-config-modal";
-import { browserTimezone, buildRecurrenceRule } from "./scheduled-config";
+import type { FieldValueSource, ScheduleAnchor } from "@rbrasier/domain";
+import type { NodeConfigValues } from "./node-config-modal";
 
-// Maps the modal's flat scheduling fields to the persisted ScheduledNodeConfig
-// jsonb, and back. Shared by the user and admin flow editors so both serialise
-// recurrence identically.
+// Maps the modal's scheduling fields to the persisted ScheduledNodeConfig jsonb,
+// and back. The author chooses one of three "when" modes; "specific" drives the
+// mad-lib sentence builder. Recurrence authoring has been withdrawn — legacy
+// recurrence/cron rows open in the builder with sensible defaults.
 
-export const scheduledConfigFromValues = (values: NodeConfigValues): Record<string, unknown> => {
-  if (values.scheduleKind === "recurrence") {
-    const rule = buildRecurrenceRule({
-      frequency: values.recurrenceFrequency,
-      interval: Number(values.recurrenceInterval) || 1,
-      weekdays: values.recurrenceWeekdays,
-      monthDay: Number(values.recurrenceMonthDay) || 1,
-      hour: values.recurrenceHour,
-      minute: values.recurrenceMinute,
-      timezone: values.recurrenceTimezone || browserTimezone(),
-    });
+export type ScheduleWhen = "ai" | "specific" | "describe";
+export type ScheduleUnit = "m" | "h" | "d" | "w";
+export type ScheduleModifier = "after" | "before" | "on";
+
+// The mad-lib anchor dropdown collapses anchor + anchorSource into a single
+// string: a fixed anchor, or a prior-step field encoded as `step:<node>:<key>`.
+export const encodeAnchorChoice = (
+  anchor: ScheduleAnchor | undefined,
+  anchorSource: FieldValueSource | undefined,
+): string => {
+  if (anchor === "step_field" && anchorSource?.kind === "step_field") {
+    return `step:${anchorSource.nodeId}:${anchorSource.fieldKey}`;
+  }
+  if (anchor === "flow_started") return "flow_started";
+  return "node_reached";
+};
+
+export const decodeAnchorChoice = (
+  choice: string,
+): { anchor: ScheduleAnchor; anchorSource?: FieldValueSource } => {
+  if (choice === "flow_started") return { anchor: "flow_started" };
+  if (choice.startsWith("step:")) {
+    const [, nodeId, fieldKey] = choice.split(":");
     return {
-      kind: "recurrence",
-      spec: serializeRecurrenceRule(rule),
-      recurring: true,
-      maxOccurrences: values.scheduleMaxOccurrences ? Number(values.scheduleMaxOccurrences) : null,
+      anchor: "step_field",
+      anchorSource: { kind: "step_field", nodeId: nodeId ?? "", fieldKey: fieldKey ?? "" },
     };
   }
+  return { anchor: "node_reached" };
+};
 
-  if (values.scheduleKind === "at") {
-    const source = values.scheduleSpecSource;
+const RELATIVE_SPEC = /^(\d+)\s*([smhdw])$/;
+
+const readSpec = (spec: string): { amount: number; unit: ScheduleUnit } => {
+  const match = RELATIVE_SPEC.exec(spec.trim());
+  if (!match) return { amount: 1, unit: "d" };
+  const amount = Number(match[1]);
+  const raw = match[2];
+  const unit: ScheduleUnit = raw === "m" || raw === "h" || raw === "w" ? raw : "d";
+  return { amount, unit };
+};
+
+export const scheduledConfigFromValues = (values: NodeConfigValues): Record<string, unknown> => {
+  if (values.scheduleWhen === "ai") {
+    return { kind: "at", spec: "", specSource: { kind: "ai" }, recurring: false, maxOccurrences: null };
+  }
+
+  if (values.scheduleWhen === "describe") {
     return {
       kind: "at",
-      spec: source.kind === "literal" ? source.value : "",
-      specSource: source,
+      spec: "",
+      specSource: { kind: "ai" },
+      describeText: values.scheduleDescribeText,
       recurring: false,
       maxOccurrences: null,
     };
   }
 
+  const { anchor, anchorSource } = decodeAnchorChoice(values.scheduleAnchorChoice);
+  const isOn = values.scheduleModifier === "on";
+  const spec = isOn ? "0s" : `${Number(values.scheduleNumber) || 1}${values.scheduleUnit}`;
   return {
     kind: "relative",
-    spec: values.scheduleSpec,
+    spec,
     recurring: false,
     maxOccurrences: null,
-    anchor: values.scheduleAnchor,
-    metadataKey: values.scheduleAnchor === "step_metadata" ? values.scheduleMetadataKey : null,
+    anchor,
+    ...(anchorSource ? { anchorSource } : {}),
+    relativeDirection: isOn ? "after" : values.scheduleModifier,
   };
 };
 
@@ -54,42 +82,37 @@ export const scheduledValuesFromConfig = (
   config: Record<string, unknown>,
 ): Partial<NodeConfigValues> => {
   const storedKind = config.kind as string | undefined;
-  // A new node has no stored kind yet — start it on the simplest "run after a
-  // delay" (relative) option. Only an existing non-plain-language kind (legacy
-  // `cron`, or an already-stored `recurrence`) opens in the recurrence builder.
-  const kind: ScheduleKind =
-    storedKind === "relative" || storedKind === "at"
-      ? storedKind
-      : storedKind
-        ? "recurrence"
-        : "relative";
 
-  const base: Partial<NodeConfigValues> = {
-    scheduleKind: kind,
-    scheduleSpec: kind === "relative" ? String(config.spec ?? "") : "",
-    scheduleSpecSource:
-      (config.specSource as FieldValueSource | undefined) ??
-      (storedKind === "at" && config.spec
-        ? { kind: "literal", value: String(config.spec) }
-        : { kind: "ai" }),
-    scheduleRecurring: Boolean(config.recurring),
-    scheduleMaxOccurrences: config.maxOccurrences != null ? String(config.maxOccurrences) : "",
-    scheduleAnchor: (config.anchor as ScheduleAnchor | undefined) ?? "node_reached",
-    scheduleMetadataKey: (config.metadataKey as string | null) ?? "",
+  const defaults: Partial<NodeConfigValues> = {
+    scheduleWhen: "specific",
+    scheduleNumber: "1",
+    scheduleUnit: "d",
+    scheduleModifier: "after",
+    scheduleAnchorChoice: "node_reached",
+    scheduleDescribeText: "",
   };
 
-  if (kind !== "recurrence") return base;
+  if (storedKind === "at") {
+    const describeText = config.describeText ? String(config.describeText) : "";
+    return {
+      ...defaults,
+      scheduleWhen: describeText ? "describe" : "ai",
+      scheduleDescribeText: describeText,
+    };
+  }
 
-  const parsed = storedKind === "recurrence" ? parseRecurrenceRule(String(config.spec ?? "")) : undefined;
-  const rule = parsed && !parsed.error ? parsed.data : undefined;
+  // relative (and legacy recurrence/cron) open in the mad-lib builder.
+  const { amount, unit } = readSpec(String(config.spec ?? ""));
+  const direction = config.relativeDirection === "before" ? "before" : "after";
   return {
-    ...base,
-    recurrenceFrequency: rule?.frequency ?? "weekly",
-    recurrenceInterval: String(rule?.interval ?? 1),
-    recurrenceWeekdays: rule?.weekdays ?? [],
-    recurrenceMonthDay: String(rule?.monthDay ?? 1),
-    recurrenceHour: rule?.hour ?? 9,
-    recurrenceMinute: rule?.minute ?? 0,
-    recurrenceTimezone: rule?.timezone ?? "",
+    ...defaults,
+    scheduleWhen: "specific",
+    scheduleNumber: amount > 0 ? String(amount) : "1",
+    scheduleUnit: amount > 0 ? unit : "d",
+    scheduleModifier: amount === 0 ? "on" : direction,
+    scheduleAnchorChoice: encodeAnchorChoice(
+      config.anchor as ScheduleAnchor | undefined,
+      config.anchorSource as FieldValueSource | undefined,
+    ),
   };
 };

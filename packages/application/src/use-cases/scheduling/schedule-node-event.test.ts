@@ -268,4 +268,103 @@ describe("ScheduleNodeEvent", () => {
 
     expect(result.data?.status).toBe("failed");
   });
+
+  it("anchors a relative delay to the session start for a `flow_started` anchor", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+    const session = { ...makeSession(), createdAt: new Date("2026-05-01T00:00:00.000Z") };
+
+    const result = await useCase.execute({
+      session,
+      node: makeNode({ kind: "relative", spec: "10d", anchor: "flow_started" }),
+    });
+
+    expect(result.data?.nextFireAt.toISOString()).toBe("2026-05-11T00:00:00.000Z");
+    expect(repo.created?.payload).toMatchObject({ anchorAt: "2026-05-01T00:00:00.000Z" });
+  });
+
+  it("resolves a `step_field` anchor from a prior step output date", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+    const priorOutput: SessionStepOutput = {
+      id: "out-1",
+      sessionId: "sess-1",
+      flowId: "flow-1",
+      nodeId: "node-0",
+      messageId: null,
+      fields: [{ key: "start_date", label: "Start", type: "date", value: "2027-03-01T00:00:00.000Z" }],
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+
+    const result = await useCase.execute({
+      session: makeSession(),
+      node: makeNode({
+        kind: "relative",
+        spec: "7d",
+        anchor: "step_field",
+        anchorSource: { kind: "step_field", nodeId: "node-0", fieldKey: "start_date" },
+      }),
+      priorStepOutputs: [priorOutput],
+    });
+
+    expect(result.data?.nextFireAt.toISOString()).toBe("2027-03-08T00:00:00.000Z");
+  });
+
+  it("marks the schedule failed when a `step_field` anchor cannot be resolved", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+
+    const result = await useCase.execute({
+      session: makeSession(),
+      node: makeNode({
+        kind: "relative",
+        spec: "7d",
+        anchor: "step_field",
+        anchorSource: { kind: "step_field", nodeId: "node-0", fieldKey: "missing" },
+      }),
+      priorStepOutputs: [],
+    });
+
+    expect(result.data?.status).toBe("failed");
+  });
+
+  it("subtracts the relative delay when relativeDirection is `before`", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+
+    const result = await useCase.execute({
+      session: makeSession(),
+      node: makeNode({ kind: "relative", spec: "5d", relativeDirection: "before" }),
+    });
+
+    expect(result.data?.nextFireAt.toISOString()).toBe("2026-05-29T10:00:00.000Z");
+  });
+
+  it("threads the author's describeText into the AI spec instruction", async () => {
+    const repo = makeRepo();
+    const capture = { system: "" };
+    const model: ILanguageModel = {
+      provider: "anthropic",
+      generateObject: vi.fn().mockImplementation(async (input: { system: string }) => {
+        capture.system = input.system;
+        return ok({ object: { fire_at: "2026-10-10T12:00:00.000Z" }, usage });
+      }),
+      streamText: vi.fn(),
+      streamObject: vi.fn(),
+    };
+    const useCase = new ScheduleNodeEvent(repo, fixedClock, model);
+
+    await useCase.execute({
+      session: makeSession(),
+      node: makeNode({
+        kind: "at",
+        spec: "",
+        specSource: { kind: "ai" },
+        describeText: "two business days after the invoice is approved",
+      }),
+    });
+
+    expect(capture.system).toContain("two business days after the invoice is approved");
+  });
 });

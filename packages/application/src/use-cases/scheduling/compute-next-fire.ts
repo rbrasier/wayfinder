@@ -136,13 +136,17 @@ export interface ComputeNextFireInput {
   // The original anchor an interval is counted from. Defaults to `anchor`;
   // recurring recomputes pass the preserved start so intervals stay stable.
   start?: Date;
+  // Whether a `relative` duration is added after the anchor (default) or
+  // subtracted before it. Ignored by every other kind.
+  direction?: "after" | "before";
 }
 
 export const computeNextFireAt = (input: ComputeNextFireInput): Result<Date> => {
   if (input.kind === "relative") {
     const duration = parseRelativeDuration(input.spec);
     if (duration.error) return duration;
-    return ok(new Date(input.anchor.getTime() + duration.data));
+    const signedDuration = input.direction === "before" ? -duration.data : duration.data;
+    return ok(new Date(input.anchor.getTime() + signedDuration));
   }
 
   if (input.kind === "at") {

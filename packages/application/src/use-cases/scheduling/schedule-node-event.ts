@@ -32,11 +32,38 @@ export interface ScheduleNodeEventInput {
 
 const resolveAnchor = (
   config: ScheduledNodeConfig,
-  metadata: Record<string, unknown>,
+  input: ScheduleNodeEventInput,
   now: Date,
 ): Result<Date> => {
-  if ((config.anchor ?? "node_reached") === "node_reached") {
+  const anchor = config.anchor ?? "node_reached";
+
+  if (anchor === "node_reached") {
     return ok(now);
+  }
+
+  if (anchor === "flow_started") {
+    return ok(input.session.createdAt);
+  }
+
+  if (anchor === "step_field") {
+    const source = config.anchorSource;
+    if (!source) {
+      return err(domainError("VALIDATION_FAILED", "step_field anchor has no anchorSource."));
+    }
+    const raw =
+      source.kind === "literal"
+        ? source.value
+        : source.kind === "step_field"
+          ? lookupStepField(input.priorStepOutputs ?? [], source.nodeId, source.fieldKey)
+          : "";
+    if (raw.trim() === "") {
+      return err(domainError("VALIDATION_FAILED", "step_field anchor resolved to no value."));
+    }
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      return err(domainError("VALIDATION_FAILED", `step_field anchor "${raw}" is not a date.`));
+    }
+    return ok(parsed);
   }
 
   const key = config.metadataKey;
@@ -44,7 +71,7 @@ const resolveAnchor = (
     return err(domainError("VALIDATION_FAILED", "step_metadata anchor has no metadataKey."));
   }
 
-  const raw = metadata[key];
+  const raw = (input.metadata ?? {})[key];
   if (typeof raw !== "string" || raw.trim() === "") {
     return err(domainError("VALIDATION_FAILED", `Metadata key "${key}" is missing.`));
   }
@@ -66,7 +93,6 @@ export class ScheduleNodeEvent {
 
   async execute(input: ScheduleNodeEventInput): Promise<Result<SessionSchedule>> {
     const config = input.node.config as unknown as ScheduledNodeConfig;
-    const metadata = input.metadata ?? {};
     const now = this.clock.now();
 
     const spec = await this.resolveSpec(config, input);
@@ -74,7 +100,7 @@ export class ScheduleNodeEvent {
       return this.failed(input, config, now, spec.error.message);
     }
 
-    const anchor = resolveAnchor(config, metadata, now);
+    const anchor = resolveAnchor(config, input, now);
     if (anchor.error) {
       return this.failed(input, config, now, anchor.error.message, spec.data);
     }
@@ -83,6 +109,7 @@ export class ScheduleNodeEvent {
       kind: config.kind,
       spec: spec.data,
       anchor: anchor.data,
+      direction: config.relativeDirection,
     });
     if (nextFireAt.error) {
       return this.failed(
@@ -121,6 +148,7 @@ export class ScheduleNodeEvent {
       return ok(config.spec);
     }
     if (source.kind === "literal") return ok(source.value);
+    if (source.kind === "none") return ok("");
     return ok(lookupStepField(input.priorStepOutputs ?? [], source.nodeId, source.fieldKey));
   }
 
@@ -136,6 +164,10 @@ export class ScheduleNodeEvent {
         ),
       );
     }
+    const describe = config.describeText?.trim();
+    const instruction = describe
+      ? `Decide the exact date and time this scheduled step should fire. The author described how to calculate it: "${describe}". Use the session context below. Respond with a single ISO 8601 timestamp, e.g. 2026-12-25T09:00:00.000Z.`
+      : "Decide the exact date and time this scheduled step should fire based on the session context. Respond with a single ISO 8601 timestamp, e.g. 2026-12-25T09:00:00.000Z.";
     const resolved = await resolveFieldValues(this.languageModel, {
       fields: [
         { key: "fire_at", label: "Scheduled date/time", type: "text", optional: false, raw: "Scheduled date/time" },
@@ -145,8 +177,7 @@ export class ScheduleNodeEvent {
       insights: input.insights ?? [],
       transcript: input.transcript ?? "",
       contextDocs: input.contextDocs ?? [],
-      instruction:
-        "Decide the exact date and time this scheduled step should fire based on the session context. Respond with a single ISO 8601 timestamp, e.g. 2026-12-25T09:00:00.000Z.",
+      instruction,
       purpose: "scheduledNodeSpec",
     });
     if (resolved.error) return resolved;

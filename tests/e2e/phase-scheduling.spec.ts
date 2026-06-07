@@ -102,7 +102,9 @@ test.describe('Scheduling: scheduled node behind the scheduled_node flag', () =>
 
     await page.locator('#node-name').fill('Wait 30 days');
     await scheduledOption.click();
-    await page.locator('#schedule-spec').fill('30d');
+    // "Pick a date and time" mad-lib is the default; set 30 days.
+    await page.getByLabel('Amount').fill('30');
+    await page.getByLabel('Unit').selectOption('d');
     await page.screenshot({ path: 'screenshots/scheduling-config.png', fullPage: true });
 
     await page.getByRole('button', { name: /^Save$/i }).click();
@@ -137,7 +139,8 @@ test.describe('Scheduling: scheduled node behind the scheduled_node flag', () =>
 
     await page.locator('#node-name').fill('Incomplete schedule');
     await scheduledOption.click();
-    // No spec entered — the form must not be submittable.
+    // "Type anything" needs a description before it can be saved.
+    await page.locator('#schedule-when').selectOption('describe');
     await expect(page.getByRole('button', { name: /^Save$/i })).toBeDisabled();
   });
 });

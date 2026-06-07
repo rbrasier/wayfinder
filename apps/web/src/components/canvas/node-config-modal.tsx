@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { Check, Copy, Eye, HelpCircle, Pencil } from "lucide-react";
+import { Check, Copy, Eye, HelpCircle, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,29 +12,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { describeRecurrenceRule } from "@rbrasier/domain";
-import type {
-  FieldValueSource,
-  PriorStepField,
-  RecurrenceFrequency,
-  TemplateField,
-} from "@rbrasier/domain";
+import { deriveFieldKey } from "@rbrasier/domain";
+import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CalendarPicker, type YearMonth } from "@/components/ui/calendar-picker";
-import { TimeWheel } from "@/components/ui/time-wheel";
 import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 import { TemplateFieldEditor, parseFieldLines } from "./template-field-editor";
-import { FieldValueList, FieldValueSelector, ReadOnlyFieldList } from "./field-value-selector";
-import { STEP_TYPE_ACCENT } from "./node-styles";
 import {
-  browserTimezone,
-  buildRecurrenceRule,
-  isoToLocalParts,
-  localPartsToIso,
-} from "./scheduled-config";
+  FieldValueList,
+  FieldValueSelector,
+  ReadOnlyFieldList,
+} from "./field-value-selector";
+import { ScheduleSentenceBuilder } from "./schedule-sentence-builder";
+import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
+import type {
+  ScheduleModifier,
+  ScheduleUnit,
+  ScheduleWhen,
+} from "./scheduled-node-config";
+import { STEP_TYPE_ACCENT } from "./node-styles";
 
 const COLOURS = [
   { hex: "#3a5fd9", label: "Indigo" },
@@ -49,10 +47,13 @@ const EXAMPLE_TAG = "{{First name}}";
 
 export type NodeConfigType = "conversational" | "auto" | "scheduled";
 
-// Authoring offers plain-language kinds only; legacy `cron` rows are mapped to
-// `recurrence` when a node is opened.
-export type ScheduleKind = "relative" | "at" | "recurrence";
-export type ScheduleAnchor = "node_reached" | "step_metadata";
+// An author-added request field while it is being edited. The key is derived
+// from the label on save; the id keeps React rows stable as the label changes.
+interface CustomRequestField {
+  id: string;
+  label: string;
+  value: FieldValueSource;
+}
 
 export interface NodeConfigValues {
   name: string;
@@ -72,21 +73,14 @@ export interface NodeConfigValues {
   requestFields: TemplateField[];
   requestFieldValues: Record<string, FieldValueSource>;
   responseFields: TemplateField[];
-  scheduleKind: ScheduleKind;
-  scheduleSpec: string;
-  scheduleSpecSource: FieldValueSource;
-  scheduleRecurring: boolean;
-  scheduleMaxOccurrences: string;
-  scheduleAnchor: ScheduleAnchor;
-  scheduleMetadataKey: string;
-  // Structured recurrence (kind === "recurrence").
-  recurrenceFrequency: RecurrenceFrequency;
-  recurrenceInterval: string;
-  recurrenceWeekdays: number[];
-  recurrenceMonthDay: string;
-  recurrenceHour: number;
-  recurrenceMinute: number;
-  recurrenceTimezone: string;
+  // Keys of author-added request fields (removable); workflow inputs are not.
+  customRequestFieldKeys: string[];
+  scheduleWhen: ScheduleWhen;
+  scheduleNumber: string;
+  scheduleUnit: ScheduleUnit;
+  scheduleModifier: ScheduleModifier;
+  scheduleAnchorChoice: string;
+  scheduleDescribeText: string;
 }
 
 interface NodeConfigModalProps {
@@ -122,92 +116,17 @@ const DEFAULT_VALUES: NodeConfigValues = {
   requestFields: [],
   requestFieldValues: {},
   responseFields: [],
-  scheduleKind: "relative",
-  scheduleSpec: "",
-  scheduleSpecSource: { kind: "ai" },
-  scheduleRecurring: false,
-  scheduleMaxOccurrences: "",
-  scheduleAnchor: "node_reached",
-  scheduleMetadataKey: "",
-  recurrenceFrequency: "weekly",
-  recurrenceInterval: "1",
-  recurrenceWeekdays: [1],
-  recurrenceMonthDay: "1",
-  recurrenceHour: 9,
-  recurrenceMinute: 0,
-  recurrenceTimezone: "",
+  customRequestFieldKeys: [],
+  scheduleWhen: "specific",
+  scheduleNumber: "1",
+  scheduleUnit: "d",
+  scheduleModifier: "after",
+  scheduleAnchorChoice: "node_reached",
+  scheduleDescribeText: "",
 };
-
-const WEEKDAY_TOGGLES = [
-  { value: 0, label: "S" },
-  { value: 1, label: "M" },
-  { value: 2, label: "T" },
-  { value: 3, label: "W" },
-  { value: 4, label: "T" },
-  { value: 5, label: "F" },
-  { value: 6, label: "S" },
-];
-
-const SCHEDULED_ACCENT = STEP_TYPE_ACCENT.scheduled;
 
 const SCHEDULE_SELECT_CLASS =
   "flex h-10 w-full rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-[13px] text-[#1a1814] focus:border-[#1f8a4c] focus:bg-white focus:outline-none";
-
-const formatLocalDateTime = (iso: string): string => {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-};
-
-// Calendar + iOS-style time wheels editing a single absolute instant, stored as
-// an ISO string. The author picks in their local timezone.
-function DateTimePicker({ value, onChange }: { value: string; onChange: (iso: string) => void }) {
-  const now = new Date();
-  const parts =
-    isoToLocalParts(value) ?? {
-      year: now.getFullYear(),
-      month: now.getMonth() + 1,
-      day: now.getDate(),
-      hour: 9,
-      minute: 0,
-    };
-  const [view, setView] = useState<YearMonth>({ year: parts.year, month: parts.month });
-
-  // A freshly chosen "specific" source starts blank; seed it so the picker
-  // reflects a concrete instant and the step validates.
-  useEffect(() => {
-    if (!value) onChange(localPartsToIso(parts));
-  }, [value, parts, onChange]);
-
-  const emit = (next: Partial<typeof parts>) => onChange(localPartsToIso({ ...parts, ...next }));
-
-  return (
-    <div className="space-y-2">
-      <CalendarPicker
-        year={view.year}
-        month={view.month}
-        day={parts.day}
-        onSelect={(picked) => emit({ year: picked.year, month: picked.month, day: picked.day })}
-        onMonthChange={setView}
-      />
-      <TimeWheel
-        hour={parts.hour}
-        minute={parts.minute}
-        onChange={(time) => emit({ hour: time.hour, minute: time.minute })}
-      />
-      {value && (
-        <p className="text-center text-[12px] font-medium text-[#5a5650]">{formatLocalDateTime(value)}</p>
-      )}
-    </div>
-  );
-}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -230,6 +149,17 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+const buildCustomFields = (values: Partial<NodeConfigValues>): CustomRequestField[] => {
+  const customKeys = new Set(values.customRequestFieldKeys ?? []);
+  return (values.requestFields ?? [])
+    .filter((field) => customKeys.has(field.key))
+    .map((field) => ({
+      id: field.key,
+      label: field.label,
+      value: values.requestFieldValues?.[field.key] ?? { kind: "ai" },
+    }));
+};
+
 export function NodeConfigModal({
   open,
   flowId,
@@ -245,10 +175,10 @@ export function NodeConfigModal({
 }: NodeConfigModalProps) {
   const utils = trpc.useUtils();
   const [values, setValues] = useState<NodeConfigValues>({ ...DEFAULT_VALUES, ...initialValues });
-  // Raw `Label (annotations)` lines edited in the field editors; the source of
-  // truth while editing so malformed lines stay visible with their errors.
+  // Raw `Label (annotations)` lines edited in the field editors (mock executor).
   const [requestLines, setRequestLines] = useState<string[]>([]);
   const [responseLines, setResponseLines] = useState<string[]>([]);
+  const [customFields, setCustomFields] = useState<CustomRequestField[]>([]);
   // Reset form state when the modal opens for a different node.
   useEffect(() => {
     if (open) {
@@ -256,6 +186,7 @@ export function NodeConfigModal({
       setValues(next);
       setRequestLines((next.requestFields ?? []).map((field) => field.raw));
       setResponseLines((next.responseFields ?? []).map((field) => field.raw));
+      setCustomFields(buildCustomFields(next));
     }
   }, [open, initialValues]);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -266,6 +197,8 @@ export function NodeConfigModal({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [infoVariant, setInfoVariant] = useState<"inputs" | "outputs">("inputs");
+  const [infoOpen, setInfoOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
@@ -299,17 +232,36 @@ export function NodeConfigModal({
   const workflows = workflowsQuery.data ?? [];
   const selectedWorkflow = workflows.find((workflow) => workflow.id === values.workflowId) ?? null;
 
-  // Workflow inputs are read-only and combine with author-added extras to form
-  // the full request-field set. Mock executor uses only the author-added fields.
-  const derivedInputs = usesN8n && selectedWorkflow ? selectedWorkflow.inputs : [];
-  const derivedOutputs = usesN8n && selectedWorkflow ? selectedWorkflow.outputs : [];
-  const requestFields = [...derivedInputs, ...requestParsed.fields];
+  // The full input/output schema for the selected workflow is fetched lazily —
+  // only once a workflow is chosen — so the dropdown stays cheap.
+  const schemaQuery = trpc.n8n.getWorkflowSchema.useQuery(
+    { workflowId: values.workflowId ?? "" },
+    { enabled: open && usesN8n && Boolean(values.workflowId) },
+  );
+  const schema = schemaQuery.data ?? null;
+
+  const derivedInputs = usesN8n && schema ? schema.inputs : [];
+  const derivedOutputs = usesN8n && schema ? schema.outputs : [];
+  // Mock executor builds its request fields from the line editor.
+  const mockRequestFields = requestParsed.fields;
 
   const setFieldValue = (key: string, next: FieldValueSource) =>
     setValues((prev) => ({
       ...prev,
       requestFieldValues: { ...prev.requestFieldValues, [key]: next },
     }));
+
+  const addCustomField = () =>
+    setCustomFields((prev) => [
+      ...prev,
+      { id: `cf-${Date.now()}-${prev.length}`, label: "", value: { kind: "ai" } },
+    ]);
+  const updateCustomLabel = (id: string, label: string) =>
+    setCustomFields((prev) => prev.map((field) => (field.id === id ? { ...field, label } : field)));
+  const updateCustomValue = (id: string, value: FieldValueSource) =>
+    setCustomFields((prev) => prev.map((field) => (field.id === id ? { ...field, value } : field)));
+  const removeCustomField = (id: string) =>
+    setCustomFields((prev) => prev.filter((field) => field.id !== id));
 
   const selectWorkflow = (workflowId: string) => {
     const workflow = workflows.find((candidate) => candidate.id === workflowId);
@@ -318,6 +270,11 @@ export function NodeConfigModal({
       workflowId: workflowId || null,
       webhookUrl: workflow?.webhookUrl ?? "",
     }));
+  };
+
+  const openInfo = (variant: "inputs" | "outputs") => {
+    setInfoVariant(variant);
+    setInfoOpen(true);
   };
 
   const conversationalValid =
@@ -329,47 +286,64 @@ export function NodeConfigModal({
     Boolean(values.name.trim()) &&
     Boolean(values.instruction.trim()) &&
     (values.executor !== "n8n" || (Boolean(values.workflowId) && Boolean(values.webhookUrl.trim()))) &&
-    requestParsed.valid &&
-    (usesN8n || responseParsed.valid);
-
-  // For an `at` schedule the time lives in the value source; a literal one still
-  // needs a value. Relative requires its duration; recurrence always has a
-  // valid default (interval 1, time 9am).
-  const scheduleSpecSatisfied =
-    values.scheduleKind === "at"
-      ? values.scheduleSpecSource.kind !== "literal" ||
-        Boolean(values.scheduleSpecSource.value.trim())
-      : values.scheduleKind === "recurrence"
-        ? true
-        : Boolean(values.scheduleSpec.trim());
+    (usesN8n || (requestParsed.valid && responseParsed.valid));
 
   const scheduledValid =
     Boolean(values.name.trim()) &&
-    scheduleSpecSatisfied &&
-    (values.scheduleKind !== "relative" ||
-      values.scheduleAnchor !== "step_metadata" ||
-      Boolean(values.scheduleMetadataKey.trim()));
+    (values.scheduleWhen === "ai" ||
+      (values.scheduleWhen === "describe" && Boolean(values.scheduleDescribeText.trim())) ||
+      (values.scheduleWhen === "specific" &&
+        (values.scheduleModifier === "on" || Number(values.scheduleNumber) > 0)));
 
   const canSave = isAuto ? autoValid : isScheduled ? scheduledValid : conversationalValid;
+
+  const saveN8nAuto = (): NodeConfigValues => {
+    const customTemplateFields: TemplateField[] = customFields
+      .filter((field) => field.label.trim())
+      .map((field) => {
+        const label = field.label.trim();
+        return { key: deriveFieldKey(label), label, type: "text", optional: false, raw: label };
+      });
+    const finalRequestFields = [...derivedInputs, ...customTemplateFields];
+    const customKeys = customTemplateFields.map((field) => field.key);
+
+    const mergedValues = { ...values.requestFieldValues };
+    for (const field of customFields) {
+      const label = field.label.trim();
+      if (label) mergedValues[deriveFieldKey(label)] = field.value;
+    }
+    const keys = new Set(finalRequestFields.map((field) => field.key));
+    const prunedValues = Object.fromEntries(
+      Object.entries(mergedValues).filter(([key]) => keys.has(key)),
+    );
+
+    return {
+      ...values,
+      requestFields: finalRequestFields,
+      requestFieldValues: prunedValues,
+      responseFields: derivedOutputs,
+      customRequestFieldKeys: customKeys,
+    };
+  };
+
+  const saveMockAuto = (): NodeConfigValues => {
+    const keys = new Set(mockRequestFields.map((field) => field.key));
+    const prunedValues = Object.fromEntries(
+      Object.entries(values.requestFieldValues).filter(([key]) => keys.has(key)),
+    );
+    return {
+      ...values,
+      requestFields: mockRequestFields,
+      requestFieldValues: prunedValues,
+      responseFields: responseParsed.fields,
+      customRequestFieldKeys: [],
+    };
+  };
 
   const handleSave = () => {
     if (!canSave) return;
     if (isAuto) {
-      const finalRequestFields = usesN8n
-        ? [...derivedInputs, ...requestParsed.fields]
-        : requestParsed.fields;
-      const finalResponseFields = usesN8n ? derivedOutputs : responseParsed.fields;
-      // Drop value bindings for fields that no longer exist.
-      const keys = new Set(finalRequestFields.map((field) => field.key));
-      const prunedValues = Object.fromEntries(
-        Object.entries(values.requestFieldValues).filter(([key]) => keys.has(key)),
-      );
-      onSave({
-        ...values,
-        requestFields: finalRequestFields,
-        requestFieldValues: prunedValues,
-        responseFields: finalResponseFields,
-      });
+      onSave(usesN8n ? saveN8nAuto() : saveMockAuto());
       return;
     }
     onSave(values);
@@ -434,7 +408,7 @@ export function NodeConfigModal({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-3xl">
         {confirmDelete ? (
           <>
             <DialogHeader>
@@ -579,7 +553,7 @@ export function NodeConfigModal({
                     {isAuto
                       ? "Runs automatically via an n8n sub-workflow — no conversation. Completes when n8n calls back."
                       : isScheduled
-                        ? "Pauses the session and resumes (once or recurring) at a computed time."
+                        ? "Pauses the session and resumes at a computed time."
                         : "A human takes a turn with the AI to complete this step."}
                   </p>
                 </div>
@@ -800,49 +774,125 @@ export function NodeConfigModal({
                 </div>
               )}
 
-              {usesN8n && selectedWorkflow && (
-                <div className="space-y-1">
-                  <Label>Expected outputs (from n8n)</Label>
-                  <p className="text-[12px] text-[#918d87]">
-                    Returned by the workflow and stored as this step&apos;s output.
-                  </p>
-                  <ReadOnlyFieldList fields={derivedOutputs} emptyText="This workflow declares no outputs." />
-                </div>
-              )}
+              {usesN8n && values.workflowId && (
+                <>
+                  <div className="space-y-2">
+                    <Label>Add request fields</Label>
+                    <p className="text-[12px] text-[#918d87]">
+                      Choose where each value comes from: the AI, an earlier step, a typed value, or none.
+                    </p>
+                    {schemaQuery.isLoading ? (
+                      <p className="text-[12px] text-[#918d87]">Reading the workflow schema…</p>
+                    ) : (
+                      <>
+                        <FieldValueList
+                          fields={derivedInputs}
+                          values={values.requestFieldValues}
+                          onChange={setFieldValue}
+                          priorStepFields={priorStepFields}
+                        />
+                        {derivedInputs.length === 0 && (
+                          <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#918d87]">
+                            No inputs found for this workflow
+                            {schema && !schema.hasExecutions ? " (it hasn't run yet)" : ""}.{" "}
+                            <button
+                              type="button"
+                              className="font-medium text-[#3a5fd9] underline"
+                              onClick={() => openInfo("inputs")}
+                            >
+                              More info
+                            </button>
+                          </p>
+                        )}
+                        {customFields.map((field) => (
+                          <div
+                            key={field.id}
+                            className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-start gap-2"
+                          >
+                            <Input
+                              aria-label="Custom field name"
+                              value={field.label}
+                              onChange={(e) => updateCustomLabel(field.id, e.target.value)}
+                              placeholder="Field name"
+                            />
+                            <FieldValueSelector
+                              value={field.value}
+                              onChange={(next) => updateCustomValue(field.id, next)}
+                              priorStepFields={priorStepFields}
+                            />
+                            <button
+                              type="button"
+                              aria-label="Remove field"
+                              className="mt-1 flex h-7 w-7 items-center justify-center rounded-md text-[#c2385a] transition-colors hover:bg-[#fdf3f5]"
+                              onClick={() => removeCustomField(field.id)}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="text-[13px] font-medium text-[#3a5fd9] hover:underline"
+                          onClick={addCustomField}
+                        >
+                          + Add field
+                        </button>
+                      </>
+                    )}
+                  </div>
 
-              <TemplateFieldEditor
-                label={usesN8n ? "Add request fields" : "Request fields"}
-                helpText={
-                  usesN8n
-                    ? "Extra fields to send alongside the workflow's inputs. Use the same Label (type) syntax as document templates."
-                    : "Fields sent with the request. Use the same Label (type) syntax as document templates."
-                }
-                lines={requestLines}
-                onChange={setRequestLines}
-              />
-
-              {(!usesN8n || selectedWorkflow) && requestFields.length > 0 && (
-                <div className="space-y-2">
-                  <Label>Field values</Label>
-                  <p className="text-[12px] text-[#918d87]">
-                    Choose where each value comes from: the AI, an earlier step&apos;s field, or a specific value.
-                  </p>
-                  <FieldValueList
-                    fields={requestFields}
-                    values={values.requestFieldValues}
-                    onChange={setFieldValue}
-                    priorStepFields={priorStepFields}
-                  />
-                </div>
+                  <div className="space-y-1">
+                    <Label>Expected outputs (from n8n)</Label>
+                    <p className="text-[12px] text-[#918d87]">
+                      Returned by the workflow and stored as this step&apos;s output.
+                    </p>
+                    {schemaQuery.isLoading ? (
+                      <p className="text-[12px] text-[#918d87]">Reading the workflow schema…</p>
+                    ) : derivedOutputs.length > 0 ? (
+                      <ReadOnlyFieldList fields={derivedOutputs} emptyText="" />
+                    ) : (
+                      <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#918d87]">
+                        No outputs found for this workflow
+                        {schema && !schema.hasExecutions ? " (it hasn't run yet)" : ""}.{" "}
+                        <button
+                          type="button"
+                          className="font-medium text-[#3a5fd9] underline"
+                          onClick={() => openInfo("outputs")}
+                        >
+                          More info
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                </>
               )}
 
               {!usesN8n && (
-                <TemplateFieldEditor
-                  label="Response fields (expected back)"
-                  helpText="The structured values the step is expected to return. Matched values are stored; anything else is left blank."
-                  lines={responseLines}
-                  onChange={setResponseLines}
-                />
+                <>
+                  <TemplateFieldEditor
+                    label="Request fields"
+                    helpText="Fields sent with the request. Use the same Label (type) syntax as document templates."
+                    lines={requestLines}
+                    onChange={setRequestLines}
+                  />
+                  {mockRequestFields.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Field values</Label>
+                      <FieldValueList
+                        fields={mockRequestFields}
+                        values={values.requestFieldValues}
+                        onChange={setFieldValue}
+                        priorStepFields={priorStepFields}
+                      />
+                    </div>
+                  )}
+                  <TemplateFieldEditor
+                    label="Response fields (expected back)"
+                    helpText="The structured values the step is expected to return. Matched values are stored; anything else is left blank."
+                    lines={responseLines}
+                    onChange={setResponseLines}
+                  />
+                </>
               )}
               </>
               )}
@@ -850,213 +900,56 @@ export function NodeConfigModal({
               {isScheduled && (
               <>
               <div className="space-y-1">
-                <Label htmlFor="schedule-kind">When should this run?</Label>
+                <Label htmlFor="schedule-when">When should this run?</Label>
                 <select
-                  id="schedule-kind"
+                  id="schedule-when"
                   className={SCHEDULE_SELECT_CLASS}
-                  value={values.scheduleKind}
-                  onChange={(e) => set("scheduleKind", e.target.value as ScheduleKind)}
+                  value={values.scheduleWhen}
+                  onChange={(e) => set("scheduleWhen", e.target.value as ScheduleWhen)}
                 >
-                  <option value="relative">Run after a delay</option>
-                  <option value="at">At a specific date &amp; time</option>
-                  <option value="recurrence">Repeat on a schedule</option>
+                  <option value="ai">AI Decides (or asks the user)</option>
+                  <option value="specific">Pick a date and time</option>
+                  <option value="describe">Type anything</option>
                 </select>
               </div>
 
-              {values.scheduleKind === "relative" && (
-                <>
-                  <div className="space-y-1">
-                    <Label htmlFor="schedule-spec">Run after</Label>
-                    <Input
-                      id="schedule-spec"
-                      value={values.scheduleSpec}
-                      onChange={(e) => set("scheduleSpec", e.target.value)}
-                      placeholder="30d"
-                    />
-                    <p className="text-[12px] text-[#918d87]">
-                      A duration, e.g. 30d (days), 2h (hours), 15m (minutes), 1w (weeks).
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="schedule-anchor">Counting from</Label>
-                    <select
-                      id="schedule-anchor"
-                      className={SCHEDULE_SELECT_CLASS}
-                      value={values.scheduleAnchor}
-                      onChange={(e) => set("scheduleAnchor", e.target.value as ScheduleAnchor)}
-                    >
-                      <option value="node_reached">When this step is reached</option>
-                      <option value="step_metadata">A date carried from an earlier step</option>
-                    </select>
-                  </div>
-                  {values.scheduleAnchor === "step_metadata" && (
-                    <div className="space-y-1">
-                      <Label htmlFor="schedule-metadata-key">Which earlier-step date?</Label>
-                      <Input
-                        id="schedule-metadata-key"
-                        value={values.scheduleMetadataKey}
-                        onChange={(e) => set("scheduleMetadataKey", e.target.value)}
-                        placeholder="approvedAt"
-                      />
-                      <p className="text-[12px] text-[#918d87]">
-                        The name of the date field captured earlier in the flow.
-                      </p>
-                    </div>
-                  )}
-                </>
+              {values.scheduleWhen === "ai" && (
+                <p className="text-[12px] text-[#918d87]">
+                  The AI chooses the fire time from the session context, or asks the user.
+                </p>
               )}
 
-              {values.scheduleKind === "at" && (
+              {values.scheduleWhen === "specific" && (
                 <div className="space-y-1">
-                  <Label>Fire date &amp; time</Label>
-                  <p className="text-[12px] text-[#918d87]">
-                    Let the AI decide, take it from an earlier step, or pick a specific date &amp; time
-                    (in your timezone).
-                  </p>
-                  <FieldValueSelector
-                    value={values.scheduleSpecSource}
-                    onChange={(next) => set("scheduleSpecSource", next)}
+                  <Label>Fire this step</Label>
+                  <ScheduleSentenceBuilder
+                    number={values.scheduleNumber}
+                    unit={values.scheduleUnit}
+                    modifier={values.scheduleModifier}
+                    anchorChoice={values.scheduleAnchorChoice}
                     priorStepFields={priorStepFields}
-                    literalLabel="A specific date & time"
-                    renderLiteral={(literal, onChange) => (
-                      <DateTimePicker value={literal} onChange={onChange} />
-                    )}
+                    onNumberChange={(value) => set("scheduleNumber", value)}
+                    onUnitChange={(value) => set("scheduleUnit", value)}
+                    onModifierChange={(value) => set("scheduleModifier", value)}
+                    onAnchorChange={(value) => set("scheduleAnchorChoice", value)}
                   />
                 </div>
               )}
 
-              {values.scheduleKind === "recurrence" && (
-                <>
-                  <div className="space-y-1">
-                    <Label htmlFor="recurrence-frequency">Repeats</Label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[13px] text-[#5a5650]">Every</span>
-                      <Input
-                        id="recurrence-interval"
-                        type="number"
-                        min="1"
-                        className="w-16"
-                        value={values.recurrenceInterval}
-                        onChange={(e) => set("recurrenceInterval", e.target.value)}
-                      />
-                      <select
-                        id="recurrence-frequency"
-                        className={SCHEDULE_SELECT_CLASS}
-                        value={values.recurrenceFrequency}
-                        onChange={(e) =>
-                          set("recurrenceFrequency", e.target.value as RecurrenceFrequency)
-                        }
-                      >
-                        <option value="daily">
-                          {Number(values.recurrenceInterval) === 1 ? "day" : "days"}
-                        </option>
-                        <option value="weekly">
-                          {Number(values.recurrenceInterval) === 1 ? "week" : "weeks"}
-                        </option>
-                        <option value="monthly">
-                          {Number(values.recurrenceInterval) === 1 ? "month" : "months"}
-                        </option>
-                      </select>
-                    </div>
-                  </div>
-
-                  {values.recurrenceFrequency === "weekly" && (
-                    <div className="space-y-1">
-                      <Label>On these days</Label>
-                      <div className="flex gap-1.5">
-                        {WEEKDAY_TOGGLES.map((weekday) => {
-                          const active = values.recurrenceWeekdays.includes(weekday.value);
-                          return (
-                            <button
-                              key={weekday.value}
-                              type="button"
-                              aria-pressed={active}
-                              onClick={() =>
-                                set(
-                                  "recurrenceWeekdays",
-                                  active
-                                    ? values.recurrenceWeekdays.filter((day) => day !== weekday.value)
-                                    : [...values.recurrenceWeekdays, weekday.value].sort(),
-                                )
-                              }
-                              className="h-9 w-9 rounded-full border text-[13px] font-medium transition-colors"
-                              style={
-                                active
-                                  ? {
-                                      borderColor: SCHEDULED_ACCENT,
-                                      backgroundColor: `${SCHEDULED_ACCENT}14`,
-                                      color: SCHEDULED_ACCENT,
-                                    }
-                                  : { borderColor: "#dedad2", color: "#5a5650" }
-                              }
-                            >
-                              {weekday.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <p className="text-[12px] text-[#918d87]">
-                        Leave all unselected to repeat on the day the step is first reached.
-                      </p>
-                    </div>
-                  )}
-
-                  {values.recurrenceFrequency === "monthly" && (
-                    <div className="space-y-1">
-                      <Label htmlFor="recurrence-month-day">On day of the month</Label>
-                      <Input
-                        id="recurrence-month-day"
-                        type="number"
-                        min="1"
-                        max="31"
-                        className="w-20"
-                        value={values.recurrenceMonthDay}
-                        onChange={(e) => set("recurrenceMonthDay", e.target.value)}
-                      />
-                    </div>
-                  )}
-
-                  <div className="space-y-1">
-                    <Label>At</Label>
-                    <TimeWheel
-                      hour={values.recurrenceHour}
-                      minute={values.recurrenceMinute}
-                      onChange={(time) => {
-                        set("recurrenceHour", time.hour);
-                        set("recurrenceMinute", time.minute);
-                      }}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <Label htmlFor="schedule-max">Stop after (blank = repeat forever)</Label>
-                    <Input
-                      id="schedule-max"
-                      type="number"
-                      min="1"
-                      value={values.scheduleMaxOccurrences}
-                      onChange={(e) => set("scheduleMaxOccurrences", e.target.value)}
-                      placeholder="e.g. 4 occurrences"
-                    />
-                  </div>
-
-                  <p
-                    className="rounded-[9px] px-3 py-2 text-[13px] font-medium"
-                    style={{ backgroundColor: `${SCHEDULED_ACCENT}14`, color: SCHEDULED_ACCENT }}
-                  >
-                    {describeRecurrenceRule(
-                      buildRecurrenceRule({
-                        frequency: values.recurrenceFrequency,
-                        interval: Number(values.recurrenceInterval) || 1,
-                        weekdays: values.recurrenceWeekdays,
-                        monthDay: Number(values.recurrenceMonthDay) || 1,
-                        hour: values.recurrenceHour,
-                        minute: values.recurrenceMinute,
-                        timezone: values.recurrenceTimezone || browserTimezone(),
-                      }),
-                    )}
+              {values.scheduleWhen === "describe" && (
+                <div className="space-y-1">
+                  <Label htmlFor="schedule-describe">Describe when to run</Label>
+                  <Textarea
+                    id="schedule-describe"
+                    rows={3}
+                    value={values.scheduleDescribeText}
+                    onChange={(e) => set("scheduleDescribeText", e.target.value)}
+                    placeholder="e.g. two business days after the invoice is approved"
+                  />
+                  <p className="text-[12px] text-[#918d87]">
+                    The AI works out the exact date and time from the session at runtime.
                   </p>
-                </>
+                </div>
               )}
               </>
               )}
@@ -1089,6 +982,11 @@ export function NodeConfigModal({
       <TemplateTagsHelpDialog
         open={helpDialogOpen}
         onClose={() => setHelpDialogOpen(false)}
+      />
+      <N8nExtractionInfoDialog
+        open={infoOpen}
+        variant={infoVariant}
+        onClose={() => setInfoOpen(false)}
       />
     </Dialog>
   );

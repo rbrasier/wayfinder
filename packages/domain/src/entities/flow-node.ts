@@ -31,6 +31,9 @@ export interface AutoNodeConfig {
   // (or no map at all) means `ai` — the legacy behaviour.
   requestFieldValues?: Record<string, FieldValueSource>;
   responseFields?: TemplateField[];
+  // Keys of author-added (custom) request fields. These are removable in the
+  // editor; workflow-derived fields are not. Missing means no custom fields.
+  customRequestFieldKeys?: string[];
 }
 
 export interface ScheduledNodeConfig {
@@ -39,9 +42,18 @@ export interface ScheduledNodeConfig {
   recurring?: boolean;
   maxOccurrences?: number | null;
   // Defaults to `node_reached`. When `step_metadata`, `metadataKey` names the
-  // ISO-timestamp field on session metadata used as the fire anchor.
+  // ISO-timestamp field on session metadata used as the fire anchor. When
+  // `step_field`, `anchorSource` resolves a prior-step date.
   anchor?: ScheduleAnchor;
   metadataKey?: string | null;
+  // Resolves the `step_field` anchor's date from an earlier step's output.
+  anchorSource?: FieldValueSource;
+  // Whether a `relative` duration is added (`after`) or subtracted (`before`)
+  // from the anchor. Defaults to `after`.
+  relativeDirection?: "after" | "before";
+  // Free-text "Type anything" description resolved to a fire time by AI at
+  // runtime. When set, the AI spec instruction is built from it.
+  describeText?: string | null;
   // Value source for the `at`-kind fire timestamp. Ignored for `relative` and
   // `cron`. A missing source means the literal `spec` is used (legacy behaviour).
   specSource?: FieldValueSource;

@@ -8,8 +8,10 @@ export type ScheduleKind = "relative" | "cron" | "at" | "recurrence";
 
 // Where the fire time is anchored before `kind`/`spec` is applied:
 // `node_reached` = the moment the node is reached; `step_metadata` = an ISO
-// timestamp carried at `metadataKey` on an earlier step's output.
-export type ScheduleAnchor = "node_reached" | "step_metadata";
+// timestamp carried at `metadataKey` on an earlier step's output;
+// `flow_started` = the session's start time; `step_field` = a date read from an
+// earlier step's output field via the config's `anchorSource`.
+export type ScheduleAnchor = "node_reached" | "step_metadata" | "flow_started" | "step_field";
 
 export type ScheduleStatus = "active" | "completed" | "cancelled" | "failed";
 
