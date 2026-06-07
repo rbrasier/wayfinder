@@ -48,6 +48,9 @@ export const resolveFieldValues = async (
 
   for (const field of input.fields) {
     const source = input.valueSources[field.key] ?? { kind: "ai" };
+    if (source.kind === "none") {
+      continue;
+    }
     if (source.kind === "literal") {
       resolved[field.key] = source.value;
       continue;

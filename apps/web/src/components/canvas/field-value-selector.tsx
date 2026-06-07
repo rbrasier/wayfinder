@@ -9,12 +9,14 @@ const SELECT_CLASS =
 
 export const encodeSource = (source: FieldValueSource): string => {
   if (source.kind === "ai") return "ai";
+  if (source.kind === "none") return "none";
   if (source.kind === "literal") return "literal";
   return `step:${source.nodeId}:${source.fieldKey}`;
 };
 
 export const decodeSource = (raw: string, previous: FieldValueSource): FieldValueSource => {
   if (raw === "ai") return { kind: "ai" };
+  if (raw === "none") return { kind: "none" };
   if (raw === "literal") {
     return { kind: "literal", value: previous.kind === "literal" ? previous.value : "" };
   }
@@ -22,12 +24,36 @@ export const decodeSource = (raw: string, previous: FieldValueSource): FieldValu
   return { kind: "step_field", nodeId: nodeId ?? "", fieldKey: fieldKey ?? "" };
 };
 
+interface StepGroup {
+  stepNumber: number;
+  stepName: string;
+  fields: PriorStepField[];
+}
+
+// Group prior-step fields by their source step so the dropdown can render one
+// non-selectable header per step (category B). Steps are ordered by number.
+export const groupPriorStepFields = (priorStepFields: PriorStepField[]): StepGroup[] => {
+  const groups = new Map<number, StepGroup>();
+  for (const prior of priorStepFields) {
+    const existing = groups.get(prior.stepNumber);
+    if (existing) {
+      existing.fields.push(prior);
+      continue;
+    }
+    groups.set(prior.stepNumber, {
+      stepNumber: prior.stepNumber,
+      stepName: prior.stepName,
+      fields: [prior],
+    });
+  }
+  return [...groups.values()].sort((a, b) => a.stepNumber - b.stepNumber);
+};
+
 interface FieldValueSelectorProps {
   value: FieldValueSource;
   onChange: (next: FieldValueSource) => void;
   priorStepFields: PriorStepField[];
-  // Overrides how the "Specific value" case is edited. The scheduled `at`
-  // timestamp uses this to swap the plain text box for a calendar/time picker.
+  // Overrides how the "Type anything" (literal) case is edited.
   renderLiteral?: (value: string, onChange: (next: string) => void) => ReactNode;
   literalLabel?: string;
 }
@@ -37,26 +63,28 @@ export function FieldValueSelector({
   onChange,
   priorStepFields,
   renderLiteral,
-  literalLabel = "Specific value",
+  literalLabel = "Type anything",
 }: FieldValueSelectorProps) {
+  const groups = groupPriorStepFields(priorStepFields);
   return (
     <div className="space-y-1">
       <select
         className={SELECT_CLASS}
         value={encodeSource(value)}
-        onChange={(e) => onChange(decodeSource(e.target.value, value))}
+        onChange={(event) => onChange(decodeSource(event.target.value, value))}
       >
-        <option value="ai">AI decides or asks the user</option>
-        {priorStepFields.length > 0 && (
-          <optgroup label="From an earlier step">
-            {priorStepFields.map((prior) => (
+        <option value="ai">AI decides (or asks the user)</option>
+        {groups.map((group) => (
+          <optgroup key={group.stepNumber} label={`${group.stepNumber}. ${group.stepName}`}>
+            {group.fields.map((prior) => (
               <option key={`${prior.nodeId}:${prior.field.key}`} value={`step:${prior.nodeId}:${prior.field.key}`}>
-                {prior.stepLabel} — {prior.field.label}
+                {group.stepNumber} {group.stepName} — {prior.field.label} ({prior.field.type})
               </option>
             ))}
           </optgroup>
-        )}
+        ))}
         <option value="literal">{literalLabel}</option>
+        <option value="none">No value</option>
       </select>
       {value.kind === "literal" &&
         (renderLiteral ? (
@@ -64,8 +92,8 @@ export function FieldValueSelector({
         ) : (
           <Input
             value={value.value}
-            onChange={(e) => onChange({ kind: "literal", value: e.target.value })}
-            placeholder="Enter a specific value"
+            onChange={(event) => onChange({ kind: "literal", value: event.target.value })}
+            placeholder="Type anything"
           />
         ))}
     </div>
@@ -77,19 +105,34 @@ interface FieldValueListProps {
   values: Record<string, FieldValueSource>;
   onChange: (key: string, next: FieldValueSource) => void;
   priorStepFields: PriorStepField[];
+  // Keys that may be removed (author-added custom fields). Workflow-derived
+  // fields are non-removable and omit the remove control.
+  removableKeys?: string[];
+  onRemove?: (key: string) => void;
 }
 
-// Renders one card per field — the field label/type (read-only) plus the value
+// Renders one row per field — the field label/type (read-only) plus the value
 // selector. Used for both workflow-derived inputs and author-added fields.
-export function FieldValueList({ fields, values, onChange, priorStepFields }: FieldValueListProps) {
+export function FieldValueList({
+  fields,
+  values,
+  onChange,
+  priorStepFields,
+  removableKeys,
+  onRemove,
+}: FieldValueListProps) {
   if (fields.length === 0) return null;
+  const removable = new Set(removableKeys ?? []);
   return (
     <div className="space-y-2">
       {fields.map((field) => (
-        <div key={field.key} className="space-y-1 rounded-[9px] border border-[#ece9e3] bg-[#faf9f7] p-2">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-[#1a1814]">{field.label}</span>
-            <span className="rounded bg-[#efede8] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#918d87]">
+        <div
+          key={field.key}
+          className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] items-center gap-2 rounded-[9px] border border-[#ece9e3] bg-[#faf9f7] p-2"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[13px] font-medium text-[#1a1814]">{field.label}</span>
+            <span className="shrink-0 rounded bg-[#efede8] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#918d87]">
               {field.type}
             </span>
           </div>
@@ -98,6 +141,18 @@ export function FieldValueList({ fields, values, onChange, priorStepFields }: Fi
             onChange={(next) => onChange(field.key, next)}
             priorStepFields={priorStepFields}
           />
+          {removable.has(field.key) && onRemove ? (
+            <button
+              type="button"
+              aria-label={`Remove ${field.label}`}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-[#c2385a] transition-colors hover:bg-[#fdf3f5]"
+              onClick={() => onRemove(field.key)}
+            >
+              ×
+            </button>
+          ) : (
+            <span className="w-7" />
+          )}
         </div>
       ))}
     </div>

@@ -299,6 +299,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
           requestFields: values.requestFields,
           requestFieldValues: values.requestFieldValues,
           responseFields: values.responseFields,
+          customRequestFieldKeys: values.customRequestFieldKeys,
         };
       }
       if (values.type === "scheduled") {
@@ -442,17 +443,55 @@ function CanvasInner({ flowId }: { flowId: string }) {
               ? readFields(config.documentTemplateFields)
               : [];
       if (fields.length === 0) continue;
-      const stepLabel = `${step}. ${(node.data as { name?: string }).name ?? "Step"}`;
+      const stepName = (node.data as { name?: string }).name ?? "Step";
+      const stepLabel = `${step}. ${stepName}`;
       for (const field of fields) {
         result.push({
           nodeId: node.id,
           stepLabel,
+          stepNumber: step,
+          stepName,
           field: { key: field.key, label: field.label, type: field.type },
         });
       }
     }
     return result;
   }, [editingNodeId, rfNodes, stepOrder]);
+
+  // A reference is stale when a step binds a value (a request field or a
+  // schedule anchor) to a prior-step field that no longer exists in the graph —
+  // e.g. the source step or field was deleted after the binding was authored.
+  const staleReferences = useMemo<string[]>(() => {
+    const declared = new Set<string>();
+    for (const node of rfNodes) {
+      const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<string, unknown>;
+      const fields =
+        node.type === "autoNode"
+          ? readFields(config.responseFields)
+          : node.type === "conversationalNode" && config.outputType === "generate_document"
+            ? readFields(config.documentTemplateFields)
+            : [];
+      for (const field of fields) declared.add(`${node.id}:${field.key}`);
+    }
+
+    const stale: string[] = [];
+    for (const node of rfNodes) {
+      const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<string, unknown>;
+      const name = (node.data as { name?: string }).name ?? "Step";
+      const requestFieldValues =
+        (config.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {};
+      for (const [key, source] of Object.entries(requestFieldValues)) {
+        if (source?.kind === "step_field" && !declared.has(`${source.nodeId}:${source.fieldKey}`)) {
+          stale.push(`"${name}" field "${key}"`);
+        }
+      }
+      const anchorSource = config.anchorSource as FieldValueSource | undefined;
+      if (anchorSource?.kind === "step_field" && !declared.has(`${anchorSource.nodeId}:${anchorSource.fieldKey}`)) {
+        stale.push(`"${name}" schedule anchor`);
+      }
+    }
+    return stale;
+  }, [rfNodes]);
 
   if (canvasQuery.isLoading) {
     return <div className="flex items-center justify-center h-96 text-muted-foreground">Loading canvas…</div>;
@@ -498,6 +537,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         requestFieldValues:
           (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},
         responseFields: readFields(editingConfig.responseFields),
+        customRequestFieldKeys:
+          (editingConfig.customRequestFieldKeys as string[] | undefined) ?? [],
         ...scheduledValuesFromConfig(editingConfig),
       }
     : undefined;
@@ -670,6 +711,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
           <Controls />
           <MiniMap zoomable pannable />
         </ReactFlow>
+        {staleReferences.length > 0 && (
+          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2 text-center text-[12px] text-[#8a6d00] shadow-md">
+            ⚠ Some steps reference data that no longer exists: {staleReferences.join(", ")}. Re-open them to fix.
+          </div>
+        )}
       </div>
 
       <ContextDocsStrip flowId={flowId} docs={contextDocs} onDocsChange={setContextDocs} />

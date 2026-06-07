@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { ok } from "@rbrasier/domain";
 import type { N8nConfig } from "@rbrasier/domain";
 import { N8nHttpWorkflowDirectory } from "./n8n-workflow-directory";
+import type { IN8nExecutionClient, N8nExecutionData } from "./n8n-execution-client";
 
 const config: N8nConfig = { baseUrl: "https://n8n.example.com", apiKey: "secret-key" };
 
@@ -166,5 +168,231 @@ describe("N8nHttpWorkflowDirectory", () => {
 
     const result = await directory.listWorkflows();
     expect(result.error?.code).toBe("INFRA_FAILURE");
+  });
+});
+
+const fakeExecutionClient = (
+  data: N8nExecutionData = { hasExecutions: false, nodeOutputs: {} },
+): IN8nExecutionClient & { getLatestExecution: ReturnType<typeof vi.fn> } => ({
+  getLatestExecution: vi.fn().mockResolvedValue(ok(data)),
+});
+
+describe("N8nHttpWorkflowDirectory.getWorkflowSchema", () => {
+  it("resolves outputs from a Set 'Outputs' node and never consults executions", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        {
+          name: "Inputs",
+          type: "n8n-nodes-base.set",
+          parameters: { assignments: { assignments: [{ name: "category", type: "string" }] } },
+        },
+        {
+          name: "Outputs",
+          type: "n8n-nodes-base.set",
+          parameters: { assignments: { assignments: [{ name: "vendor", type: "string" }] } },
+        },
+      ],
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const executionClient = fakeExecutionClient();
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      executionClient,
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.outputsMethod).toBe("set");
+    expect(result.data?.inputsMethod).toBe("set");
+    expect(result.data?.outputs).toEqual([
+      { key: "vendor", label: "vendor", type: "text", optional: false, raw: "vendor" },
+    ]);
+    expect(executionClient.getLatestExecution).not.toHaveBeenCalled();
+  });
+
+  it("falls back to respondToWebhook for outputs", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        { name: "Respond", type: "n8n-nodes-base.respondToWebhook", parameters: { responseBody: '{"ok":true}' } },
+      ],
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient(),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.outputsMethod).toBe("respond");
+    expect(result.data?.outputs).toEqual([
+      { key: "ok", label: "ok", type: "yesno", optional: false, raw: "ok" },
+    ]);
+  });
+
+  it("falls back to pinData on the terminal node for outputs", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        { name: "Final", type: "n8n-nodes-base.noOp" },
+      ],
+      connections: { Webhook: { main: [[{ node: "Final" }]] } },
+      pinData: { Final: [{ json: { result: "done", count: 3 } }] },
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient(),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.outputsMethod).toBe("pin");
+    expect(result.data?.outputs).toEqual([
+      { key: "result", label: "result", type: "text", optional: false, raw: "result" },
+      { key: "count", label: "count", type: "number", optional: false, raw: "count" },
+    ]);
+  });
+
+  it("falls back to pinData on the trigger node for inputs", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        {
+          name: "Outputs",
+          type: "n8n-nodes-base.set",
+          parameters: { assignments: { assignments: [{ name: "vendor", type: "string" }] } },
+        },
+      ],
+      pinData: { Webhook: [{ json: { query: "abc" } }] },
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient(),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.inputsMethod).toBe("pin");
+    expect(result.data?.inputs).toEqual([
+      { key: "query", label: "query", type: "text", optional: false, raw: "query" },
+    ]);
+  });
+
+  it("scans `$json` expressions for inputs when no set or pin data exists", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        {
+          name: "Code",
+          type: "n8n-nodes-base.code",
+          parameters: { a: "={{ $json.customer_name }}", b: "={{ $json[\"order_id\"] }}" },
+        },
+        {
+          name: "Outputs",
+          type: "n8n-nodes-base.set",
+          parameters: { assignments: { assignments: [{ name: "vendor", type: "string" }] } },
+        },
+      ],
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient(),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.inputsMethod).toBe("expression");
+    expect(result.data?.inputs.map((field) => field.key).sort()).toEqual(["customer_name", "order_id"]);
+  });
+
+  it("uses execution history for both inputs and outputs only when free methods are empty", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        { name: "Final", type: "n8n-nodes-base.noOp" },
+      ],
+      connections: { Webhook: { main: [[{ node: "Final" }]] } },
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const executionClient = fakeExecutionClient({
+      hasExecutions: true,
+      nodeOutputs: { Webhook: { in_a: 1 }, Final: { out_b: "x" } },
+    });
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      executionClient,
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(executionClient.getLatestExecution).toHaveBeenCalledWith("wf-1");
+    expect(result.data?.inputsMethod).toBe("execution");
+    expect(result.data?.outputsMethod).toBe("execution");
+    expect(result.data?.inputs).toEqual([
+      { key: "in_a", label: "in_a", type: "number", optional: false, raw: "in_a" },
+    ]);
+    expect(result.data?.hasExecutions).toBe(true);
+  });
+
+  it("reports method 'none' and hasExecutions false when nothing is found and the workflow never ran", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [
+        { name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } },
+        { name: "Final", type: "n8n-nodes-base.noOp" },
+      ],
+      connections: { Webhook: { main: [[{ node: "Final" }]] } },
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      fakeExecutionClient({ hasExecutions: false, nodeOutputs: {} }),
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.data?.inputsMethod).toBe("none");
+    expect(result.data?.outputsMethod).toBe("none");
+    expect(result.data?.hasExecutions).toBe(false);
+  });
+
+  it("soft-fails to 'none' when the executions API errors", async () => {
+    const workflow = {
+      id: "wf-1",
+      nodes: [{ name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "p" } }],
+    };
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse(workflow));
+    const executionClient: IN8nExecutionClient = {
+      getLatestExecution: vi.fn().mockResolvedValue({ error: { code: "INFRA_FAILURE", message: "no" } }),
+    };
+    const directory = new N8nHttpWorkflowDirectory(
+      async () => config,
+      fetchFn as unknown as typeof fetch,
+      executionClient,
+    );
+
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.error).toBeUndefined();
+    expect(result.data?.outputsMethod).toBe("none");
+    expect(result.data?.hasExecutions).toBe(false);
+  });
+
+  it("returns a validation error when n8n is not configured", async () => {
+    const directory = new N8nHttpWorkflowDirectory(async () => ({ baseUrl: "", apiKey: "" }));
+    const result = await directory.getWorkflowSchema("wf-1");
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 });

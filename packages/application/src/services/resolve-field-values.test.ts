@@ -163,6 +163,36 @@ describe("resolveFieldValues", () => {
     expect(model.generateObject).toHaveBeenCalled();
   });
 
+  it("omits a `none` field entirely and never calls the model", async () => {
+    const model = makeLanguageModel({});
+    const result = await resolveFieldValues(model, {
+      ...baseInput,
+      fields: [field("optional_note")],
+      valueSources: { optional_note: { kind: "none" } },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({});
+    expect("optional_note" in (result.data ?? {})).toBe(false);
+    expect(model.generateObject).not.toHaveBeenCalled();
+  });
+
+  it("resolves `none` alongside ai and literal fields without sending it to the model", async () => {
+    const model = makeLanguageModel({ summary: "A summary" });
+    const result = await resolveFieldValues(model, {
+      ...baseInput,
+      fields: [field("region"), field("skipped"), field("summary")],
+      valueSources: {
+        region: { kind: "literal", value: "EU-West" },
+        skipped: { kind: "none" },
+        summary: { kind: "ai" },
+      },
+    });
+
+    expect(result.data).toEqual({ region: "EU-West", summary: "A summary" });
+    expect(model.lastInput?.prompt).not.toContain("skipped");
+  });
+
   it("does not call the model when there are no fields", async () => {
     const model = makeLanguageModel({});
     const result = await resolveFieldValues(model, {

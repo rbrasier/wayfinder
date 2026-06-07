@@ -25,3 +25,21 @@ export interface N8nWorkflowSummary {
   inputs: TemplateField[];
   outputs: TemplateField[];
 }
+
+// How an input/output schema was discovered. `none` means no method yielded
+// anything. Ordered by the fallback chains: inputs try set → pin → expression →
+// execution; outputs try set → respond → pin → execution.
+export type N8nSchemaMethod = "set" | "pin" | "expression" | "respond" | "execution" | "none";
+
+// The richer, possibly-expensive schema for a single selected workflow. Unlike
+// `N8nWorkflowSummary` (free methods only, used by the cheap dropdown), this is
+// fetched lazily per workflow and may consult execution history. `hasExecutions`
+// reports whether the workflow has ever run, so the UI can explain an empty
+// schema.
+export interface N8nWorkflowSchema {
+  inputs: TemplateField[];
+  outputs: TemplateField[];
+  inputsMethod: N8nSchemaMethod;
+  outputsMethod: N8nSchemaMethod;
+  hasExecutions: boolean;
+}

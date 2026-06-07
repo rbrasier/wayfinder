@@ -139,10 +139,10 @@ test.describe('n8n workflow directory + step-context field values', () => {
     await requestEditor.getByRole('button', { name: /Add field/i }).click();
     await requestEditor.getByPlaceholder(/Preferred Vendor/i).last().fill('Region (text)');
 
-    const valueSelect = page.locator('select').filter({ hasText: /AI decides or asks/i }).last();
+    const valueSelect = page.locator('select').filter({ hasText: /AI decides/i }).last();
     await expect(valueSelect).toBeVisible({ timeout: 5_000 });
     await valueSelect.selectOption('literal');
-    await page.getByPlaceholder(/Enter a specific value/i).fill('EU-West');
+    await page.getByPlaceholder(/Type anything/i).last().fill('EU-West');
 
     await page.screenshot({ path: 'screenshots/n8n-auto-field-value.png', fullPage: true });
 

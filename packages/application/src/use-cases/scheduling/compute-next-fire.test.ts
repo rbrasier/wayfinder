@@ -34,6 +34,16 @@ describe("computeNextFireAt", () => {
     expect(result.data?.toISOString()).toBe("2026-07-03T10:00:00.000Z");
   });
 
+  it("subtracts a relative duration when direction is `before`", () => {
+    const result = computeNextFireAt({ kind: "relative", spec: "30d", anchor, direction: "before" });
+    expect(result.data?.toISOString()).toBe("2026-05-04T10:00:00.000Z");
+  });
+
+  it("adds a relative duration when direction is explicitly `after`", () => {
+    const result = computeNextFireAt({ kind: "relative", spec: "2h", anchor, direction: "after" });
+    expect(result.data?.toISOString()).toBe("2026-06-03T12:00:00.000Z");
+  });
+
   it("uses the literal spec timestamp for `at` when provided", () => {
     const result = computeNextFireAt({
       kind: "at",
