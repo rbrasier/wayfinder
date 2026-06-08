@@ -164,10 +164,11 @@ export class ScheduleNodeEvent {
         ),
       );
     }
+    const nowIso = this.clock.now().toISOString();
     const describe = config.describeText?.trim();
     const instruction = describe
-      ? `Decide the exact date and time this scheduled step should fire. The author described how to calculate it: "${describe}". Use the session context below. Respond with a single ISO 8601 timestamp, e.g. 2026-12-25T09:00:00.000Z.`
-      : "Decide the exact date and time this scheduled step should fire based on the session context. Respond with a single ISO 8601 timestamp, e.g. 2026-12-25T09:00:00.000Z.";
+      ? `Decide the exact date and time this scheduled step should fire. The current date and time is ${nowIso}. The author described how to calculate it: "${describe}". Use the session context below. Respond with a single ISO 8601 timestamp, e.g. 2026-12-25T09:00:00.000Z.`
+      : `Decide the exact date and time this scheduled step should fire based on the session context. The current date and time is ${nowIso}. Respond with a single ISO 8601 timestamp, e.g. 2026-12-25T09:00:00.000Z.`;
     const resolved = await resolveFieldValues(this.languageModel, {
       fields: [
         { key: "fire_at", label: "Scheduled date/time", type: "text", optional: false, raw: "Scheduled date/time" },

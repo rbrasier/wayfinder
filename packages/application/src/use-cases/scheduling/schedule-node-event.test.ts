@@ -367,4 +367,55 @@ describe("ScheduleNodeEvent", () => {
 
     expect(capture.system).toContain("two business days after the invoice is approved");
   });
+
+  it("includes the current ISO timestamp in the AI spec instruction so the model can compute relative durations", async () => {
+    const repo = makeRepo();
+    const capture = { system: "" };
+    const model: ILanguageModel = {
+      provider: "anthropic",
+      generateObject: vi.fn().mockImplementation(async (input: { system: string }) => {
+        capture.system = input.system;
+        return ok({ object: { fire_at: "2026-06-03T10:00:30.000Z" }, usage });
+      }),
+      streamText: vi.fn(),
+      streamObject: vi.fn(),
+    };
+    const useCase = new ScheduleNodeEvent(repo, fixedClock, model);
+
+    await useCase.execute({
+      session: makeSession(),
+      node: makeNode({ kind: "at", spec: "", specSource: { kind: "ai" } }),
+      transcript: "User: wait 30 seconds",
+    });
+
+    expect(capture.system).toContain(NOW.toISOString());
+  });
+
+  it("includes the current ISO timestamp in the AI spec instruction when describeText is present", async () => {
+    const repo = makeRepo();
+    const capture = { system: "" };
+    const model: ILanguageModel = {
+      provider: "anthropic",
+      generateObject: vi.fn().mockImplementation(async (input: { system: string }) => {
+        capture.system = input.system;
+        return ok({ object: { fire_at: "2026-06-03T10:00:30.000Z" }, usage });
+      }),
+      streamText: vi.fn(),
+      streamObject: vi.fn(),
+    };
+    const useCase = new ScheduleNodeEvent(repo, fixedClock, model);
+
+    await useCase.execute({
+      session: makeSession(),
+      node: makeNode({
+        kind: "at",
+        spec: "",
+        specSource: { kind: "ai" },
+        describeText: "30 seconds after the user confirms",
+      }),
+      transcript: "User: confirmed",
+    });
+
+    expect(capture.system).toContain(NOW.toISOString());
+  });
 });
