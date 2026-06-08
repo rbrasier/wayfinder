@@ -50,6 +50,13 @@ const EXAMPLE_TAG = "{{First name}}";
 // Keys are normalised (lowercase, alphanumeric only) to match TemplateField.key.
 const ADVANCED_REQUEST_FIELD_KEYS = new Set(["headers", "params", "query", "webhookurl", "executionmode"]);
 
+// Returns true for exact matches (e.g. "headers") and for nested subfields
+// produced by the recursive extractor (e.g. "headers.content-type").
+function isAdvancedField(key: string): boolean {
+  if (ADVANCED_REQUEST_FIELD_KEYS.has(key)) return true;
+  return [...ADVANCED_REQUEST_FIELD_KEYS].some((prefix) => key.startsWith(`${prefix}.`));
+}
+
 export type NodeConfigType = "conversational" | "auto" | "scheduled";
 
 // An author-added request field while it is being edited. The key is derived
@@ -246,8 +253,8 @@ export function NodeConfigModal({
   const schema = schemaQuery.data ?? null;
 
   const derivedInputs = usesN8n && schema ? schema.inputs : [];
-  const regularDerivedInputs = derivedInputs.filter((field) => !ADVANCED_REQUEST_FIELD_KEYS.has(field.key));
-  const advancedDerivedInputs = derivedInputs.filter((field) => ADVANCED_REQUEST_FIELD_KEYS.has(field.key));
+  const regularDerivedInputs = derivedInputs.filter((field) => !isAdvancedField(field.key));
+  const advancedDerivedInputs = derivedInputs.filter((field) => isAdvancedField(field.key));
   const derivedOutputs = usesN8n && schema ? schema.outputs : [];
   // Mock executor builds its request fields from the line editor.
   const mockRequestFields = requestParsed.fields;
