@@ -66,6 +66,49 @@ These apply whenever any skill writes code:
 
 ---
 
+## Wayfinder — Product Positioning
+
+Wayfinder occupies a distinct position in the AI tooling landscape: **structured workflow + end user**. No current tool sits in this quadrant.
+
+| Tool | User Axis | Structure Axis |
+|---|---|---|
+| Wayfinder | End User | Structured |
+| Cowork | End User (slight) | Structured (slight) |
+| Dify | Developer | Structured |
+| n8n | Developer | Mid |
+| ChatGPT | End User | Open Ended |
+| Claude Code | Developer | Open Ended |
+
+### Axis Definitions
+
+- **Structured ↔ Open Ended**: Does the tool guide users through a defined process, or does it respond freely to whatever the user asks?
+- **End User ↔ Developer**: Is the primary operator a business user (no-code), or a developer building/configuring the tool?
+
+### Quadrant Summary
+
+| Quadrant | Description | Examples |
+|---|---|---|
+| Structured + End User | Governed, guided workflows for non-technical operators | **Wayfinder**, Cowork |
+| Structured + Developer | Visual builders and frameworks for devs wiring AI pipelines | Dify, n8n, LangChain |
+| Open Ended + End User | Consumer-facing chat and productivity AI | ChatGPT, Notion AI |
+| Open Ended + Developer | Agentic coding and developer-first AI tooling | Claude Code, Cursor |
+
+### Why Wayfinder is Different
+
+Every other tool in this space requires either:
+- **a developer** to build and configure it, or
+- **an open-ended interaction** with no process governance
+
+Wayfinder is purpose-built for the top-left quadrant: a **procurement officer, HR manager, or ops lead** can run a complex, multi-step, document-producing AI workflow — with confidence tracking, audit logging, and staged governance — without writing a single line of code or prompt.
+
+### Closest neighbours (and why they're still different)
+
+- **Cowork** — personal desktop task automation for individuals; no organisational governance or document generation pipeline
+- **Dify** — developer AI app builder; the workflow author must be technical
+- **n8n** — integration/automation platform; LLM is one tool among many, not the guide
+
+---
+
 ## Versioning
 
 `VERSION` and root `package.json` `version` must always match. `validate.sh` enforces this.
