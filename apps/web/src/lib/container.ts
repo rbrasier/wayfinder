@@ -7,7 +7,9 @@ import {
   CreateFlow,
   CreateFlowEdge,
   CreateFlowNode,
+  ConfirmAndSend,
   CreateUser,
+  DecideApproval,
   DeleteFlow,
   DeleteFlowEdge,
   DeleteFlowNode,
@@ -23,6 +25,7 @@ import {
   GetUsageSummary,
   GrantFlowOwner,
   HeartbeatTyping,
+  ImportHrDataset,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
@@ -33,12 +36,15 @@ import {
   ListJobs,
   ListRoles,
   ListScheduleRuns,
+  ListPendingApprovals,
   ListSessions,
   ListTypingUsers,
   ListUsers,
   ListUsersForRole,
   LogAuditEvent,
   LogError,
+  NotifyOnApprovalDecided,
+  NotifyOnApprovalRequested,
   NotifyOnFlowShared,
   NotifyOnSessionComplete,
   NotifyOnStepComplete,
@@ -54,9 +60,12 @@ import {
   RunAutoNode,
   RunTurn,
   ScheduleNodeEvent,
+  SearchPeople,
   SendMessage,
+  SetColumnMapping,
   SetFeatureFlagRoles,
   StartSession,
+  SuggestApprover,
   SummariseTemplate,
   TrackUsage,
   UpdateErrorStatus,
@@ -71,6 +80,7 @@ import {
   DocxGenerator,
   DocumentExtractorService,
   DocumentIndexingService,
+  DrizzleApprovalRepository,
   DrizzleAuditLogger,
   DrizzleContextDocContentRepository,
   DrizzleConversationRepository,
@@ -82,6 +92,7 @@ import {
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
+  DrizzleHrDatasetRepository,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
   DrizzleReindexSourceRepository,
@@ -99,6 +110,10 @@ import {
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
   FlowSessionGraph,
+  GraphClient,
+  GraphPeopleDirectory,
+  GraphReportingLineResolver,
+  HrPeopleDirectory,
   LangGraphAgentRunner,
   LanguageModelAdapter,
   createEmbeddingsProvider,
@@ -108,6 +123,7 @@ import {
   PinoLogger,
   PkiCertAdapter,
   RuntimeConfigStore,
+  SpreadsheetParser,
   SystemClock,
   createAuth,
   createDatabase,
@@ -233,6 +249,41 @@ const build = () => {
     auditLogger,
     notificationConfig,
   );
+  const notifyOnApprovalRequested = new NotifyOnApprovalRequested(
+    notificationLog,
+    emailSender,
+    users,
+    flows,
+    auditLogger,
+    notificationConfig,
+  );
+  const notifyOnApprovalDecided = new NotifyOnApprovalDecided(
+    notificationLog,
+    emailSender,
+    users,
+    flows,
+    auditLogger,
+    notificationConfig,
+  );
+
+  const approvals = new DrizzleApprovalRepository(db);
+  const hrDatasets = new DrizzleHrDatasetRepository(db);
+  const spreadsheetParser = new SpreadsheetParser();
+  // Reuses the Email-Notifications M365 app registration (ADR-018), degrading to
+  // HR/manual resolution when the added Graph scopes are not yet consented.
+  const graphConfig =
+    env.M365_TENANT_ID && env.M365_CLIENT_ID && env.M365_CLIENT_SECRET
+      ? {
+          tenantId: env.M365_TENANT_ID,
+          clientId: env.M365_CLIENT_ID,
+          clientSecret: env.M365_CLIENT_SECRET,
+        }
+      : null;
+  const graphClient = new GraphClient(graphConfig);
+  const graphPeopleDirectory = new GraphPeopleDirectory(graphClient);
+  const hrPeopleDirectory = new HrPeopleDirectory(hrDatasets);
+  const reportingLineResolver = new GraphReportingLineResolver(graphClient, hrDatasets, users);
+
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);
@@ -304,7 +355,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       summariseTemplate: new SummariseTemplate(llm),
@@ -372,6 +423,20 @@ const build = () => {
       listTypingUsers: new ListTypingUsers(sessionTyping, users),
       getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs),
+      suggestApprover: new SuggestApprover(approvals, flowNodes, reportingLineResolver, users),
+      confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
+      decideApproval: new DecideApproval(
+        approvals,
+        sessions,
+        flowEdges,
+        sessionStepOutputs,
+        auditLogger,
+        notifyOnApprovalDecided,
+      ),
+      listPendingApprovals: new ListPendingApprovals(approvals),
+      searchPeople: new SearchPeople([graphPeopleDirectory, hrPeopleDirectory]),
+      importHrDataset: new ImportHrDataset(spreadsheetParser, hrDatasets),
+      setColumnMapping: new SetColumnMapping(hrDatasets),
     },
   };
 };

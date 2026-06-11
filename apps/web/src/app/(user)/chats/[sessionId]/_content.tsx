@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";
 import { ChatComposer } from "@/components/chat/chat-composer";
+import { ApprovalGate } from "@/components/chat/approval-gate";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { MessageFeed } from "@/components/chat/message-feed";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
@@ -102,6 +103,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     const edgesAsEdgeLike = edges.map((e) => ({ fromNodeId: e.fromNodeId, toNodeId: e.toNodeId }));
     return topoSortNodes(rawNodes, edgesAsEdgeLike);
   }, [rawNodes, edges]);
+
+  const currentNode = rawNodes.find((node) => node.id === currentNodeId) ?? null;
+  const isApprovalGate = currentNode?.type === "approval";
 
   const senderNamesById = useMemo(() => {
     const namesById: Record<string, string> = {};
@@ -351,6 +355,15 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
+      {isApprovalGate && currentNode && session.status === "active" && (
+        <ApprovalGate
+          sessionId={sessionId}
+          flowId={session.flowId}
+          nodeId={currentNode.id}
+          instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
+        />
+      )}
+
       <ChatComposer
         sessionId={sessionId}
         value={input}
@@ -363,7 +376,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           heartbeatMutation.mutate({ sessionId });
         }}
         onSubmit={handleSend}
-        disabled={isLoading || session.status !== "active" || isFlowDeleted}
+        disabled={isLoading || session.status !== "active" || isFlowDeleted || isApprovalGate}
       />
 
       <BranchOverrideModal

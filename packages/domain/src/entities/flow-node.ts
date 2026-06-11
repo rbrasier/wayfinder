@@ -2,7 +2,20 @@ import type { FieldValueSource } from "./field-value-source";
 import type { ScheduleAnchor, ScheduleKind } from "./session-schedule";
 import type { TemplateField } from "./template-field";
 
-export type FlowNodeType = "conversational" | "auto" | "scheduled";
+export type FlowNodeType = "conversational" | "auto" | "scheduled" | "approval";
+
+export type ApproverSourceMode =
+  | "first_level_supervisor"
+  | "second_level_supervisor"
+  | "dynamic";
+
+export interface ApprovalNodeConfig {
+  approverSource: ApproverSourceMode;
+  // Optional steer for the `dynamic` case — the role/position named by policy.
+  roleHint?: string;
+  // Shown to the operator (when confirming) and to the approver (when deciding).
+  instructions?: string;
+}
 
 export interface ConversationalNodeConfig {
   aiInstruction: string;

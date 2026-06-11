@@ -29,3 +29,6 @@ export * from "./analytics";
 export * from "./system-setting";
 export * from "./runtime-config";
 export * from "./notification-log";
+export * from "./approval";
+export * from "./person";
+export * from "./hr-dataset";

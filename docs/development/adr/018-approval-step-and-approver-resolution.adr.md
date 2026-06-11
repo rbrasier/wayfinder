@@ -1,6 +1,6 @@
 # ADR-018 — Approval Step Type & Approver Resolution
 
-- **Status**: Proposed
+- **Status**: Accepted (implemented v1.37.0)
 - **Date**: 2026-06-03
 - **Relates to**: ADR-010 (`INodeExecutor` / `pending_approval`), ADR-016 /
   ADR-017 (pgvector RAG over the knowledge base), ADR-023 Email Notification

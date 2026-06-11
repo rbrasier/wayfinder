@@ -1,0 +1,161 @@
+import {
+  domainError,
+  err,
+  ok,
+  type Approval,
+  type ApprovalDecision,
+  type IApprovalRepository,
+  type IAuditLogger,
+  type IFlowEdgeRepository,
+  type ISessionRepository,
+  type ISessionStepOutputRepository,
+  type Result,
+  type StepOutputField,
+} from "@rbrasier/domain";
+import type { IApprovalDecidedNotifier } from "../notifications/notify-on-approval-decided";
+
+export interface DecideApprovalInput {
+  approvalId: string;
+  decidedByUserId: string;
+  decision: ApprovalDecision;
+  comment?: string | null;
+  // The tRPC layer sets this for admins so they can act on behalf of an approver.
+  isAdmin?: boolean;
+}
+
+export interface DecideApprovalOutput {
+  approval: Approval;
+  advanced: boolean;
+  newNodeId: string | null;
+  sessionCompleted: boolean;
+}
+
+const field = (key: string, label: string, value: string): StepOutputField => ({
+  key,
+  label,
+  type: "text",
+  value,
+});
+
+// Records an approver's decision. Approve snapshots the step outputs and advances
+// the session; reject / changes-requested surface the comment and hold. The
+// outcome is projected onto the node's step-output metadata for reporting.
+export class DecideApproval {
+  constructor(
+    private readonly approvals: IApprovalRepository,
+    private readonly sessions: ISessionRepository,
+    private readonly flowEdges: IFlowEdgeRepository,
+    private readonly sessionStepOutputs: ISessionStepOutputRepository,
+    private readonly auditLogger: IAuditLogger,
+    private readonly notifier?: IApprovalDecidedNotifier,
+  ) {}
+
+  async execute(input: DecideApprovalInput): Promise<Result<DecideApprovalOutput>> {
+    const found = await this.approvals.findById(input.approvalId);
+    if (found.error) return found;
+    const approval = found.data;
+    if (!approval) {
+      return err(domainError("NOT_FOUND", `Approval ${input.approvalId} not found.`));
+    }
+    if (approval.status !== "pending") {
+      return err(domainError("VALIDATION_FAILED", "This approval has already been decided."));
+    }
+    if (
+      approval.approverUserId &&
+      approval.approverUserId !== input.decidedByUserId &&
+      !input.isAdmin
+    ) {
+      return err(domainError("FORBIDDEN", "Only the confirmed approver can decide this."));
+    }
+
+    const decidedAt = new Date();
+    const recordSnapshot =
+      input.decision === "approved"
+        ? await this.snapshot(approval.sessionId)
+        : approval.recordSnapshot;
+
+    const updated = await this.approvals.update(approval.id, {
+      status: input.decision,
+      decidedByUserId: input.decidedByUserId,
+      decidedAt,
+      comment: input.comment ?? null,
+      recordSnapshot,
+    });
+    if (updated.error) return updated;
+
+    await this.projectDecision(updated.data, decidedAt);
+
+    await this.auditLogger.log({
+      actorId: input.decidedByUserId,
+      action: "approval.decided",
+      resourceType: "approval",
+      resourceId: approval.id,
+      metadata: { decision: input.decision, comment: input.comment ?? null },
+    });
+
+    void this.notifier
+      ?.execute({ approval: updated.data, decision: input.decision })
+      .catch(() => undefined);
+
+    if (input.decision !== "approved") {
+      return ok({ approval: updated.data, advanced: false, newNodeId: null, sessionCompleted: false });
+    }
+
+    return this.advance(updated.data);
+  }
+
+  private async snapshot(sessionId: string): Promise<Record<string, unknown> | null> {
+    const outputs = await this.sessionStepOutputs.listBySession(sessionId);
+    if (outputs.error) return null;
+    return { stepOutputs: outputs.data };
+  }
+
+  // Best-effort denormalised projection — the approval row stays the source of
+  // truth, so a projection failure must not fail the decision.
+  private async projectDecision(approval: Approval, decidedAt: Date): Promise<void> {
+    await this.sessionStepOutputs.create({
+      sessionId: approval.sessionId,
+      flowId: approval.flowId,
+      nodeId: approval.nodeId,
+      fields: [
+        field("outcome", "Outcome", approval.status),
+        field("decided_at", "Decided at", decidedAt.toISOString()),
+        field("decided_by", "Decided by", approval.decidedByUserId ?? ""),
+        field("comment", "Comment", approval.comment ?? ""),
+      ],
+    });
+  }
+
+  private async advance(approval: Approval): Promise<Result<DecideApprovalOutput>> {
+    const sessionResult = await this.sessions.findById(approval.sessionId);
+    if (sessionResult.error) return sessionResult;
+    const session = sessionResult.data;
+    if (!session) {
+      return err(domainError("NOT_FOUND", `Session ${approval.sessionId} not found.`));
+    }
+
+    const edgesResult = await this.flowEdges.listByFlow(approval.flowId);
+    if (edgesResult.error) return edgesResult;
+    const outgoing = edgesResult.data.filter((edge) => edge.fromNodeId === approval.nodeId);
+
+    if (outgoing.length === 0) {
+      const completed = await this.sessions.update(session.id, { status: "complete" });
+      if (completed.error) return completed;
+      return ok({ approval, advanced: true, newNodeId: null, sessionCompleted: true });
+    }
+
+    // A fork after an approval cannot be auto-chosen; the session parks at the
+    // node for the operator to pick a branch, mirroring the other advance paths.
+    if (outgoing.length > 1) {
+      return ok({ approval, advanced: false, newNodeId: null, sessionCompleted: false });
+    }
+
+    const newNodeId = outgoing[0]!.toNodeId;
+    const moved = await this.sessions.update(session.id, {
+      currentNodeId: newNodeId,
+      graphCheckpoint: { currentNodeId: newNodeId, advancedFrom: approval.nodeId },
+    });
+    if (moved.error) return moved;
+    return ok({ approval, advanced: true, newNodeId, sessionCompleted: false });
+  }
+}

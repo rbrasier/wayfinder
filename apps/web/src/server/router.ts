@@ -1,9 +1,12 @@
 import { analyticsRouter } from "./routers/analytics";
+import { approvalRouter } from "./routers/approval";
 import { errorRouter } from "./routers/error";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
+import { hrRouter } from "./routers/hr";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
+import { peopleRouter } from "./routers/people";
 import { roleRouter } from "./routers/role";
 import { scheduleRouter } from "./routers/schedule";
 import { sessionRouter } from "./routers/session";
@@ -25,6 +28,9 @@ export const appRouter = router({
   settings: settingsRouter,
   n8n: n8nRouter,
   analytics: analyticsRouter,
+  approval: approvalRouter,
+  people: peopleRouter,
+  hr: hrRouter,
 });
 
 export type AppRouter = typeof appRouter;

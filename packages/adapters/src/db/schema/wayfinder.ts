@@ -56,7 +56,7 @@ export const app_flow_nodes = pgTable(
     flow_id: uuid("flow_id")
       .notNull()
       .references(() => app_flows.id, { onDelete: "cascade" }),
-    type: text("type", { enum: ["conversational", "auto", "scheduled"] })
+    type: text("type", { enum: ["conversational", "auto", "scheduled", "approval"] })
       .notNull()
       .default("conversational"),
     name: text("name").notNull(),
@@ -299,6 +299,61 @@ export const app_session_step_outputs = pgTable(
   }),
 );
 
+// Approval requests raised when a session reaches an `approval` node. The row is
+// the source of truth for the decision; the suggested/confirmed approver and any
+// override are all recorded for audit (ADR-018).
+export const app_session_approvals = pgTable(
+  "app_session_approvals",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    node_id: uuid("node_id")
+      .notNull()
+      .references(() => app_flow_nodes.id, { onDelete: "cascade" }),
+    message_id: uuid("message_id"),
+    requested_by_user_id: uuid("requested_by_user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "restrict" }),
+    approver_source: text("approver_source", {
+      enum: ["first_level_supervisor", "second_level_supervisor", "dynamic"],
+    }).notNull(),
+    suggested_approver_user_id: uuid("suggested_approver_user_id").references(
+      () => core_users.id,
+      { onDelete: "set null" },
+    ),
+    approver_user_id: uuid("approver_user_id").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    approver_email: text("approver_email"),
+    is_override: boolean("is_override").notNull().default(false),
+    status: text("status", {
+      enum: ["pending", "approved", "rejected", "changes_requested"],
+    })
+      .notNull()
+      .default("pending"),
+    decided_by_user_id: uuid("decided_by_user_id").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    decided_at: timestamp("decided_at", { withTimezone: true }),
+    comment: text("comment"),
+    record_snapshot: jsonb("record_snapshot").$type<Record<string, unknown>>(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_approver_status: index("app_session_approvals_approver_user_id_status_idx").on(
+      t.approver_user_id,
+      t.status,
+    ),
+    by_session: index("app_session_approvals_session_id_idx").on(t.session_id),
+  }),
+);
+
 // Outbox + delivery log for outbound email (ADR-023). Rows are written as
 // `pending` inside the triggering action, then flipped to `sent`/`failed` by
 // the best-effort send. The unique index makes sends idempotent per
@@ -311,8 +366,16 @@ export const app_notification_log = pgTable(
     recipient_user_id: uuid("recipient_user_id").references(() => core_users.id, {
       onDelete: "set null",
     }),
-    trigger: text("trigger", { enum: ["session_complete", "step_complete", "flow_shared"] }).notNull(),
-    resource_type: text("resource_type", { enum: ["session", "flow"] }).notNull(),
+    trigger: text("trigger", {
+      enum: [
+        "session_complete",
+        "step_complete",
+        "flow_shared",
+        "approval_requested",
+        "approval_decided",
+      ],
+    }).notNull(),
+    resource_type: text("resource_type", { enum: ["session", "flow", "approval"] }).notNull(),
     resource_id: text("resource_id").notNull(),
     subject: text("subject").notNull(),
     status: text("status", { enum: ["pending", "sent", "failed"] })
