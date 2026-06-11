@@ -15,9 +15,9 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
 
-// The flow-insights dashboard is client-fetched: it shows "Loading…" until the
+// The flow-usage dashboard is client-fetched: it shows "Loading…" until the
 // tRPC query resolves, then settles into either its empty state ("No flows
-// yet") or the "Flow insights" heading. `networkidle` can fire mid-load, so wait
+// yet") or the "Flow usage" heading. `networkidle` can fire mid-load, so wait
 // for one of the terminal states before deciding whether to skip.
 async function waitForFlowUsageSettled(page: Page): Promise<void> {
   await page
