@@ -79,6 +79,9 @@ describe("scheduledConfigFromValues", () => {
     scheduleModifier: "after",
     scheduleAnchorChoice: "node_reached",
     scheduleDescribeText: "",
+    approverSource: "first_level_supervisor",
+    roleHint: "",
+    approvalInstructions: "",
     notifyOnComplete: true,
   };
 

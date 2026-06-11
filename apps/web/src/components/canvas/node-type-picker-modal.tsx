@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, Timer, Zap } from "lucide-react";
+import { MessageSquare, Stamp, Timer, Zap } from "lucide-react";
 import {
   Dialog,
   DialogBody,
@@ -38,12 +38,19 @@ const ALL_OPTIONS: NodeTypeOption[] = [
     description: "Pauses the session and resumes at a computed time.",
     Icon: Timer,
   },
+  {
+    type: "approval",
+    label: "Approval",
+    description: "Pauses the session until a confirmed approver signs off.",
+    Icon: Stamp,
+  },
 ];
 
 interface NodeTypePickerModalProps {
   open: boolean;
   autoNodeEnabled?: boolean;
   scheduledNodeEnabled?: boolean;
+  approvalNodeEnabled?: boolean;
   onSelect: (type: NodeConfigType) => void;
   onClose: () => void;
 }
@@ -52,12 +59,14 @@ export function NodeTypePickerModal({
   open,
   autoNodeEnabled = false,
   scheduledNodeEnabled = false,
+  approvalNodeEnabled = true,
   onSelect,
   onClose,
 }: NodeTypePickerModalProps) {
   const options = ALL_OPTIONS.filter((option) => {
     if (option.type === "auto") return autoNodeEnabled;
     if (option.type === "scheduled") return scheduledNodeEnabled;
+    if (option.type === "approval") return approvalNodeEnabled;
     return true;
   });
 

@@ -17,6 +17,7 @@ import {
   Settings,
   ShieldOff,
   ShieldCheck,
+  Stamp,
   Users,
   X,
 } from "lucide-react";
@@ -33,6 +34,7 @@ interface NavItem {
 const userNav: NavItem[] = [
   { href: "/chats", icon: MessageSquare, label: "My Chats" },
   { href: "/flows", icon: GitBranch, label: "Flows" },
+  { href: "/approvals", icon: Stamp, label: "Approvals" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 

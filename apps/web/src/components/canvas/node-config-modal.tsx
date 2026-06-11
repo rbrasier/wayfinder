@@ -56,7 +56,12 @@ function isAdvancedField(key: string): boolean {
   return [...ADVANCED_REQUEST_FIELD_KEYS].some((prefix) => key.startsWith(`${prefix}.`));
 }
 
-export type NodeConfigType = "conversational" | "auto" | "scheduled";
+export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval";
+
+export type ApproverSourceMode =
+  | "first_level_supervisor"
+  | "second_level_supervisor"
+  | "dynamic";
 
 // An author-added request field while it is being edited. The key is derived
 // from the label on save; the id keeps React rows stable as the label changes.
@@ -92,6 +97,9 @@ export interface NodeConfigValues {
   scheduleModifier: ScheduleModifier;
   scheduleAnchorChoice: string;
   scheduleDescribeText: string;
+  approverSource: ApproverSourceMode;
+  roleHint: string;
+  approvalInstructions: string;
   notifyOnComplete: boolean;
 }
 
@@ -133,6 +141,9 @@ const DEFAULT_VALUES: NodeConfigValues = {
   scheduleModifier: "after",
   scheduleAnchorChoice: "node_reached",
   scheduleDescribeText: "",
+  approverSource: "first_level_supervisor",
+  roleHint: "",
+  approvalInstructions: "",
   notifyOnComplete: false,
 };
 
@@ -232,6 +243,7 @@ export function NodeConfigModal({
 
   const isAuto = values.type === "auto";
   const isScheduled = values.type === "scheduled";
+  const isApproval = values.type === "approval";
   const isConversational = values.type === "conversational";
   const requestParsed = parseFieldLines(requestLines);
   const responseParsed = parseFieldLines(responseLines);
@@ -326,7 +338,15 @@ export function NodeConfigModal({
       (values.scheduleWhen === "specific" &&
         (values.scheduleModifier === "on" || Number(values.scheduleNumber) > 0)));
 
-  const canSave = isAuto ? autoValid : isScheduled ? scheduledValid : conversationalValid;
+  const approvalValid = Boolean(values.name.trim()) && Boolean(values.approverSource);
+
+  const canSave = isAuto
+    ? autoValid
+    : isScheduled
+      ? scheduledValid
+      : isApproval
+        ? approvalValid
+        : conversationalValid;
 
   const saveN8nAuto = (): NodeConfigValues => {
     const customTemplateFields: TemplateField[] = customFields
@@ -945,6 +965,50 @@ export function NodeConfigModal({
                   </p>
                 </div>
               )}
+              </>
+              )}
+
+              {isApproval && (
+              <>
+              <div className="space-y-1">
+                <Label htmlFor="approver-source">Who approves?</Label>
+                <select
+                  id="approver-source"
+                  className={SCHEDULE_SELECT_CLASS}
+                  value={values.approverSource}
+                  onChange={(e) => set("approverSource", e.target.value as ApproverSourceMode)}
+                >
+                  <option value="first_level_supervisor">First-level supervisor</option>
+                  <option value="second_level_supervisor">Second-level supervisor</option>
+                  <option value="dynamic">Dynamic — resolved from policy/context</option>
+                </select>
+                <p className="text-[12px] text-[#918d87]">
+                  The operator always confirms the suggested approver, and can choose someone else.
+                </p>
+              </div>
+
+              {values.approverSource === "dynamic" && (
+                <div className="space-y-1">
+                  <Label htmlFor="approver-role-hint">Role hint (optional)</Label>
+                  <Input
+                    id="approver-role-hint"
+                    value={values.roleHint}
+                    onChange={(e) => set("roleHint", e.target.value)}
+                    placeholder="e.g. SES Band 1 delegate"
+                  />
+                </div>
+              )}
+
+              <div className="space-y-1">
+                <Label htmlFor="approval-instructions">Instructions (optional)</Label>
+                <Textarea
+                  id="approval-instructions"
+                  rows={3}
+                  value={values.approvalInstructions}
+                  onChange={(e) => set("approvalInstructions", e.target.value)}
+                  placeholder="Shown to the operator and the approver…"
+                />
+              </div>
               </>
               )}
 

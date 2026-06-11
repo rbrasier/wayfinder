@@ -38,3 +38,8 @@ export * from "./schedule-repository";
 export * from "./schedule-run-repository";
 export * from "./schedule-fire-handler";
 export * from "./notification-log-repository";
+export * from "./approval-repository";
+export * from "./people-directory";
+export * from "./reporting-line-resolver";
+export * from "./hr-dataset-repository";
+export * from "./spreadsheet-parser";

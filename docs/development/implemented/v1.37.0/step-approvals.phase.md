@@ -1,6 +1,6 @@
 # Phase — Step Approvals
 
-- **Status**: Sketched (awaiting `/doc-review`)
+- **Status**: Implemented (v1.37.0)
 - **Target version**: 1.37.0 (bump: **MINOR** — new node type, new tables, new
   domain ports)
 - **PRD**: `docs/development/prd/step-approvals.prd.md`

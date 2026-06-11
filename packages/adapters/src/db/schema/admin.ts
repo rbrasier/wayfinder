@@ -1,5 +1,16 @@
 import { sql } from "drizzle-orm";
-import { boolean, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
+import type { HrColumnMapping } from "@rbrasier/domain";
 import { core_users } from "./core";
 
 export const admin_roles = pgTable("admin_roles", {
@@ -48,6 +59,44 @@ export const admin_user_roles = pgTable(
   },
   (t) => ({
     user_role_unique: unique("admin_user_roles_user_id_role_id_unique").on(t.user_id, t.role_id),
+  }),
+);
+
+// Uploaded HR spreadsheet metadata. Rows are stored in admin_hr_rows in the
+// structure they arrived in; `column_mapping` records which header carries which
+// canonical field for resolution (ADR-018).
+export const admin_hr_datasets = pgTable("admin_hr_datasets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  filename: text("filename").notNull(),
+  source_format: text("source_format", { enum: ["csv", "xlsx"] }).notNull(),
+  uploaded_by_user_id: uuid("uploaded_by_user_id")
+    .notNull()
+    .references(() => core_users.id, { onDelete: "restrict" }),
+  columns: jsonb("columns").$type<string[]>().notNull().default([]),
+  column_mapping: jsonb("column_mapping").$type<HrColumnMapping>().notNull().default({}),
+  row_count: integer("row_count").notNull().default(0),
+  status: text("status", { enum: ["active", "archived"] }).notNull().default("active"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// One row per spreadsheet row, keyed by original header, stored as-uploaded. The
+// GIN index over the jsonb powers the "Someone else" search before any mapping.
+export const admin_hr_rows = pgTable(
+  "admin_hr_rows",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    dataset_id: uuid("dataset_id")
+      .notNull()
+      .references(() => admin_hr_datasets.id, { onDelete: "cascade" }),
+    row_index: integer("row_index").notNull(),
+    data: jsonb("data").$type<Record<string, string>>().notNull().default({}),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_dataset: index("admin_hr_rows_dataset_id_idx").on(t.dataset_id),
+    data_gin: index("admin_hr_rows_data_gin_idx").using("gin", t.data),
   }),
 );
 

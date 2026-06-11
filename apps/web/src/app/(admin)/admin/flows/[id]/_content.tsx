@@ -32,6 +32,8 @@ import type { AutoNodeData } from "@/components/canvas/auto-node";
 import { AutoNode } from "@/components/canvas/auto-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
+import type { ApprovalNodeData } from "@/components/canvas/approval-node";
+import { ApprovalNode } from "@/components/canvas/approval-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
 import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
@@ -50,6 +52,7 @@ const NODE_TYPES = {
   conversationalNode: ConversationalNode,
   autoNode: AutoNode,
   scheduledNode: ScheduledNode,
+  approvalNode: ApprovalNode,
 };
 
 const DEBOUNCE_MS = 600;
@@ -58,7 +61,7 @@ interface RawNode {
   id: string;
   name: string;
   colour: string | null;
-  type?: "conversational" | "auto" | "scheduled";
+  type?: "conversational" | "auto" | "scheduled" | "approval";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;
@@ -92,6 +95,17 @@ const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
       config: node.config,
     };
     return { id: node.id, type: "scheduledNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  if (node.type === "approval") {
+    const data: ApprovalNodeData = {
+      name: node.name,
+      colour: node.colour,
+      approverSource: (node.config.approverSource as string | null) ?? null,
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "approvalNode", position: { x: node.positionX, y: node.positionY }, data };
   }
 
   const data: ConversationalNodeData = {
@@ -318,6 +332,14 @@ function CanvasInner({ flowId }: { flowId: string }) {
       if (values.type === "scheduled") {
         return { ...scheduledConfigFromValues(values), notifyOnComplete: values.notifyOnComplete };
       }
+      if (values.type === "approval") {
+        return {
+          approverSource: values.approverSource,
+          roleHint: values.roleHint,
+          instructions: values.approvalInstructions,
+          notifyOnComplete: values.notifyOnComplete,
+        };
+      }
       const hasTemplate = values.outputType === "generate_document" && !!values.documentTemplatePath;
       return {
         aiInstruction: values.aiInstruction,
@@ -523,7 +545,17 @@ function CanvasInner({ flowId }: { flowId: string }) {
             ? "auto"
             : editingNode?.type === "scheduledNode"
               ? "scheduled"
-              : "conversational",
+              : editingNode?.type === "approvalNode"
+                ? "approval"
+                : "conversational",
+        approverSource:
+          (editingConfig.approverSource as
+            | "first_level_supervisor"
+            | "second_level_supervisor"
+            | "dynamic"
+            | undefined) ?? "first_level_supervisor",
+        roleHint: (editingConfig.roleHint as string | null) ?? "",
+        approvalInstructions: (editingConfig.instructions as string | null) ?? "",
         aiInstruction: (editingConfig.aiInstruction as string | null) ?? editingData.aiInstruction ?? "",
         doneWhen: (editingConfig.doneWhen as string | null) ?? "",
         neverDone: Boolean(editingConfig.neverDone),

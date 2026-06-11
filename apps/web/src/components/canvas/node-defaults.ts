@@ -28,6 +28,14 @@ export const defaultConfigForType = (type: NodeConfigType): Record<string, unkno
       notifyOnComplete: true,
     };
   }
+  if (type === "approval") {
+    return {
+      approverSource: "first_level_supervisor",
+      roleHint: "",
+      instructions: "",
+      notifyOnComplete: true,
+    };
+  }
   return {
     aiInstruction: "",
     doneWhen: "",
