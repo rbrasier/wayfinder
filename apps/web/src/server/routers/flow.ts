@@ -72,7 +72,10 @@ const nodeRouter = router({
     .input(
       z.object({
         flowId: z.string().uuid(),
-        name: z.string().min(1),
+        // Nodes are persisted on type-select with a blank name (v1.36.0); the
+        // author names the step afterwards in the config modal. The canvas
+        // renders an "Untitled step" fallback while the name is empty.
+        name: z.string(),
         colour: z.string().nullable().optional(),
         type: z.enum(["conversational", "auto", "scheduled", "approval"]).optional(),
         positionX: z.number(),
@@ -102,7 +105,8 @@ const nodeRouter = router({
       z.object({
         nodeId: z.string().uuid(),
         flowId: z.string().uuid(),
-        name: z.string().min(1).optional(),
+        // Blank names are allowed (v1.36.0) — canvas shows an "Untitled step" fallback.
+        name: z.string().optional(),
         colour: z.string().nullable().optional(),
         type: z.enum(["conversational", "auto", "scheduled", "approval"]).optional(),
         config: z.record(z.unknown()).optional(),
