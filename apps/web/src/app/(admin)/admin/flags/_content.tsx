@@ -18,11 +18,7 @@ import { trpc } from "@/trpc/client";
 export function AdminFlagsContent() {
   const utils = trpc.useUtils();
   const flagsQuery = trpc.featureFlag.list.useQuery();
-  const rolesQuery = trpc.role.list.useQuery();
   const upsert = trpc.featureFlag.upsert.useMutation({
-    onSuccess: () => void utils.featureFlag.list.invalidate(),
-  });
-  const setRoles = trpc.featureFlag.setRoles.useMutation({
     onSuccess: () => void utils.featureFlag.list.invalidate(),
   });
 
@@ -37,19 +33,6 @@ export function AdminFlagsContent() {
     setNewKey("");
   };
 
-  // Empty allowlist ⇒ everyone (ADR-022). Admins always pass, so only offer
-  // assignable roles (non-default, non-immutable) as scoping targets.
-  const scopableRoles = (rolesQuery.data ?? [])
-    .filter((entry) => !entry.role.isDefault && !entry.role.isImmutable)
-    .map((entry) => entry.role);
-
-  const toggleRole = (flagKey: string, roleIds: string[], roleId: string): void => {
-    const next = roleIds.includes(roleId)
-      ? roleIds.filter((id) => id !== roleId)
-      : [...roleIds, roleId];
-    setRoles.mutate({ key: flagKey, roleIds: next });
-  };
-
   return (
     <div className="h-full overflow-auto">
     <div className="container py-8">
@@ -58,6 +41,10 @@ export function AdminFlagsContent() {
         <CardTitle>Feature Flags</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Enable or disable features here. Grant access to each enabled feature by role on the{" "}
+          <span className="font-medium">Roles</span> page under “Feature access”.
+        </p>
         <div className="flex gap-2">
           <Input
             placeholder="new-flag-key"
@@ -79,7 +66,6 @@ export function AdminFlagsContent() {
               <TableRow>
                 <TableHead>Key</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Limit to roles</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Updated</TableHead>
               </TableRow>
@@ -97,28 +83,6 @@ export function AdminFlagsContent() {
                         {f.enabled ? "on" : "off"}
                       </Badge>
                     </button>
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {!f.enabled ? (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    ) : (
-                      <div className="flex flex-col gap-1">
-                        {f.roleIds.length === 0 && (
-                          <span className="text-xs text-muted-foreground">Everyone</span>
-                        )}
-                        {scopableRoles.map((role) => (
-                          <label key={role.id} className="flex items-center gap-2 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={f.roleIds.includes(role.id)}
-                              disabled={setRoles.isPending}
-                              onChange={() => toggleRole(f.key, f.roleIds, role.id)}
-                            />
-                            {role.name}
-                          </label>
-                        ))}
-                      </div>
-                    )}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {f.description ?? "—"}

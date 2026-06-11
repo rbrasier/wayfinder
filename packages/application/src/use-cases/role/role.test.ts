@@ -9,6 +9,9 @@ import {
   type Role,
 } from "@rbrasier/domain";
 import { ListRoles } from "./list-roles";
+import { CreateRole } from "./create-role";
+import { RenameRole } from "./rename-role";
+import { DeleteRole } from "./delete-role";
 import { UpdateRolePermissions } from "./update-role-permissions";
 import { AssignUserRole } from "./assign-user-role";
 import { RemoveUserRole } from "./remove-user-role";
@@ -47,6 +50,25 @@ class FakeRoleRepository implements IRoleRepository {
     };
     this.roles.set(created.id, created);
     return ok(created);
+  }
+  async update(
+    id: string,
+    patch: { name?: string; description?: string | null },
+  ): Promise<Result<Role>> {
+    const existing = this.roles.get(id);
+    if (!existing) return ok(existing as unknown as Role);
+    const updated: Role = {
+      ...existing,
+      name: patch.name ?? existing.name,
+      description: patch.description === undefined ? existing.description : patch.description,
+    };
+    this.roles.set(id, updated);
+    return ok(updated);
+  }
+  async delete(id: string): Promise<Result<void>> {
+    this.roles.delete(id);
+    this.permissions.delete(id);
+    return ok(undefined);
   }
   async listPermissions(roleId: string): Promise<Result<PermissionKey[]>> {
     return ok(this.permissions.get(roleId) ?? []);
@@ -229,5 +251,68 @@ describe("ListUsersForRole", () => {
     const { roles, userRoles } = seededRepos();
     const result = await new ListUsersForRole(roles, userRoles).execute("everyone");
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("CreateRole", () => {
+  it("creates a custom role with a slugified, unique key", async () => {
+    const { roles } = seededRepos();
+    const result = await new CreateRole(roles).execute({ name: "Procurement Lead" });
+    expect(result.error).toBeUndefined();
+    expect(result.data!.key).toBe("procurement_lead");
+    expect(result.data!.isSystem).toBe(false);
+    expect(result.data!.isImmutable).toBe(false);
+    expect(result.data!.isDefault).toBe(false);
+  });
+
+  it("appends a suffix when the derived key collides", async () => {
+    const { roles } = seededRepos();
+    const first = await new CreateRole(roles).execute({ name: "Reviewer" });
+    const second = await new CreateRole(roles).execute({ name: "Reviewer" });
+    expect(first.data!.key).toBe("reviewer");
+    expect(second.data!.key).toBe("reviewer_2");
+  });
+
+  it("rejects a blank name", async () => {
+    const { roles } = seededRepos();
+    const result = await new CreateRole(roles).execute({ name: "   " });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("RenameRole", () => {
+  it("renames an editable role such as Power Users", async () => {
+    const { roles } = seededRepos();
+    const result = await new RenameRole(roles).execute({ roleId: "power", name: "Super Users" });
+    expect(result.error).toBeUndefined();
+    expect((await roles.findById("power")).data!.name).toBe("Super Users");
+  });
+
+  it("rejects renaming the immutable Admins role", async () => {
+    const { roles } = seededRepos();
+    const result = await new RenameRole(roles).execute({ roleId: "admins", name: "Owners" });
+    expect(result.error?.code).toBe("FORBIDDEN");
+  });
+
+  it("returns NOT_FOUND for an unknown role", async () => {
+    const { roles } = seededRepos();
+    const result = await new RenameRole(roles).execute({ roleId: "missing", name: "X" });
+    expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("DeleteRole", () => {
+  it("deletes a custom role", async () => {
+    const { roles } = seededRepos();
+    const created = await new CreateRole(roles).execute({ name: "Temp" });
+    const result = await new DeleteRole(roles).execute(created.data!.id);
+    expect(result.error).toBeUndefined();
+    expect((await roles.findById(created.data!.id)).data).toBeNull();
+  });
+
+  it("rejects deleting a system role", async () => {
+    const { roles } = seededRepos();
+    const result = await new DeleteRole(roles).execute("power");
+    expect(result.error?.code).toBe("FORBIDDEN");
   });
 });

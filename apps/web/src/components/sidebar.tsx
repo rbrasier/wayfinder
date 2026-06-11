@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   Activity,
   AlertCircle,
   BarChart2,
+  ChevronDown,
   Clock,
   Flag,
   GitBranch,
-  LayoutGrid,
   LogOut,
   Menu,
   MessageSquare,
@@ -31,29 +32,133 @@ interface NavItem {
   label: string;
 }
 
-const userNav: NavItem[] = [
-  { href: "/chats", icon: MessageSquare, label: "My Chats" },
-  { href: "/flows", icon: GitBranch, label: "Flows" },
-  { href: "/approvals", icon: Stamp, label: "Approvals" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+interface NavGroup {
+  label?: string;
+  items: NavItem[];
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
+}
+
+const userNav: NavGroup[] = [
+  {
+    items: [
+      { href: "/chats", icon: MessageSquare, label: "My Chats" },
+      { href: "/flows", icon: GitBranch, label: "Flows" },
+      { href: "/approvals", icon: Stamp, label: "Approvals" },
+      { href: "/settings", icon: Settings, label: "Settings" },
+    ],
+  },
 ];
 
-const adminNav: NavItem[] = [
-  { href: "/admin/dashboards/overview", icon: Activity, label: "Overview" },
-  { href: "/admin/dashboards/flows", icon: PieChart, label: "Flow Insights" },
-  { href: "/admin/sessions", icon: LayoutGrid, label: "All Sessions" },
-  { href: "/admin/schedules", icon: Clock, label: "Schedules" },
-  { href: "/admin/flows", icon: GitBranch, label: "Flows" },
-  { href: "/admin/users", icon: Users, label: "Users" },
-  { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
-  { href: "/admin/usage", icon: BarChart2, label: "Usage" },
-  { href: "/admin/flags", icon: Flag, label: "Flags" },
-  { href: "/admin/errors", icon: AlertCircle, label: "Errors" },
-  { href: "/admin/settings", icon: Settings, label: "Settings" },
+const adminNav: NavGroup[] = [
+  {
+    items: [
+      { href: "/admin/dashboards/overview", icon: Activity, label: "Overview" },
+      { href: "/admin/dashboards/insights", icon: PieChart, label: "Flow Insights" },
+      { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Usage" },
+      { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
+      { href: "/admin/flows", icon: GitBranch, label: "Flows" },
+      { href: "/admin/settings", icon: Settings, label: "Configuration" },
+    ],
+  },
+  {
+    label: "User Admin",
+    items: [
+      { href: "/admin/users", icon: Users, label: "Users" },
+      { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
+    ],
+  },
+  {
+    label: "Advanced",
+    collapsible: true,
+    defaultCollapsed: true,
+    items: [
+      { href: "/admin/usage", icon: BarChart2, label: "Usage" },
+      { href: "/admin/flags", icon: Flag, label: "Flags" },
+      { href: "/admin/errors", icon: AlertCircle, label: "Errors" },
+      { href: "/admin/schedules", icon: Clock, label: "Schedules" },
+    ],
+  },
 ];
 
 interface AppSidebarProps {
   isAdmin?: boolean;
+}
+
+function NavGroups({
+  groups,
+  isActive,
+  onNavigate,
+}: {
+  groups: NavGroup[];
+  isActive: (href: string) => boolean;
+  onNavigate: () => void;
+}) {
+  // A collapsible group auto-expands when it holds the active route so the
+  // current page is never hidden behind a collapsed header.
+  const groupHoldsActive = (group: NavGroup): boolean => group.items.some((item) => isActive(item.href));
+
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const group of groups) {
+      if (group.collapsible && group.label) {
+        initial[group.label] = group.defaultCollapsed ?? false;
+      }
+    }
+    return initial;
+  });
+
+  return (
+    <>
+      {groups.map((group, index) => {
+        const isCollapsible = Boolean(group.collapsible && group.label);
+        const isCollapsed = isCollapsible && (collapsed[group.label as string] ?? false) && !groupHoldsActive(group);
+
+        return (
+          <div key={group.label ?? `group-${index}`} className={index > 0 ? "mt-[6px]" : undefined}>
+            {group.label &&
+              (isCollapsible ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCollapsed((prev) => ({ ...prev, [group.label as string]: !prev[group.label as string] }))
+                  }
+                  className="flex w-full items-center justify-between px-[10px] pb-[6px] pt-[8px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87] transition-colors hover:text-[#5a5650]"
+                >
+                  {group.label}
+                  <ChevronDown
+                    className={`h-[13px] w-[13px] shrink-0 transition-transform ${isCollapsed ? "-rotate-90" : ""}`}
+                  />
+                </button>
+              ) : (
+                <div className="px-[10px] pb-[6px] pt-[8px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+                  {group.label}
+                </div>
+              ))}
+
+            {!isCollapsed &&
+              group.items.map(({ href, icon: Icon, label }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={onNavigate}
+                  className={`flex items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13.5px] transition-colors ${
+                    isActive(href)
+                      ? "bg-[#eef1fc] font-medium text-[#3a5fd9]"
+                      : "text-[#5a5650] hover:bg-[#efede8] hover:text-[#1a1814]"
+                  }`}
+                >
+                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                    <Icon className="h-[15px] w-[15px]" />
+                  </span>
+                  {label}
+                </Link>
+              ))}
+          </div>
+        );
+      })}
+    </>
+  );
 }
 
 export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
@@ -104,137 +209,123 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
-  const navContent = (
+  const recentChatsBlock = recentChats.length > 0 && (
     <>
-      {/* Logo */}
-      <div className="flex items-center gap-[9px] border-b border-[#dedad2] px-[18px] pb-[14px] pt-[16px]">
-        <Link href={homeHref} onClick={closeMobile}>
-          <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] bg-[#3a5fd9] text-[11px] font-bold text-white">
-            W
-          </div>
-        </Link>
-        <span className="text-[14px] font-bold tracking-[-0.3px] text-[#1a1814]">Wayfinder</span>
+      <hr className="my-[10px] border-[#dedad2]" />
+      <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+        Recent Chats
       </div>
-
-      {/* Nav items */}
-      <nav className="flex flex-1 flex-col gap-[2px] overflow-y-auto px-[10px] py-[12px]">
-        {nav.map(({ href, icon: Icon, label }) => (
-          <Link
-            key={href}
-            href={href}
-            onClick={closeMobile}
-            className={`flex items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13.5px] transition-colors ${
-              isActive(href)
-                ? "bg-[#eef1fc] font-medium text-[#3a5fd9]"
-                : "text-[#5a5650] hover:bg-[#efede8] hover:text-[#1a1814]"
+      {recentChats.map((chat) => (
+        <Link
+          key={chat.id}
+          href={`/chats/${chat.id}`}
+          onClick={closeMobile}
+          className="flex items-center gap-[9px] rounded-[8px] px-[10px] py-[7px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+        >
+          <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-[#eef1fc] text-[11px]">
+            {chat.icon}
+          </span>
+          <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{chat.label}</span>
+          <span
+            aria-label={chat.status === "complete" ? "Complete" : "In progress"}
+            className={`shrink-0 rounded-full px-[7px] py-[1px] text-[9.5px] font-semibold ${
+              chat.status === "complete"
+                ? "bg-[#eaf6f0] text-[#2e9e6a]"
+                : "bg-[#eef1fc] text-[#3a5fd9]"
             }`}
           >
-            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-              <Icon className="h-[15px] w-[15px]" />
-            </span>
-            {label}
-          </Link>
-        ))}
-
-        {recentChats.length > 0 && (
-          <>
-            <hr className="my-[10px] border-[#dedad2]" />
-            <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
-              Recent Chats
-            </div>
-            {recentChats.map((chat) => (
-              <Link
-                key={chat.id}
-                href={`/chats/${chat.id}`}
-                onClick={closeMobile}
-                className="flex items-center gap-[9px] rounded-[8px] px-[10px] py-[7px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
-              >
-                <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-[#eef1fc] text-[11px]">
-                  {chat.icon}
-                </span>
-                <span className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap">{chat.label}</span>
-                <span
-                  aria-label={chat.status === "complete" ? "Complete" : "In progress"}
-                  className={`shrink-0 rounded-full px-[7px] py-[1px] text-[9.5px] font-semibold ${
-                    chat.status === "complete"
-                      ? "bg-[#eaf6f0] text-[#2e9e6a]"
-                      : "bg-[#eef1fc] text-[#3a5fd9]"
-                  }`}
-                >
-                  {chat.status === "complete" ? "Done" : "In Progress"}
-                </span>
-              </Link>
-            ))}
-          </>
-        )}
-      </nav>
-
-      {/* Footer */}
-      <div className="border-t border-[#dedad2] px-[10px] py-[12px]">
-        {isAdmin && (
-          <button
-            onClick={() => router.push("/chats")}
-            className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#c17a1a] transition-colors hover:border-[#d4a265] hover:bg-[#fae8ce]"
-          >
-            <ShieldOff className="h-[13px] w-[13px] shrink-0" />
-            <span>Exit admin mode</span>
-          </button>
-        )}
-        {!isAdmin && user?.isAdmin && (
-          <button
-            onClick={() => router.push("/admin/sessions")}
-            className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#c5d0f7] bg-[#eef1fc] px-[10px] py-[8px] text-[12px] font-medium text-[#3a5fd9] transition-colors hover:border-[#a8b9f0] hover:bg-[#dde5fb]"
-          >
-            <ShieldCheck className="h-[13px] w-[13px] shrink-0" />
-            <span>Enter admin mode</span>
-          </button>
-        )}
-        {user && (
-          <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px] hover:bg-[#efede8]">
-            <div className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[11px] font-bold text-white">
-              {initials}
-            </div>
-            <div className="min-w-0">
-              <div className="truncate text-[13px] font-medium text-[#1a1814]">{displayName}</div>
-              {user.email && (
-                <div className="truncate text-[11px] text-[#918d87]">{user.email}</div>
-              )}
-            </div>
-          </div>
-        )}
-        {user && (
-          <button
-            onClick={handleSignOut}
-            className="mt-[6px] flex w-full items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
-          >
-            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-              <LogOut className="h-[15px] w-[15px]" />
-            </span>
-            Sign out
-          </button>
-        )}
-      </div>
+            {chat.status === "complete" ? "Done" : "In Progress"}
+          </span>
+        </Link>
+      ))}
     </>
+  );
+
+  const footer = (
+    <div className="border-t border-[#dedad2] px-[10px] py-[12px]">
+      {isAdmin && (
+        <button
+          onClick={() => {
+            closeMobile();
+            router.push("/chats");
+          }}
+          className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#c17a1a] transition-colors hover:border-[#d4a265] hover:bg-[#fae8ce]"
+        >
+          <ShieldOff className="h-[13px] w-[13px] shrink-0" />
+          <span>Exit admin mode</span>
+        </button>
+      )}
+      {!isAdmin && user?.isAdmin && (
+        <button
+          onClick={() => {
+            closeMobile();
+            router.push("/admin/sessions");
+          }}
+          className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#c5d0f7] bg-[#eef1fc] px-[10px] py-[8px] text-[12px] font-medium text-[#3a5fd9] transition-colors hover:border-[#a8b9f0] hover:bg-[#dde5fb]"
+        >
+          <ShieldCheck className="h-[13px] w-[13px] shrink-0" />
+          <span>Enter admin mode</span>
+        </button>
+      )}
+      {user && (
+        <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px] hover:bg-[#efede8]">
+          <div className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[11px] font-bold text-white">
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-medium text-[#1a1814]">{displayName}</div>
+            {user.email && <div className="truncate text-[11px] text-[#918d87]">{user.email}</div>}
+          </div>
+        </div>
+      )}
+      {user && (
+        <button
+          onClick={() => {
+            closeMobile();
+            void handleSignOut();
+          }}
+          className="mt-[6px] flex w-full items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+        >
+          <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+            <LogOut className="h-[15px] w-[15px]" />
+          </span>
+          Sign out
+        </button>
+      )}
+    </div>
+  );
+
+  const navBody = (
+    <nav className="flex flex-1 flex-col gap-[2px] overflow-y-auto px-[10px] py-[12px]">
+      <NavGroups groups={nav} isActive={isActive} onNavigate={closeMobile} />
+      {recentChatsBlock}
+    </nav>
   );
 
   return (
     <>
       {/* Desktop: 220px text sidebar */}
       <aside className="hidden h-screen w-[220px] shrink-0 flex-col border-r border-[#dedad2] bg-white md:flex">
-        {navContent}
+        {/* Logo */}
+        <div className="flex items-center gap-[9px] border-b border-[#dedad2] px-[18px] pb-[14px] pt-[16px]">
+          <Link href={homeHref}>
+            <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] bg-[#3a5fd9] text-[11px] font-bold text-white">
+              W
+            </div>
+          </Link>
+          <span className="text-[14px] font-bold tracking-[-0.3px] text-[#1a1814]">Wayfinder</span>
+        </div>
+        {navBody}
+        {footer}
       </aside>
 
       {/* Mobile: hamburger triggers the drawer managed by parent context */}
       {mobileOpen && (
         <>
           {/* Backdrop */}
-          <div
-            className="fixed inset-0 z-40 bg-[rgba(20,18,15,0.35)]"
-            onClick={closeMobile}
-          />
+          <div className="fixed inset-0 z-40 bg-[rgba(20,18,15,0.35)]" onClick={closeMobile} />
           {/* Drawer */}
           <div className="fixed bottom-0 left-0 top-0 z-50 flex w-[220px] flex-col bg-white shadow-[4px_0_20px_rgba(0,0,0,.12)]">
-            {/* Drawer header with close button */}
             <div className="flex items-center justify-between border-b border-[#dedad2] px-[14px] py-[14px] pb-[12px]">
               <div className="flex items-center gap-[9px]">
                 <div className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-[#3a5fd9] text-[11px] font-bold text-white">
@@ -249,91 +340,8 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                 <X className="h-3.5 w-3.5" />
               </button>
             </div>
-            {/* Reuse nav + footer */}
-            <nav className="flex flex-1 flex-col gap-[2px] overflow-y-auto px-[10px] py-[12px]">
-              {nav.map(({ href, icon: Icon, label }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={closeMobile}
-                  className={`flex items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13.5px] transition-colors ${
-                    isActive(href)
-                      ? "bg-[#eef1fc] font-medium text-[#3a5fd9]"
-                      : "text-[#5a5650] hover:bg-[#efede8] hover:text-[#1a1814]"
-                  }`}
-                >
-                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-                    <Icon className="h-[15px] w-[15px]" />
-                  </span>
-                  {label}
-                </Link>
-              ))}
-              {recentChats.length > 0 && (
-                <>
-                  <hr className="my-[10px] border-[#dedad2]" />
-                  <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
-                    Recent Chats
-                  </div>
-                  {recentChats.map((chat) => (
-                    <Link
-                      key={chat.id}
-                      href={`/chats/${chat.id}`}
-                      onClick={closeMobile}
-                      className="flex items-center gap-[9px] rounded-[8px] px-[10px] py-[7px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
-                    >
-                      <span className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-[5px] bg-[#eef1fc] text-[11px]">
-                        {chat.icon}
-                      </span>
-                      <span className="overflow-hidden text-ellipsis whitespace-nowrap">{chat.label}</span>
-                    </Link>
-                  ))}
-                </>
-              )}
-            </nav>
-            <div className="border-t border-[#dedad2] px-[10px] py-[12px]">
-              {isAdmin && (
-                <button
-                  onClick={() => { closeMobile(); router.push("/chats"); }}
-                  className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#c17a1a] transition-colors hover:border-[#d4a265] hover:bg-[#fae8ce]"
-                >
-                  <ShieldOff className="h-[13px] w-[13px] shrink-0" />
-                  <span>Exit admin mode</span>
-                </button>
-              )}
-              {!isAdmin && user?.isAdmin && (
-                <button
-                  onClick={() => { closeMobile(); router.push("/admin/sessions"); }}
-                  className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#c5d0f7] bg-[#eef1fc] px-[10px] py-[8px] text-[12px] font-medium text-[#3a5fd9] transition-colors hover:border-[#a8b9f0] hover:bg-[#dde5fb]"
-                >
-                  <ShieldCheck className="h-[13px] w-[13px] shrink-0" />
-                  <span>Enter admin mode</span>
-                </button>
-              )}
-              {user && (
-                <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px]">
-                  <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[10px] font-bold text-white">
-                    {initials}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="truncate text-[13px] font-medium text-[#1a1814]">{displayName}</div>
-                    {user.email && (
-                      <div className="truncate text-[11px] text-[#918d87]">{user.email}</div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {user && (
-                <button
-                  onClick={() => { closeMobile(); void handleSignOut(); }}
-                  className="mt-[6px] flex w-full items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13px] text-[#5a5650] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
-                >
-                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-                    <LogOut className="h-[15px] w-[15px]" />
-                  </span>
-                  Sign out
-                </button>
-              )}
-            </div>
+            {navBody}
+            {footer}
           </div>
         </>
       )}

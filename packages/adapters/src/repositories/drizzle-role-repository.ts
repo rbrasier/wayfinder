@@ -80,6 +80,37 @@ export class DrizzleRoleRepository implements IRoleRepository {
     }
   }
 
+  async update(
+    id: string,
+    patch: { name?: string; description?: string | null },
+  ): Promise<Result<Role>> {
+    try {
+      const values: { name?: string; description?: string | null; updated_at: Date } = {
+        updated_at: new Date(),
+      };
+      if (patch.name !== undefined) values.name = patch.name;
+      if (patch.description !== undefined) values.description = patch.description;
+      const [row] = await this.db
+        .update(admin_roles)
+        .set(values)
+        .where(eq(admin_roles.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", "Role not found."));
+      return ok(toEntity(row));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to update role.", cause));
+    }
+  }
+
+  async delete(id: string): Promise<Result<void>> {
+    try {
+      await this.db.delete(admin_roles).where(eq(admin_roles.id, id));
+      return ok(undefined);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to delete role.", cause));
+    }
+  }
+
   async listPermissions(roleId: string): Promise<Result<PermissionKey[]>> {
     try {
       const rows = await this.db

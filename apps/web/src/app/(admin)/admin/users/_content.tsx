@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
+  DialogBody,
+  DialogCloseButton,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -166,41 +168,43 @@ export function AdminUsersContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{editing?.id ? "Edit user" : "Add user"}</DialogTitle>
+            <DialogCloseButton />
           </DialogHeader>
           {editing && (
             <form
-              className="space-y-4"
               onSubmit={(e) => {
                 e.preventDefault();
                 void onSubmit(editing);
               }}
             >
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  value={editing.email}
-                  onChange={(e) => setEditing({ ...editing, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={editing.name}
-                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={editing.isAdmin}
-                  onChange={(e) => setEditing({ ...editing, isAdmin: e.target.checked })}
-                />
-                Admin
-              </label>
+              <DialogBody>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    value={editing.email}
+                    onChange={(e) => setEditing({ ...editing, email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    value={editing.name}
+                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={editing.isAdmin}
+                    onChange={(e) => setEditing({ ...editing, isAdmin: e.target.checked })}
+                  />
+                  Admin
+                </label>
+              </DialogBody>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditing(null)}>
                   Cancel
@@ -216,10 +220,13 @@ export function AdminUsersContent() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete user?</DialogTitle>
+            <DialogCloseButton />
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This will permanently remove <strong>{confirmDelete?.email}</strong>.
-          </p>
+          <DialogBody>
+            <p className="text-sm text-muted-foreground">
+              This will permanently remove <strong>{confirmDelete?.email}</strong>.
+            </p>
+          </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmDelete(null)}>
               Cancel

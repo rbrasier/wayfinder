@@ -9,6 +9,7 @@ const serverPages = [
   "(admin)/admin/users/page.tsx",
   "(admin)/admin/dashboards/overview/page.tsx",
   "(admin)/admin/dashboards/flows/page.tsx",
+  "(admin)/admin/dashboards/insights/page.tsx",
   "(user)/flows/[id]/config/page.tsx",
 ];
 

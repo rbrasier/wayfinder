@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   Bar,
   BarChart,
@@ -20,10 +20,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/trpc/client";
-import { FieldReportSection } from "@/components/admin/field-report-section";
+import { FlowSelector } from "@/components/admin/flow-selector";
 
 const AXIS_STYLE = { fontSize: 11, fill: "#918d87" };
-const FLOW_CARD_THRESHOLD = 5;
 
 const formatDuration = (seconds: number): string => {
   if (seconds <= 0) return "—";
@@ -44,24 +43,7 @@ const truncate = (value: string, max = 14): string =>
 
 export function AdminFlowDeepDive() {
   const [selectedFlowId, setSelectedFlowId] = useState<string | undefined>(undefined);
-  const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const searchContainerRef = useRef<HTMLDivElement>(null);
   const deepDiveQuery = trpc.analytics.flowDeepDive.useQuery({ flowId: selectedFlowId });
-
-  useEffect(() => {
-    if (!showSearch) return;
-
-    const handleMouseDown = (event: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
-        setShowSearch(false);
-        setSearchQuery("");
-      }
-    };
-
-    document.addEventListener("mousedown", handleMouseDown);
-    return () => document.removeEventListener("mousedown", handleMouseDown);
-  }, [showSearch]);
   const data = deepDiveQuery.data;
 
   if (deepDiveQuery.isLoading || !data) {
@@ -76,7 +58,7 @@ export function AdminFlowDeepDive() {
     return (
       <div className="h-full overflow-auto">
         <div className="container py-8 text-sm text-muted-foreground">
-          No flows yet. Create a flow and run some sessions to see insights here.
+          No flows yet. Create a flow and run some sessions to see usage here.
         </div>
       </div>
     );
@@ -96,67 +78,13 @@ export function AdminFlowDeepDive() {
     <div className="h-full overflow-auto">
       <div className="container space-y-4 py-8">
         <div>
-          <h1 className="text-lg font-semibold text-[#1a1814]">Flow insights</h1>
+          <h1 className="text-lg font-semibold text-[#1a1814]">Flow usage</h1>
           <p className="text-[13px] text-[#918d87]">
-            Select a flow to see its node-level breakdown and reporting.
+            Select a flow to see its node-level breakdown — drop-off, confidence and completion.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {(data.flows.length > FLOW_CARD_THRESHOLD
-            ? data.flows.slice(0, FLOW_CARD_THRESHOLD)
-            : data.flows
-          ).map((flow) => {
-            const selected = flow.flowId === activeFlowId;
-            return (
-              <button
-                key={flow.flowId}
-                type="button"
-                onClick={() => setSelectedFlowId(flow.flowId)}
-                className={`rounded-[9px] border px-3 py-2 text-left transition-colors ${
-                  selected
-                    ? "border-[#3a5fd9] bg-[#eef2fd]"
-                    : "border-[#dedad2] bg-white hover:bg-[#f7f6f3]"
-                }`}
-              >
-                <span className="block text-[13px] font-medium text-[#1a1814]">
-                  {flow.flowName}
-                </span>
-                <span className="block text-[12px] text-[#918d87]">
-                  {flow.sessionCount} session{flow.sessionCount === 1 ? "" : "s"}
-                </span>
-              </button>
-            );
-          })}
-
-          {data.flows.length > FLOW_CARD_THRESHOLD && (
-            showSearch ? (
-              <FlowSearchInput
-                flows={data.flows}
-                searchQuery={searchQuery}
-                containerRef={searchContainerRef}
-                onQueryChange={setSearchQuery}
-                onSelect={(flowId) => {
-                  setSelectedFlowId(flowId);
-                  setShowSearch(false);
-                  setSearchQuery("");
-                }}
-                onDismiss={() => {
-                  setShowSearch(false);
-                  setSearchQuery("");
-                }}
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowSearch(true)}
-                className="rounded-[9px] border border-[#dedad2] bg-white px-3 py-2 text-left transition-colors hover:bg-[#f7f6f3]"
-              >
-                <span className="block text-[13px] font-medium text-[#918d87]">Search for more</span>
-              </button>
-            )
-          )}
-        </div>
+        <FlowSelector flows={data.flows} activeFlowId={activeFlowId} onSelect={setSelectedFlowId} />
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <ChartCard title="Avg confidence at completion, per step">
@@ -253,78 +181,7 @@ export function AdminFlowDeepDive() {
             </Table>
           </CardContent>
         </Card>
-
-        <Suspense>
-          <FieldReportSection
-            report={data.fieldReport}
-            flowId={activeFlowId ?? ""}
-            sessionSummary={data.sessionSummary}
-          />
-        </Suspense>
       </div>
-    </div>
-  );
-}
-
-interface FlowSearchInputProps {
-  flows: { flowId: string; flowName: string; sessionCount: number }[];
-  searchQuery: string;
-  containerRef: React.RefObject<HTMLDivElement | null>;
-  onQueryChange: (query: string) => void;
-  onSelect: (flowId: string) => void;
-  onDismiss: () => void;
-}
-
-function FlowSearchInput({
-  flows,
-  searchQuery,
-  containerRef,
-  onQueryChange,
-  onSelect,
-  onDismiss,
-}: FlowSearchInputProps) {
-  const filtered = flows.filter((flow) =>
-    flow.flowName.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
-  return (
-    <div ref={containerRef} className="relative">
-      <input
-        autoFocus
-        type="text"
-        value={searchQuery}
-        onChange={(event) => onQueryChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") onDismiss();
-        }}
-        placeholder="Search flows…"
-        className="rounded-[9px] border border-[#3a5fd9] bg-white px-3 py-2 text-[13px] text-[#1a1814] outline-none placeholder:text-[#c4bfb8]"
-      />
-      {filtered.length > 0 && (
-        <ul className="absolute left-0 top-full z-10 mt-1 w-[240px] overflow-hidden rounded-[9px] border border-[#dedad2] bg-white shadow-md">
-          {filtered.map((flow) => (
-            <li key={flow.flowId}>
-              <button
-                type="button"
-                data-testid="flow-search-option"
-                onMouseDown={(event) => {
-                  // Prevent input blur before the click registers
-                  event.preventDefault();
-                  onSelect(flow.flowId);
-                }}
-                className="w-full px-3 py-2 text-left hover:bg-[#f7f6f3]"
-              >
-                <span className="block text-[13px] font-medium text-[#1a1814]">
-                  {flow.flowName}
-                </span>
-                <span className="block text-[12px] text-[#918d87]">
-                  {flow.sessionCount} session{flow.sessionCount === 1 ? "" : "s"}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

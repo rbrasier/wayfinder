@@ -45,7 +45,7 @@ export function AdminSessionsContent() {
     <div className="container py-8">
     <Card>
       <CardHeader>
-        <CardTitle>All Sessions</CardTitle>
+        <CardTitle>All Chats</CardTitle>
       </CardHeader>
       <CardContent>
         {sessionsQuery.isLoading ? (

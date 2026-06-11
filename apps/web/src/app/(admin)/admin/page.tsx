@@ -17,14 +17,23 @@ export default function AdminIndexPage() {
           </CardContent>
         </Card>
       </Link>
-      <Link href="/admin/dashboards/flows">
+      <Link href="/admin/dashboards/insights">
         <Card className="transition-shadow hover:shadow-md">
           <CardHeader>
             <CardTitle>Flow insights</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Node-level breakdown per flow — drop-off, confidence, completion — and reporting on
-            captured template field values.
+            Reporting on captured template field values across each flow&apos;s sessions.
+          </CardContent>
+        </Card>
+      </Link>
+      <Link href="/admin/dashboards/flows">
+        <Card className="transition-shadow hover:shadow-md">
+          <CardHeader>
+            <CardTitle>Flow usage</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Node-level breakdown per flow — drop-off, confidence and completion.
           </CardContent>
         </Card>
       </Link>
@@ -51,7 +60,7 @@ export default function AdminIndexPage() {
       <Link href="/admin/settings">
         <Card className="transition-shadow hover:shadow-md">
           <CardHeader>
-            <CardTitle>Settings</CardTitle>
+            <CardTitle>Configuration</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             Configure AI provider, email, and global application behaviour.

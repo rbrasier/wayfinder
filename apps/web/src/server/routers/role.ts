@@ -14,6 +14,43 @@ export const roleRouter = router({
     return result.data;
   }),
 
+  create: adminProcedure
+    .input(z.object({ name: z.string().min(1), description: z.string().nullable().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.createRole.execute({
+        name: input.name,
+        description: input.description ?? null,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  rename: adminProcedure
+    .input(
+      z.object({
+        roleId: z.string().uuid(),
+        name: z.string().min(1),
+        description: z.string().nullable().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.renameRole.execute({
+        roleId: input.roleId,
+        name: input.name,
+        description: input.description,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  delete: adminProcedure
+    .input(z.object({ roleId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.deleteRole.execute(input.roleId);
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
   updatePermissions: adminProcedure
     .input(z.object({ roleId: z.string().uuid(), keys: z.array(permissionKeySchema) }))
     .mutation(async ({ ctx, input }) => {

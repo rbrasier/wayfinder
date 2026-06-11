@@ -7,6 +7,8 @@ export interface IRoleRepository {
   findByKey(key: string): Promise<Result<Role | null>>;
   findById(id: string): Promise<Result<Role | null>>;
   create(role: NewRole): Promise<Result<Role>>;
+  update(id: string, patch: { name?: string; description?: string | null }): Promise<Result<Role>>;
+  delete(id: string): Promise<Result<void>>;
   listPermissions(roleId: string): Promise<Result<PermissionKey[]>>;
   replacePermissions(roleId: string, keys: PermissionKey[]): Promise<Result<void>>;
 }

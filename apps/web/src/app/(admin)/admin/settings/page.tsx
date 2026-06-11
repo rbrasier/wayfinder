@@ -1307,7 +1307,7 @@ export default function AppSettingsPage() {
       <div className="container py-8">
         <div className="space-y-6">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Application Settings</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Configuration</h1>
             <p className="text-sm text-muted-foreground">
               Configure global behaviour for this application.
             </p>

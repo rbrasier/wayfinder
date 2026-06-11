@@ -1,4 +1,7 @@
 export * from "./list-roles";
+export * from "./create-role";
+export * from "./rename-role";
+export * from "./delete-role";
 export * from "./update-role-permissions";
 export * from "./assign-user-role";
 export * from "./remove-user-role";
