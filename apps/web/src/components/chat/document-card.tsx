@@ -1,16 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { FileText } from "lucide-react";
+import { FileText, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import type { DocumentGenerationConfidence, SessionDocument } from "@rbrasier/domain";
 import { DocumentInfoModal } from "./document-info-modal";
+import { DocumentEditDialog } from "./document-edit-dialog";
 
 interface DocumentCardProps {
   messageId: string;
   document: SessionDocument;
   documentGenerationConfidence?: DocumentGenerationConfidence | null;
+  // When the node permits manual edits and the session is still editable.
+  canEdit?: boolean;
+  onEdited?: () => void;
   onRegenerate?: (messageId: string) => void;
 }
 
@@ -18,10 +22,13 @@ export function DocumentCard({
   messageId,
   document,
   documentGenerationConfidence,
+  canEdit = false,
+  onEdited,
   onRegenerate,
 }: DocumentCardProps) {
   const [isUnavailable, setIsUnavailable] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
 
   const handleDownload = async () => {
     setIsDownloading(true);
@@ -46,6 +53,19 @@ export function DocumentCard({
     }
   };
 
+  // Regenerate is a rewrite from the conversation that overrides manual edits;
+  // warn before discarding the operator's corrections.
+  const handleRegenerate = () => {
+    if (!onRegenerate) return;
+    if (document.editedAt) {
+      const confirmed = window.confirm(
+        "Regenerating rewrites this document from the conversation and overrides your manual edits (the edit history is kept). Continue?",
+      );
+      if (!confirmed) return;
+    }
+    onRegenerate(messageId);
+  };
+
   return (
     <div className="my-3 flex justify-center">
       <div className="relative w-full max-w-sm rounded-[10px] border border-[#dedad2] bg-white p-[12px_14px] shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]">
@@ -66,6 +86,11 @@ export function DocumentCard({
             <p className="mt-1 font-mono text-[10px] text-[#918d87]">
               Generated {new Date(document.generatedAt).toLocaleDateString()}
             </p>
+            {document.editedAt && (
+              <p className="mt-0.5 text-[10px] font-medium text-[#c17a1a]">
+                Edited {new Date(document.editedAt).toLocaleDateString()}
+              </p>
+            )}
           </div>
         </div>
 
@@ -74,18 +99,40 @@ export function DocumentCard({
             <div className="flex-1 space-y-2">
               <p className="text-[12px] text-[#c17a1a]">File no longer available. Try regenerating.</p>
               {onRegenerate && (
-                <Button size="sm" variant="secondary" onClick={() => onRegenerate(messageId)} className="w-full">
+                <Button size="sm" variant="secondary" onClick={handleRegenerate} className="w-full">
                   Regenerate
                 </Button>
               )}
             </div>
           ) : (
-            <Button size="sm" onClick={handleDownload} disabled={isDownloading} className="flex-1">
-              {isDownloading ? "Downloading…" : "↓ Download"}
-            </Button>
+            <>
+              <Button size="sm" onClick={handleDownload} disabled={isDownloading} className="flex-1">
+                {isDownloading ? "Downloading…" : "↓ Download"}
+              </Button>
+              {canEdit && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => setIsEditOpen(true)}
+                  className="shrink-0"
+                >
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                  Edit
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
+
+      {canEdit && (
+        <DocumentEditDialog
+          open={isEditOpen}
+          messageId={messageId}
+          onClose={() => setIsEditOpen(false)}
+          onSaved={() => onEdited?.()}
+        />
+      )}
     </div>
   );
 }

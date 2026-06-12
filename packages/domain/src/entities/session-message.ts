@@ -2,11 +2,32 @@ import type { MessageRole } from "./conversation";
 
 export type { MessageRole };
 
+// One before/after value pair changed within a single manual edit.
+export interface DocumentFieldChange {
+  key: string;
+  previousValue: string;
+  newValue: string;
+}
+
+// A durable metadata-history entry for one manual field edit. Survives later
+// regeneration (which clears the live edited stamps but never the history).
+export interface DocumentEdit {
+  editedAt: string;
+  editedByUserId: string | null;
+  storagePath: string;
+  changes: DocumentFieldChange[];
+}
+
 export interface SessionDocument {
   filename: string;
   storagePath: string;
   summary: string | null;
   generatedAt: string;
+  // Live edit stamps — set on a manual edit, cleared by regeneration.
+  editedAt?: string | null;
+  editedByUserId?: string | null;
+  // Append-only audit of manual edits; preserved across regeneration.
+  editHistory?: DocumentEdit[];
 }
 
 export interface DocumentGenerationConfidence {

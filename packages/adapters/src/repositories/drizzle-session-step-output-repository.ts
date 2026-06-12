@@ -70,4 +70,35 @@ export class DrizzleSessionStepOutputRepository implements ISessionStepOutputRep
       return err(domainError("INFRA_FAILURE", "Failed to list session step outputs.", cause));
     }
   }
+
+  async findByMessageId(messageId: string): Promise<Result<SessionStepOutput | null>> {
+    try {
+      const [row] = await this.db
+        .select()
+        .from(app_session_step_outputs)
+        .where(eq(app_session_step_outputs.message_id, messageId))
+        .orderBy(desc(app_session_step_outputs.created_at))
+        .limit(1);
+      return ok(row ? toEntity(row) : null);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to find step output by message.", cause));
+    }
+  }
+
+  async updateFields(
+    id: string,
+    fields: StepOutputField[],
+  ): Promise<Result<SessionStepOutput>> {
+    try {
+      const [row] = await this.db
+        .update(app_session_step_outputs)
+        .set({ fields, updated_at: new Date() })
+        .where(eq(app_session_step_outputs.id, id))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", `Step output ${id} not found.`));
+      return ok(toEntity(row));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to update session step output.", cause));
+    }
+  }
 }

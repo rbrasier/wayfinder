@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -108,6 +108,24 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list pending approvals.", cause));
+    }
+  }
+
+  async hasRecordedSnapshot(sessionId: string): Promise<Result<boolean>> {
+    try {
+      const [row] = await this.db
+        .select({ id: app_session_approvals.id })
+        .from(app_session_approvals)
+        .where(
+          and(
+            eq(app_session_approvals.session_id, sessionId),
+            isNotNull(app_session_approvals.record_snapshot),
+          ),
+        )
+        .limit(1);
+      return ok(Boolean(row));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to check approval snapshot.", cause));
     }
   }
 

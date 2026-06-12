@@ -1,5 +1,6 @@
 import { analyticsRouter } from "./routers/analytics";
 import { approvalRouter } from "./routers/approval";
+import { documentRouter } from "./routers/document";
 import { errorRouter } from "./routers/error";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
@@ -29,6 +30,7 @@ export const appRouter = router({
   n8n: n8nRouter,
   analytics: analyticsRouter,
   approval: approvalRouter,
+  document: documentRouter,
   people: peopleRouter,
   hr: hrRouter,
 });

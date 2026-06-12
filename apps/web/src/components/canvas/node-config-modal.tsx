@@ -82,6 +82,7 @@ export interface NodeConfigValues {
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
   documentTemplateContent?: string | null;
+  allowManualEdit: boolean;
   instruction: string;
   executor: "n8n" | "mock";
   workflowId: string | null;
@@ -127,6 +128,7 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplatePath: null,
   documentTemplateFilename: null,
   documentTemplateContent: null,
+  allowManualEdit: true,
   instruction: "",
   executor: "n8n",
   workflowId: null,
@@ -664,6 +666,33 @@ export function NodeConfigModal({
                   {uploadError && (
                     <p className="text-[12px] text-[#c2385a]">{uploadError}</p>
                   )}
+                </div>
+              )}
+
+              {values.outputType === "generate_document" && (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="allow-manual-edit">Allow manual field editing</Label>
+                    <p className="text-[12px] text-[#918d87]">
+                      Operators can correct the generated document&apos;s field values before approval.
+                    </p>
+                  </div>
+                  <button
+                    id="allow-manual-edit"
+                    type="button"
+                    role="switch"
+                    aria-checked={values.allowManualEdit}
+                    onClick={() => set("allowManualEdit", !values.allowManualEdit)}
+                    className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      values.allowManualEdit ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        values.allowManualEdit ? "translate-x-4" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
                 </div>
               )}
 

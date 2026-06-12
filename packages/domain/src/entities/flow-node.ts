@@ -27,6 +27,9 @@ export interface ConversationalNodeConfig {
   documentTemplateFilename?: string | null;
   documentTemplateFields?: TemplateField[] | null;
   advanceConfidenceThreshold?: number;
+  // Whether the operator may manually correct generated document field values.
+  // Absent means allowed — editing is on by default.
+  allowManualEdit?: boolean;
 }
 
 export type NodeExecutorKind = "n8n" | "mock";
