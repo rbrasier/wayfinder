@@ -37,6 +37,8 @@ values and downstream steps consume them.
 - The edited values are what approval snapshots capture and what downstream
   steps consume; no change to advancement logic is required.
 - Edited documents are visibly marked (who edited, when) in the session UI.
+- Every manual edit is appended to a metadata history on the document (who,
+  when, which fields, before/after values) that survives later regeneration.
 - Edits are blocked once an approval snapshot has been recorded for the
   session, and on non-active sessions.
 - Every edit writes an audit event.
@@ -46,9 +48,9 @@ values and downstream steps consume them.
 - **No free-form DOCX editing.** Upload-replace of an externally edited file
   and in-browser DOCX editing (OnlyOffice et al.) are explicitly deferred —
   see ADR-024.
-- **No version-history table.** v1 keeps minimal versioning (retained prior
-  files in object storage + edited-by metadata); a browsable revision history
-  is future work.
+- **No version-history table.** v1 keeps versioning in metadata (the
+  `editHistory` array on the document JSONB) plus retained prior files in
+  object storage; a dedicated table with diff UI is future work.
 - **No re-grading.** A manual edit does not re-run document-grading
   confidence; the human edit is authoritative. The AI summary is refreshed.
 - **No reopening completed sessions.** Session immutability after completion
@@ -58,7 +60,8 @@ values and downstream steps consume them.
 
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
-| `SessionDocument` | `packages/domain/src/entities/session-message.ts` | existing | Gains optional `editedAt: string \| null`, `editedByUserId: string \| null`. JSONB on `app_session_messages.document` — no migration. |
+| `SessionDocument` | `packages/domain/src/entities/session-message.ts` | existing | Gains optional `editedAt: string \| null`, `editedByUserId: string \| null`, and `editHistory: DocumentEdit[]`. JSONB on `app_session_messages.document` — no migration. |
+| `DocumentEdit` | `packages/domain/src/entities/session-message.ts` | new | One metadata-history entry per manual edit: `editedAt`, `editedByUserId`, `storagePath` (the render produced), `changes: [{ key, previousValue, newValue }]`. Survives regeneration. |
 | `SessionStepOutput` / `StepOutputField` | `packages/domain/src/entities/session-step-output.ts` | existing | Field values become updatable; they are what flows downstream. |
 | `TemplateField` | `packages/domain/src/entities/template-field.ts` | existing | Drives the edit form (type, options, maxLength, min/max, optional). Gains a pure value-validation helper. |
 | `ConversationalNodeConfig` | `packages/domain/src/entities/flow-node.ts` | existing | Gains optional `allowManualEdit?: boolean` (default `true`); flow designers can disable editing per step. |
@@ -92,10 +95,11 @@ values and downstream steps consume them.
     validation errors or the updated document metadata.
 - Flow designer step config (advanced mode): `allowManualEdit` toggle on
   conversational nodes with document output.
-- `apps/web/src/app/api/documents/[documentId]/route.ts` — unchanged
-  behaviour; GET serves whatever `storagePath` currently points at, POST
-  (regenerate) overwrites edits by design (it re-extracts from the
-  conversation) and clears the edited marker.
+- `apps/web/src/app/api/documents/[documentId]/route.ts` — GET unchanged
+  (serves whatever `storagePath` currently points at). POST (regenerate)
+  overrides manual edits by design — it is a rewrite from the conversation —
+  after a UI warning; it clears the *current* edited marker but **retains
+  `editHistory`**.
 
 ## 8. Database changes
 
@@ -131,6 +135,8 @@ No new tables, no migrations.
 - [ ] Saving updates `app_session_step_outputs.fields`, re-renders the DOCX
       from the node's template, and stores it at a **new** storage path; the
       previous object is retained in MinIO.
+- [ ] Saving appends a `DocumentEdit` entry to `editHistory` with editor,
+      timestamp, produced storage path, and per-field before/after values.
 - [ ] After saving, GET `/api/documents/{messageId}` downloads the edited
       DOCX, and the document card shows the edited marker and refreshed AI
       summary.
@@ -138,9 +144,11 @@ No new tables, no migrations.
 - [ ] Editing is blocked (server-side, not just UI) when: the session is not
       `active`, an approval snapshot has been recorded for the session, or the
       node config has `allowManualEdit: false`.
-- [ ] Regenerate (POST) still works and clears `editedAt` / `editedByUserId`.
+- [ ] Regenerate (POST) still works after a UI warning; it clears `editedAt` /
+      `editedByUserId` but leaves `editHistory` intact.
 - [ ] A `document.fields_edited` audit event is written with the message id,
-      editor user id, and changed field keys.
+      editor user id, and changed field keys (before/after values live in
+      `editHistory`).
 - [ ] Document-grading confidence is **not** re-run on edit.
 - [ ] `./validate.sh` passes; `VERSION` and root `package.json` read `1.39.0`.
 
@@ -150,12 +158,11 @@ No new tables, no migrations.
   values) — revisit if field-level editing proves insufficient for free-form
   changes.
 - In-browser DOCX editing (OnlyOffice / Collabora).
-- A browsable `app_session_document_versions` history with diff view; v1 only
-  retains prior objects in storage.
+- A browsable `app_session_document_versions` history table with diff view;
+  v1 keeps history as JSONB metadata (`editHistory`) plus retained storage
+  objects.
 - Approver-initiated edits during review (v1 is operator-only; approvers use
   "changes_requested").
-- Before/after field values in the audit payload (v1 records changed keys
-  only).
 
 ## 12. Risks / open questions
 

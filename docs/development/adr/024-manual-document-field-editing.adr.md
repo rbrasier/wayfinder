@@ -55,6 +55,9 @@ editor:
    - stores the render at a **new versioned storage key**,
    - stamps `SessionDocument` with `editedAt` / `editedByUserId` and the new
      `storagePath`,
+   - appends a `DocumentEdit` entry to `SessionDocument.editHistory` —
+     `{ editedAt, editedByUserId, storagePath, changes: [{ key, previousValue,
+     newValue }] }` — the durable record of the manual edit,
    - refreshes the two-sentence AI summary (best-effort),
    - writes a `document.fields_edited` event to `core_audit_log`.
 4. Document-grading confidence is **not** re-run — the human edit is
@@ -65,14 +68,16 @@ Field extraction at edit time reuses `GenerateDocument.resolveFields` semantics:
 config `documentTemplateFields` if present, else `IDocumentGenerator.extractFields`
 on the template.
 
-### Minimal versioning — retained objects, no version table
+### Versioning in metadata — `editHistory` + retained objects, no version table
 
 Storage keys gain a revision suffix:
 `generated/{sessionId}/{basename}-r{n}.docx`. The previous object is **not**
 deleted; `SessionDocument.storagePath` always points at the current revision.
-This gives a recoverable history in MinIO without a
-`app_session_document_versions` table, which is deferred until someone needs to
-*browse* history rather than merely retain it.
+Each manual edit appends a `DocumentEdit` entry to
+`SessionDocument.editHistory` (JSONB), capturing who edited, when, the render
+produced, and per-field before/after values. Together these give a complete,
+recoverable history without an `app_session_document_versions` table, which is
+deferred until someone needs to *browse* history rather than merely retain it.
 
 ### Governance gates
 
@@ -88,9 +93,11 @@ This gives a recoverable history in MinIO without a
 ### Interaction with Regenerate
 
 The existing regenerate path (POST `/api/documents/{messageId}`) re-extracts
-values from the conversation and therefore **overwrites manual edits by
-design**; it clears `editedAt` / `editedByUserId`. The UI warns before
-regenerating an edited document.
+values from the conversation and **overrides manual edits by design** — it is
+a rewrite. The UI warns before regenerating an edited document. Regenerate
+clears the *current* `editedAt` / `editedByUserId` stamps but **never touches
+`editHistory`**: the record of what was manually changed, by whom, survives
+the override and remains auditable.
 
 ## Alternatives considered
 

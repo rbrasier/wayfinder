@@ -31,14 +31,14 @@ Tests are written before each implementation file (tests are the spec).
 
 | Layer | File | Change |
 |-------|------|--------|
-| domain | `packages/domain/src/entities/session-message.ts` | `SessionDocument` gains optional `editedAt: string \| null`, `editedByUserId: string \| null`. |
+| domain | `packages/domain/src/entities/session-message.ts` | `SessionDocument` gains optional `editedAt: string \| null`, `editedByUserId: string \| null`, and `editHistory: DocumentEdit[]`. New `DocumentEdit` interface: `{ editedAt, editedByUserId, storagePath, changes: { key, previousValue, newValue }[] }`. |
 | domain | `packages/domain/src/entities/flow-node.ts` | `ConversationalNodeConfig` gains `allowManualEdit?: boolean` (default `true`). |
 | domain | `packages/domain/src/entities/template-field.ts` (+ test) | New pure `validateTemplateFieldValue(field, value): Result<string>` — options membership, `maxLength`, `min`/`max`, `yesno`/section values, required-ness. Reuses existing type vocabulary; never throws. |
 | domain | `packages/domain/src/ports/session-step-output-repository.ts` | Add `findByMessageId(messageId): Promise<Result<SessionStepOutput \| null>>` and `updateFields(id, fields): Promise<Result<SessionStepOutput>>`. |
 | domain | `packages/domain/src/ports/approval-repository.ts` | Add (or reuse if present) a query to detect a recorded snapshot for a session, e.g. `hasRecordedSnapshot(sessionId): Promise<Result<boolean>>`. |
 | adapters | `packages/adapters/src/db/repositories/...` (+ tests) | Implement the two new step-output methods and the snapshot query. `updateFields` also bumps `updated_at`. No schema change. |
-| application | `packages/application/src/use-cases/document/update-document-fields.ts` (+ test **first**) | Orchestration: load message/session/node → guard (active, no snapshot, `allowManualEdit`) → resolve `TemplateField`s (config else `extractFields`, mirroring `GenerateDocument.resolveFields`) → validate all values (collect per-field errors) → render via `IDocumentGenerator.generate` with section→boolean mapping → `objectStorage.put` at `generated/{sessionId}/{basename}-r{n}.docx` (previous object retained) → `sessionStepOutputs.updateFields` → `sessionMessages.updateDocument` with new path + edited stamps → best-effort summary refresh → audit `document.fields_edited`. Result pattern throughout. |
-| application | `packages/application/src/use-cases/document/generate-document.ts` | Extract the shared render-data mapping (section → boolean) to a small exported helper so generate and edit cannot drift; regenerate clears `editedAt`/`editedByUserId`. |
+| application | `packages/application/src/use-cases/document/update-document-fields.ts` (+ test **first**) | Orchestration: load message/session/node → guard (active, no snapshot, `allowManualEdit`) → resolve `TemplateField`s (config else `extractFields`, mirroring `GenerateDocument.resolveFields`) → validate all values (collect per-field errors) → render via `IDocumentGenerator.generate` with section→boolean mapping → `objectStorage.put` at `generated/{sessionId}/{basename}-r{n}.docx` (previous object retained) → `sessionStepOutputs.updateFields` → `sessionMessages.updateDocument` with new path, edited stamps, and a `DocumentEdit` appended to `editHistory` (per-field before/after values) → best-effort summary refresh → audit `document.fields_edited`. Result pattern throughout. |
+| application | `packages/application/src/use-cases/document/generate-document.ts` | Extract the shared render-data mapping (section → boolean) to a small exported helper so generate and edit cannot drift; regenerate clears `editedAt`/`editedByUserId` but **preserves `editHistory`** (regenerate is a rewrite that overrides edits, after a UI warning). |
 | apps/web | `apps/web/src/server/routers/document.ts` (+ test **first**) | New router: `getFields` (fields + current values + `editable` flag + reason when not editable) and `updateFields` (zod input; returns per-field validation errors or updated `SessionDocument`). Same relaxed participant-access model as the documents API route. Register in the root router. |
 | apps/web | `apps/web/src/components/chat/document-edit-dialog.tsx` | Field-edit form: input per `TemplateFieldType` (text, date, currency, number, email, yesno select, options select / multi-options checkboxes, narrative textarea, section include/omit switch). Per-field error display; save / cancel. |
 | apps/web | `apps/web/src/components/chat/document-card.tsx` | **Edit** action beside Download/Regenerate (hidden when not editable); "Edited by … on …" marker; warn before Regenerate on an edited document. |
@@ -73,12 +73,14 @@ Mirror PRD §10:
 - [ ] Form is pre-filled from the step output; inputs are typed per field.
 - [ ] Invalid values return per-field errors; nothing persists on failure.
 - [ ] Save updates step-output fields, re-renders the DOCX to a new `-r{n}`
-      storage path, retains the prior object, and stamps
-      `editedAt`/`editedByUserId`.
+      storage path, retains the prior object, stamps
+      `editedAt`/`editedByUserId`, and appends a `DocumentEdit` (with
+      before/after values) to `editHistory`.
 - [ ] Download serves the edited DOCX; card shows edited marker + refreshed
       summary.
 - [ ] A subsequent approval snapshots the edited values.
-- [ ] Regenerate still works and clears the edited stamps (after a UI warning).
+- [ ] Regenerate still works (after a UI warning), clears the edited stamps,
+      and leaves `editHistory` intact.
 - [ ] `document.fields_edited` audit event written (message id, editor,
       changed keys).
 - [ ] Grading confidence not re-run on edit.
