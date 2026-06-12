@@ -23,6 +23,7 @@ import {
   documentGenerationConfidenceSchema,
   documentSummarySchema,
 } from "@rbrasier/shared";
+import { buildRenderData } from "./render-data";
 import { buildContextDocsSection, extractStructuredFields } from "./structured-fields";
 
 export interface GenerateDocumentInput {
@@ -75,7 +76,7 @@ export class GenerateDocument {
 
     const generateResult = this.documentGenerator.generate({
       templateBytes: templateResult.data,
-      data: this.buildRenderData(fields, fieldValues),
+      data: buildRenderData(fields, fieldValues),
     });
     if (generateResult.error) return generateResult;
 
@@ -98,11 +99,20 @@ export class GenerateDocument {
 
     const summary = summaryResult.error ? null : summaryResult.data.object.summary;
 
+    // Regeneration is a rewrite from the conversation: it overrides any manual
+    // edit, clearing the live stamps, but the edit history is an audit record
+    // that must survive the override.
+    const existing = await this.sessionMessages.findById(input.messageId);
+    const editHistory = existing.data?.document?.editHistory ?? [];
+
     const document: SessionDocument = {
       filename,
       storagePath: storageKey,
       summary,
       generatedAt: new Date().toISOString(),
+      editedAt: null,
+      editedByUserId: null,
+      editHistory,
     };
 
     const updateResult = await this.sessionMessages.updateDocument(input.messageId, document);
@@ -125,21 +135,6 @@ export class GenerateDocument {
     });
 
     return ok({ document });
-  }
-
-  // docxtemplater gates {{#section}} blocks on truthiness, and every non-empty
-  // string is truthy — so a section's "Yes"/"No" must become a real boolean,
-  // while ordinary placeholders stay strings.
-  private buildRenderData(
-    fields: TemplateField[],
-    values: Record<string, string>,
-  ): Record<string, string | boolean> {
-    const renderData: Record<string, string | boolean> = {};
-    for (const field of fields) {
-      const value = values[field.key] ?? "";
-      renderData[field.key] = field.type === "section" ? value === "Yes" : value;
-    }
-    return renderData;
   }
 
   private resolveFields(

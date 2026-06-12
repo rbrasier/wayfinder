@@ -30,6 +30,10 @@ interface MessageFeedProps {
   error?: Error | null;
   onRetry?: () => void;
   onRegenerateDocument?: (messageId: string) => void;
+  // Coarse gate: documents are only manually editable on an active session. The
+  // node's allowManualEdit flag refines this per step, and the server enforces both.
+  canEditDocuments?: boolean;
+  onDocumentEdited?: () => void;
   expertRole?: string | null;
   userFirstInitial?: string;
   senderNamesById?: Record<string, string>;
@@ -64,6 +68,8 @@ export function MessageFeed({
   error,
   onRetry,
   onRegenerateDocument,
+  canEditDocuments,
+  onDocumentEdited,
   expertRole,
   userFirstInitial,
   senderNamesById,
@@ -184,6 +190,8 @@ export function MessageFeed({
                       messageId={msg.id}
                       document={msg.document}
                       documentGenerationConfidence={msg.aiPayload?.documentGenerationConfidence ?? null}
+                      canEdit={Boolean(canEditDocuments) && config?.["allowManualEdit"] !== false}
+                      onEdited={onDocumentEdited}
                       onRegenerate={
                         onRegenerateDocument ? () => onRegenerateDocument(msg.id) : undefined
                       }

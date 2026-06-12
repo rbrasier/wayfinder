@@ -9,4 +9,7 @@ export interface IApprovalRepository {
   findPendingByNode(sessionId: string, nodeId: string): Promise<Result<Approval | null>>;
   listPendingForApprover(approverUserId: string): Promise<Result<Approval[]>>;
   update(id: string, patch: ApprovalUpdate): Promise<Result<Approval>>;
+  // True once any approval in the session has recorded a snapshot — the point
+  // after which the snapshot, not the live document, is the governed record.
+  hasRecordedSnapshot(sessionId: string): Promise<Result<boolean>>;
 }

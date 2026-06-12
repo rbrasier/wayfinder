@@ -46,6 +46,7 @@ export const defaultConfigForType = (type: NodeConfigType): Record<string, unkno
     documentTemplateContent: null,
     documentTemplateFields: null,
     documentTemplateStructuredContent: null,
+    allowManualEdit: true,
     notifyOnComplete: false,
   };
 };

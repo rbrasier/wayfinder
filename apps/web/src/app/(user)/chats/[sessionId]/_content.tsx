@@ -332,6 +332,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         error={error ?? null}
         onRetry={() => void reload()}
         onRegenerateDocument={handleRegenerateDocument}
+        canEditDocuments={session.status === "active" && !isShared && !isFlowDeleted}
+        onDocumentEdited={() => void utils.session.get.invalidate({ sessionId })}
         expertRole={flow.expertRole ?? null}
         userFirstInitial={userFirstInitial}
         senderNamesById={senderNamesById}
