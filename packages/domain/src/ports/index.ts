@@ -43,3 +43,4 @@ export * from "./people-directory";
 export * from "./reporting-line-resolver";
 export * from "./hr-dataset-repository";
 export * from "./spreadsheet-parser";
+export * from "./column-mapping-detector";

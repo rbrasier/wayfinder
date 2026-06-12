@@ -112,6 +112,7 @@ import {
   DrizzleUsageRepository,
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
+  AiColumnMappingDetector,
   FlowSessionGraph,
   GraphClient,
   GraphPeopleDirectory,
@@ -450,7 +451,15 @@ const build = () => {
       listTypingUsers: new ListTypingUsers(sessionTyping, users),
       getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs),
-      suggestApprover: new SuggestApprover(approvals, flowNodes, reportingLineResolver, users),
+      suggestApprover: new SuggestApprover(
+        approvals,
+        flowNodes,
+        reportingLineResolver,
+        users,
+        embeddings,
+        documentChunks,
+        llm,
+      ),
       confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
       decideApproval: new DecideApproval(
         approvals,
@@ -462,7 +471,11 @@ const build = () => {
       ),
       listPendingApprovals: new ListPendingApprovals(approvals),
       searchPeople: new SearchPeople([graphPeopleDirectory, hrPeopleDirectory]),
-      importHrDataset: new ImportHrDataset(spreadsheetParser, hrDatasets),
+      importHrDataset: new ImportHrDataset(
+        spreadsheetParser,
+        hrDatasets,
+        new AiColumnMappingDetector(llm),
+      ),
       setColumnMapping: new SetColumnMapping(hrDatasets),
     },
   };

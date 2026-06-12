@@ -8,9 +8,14 @@ import {
   type FlowEdge,
   type FlowNode,
   type IApprovalRepository,
+  type DocumentChunkSearch,
+  type GenerateObjectInput,
   type IAuditLogger,
+  type IDocumentChunkRepository,
+  type IEmbeddingsProvider,
   type IFlowEdgeRepository,
   type IFlowNodeRepository,
+  type ILanguageModel,
   type IReportingLineResolver,
   type ISessionRepository,
   type ISessionStepOutputRepository,
@@ -19,13 +24,16 @@ import {
   type NewAuditLog,
   type NewSessionStepOutput,
   type NewUser,
+  type NotificationLog,
   type Person,
   type PositionLookupInput,
   type ReportingLineSuggestion,
   type Result,
+  type RetrievedChunk,
   type Session,
   type SessionStepOutput,
   type SessionUpdate,
+  type TokenUsage,
   type UnresolvedSuggestion,
   type User,
 } from "@rbrasier/domain";
@@ -33,6 +41,10 @@ import { SuggestApprover } from "./suggest-approver";
 import { ConfirmAndSend } from "./confirm-and-send";
 import { DecideApproval } from "./decide-approval";
 import { ListPendingApprovals } from "./list-pending-approvals";
+import type {
+  IApprovalDecidedNotifier,
+  NotifyOnApprovalDecidedInput,
+} from "../notifications/notify-on-approval-decided";
 
 class InMemoryApprovals implements IApprovalRepository {
   rows = new Map<string, Approval>();
@@ -120,6 +132,7 @@ class InMemoryFlowNodes implements IFlowNodeRepository {
 }
 
 class StubResolver implements IReportingLineResolver {
+  lastLookup: PositionLookupInput | null = null;
   constructor(
     private readonly suggestion: ReportingLineSuggestion | UnresolvedSuggestion,
     private readonly holders: Person[] = [],
@@ -127,10 +140,60 @@ class StubResolver implements IReportingLineResolver {
   async suggest(): Promise<Result<ReportingLineSuggestion | UnresolvedSuggestion>> {
     return ok(this.suggestion);
   }
-  async findPositionHolder(_input: PositionLookupInput): Promise<Result<Person[]>> {
+  async findPositionHolder(input: PositionLookupInput): Promise<Result<Person[]>> {
+    this.lastLookup = input;
     return ok(this.holders);
   }
 }
+
+class StubEmbeddings implements IEmbeddingsProvider {
+  async embed(_text: string): Promise<Result<number[]>> {
+    return ok([0.1, 0.2, 0.3]);
+  }
+}
+
+class StubDocumentChunks implements IDocumentChunkRepository {
+  constructor(private readonly chunks: RetrievedChunk[]) {}
+  async insertMany(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+  async deleteByStoragePath(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+  async search(_input: DocumentChunkSearch): Promise<Result<RetrievedChunk[]>> {
+    return ok(this.chunks);
+  }
+}
+
+const usage: TokenUsage = {
+  promptTokens: 0,
+  completionTokens: 0,
+  systemTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+};
+
+class StubLanguageModel implements ILanguageModel {
+  readonly provider = "openai" as const;
+  constructor(private readonly object: Record<string, string>) {}
+  async generateObject<T>(_input: GenerateObjectInput): Promise<Result<{ object: T; usage: TokenUsage }>> {
+    return ok({ object: this.object as T, usage });
+  }
+  async streamText(): Promise<never> {
+    throw new Error("unused");
+  }
+  async streamObject(): Promise<never> {
+    throw new Error("unused");
+  }
+}
+
+const policyChunk = (chunkText: string): RetrievedChunk => ({
+  filename: "delegation-policy.pdf",
+  chunkIndex: 0,
+  chunkText,
+  sourceType: "flow_context_doc",
+  similarity: 0.82,
+});
 
 class InMemoryUsers implements IUserRepository {
   rows = new Map<string, User>();
@@ -238,6 +301,14 @@ class RecordingAuditLogger implements IAuditLogger {
   async log(payload: NewAuditLog): Promise<Result<true>> {
     this.entries.push(payload);
     return ok(true as const);
+  }
+}
+
+class RecordingNotifier implements IApprovalDecidedNotifier {
+  calls: NotifyOnApprovalDecidedInput[] = [];
+  async execute(input: NotifyOnApprovalDecidedInput): Promise<Result<NotificationLog | null>> {
+    this.calls.push(input);
+    return ok(null);
   }
 }
 
@@ -377,6 +448,90 @@ describe("SuggestApprover", () => {
     });
 
     expect(result.data?.approval.suggestedApproverUserId).toBe("delegate-1");
+  });
+
+  it("dynamic: uses the RAG-extracted role to call findPositionHolder when chunks are found", async () => {
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode({ config: { approverSource: "dynamic", roleHint: "the delegate" } }));
+    const users = new InMemoryUsers();
+    users.add(user("cfo-1", "cfo@corp.test"));
+    const holder: Person = {
+      source: "hr",
+      directoryId: "h1",
+      userId: "cfo-1",
+      displayName: "Casey FO",
+      email: "cfo@corp.test",
+      jobTitle: "Chief Financial Officer",
+      department: "Finance",
+    };
+    const resolver = new StubResolver({ unresolved: true }, [holder]);
+    const sut = new SuggestApprover(
+      new InMemoryApprovals(),
+      nodes,
+      resolver,
+      users,
+      new StubEmbeddings(),
+      new StubDocumentChunks([policyChunk("Spend above $1m is approved by the Chief Financial Officer.")]),
+      new StubLanguageModel({ role: "Chief Financial Officer" }),
+    );
+
+    const result = await sut.execute({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+    });
+
+    expect(resolver.lastLookup?.role).toBe("Chief Financial Officer");
+    expect(result.data?.approval.suggestedApproverUserId).toBe("cfo-1");
+  });
+
+  it("dynamic: falls back to roleHint when no chunks are retrieved", async () => {
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode({ config: { approverSource: "dynamic", roleHint: "SES Band 2" } }));
+    const resolver = new StubResolver({ unresolved: true }, []);
+    const sut = new SuggestApprover(
+      new InMemoryApprovals(),
+      nodes,
+      resolver,
+      new InMemoryUsers(),
+      new StubEmbeddings(),
+      new StubDocumentChunks([]),
+      new StubLanguageModel({ role: "should not be used" }),
+    );
+
+    await sut.execute({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+    });
+
+    expect(resolver.lastLookup?.role).toBe("SES Band 2");
+  });
+
+  it("dynamic: falls back to roleHint when LLM extraction returns an empty object", async () => {
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode({ config: { approverSource: "dynamic", roleHint: "SES Band 2" } }));
+    const resolver = new StubResolver({ unresolved: true }, []);
+    const sut = new SuggestApprover(
+      new InMemoryApprovals(),
+      nodes,
+      resolver,
+      new InMemoryUsers(),
+      new StubEmbeddings(),
+      new StubDocumentChunks([policyChunk("Delegations are listed in the schedule.")]),
+      new StubLanguageModel({}),
+    );
+
+    await sut.execute({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+    });
+
+    expect(resolver.lastLookup?.role).toBe("SES Band 2");
   });
 
   it("rejects a node that is not an approval node", async () => {
@@ -530,11 +685,44 @@ describe("DecideApproval", () => {
     expect(sessions.rows.get("session-1")?.status).toBe("complete");
   });
 
-  it("holds the session on changes_requested and surfaces the comment", async () => {
+  const checkpointedSession = () =>
+    session({ graphCheckpoint: { currentNodeId: "node-appr", advancedFrom: "node-prev" } });
+
+  it("changes_requested: routes the session back to the previous node and notifies the originator", async () => {
     const approvals = new InMemoryApprovals();
     const approval = await seedConfirmed(approvals);
     const sessions = new InMemorySessions();
-    sessions.add(session());
+    sessions.add(checkpointedSession());
+    const notifier = new RecordingNotifier();
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      notifier,
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "changes_requested",
+      comment: "Please revise section 2",
+    });
+
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-prev");
+    expect(sessions.rows.get("session-1")?.status).toBe("active");
+    expect(approvals.rows.get(approval.id)?.comment).toBe("Please revise section 2");
+    expect(notifier.calls).toHaveLength(1);
+    expect(notifier.calls[0]?.routedBack).toBe(true);
+    expect(result.data?.advanced).toBe(true);
+  });
+
+  it("changes_requested: returns advanced=true and newNodeId=previousNodeId", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointedSession());
     const sut = new DecideApproval(
       approvals,
       sessions,
@@ -547,13 +735,90 @@ describe("DecideApproval", () => {
       approvalId: approval.id,
       decidedByUserId: "manager-1",
       decision: "changes_requested",
-      comment: "Please revise section 2",
+      comment: "Revise",
+    });
+
+    expect(result.data?.advanced).toBe(true);
+    expect(result.data?.newNodeId).toBe("node-prev");
+    expect(result.data?.sessionCompleted).toBe(false);
+  });
+
+  it("rejected + routeBack: routes the session back to the previous node", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointedSession());
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "rejected",
+      routeBack: true,
+    });
+
+    expect(result.data?.advanced).toBe(true);
+    expect(result.data?.newNodeId).toBe("node-prev");
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-prev");
+    expect(sessions.rows.get("session-1")?.status).toBe("active");
+  });
+
+  it("rejected + routeBack:false: cancels the session and notifies the originator", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointedSession());
+    const notifier = new RecordingNotifier();
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      notifier,
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "rejected",
+      routeBack: false,
     });
 
     expect(result.data?.advanced).toBe(false);
-    expect(approvals.rows.get(approval.id)?.status).toBe("changes_requested");
-    expect(approvals.rows.get(approval.id)?.comment).toBe("Please revise section 2");
-    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
+    expect(result.data?.sessionCompleted).toBe(true);
+    expect(sessions.rows.get("session-1")?.status).toBe("cancelled");
+    expect(notifier.calls[0]?.routedBack).toBe(false);
+  });
+
+  it("rejected + no previous node in checkpoint: cancels the session", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session({ graphCheckpoint: null }));
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "rejected",
+      routeBack: true,
+    });
+
+    expect(result.data?.sessionCompleted).toBe(true);
+    expect(sessions.rows.get("session-1")?.status).toBe("cancelled");
   });
 
   it("rejects a second decision on an already-decided approval", async () => {

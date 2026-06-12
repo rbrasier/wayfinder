@@ -19,6 +19,10 @@ export interface DecideApprovalInput {
   decidedByUserId: string;
   decision: ApprovalDecision;
   comment?: string | null;
+  // Only meaningful for `rejected`: true routes the session back to the
+  // originator, false (or missing) cancels it. `changes_requested` always routes
+  // back; `approved` ignores it.
+  routeBack?: boolean;
   // The tRPC layer sets this for admins so they can act on behalf of an approver.
   isAdmin?: boolean;
 }
@@ -93,15 +97,55 @@ export class DecideApproval {
       metadata: { decision: input.decision, comment: input.comment ?? null },
     });
 
-    void this.notifier
-      ?.execute({ approval: updated.data, decision: input.decision })
-      .catch(() => undefined);
-
-    if (input.decision !== "approved") {
-      return ok({ approval: updated.data, advanced: false, newNodeId: null, sessionCompleted: false });
+    if (input.decision === "approved") {
+      this.notify(updated.data, input.decision, false);
+      return this.advance(updated.data);
     }
 
-    return this.advance(updated.data);
+    return this.routeBackOrCancel(updated.data, input);
+  }
+
+  private notify(approval: Approval, decision: ApprovalDecision, routedBack: boolean): void {
+    void this.notifier?.execute({ approval, decision, routedBack }).catch(() => undefined);
+  }
+
+  // Non-approve decisions either return the session to the originator (route-back)
+  // or close it. `changes_requested` always routes back; `rejected` routes back
+  // only when the approver chose to, and a missing previous node forces a cancel
+  // since there is nowhere to return to.
+  private async routeBackOrCancel(
+    approval: Approval,
+    input: DecideApprovalInput,
+  ): Promise<Result<DecideApprovalOutput>> {
+    const sessionResult = await this.sessions.findById(approval.sessionId);
+    if (sessionResult.error) return sessionResult;
+    const session = sessionResult.data;
+    if (!session) {
+      return err(domainError("NOT_FOUND", `Session ${approval.sessionId} not found.`));
+    }
+
+    const previousNodeId = this.previousNodeId(session);
+    const shouldRouteBack = input.decision === "changes_requested" || input.routeBack === true;
+
+    if (shouldRouteBack && previousNodeId) {
+      const moved = await this.sessions.update(session.id, {
+        currentNodeId: previousNodeId,
+        graphCheckpoint: { currentNodeId: previousNodeId, advancedFrom: null },
+      });
+      if (moved.error) return moved;
+      this.notify(approval, input.decision, true);
+      return ok({ approval, advanced: true, newNodeId: previousNodeId, sessionCompleted: false });
+    }
+
+    const cancelled = await this.sessions.update(session.id, { status: "cancelled" });
+    if (cancelled.error) return cancelled;
+    this.notify(approval, input.decision, false);
+    return ok({ approval, advanced: false, newNodeId: null, sessionCompleted: true });
+  }
+
+  private previousNodeId(session: { graphCheckpoint: Record<string, unknown> | null }): string | null {
+    const value = session.graphCheckpoint?.["advancedFrom"];
+    return typeof value === "string" ? value : null;
   }
 
   private async snapshot(sessionId: string): Promise<Record<string, unknown> | null> {

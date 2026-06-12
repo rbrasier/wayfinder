@@ -2,8 +2,10 @@ import {
   domainError,
   err,
   ok,
+  type HrColumnMapping,
   type HrDataset,
   type HrSourceFormat,
+  type IColumnMappingDetector,
   type IHrDatasetRepository,
   type ISpreadsheetParser,
   type Result,
@@ -14,15 +16,20 @@ export interface ImportHrDatasetInput {
   format: HrSourceFormat;
   content: Uint8Array;
   uploadedByUserId: string;
+  // When supplied the mapping is stored as-is; otherwise the optional detector
+  // pre-fills it from the headers.
+  columnMapping?: HrColumnMapping;
 }
 
 // Parses an uploaded CSV/XLSX and stores it in the structure it arrived in —
-// headers preserved, each row as-is. No mapping is required to import; mapping is
-// layered on later for resolution.
+// headers preserved, each row as-is. No mapping is required to import; when none
+// is supplied an optional detector pre-fills one for the operator to confirm, and
+// a detection failure never fails the import.
 export class ImportHrDataset {
   constructor(
     private readonly parser: ISpreadsheetParser,
     private readonly datasets: IHrDatasetRepository,
+    private readonly detector?: IColumnMappingDetector,
   ) {}
 
   async execute(input: ImportHrDatasetInput): Promise<Result<HrDataset>> {
@@ -32,11 +39,14 @@ export class ImportHrDataset {
       return err(domainError("VALIDATION_FAILED", "The uploaded file has no columns."));
     }
 
+    const columnMapping = await this.resolveMapping(input, parsed.data.columns, parsed.data.rows);
+
     const created = await this.datasets.createDataset({
       filename: input.filename,
       sourceFormat: input.format,
       uploadedByUserId: input.uploadedByUserId,
       columns: parsed.data.columns,
+      columnMapping,
       rowCount: parsed.data.rows.length,
     });
     if (created.error) return created;
@@ -53,5 +63,18 @@ export class ImportHrDataset {
     }
 
     return ok(created.data);
+  }
+
+  private async resolveMapping(
+    input: ImportHrDatasetInput,
+    headers: string[],
+    rows: Record<string, string>[],
+  ): Promise<HrColumnMapping> {
+    if (input.columnMapping) return input.columnMapping;
+    if (!this.detector) return {};
+
+    const detected = await this.detector.detect({ headers, sampleRows: rows.slice(0, 3) });
+    if (detected.error) return {};
+    return detected.data;
   }
 }

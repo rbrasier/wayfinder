@@ -39,21 +39,26 @@ export const buildApprovalRequestedEmail = (input: ApprovalRequestedEmailInput):
   };
 };
 
-const DECISION_LABEL: Record<ApprovalDecision, string> = {
-  approved: "approved",
-  rejected: "rejected",
-  changes_requested: "sent back for changes",
+// The originator-facing label depends on the routing outcome, not just the raw
+// decision: a routed-back decision (changes requested, or rejected with
+// route-back) reads as "returned for revision"; a rejection that closed the
+// request reads as "declined".
+const decisionLabel = (decision: ApprovalDecision, routedBack: boolean | undefined): string => {
+  if (decision === "approved") return "approved";
+  if (decision === "changes_requested") return "returned for revision";
+  return routedBack ? "returned for revision" : "declined";
 };
 
 export interface ApprovalDecidedEmailInput {
   flowName: string;
   decision: ApprovalDecision;
+  routedBack?: boolean;
   comment: string | null;
   sessionUrl: string;
 }
 
 export const buildApprovalDecidedEmail = (input: ApprovalDecidedEmailInput): EmailContent => {
-  const label = DECISION_LABEL[input.decision];
+  const label = decisionLabel(input.decision, input.routedBack);
   const commentLine = input.comment ? [`Comment: ${input.comment}`, ""] : [];
   return {
     subject: `Your '${input.flowName}' approval was ${label}`,

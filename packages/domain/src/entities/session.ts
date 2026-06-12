@@ -1,4 +1,6 @@
-export type SessionStatus = "active" | "complete" | "abandoned";
+// `cancelled` is the terminal state a rejected approval drives the session to
+// when the originator chooses "Close request" (no route-back).
+export type SessionStatus = "active" | "complete" | "abandoned" | "cancelled";
 
 // In-flight auto-node execution awaiting an n8n callback, keyed by correlationId
 // on Session.pendingExecutions. sentAt makes a stuck execution observable.

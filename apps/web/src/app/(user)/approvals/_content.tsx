@@ -17,6 +17,9 @@ function ApprovalRow({ approvalId, sessionId, createdAt }: {
 }) {
   const utils = trpc.useUtils();
   const [comment, setComment] = useState("");
+  // Only consulted when rejecting: route the session back to the originator for
+  // revision, or close the request outright.
+  const [rejectRouteBack, setRejectRouteBack] = useState(true);
   const decide = trpc.approval.decide.useMutation({
     onSuccess: async () => {
       await utils.approval.listPending.invalidate();
@@ -26,7 +29,12 @@ function ApprovalRow({ approvalId, sessionId, createdAt }: {
   });
 
   const submit = (decision: Decision) =>
-    decide.mutate({ approvalId, decision, comment: comment.trim() || null });
+    decide.mutate({
+      approvalId,
+      decision,
+      comment: comment.trim() || null,
+      routeBack: decision === "rejected" ? rejectRouteBack : undefined,
+    });
 
   return (
     <div
@@ -56,6 +64,29 @@ function ApprovalRow({ approvalId, sessionId, createdAt }: {
         onChange={(event) => setComment(event.target.value)}
         placeholder="Add a comment (required to request changes)…"
       />
+
+      <fieldset className="flex flex-wrap items-center gap-4" aria-label="On reject">
+        <legend className="sr-only">On reject</legend>
+        <span className="text-[12.5px] font-medium text-[#918d87]">On reject:</span>
+        <label className="flex items-center gap-1.5 text-[12.5px] text-[#1a1814]">
+          <input
+            type="radio"
+            name={`reject-route-${approvalId}`}
+            checked={rejectRouteBack}
+            onChange={() => setRejectRouteBack(true)}
+          />
+          Route back to originator
+        </label>
+        <label className="flex items-center gap-1.5 text-[12.5px] text-[#1a1814]">
+          <input
+            type="radio"
+            name={`reject-route-${approvalId}`}
+            checked={!rejectRouteBack}
+            onChange={() => setRejectRouteBack(false)}
+          />
+          Close request
+        </label>
+      </fieldset>
 
       <div className="flex flex-wrap gap-2">
         <Button size="sm" onClick={() => submit("approved")} disabled={decide.isPending}>

@@ -89,4 +89,60 @@ test.describe('Step approvals: API', () => {
     });
     expect(result.status, 'deciding a missing approval should not succeed').not.toBe(200);
   });
+
+  test('a dynamic approval node persists its roleHint (v1.39 RAG suggestion source)', async ({
+    page,
+  }) => {
+    const flowId = loadSeedFixtures()?.flowId;
+    if (!flowId) {
+      test.skip(true, 'No seeded flow available — run the seed setup project first');
+      return;
+    }
+    const probe = await page.request.get('/api/test/notifications');
+    if (probe.status() === 404) {
+      test.skip(true, 'TEST_AUTH_BYPASS not set');
+      return;
+    }
+
+    const created = await trpcMutate(page, 'flow.node.create', {
+      flowId,
+      name: 'Delegated sign-off',
+      type: 'approval',
+      positionX: 720,
+      positionY: 320,
+      config: { approverSource: 'dynamic', roleHint: 'Chief Financial Officer' },
+    });
+    expect(created.status).toBe(200);
+
+    const body = created.body as Array<{
+      result?: { data?: { json?: { config?: Record<string, unknown> } } };
+    }>;
+    const config = body?.[0]?.result?.data?.json?.config;
+    expect(config?.approverSource).toBe('dynamic');
+    expect(config?.roleHint).toBe('Chief Financial Officer');
+  });
+
+  test('the decide mutation accepts the v1.39 routeBack field for rejections', async ({ page }) => {
+    const probe = await page.request.get('/api/test/notifications');
+    if (probe.status() === 404) {
+      test.skip(true, 'TEST_AUTH_BYPASS not set');
+      return;
+    }
+
+    // A missing approval should fail as NOT_FOUND, not as a bad-input parse error
+    // — proving routeBack is a recognised part of the decide input shape.
+    const result = await trpcMutate(page, 'approval.decide', {
+      approvalId: '00000000-0000-4000-8000-000000000000',
+      decision: 'rejected',
+      routeBack: false,
+    });
+    expect(result.status).not.toBe(200);
+
+    const body = result.body as Array<{ error?: { json?: { data?: { code?: string } } } }>;
+    const code = body?.[0]?.error?.json?.data?.code;
+    if (code) {
+      expect(code).not.toBe('BAD_REQUEST');
+      expect(code).not.toBe('PARSE_ERROR');
+    }
+  });
 });

@@ -104,7 +104,7 @@ export const app_sessions = pgTable(
     user_id: uuid("user_id")
       .notNull()
       .references(() => core_users.id, { onDelete: "restrict" }),
-    status: text("status", { enum: ["active", "complete", "abandoned"] })
+    status: text("status", { enum: ["active", "complete", "abandoned", "cancelled"] })
       .notNull()
       .default("active"),
     title: text("title"),

@@ -16,6 +16,9 @@ import { buildApprovalDecidedEmail } from "./approval-templates";
 export interface NotifyOnApprovalDecidedInput {
   approval: Approval;
   decision: ApprovalDecision;
+  // Whether the decision routed the session back to the originator (vs cancelled
+  // it). Drives the "returned for revision" / "declined" wording in the email.
+  routedBack?: boolean;
 }
 
 // Narrow view injected into DecideApproval, so it depends on "an approval-decided
@@ -35,7 +38,7 @@ export class NotifyOnApprovalDecided implements IApprovalDecidedNotifier {
   ) {}
 
   async execute(input: NotifyOnApprovalDecidedInput): Promise<Result<NotificationLog | null>> {
-    const { approval, decision } = input;
+    const { approval, decision, routedBack } = input;
 
     const requesterResult = await this.users.findById(approval.requestedByUserId);
     if (requesterResult.error) return requesterResult;
@@ -56,6 +59,7 @@ export class NotifyOnApprovalDecided implements IApprovalDecidedNotifier {
     const email = buildApprovalDecidedEmail({
       flowName,
       decision,
+      routedBack,
       comment: approval.comment,
       sessionUrl: `${this.config.baseUrl}/chats/${approval.sessionId}`,
     });

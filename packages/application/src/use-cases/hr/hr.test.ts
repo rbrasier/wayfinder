@@ -7,6 +7,7 @@ import {
   type HrDataset,
   type HrRow,
   type HrRowSearchInput,
+  type IColumnMappingDetector,
   type IHrDatasetRepository,
   type ISpreadsheetParser,
   type NewHrDataset,
@@ -97,6 +98,24 @@ class FailingParser implements ISpreadsheetParser {
   }
 }
 
+class StubDetector implements IColumnMappingDetector {
+  calls: { headers: string[]; sampleRows: Record<string, string>[] }[] = [];
+  constructor(private readonly mapping: HrColumnMapping) {}
+  async detect(input: {
+    headers: string[];
+    sampleRows: Record<string, string>[];
+  }): Promise<Result<HrColumnMapping>> {
+    this.calls.push(input);
+    return ok(this.mapping);
+  }
+}
+
+class FailingDetector implements IColumnMappingDetector {
+  async detect(): Promise<Result<HrColumnMapping>> {
+    return err(domainError("AI_PROVIDER_FAILED", "model unavailable"));
+  }
+}
+
 describe("ImportHrDataset", () => {
   it("stores the dataset and rows as-uploaded with detected columns", async () => {
     const repository = new InMemoryHrDatasets();
@@ -152,6 +171,75 @@ describe("ImportHrDataset", () => {
     });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("calls the detector when no mapping is supplied and stores the returned mapping", async () => {
+    const repository = new InMemoryHrDatasets();
+    const parser = new StubParser({
+      columns: ["Full Name", "Email", "Manager"],
+      rows: [
+        { "Full Name": "Ada Lovelace", Email: "ada@corp.test", Manager: "bob@corp.test" },
+        { "Full Name": "Bob Stone", Email: "bob@corp.test", Manager: "" },
+      ],
+    });
+    const detector = new StubDetector({ Email: "email", "Full Name": "name", Manager: "manager" });
+    const sut = new ImportHrDataset(parser, repository, detector);
+
+    const result = await sut.execute({
+      filename: "people.csv",
+      format: "csv",
+      content: new Uint8Array(),
+      uploadedByUserId: "admin-1",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.columnMapping).toEqual({
+      Email: "email",
+      "Full Name": "name",
+      Manager: "manager",
+    });
+    expect(detector.calls[0]?.headers).toEqual(["Full Name", "Email", "Manager"]);
+    expect(detector.calls[0]?.sampleRows).toHaveLength(2);
+  });
+
+  it("falls back to an empty mapping when the detector returns an error", async () => {
+    const repository = new InMemoryHrDatasets();
+    const parser = new StubParser({
+      columns: ["Full Name", "Email"],
+      rows: [{ "Full Name": "Ada", Email: "ada@corp.test" }],
+    });
+    const sut = new ImportHrDataset(parser, repository, new FailingDetector());
+
+    const result = await sut.execute({
+      filename: "people.csv",
+      format: "csv",
+      content: new Uint8Array(),
+      uploadedByUserId: "admin-1",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.columnMapping).toEqual({});
+  });
+
+  it("skips the detector when a mapping is explicitly supplied", async () => {
+    const repository = new InMemoryHrDatasets();
+    const parser = new StubParser({
+      columns: ["Full Name", "Email"],
+      rows: [{ "Full Name": "Ada", Email: "ada@corp.test" }],
+    });
+    const detector = new StubDetector({ Email: "email" });
+    const sut = new ImportHrDataset(parser, repository, detector);
+
+    const result = await sut.execute({
+      filename: "people.csv",
+      format: "csv",
+      content: new Uint8Array(),
+      uploadedByUserId: "admin-1",
+      columnMapping: { Email: "email", "Full Name": "name" },
+    });
+
+    expect(result.data?.columnMapping).toEqual({ Email: "email", "Full Name": "name" });
+    expect(detector.calls).toHaveLength(0);
   });
 });
 

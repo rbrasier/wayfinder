@@ -50,6 +50,9 @@ export const approvalRouter = router({
         approvalId: z.string().uuid(),
         decision: z.enum(["approved", "rejected", "changes_requested"]),
         comment: z.string().max(2000).nullish(),
+        // Only consulted for `rejected`: route the session back to the originator
+        // or close the request entirely.
+        routeBack: z.boolean().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -58,6 +61,7 @@ export const approvalRouter = router({
         decidedByUserId: ctx.userId,
         decision: input.decision,
         comment: input.comment ?? null,
+        routeBack: input.routeBack,
         isAdmin: ctx.isAdmin,
       });
       if (result.error) throw toTrpcError(result.error);

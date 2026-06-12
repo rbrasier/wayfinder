@@ -7,3 +7,4 @@ export * from "./context-docs";
 export * from "./session-uploads";
 export * from "./templates";
 export * from "./embeddings";
+export * from "./approvals";
