@@ -9,6 +9,7 @@ import type { Container } from "./container";
 
 const SEED_FLOW_NAME = "E2E SEED Onboarding Flow";
 const SEED_SESSION_TITLE = "E2E SEED Session";
+const SEED_FORK_FLOW_NAME = "E2E SEED Fork Flow";
 
 const unwrap = <T>(result: Result<T>, context: string): T => {
   if (result.error) {
@@ -34,7 +35,121 @@ const resolveAdminUserId = async (container: Container): Promise<string> => {
 export interface SeedResult {
   flowId: string;
   sessionId: string;
+  forkFlowId: string;
 }
+
+// A fork flow whose two mutually-exclusive branches capture the same `amount`
+// field. Flow Insights collapses both branch columns into one by default; the
+// "Combine forked steps" toggle splits them back. Drives the
+// enhance-fork-field-consolidation e2e spec.
+const seedForkFlow = async (container: Container, ownerUserId: string): Promise<string> => {
+  const flow = unwrap(
+    await container.useCases.createFlow.execute({
+      name: SEED_FORK_FLOW_NAME,
+      description: "Seeded procurement flow that forks into two approval branches",
+      expertRole: "Procurement Officer",
+      ownerUserId,
+    }),
+    "create fork flow",
+  );
+
+  const branchNode = async (name: string, positionX: number) =>
+    unwrap(
+      await container.useCases.createFlowNode.execute({
+        flowId: flow.id,
+        type: "conversational",
+        name,
+        positionX,
+        positionY: 240,
+        config: {
+          aiInstruction: "Capture the amount of the purchase.",
+          doneWhen: "The amount is confirmed.",
+          outputType: "conversation_only",
+        },
+      }),
+      `create ${name} node`,
+    );
+
+  const intakeNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Request Intake",
+      positionX: 120,
+      positionY: 120,
+      config: {
+        aiInstruction: "Open the procurement request.",
+        doneWhen: "The request is opened.",
+        outputType: "conversation_only",
+      },
+    }),
+    "create intake node",
+  );
+
+  const standardNode = await branchNode("Standard Purchase", 320);
+  const approvalNode = await branchNode("Procurement Approval", 520);
+
+  const saveNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Save document",
+      positionX: 420,
+      positionY: 360,
+      config: {
+        aiInstruction: "Save the procurement document.",
+        doneWhen: "The document is saved.",
+        outputType: "conversation_only",
+      },
+    }),
+    "create save node",
+  );
+
+  const forkEdges: [string, string][] = [
+    [intakeNode.id, standardNode.id],
+    [intakeNode.id, approvalNode.id],
+    [standardNode.id, saveNode.id],
+    [approvalNode.id, saveNode.id],
+  ];
+  for (const [fromNodeId, toNodeId] of forkEdges) {
+    unwrap(
+      await container.useCases.createFlowEdge.execute({ flowId: flow.id, fromNodeId, toNodeId }),
+      "create fork edge",
+    );
+  }
+
+  unwrap(
+    await container.useCases.updateFlow.execute(
+      flow.id,
+      { status: "published", visibility: { kind: "global" } },
+      { canPublishToEveryone: true },
+    ),
+    "publish fork flow",
+  );
+
+  // One session per branch, each capturing `amount` on its own branch node.
+  const branchCaptures: [string, string][] = [
+    [standardNode.id, "$1,500"],
+    [approvalNode.id, "$2,750"],
+  ];
+  for (const [nodeId, value] of branchCaptures) {
+    const branchSession = unwrap(
+      await container.useCases.startSession.execute({ flowId: flow.id, userId: ownerUserId }),
+      "start fork session",
+    );
+    unwrap(
+      await container.repos.sessionStepOutputs.create({
+        sessionId: branchSession.id,
+        flowId: flow.id,
+        nodeId,
+        fields: [{ key: "amount", label: "Amount", type: "currency", value }],
+      }),
+      "create fork step output",
+    );
+  }
+
+  return flow.id;
+};
 
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
@@ -208,7 +323,9 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     "create step output",
   );
 
-  return { flowId: flow.id, sessionId: session.id };
+  const forkFlowId = await seedForkFlow(container, ownerUserId);
+
+  return { flowId: flow.id, sessionId: session.id, forkFlowId };
 };
 
 // Clears every flow/session row in the (dedicated) E2E database — the seed
