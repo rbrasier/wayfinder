@@ -6,7 +6,7 @@ import { toTrpcError } from "../trpc-errors";
 
 const flowIdInput = z.object({ flowId: z.string().uuid() });
 
-const canEditFlow = async (
+export const canEditFlow = async (
   container: Container,
   flowId: string,
   userId: string,
@@ -20,6 +20,13 @@ const canEditFlow = async (
     flow.ownerUserId === userId ||
     flow.permissions.some((p) => p.userId === userId && p.role === "owner")
   );
+};
+
+// Opens/refreshes the published flow's single draft after an edit. Best-effort:
+// a versioning hiccup must never break the edit itself, and it no-ops for flows
+// that have never been published (nothing to diverge from yet).
+const syncDraft = (container: Container, flowId: string): void => {
+  void container.useCases.syncFlowDraft.execute(flowId).catch(() => undefined);
 };
 
 const nodeRouter = router({
@@ -97,6 +104,7 @@ const nodeRouter = router({
         config: input.config,
       });
       if (result.error) throw toTrpcError(result.error);
+      syncDraft(ctx.container, input.flowId);
       return result.data;
     }),
 
@@ -123,6 +131,7 @@ const nodeRouter = router({
         config: input.config,
       });
       if (result.error) throw toTrpcError(result.error);
+      syncDraft(ctx.container, input.flowId);
       return result.data;
     }),
 
@@ -152,6 +161,7 @@ const nodeRouter = router({
       }
       const result = await ctx.container.useCases.deleteFlowNode.execute(input.nodeId);
       if (result.error) throw toTrpcError(result.error);
+      syncDraft(ctx.container, input.flowId);
       return { ok: true };
     }),
 });
@@ -171,6 +181,7 @@ const edgeRouter = router({
       }
       const result = await ctx.container.useCases.createFlowEdge.execute(input);
       if (result.error) throw toTrpcError(result.error);
+      syncDraft(ctx.container, input.flowId);
       return result.data;
     }),
 
@@ -182,6 +193,7 @@ const edgeRouter = router({
       }
       const result = await ctx.container.useCases.deleteFlowEdge.execute(input.edgeId);
       if (result.error) throw toTrpcError(result.error);
+      syncDraft(ctx.container, input.flowId);
       return { ok: true };
     }),
 });
@@ -247,6 +259,8 @@ export const flowRouter = router({
         icon: z.string().nullable().optional(),
         expertRole: z.string().nullable().optional(),
         status: z.enum(["draft", "published"]).optional(),
+        // Optional one-line note recorded on the version when publishing.
+        changeSummary: z.string().max(500).nullable().optional(),
         visibility: z
           .discriminatedUnion("kind", [
             z.object({ kind: z.literal("private") }),
@@ -259,12 +273,26 @@ export const flowRouter = router({
       if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
-      const { flowId, ...patch } = input;
+      const { flowId, changeSummary, ...patch } = input;
       const result = await ctx.container.useCases.updateFlow.execute(flowId, patch, {
         canPublishToEveryone:
           ctx.isAdmin || ctx.permissions.has("workflow:publish_to_everyone"),
       });
       if (result.error) throw toTrpcError(result.error);
+
+      // The publish transition promotes the open draft into an immutable
+      // version (ADR-015); any other edit refreshes the draft snapshot.
+      if (patch.status === "published") {
+        const published = await ctx.container.useCases.publishFlowVersion.execute({
+          flowId,
+          publishedByUserId: ctx.userId,
+          changeSummary: changeSummary ?? null,
+        });
+        if (published.error) throw toTrpcError(published.error);
+      } else {
+        syncDraft(ctx.container, flowId);
+      }
+
       return result.data;
     }),
 

@@ -20,6 +20,7 @@ import {
   GetFeatureFlag,
   GetFlowCanvas,
   GetFlowDeepDive,
+  GetFlowVersion,
   GetOverviewDashboard,
   GetSession,
   GetUsageSummary,
@@ -33,6 +34,7 @@ import {
   ListFeatureFlags,
   ListFlows,
   ListFlowsForUser,
+  ListFlowVersions,
   ListJobs,
   ListRoles,
   CreateRole,
@@ -52,6 +54,9 @@ import {
   NotifyOnSessionComplete,
   NotifyOnStepComplete,
   OverrideBranch,
+  PublishFlowVersion,
+  RestoreFlowVersion,
+  SyncFlowDraft,
   PingJob,
   RegisterJob,
   ReindexAllDocuments,
@@ -96,6 +101,7 @@ import {
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
+  DrizzleFlowVersionRepository,
   DrizzleHrDatasetRepository,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
@@ -165,6 +171,7 @@ const build = () => {
   const flows = new DrizzleFlowRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
   const flowEdges = new DrizzleFlowEdgeRepository(db);
+  const flowVersions = new DrizzleFlowVersionRepository(db);
   const sessions = new DrizzleSessionRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
@@ -381,7 +388,7 @@ const build = () => {
     runtimeConfig,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog, approvals, hrDatasets },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       updateDocumentFields: new UpdateDocumentFields(
@@ -446,11 +453,16 @@ const build = () => {
       retrieveDocumentChunks: new RetrieveDocumentChunks(embeddings, documentChunks),
       reindexAllDocuments: new ReindexAllDocuments(reindexSource, documentIndexer, jobRepo),
       grantFlowOwner: new GrantFlowOwner(flows),
-      startSession: new StartSession(sessions, flows, flowNodes, flowEdges),
+      startSession: new StartSession(sessions, flows, flowNodes, flowEdges, flowVersions),
       listSessions: new ListSessions(sessions),
       listAllSessions: new ListAllSessions(sessions),
-      getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges),
-      runTurn: new RunTurn(sessions, sessionMessages, flowEdges, notifyOnSessionComplete, notifyOnStepComplete),
+      getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      runTurn: new RunTurn(sessions, sessionMessages, flowEdges, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
+      publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
+      listFlowVersions: new ListFlowVersions(flowVersions),
+      getFlowVersion: new GetFlowVersion(flowVersions),
+      restoreFlowVersion: new RestoreFlowVersion(flowVersions, auditLogger),
+      syncFlowDraft: new SyncFlowDraft(flows, flowNodes, flowEdges, flowVersions),
       runAutoNode: new RunAutoNode(sessions, llm, nodeExecutors, sessionStepOutputs),
       applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete, notifyOnStepComplete),
       scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock, llm),

@@ -14,6 +14,7 @@ export * from "./health-checker";
 export * from "./node-executor";
 export * from "./n8n-workflow-directory";
 export * from "./flow-repository";
+export * from "./flow-version-repository";
 export * from "./flow-node-repository";
 export * from "./flow-edge-repository";
 export * from "./session-repository";

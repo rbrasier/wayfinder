@@ -48,6 +48,7 @@ import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
 import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal";
+import { VersionHistoryDialog } from "@/components/canvas/version-history-dialog";
 import { STEP_TYPE_ACCENT } from "@/components/canvas/node-styles";
 import { defaultConfigForType } from "@/components/canvas/node-defaults";
 import {
@@ -176,6 +177,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [createdNodeId, setCreatedNodeId] = useState<string | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [flowMenuOpen, setFlowMenuOpen] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const flowMenuRef = useRef<HTMLDivElement>(null);
 
@@ -737,6 +739,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
                 >
                   Edit
                 </button>
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  onClick={() => {
+                    setFlowMenuOpen(false);
+                    setVersionHistoryOpen(true);
+                  }}
+                >
+                  Version history
+                </button>
                 <div className="my-1 border-t border-[#dedad2]" />
                 <button
                   type="button"
@@ -830,6 +842,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
             });
         }}
         onClose={() => setEditingMetadata(false)}
+      />
+
+      <VersionHistoryDialog
+        flowId={flowId}
+        open={versionHistoryOpen}
+        onOpenChange={setVersionHistoryOpen}
+        onRestored={() => void canvasQuery.refetch()}
       />
 
       <Dialog open={deleteConfirmOpen} onOpenChange={(open) => !open && setDeleteConfirmOpen(false)}>

@@ -10,6 +10,7 @@ export * from "./job";
 export * from "./system-health";
 export * from "./flow";
 export * from "./flow-visibility";
+export * from "./flow-version";
 export * from "./flow-node";
 export * from "./field-value-source";
 export * from "./n8n-workflow";

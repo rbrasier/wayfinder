@@ -38,6 +38,7 @@ import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
 import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal";
+import { VersionHistoryDialog } from "@/components/canvas/version-history-dialog";
 import { STEP_TYPE_ACCENT } from "@/components/canvas/node-styles";
 import { defaultConfigForType } from "@/components/canvas/node-defaults";
 import {
@@ -145,6 +146,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [flowVisibility, setFlowVisibility] = useState<"private" | "global">("private");
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [publishSubOpen, setPublishSubOpen] = useState(false);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
@@ -787,6 +789,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
                     </Link>
                   </>
                 )}
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  onClick={() => {
+                    setActionsMenuOpen(false);
+                    setVersionHistoryOpen(true);
+                  }}
+                >
+                  Version history
+                </button>
               </div>
             )}
           </div>
@@ -845,6 +857,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}
         onUploadTemplate={editingNodeId ? handleUploadTemplate : undefined}
+      />
+      <VersionHistoryDialog
+        flowId={flowId}
+        open={versionHistoryOpen}
+        onOpenChange={setVersionHistoryOpen}
+        onRestored={() => void canvasQuery.refetch()}
       />
     </div>
   );

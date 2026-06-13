@@ -4,9 +4,11 @@ import type {
   Flow,
   FlowEdge,
   FlowNode,
+  FlowVersion,
   IFlowEdgeRepository,
   IFlowNodeRepository,
   IFlowRepository,
+  IFlowVersionRepository,
   ISessionMessageRepository,
   ISessionRepository,
   NewFlowEdge,
@@ -18,6 +20,7 @@ import type {
   SessionMessage,
   SessionUpdate,
 } from "@rbrasier/domain";
+import { buildFlowSnapshot } from "@rbrasier/domain";
 import { StartSession } from "./start-session";
 import { ListSessions } from "./list-sessions";
 import { ListAllSessions } from "./list-all-sessions";
@@ -100,6 +103,42 @@ class FakeFlowEdgeRepository implements IFlowEdgeRepository {
   async delete(): Promise<Result<true>> { return ok(true as const); }
 }
 
+class FakeFlowVersionRepository implements IFlowVersionRepository {
+  versions: Map<string, FlowVersion> = new Map();
+
+  async createPublished(): Promise<Result<FlowVersion>> { return err(domainError("INFRA_FAILURE", "not used")); }
+  async upsertDraft(): Promise<Result<FlowVersion>> { return err(domainError("INFRA_FAILURE", "not used")); }
+  async restore(): Promise<Result<FlowVersion>> { return err(domainError("INFRA_FAILURE", "not used")); }
+  async listForFlow(): Promise<Result<never[]>> { return ok([]); }
+  async getByNumber(): Promise<Result<FlowVersion | null>> { return ok(null); }
+  async openDraft(): Promise<Result<FlowVersion | null>> { return ok(null); }
+
+  async getById(id: string): Promise<Result<FlowVersion | null>> {
+    return ok(this.versions.get(id) ?? null);
+  }
+
+  async latestPublished(flowId: string): Promise<Result<FlowVersion | null>> {
+    const published = [...this.versions.values()]
+      .filter((v) => v.flowId === flowId && v.status === "published")
+      .sort((a, b) => (b.versionNumber ?? 0) - (a.versionNumber ?? 0));
+    return ok(published[0] ?? null);
+  }
+}
+
+const makeVersion = (overrides: Partial<FlowVersion> = {}): FlowVersion => ({
+  id: "version-1",
+  flowId: "flow-1",
+  versionNumber: 1,
+  status: "published",
+  snapshot: buildFlowSnapshot(makeFlow(), [makeNode()], []),
+  changeSummary: null,
+  publishedByUserId: "user-1",
+  publishedAt: new Date("2026-01-01"),
+  createdAt: new Date("2026-01-01"),
+  updatedAt: new Date("2026-01-01"),
+  ...overrides,
+});
+
 class FakeSessionRepository implements ISessionRepository {
   sessions: Map<string, Session> = new Map();
 
@@ -111,6 +150,7 @@ class FakeSessionRepository implements ISessionRepository {
       status: "active",
       title: input.title ?? null,
       currentNodeId: input.currentNodeId ?? null,
+      flowVersionId: input.flowVersionId ?? null,
       graphCheckpoint: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -257,6 +297,7 @@ describe("StartSession", () => {
   let nodes: FakeFlowNodeRepository;
   let edges: FakeFlowEdgeRepository;
   let sessions: FakeSessionRepository;
+  let flowVersions: FakeFlowVersionRepository;
   let useCase: StartSession;
 
   beforeEach(() => {
@@ -264,9 +305,10 @@ describe("StartSession", () => {
     nodes = new FakeFlowNodeRepository();
     edges = new FakeFlowEdgeRepository();
     sessions = new FakeSessionRepository();
+    flowVersions = new FakeFlowVersionRepository();
     flows.flows.set("flow-1", makeFlow());
     nodes.nodes.set("node-1", makeNode());
-    useCase = new StartSession(sessions, flows, nodes, edges);
+    useCase = new StartSession(sessions, flows, nodes, edges, flowVersions);
   });
 
   it("creates a session with the first node as current node", async () => {
@@ -277,6 +319,25 @@ describe("StartSession", () => {
     expect(result.data?.userId).toBe("user-1");
     expect(result.data?.status).toBe("active");
     expect(result.data?.currentNodeId).toBe("node-1");
+  });
+
+  it("pins the session to the latest published version and reads its snapshot", async () => {
+    // A snapshot whose root differs from the live rows proves the runner reads
+    // the pinned version, not the live nodes.
+    const snapshot = buildFlowSnapshot(
+      makeFlow(),
+      [makeNode({ id: "snap-root" })],
+      [],
+    );
+    flowVersions.versions.set(
+      "version-7",
+      makeVersion({ id: "version-7", versionNumber: 2, snapshot }),
+    );
+
+    const result = await useCase.execute({ flowId: "flow-1", userId: "user-1" });
+
+    expect(result.data?.flowVersionId).toBe("version-7");
+    expect(result.data?.currentNodeId).toBe("snap-root");
   });
 
   it("selects the root node (no incoming edges) as first node", async () => {
@@ -367,6 +428,7 @@ describe("GetSession", () => {
   let flows: FakeFlowRepository;
   let nodes: FakeFlowNodeRepository;
   let edges: FakeFlowEdgeRepository;
+  let flowVersions: FakeFlowVersionRepository;
   let useCase: GetSession;
 
   beforeEach(() => {
@@ -375,12 +437,13 @@ describe("GetSession", () => {
     flows = new FakeFlowRepository();
     nodes = new FakeFlowNodeRepository();
     edges = new FakeFlowEdgeRepository();
+    flowVersions = new FakeFlowVersionRepository();
 
     sessions.sessions.set("session-1", makeSession());
     flows.flows.set("flow-1", makeFlow());
     nodes.nodes.set("node-1", makeNode());
 
-    useCase = new GetSession(sessions, messages, flows, nodes, edges);
+    useCase = new GetSession(sessions, messages, flows, nodes, edges, flowVersions);
   });
 
   it("returns session detail with flow, nodes, messages", async () => {
@@ -390,6 +453,19 @@ describe("GetSession", () => {
     expect(result.data?.flow.id).toBe("flow-1");
     expect(result.data?.nodes).toHaveLength(1);
     expect(result.data?.messages).toHaveLength(0);
+  });
+
+  it("renders the pinned snapshot definition, not the live rows", async () => {
+    // Live rows have node-1; the pinned snapshot has a different node. A pinned
+    // session must render the snapshot so later edits never leak into the chat.
+    const snapshot = buildFlowSnapshot(makeFlow(), [makeNode({ id: "pinned-node" })], []);
+    flowVersions.versions.set("version-1", makeVersion({ snapshot }));
+    sessions.sessions.set("session-1", makeSession({ flowVersionId: "version-1" }));
+
+    const result = await useCase.execute("session-1");
+
+    expect(result.data?.nodes).toHaveLength(1);
+    expect(result.data?.nodes[0]?.id).toBe("pinned-node");
   });
 
   it("returns null when session does not exist", async () => {

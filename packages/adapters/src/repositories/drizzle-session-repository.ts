@@ -19,6 +19,7 @@ const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   status: row.status,
   title: row.title,
   currentNodeId: row.current_node_id,
+  flowVersionId: row.flow_version_id ?? null,
   graphCheckpoint: row.graph_checkpoint ?? null,
   pendingExecutions: row.pending_executions ?? {},
   createdAt: row.created_at,
@@ -37,6 +38,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
           user_id: input.userId,
           title: input.title ?? null,
           current_node_id: input.currentNodeId ?? null,
+          flow_version_id: input.flowVersionId ?? null,
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Session insert returned no row."));

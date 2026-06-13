@@ -10,10 +10,11 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
-import type { FlowPermission, FlowVisibility } from "@rbrasier/domain";
+import type { FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@rbrasier/domain";
 import type { AiTurnPayload, PendingExecutions, SessionDocument, StepOutputField } from "@rbrasier/domain";
 import { core_users } from "./core";
 
@@ -94,6 +95,45 @@ export const app_flow_edges = pgTable(
   }),
 );
 
+// Immutable snapshot of a flow's full definition under a draft→published
+// lifecycle (ADR-015). A version is self-contained jsonb so it survives any
+// later edit/deletion of the live rows. `version_number` is null while `draft`
+// and allocated monotonically per flow on publish.
+export const app_flow_versions = pgTable(
+  "app_flow_versions",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    version_number: integer("version_number"),
+    status: text("status", { enum: ["draft", "published"] })
+      .$type<FlowVersionStatus>()
+      .notNull()
+      .default("draft"),
+    snapshot: jsonb("snapshot").$type<FlowSnapshot>().notNull(),
+    change_summary: text("change_summary"),
+    published_by_user_id: uuid("published_by_user_id").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    published_at: timestamp("published_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_flow: index("app_flow_versions_flow_id_idx").on(t.flow_id),
+    number_unique: unique("app_flow_versions_flow_id_version_number_unique").on(
+      t.flow_id,
+      t.version_number,
+    ),
+    // At most one open draft per flow — editing updates that single draft row
+    // rather than writing a new version per save.
+    one_draft: uniqueIndex("app_flow_versions_one_draft_idx")
+      .on(t.flow_id)
+      .where(sql`status = 'draft'`),
+  }),
+);
+
 export const app_sessions = pgTable(
   "app_sessions",
   {
@@ -109,6 +149,9 @@ export const app_sessions = pgTable(
       .default("active"),
     title: text("title"),
     current_node_id: uuid("current_node_id"),
+    flow_version_id: uuid("flow_version_id").references(() => app_flow_versions.id, {
+      onDelete: "set null",
+    }),
     graph_checkpoint: jsonb("graph_checkpoint").$type<Record<string, unknown>>(),
     pending_executions: jsonb("pending_executions")
       .$type<PendingExecutions>()
@@ -120,6 +163,7 @@ export const app_sessions = pgTable(
   (t) => ({
     by_user: index("app_sessions_user_id_created_at_idx").on(t.user_id, t.created_at),
     by_flow: index("app_sessions_flow_id_idx").on(t.flow_id),
+    by_flow_version: index("app_sessions_flow_version_id_idx").on(t.flow_version_id),
   }),
 );
 

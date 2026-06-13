@@ -1,7 +1,10 @@
 import {
+  flowEdgesFromSnapshot,
   ok,
   type AiTurnPayload,
+  type FlowEdge,
   type IFlowEdgeRepository,
+  type IFlowVersionRepository,
   type ISessionMessageRepository,
   type ISessionRepository,
   type Result,
@@ -49,7 +52,23 @@ export class RunTurn {
     private readonly flowEdges: IFlowEdgeRepository,
     private readonly sessionCompleteNotifier?: ISessionCompleteNotifier,
     private readonly sessionStepCompleteNotifier?: ISessionStepCompleteNotifier,
+    private readonly flowVersions?: IFlowVersionRepository,
   ) {}
+
+  // Advancement follows the pinned snapshot's edges when the chat is pinned, so
+  // a later edit/publish/restore cannot reroute an in-progress chat. Falls back
+  // to the live edges for unpinned sessions.
+  private async resolveEdges(session: Session, flowId: string): Promise<Result<FlowEdge[]>> {
+    if (session.flowVersionId && this.flowVersions) {
+      const versionResult = await this.flowVersions.getById(session.flowVersionId);
+      if (versionResult.error) return versionResult;
+      if (versionResult.data) {
+        const version = versionResult.data;
+        return ok(flowEdgesFromSnapshot(flowId, version.snapshot, version.createdAt));
+      }
+    }
+    return this.flowEdges.listByFlow(flowId);
+  }
 
   // Persists the user message before the AI call runs, so it survives any
   // model/network failure. Idempotent for retries: if the most recent message
@@ -104,7 +123,7 @@ export class RunTurn {
       return ok({ session, advanced: false, newNodeId: null });
     }
 
-    const edgesResult = await this.flowEdges.listByFlow(flowId);
+    const edgesResult = await this.resolveEdges(session, flowId);
     if (edgesResult.error) return edgesResult;
 
     const outgoing = edgesResult.data.filter((e) => e.fromNodeId === session.currentNodeId);

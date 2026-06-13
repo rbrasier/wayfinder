@@ -12,3 +12,8 @@ export * from "./delete-flow-edge";
 export * from "./add-context-doc";
 export * from "./remove-context-doc";
 export * from "./grant-flow-owner";
+export * from "./publish-flow-version";
+export * from "./list-flow-versions";
+export * from "./get-flow-version";
+export * from "./restore-flow-version";
+export * from "./sync-flow-draft";

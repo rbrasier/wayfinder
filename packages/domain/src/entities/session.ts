@@ -19,6 +19,11 @@ export interface Session {
   status: SessionStatus;
   title: string | null;
   currentNodeId: string | null;
+  // The flow version this chat is pinned to (ADR-015). Resolved to the latest
+  // published version at session start; the runner reads that snapshot, not the
+  // live rows, so the chat stays stable across later edits/publishes/restores.
+  // Optional for sessions created before versioning shipped (back-filled).
+  flowVersionId?: string | null;
   graphCheckpoint: Record<string, unknown> | null;
   pendingExecutions: PendingExecutions;
   createdAt: Date;
@@ -30,4 +35,5 @@ export interface NewSession {
   userId: string;
   title?: string | null;
   currentNodeId?: string | null;
+  flowVersionId?: string | null;
 }
