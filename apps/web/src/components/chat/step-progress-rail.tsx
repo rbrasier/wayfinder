@@ -15,13 +15,13 @@ interface StepProgressRailProps {
 const badgeClass: Record<StepState, string> = {
   complete: "bg-[#2e9e6a] text-white",
   current:  "bg-[#3a5fd9] text-white",
-  pending:  "bg-[#e6e3dc] text-[#918d87]",
+  pending:  "bg-[#e6e3dc] text-[#5a5650]",
 };
 
 const labelClass: Record<StepState, string> = {
   complete: "text-[#2e9e6a]",
   current:  "font-semibold text-[#3a5fd9]",
-  pending:  "text-[#918d87]",
+  pending:  "text-[#5a5650]",
 };
 
 const getState = (
