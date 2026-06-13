@@ -4,6 +4,12 @@
 
 @layer base {
   :root {
+    /* Wayfinder is a light-only design (see Storybook tokens below). Pinning the
+       color-scheme stops the browser rendering native controls — <select> option
+       lists, scrollbars — in OS dark mode, which previously surfaced as a black
+       status dropdown against the otherwise-light UI. */
+    color-scheme: light;
+
     /* Tailwind HSL vars */
     --background: 40 20% 96%;
     --foreground: 35 12% 10%;
@@ -52,27 +58,6 @@
     --sh-xl:         0 4px 24px rgba(0,0,0,.13), 0 20px 60px rgba(0,0,0,.10);
   }
 
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --background: 35 12% 8%;
-      --foreground: 40 20% 94%;
-      --card: 35 10% 11%;
-      --card-foreground: 40 20% 94%;
-      --primary: 226 67% 64%;
-      --primary-foreground: 0 0% 100%;
-      --secondary: 35 10% 16%;
-      --secondary-foreground: 40 20% 94%;
-      --muted: 35 10% 16%;
-      --muted-foreground: 40 12% 58%;
-      --accent: 35 10% 20%;
-      --accent-foreground: 40 20% 94%;
-      --destructive: 0 62% 40%;
-      --destructive-foreground: 0 0% 100%;
-      --border: 35 10% 20%;
-      --input: 35 10% 20%;
-      --ring: 226 67% 64%;
-    }
-  }
 }
 
 @layer base {
@@ -88,4 +73,20 @@
   .font-mono {
     font-family: var(--font-dm-mono), 'Courier New', monospace;
   }
+}
+
+/* React Flow ships its own prefers-color-scheme:dark styling for the +/- zoom
+   controls, which left them dark and low-contrast against our light canvas.
+   Pin them to the Storybook palette so the glyphs stay readable everywhere. */
+.react-flow__controls-button {
+  background-color: var(--surface) !important;
+  border-bottom: 1px solid var(--wf-border) !important;
+  color: var(--wf-text) !important;
+  fill: var(--wf-text) !important;
+}
+.react-flow__controls-button:hover {
+  background-color: var(--bg2) !important;
+}
+.react-flow__controls-button svg {
+  fill: var(--wf-text) !important;
 }
