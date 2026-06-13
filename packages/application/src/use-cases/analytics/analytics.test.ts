@@ -6,7 +6,9 @@ import type {
   AnalyticsTimeRange,
   Flow,
   FlowNode,
+  FlowEdge,
   IAnalyticsRepository,
+  IFlowEdgeRepository,
   IFlowNodeRepository,
   IFlowRepository,
   ISessionStepOutputRepository,
@@ -103,6 +105,26 @@ const makeStepOutputs = (outputs: SessionStepOutput[]): ISessionStepOutputReposi
   listByFlow: async () => ok(outputs),
 });
 
+const edge = (fromNodeId: string, toNodeId: string): FlowEdge => ({
+  id: `${fromNodeId}-${toNodeId}`,
+  flowId: "f1",
+  fromNodeId,
+  toNodeId,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
+
+const makeFlowEdges = (
+  edges: FlowEdge[],
+  spy?: (flowId: string) => void,
+): IFlowEdgeRepository =>
+  ({
+    listByFlow: async (flowId: string) => {
+      spy?.(flowId);
+      return ok(edges);
+    },
+  }) as unknown as IFlowEdgeRepository;
+
 const node = (id: string, name: string): FlowNode => ({
   id,
   flowId: "f1",
@@ -141,6 +163,7 @@ describe("GetFlowDeepDive", () => {
       makeFlowNodes([node("n1", "Intake")]),
       analytics,
       stepOutputs,
+      makeFlowEdges([]),
     );
 
     const result = await useCase.execute({ now });
@@ -151,6 +174,56 @@ describe("GetFlowDeepDive", () => {
     expect(result.data?.nodeBreakdown[0]?.nodeName).toBe("Intake");
     expect(result.data?.fieldReport.columns[0]?.fieldKey).toBe("fee");
     expect(result.data?.fieldReport.columns[0]?.columnKey).toBe("n1:fee");
+  });
+
+  it("loads edges for the selected flow and collapses fork-sibling columns", () => {
+    return (async () => {
+      const loadedFlowIds: string[] = [];
+      const analytics = new FakeAnalytics([
+        makeSession({ id: "s1", flowId: "f1" }),
+        makeSession({ id: "s2", flowId: "f1" }),
+      ]);
+      const stepOutputs = makeStepOutputs([
+        {
+          id: "o1",
+          sessionId: "s1",
+          flowId: "f1",
+          nodeId: "n1",
+          messageId: "m1",
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "o2",
+          sessionId: "s2",
+          flowId: "f1",
+          nodeId: "n2",
+          messageId: "m2",
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$20.00" }],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+
+      const useCase = new GetFlowDeepDive(
+        makeFlows([{ id: "f1", name: "One" }]),
+        makeFlowNodes([node("n1", "Standard"), node("n2", "Approval")]),
+        analytics,
+        stepOutputs,
+        makeFlowEdges(
+          [edge("n0", "n1"), edge("n0", "n2"), edge("n1", "n3"), edge("n2", "n3")],
+          (flowId) => loadedFlowIds.push(flowId),
+        ),
+      );
+
+      const result = await useCase.execute({ now });
+
+      expect(loadedFlowIds).toEqual(["f1"]);
+      const columns = result.data?.fieldReport.columns ?? [];
+      const groupIds = columns.map((column) => column.collapseGroupId);
+      expect(groupIds.every((id) => id === "amount::n1+n2")).toBe(true);
+    })();
   });
 
   it("returns correct sessionSummary counts", async () => {
@@ -164,6 +237,7 @@ describe("GetFlowDeepDive", () => {
       makeFlowNodes([]),
       analytics,
       makeStepOutputs([]),
+      makeFlowEdges([]),
     );
 
     const result = await useCase.execute({ now });
@@ -183,6 +257,7 @@ describe("GetFlowDeepDive", () => {
       makeFlowNodes([]),
       analytics,
       makeStepOutputs([]),
+      makeFlowEdges([]),
     );
 
     const result = await useCase.execute({ flowId: "f1", now });
@@ -195,6 +270,7 @@ describe("GetFlowDeepDive", () => {
       makeFlowNodes([]),
       new FakeAnalytics([]),
       makeStepOutputs([]),
+      makeFlowEdges([]),
     );
 
     const result = await useCase.execute({ now });

@@ -277,4 +277,211 @@ describe("computeFieldReport", () => {
     expect(report.rows[0]?.values["n1:fee"]).toBe("$800.00");
     expect(report.rows[1]?.values["n1:fee"]).toBe("$1,200.00");
   });
+
+  it("assigns no group ids when called without edges (byte-for-byte as today)", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n2",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$20.00" }],
+        },
+      ],
+      [nodeIntake, nodeApproval],
+      [sessionS1, sessionS2],
+    );
+
+    expect(report.columns.every((column) => column.collapseGroupId === undefined)).toBe(true);
+    expect(report.columns.every((column) => column.versionGroupId === undefined)).toBe(true);
+  });
+
+  it("gives fork-sibling columns sharing a field key the same collapseGroupId", () => {
+    // n1 and n2 are the two branches of a fork that rejoins at n3 — mutually
+    // unreachable, so the shared `amount` field collapses into one group.
+    const edges = [
+      { fromNodeId: "n0", toNodeId: "n1" },
+      { fromNodeId: "n0", toNodeId: "n2" },
+      { fromNodeId: "n1", toNodeId: "n3" },
+      { fromNodeId: "n2", toNodeId: "n3" },
+    ];
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n2",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$20.00" }],
+        },
+      ],
+      [
+        { id: "n1", name: "Standard" },
+        { id: "n2", name: "Approval" },
+      ],
+      [sessionS1, sessionS2],
+      edges,
+    );
+
+    const columnOne = report.columns.find((column) => column.columnKey === "n1:amount");
+    const columnTwo = report.columns.find((column) => column.columnKey === "n2:amount");
+    expect(columnOne?.collapseGroupId).toBeDefined();
+    expect(columnOne?.collapseGroupId).toBe(columnTwo?.collapseGroupId);
+    expect(columnOne?.collapseGroupId).toBe("amount::n1+n2");
+  });
+
+  it("never collapses a step reachable from both branches even when the key matches", () => {
+    // n3 is downstream of both branches: a session can reach a branch AND n3, so
+    // its `amount` must stay a distinct column.
+    const edges = [
+      { fromNodeId: "n0", toNodeId: "n1" },
+      { fromNodeId: "n0", toNodeId: "n2" },
+      { fromNodeId: "n1", toNodeId: "n3" },
+      { fromNodeId: "n2", toNodeId: "n3" },
+    ];
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s1",
+          nodeId: "n3",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$30.00" }],
+        },
+      ],
+      [
+        { id: "n1", name: "Standard" },
+        { id: "n3", name: "Finance Sign-off" },
+      ],
+      [sessionS1],
+      edges,
+    );
+
+    const branchColumn = report.columns.find((column) => column.columnKey === "n1:amount");
+    const downstreamColumn = report.columns.find((column) => column.columnKey === "n3:amount");
+    expect(branchColumn?.collapseGroupId).toBeUndefined();
+    expect(downstreamColumn?.collapseGroupId).toBeUndefined();
+  });
+
+  it("gives different field keys on fork-siblings distinct group ids", () => {
+    const edges = [
+      { fromNodeId: "n0", toNodeId: "n1" },
+      { fromNodeId: "n0", toNodeId: "n2" },
+    ];
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n2",
+          createdAt: new Date(),
+          fields: [{ key: "fee", label: "Fee", type: "currency", value: "$20.00" }],
+        },
+      ],
+      [
+        { id: "n1", name: "Standard" },
+        { id: "n2", name: "Approval" },
+      ],
+      [sessionS1, sessionS2],
+      edges,
+    );
+
+    expect(report.columns.every((column) => column.collapseGroupId === undefined)).toBe(true);
+  });
+
+  it("collapses a historical (other-version) column into the live one via versionGroupId", () => {
+    // n_old is not in the live node list (deleted in a later version); its
+    // `amount` records can never co-occur with the live n1 in a single session,
+    // so they share a versionGroupId.
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s2",
+          nodeId: "n_old",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$20.00" }],
+        },
+      ],
+      [{ id: "n1", name: "Intake" }],
+      [sessionS1, sessionS2],
+      [],
+    );
+
+    const liveColumn = report.columns.find((column) => column.columnKey === "n1:amount");
+    const historicalColumn = report.columns.find((column) => column.columnKey === "n_old:amount");
+    expect(liveColumn?.versionGroupId).toBeDefined();
+    expect(liveColumn?.versionGroupId).toBe(historicalColumn?.versionGroupId);
+    expect(liveColumn?.versionGroupId).toBe("amount::version");
+  });
+
+  it("does not assign a versionGroupId when every column is a live node", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+      ],
+      [{ id: "n1", name: "Intake" }],
+      [sessionS1],
+      [],
+    );
+
+    expect(report.columns[0]?.versionGroupId).toBeUndefined();
+  });
+
+  it("skips cross-version collapse when two columns of the key co-occur in one session", () => {
+    // A single session populated both the live and historical column for the
+    // same key, proving they are not mutually exclusive — leave them split.
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$10.00" }],
+        },
+        {
+          sessionId: "s1",
+          nodeId: "n_old",
+          createdAt: new Date(),
+          fields: [{ key: "amount", label: "Amount", type: "currency", value: "$20.00" }],
+        },
+      ],
+      [{ id: "n1", name: "Intake" }],
+      [sessionS1],
+      [],
+    );
+
+    expect(report.columns.every((column) => column.versionGroupId === undefined)).toBe(true);
+  });
 });

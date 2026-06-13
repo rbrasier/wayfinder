@@ -474,7 +474,7 @@ const build = () => {
       heartbeatTyping: new HeartbeatTyping(sessionTyping),
       listTypingUsers: new ListTypingUsers(sessionTyping, users),
       getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
-      getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs),
+      getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
       suggestApprover: new SuggestApprover(
         approvals,
         flowNodes,

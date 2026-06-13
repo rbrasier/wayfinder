@@ -2,6 +2,7 @@ import type { SessionStatus } from "./session";
 import type { MessageRole } from "./conversation";
 import type { StepOutputField } from "./session-step-output";
 import type { TemplateFieldType } from "./template-field";
+import { computeForkSiblingGroups, type FlowGraphEdge } from "./flow-graph";
 
 export const parseNumeric = (value: string): number | null => {
   const cleaned = value.replace(/[^0-9.\-]/g, "");
@@ -92,6 +93,12 @@ export interface FieldReportColumn {
   label: string;
   type: TemplateFieldType;
   options?: string[];
+  // Same key on fork-sibling (mutually-unreachable live) nodes — collapsible in
+  // the "Combine forked steps" view. Absent when the column has no safe sibling.
+  collapseGroupId?: string;
+  // Same key spanning a node absent from the current flow version (historical
+  // records) — collapsible in the "Combine across versions" view.
+  versionGroupId?: string;
 }
 
 export interface FieldReportSessionRow {
@@ -327,10 +334,56 @@ interface StepOutputForReport {
   fields: StepOutputField[];
 }
 
+// Same key on fork-sibling live nodes collapse under this deterministic id.
+const forkGroupId = (fieldKey: string, nodeIds: string[]): string =>
+  `${fieldKey}::${[...nodeIds].sort().join("+")}`;
+
+// Tags columns with `collapseGroupId` (fork-siblings within the live graph) and
+// `versionGroupId` (a key whose records span a node no longer in the live flow).
+// Both are presentational hints — the UI decides whether to honour them. Mutates
+// the passed columns in place; only invoked when `edges` is supplied so the
+// no-edges call path stays byte-for-byte unchanged.
+const annotateCollapseGroups = (
+  columns: FieldReportColumn[],
+  rows: FieldReportSessionRow[],
+  liveNodeIds: Set<string>,
+  edges: FlowGraphEdge[],
+): void => {
+  const byFieldKey = new Map<string, FieldReportColumn[]>();
+  for (const column of columns) {
+    const list = byFieldKey.get(column.fieldKey) ?? [];
+    list.push(column);
+    byFieldKey.set(column.fieldKey, list);
+  }
+
+  for (const [fieldKey, fieldColumns] of byFieldKey.entries()) {
+    const liveColumns = fieldColumns.filter((column) => liveNodeIds.has(column.nodeId));
+    const liveNodeIdsForKey = liveColumns.map((column) => column.nodeId);
+    for (const group of computeForkSiblingGroups(liveNodeIdsForKey, edges)) {
+      if (group.length < 2) continue;
+      const groupId = forkGroupId(fieldKey, group);
+      for (const column of liveColumns) {
+        if (group.includes(column.nodeId)) column.collapseGroupId = groupId;
+      }
+    }
+
+    const hasHistorical = fieldColumns.some((column) => !liveNodeIds.has(column.nodeId));
+    if (!hasHistorical || fieldColumns.length < 2) continue;
+
+    const memberKeys = new Set(fieldColumns.map((column) => column.columnKey));
+    const coOccurs = rows.some(
+      (row) => Object.keys(row.values).filter((key) => memberKeys.has(key)).length >= 2,
+    );
+    if (coOccurs) continue;
+    for (const column of fieldColumns) column.versionGroupId = `${fieldKey}::version`;
+  }
+};
+
 export const computeFieldReport = (
   stepOutputs: StepOutputForReport[],
   nodes: NodeForReport[],
   sessions: SessionForReport[],
+  edges?: FlowGraphEdge[],
 ): FieldReport => {
   const nodeMap = new Map(nodes.map((node) => [node.id, node.name]));
   const sessionMap = new Map(sessions.map((session) => [session.id, session]));
@@ -385,6 +438,10 @@ export const computeFieldReport = (
   }
 
   rows.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime());
+
+  if (edges !== undefined) {
+    annotateCollapseGroups(columns, rows, new Set(nodes.map((node) => node.id)), edges);
+  }
 
   return { columns, rows };
 };

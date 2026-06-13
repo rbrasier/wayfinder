@@ -5,6 +5,7 @@ import {
   type AnalyticsNode,
   type FieldReport,
   type IAnalyticsRepository,
+  type IFlowEdgeRepository,
   type IFlowNodeRepository,
   type IFlowRepository,
   type ISessionStepOutputRepository,
@@ -47,6 +48,7 @@ export class GetFlowDeepDive {
     private readonly flowNodes: IFlowNodeRepository,
     private readonly analytics: IAnalyticsRepository,
     private readonly stepOutputs: ISessionStepOutputRepository,
+    private readonly flowEdges: IFlowEdgeRepository,
   ) {}
 
   async execute(input: GetFlowDeepDiveInput = {}): Promise<Result<FlowDeepDive>> {
@@ -95,6 +97,9 @@ export class GetFlowDeepDive {
     const stepOutputsResult = await this.stepOutputs.listByFlow(selectedFlowId);
     if (stepOutputsResult.error) return stepOutputsResult;
 
+    const edgesResult = await this.flowEdges.listByFlow(selectedFlowId);
+    if (edgesResult.error) return edgesResult;
+
     const nodes: AnalyticsNode[] = nodesResult.data.map((node) => ({
       id: node.id,
       name: node.name,
@@ -123,6 +128,7 @@ export class GetFlowDeepDive {
         })),
         nodes,
         flowSessions,
+        edgesResult.data,
       ),
       sessionSummary,
     });

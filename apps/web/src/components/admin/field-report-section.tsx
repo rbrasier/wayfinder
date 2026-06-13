@@ -28,13 +28,100 @@ type DatePreset = "all" | "this_year" | "last_90" | "last_30";
 type FilterOperator = "gte" | "lte";
 type StatusFilter = "all" | "complete" | "active" | "abandoned";
 
+// A column as rendered: either a single raw column or several collapsed into
+// one. `memberKeys` lists the raw `columnKey`s whose values it coalesces.
+interface DisplayColumn {
+  columnKey: string;
+  nodeId: string;
+  nodeName: string;
+  fieldKey: string;
+  label: string;
+  type: FieldReportColumn["type"];
+  options?: string[];
+  memberKeys: string[];
+  stepNames: string[];
+}
+
 interface NodeGroup {
   nodeId: string;
   nodeName: string;
-  columns: FieldReportColumn[];
+  columns: DisplayColumn[];
 }
 
 const STORAGE_PREFIX = "wayfinder:field-report";
+
+// First non-empty member value for a collapsed column. Exclusive routing means
+// at most one member is populated per session, so order rarely matters; when a
+// defensive double-capture occurs we take the first in column order.
+const coalesceValue = (values: Record<string, string>, memberKeys: string[]): string => {
+  for (const key of memberKeys) {
+    const value = values[key];
+    if (value !== undefined && value !== "") return value;
+  }
+  return "";
+};
+
+// Union-find over raw columns: two columns merge when they share an *active*
+// collapse group (fork-siblings and/or cross-version). Produces one
+// DisplayColumn per resulting set, preserving first-seen column order.
+const buildDisplayColumns = (
+  columns: FieldReportColumn[],
+  combineForks: boolean,
+  combineVersions: boolean,
+): DisplayColumn[] => {
+  const parent = new Map<string, string>();
+  const find = (key: string): string => {
+    let root = key;
+    while (parent.get(root) !== root && parent.get(root) !== undefined) root = parent.get(root)!;
+    return root;
+  };
+  const union = (first: string, second: string): void => {
+    parent.set(find(first), find(second));
+  };
+
+  for (const column of columns) parent.set(column.columnKey, column.columnKey);
+
+  const firstByGroup = new Map<string, string>();
+  for (const column of columns) {
+    const groupId =
+      (combineForks ? column.collapseGroupId : undefined) ??
+      (combineVersions ? column.versionGroupId : undefined);
+    if (!groupId) continue;
+    const seen = firstByGroup.get(groupId);
+    if (seen) union(seen, column.columnKey);
+    else firstByGroup.set(groupId, column.columnKey);
+  }
+
+  const order: string[] = [];
+  const byRoot = new Map<string, FieldReportColumn[]>();
+  for (const column of columns) {
+    const root = find(column.columnKey);
+    const list = byRoot.get(root);
+    if (list) {
+      list.push(column);
+    } else {
+      byRoot.set(root, [column]);
+      order.push(root);
+    }
+  }
+
+  return order.map((root) => {
+    const members = byRoot.get(root)!;
+    const lead = members[0]!;
+    const stepNames = [...new Set(members.map((member) => member.nodeName))];
+    return {
+      columnKey: members.length === 1 ? lead.columnKey : root,
+      nodeId: lead.nodeId,
+      nodeName: lead.nodeName,
+      fieldKey: lead.fieldKey,
+      label: lead.label,
+      type: lead.type,
+      options: lead.options,
+      memberKeys: members.map((member) => member.columnKey),
+      stepNames,
+    };
+  });
+};
 
 const selectStyle =
   "h-9 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 text-[13px] text-[#1a1814] outline-none focus:border-[#3a5fd9] focus:bg-white";
@@ -93,6 +180,8 @@ export function FieldReportSection({
   const [restoredAt, setRestoredAt] = useState<Date | null>(null);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[] | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [combineForks, setCombineForks] = useState(true);
+  const [combineVersions, setCombineVersions] = useState(true);
 
   const datePreset = (searchParams.get("field_date") ?? "all") as DatePreset;
   const filterColumnKey = searchParams.get("field_col") ?? null;
@@ -102,6 +191,7 @@ export function FieldReportSection({
 
   const filtersStorageKey = `${STORAGE_PREFIX}:${flowId}:filters`;
   const columnsStorageKey = `${STORAGE_PREFIX}:${flowId}:columns`;
+  const collapseStorageKey = `${STORAGE_PREFIX}:${flowId}:collapse`;
 
   const buildParams = useCallback(
     (updates: Partial<{
@@ -152,6 +242,16 @@ export function FieldReportSection({
       if (storedCols) setVisibleColumnKeys(JSON.parse(storedCols) as string[]);
     } catch { /* ignore */ }
 
+    // Collapse toggles default ON; only an explicit stored `false` turns one off.
+    try {
+      const storedCollapse = localStorage.getItem(collapseStorageKey);
+      if (storedCollapse) {
+        const parsed = JSON.parse(storedCollapse) as Partial<{ forks: boolean; versions: boolean }>;
+        if (parsed.forks === false) setCombineForks(false);
+        if (parsed.versions === false) setCombineVersions(false);
+      }
+    } catch { /* ignore */ }
+
     // Restore filters only if URL has no field filter params
     const hasUrlFilters = ["field_date", "field_col", "field_status"].some((key) => searchParams.has(key));
     if (hasUrlFilters) return;
@@ -178,7 +278,18 @@ export function FieldReportSection({
         setRestoredAt(new Date());
       }
     } catch { /* ignore */ }
-  }, [flowId, columnsStorageKey, filtersStorageKey, pathname, router, searchParams]);
+  }, [flowId, columnsStorageKey, filtersStorageKey, collapseStorageKey, pathname, router, searchParams]);
+
+  // Persist collapse toggles whenever they change
+  useEffect(() => {
+    if (hasRestoredRef.current !== flowId) return;
+    try {
+      localStorage.setItem(
+        collapseStorageKey,
+        JSON.stringify({ forks: combineForks, versions: combineVersions }),
+      );
+    } catch { /* ignore */ }
+  }, [collapseStorageKey, flowId, combineForks, combineVersions]);
 
   // Persist filter state to localStorage whenever it changes
   useEffect(() => {
@@ -198,9 +309,23 @@ export function FieldReportSection({
     } catch { /* ignore */ }
   }, [columnsStorageKey, visibleColumnKeys]);
 
+  const displayColumns = useMemo(
+    () => buildDisplayColumns(report.columns, combineForks, combineVersions),
+    [report.columns, combineForks, combineVersions],
+  );
+
+  const hasForkGroups = useMemo(
+    () => report.columns.some((col) => col.collapseGroupId !== undefined),
+    [report.columns],
+  );
+  const hasVersionGroups = useMemo(
+    () => report.columns.some((col) => col.versionGroupId !== undefined),
+    [report.columns],
+  );
+
   const columnsByNode = useMemo((): NodeGroup[] => {
     const groups = new Map<string, NodeGroup>();
-    for (const column of report.columns) {
+    for (const column of displayColumns) {
       const existing = groups.get(column.nodeId);
       if (existing) {
         existing.columns.push(column);
@@ -209,22 +334,22 @@ export function FieldReportSection({
       }
     }
     return [...groups.values()];
-  }, [report.columns]);
+  }, [displayColumns]);
 
   const effectiveVisibleKeys = useMemo((): Set<string> => {
-    if (visibleColumnKeys === null) return new Set(report.columns.map((col) => col.columnKey));
-    const valid = new Set(report.columns.map((col) => col.columnKey));
+    if (visibleColumnKeys === null) return new Set(displayColumns.map((col) => col.columnKey));
+    const valid = new Set(displayColumns.map((col) => col.columnKey));
     return new Set(visibleColumnKeys.filter((key) => valid.has(key)));
-  }, [visibleColumnKeys, report.columns]);
+  }, [visibleColumnKeys, displayColumns]);
 
   const displayedColumns = useMemo(
-    () => report.columns.filter((col) => effectiveVisibleKeys.has(col.columnKey)),
-    [report.columns, effectiveVisibleKeys],
+    () => displayColumns.filter((col) => effectiveVisibleKeys.has(col.columnKey)),
+    [displayColumns, effectiveVisibleKeys],
   );
 
   const filterColumn = useMemo(
-    () => report.columns.find((col) => col.columnKey === filterColumnKey) ?? null,
-    [report.columns, filterColumnKey],
+    () => displayColumns.find((col) => col.columnKey === filterColumnKey) ?? null,
+    [displayColumns, filterColumnKey],
   );
 
   const filteredRows = useMemo((): FieldReportSessionRow[] => {
@@ -236,7 +361,7 @@ export function FieldReportSection({
       if (statusFilter !== "all" && row.status !== statusFilter) return false;
 
       if (filterColumn && filterColumnKey) {
-        const rawValue = row.values[filterColumnKey] ?? "";
+        const rawValue = coalesceValue(row.values, filterColumn.memberKeys);
         if (filterColumn.type === "currency" || filterColumn.type === "number") {
           if (filterThreshold !== "") {
             const threshold = parseNumeric(filterThreshold);
@@ -258,7 +383,7 @@ export function FieldReportSection({
   const matchStats = useMemo(() => {
     if (!filterColumn || (filterColumn.type !== "currency" && filterColumn.type !== "number")) return null;
     const numbers = filteredRows
-      .map((row) => parseNumeric(row.values[filterColumnKey ?? ""] ?? ""))
+      .map((row) => parseNumeric(coalesceValue(row.values, filterColumn.memberKeys)))
       .filter((value): value is number => value !== null);
     if (numbers.length === 0) return null;
     const sum = numbers.reduce((total, value) => total + value, 0);
@@ -267,7 +392,7 @@ export function FieldReportSection({
       max: Math.max(...numbers),
       type: filterColumn.type,
     };
-  }, [filteredRows, filterColumn, filterColumnKey]);
+  }, [filteredRows, filterColumn]);
 
   const handleReset = useCallback(() => {
     const params = new URLSearchParams(searchParams.toString());
@@ -280,11 +405,11 @@ export function FieldReportSection({
   const handleColumnsChange = useCallback(
     (columnKey: string, checked: boolean) => {
       setVisibleColumnKeys((previous) => {
-        const current = previous ?? report.columns.map((col) => col.columnKey);
+        const current = previous ?? displayColumns.map((col) => col.columnKey);
         return checked ? [...current, columnKey] : current.filter((key) => key !== columnKey);
       });
     },
-    [report.columns],
+    [displayColumns],
   );
 
   if (report.columns.length === 0) {
@@ -314,7 +439,35 @@ export function FieldReportSection({
           <CardTitle className="text-sm font-medium text-muted-foreground">
             Template field reporting
           </CardTitle>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {hasForkGroups && (
+              <label
+                className="flex cursor-pointer items-center gap-1.5 text-[12px] text-[#5a5650]"
+                title="Combine fork-sibling steps that capture the same field into one column"
+              >
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5"
+                  checked={combineForks}
+                  onChange={(event) => setCombineForks(event.target.checked)}
+                />
+                Combine forked steps
+              </label>
+            )}
+            {hasVersionGroups && (
+              <label
+                className="flex cursor-pointer items-center gap-1.5 text-[12px] text-[#5a5650]"
+                title="Combine the same field captured across different versions of this flow"
+              >
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5"
+                  checked={combineVersions}
+                  onChange={(event) => setCombineVersions(event.target.checked)}
+                />
+                Combine across versions
+              </label>
+            )}
             <button
               type="button"
               onClick={handleReset}
@@ -484,7 +637,14 @@ export function FieldReportSection({
                 <TableHead className="w-[110px]">Started</TableHead>
                 <TableHead className="w-[110px]">Status</TableHead>
                 {displayedColumns.map((col) => (
-                  <TableHead key={col.columnKey}>{col.label}</TableHead>
+                  <TableHead key={col.columnKey}>
+                    {col.label}
+                    {col.stepNames.length > 1 && (
+                      <span className="block text-[10px] font-normal normal-case text-[#918d87]">
+                        {col.stepNames.join(" · ")}
+                      </span>
+                    )}
+                  </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -509,7 +669,7 @@ export function FieldReportSection({
                   </TableCell>
                   {displayedColumns.map((col) => (
                     <TableCell key={col.columnKey} className="max-w-[220px] truncate text-[13px]">
-                      {row.values[col.columnKey] || "—"}
+                      {coalesceValue(row.values, col.memberKeys) || "—"}
                     </TableCell>
                   ))}
                 </TableRow>
