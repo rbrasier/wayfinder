@@ -74,6 +74,34 @@ export interface EmbeddingsConfig {
   model: string;
 }
 
+// Which sign-in methods the application accepts, plus the Entra ID app
+// registration credentials. Stored as a JSON row in admin_system_settings and
+// resolved at runtime so an admin can change auth without a redeploy.
+export interface EntraCredentials {
+  tenantId: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+export interface AuthConfig {
+  emailPasswordEnabled: boolean;
+  entraEnabled: boolean;
+  entra: EntraCredentials;
+}
+
+export const createDefaultAuthConfig = (): AuthConfig => ({
+  emailPasswordEnabled: true,
+  entraEnabled: false,
+  entra: { tenantId: "", clientId: "", clientSecret: "" },
+});
+
+export const isEntraConfigured = (entra: EntraCredentials): boolean =>
+  entra.tenantId.length > 0 && entra.clientId.length > 0 && entra.clientSecret.length > 0;
+
+// Guards the lockout invariant: an admin must never disable every method.
+export const isAtLeastOneMethodEnabled = (config: AuthConfig): boolean =>
+  config.emailPasswordEnabled || config.entraEnabled;
+
 export const AI_CONFIG_SETTING_KEY = "ai_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
 export const REGISTRATION_ENABLED_SETTING_KEY = "registration_enabled";
@@ -82,3 +110,4 @@ export const EMAIL_CONFIG_SETTING_KEY = "email_config";
 export const EMBEDDINGS_CONFIG_SETTING_KEY = "embeddings_config";
 export const N8N_CONFIG_SETTING_KEY = "n8n_config";
 export const NOTIFICATION_PREFS_SETTING_KEY = "notification_prefs";
+export const AUTH_CONFIG_SETTING_KEY = "auth_config";

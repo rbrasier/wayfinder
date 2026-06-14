@@ -209,6 +209,14 @@ const build = () => {
       bucket: env.MINIO_BUCKET,
     },
     embeddingsProvider: env.EMBEDDINGS_PROVIDER,
+    entra:
+      env.ENTRA_TENANT_ID && env.ENTRA_CLIENT_ID && env.ENTRA_CLIENT_SECRET
+        ? {
+            tenantId: env.ENTRA_TENANT_ID,
+            clientId: env.ENTRA_CLIENT_ID,
+            clientSecret: env.ENTRA_CLIENT_SECRET,
+          }
+        : undefined,
   });
 
   const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);
@@ -371,17 +379,36 @@ const build = () => {
       ? new PkiCertAdapter(db, users, pkiConfig)
       : null;
 
-  const auth = createAuth(db, {
-    secret: env.BETTER_AUTH_SECRET,
-    baseURL: env.BETTER_AUTH_URL,
-    adminSeedEmail: env.ADMIN_SEED_EMAIL,
-    authMethod,
-  });
+  // The Better Auth instance reflects the runtime auth config, so it is built
+  // lazily and rebuilt whenever the config is invalidated (ADR-025). The auth
+  // route resolves the current instance per request — a settings change applies
+  // on the next request with no process restart.
+  let authInstance: ReturnType<typeof createAuth> | null = null;
+  let builtAuthVersion = -1;
+
+  const buildAuth = async () => {
+    const authConfig = await runtimeConfig.getAuthConfig();
+    return createAuth(db, {
+      secret: env.BETTER_AUTH_SECRET,
+      baseURL: env.BETTER_AUTH_URL,
+      adminSeedEmail: env.ADMIN_SEED_EMAIL,
+      authMethod,
+      authConfig,
+    });
+  };
+
+  const getAuth = async () => {
+    const version = runtimeConfig.getAuthVersion();
+    if (authInstance && builtAuthVersion === version) return authInstance;
+    authInstance = await buildAuth();
+    builtAuthVersion = version;
+    return authInstance;
+  };
 
   return {
     env,
     db,
-    auth,
+    getAuth,
     pkiCertAdapter,
     logger,
     objectStorage,

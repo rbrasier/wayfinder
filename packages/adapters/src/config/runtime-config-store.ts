@@ -1,13 +1,18 @@
 import {
   AI_CONFIG_SETTING_KEY,
+  AUTH_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
+  createDefaultAuthConfig,
+  isEntraConfigured,
   type AiConfig,
   type AiPurpose,
+  type AuthConfig,
   type BedrockCredentials,
   type EmbeddingsConfig,
+  type EntraCredentials,
   type ISystemSettingsRepository,
   type N8nConfig,
   type ProviderName,
@@ -59,6 +64,7 @@ export interface EnvDefaults {
   storage: StorageConfig;
   embeddingsProvider: EmbeddingsProvider;
   n8n?: N8nConfig;
+  entra?: EntraCredentials;
 }
 
 const DEFAULT_N8N_CONFIG: N8nConfig = { baseUrl: "", apiKey: "" };
@@ -209,6 +215,44 @@ const parseEmbeddingsConfig = (raw: string, fallback: EmbeddingsConfig): Embeddi
   }
 };
 
+const buildEnvAuthConfig = (env: EnvDefaults): AuthConfig => {
+  const defaults = createDefaultAuthConfig();
+  const entra = env.entra ?? defaults.entra;
+  return {
+    emailPasswordEnabled: defaults.emailPasswordEnabled,
+    // Env-only deployments: enable Entra automatically when all three
+    // credentials are present, so the DB row stays optional.
+    entraEnabled: isEntraConfigured(entra),
+    entra,
+  };
+};
+
+const stringOr = (value: unknown, fallback: string): string =>
+  typeof value === "string" && value.length > 0 ? value : fallback;
+
+const parseAuthConfig = (raw: string, fallback: AuthConfig): AuthConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    const rawEntra = isObject(parsed.entra) ? parsed.entra : {};
+    return {
+      emailPasswordEnabled:
+        typeof parsed.emailPasswordEnabled === "boolean"
+          ? parsed.emailPasswordEnabled
+          : fallback.emailPasswordEnabled,
+      entraEnabled:
+        typeof parsed.entraEnabled === "boolean" ? parsed.entraEnabled : fallback.entraEnabled,
+      entra: {
+        tenantId: stringOr(rawEntra.tenantId, fallback.entra.tenantId),
+        clientId: stringOr(rawEntra.clientId, fallback.entra.clientId),
+        clientSecret: stringOr(rawEntra.clientSecret, fallback.entra.clientSecret),
+      },
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 export class RuntimeConfigStore {
   private aiCache: AiConfig | null = null;
   private aiPending: Promise<AiConfig> | null = null;
@@ -221,6 +265,9 @@ export class RuntimeConfigStore {
   private embeddingsPending: Promise<EmbeddingsConfig> | null = null;
   private n8nCache: N8nConfig | null = null;
   private n8nPending: Promise<N8nConfig> | null = null;
+  private authCache: AuthConfig | null = null;
+  private authPending: Promise<AuthConfig> | null = null;
+  private authVersion = 0;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -303,8 +350,27 @@ export class RuntimeConfigStore {
     return this.n8nPending;
   }
 
+  async getAuthConfig(): Promise<AuthConfig> {
+    if (this.authCache) return this.authCache;
+    if (this.authPending) return this.authPending;
+    this.authPending = (async () => {
+      const fallback = buildEnvAuthConfig(this.envDefaults);
+      const result = await this.settingsRepo.get(AUTH_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value ? parseAuthConfig(result.data.value, fallback) : fallback;
+      this.authCache = config;
+      this.authPending = null;
+      return config;
+    })();
+    return this.authPending;
+  }
+
   getStorageVersion(): number {
     return this.storageVersion;
+  }
+
+  getAuthVersion(): number {
+    return this.authVersion;
   }
 
   invalidateAi(): void {
@@ -331,6 +397,12 @@ export class RuntimeConfigStore {
   invalidateN8n(): void {
     this.n8nCache = null;
     this.n8nPending = null;
+  }
+
+  invalidateAuth(): void {
+    this.authCache = null;
+    this.authPending = null;
+    this.authVersion++;
   }
 
   /**
@@ -361,5 +433,21 @@ export class RuntimeConfigStore {
 
   static redactN8n(config: N8nConfig): { baseUrl: string; apiKey: "set" | "unset" } {
     return { baseUrl: config.baseUrl, apiKey: config.apiKey ? "set" : "unset" };
+  }
+
+  static redactAuth(config: AuthConfig): {
+    emailPasswordEnabled: boolean;
+    entraEnabled: boolean;
+    entra: { tenantId: string; clientId: string; clientSecret: "set" | "unset" };
+  } {
+    return {
+      emailPasswordEnabled: config.emailPasswordEnabled,
+      entraEnabled: config.entraEnabled,
+      entra: {
+        tenantId: config.entra.tenantId,
+        clientId: config.entra.clientId,
+        clientSecret: config.entra.clientSecret ? "set" : "unset",
+      },
+    };
   }
 }

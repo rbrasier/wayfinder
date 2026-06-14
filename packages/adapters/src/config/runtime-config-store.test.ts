@@ -287,3 +287,89 @@ describe("RuntimeConfigStore — embeddings config", () => {
     expect(repo.get).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("RuntimeConfigStore — getAuthConfig", () => {
+  const fullEntraEnv = {
+    entra: { tenantId: "env-tenant", clientId: "env-client", clientSecret: "env-secret" },
+  };
+
+  it("defaults to email/password enabled and Entra disabled with no stored value or env", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    expect(config.emailPasswordEnabled).toBe(true);
+    expect(config.entraEnabled).toBe(false);
+    expect(config.entra).toEqual({ tenantId: "", clientId: "", clientSecret: "" });
+  });
+
+  it("falls back to ENTRA_* env credentials and enables Entra when fully configured", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv(fullEntraEnv));
+
+    const config = await store.getAuthConfig();
+
+    expect(config.entraEnabled).toBe(true);
+    expect(config.entra).toEqual(fullEntraEnv.entra);
+  });
+
+  it("lets the DB override the env credentials", async () => {
+    const stored = JSON.stringify({
+      emailPasswordEnabled: false,
+      entraEnabled: true,
+      entra: { tenantId: "db-tenant", clientId: "db-client", clientSecret: "db-secret" },
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv(fullEntraEnv));
+
+    const config = await store.getAuthConfig();
+
+    expect(config.emailPasswordEnabled).toBe(false);
+    expect(config.entra).toEqual({
+      tenantId: "db-tenant",
+      clientId: "db-client",
+      clientSecret: "db-secret",
+    });
+  });
+
+  it("keeps the env credential for any field the stored config leaves blank", async () => {
+    const stored = JSON.stringify({
+      emailPasswordEnabled: true,
+      entraEnabled: true,
+      entra: { tenantId: "db-tenant", clientId: "", clientSecret: "" },
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv(fullEntraEnv));
+
+    const config = await store.getAuthConfig();
+
+    expect(config.entra).toEqual({
+      tenantId: "db-tenant",
+      clientId: "env-client",
+      clientSecret: "env-secret",
+    });
+  });
+
+  it("caches until invalidated and bumps the auth version on invalidate", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    expect(store.getAuthVersion()).toBe(0);
+    await store.getAuthConfig();
+    await store.getAuthConfig();
+    store.invalidateAuth();
+    await store.getAuthConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(2);
+    expect(store.getAuthVersion()).toBe(1);
+  });
+
+  it("redacts the secret while preserving tenant and client IDs", () => {
+    const redacted = RuntimeConfigStore.redactAuth({
+      emailPasswordEnabled: true,
+      entraEnabled: true,
+      entra: { tenantId: "t", clientId: "c", clientSecret: "super-secret" },
+    });
+
+    expect(redacted.entra.tenantId).toBe("t");
+    expect(redacted.entra.clientId).toBe("c");
+    expect(redacted.entra.clientSecret).toBe("set");
+  });
+});

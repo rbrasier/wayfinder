@@ -95,3 +95,54 @@ describe("settings router — mergeApiKeys (bedrock)", () => {
     expect(merged.bedrock).toEqual(stored.bedrock);
   });
 });
+
+import { mergeAuthConfig } from "./settings";
+
+const storedAuth = {
+  emailPasswordEnabled: true,
+  entraEnabled: true,
+  entra: { tenantId: "stored-tenant", clientId: "stored-client", clientSecret: "stored-secret" },
+};
+
+describe("settings router — mergeAuthConfig", () => {
+  it("keeps the stored secret when the incoming secret is blank", () => {
+    const merged = mergeAuthConfig(
+      {
+        emailPasswordEnabled: false,
+        entraEnabled: true,
+        entra: { tenantId: "new-tenant", clientId: "new-client", clientSecret: "" },
+      },
+      storedAuth,
+    );
+
+    expect(merged.entra.clientSecret).toBe("stored-secret");
+    expect(merged.entra.tenantId).toBe("new-tenant");
+    expect(merged.emailPasswordEnabled).toBe(false);
+  });
+
+  it("replaces the stored secret when a new secret is provided", () => {
+    const merged = mergeAuthConfig(
+      {
+        emailPasswordEnabled: true,
+        entraEnabled: true,
+        entra: { tenantId: "t", clientId: "c", clientSecret: "rotated-secret" },
+      },
+      storedAuth,
+    );
+
+    expect(merged.entra.clientSecret).toBe("rotated-secret");
+  });
+
+  it("treats an omitted secret the same as a blank one", () => {
+    const merged = mergeAuthConfig(
+      {
+        emailPasswordEnabled: true,
+        entraEnabled: false,
+        entra: { tenantId: "t", clientId: "c" },
+      },
+      storedAuth,
+    );
+
+    expect(merged.entra.clientSecret).toBe("stored-secret");
+  });
+});

@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { isEntraConfigured, type AuthConfig as AuthMethodsConfig } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
 import type { PkiConfig } from "./pki-cert-adapter";
@@ -11,12 +12,36 @@ export type AuthMethod =
   | { readonly type: "google-oauth" }
   | { readonly type: "other" };
 
-export interface AuthConfig {
+export interface CreateAuthOptions {
   readonly secret: string;
   readonly baseURL: string;
   readonly adminSeedEmail: string | undefined;
   readonly authMethod: AuthMethod;
+  readonly authConfig: AuthMethodsConfig;
 }
+
+export interface MicrosoftProviderOptions {
+  readonly clientId: string;
+  readonly clientSecret: string;
+  readonly tenantId: string;
+}
+
+/**
+ * Resolves Better Auth's Microsoft social-provider options from the runtime
+ * auth config, or null when Entra must not be offered (disabled, or enabled
+ * but missing credentials — fail closed per ADR-025).
+ */
+export const microsoftProviderFor = (
+  authConfig: AuthMethodsConfig,
+): MicrosoftProviderOptions | null => {
+  if (!authConfig.entraEnabled) return null;
+  if (!isEntraConfigured(authConfig.entra)) return null;
+  return {
+    clientId: authConfig.entra.clientId,
+    clientSecret: authConfig.entra.clientSecret,
+    tenantId: authConfig.entra.tenantId,
+  };
+};
 
 /**
  * Minimal structural surface of the Better Auth instance that this template
@@ -35,16 +60,15 @@ export interface Auth {
  * The first user signing in with ADMIN_SEED_EMAIL is promoted to admin via
  * `seedAdmin` — call it once from the app's container after migrations.
  */
-export const createAuth = (db: Database, config: AuthConfig): Auth => {
+export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
   if (config.authMethod.type === "google-oauth") {
     throw new Error(
       "google-oauth requires additional setup. See docs/guides/google-oauth.md for configuration steps.",
     );
   }
 
-  const emailPasswordEnabled =
-    config.authMethod.type === "email-password" ||
-    config.authMethod.type === "pki-and-email-password";
+  const emailPasswordEnabled = config.authConfig.emailPasswordEnabled;
+  const microsoftProvider = microsoftProviderFor(config.authConfig);
 
   return betterAuth({
     database: drizzleAdapter(db, {
@@ -91,6 +115,12 @@ export const createAuth = (db: Database, config: AuthConfig): Auth => {
         createdAt: "created_at",
         updatedAt: "updated_at",
       },
+      // A first Entra sign-in whose verified email matches an existing user
+      // links to that user instead of creating a duplicate (ADR-025).
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ["microsoft", "email-password"],
+      },
     },
     verification: {
       modelName: "verification",
@@ -106,5 +136,16 @@ export const createAuth = (db: Database, config: AuthConfig): Auth => {
       autoSignIn: true,
       requireEmailVerification: false,
     },
+    ...(microsoftProvider
+      ? {
+          socialProviders: {
+            microsoft: {
+              clientId: microsoftProvider.clientId,
+              clientSecret: microsoftProvider.clientSecret,
+              tenantId: microsoftProvider.tenantId,
+            },
+          },
+        }
+      : {}),
   }) as unknown as Auth;
 };

@@ -1,6 +1,8 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   AI_CONFIG_SETTING_KEY,
+  AUTH_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
@@ -8,8 +10,11 @@ import {
   REGISTRATION_ENABLED_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
+  isAtLeastOneMethodEnabled,
+  isEntraConfigured,
   type AiConfig,
   type AiPurpose,
+  type AuthConfig,
   type BedrockCredentials,
   type EmailConfig,
   type N8nConfig,
@@ -180,6 +185,41 @@ export const mergeApiKeys = (
 const apiKeyState = (value: string | null): "set" | "unset" =>
   value && value.length > 0 ? "set" : "unset";
 
+const authConfigInputSchema = z.object({
+  emailPasswordEnabled: z.boolean(),
+  entraEnabled: z.boolean(),
+  entra: z.object({
+    tenantId: z.string().default(""),
+    clientId: z.string().default(""),
+    // Empty/omitted secret keeps the stored one — admins can't read it back.
+    clientSecret: z.string().nullable().optional(),
+  }),
+});
+
+type AuthConfigInput = {
+  emailPasswordEnabled: boolean;
+  entraEnabled: boolean;
+  entra: { tenantId: string; clientId: string; clientSecret?: string | null };
+};
+
+/**
+ * Merge an incoming auth config with the stored one. A blank/omitted secret
+ * keeps the previously-stored value so saving the form does not wipe a secret
+ * the admin can never read back from the redacted display.
+ */
+export const mergeAuthConfig = (incoming: AuthConfigInput, stored: AuthConfig): AuthConfig => ({
+  emailPasswordEnabled: incoming.emailPasswordEnabled,
+  entraEnabled: incoming.entraEnabled,
+  entra: {
+    tenantId: incoming.entra.tenantId,
+    clientId: incoming.entra.clientId,
+    clientSecret:
+      incoming.entra.clientSecret && incoming.entra.clientSecret.length > 0
+        ? incoming.entra.clientSecret
+        : stored.entra.clientSecret,
+  },
+});
+
 const bedrockState = (value: BedrockCredentials | null) => ({
   region: value?.region ?? null,
   accessKeyId: apiKeyState(value?.accessKeyId ?? null),
@@ -236,6 +276,49 @@ export const settingsRouter = router({
       ctx.container.runtimeConfig.invalidateAi();
       return { ok: true };
     }),
+
+  getAuthConfig: adminProcedure.query(async ({ ctx }) => {
+    const config = await ctx.container.runtimeConfig.getAuthConfig();
+    return {
+      emailPasswordEnabled: config.emailPasswordEnabled,
+      entraEnabled: config.entraEnabled,
+      entra: {
+        tenantId: config.entra.tenantId,
+        clientId: config.entra.clientId,
+        clientSecret: apiKeyState(config.entra.clientSecret),
+      },
+      redirectUri: `${ctx.container.env.BETTER_AUTH_URL}/api/auth/callback/microsoft`,
+    };
+  }),
+
+  setAuthConfig: adminProcedure
+    .input(authConfigInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const current = await ctx.container.runtimeConfig.getAuthConfig();
+      const merged = mergeAuthConfig(input, current);
+      if (!isAtLeastOneMethodEnabled(merged)) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "At least one sign-in method must stay enabled.",
+        });
+      }
+      const result = await ctx.container.repos.systemSettings.set(
+        AUTH_CONFIG_SETTING_KEY,
+        JSON.stringify(merged),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      ctx.container.runtimeConfig.invalidateAuth();
+      return { ok: true };
+    }),
+
+  // Public so the unauthenticated /login page can render the right controls.
+  enabledAuthMethods: publicProcedure.query(async ({ ctx }) => {
+    const config = await ctx.container.runtimeConfig.getAuthConfig();
+    return {
+      emailPassword: config.emailPasswordEnabled,
+      entra: config.entraEnabled && isEntraConfigured(config.entra),
+    };
+  }),
 
   getN8nConfig: adminProcedure.query(async ({ ctx }) => {
     const config: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();

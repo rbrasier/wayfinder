@@ -68,6 +68,11 @@ const serverEnvSchema = z.object({
   M365_TENANT_ID: z.string().optional(),
   M365_CLIENT_ID: z.string().optional(),
   M365_CLIENT_SECRET: z.string().optional(),
+  // Microsoft Entra ID sign-in (ADR-025). Fallbacks the admin-settings auth
+  // config overrides — the DB row takes precedence when present.
+  ENTRA_TENANT_ID: z.string().optional(),
+  ENTRA_CLIENT_ID: z.string().optional(),
+  ENTRA_CLIENT_SECRET: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
