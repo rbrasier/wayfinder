@@ -176,6 +176,11 @@ class FakeFlowVersionRepository implements IFlowVersionRepository {
   async restore(input: RestoreVersion): Promise<Result<FlowVersion>> {
     const number = this.nextNumber(input.flowId);
     const now = new Date();
+    // A restore realigns the live flow with the chosen version, so any stale
+    // open draft is dropped — mirrors the repository transaction.
+    this.versions = this.versions.filter(
+      (v) => !(v.flowId === input.flowId && v.status === "draft"),
+    );
     const version: FlowVersion = {
       id: `version-${++this.seq}`,
       flowId: input.flowId,
@@ -381,6 +386,38 @@ describe("RestoreFlowVersion", () => {
     expect(result.data?.changeSummary).toContain("version 1");
     expect(result.data?.snapshot.nodes[0]?.id).toBe("keep");
     expect(audit.entries[0]?.action).toBe("flow.version.restored");
+  });
+
+  it("clears the stale open draft so a post-restore edit opens a fresh draft", async () => {
+    await versions.createPublished({
+      flowId: "flow-1",
+      snapshot: buildFlowSnapshot(makeFlow({ name: "v1" }), [makeNode({ id: "keep" })], []),
+      publishedByUserId: "user-1",
+    });
+    // Edits made before the restore leave a stale draft behind.
+    const stale = await versions.upsertDraft({
+      flowId: "flow-1",
+      snapshot: buildFlowSnapshot(makeFlow({ name: "stale" }), [makeNode()], []),
+    });
+
+    await useCase.execute({ versionId: "version-1", restoredByUserId: "user-1" });
+
+    // The pre-restore draft is gone — the live flow now matches the restored version.
+    const afterRestore = await versions.openDraft("flow-1");
+    expect(afterRestore.data).toBeNull();
+
+    // A subsequent edit opens a brand-new draft (not the recycled stale one) that
+    // shows up in version history.
+    await versions.upsertDraft({
+      flowId: "flow-1",
+      snapshot: buildFlowSnapshot(makeFlow({ name: "fresh edit" }), [makeNode()], []),
+    });
+    const freshDraft = await versions.openDraft("flow-1");
+    expect(freshDraft.data).not.toBeNull();
+    expect(freshDraft.data?.id).not.toBe(stale.data?.id);
+
+    const history = await versions.listForFlow("flow-1");
+    expect(history.data?.some((v) => v.status === "draft")).toBe(true);
   });
 
   it("refuses to restore an unpublished draft", async () => {

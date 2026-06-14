@@ -39,6 +39,7 @@ import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal";
 import { VersionHistoryDialog } from "@/components/canvas/version-history-dialog";
+import { FlowVersionIndicator } from "@/components/canvas/flow-version-indicator";
 import { STEP_TYPE_ACCENT } from "@/components/canvas/node-styles";
 import { defaultConfigForType } from "@/components/canvas/node-defaults";
 import {
@@ -149,6 +150,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+
+  // Tracks whether the live definition diverges from the published version, so
+  // the header can show a "Draft · unpublished" indicator and the menu can offer
+  // "Publish new version". Seeded from the server and flipped true on every edit.
+  const versionStatusQuery = trpc.flowVersion.status.useQuery({ flowId });
+  const [hasUnpublishedChanges, setHasUnpublishedChanges] = useState(false);
+  useEffect(() => {
+    if (versionStatusQuery.data) setHasUnpublishedChanges(versionStatusQuery.data.hasOpenDraft);
+  }, [versionStatusQuery.data]);
+  const markEdited = useCallback(() => setHasUnpublishedChanges(true), []);
   const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
   const scheduledNodeEnabled =
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
@@ -216,7 +227,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
     for (const del of deletions) {
       void deleteEdgeMutation.mutateAsync({ edgeId: del.id, flowId });
     }
-  }, [deleteEdgeMutation, flowId]);
+    if (deletions.length > 0) markEdited();
+  }, [deleteEdgeMutation, flowId, markEdited]);
 
   const onConnect = useCallback((connection: Connection) => {
     if (!connection.source || !connection.target) return;
@@ -229,6 +241,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       target: connection.target,
     };
     setRfEdges((eds) => addEdge(edge, eds));
+    markEdited();
     void createEdgeMutation.mutateAsync({
       flowId,
       fromNodeId: connection.source,
@@ -238,7 +251,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         eds.map((e) => (e.id === edge.id ? { ...e, id: created.id } : e)),
       );
     });
-  }, [createEdgeMutation, flowId]);
+  }, [createEdgeMutation, flowId, markEdited]);
 
   // Persists a new node immediately (auto-save), optionally wiring an edge from
   // a source node, then opens its config modal. The node exists in the DB before
@@ -271,8 +284,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
       setCreatedNodeId(created.id);
       setEditingNodeId(created.id);
       setConfigOpen(true);
+      markEdited();
     },
-    [createNodeMutation, createEdgeMutation, flowId],
+    [createNodeMutation, createEdgeMutation, flowId, markEdited],
   );
 
   const onConnectEnd: OnConnectEnd = useCallback((event, connectionState) => {
@@ -312,9 +326,10 @@ function CanvasInner({ flowId }: { flowId: string }) {
         y: node.position.y,
       });
       positionTimers.current.delete(node.id);
+      markEdited();
     }, DEBOUNCE_MS);
     positionTimers.current.set(node.id, timer);
-  }, [updatePositionMutation, flowId]);
+  }, [updatePositionMutation, flowId, markEdited]);
 
   const handleConfigSave = useCallback(async (values: NodeConfigValues) => {
     if (!editingNodeId) return;
@@ -387,10 +402,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
       setCreatedNodeId(null);
       setConfigOpen(false);
       setEditingNodeId(null);
+      markEdited();
     } finally {
       setIsSavingConfig(false);
     }
-  }, [editingNodeId, flowId, rfNodes, updateNodeMutation]);
+  }, [editingNodeId, flowId, rfNodes, updateNodeMutation, markEdited]);
 
   const handleAddStep = useCallback(() => {
     setTypePickerOpen(true);
@@ -477,8 +493,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setCreatedNodeId(null);
     setConfigOpen(false);
     setEditingNodeId(null);
+    markEdited();
     toast.success("Step deleted");
-  }, [editingNodeId, deleteNodeMutation, flowId]);
+  }, [editingNodeId, deleteNodeMutation, flowId, markEdited]);
 
   const stepNumbers = useMemo(() => {
     const adaptedEdges = rfEdges.map((e) => ({ fromNodeId: e.source, toNodeId: e.target }));
@@ -653,6 +670,11 @@ function CanvasInner({ flowId }: { flowId: string }) {
           </button>
         )}
 
+        <FlowVersionIndicator
+          hasUnpublishedChanges={hasUnpublishedChanges}
+          latestPublishedNumber={versionStatusQuery.data?.latestPublishedNumber ?? null}
+        />
+
         <Badge variant={flowStatus === "published" ? "default" : "secondary"}>
           {flowStatus === "published"
             ? `Published · ${flowVisibility === "global" ? "Everyone" : "Only you"}`
@@ -752,6 +774,25 @@ function CanvasInner({ flowId }: { flowId: string }) {
                         }}
                       >
                         Make private (only you)
+                      </button>
+                    )}
+                    {flowStatus === "published" && hasUnpublishedChanges && (
+                      <button
+                        type="button"
+                        className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                        onClick={() => {
+                          setActionsMenuOpen(false);
+                          setPublishSubOpen(false);
+                          setHasUnpublishedChanges(false);
+                          void updateFlowMutation
+                            .mutateAsync({ flowId, status: "published" })
+                            .then(() => {
+                              toast.success("New version published");
+                              void versionStatusQuery.refetch();
+                            });
+                        }}
+                      >
+                        Publish new version
                       </button>
                     )}
                     {flowStatus === "published" && (
@@ -862,7 +903,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
         flowId={flowId}
         open={versionHistoryOpen}
         onOpenChange={setVersionHistoryOpen}
-        onRestored={() => void canvasQuery.refetch()}
+        onRestored={() => {
+          // A restore realigns the live flow with the chosen version, clearing
+          // any open draft — refresh both the canvas and the version indicator.
+          setHasUnpublishedChanges(false);
+          void canvasQuery.refetch();
+          void versionStatusQuery.refetch();
+        }}
       />
     </div>
   );

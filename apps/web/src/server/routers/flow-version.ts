@@ -33,6 +33,28 @@ export const flowVersionRouter = router({
       }));
     }),
 
+  // Lightweight header summary: which version is live and whether the editor has
+  // unpublished changes open as a draft. Powers the version indicator that sits
+  // beside the published-state badge in the flow editor.
+  status: authenticatedProcedure
+    .input(z.object({ flowId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to view this flow's history." });
+      }
+      const [draftResult, publishedResult] = await Promise.all([
+        ctx.container.repos.flowVersions.openDraft(input.flowId),
+        ctx.container.repos.flowVersions.latestPublished(input.flowId),
+      ]);
+      if (draftResult.error) throw toTrpcError(draftResult.error);
+      if (publishedResult.error) throw toTrpcError(publishedResult.error);
+
+      return {
+        hasOpenDraft: Boolean(draftResult.data),
+        latestPublishedNumber: publishedResult.data?.versionNumber ?? null,
+      };
+    }),
+
   get: authenticatedProcedure
     .input(z.object({ versionId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
