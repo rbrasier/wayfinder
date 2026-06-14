@@ -90,6 +90,40 @@ describe("NodemailerEmailSender with environment transport config", () => {
 
     expect(await sender.isConfigured()).toBe(true);
   });
+
+  it("rejects connectivity test in stream mode since there is no live endpoint", async () => {
+    const sender = new NodemailerEmailSender(new FakeSystemSettingsRepository(), makeEnvConfig());
+
+    const result = await sender.testConnectivity();
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("stream mode");
+  });
+
+  it("acquires an M365 token for an oauth2 env transport and surfaces token failures", async () => {
+    const sender = new NodemailerEmailSender(
+      new FakeSystemSettingsRepository(),
+      makeEnvConfig({
+        mode: "oauth2",
+        user: "mailer@tenant.com",
+        m365TenantId: "tenant-id",
+        m365ClientId: "client-id",
+        m365ClientSecret: "client-secret",
+      }),
+    );
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error("network down");
+    }) as typeof fetch;
+    try {
+      const result = await sender.testConnectivity();
+      // Reaching the token fetch proves the oauth2 verify branch was taken.
+      expect(result.error?.code).toBe("INFRA_FAILURE");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe("NodemailerEmailSender without environment transport config", () => {

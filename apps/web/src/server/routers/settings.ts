@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   AI_CONFIG_SETTING_KEY,
+  CONNECTIVITY_TARGETS,
   EMAIL_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
@@ -11,6 +12,7 @@ import {
   type AiConfig,
   type AiPurpose,
   type BedrockCredentials,
+  type ConnectivityTarget,
   type EmailConfig,
   type N8nConfig,
   type NotificationPreferences,
@@ -410,4 +412,22 @@ export const settingsRouter = router({
       if (result.error) throw toTrpcError(result.error);
       return { ok: true };
     }),
+
+  testConnectivity: adminProcedure
+    .input(
+      z.object({
+        target: z.enum([...CONNECTIVITY_TARGETS] as [ConnectivityTarget, ...ConnectivityTarget[]]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.connectivityTester.test(input.target);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  testAllConnectivity: adminProcedure.mutation(async ({ ctx }) => {
+    const result = await ctx.container.connectivityTester.testAll();
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
 });

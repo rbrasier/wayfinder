@@ -120,6 +120,7 @@ import {
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
   AiColumnMappingDetector,
+  CompositeConnectivityTester,
   FlowSessionGraph,
   GraphClient,
   GraphPeopleDirectory,
@@ -330,6 +331,13 @@ const build = () => {
   });
   const documentIndexer = new DocumentIndexingService(embeddings, documentChunks);
   const reindexSource = new DrizzleReindexSourceRepository(db);
+  const connectivityTester = new CompositeConnectivityTester({
+    runtimeConfig,
+    emailSender,
+    graphClient,
+    embeddingsProvider: embeddings,
+    openaiApiKey: env.OPENAI_API_KEY ?? null,
+  });
   objectStorage.initialise().catch((error: unknown) => {
     logger.warn("MinIO initialisation failed — object storage unavailable until the server restarts", { error });
   });
@@ -386,6 +394,7 @@ const build = () => {
     logger,
     objectStorage,
     runtimeConfig,
+    connectivityTester,
     resolveSession: (token: string) => resolveSession(db, token),
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog, approvals, hrDatasets },

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import type { ConnectivityResult, ConnectivityTarget } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -25,6 +26,139 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   mistral: "Mistral",
   bedrock: "Amazon Bedrock",
 };
+
+// Targets exercised by the header "Test all" button, in card order.
+const ALL_CONNECTIVITY_TARGETS: ConnectivityTarget[] = [
+  "ai",
+  "n8n",
+  "embeddings",
+  "storage",
+  "email",
+  "entra",
+];
+
+type BadgeState =
+  | { status: "idle" }
+  | { status: "testing" }
+  | { status: "ok"; latencyMs?: number; message?: string }
+  | { status: "skipped"; message?: string }
+  | { status: "failed"; message?: string };
+
+interface ConnectivityController {
+  states: Partial<Record<ConnectivityTarget, BadgeState>>;
+  runTest: (target: ConnectivityTarget) => Promise<void>;
+  runAll: (targets: ConnectivityTarget[]) => Promise<void>;
+  isBusy: boolean;
+}
+
+const toBadge = (result: ConnectivityResult): BadgeState => {
+  if (result.skipped) return { status: "skipped", message: result.message };
+  if (result.ok) return { status: "ok", latencyMs: result.latencyMs, message: result.message };
+  return { status: "failed", message: result.message };
+};
+
+function useConnectivity(): ConnectivityController {
+  const [states, setStates] = useState<Partial<Record<ConnectivityTarget, BadgeState>>>({});
+  const mutation = trpc.settings.testConnectivity.useMutation();
+
+  const runTest = useCallback(
+    async (target: ConnectivityTarget) => {
+      setStates((prev) => ({ ...prev, [target]: { status: "testing" } }));
+      try {
+        const result = await mutation.mutateAsync({ target });
+        setStates((prev) => ({ ...prev, [target]: toBadge(result) }));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Probe failed";
+        setStates((prev) => ({ ...prev, [target]: { status: "failed", message } }));
+      }
+    },
+    [mutation],
+  );
+
+  // Fan out to per-card probes in parallel so each badge resolves independently.
+  const runAll = useCallback(
+    async (targets: ConnectivityTarget[]) => {
+      await Promise.all(targets.map((target) => runTest(target)));
+    },
+    [runTest],
+  );
+
+  const isBusy = Object.values(states).some((state) => state?.status === "testing");
+
+  return { states, runTest, runAll, isBusy };
+}
+
+function ConnectivityBadge({ target, state }: { target: ConnectivityTarget; state?: BadgeState }) {
+  if (!state || state.status === "idle") return null;
+
+  const testId = `connectivity-badge-${target}`;
+  if (state.status === "testing") {
+    return (
+      <span
+        data-testid={testId}
+        data-status="testing"
+        className="inline-flex items-center gap-1 rounded-md border border-[#dedad2] bg-[#f7f6f3] px-2 py-1 text-xs text-muted-foreground"
+      >
+        <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground" /> Testing…
+      </span>
+    );
+  }
+  if (state.status === "ok") {
+    return (
+      <span
+        data-testid={testId}
+        data-status="ok"
+        className="inline-flex rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-900"
+      >
+        Reachable{typeof state.latencyMs === "number" ? ` · ${state.latencyMs} ms` : ""}
+      </span>
+    );
+  }
+  if (state.status === "skipped") {
+    return (
+      <span
+        data-testid={testId}
+        data-status="skipped"
+        className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900"
+      >
+        {state.message ?? "Not configured"}
+      </span>
+    );
+  }
+  return (
+    <span
+      data-testid={testId}
+      data-status="failed"
+      className="inline-flex rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-900"
+    >
+      Failed{state.message ? `: ${state.message}` : ""}
+    </span>
+  );
+}
+
+function ConnectivityTest({
+  target,
+  controller,
+}: {
+  target: ConnectivityTarget;
+  controller: ConnectivityController;
+}) {
+  const state = controller.states[target];
+  return (
+    <div className="flex items-center gap-2 border-t border-[#ece9e3] pt-3">
+      <Button
+        size="sm"
+        variant="secondary"
+        data-testid={`test-connectivity-${target}`}
+        onClick={() => void controller.runTest(target)}
+        disabled={state?.status === "testing"}
+      >
+        {state?.status === "testing" ? "Testing…" : "Test connectivity"}
+      </Button>
+      <ConnectivityBadge target={target} state={state} />
+    </div>
+  );
+}
 
 function OrganisationNameCard() {
   const orgNameQuery = trpc.settings.get.useQuery({ key: "organisation_name" });
@@ -120,7 +254,7 @@ function RegistrationToggleCard() {
   );
 }
 
-function AiProviderCard() {
+function AiProviderCard({ connectivity }: { connectivity: ConnectivityController }) {
   const utils = trpc.useUtils();
   const aiQuery = trpc.settings.getAiConfig.useQuery();
   const saveMutation = trpc.settings.setAiConfig.useMutation({
@@ -145,6 +279,16 @@ function AiProviderCard() {
   const [bedrockSecretAccessKey, setBedrockSecretAccessKey] = useState("");
 
   const config = aiQuery.data;
+  const aiConfigured = config
+    ? config.provider === "anthropic"
+      ? config.apiKeys.anthropic === "set"
+      : config.provider === "openai"
+        ? config.apiKeys.openai === "set"
+        : config.provider === "mistral"
+          ? config.apiKeys.mistral === "set"
+          : config.apiKeys.bedrock.accessKeyId === "set" &&
+            config.apiKeys.bedrock.secretAccessKey === "set"
+    : false;
 
   useEffect(() => {
     if (!open || !config) return;
@@ -237,6 +381,7 @@ function AiProviderCard() {
             </div>
           </>
         )}
+        {aiConfigured && <ConnectivityTest target="ai" controller={connectivity} />}
       </CardContent>
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
@@ -369,7 +514,7 @@ function AiProviderCard() {
   );
 }
 
-function N8nIntegrationCard() {
+function N8nIntegrationCard({ connectivity }: { connectivity: ConnectivityController }) {
   const utils = trpc.useUtils();
   const configQuery = trpc.settings.getN8nConfig.useQuery();
   const saveMutation = trpc.settings.setN8nConfig.useMutation({
@@ -428,6 +573,9 @@ function N8nIntegrationCard() {
             </div>
           </>
         )}
+        {config && Boolean(config.baseUrl) && config.apiKey === "set" && (
+          <ConnectivityTest target="n8n" controller={connectivity} />
+        )}
       </CardContent>
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
@@ -474,7 +622,7 @@ function N8nIntegrationCard() {
   );
 }
 
-function StorageCard() {
+function StorageCard({ connectivity }: { connectivity: ConnectivityController }) {
   const utils = trpc.useUtils();
   const storageQuery = trpc.settings.getStorageConfig.useQuery();
   const saveMutation = trpc.settings.setStorageConfig.useMutation({
@@ -558,6 +706,9 @@ function StorageCard() {
               <span className="font-mono text-xs">{config.secretKey || "—"}</span>
             </div>
           </>
+        )}
+        {config && Boolean(config.endpoint && config.accessKey && config.secretKey && config.bucket) && (
+          <ConnectivityTest target="storage" controller={connectivity} />
         )}
       </CardContent>
 
@@ -643,7 +794,7 @@ const EMBEDDINGS_PROVIDER_LABEL: Record<EmbeddingsProviderChoice, string> = {
   openai: "OpenAI",
 };
 
-function RagEmbeddingsCard() {
+function RagEmbeddingsCard({ connectivity }: { connectivity: ConnectivityController }) {
   const utils = trpc.useUtils();
   const configQuery = trpc.settings.getEmbeddingsConfig.useQuery();
   const saveMutation = trpc.settings.setEmbeddingsConfig.useMutation({
@@ -765,6 +916,7 @@ function RagEmbeddingsCard() {
             </p>
           ) : null}
         </div>
+        {config && <ConnectivityTest target="embeddings" controller={connectivity} />}
       </CardContent>
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
@@ -932,7 +1084,7 @@ const EMAIL_PROVIDER_LABEL: Record<EmailProviderChoice, string> = {
   m365: "Microsoft 365",
 };
 
-function EmailCard() {
+function EmailCard({ connectivity }: { connectivity: ConnectivityController }) {
   const utils = trpc.useUtils();
   const configQuery = trpc.settings.getEmailConfig.useQuery();
   const saveMutation = trpc.settings.setEmailConfig.useMutation({
@@ -1103,6 +1255,8 @@ function EmailCard() {
             </Button>
           </div>
         )}
+
+        {isConfigured && <ConnectivityTest target="email" controller={connectivity} />}
       </CardContent>
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
@@ -1499,7 +1653,7 @@ function HrDataCard() {
   );
 }
 
-function EntraDirectoryCard() {
+function EntraDirectoryCard({ connectivity }: { connectivity: ConnectivityController }) {
   return (
     <Card>
       <CardHeader>
@@ -1515,35 +1669,48 @@ function EntraDirectoryCard() {
           <code>Directory.Read.All</code> (tenant admin consent) to enable live reporting-line and
           people search. Until then, resolution falls back to the HR upload and manual pick.
         </p>
+        <ConnectivityTest target="entra" controller={connectivity} />
       </CardContent>
     </Card>
   );
 }
 
 export default function AppSettingsPage() {
+  const connectivity = useConnectivity();
+
   return (
     <div className="h-full overflow-auto">
       <div className="container py-8">
         <div className="space-y-6">
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Configuration</h1>
-            <p className="text-sm text-muted-foreground">
-              Configure global behaviour for this application.
-            </p>
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <h1 className="text-2xl font-semibold tracking-tight">Configuration</h1>
+              <p className="text-sm text-muted-foreground">
+                Configure global behaviour for this application.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              data-testid="test-all-connectivity"
+              onClick={() => void connectivity.runAll(ALL_CONNECTIVITY_TARGETS)}
+              disabled={connectivity.isBusy}
+            >
+              {connectivity.isBusy ? "Testing…" : "Test all"}
+            </Button>
           </div>
 
           <div className="space-y-4">
             <OrganisationNameCard />
             <RegistrationToggleCard />
-            <AiProviderCard />
-            <N8nIntegrationCard />
-            <RagEmbeddingsCard />
-            <StorageCard />
+            <AiProviderCard connectivity={connectivity} />
+            <N8nIntegrationCard connectivity={connectivity} />
+            <RagEmbeddingsCard connectivity={connectivity} />
+            <StorageCard connectivity={connectivity} />
             <SessionUploadsCard />
-            <EmailCard />
+            <EmailCard connectivity={connectivity} />
             <NotificationSettingsCard />
             <HrDataCard />
-            <EntraDirectoryCard />
+            <EntraDirectoryCard connectivity={connectivity} />
           </div>
         </div>
       </div>
