@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
+import { trpc } from "@/trpc/client";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -15,10 +16,25 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const isExpired = searchParams.get("expired") === "true";
 
+  const methodsQuery = trpc.settings.enabledAuthMethods.useQuery();
+  const emailPasswordEnabled = methodsQuery.data?.emailPassword ?? true;
+  const entraEnabled = methodsQuery.data?.entra ?? false;
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const onMicrosoftSignIn = async (): Promise<void> => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      await authClient.signIn.social({ provider: "microsoft", callbackURL: "/admin" });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setSubmitting(false);
+    }
+  };
 
   const onSubmit = async (e: FormEvent): Promise<void> => {
     e.preventDefault();
@@ -76,52 +92,77 @@ function LoginForm() {
               Your session has expired, please sign in again.
             </p>
           )}
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={submitting}>
-              {submitting ? "Signing in…" : "Sign in"}
-            </Button>
-            {isDev && (
+          {emailPasswordEnabled && (
+            <form onSubmit={onSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <Button type="submit" className="w-full" disabled={submitting}>
+                {submitting ? "Signing in…" : "Sign in"}
+              </Button>
+              {isDev && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={onDevLogin}
+                  disabled={submitting || !email}
+                >
+                  Dev login (skip password)
+                </Button>
+              )}
+              <p className="text-center text-sm text-muted-foreground">
+                No account?{" "}
+                <Link href="/register" className="underline">
+                  Register
+                </Link>
+              </p>
+            </form>
+          )}
+          {entraEnabled && (
+            <div className="space-y-4">
+              {emailPasswordEnabled && (
+                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" />
+                  or
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
+              {!emailPasswordEnabled && error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
               <Button
                 type="button"
                 variant="outline"
                 className="w-full"
-                onClick={onDevLogin}
-                disabled={submitting || !email}
+                onClick={onMicrosoftSignIn}
+                disabled={submitting}
               >
-                Dev login (skip password)
+                Sign in with Microsoft
               </Button>
-            )}
-            <p className="text-center text-sm text-muted-foreground">
-              No account?{" "}
-              <Link href="/register" className="underline">
-                Register
-              </Link>
-            </p>
-          </form>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
