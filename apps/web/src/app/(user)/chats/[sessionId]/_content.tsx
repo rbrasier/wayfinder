@@ -393,20 +393,22 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         />
       )}
 
-      <ChatComposer
-        sessionId={sessionId}
-        value={input}
-        onChange={(value) => {
-          setInput(value);
-          if (session.status !== "active") return;
-          const now = Date.now();
-          if (now - lastTypingHeartbeatRef.current < 2000) return;
-          lastTypingHeartbeatRef.current = now;
-          heartbeatMutation.mutate({ sessionId });
-        }}
-        onSubmit={handleSend}
-        disabled={isLoading || session.status !== "active" || isFlowDeleted || isApprovalGate}
-      />
+      {!isShared && (
+        <ChatComposer
+          sessionId={sessionId}
+          value={input}
+          onChange={(value) => {
+            setInput(value);
+            if (session.status !== "active") return;
+            const now = Date.now();
+            if (now - lastTypingHeartbeatRef.current < 2000) return;
+            lastTypingHeartbeatRef.current = now;
+            heartbeatMutation.mutate({ sessionId });
+          }}
+          onSubmit={handleSend}
+          disabled={isLoading || session.status !== "active" || isFlowDeleted || isApprovalGate}
+        />
+      )}
 
       <BranchOverrideModal
         open={overrideOpen}

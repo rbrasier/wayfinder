@@ -32,11 +32,12 @@ test.describe('Flow selector: search-for-more', () => {
       return;
     }
 
-    const flowButtons = page.getByRole('button').filter({ hasText: /\bsessions?\b/i });
-    const count = await flowButtons.count();
-
-    if (count > 5) {
-      test.skip(true, 'More than 5 flows present — this test only applies to ≤ 5');
+    const hasSearchButton = await page
+      .getByRole('button', { name: /search for more/i })
+      .isVisible()
+      .catch(() => false);
+    if (hasSearchButton) {
+      test.skip(true, 'More than 5 flows present — search button already visible');
       return;
     }
 

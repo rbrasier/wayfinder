@@ -1,5 +1,6 @@
 import type { Result } from "@rbrasier/domain";
 import { schema } from "@rbrasier/adapters";
+import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
 
 // Deterministic fixture data seeded before the E2E suite so that specs gated on
@@ -328,22 +329,68 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   return { flowId: flow.id, sessionId: session.id, forkFlowId };
 };
 
-// Clears every flow/session row in the (dedicated) E2E database — the seed
-// fixtures and anything the specs created — in foreign-key-safe order. Auth
-// users/sessions and system settings are left intact so re-runs work.
+// Clears only the E2E admin user's flows and sessions — in foreign-key-safe
+// order — leaving data owned by other users untouched. Auth users/sessions
+// and system settings are never touched so re-runs work.
 export const teardownE2EFixtures = async (container: Container): Promise<void> => {
   const { db } = container;
-  await db.delete(schema.app_notification_log);
-  await db.delete(schema.app_session_schedule_runs);
-  await db.delete(schema.app_session_schedules);
-  await db.delete(schema.app_session_step_outputs);
-  await db.delete(schema.app_session_uploads);
-  await db.delete(schema.app_session_typing);
-  await db.delete(schema.app_session_messages);
-  await db.delete(schema.kb_document_chunks);
-  await db.delete(schema.app_sessions);
-  await db.delete(schema.kb_context_doc_content);
-  await db.delete(schema.app_flow_edges);
-  await db.delete(schema.app_flow_nodes);
-  await db.delete(schema.app_flows);
+
+  const adminUserId = await resolveAdminUserId(container);
+
+  const flowRows = await db
+    .select({ id: schema.app_flows.id })
+    .from(schema.app_flows)
+    .where(eq(schema.app_flows.owner_user_id, adminUserId));
+  const flowIds = flowRows.map((r) => r.id);
+
+  const sessionRows = await db
+    .select({ id: schema.app_sessions.id })
+    .from(schema.app_sessions)
+    .where(eq(schema.app_sessions.user_id, adminUserId));
+  const sessionIds = sessionRows.map((r) => r.id);
+
+  await db
+    .delete(schema.app_notification_log)
+    .where(eq(schema.app_notification_log.recipient_user_id, adminUserId));
+
+  if (sessionIds.length > 0) {
+    await db
+      .delete(schema.app_session_schedule_runs)
+      .where(inArray(schema.app_session_schedule_runs.session_id, sessionIds));
+    await db
+      .delete(schema.app_session_schedules)
+      .where(inArray(schema.app_session_schedules.session_id, sessionIds));
+    await db
+      .delete(schema.app_session_step_outputs)
+      .where(inArray(schema.app_session_step_outputs.session_id, sessionIds));
+    await db
+      .delete(schema.app_session_uploads)
+      .where(inArray(schema.app_session_uploads.session_id, sessionIds));
+    await db
+      .delete(schema.app_session_typing)
+      .where(inArray(schema.app_session_typing.session_id, sessionIds));
+    await db
+      .delete(schema.app_session_messages)
+      .where(inArray(schema.app_session_messages.session_id, sessionIds));
+    await db
+      .delete(schema.kb_document_chunks)
+      .where(inArray(schema.kb_document_chunks.session_id, sessionIds));
+    await db.delete(schema.app_sessions).where(eq(schema.app_sessions.user_id, adminUserId));
+  }
+
+  if (flowIds.length > 0) {
+    await db
+      .delete(schema.kb_document_chunks)
+      .where(inArray(schema.kb_document_chunks.flow_id, flowIds));
+    await db
+      .delete(schema.kb_context_doc_content)
+      .where(inArray(schema.kb_context_doc_content.flow_id, flowIds));
+    await db
+      .delete(schema.app_flow_edges)
+      .where(inArray(schema.app_flow_edges.flow_id, flowIds));
+    await db
+      .delete(schema.app_flow_nodes)
+      .where(inArray(schema.app_flow_nodes.flow_id, flowIds));
+    await db.delete(schema.app_flows).where(eq(schema.app_flows.owner_user_id, adminUserId));
+  }
 };

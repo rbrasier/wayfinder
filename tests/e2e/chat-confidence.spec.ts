@@ -103,12 +103,7 @@ test.describe('Chat: Confidence', () => {
 
     await input.fill('I have gathered all the required information and am ready to proceed');
 
-    const sendBtn = page.getByRole('button', { name: /send message/i });
-    if (await sendBtn.isVisible().catch(() => false)) {
-      await sendBtn.click();
-    } else {
-      await input.press('Enter');
-    }
+    await input.press('Enter');
 
     const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
 
@@ -153,12 +148,7 @@ test.describe('Chat: Confidence', () => {
     for (let i = 0; i < turns.length; i++) {
       await input.fill(turns[i]);
 
-      const sendBtn = page.getByRole('button', { name: /send message/i });
-      if (await sendBtn.isVisible().catch(() => false)) {
-        await sendBtn.click();
-      } else {
-        await input.press('Enter');
-      }
+      await input.press('Enter');
 
       // Wait for input to clear (message was accepted)
       await page.waitForFunction(
