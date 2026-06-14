@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { MockLanguageModelV1 } from "ai/test";
 import type { AiTurnPayload, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
 import {
+  applyAdvanceSideEffects,
   buildGatheredContext,
   generateDocument,
   generateInitialMessage,
 } from "./turn-helpers";
+import type { Session } from "@rbrasier/domain";
 
 const makeAssistantMessage = (overrides: Partial<SessionMessage> = {}): SessionMessage => ({
   id: "msg-1",
@@ -339,6 +341,136 @@ describe("generateDocument return value", () => {
     );
 
     expect(result).toBe(true);
+  });
+});
+
+describe("applyAdvanceSideEffects", () => {
+  const makeSession = (): Session =>
+    ({
+      id: "sess-1",
+      flowId: "flow-1",
+      userId: "user-1",
+      status: "active",
+      title: null,
+      currentNodeId: "node-2",
+      awaitingConfirmationNodeId: null,
+      graphCheckpoint: null,
+      pendingExecutions: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as unknown as Session);
+
+  const completedDocNode = makeNode({
+    id: "node-1",
+    name: "Gather details",
+    config: {
+      outputType: "generate_document",
+      documentTemplatePath: "tpl.docx",
+    } as unknown as FlowNode["config"],
+  });
+
+  const model = new MockLanguageModelV1({
+    defaultObjectGenerationMode: "json",
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: "stop",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      text: JSON.stringify({ response: "Hi", rationale: "r", stepCompleteConfidence: 0, contextGathered: [] }),
+    }),
+  });
+
+  const baseInput = (overrides: Record<string, unknown>) => ({
+    container: overrides.container,
+    session: makeSession(),
+    flow: makeFlow(),
+    nodes: overrides.nodes as FlowNode[],
+    completedNode: completedDocNode,
+    newNodeId: (overrides.newNodeId as string | null) ?? null,
+    fallbackMessages: [],
+    gatheredContext: "",
+    organisationName: null,
+    userProfile: null,
+    userId: "user-1",
+    isAdmin: false,
+    model,
+    provider: "anthropic",
+  }) as unknown as Parameters<typeof applyAdvanceSideEffects>[0];
+
+  it("generates a document for the completed doc-node when a template is present", async () => {
+    const updateDocumentStatus = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const generateDocumentExecute = vi.fn().mockResolvedValue({ data: { document: {} }, error: null });
+    const listBySession = vi.fn().mockResolvedValue({
+      data: [makeAssistantMessage({ id: "milestone", stepNodeId: "node-1" })],
+      error: null,
+    });
+
+    const container = {
+      repos: {
+        sessionMessages: { listBySession, updateDocumentStatus },
+        usageRepo: {},
+      },
+      useCases: { generateDocument: { execute: generateDocumentExecute } },
+      services: { errorLogger: { log: vi.fn().mockResolvedValue({ error: null }) } },
+    };
+
+    await applyAdvanceSideEffects(baseInput({ container, nodes: [completedDocNode], newNodeId: null }));
+
+    expect(updateDocumentStatus).toHaveBeenCalledWith("milestone", "pending");
+    expect(generateDocumentExecute).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips the AI opener for an approval new node", async () => {
+    const retrieveExecute = vi.fn().mockResolvedValue({ data: [], error: null });
+    const listBySession = vi.fn().mockResolvedValue({ data: [], error: null });
+    const approvalNode = makeNode({ id: "node-2", config: {} as unknown as FlowNode["config"] });
+    (approvalNode as { type: string }).type = "approval";
+
+    const container = {
+      repos: { sessionMessages: { listBySession, updateDocumentStatus: vi.fn() }, usageRepo: {} },
+      useCases: {
+        generateDocument: { execute: vi.fn() },
+        retrieveDocumentChunks: { execute: retrieveExecute },
+        isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: false, error: null }) },
+      },
+      services: { errorLogger: { log: vi.fn() }, sessionAgent: { buildSystemPrompt: vi.fn() } },
+    };
+
+    await applyAdvanceSideEffects(
+      baseInput({ container, nodes: [completedDocNode, approvalNode], newNodeId: "node-2" }),
+    );
+
+    // The approval gate raises its own request; no opener turn should run.
+    expect(retrieveExecute).not.toHaveBeenCalled();
+  });
+
+  it("generates an AI opener for a conversational new node", async () => {
+    const retrieveExecute = vi.fn().mockResolvedValue({ data: [], error: null });
+    const listBySession = vi.fn().mockResolvedValue({ data: [], error: null });
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const conversationalNode = makeNode({
+      id: "node-2",
+      config: { aiInstruction: "Help", doneWhen: "done", outputType: "conversation_only" } as unknown as FlowNode["config"],
+    });
+
+    const container = {
+      repos: { sessionMessages: { listBySession, updateDocumentStatus: vi.fn(), create }, usageRepo: {} },
+      useCases: {
+        generateDocument: { execute: vi.fn() },
+        retrieveDocumentChunks: { execute: retrieveExecute },
+        isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: false, error: null }) },
+      },
+      services: {
+        errorLogger: { log: vi.fn() },
+        sessionAgent: { buildSystemPrompt: vi.fn().mockReturnValue({ data: "prompt", error: null }) },
+      },
+    };
+
+    await applyAdvanceSideEffects(
+      baseInput({ container, nodes: [completedDocNode, conversationalNode], newNodeId: "node-2" }),
+    );
+
+    expect(retrieveExecute).toHaveBeenCalled();
+    expect(create).toHaveBeenCalled();
   });
 });
 

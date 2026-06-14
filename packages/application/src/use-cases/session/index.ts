@@ -9,5 +9,6 @@ export * from "./run-turn";
 export * from "./run-auto-node";
 export * from "./apply-auto-node-result";
 export * from "./override-branch";
+export * from "./confirm-step-advance";
 export * from "./heartbeat-typing";
 export * from "./list-typing-users";

@@ -169,6 +169,13 @@
       "when": 1781380796751,
       "tag": "0023_flow_versioning",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781474230849,
+      "tag": "0024_next_hitman",
+      "breakpoints": true
     }
   ]
 }

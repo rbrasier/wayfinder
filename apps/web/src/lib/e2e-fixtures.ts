@@ -11,6 +11,8 @@ import type { Container } from "./container";
 const SEED_FLOW_NAME = "E2E SEED Onboarding Flow";
 const SEED_SESSION_TITLE = "E2E SEED Session";
 const SEED_FORK_FLOW_NAME = "E2E SEED Fork Flow";
+const SEED_CONFIRM_FLOW_NAME = "E2E SEED Confirmation Flow";
+const SEED_CONFIRM_SESSION_TITLE = "E2E SEED Confirmation Session";
 
 const unwrap = <T>(result: Result<T>, context: string): T => {
   if (result.error) {
@@ -37,6 +39,7 @@ export interface SeedResult {
   flowId: string;
   sessionId: string;
   forkFlowId: string;
+  confirmationSessionId: string;
 }
 
 // A fork flow whose two mutually-exclusive branches capture the same `amount`
@@ -150,6 +153,111 @@ const seedForkFlow = async (container: Container, ownerUserId: string): Promise<
   }
 
   return flow.id;
+};
+
+// A two-step conversational flow whose first step has `requireConfirmation` on.
+// The seeded session has reached the step's threshold and is parked in the
+// awaiting-confirmation state, so the ConfirmStepCard renders deterministically
+// without driving a live AI turn. Drives the step-confirmation-toggle e2e spec.
+const seedConfirmationSession = async (
+  container: Container,
+  ownerUserId: string,
+): Promise<string> => {
+  const flow = unwrap(
+    await container.useCases.createFlow.execute({
+      name: SEED_CONFIRM_FLOW_NAME,
+      description: "Seeded flow whose first step requires operator confirmation",
+      expertRole: "Onboarding Expert",
+      ownerUserId,
+    }),
+    "create confirmation flow",
+  );
+
+  const confirmNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Confirm requester details",
+      positionX: 120,
+      positionY: 120,
+      config: {
+        aiInstruction: "Collect the requester's name and organisation.",
+        doneWhen: "Name and organisation are confirmed.",
+        outputType: "conversation_only",
+        requireConfirmation: true,
+      },
+    }),
+    "create confirm node",
+  );
+
+  const nextNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Plan next steps",
+      positionX: 420,
+      positionY: 120,
+      config: {
+        aiInstruction: "Plan the onboarding next steps.",
+        doneWhen: "The plan is agreed.",
+        outputType: "conversation_only",
+      },
+    }),
+    "create confirm next node",
+  );
+
+  unwrap(
+    await container.useCases.createFlowEdge.execute({
+      flowId: flow.id,
+      fromNodeId: confirmNode.id,
+      toNodeId: nextNode.id,
+    }),
+    "create confirm edge",
+  );
+
+  unwrap(
+    await container.useCases.updateFlow.execute(
+      flow.id,
+      { status: "published", visibility: { kind: "global" } },
+      { canPublishToEveryone: true },
+    ),
+    "publish confirmation flow",
+  );
+
+  const session = unwrap(
+    await container.useCases.startSession.execute({ flowId: flow.id, userId: ownerUserId }),
+    "start confirmation session",
+  );
+
+  unwrap(
+    await container.repos.sessionMessages.create({
+      sessionId: session.id,
+      role: "assistant",
+      content: "Thanks — I have your name and organisation. Proceed when you're ready.",
+      confidence: 95,
+      stepNodeId: confirmNode.id,
+      aiPayload: {
+        response: "Thanks — I have your name and organisation. Proceed when you're ready.",
+        rationale: "Details gathered; the step is complete but held for operator confirmation.",
+        stepCompleteConfidence: 95,
+        contextGathered: [
+          { key: "Name", value: "Jane Smith" },
+          { key: "Organisation", value: "Acme Ltd" },
+        ],
+      },
+    }),
+    "create confirmation assistant message",
+  );
+
+  unwrap(
+    await container.repos.sessions.update(session.id, {
+      title: SEED_CONFIRM_SESSION_TITLE,
+      awaitingConfirmationNodeId: confirmNode.id,
+    }),
+    "park confirmation session in awaiting state",
+  );
+
+  return session.id;
 };
 
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
@@ -325,8 +433,9 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   );
 
   const forkFlowId = await seedForkFlow(container, ownerUserId);
+  const confirmationSessionId = await seedConfirmationSession(container, ownerUserId);
 
-  return { flowId: flow.id, sessionId: session.id, forkFlowId };
+  return { flowId: flow.id, sessionId: session.id, forkFlowId, confirmationSessionId };
 };
 
 // Clears only the E2E admin user's flows and sessions — in foreign-key-safe

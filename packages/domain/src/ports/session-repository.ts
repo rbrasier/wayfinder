@@ -5,6 +5,7 @@ export interface SessionUpdate {
   status?: SessionStatus;
   title?: string | null;
   currentNodeId?: string | null;
+  awaitingConfirmationNodeId?: string | null;
   graphCheckpoint?: Record<string, unknown> | null;
   pendingExecutions?: PendingExecutions;
 }

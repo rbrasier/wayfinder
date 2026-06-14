@@ -37,6 +37,9 @@ interface MessageFeedProps {
   expertRole?: string | null;
   userFirstInitial?: string;
   senderNamesById?: Record<string, string>;
+  // The step held open awaiting operator confirmation. Its milestone pill is
+  // suppressed because the step has not actually completed yet (ADR-026).
+  awaitingConfirmationNodeId?: string | null;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -73,6 +76,7 @@ export function MessageFeed({
   expertRole,
   userFirstInitial,
   senderNamesById,
+  awaitingConfirmationNodeId,
 }: MessageFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -101,7 +105,10 @@ export function MessageFeed({
             msg.role === "assistant" &&
             msg.confidence !== null &&
             msg.confidence >= 90 &&
-            dbMessages[index + 1]?.stepNodeId !== msg.stepNodeId;
+            dbMessages[index + 1]?.stepNodeId !== msg.stepNodeId &&
+            // A step awaiting confirmation has reached threshold but not advanced;
+            // it gets the pinned ConfirmStepCard, not the auto-advance milestone.
+            msg.stepNodeId !== awaitingConfirmationNodeId;
 
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";

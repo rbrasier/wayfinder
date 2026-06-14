@@ -83,6 +83,7 @@ export interface NodeConfigValues {
   documentTemplateFilename?: string | null;
   documentTemplateContent?: string | null;
   allowManualEdit: boolean;
+  requireConfirmation: boolean;
   instruction: string;
   executor: "n8n" | "mock";
   workflowId: string | null;
@@ -129,6 +130,7 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplateFilename: null,
   documentTemplateContent: null,
   allowManualEdit: true,
+  requireConfirmation: false,
   instruction: "",
   executor: "n8n",
   workflowId: null,
@@ -726,6 +728,33 @@ export function NodeConfigModal({
                   </p>
                 )}
               </div>
+
+              {doneWhenMode !== "never" && (
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="require-confirmation">Require confirmation before completing this step</Label>
+                    <p className="text-[12px] text-[#918d87]">
+                      When this step is complete, hold it open until the operator clicks Proceed instead of advancing automatically.
+                    </p>
+                  </div>
+                  <button
+                    id="require-confirmation"
+                    type="button"
+                    role="switch"
+                    aria-checked={values.requireConfirmation}
+                    onClick={() => set("requireConfirmation", !values.requireConfirmation)}
+                    className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                      values.requireConfirmation ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        values.requireConfirmation ? "translate-x-4" : "translate-x-0.5"
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
               </>
               )}
 

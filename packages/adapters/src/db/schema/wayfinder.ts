@@ -149,6 +149,7 @@ export const app_sessions = pgTable(
       .default("active"),
     title: text("title"),
     current_node_id: uuid("current_node_id"),
+    awaiting_confirmation_node_id: uuid("awaiting_confirmation_node_id"),
     flow_version_id: uuid("flow_version_id").references(() => app_flow_versions.id, {
       onDelete: "set null",
     }),

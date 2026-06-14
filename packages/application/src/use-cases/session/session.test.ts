@@ -151,6 +151,7 @@ class FakeSessionRepository implements ISessionRepository {
       title: input.title ?? null,
       currentNodeId: input.currentNodeId ?? null,
       flowVersionId: input.flowVersionId ?? null,
+      awaitingConfirmationNodeId: null,
       graphCheckpoint: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -179,6 +180,9 @@ class FakeSessionRepository implements ISessionRepository {
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       ...(patch.title !== undefined ? { title: patch.title } : {}),
       ...(patch.currentNodeId !== undefined ? { currentNodeId: patch.currentNodeId } : {}),
+      ...(patch.awaitingConfirmationNodeId !== undefined
+        ? { awaitingConfirmationNodeId: patch.awaitingConfirmationNodeId }
+        : {}),
       ...(patch.graphCheckpoint !== undefined ? { graphCheckpoint: patch.graphCheckpoint } : {}),
       updatedAt: new Date(),
     };
@@ -284,6 +288,7 @@ const makeSession = (overrides: Partial<Session> = {}): Session => ({
   status: "active",
   title: null,
   currentNodeId: "node-1",
+  awaitingConfirmationNodeId: null,
   graphCheckpoint: null,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-01-01"),
@@ -757,5 +762,109 @@ describe("RunTurn", () => {
     const messages = [...sessionMessages.messages.values()];
     expect(messages).toHaveLength(1);
     expect(messages[0]!.role).toBe("assistant");
+  });
+
+  // ── requireConfirmation: hold the completed step open ──────────────────────
+
+  it("advances normally at threshold when requireConfirmation is off", async () => {
+    edges.edges.set("edge-1", {
+      id: "edge-1",
+      flowId: "flow-1",
+      fromNodeId: "node-1",
+      toNodeId: "node-2",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await useCase.persistAssistantTurn({
+      session,
+      flowId: "flow-1",
+      assistantMessage: "Advancing",
+      aiPayload: makeAiPayload(95),
+      branchChoice: null,
+    });
+
+    expect(result.data?.advanced).toBe(true);
+    expect(result.data?.newNodeId).toBe("node-2");
+    expect(sessions.sessions.get("session-1")?.awaitingConfirmationNodeId).toBeNull();
+  });
+
+  it("withholds advancement and marks awaiting when requireConfirmation and confidence >= threshold", async () => {
+    edges.edges.set("edge-1", {
+      id: "edge-1",
+      flowId: "flow-1",
+      fromNodeId: "node-1",
+      toNodeId: "node-2",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await useCase.persistAssistantTurn({
+      session,
+      flowId: "flow-1",
+      assistantMessage: "Ready when you are",
+      aiPayload: makeAiPayload(95),
+      branchChoice: null,
+      requireConfirmation: true,
+      advanceThreshold: Number.POSITIVE_INFINITY,
+      confirmationThreshold: 90,
+    });
+
+    expect(result.data?.advanced).toBe(false);
+    expect(result.data?.newNodeId).toBeNull();
+    const updated = sessions.sessions.get("session-1");
+    expect(updated?.awaitingConfirmationNodeId).toBe("node-1");
+    expect(updated?.status).toBe("active");
+    expect(updated?.currentNodeId).toBe("node-1");
+  });
+
+  it("does not mark awaiting when requireConfirmation but confidence below threshold", async () => {
+    const result = await useCase.persistAssistantTurn({
+      session,
+      flowId: "flow-1",
+      assistantMessage: "Still gathering",
+      aiPayload: makeAiPayload(70),
+      branchChoice: null,
+      requireConfirmation: true,
+      advanceThreshold: Number.POSITIVE_INFINITY,
+      confirmationThreshold: 90,
+    });
+
+    expect(result.data?.advanced).toBe(false);
+    expect(sessions.sessions.get("session-1")?.awaitingConfirmationNodeId).toBeNull();
+  });
+
+  it("is idempotent across repeat turns while already awaiting the same node", async () => {
+    const awaitingSession = makeSession({ awaitingConfirmationNodeId: "node-1" });
+    sessions.sessions.set("session-1", awaitingSession);
+
+    const result = await useCase.persistAssistantTurn({
+      session: awaitingSession,
+      flowId: "flow-1",
+      assistantMessage: "Whenever you're ready",
+      aiPayload: makeAiPayload(96),
+      branchChoice: null,
+      requireConfirmation: true,
+      advanceThreshold: Number.POSITIVE_INFINITY,
+      confirmationThreshold: 90,
+    });
+
+    expect(result.data?.advanced).toBe(false);
+    expect(sessions.sessions.get("session-1")?.awaitingConfirmationNodeId).toBe("node-1");
+  });
+
+  it("never awaits or advances a neverDone node (Infinity threshold wins)", async () => {
+    const result = await useCase.persistAssistantTurn({
+      session,
+      flowId: "flow-1",
+      assistantMessage: "Carry on",
+      aiPayload: makeAiPayload(99),
+      branchChoice: null,
+      requireConfirmation: false,
+      advanceThreshold: Number.POSITIVE_INFINITY,
+    });
+
+    expect(result.data?.advanced).toBe(false);
+    expect(sessions.sessions.get("session-1")?.awaitingConfirmationNodeId).toBeNull();
   });
 });

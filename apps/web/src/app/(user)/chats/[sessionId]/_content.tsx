@@ -12,6 +12,7 @@ import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";
 import { ChatComposer } from "@/components/chat/chat-composer";
 import { ApprovalGate } from "@/components/chat/approval-gate";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
+import { ConfirmStepCard } from "@/components/chat/confirm-step-card";
 import { MessageFeed } from "@/components/chat/message-feed";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
@@ -95,6 +96,22 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     },
   });
 
+  const confirmStepMutation = trpc.session.confirmStep.useMutation({
+    onSuccess: (result) => {
+      void utils.session.get.invalidate({ sessionId });
+      // A forked step the AI could not route on its own falls back to the
+      // existing manual branch-override picker rather than failing silently.
+      if (result.needsManualBranch) {
+        setOverrideOpen(true);
+        return;
+      }
+      if (result.advanced) toast.success("Step confirmed");
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
   const dbMessages = sessionData?.messages ?? [];
   const rawNodes: FlowNode[] = sessionData?.nodes ?? [];
   const edges: FlowEdge[] = sessionData?.edges ?? [];
@@ -107,6 +124,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   const currentNode = rawNodes.find((node) => node.id === currentNodeId) ?? null;
   const isApprovalGate = currentNode?.type === "approval";
+  const awaitingConfirmationNodeId = sessionData?.session.awaitingConfirmationNodeId ?? null;
+  const isAwaitingConfirmation =
+    awaitingConfirmationNodeId !== null && awaitingConfirmationNodeId === currentNodeId;
 
   const senderNamesById = useMemo(() => {
     const namesById: Record<string, string> = {};
@@ -363,6 +383,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         expertRole={flow.expertRole ?? null}
         userFirstInitial={userFirstInitial}
         senderNamesById={senderNamesById}
+        awaitingConfirmationNodeId={awaitingConfirmationNodeId}
       />
 
       {showBranchOverride && (
@@ -381,6 +402,14 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           <TypingIndicator />
           <span className="text-[12px] text-[#918d87]">{typingLabel}</span>
         </div>
+      )}
+
+      {isAwaitingConfirmation && currentNode && session.status === "active" && !isShared && (
+        <ConfirmStepCard
+          stepName={currentNode.name}
+          onProceed={() => confirmStepMutation.mutate({ sessionId })}
+          isPending={confirmStepMutation.isPending}
+        />
       )}
 
       {isApprovalGate && currentNode && session.status === "active" && (

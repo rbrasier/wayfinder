@@ -43,6 +43,11 @@ export interface PersistAssistantTurnInput {
   aiPayload: AiTurnPayload;
   branchChoice: string | null;
   advanceThreshold?: number;
+  // When set, a completed step (confidence >= confirmationThreshold) is held
+  // open awaiting operator confirmation rather than advanced. The caller passes
+  // advanceThreshold = Infinity alongside this so the auto-advance never fires.
+  requireConfirmation?: boolean;
+  confirmationThreshold?: number;
 }
 
 export class RunTurn {
@@ -120,7 +125,7 @@ export class RunTurn {
 
     const shouldAdvance = aiPayload.stepCompleteConfidence >= threshold;
     if (!shouldAdvance) {
-      return ok({ session, advanced: false, newNodeId: null });
+      return this.maybeMarkAwaiting(input);
     }
 
     const edgesResult = await this.resolveEdges(session, flowId);
@@ -161,6 +166,33 @@ export class RunTurn {
 
     this.notifyStepComplete(updated.data, completedNodeId);
     return ok({ session: updated.data, advanced: true, newNodeId });
+  }
+
+  // When the step requires operator confirmation and the AI is confident enough,
+  // hold the step open by marking the session as awaiting confirmation on the
+  // current node. Idempotent: a repeat turn while already awaiting is a no-op.
+  private async maybeMarkAwaiting(
+    input: PersistAssistantTurnInput,
+  ): Promise<Result<RunTurnOutput>> {
+    const { session, aiPayload } = input;
+    const confirmationThreshold = input.confirmationThreshold ?? 90;
+    const shouldAwait =
+      input.requireConfirmation === true &&
+      aiPayload.stepCompleteConfidence >= confirmationThreshold;
+
+    if (!shouldAwait) {
+      return ok({ session, advanced: false, newNodeId: null });
+    }
+
+    if (session.awaitingConfirmationNodeId === session.currentNodeId) {
+      return ok({ session, advanced: false, newNodeId: null });
+    }
+
+    const updated = await this.sessions.update(session.id, {
+      awaitingConfirmationNodeId: session.currentNodeId,
+    });
+    if (updated.error) return updated;
+    return ok({ session: updated.data, advanced: false, newNodeId: null });
   }
 
   // Fire-and-forget so a slow SMTP server can never stall the turn; the

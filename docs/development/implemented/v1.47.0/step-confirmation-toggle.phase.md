@@ -8,8 +8,9 @@
   (`run-turn.ts`), the chat stream route and its `turn-helpers`, flow versioning
   (ADR-015, `run-turn.ts:61`), the `overrideBranch` advance precedent
   (`session.ts:223`)
-- **Relationship**: delivers the chat-stream UX that `advanced-step-config.phase.md`
-  left as an open question; see ADR-026 for reconciliation.
+- **Relationship**: delivers the chat-stream UX that the advanced-step-config
+  phase (`advanced-step-config.phase`) left as an open question; see ADR-026 for
+  reconciliation.
 
 ## 1. Problem
 

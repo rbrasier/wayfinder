@@ -66,6 +66,7 @@ describe("scheduledConfigFromValues", () => {
     neverDone: false,
     outputType: "conversation_only",
     allowManualEdit: true,
+    requireConfirmation: false,
     instruction: "",
     executor: "n8n",
     workflowId: null,

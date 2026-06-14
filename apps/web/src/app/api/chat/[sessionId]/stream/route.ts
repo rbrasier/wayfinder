@@ -5,14 +5,9 @@ import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { streamTurn } from "./stream-turn";
 import {
+  applyAdvanceSideEffects,
   buildGatheredContext,
-  dispatchAutoNode,
-  dispatchScheduledNode,
-  generateDocument,
-  generateInitialMessage,
   generateTitle,
-  isAutoNodeEnabled,
-  isScheduledNodeEnabled,
 } from "./turn-helpers";
 
 const getSessionToken = (req: Request): string | null => {
@@ -64,6 +59,10 @@ export async function POST(
 
   const nodeConfig = currentNode.config as unknown as ConversationalNodeConfig & { neverDone?: boolean };
   const isNeverDone = Boolean(nodeConfig.neverDone);
+  // A never-completing step has nothing to confirm; confirmation only applies to
+  // a step that can actually reach its threshold.
+  const requireConfirmation = Boolean(nodeConfig.requireConfirmation) && !isNeverDone;
+  const realThreshold = nodeConfig.advanceConfidenceThreshold ?? 90;
 
   const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
   const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
@@ -178,7 +177,9 @@ export async function POST(
       });
 
       let branchChoice: string | null = null;
-      if (!isNeverDone && aiPayload.stepCompleteConfidence >= 90 && branchNodes.length > 1) {
+      // When the step requires confirmation it does not advance now, so the
+      // branch is recomputed at Proceed time (ADR-026) — skip the call here.
+      if (!isNeverDone && !requireConfirmation && aiPayload.stepCompleteConfidence >= 90 && branchNodes.length > 1) {
         const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
         if (!branchPromptResult.error) {
           const branchResult = await generateObject({
@@ -216,7 +217,13 @@ export async function POST(
         assistantMessage: aiPayload.response,
         aiPayload,
         branchChoice,
-        advanceThreshold: isNeverDone ? Number.POSITIVE_INFINITY : (nodeConfig.advanceConfidenceThreshold ?? 90),
+        // Confirmation reuses the neverDone suppression: pass Infinity so the
+        // turn never auto-advances, and the real threshold so it can instead
+        // mark the step as awaiting operator confirmation.
+        advanceThreshold:
+          isNeverDone || requireConfirmation ? Number.POSITIVE_INFINITY : realThreshold,
+        requireConfirmation,
+        confirmationThreshold: realThreshold,
       });
 
       if (runResult.error) {
@@ -225,83 +232,22 @@ export async function POST(
       }
 
       if (runResult.data.advanced) {
-        const assistantMessages = await container.repos.sessionMessages.listBySession(session.id);
-        if (!assistantMessages.error) {
-          const milestone = [...assistantMessages.data].reverse().find(
-            (m) => m.role === "assistant" && m.stepNodeId === currentNode.id,
-          );
-          if (
-            milestone &&
-            nodeConfig.outputType === "generate_document" &&
-            nodeConfig.documentTemplatePath
-          ) {
-            await container.repos.sessionMessages
-              .updateDocumentStatus(milestone.id, "pending")
-              .catch(() => undefined);
-            void generateDocument(
-              container,
-              milestone.id,
-              session.id,
-              flow,
-              nodes,
-              assistantMessages.data,
-              currentNode,
-            );
-          }
-        }
-
-        if (runResult.data.newNodeId) {
-          const newNode = nodes.find((n) => n.id === runResult.data.newNodeId);
-          if (newNode) {
-            const refreshed = await container.repos.sessionMessages.listBySession(session.id);
-            const nextStepContext = refreshed.error
-              ? gatheredContext
-              : buildGatheredContext(refreshed.data);
-
-            if (
-              newNode.type === "scheduled" &&
-              (await isScheduledNodeEnabled(container, authSession.userId, authSession.isAdmin))
-            ) {
-              await dispatchScheduledNode({
-                container,
-                session: runResult.data.session,
-                flow,
-                node: newNode,
-                messages: refreshed.error ? dbMessages : refreshed.data,
-              });
-            } else if (
-              newNode.type === "auto" &&
-              (await isAutoNodeEnabled(container, authSession.userId, authSession.isAdmin))
-            ) {
-              await dispatchAutoNode({
-                container,
-                session: runResult.data.session,
-                flow,
-                node: newNode,
-                messages: refreshed.error ? dbMessages : refreshed.data,
-                userId: authSession.userId,
-                userRole: authSession.isAdmin ? "admin" : "user",
-              });
-            } else if (newNode.type !== "approval") {
-              // Approval nodes park the session on the operator-facing approval
-              // gate, which raises its own request — generating an AI opener here
-              // would leave a stray chat message above the gate.
-              await generateInitialMessage({
-                container,
-                sessionId: session.id,
-                newNodeId: runResult.data.newNodeId,
-                newNode,
-                flow,
-                model: branchingModel,
-                organisationName,
-                userProfile,
-                userId: authSession.userId,
-                provider,
-                gatheredContext: nextStepContext,
-              });
-            }
-          }
-        }
+        await applyAdvanceSideEffects({
+          container,
+          session: runResult.data.session,
+          flow,
+          nodes,
+          completedNode: currentNode,
+          newNodeId: runResult.data.newNodeId,
+          fallbackMessages: dbMessages,
+          gatheredContext,
+          organisationName,
+          userProfile,
+          userId: authSession.userId,
+          isAdmin: authSession.isAdmin,
+          model: branchingModel,
+          provider,
+        });
       }
 
       if (dbMessages.filter((m) => m.role === "user").length === 0) {

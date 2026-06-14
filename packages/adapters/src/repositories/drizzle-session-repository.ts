@@ -19,6 +19,7 @@ const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   status: row.status,
   title: row.title,
   currentNodeId: row.current_node_id,
+  awaitingConfirmationNodeId: row.awaiting_confirmation_node_id ?? null,
   flowVersionId: row.flow_version_id ?? null,
   graphCheckpoint: row.graph_checkpoint ?? null,
   pendingExecutions: row.pending_executions ?? {},
@@ -90,6 +91,9 @@ export class DrizzleSessionRepository implements ISessionRepository {
           ...(patch.status !== undefined ? { status: patch.status } : {}),
           ...(patch.title !== undefined ? { title: patch.title } : {}),
           ...(patch.currentNodeId !== undefined ? { current_node_id: patch.currentNodeId } : {}),
+          ...(patch.awaitingConfirmationNodeId !== undefined
+            ? { awaiting_confirmation_node_id: patch.awaitingConfirmationNodeId }
+            : {}),
           ...(patch.graphCheckpoint !== undefined ? { graph_checkpoint: patch.graphCheckpoint ?? undefined } : {}),
           ...(patch.pendingExecutions !== undefined ? { pending_executions: patch.pendingExecutions } : {}),
           updated_at: new Date(),

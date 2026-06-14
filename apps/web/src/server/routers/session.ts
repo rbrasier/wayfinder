@@ -5,6 +5,7 @@ import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { orderStepIds } from "@/lib/step-order";
 import { buildCompletedStepData } from "@/lib/step-data";
+import { confirmStep } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
 
@@ -232,6 +233,34 @@ export const sessionRouter = router({
       const result = await ctx.container.useCases.overrideBranch.execute({
         sessionId: input.sessionId,
         targetNodeId: input.targetNodeId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  confirmStep: authenticatedProcedure
+    .input(z.object({ sessionId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
+      if (sessionResult.error) throw toTrpcError(sessionResult.error);
+      if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
+
+      const { session, flow, nodes, edges, messages } = sessionResult.data;
+      // Only the originator (or an admin) may confirm — this rejects read-only
+      // shared participants, mirroring overrideBranch's authorisation.
+      if (!ctx.isAdmin && session.userId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+      }
+
+      const result = await confirmStep({
+        container: ctx.container,
+        session,
+        flow,
+        nodes,
+        edges,
+        messages,
+        confirmedByUserId: ctx.userId,
+        isAdmin: ctx.isAdmin,
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

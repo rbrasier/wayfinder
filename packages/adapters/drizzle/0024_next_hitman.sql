@@ -1,0 +1,1 @@
+ALTER TABLE "app_sessions" ADD COLUMN "awaiting_confirmation_node_id" uuid;

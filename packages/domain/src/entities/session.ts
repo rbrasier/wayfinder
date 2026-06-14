@@ -24,6 +24,11 @@ export interface Session {
   // live rows, so the chat stays stable across later edits/publishes/restores.
   // Optional for sessions created before versioning shipped (back-filled).
   flowVersionId?: string | null;
+  // The node this session is paused on awaiting operator confirmation (ADR-026).
+  // `awaitingConfirmationNodeId === currentNodeId` is the single source of truth
+  // for "this step is complete and waiting for the operator to Proceed". Null
+  // (or absent on rows created before the feature) means not awaiting.
+  awaitingConfirmationNodeId?: string | null;
   graphCheckpoint: Record<string, unknown> | null;
   pendingExecutions: PendingExecutions;
   createdAt: Date;

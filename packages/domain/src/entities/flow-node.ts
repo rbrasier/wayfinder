@@ -30,6 +30,10 @@ export interface ConversationalNodeConfig {
   // Whether the operator may manually correct generated document field values.
   // Absent means allowed — editing is on by default.
   allowManualEdit?: boolean;
+  // When true, a completed step (confidence past threshold) is held open until
+  // the operator clicks Proceed, instead of auto-advancing. Absent/false keeps
+  // today's auto-advance behaviour.
+  requireConfirmation?: boolean;
 }
 
 export type NodeExecutorKind = "n8n" | "mock";
