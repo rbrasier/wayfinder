@@ -228,6 +228,14 @@ export class DrizzleFlowVersionRepository implements IFlowVersionRepository {
           );
         }
 
+        // A restore makes the live definition match the chosen version exactly,
+        // so any open draft (edits captured before the restore) is now stale.
+        // Drop it: the next edit opens a fresh draft that sorts to the top of
+        // history rather than reusing the pre-restore draft's older timestamp.
+        await tx
+          .delete(app_flow_versions)
+          .where(and(eq(app_flow_versions.flow_id, input.flowId), eq(app_flow_versions.status, "draft")));
+
         const versionNumber = await nextVersionNumber(tx, input.flowId);
         const [row] = await tx
           .insert(app_flow_versions)
