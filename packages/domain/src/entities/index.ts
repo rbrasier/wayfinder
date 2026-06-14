@@ -8,6 +8,7 @@ export * from "./permission";
 export * from "./usage-event";
 export * from "./job";
 export * from "./system-health";
+export * from "./connectivity";
 export * from "./flow";
 export * from "./flow-visibility";
 export * from "./flow-version";

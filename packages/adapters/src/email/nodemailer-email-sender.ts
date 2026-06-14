@@ -19,6 +19,15 @@ import {
 
 const M365_SMTP_HOST = "smtp.office365.com";
 
+// Nodemailer tags handshake failures with a short code (EAUTH, ECONNECTION,
+// ESOCKET, EDNS, …). Surface that as the reason, never the raw error/credentials.
+const smtpVerificationMessage = (cause: unknown): string => {
+  const code = (cause as { code?: unknown } | null)?.code;
+  return typeof code === "string" && code.length > 0
+    ? `SMTP verification failed (${code})`
+    : "SMTP verification failed.";
+};
+
 const isConfigComplete = (config: Partial<EmailConfig> | null): config is EmailConfig => {
   if (!config) return false;
   const provider = config.provider ?? "smtp";
@@ -62,6 +71,78 @@ export class NodemailerEmailSender implements IEmailSender {
   async isConfigured(): Promise<boolean> {
     if (this.envConfig) return this.isEnvConfigComplete(this.envConfig);
     return (await this.loadAdminConfig()) !== null;
+  }
+
+  // Live reachability check that never sends a message: an SMTP handshake via
+  // transport.verify(), or — for Microsoft 365 — a client-credentials token
+  // acquisition. Mirrors send()'s env-over-admin config resolution (ADR-023).
+  async testConnectivity(): Promise<Result<true>> {
+    if (this.envConfig) return this.verifyEnvironment(this.envConfig);
+    return this.verifyAdminSettings();
+  }
+
+  private async verifyEnvironment(config: SmtpEnvConfig): Promise<Result<true>> {
+    if (config.mode === "stream") {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          "Email transport is in stream mode; there is no live endpoint to verify.",
+        ),
+      );
+    }
+    if (config.mode === "oauth2") {
+      const tokenResult = await this.resolveM365Token(config);
+      return tokenResult.error ? tokenResult : ok(true as const);
+    }
+    const optionsResult = buildEnvTransportOptions(config, null);
+    if (optionsResult.error) return optionsResult;
+    return this.verifyTransport(this.createTransport(optionsResult.data));
+  }
+
+  private async verifyAdminSettings(): Promise<Result<true>> {
+    const config = await this.loadAdminConfig();
+    if (!config) {
+      return err(
+        domainError("VALIDATION_FAILED", "Email is not configured. Set email details in admin settings first."),
+      );
+    }
+
+    if (config.provider === "m365") {
+      const mailbox = config.username && config.username.length > 0 ? config.username : config.fromAddress;
+      const envShape: SmtpEnvConfig = {
+        mode: "oauth2",
+        host: M365_SMTP_HOST,
+        port: 587,
+        secure: false,
+        user: mailbox,
+        pass: null,
+        from: config.fromAddress,
+        m365TenantId: config.m365TenantId,
+        m365ClientId: config.m365ClientId,
+        m365ClientSecret: config.m365ClientSecret,
+      };
+      const tokenResult = await this.resolveM365Token(envShape);
+      return tokenResult.error ? tokenResult : ok(true as const);
+    }
+
+    const transport = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: { user: config.username, pass: config.password },
+    });
+    return this.verifyTransport(transport);
+  }
+
+  private async verifyTransport(
+    transport: ReturnType<NodemailerEmailSender["createTransport"]>,
+  ): Promise<Result<true>> {
+    try {
+      await transport.verify();
+      return ok(true as const);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", smtpVerificationMessage(cause), cause));
+    }
   }
 
   // `stream` mode builds messages but never delivers them, so it does not count

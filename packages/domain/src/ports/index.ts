@@ -11,6 +11,7 @@ export * from "./role-repository";
 export * from "./usage-repository";
 export * from "./job-repository";
 export * from "./health-checker";
+export * from "./connectivity-tester";
 export * from "./node-executor";
 export * from "./n8n-workflow-directory";
 export * from "./flow-repository";
