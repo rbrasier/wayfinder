@@ -29,7 +29,7 @@ function LoginForm() {
     setSubmitting(true);
     setError(null);
     try {
-      await authClient.signIn.social({ provider: "microsoft", callbackURL: "/admin" });
+      await authClient.signIn.social({ provider: "microsoft", callbackURL: "/chats" });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
       setSubmitting(false);
@@ -44,13 +44,13 @@ function LoginForm() {
       const result = await authClient.signIn.email({
         email,
         password,
-        callbackURL: "/admin",
+        callbackURL: "/chats",
       });
       if (result.error) {
         setError(result.error.message ?? "Invalid email or password");
         return;
       }
-      window.location.href = "/admin";
+      window.location.href = "/chats";
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -68,7 +68,7 @@ function LoginForm() {
         body: JSON.stringify({ email }),
       });
       if (res.ok) {
-        window.location.href = "/admin";
+        window.location.href = "/chats";
       } else {
         const body = (await res.json()) as { error?: string };
         setError(body.error ?? "Dev login failed");
