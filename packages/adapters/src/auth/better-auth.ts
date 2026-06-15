@@ -82,6 +82,14 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
     }),
     secret: config.secret,
     baseURL: config.baseURL,
+    // Every core_* table declares `id` as a uuid column. Without this, Better
+    // Auth supplies its own random string ids and Postgres rejects the insert
+    // ("invalid input syntax for type uuid"). "uuid" emits gen_random_uuid().
+    advanced: {
+      database: {
+        generateId: "uuid",
+      },
+    },
     user: {
       modelName: "user",
       fields: {

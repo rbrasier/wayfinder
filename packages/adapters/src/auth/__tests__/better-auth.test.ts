@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { AuthConfig } from "@rbrasier/domain";
-import { microsoftProviderFor, type AuthMethod } from "../better-auth";
+import { createDatabase } from "../../db/client";
+import { createAuth, microsoftProviderFor, type AuthMethod } from "../better-auth";
 
 describe("AuthMethod discriminated union", () => {
   it("accepts email-password as the default mechanism", () => {
@@ -77,5 +78,37 @@ describe("microsoftProviderFor", () => {
     };
 
     expect(microsoftProviderFor(config)).toBeNull();
+  });
+});
+
+describe("createAuth id generation", () => {
+  // Better Auth defaults to random string ids, but every core_* table declares
+  // `id` as a Postgres uuid column. Without this option Postgres rejects the
+  // insert: "invalid input syntax for type uuid". Constructing the client with
+  // a dummy URL is safe — postgres-js does not connect until a query runs.
+  const database = createDatabase("postgres://user:pass@localhost:5432/wayfinder_test");
+
+  const config = {
+    secret: "test-secret-value-at-least-32-chars-long",
+    baseURL: "http://localhost:3000",
+    adminSeedEmail: undefined,
+    authMethod: { type: "email-password" } as AuthMethod,
+    authConfig: {
+      emailPasswordEnabled: true,
+      entraEnabled: false,
+      entra: { tenantId: "", clientId: "", clientSecret: "" },
+    } satisfies AuthConfig,
+  };
+
+  it("configures Better Auth to generate uuid ids for the database", () => {
+    const auth = createAuth(database, config);
+
+    const options = (
+      auth as unknown as {
+        options?: { advanced?: { database?: { generateId?: unknown } } };
+      }
+    ).options;
+
+    expect(options?.advanced?.database?.generateId).toBe("uuid");
   });
 });
