@@ -21,8 +21,15 @@ class FakeEmbeddings implements IEmbeddingsProvider {
 }
 
 class FakeChunkRepo implements IDocumentChunkRepository {
-  public lastSearch: DocumentChunkSearch | null = null;
-  constructor(private readonly results: RetrievedChunk[] = []) {}
+  public searches: DocumentChunkSearch[] = [];
+  // Returns a result list keyed by which scope was searched, so a test can
+  // verify the two scopes are merged.
+  constructor(
+    private readonly resultsByScope: {
+      flow?: RetrievedChunk[];
+      session?: RetrievedChunk[];
+    } = {},
+  ) {}
   async insertMany(_chunks: NewDocumentChunk[]): Promise<Result<void>> {
     return ok(undefined);
   }
@@ -30,23 +37,41 @@ class FakeChunkRepo implements IDocumentChunkRepository {
     return ok(undefined);
   }
   async search(input: DocumentChunkSearch): Promise<Result<RetrievedChunk[]>> {
-    this.lastSearch = input;
-    return ok(this.results);
+    this.searches.push(input);
+    if (input.flowId) return ok(this.resultsByScope.flow ?? []);
+    if (input.sessionId) return ok(this.resultsByScope.session ?? []);
+    return ok([]);
   }
 }
 
-const chunk: RetrievedChunk = {
+const flowChunk: RetrievedChunk = {
   filename: "policy.pdf",
   chunkIndex: 0,
-  chunkText: "Relevant excerpt.",
+  chunkText: "Flow excerpt.",
   sourceType: "flow_context_doc",
   similarity: 0.8,
 };
 
+const sessionChunk: RetrievedChunk = {
+  filename: "dave.docx",
+  chunkIndex: 0,
+  chunkText: "Purchase Office 365 licences, about $99 each.",
+  sourceType: "session_upload",
+  // Loosely-related uploads score below the strict flow threshold but above the
+  // permissive session threshold — the heart of the bug being fixed.
+  similarity: 0.3,
+};
+
+const findScope = (
+  searches: DocumentChunkSearch[],
+  scope: "flow" | "session",
+): DocumentChunkSearch | undefined =>
+  searches.find((search) => (scope === "flow" ? search.flowId !== null : search.sessionId !== null));
+
 describe("RetrieveDocumentChunks", () => {
   it("returns an empty list without embedding when the query is blank", async () => {
     const embeddings = new FakeEmbeddings();
-    const useCase = new RetrieveDocumentChunks(embeddings, new FakeChunkRepo([chunk]));
+    const useCase = new RetrieveDocumentChunks(embeddings, new FakeChunkRepo());
 
     const result = await useCase.execute({ flowId: "flow-1", sessionId: "sess-1", query: "   " });
 
@@ -54,41 +79,77 @@ describe("RetrieveDocumentChunks", () => {
     expect(embeddings.calls).toHaveLength(0);
   });
 
-  it("embeds the query and searches both flow and session scopes with defaults", async () => {
+  it("returns an empty list without embedding when no scope is provided", async () => {
     const embeddings = new FakeEmbeddings();
-    const repo = new FakeChunkRepo([chunk]);
+    const useCase = new RetrieveDocumentChunks(embeddings, new FakeChunkRepo());
+
+    const result = await useCase.execute({ flowId: null, sessionId: null, query: "anything" });
+
+    expect(result.data).toEqual([]);
+    expect(embeddings.calls).toHaveLength(0);
+  });
+
+  it("searches flow docs strictly and session uploads permissively", async () => {
+    const embeddings = new FakeEmbeddings();
+    const repo = new FakeChunkRepo({ flow: [flowChunk], session: [sessionChunk] });
     const useCase = new RetrieveDocumentChunks(embeddings, repo);
 
     const result = await useCase.execute({
       flowId: "flow-1",
       sessionId: "sess-1",
-      query: "what is the approval limit?",
+      query: "Here is the request I've been asked to do",
     });
 
-    expect(result.data).toEqual([chunk]);
-    expect(embeddings.calls).toEqual(["what is the approval limit?"]);
-    expect(repo.lastSearch).toMatchObject({
+    // One embedding for the query, reused across both scoped searches.
+    expect(embeddings.calls).toEqual(["Here is the request I've been asked to do"]);
+
+    const flowSearch = findScope(repo.searches, "flow");
+    expect(flowSearch).toMatchObject({
       flowId: "flow-1",
-      sessionId: "sess-1",
-      embedding: [1, 2, 3],
+      sessionId: null,
       limit: 5,
       minSimilarity: 0.5,
     });
+
+    const sessionSearch = findScope(repo.searches, "session");
+    expect(sessionSearch).toMatchObject({
+      flowId: null,
+      sessionId: "sess-1",
+      limit: 8,
+      minSimilarity: 0.2,
+    });
+
+    // Both scopes' results are merged, highest similarity first.
+    expect(result.data).toEqual([flowChunk, sessionChunk]);
   });
 
-  it("honours explicit limit and minSimilarity overrides", async () => {
-    const repo = new FakeChunkRepo([]);
+  it("does not search the flow scope when no flowId is given", async () => {
+    const repo = new FakeChunkRepo({ session: [sessionChunk] });
+    const useCase = new RetrieveDocumentChunks(new FakeEmbeddings(), repo);
+
+    const result = await useCase.execute({ flowId: null, sessionId: "sess-1", query: "x" });
+
+    expect(repo.searches).toHaveLength(1);
+    expect(findScope(repo.searches, "session")).toMatchObject({ sessionId: "sess-1", limit: 8 });
+    expect(result.data).toEqual([sessionChunk]);
+  });
+
+  it("honours explicit per-scope overrides", async () => {
+    const repo = new FakeChunkRepo();
     const useCase = new RetrieveDocumentChunks(new FakeEmbeddings(), repo);
 
     await useCase.execute({
       flowId: "flow-1",
-      sessionId: null,
+      sessionId: "sess-1",
       query: "x",
-      limit: 8,
-      minSimilarity: 0.7,
+      flowLimit: 3,
+      flowMinSimilarity: 0.7,
+      sessionLimit: 12,
+      sessionMinSimilarity: 0.1,
     });
 
-    expect(repo.lastSearch).toMatchObject({ limit: 8, minSimilarity: 0.7, sessionId: null });
+    expect(findScope(repo.searches, "flow")).toMatchObject({ limit: 3, minSimilarity: 0.7 });
+    expect(findScope(repo.searches, "session")).toMatchObject({ limit: 12, minSimilarity: 0.1 });
   });
 
   it("propagates an embedding failure", async () => {
@@ -97,5 +158,18 @@ describe("RetrieveDocumentChunks", () => {
     const result = await useCase.execute({ flowId: "flow-1", sessionId: null, query: "x" });
 
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+
+  it("propagates a repository search failure", async () => {
+    class FailingRepo extends FakeChunkRepo {
+      async search(): Promise<Result<RetrievedChunk[]>> {
+        return err(domainError("INFRA_FAILURE", "db down"));
+      }
+    }
+    const useCase = new RetrieveDocumentChunks(new FakeEmbeddings(), new FailingRepo());
+
+    const result = await useCase.execute({ flowId: "flow-1", sessionId: "sess-1", query: "x" });
+
+    expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 });

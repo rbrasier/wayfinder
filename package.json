@@ -1,6 +1,6 @@
 {
   "name": "wayfinder",
-  "version": "1.47.0",
+  "version": "1.47.1",
   "private": true,
   "description": "Wayfinder — AI-guided workflow agent for document-heavy processes.",
   "packageManager": "pnpm@9.12.0",
