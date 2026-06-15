@@ -7,6 +7,7 @@ import {
   type IApprovalRepository,
   type IAuditLogger,
   type IFlowEdgeRepository,
+  type ISessionMessageRepository,
   type ISessionRepository,
   type ISessionStepOutputRepository,
   type Result,
@@ -52,6 +53,7 @@ export class DecideApproval {
     private readonly sessionStepOutputs: ISessionStepOutputRepository,
     private readonly auditLogger: IAuditLogger,
     private readonly notifier?: IApprovalDecidedNotifier,
+    private readonly messages?: ISessionMessageRepository,
   ) {}
 
   async execute(input: DecideApprovalInput): Promise<Result<DecideApprovalOutput>> {
@@ -98,6 +100,7 @@ export class DecideApproval {
     });
 
     if (input.decision === "approved") {
+      await this.recordDecisionMessage(updated.data, input.decision, false);
       this.notify(updated.data, input.decision, false);
       return this.advance(updated.data);
     }
@@ -107,6 +110,37 @@ export class DecideApproval {
 
   private notify(approval: Approval, decision: ApprovalDecision, routedBack: boolean): void {
     void this.notifier?.execute({ approval, decision, routedBack }).catch(() => undefined);
+  }
+
+  // Surfaces the decision and its reason in the chat thread so everyone with the
+  // session open sees the outcome. Best-effort — a message-write failure must not
+  // fail the decision, mirroring the projection above.
+  private async recordDecisionMessage(
+    approval: Approval,
+    decision: ApprovalDecision,
+    routedBack: boolean,
+  ): Promise<void> {
+    if (!this.messages) return;
+    const summary = this.decisionSummary(decision, routedBack);
+    const content = approval.comment ? `${summary}\n\nComment: ${approval.comment}` : summary;
+    try {
+      await this.messages.create({
+        sessionId: approval.sessionId,
+        role: "system",
+        content,
+        stepNodeId: approval.nodeId,
+      });
+    } catch {
+      // Ignore — the approval row remains the source of truth.
+    }
+  }
+
+  private decisionSummary(decision: ApprovalDecision, routedBack: boolean): string {
+    if (decision === "approved") return "Approval granted.";
+    if (decision === "changes_requested") return "Changes requested by the approver.";
+    return routedBack
+      ? "Approval rejected — routed back to the originator."
+      : "Approval rejected — the request was closed.";
   }
 
   // Non-approve decisions either return the session to the originator (route-back)
@@ -133,12 +167,14 @@ export class DecideApproval {
         graphCheckpoint: { currentNodeId: previousNodeId, advancedFrom: null },
       });
       if (moved.error) return moved;
+      await this.recordDecisionMessage(approval, input.decision, true);
       this.notify(approval, input.decision, true);
       return ok({ approval, advanced: true, newNodeId: previousNodeId, sessionCompleted: false });
     }
 
     const cancelled = await this.sessions.update(session.id, { status: "cancelled" });
     if (cancelled.error) return cancelled;
+    await this.recordDecisionMessage(approval, input.decision, false);
     this.notify(approval, input.decision, false);
     return ok({ approval, advanced: false, newNodeId: null, sessionCompleted: true });
   }

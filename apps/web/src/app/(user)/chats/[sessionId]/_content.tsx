@@ -51,6 +51,10 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const sessionQuery = trpc.session.get.useQuery({ sessionId });
   const meQuery = trpc.user.me.useQuery();
   const sessionData = sessionQuery.data;
+  // The server grants approvers read-only access to sessions they don't own so
+  // they can open the request for context. Treated like a shared viewer: no
+  // composer, gate, or step actions.
+  const isReadOnly = isShared || sessionData?.readOnly === true;
   const isAdmin = meQuery.data?.isAdmin ?? false;
 
   const heartbeatMutation = trpc.session.heartbeatTyping.useMutation();
@@ -198,7 +202,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (kickoffSentRef.current) return;
     if (!sessionData) return;
-    if (isShared) return;
+    if (isReadOnly) return;
     if (sessionData.session.status !== "active") return;
     if (sessionData.flow.deletedAt !== null) return;
     if (sessionData.messages.length > 0) return;
@@ -214,7 +218,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       : `Hi! I'm ready to get started with the "${flowName}" workflow. Please guide me through the first step.`;
 
     void append({ role: "user", content: kickoffMessage });
-  }, [sessionData, isShared, messages.length, isLoading, currentNode, append]);
+  }, [sessionData, isReadOnly, messages.length, isLoading, currentNode, append]);
 
   // Poll while a document is being generated so the spinner resolves automatically.
   // "pending" means generation is in flight; null treated as pending so legacy rows
@@ -350,7 +354,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             collaborateUrl={collaborateUrl}
             onRename={(title) => renameMutation.mutate({ sessionId, title })}
             onClose={() => closeMutation.mutate({ sessionId })}
-            isReadOnly={isShared}
+            isReadOnly={isReadOnly}
           />
         </div>
       </header>
@@ -378,7 +382,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         error={error ?? null}
         onRetry={() => void reload()}
         onRegenerateDocument={handleRegenerateDocument}
-        canEditDocuments={session.status === "active" && !isShared && !isFlowDeleted}
+        canEditDocuments={session.status === "active" && !isReadOnly && !isFlowDeleted}
         onDocumentEdited={() => void utils.session.get.invalidate({ sessionId })}
         expertRole={flow.expertRole ?? null}
         userFirstInitial={userFirstInitial}
@@ -404,7 +408,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {isAwaitingConfirmation && currentNode && session.status === "active" && !isShared && (
+      {isAwaitingConfirmation && currentNode && session.status === "active" && !isReadOnly && (
         <ConfirmStepCard
           stepName={currentNode.name}
           onProceed={() => confirmStepMutation.mutate({ sessionId })}
@@ -412,7 +416,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         />
       )}
 
-      {isApprovalGate && currentNode && session.status === "active" && (
+      {isApprovalGate && currentNode && session.status === "active" && !isReadOnly && (
         <ApprovalGate
           sessionId={sessionId}
           flowId={session.flowId}
@@ -422,7 +426,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         />
       )}
 
-      {!isShared && (
+      {!isReadOnly && (
         <ChatComposer
           sessionId={sessionId}
           value={input}

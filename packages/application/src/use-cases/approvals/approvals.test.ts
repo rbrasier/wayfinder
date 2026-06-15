@@ -17,13 +17,16 @@ import {
   type IFlowNodeRepository,
   type ILanguageModel,
   type IReportingLineResolver,
+  type ISessionMessageRepository,
   type ISessionRepository,
   type ISessionStepOutputRepository,
   type IUserRepository,
   type NewApproval,
   type NewAuditLog,
+  type NewSessionMessage,
   type NewSessionStepOutput,
   type NewUser,
+  type SessionMessage,
   type NotificationLog,
   type Person,
   type PositionLookupInput,
@@ -41,6 +44,7 @@ import { SuggestApprover } from "./suggest-approver";
 import { ConfirmAndSend } from "./confirm-and-send";
 import { DecideApproval } from "./decide-approval";
 import { ListPendingApprovals } from "./list-pending-approvals";
+import { ListPendingApprovalsWithContext } from "./list-pending-approvals-with-context";
 import type {
   IApprovalDecidedNotifier,
   NotifyOnApprovalDecidedInput,
@@ -100,6 +104,10 @@ class InMemoryApprovals implements IApprovalRepository {
             (input.approverEmail !== null && row.approverEmail === input.approverEmail)),
       ),
     );
+  }
+
+  async listBySession(sessionId: string): Promise<Result<Approval[]>> {
+    return ok([...this.rows.values()].filter((row) => row.sessionId === sessionId));
   }
 
   async update(id: string, patch: ApprovalUpdate): Promise<Result<Approval>> {
@@ -299,6 +307,43 @@ class InMemoryStepOutputs implements ISessionStepOutputRepository {
   }
   async listBySession(sessionId: string): Promise<Result<SessionStepOutput[]>> {
     return ok(this.rows.filter((row) => row.sessionId === sessionId));
+  }
+}
+
+class InMemoryMessages implements ISessionMessageRepository {
+  rows: SessionMessage[] = [];
+  private seq = 0;
+  async create(input: NewSessionMessage): Promise<Result<SessionMessage>> {
+    const message: SessionMessage = {
+      id: `msg-${(this.seq += 1)}`,
+      sessionId: input.sessionId,
+      role: input.role,
+      content: input.content,
+      senderUserId: input.senderUserId ?? null,
+      confidence: input.confidence ?? null,
+      stepNodeId: input.stepNodeId ?? null,
+      document: input.document ?? null,
+      documentStatus: input.documentStatus ?? null,
+      aiPayload: input.aiPayload ?? null,
+      createdAt: new Date(Date.now() + this.seq),
+    };
+    this.rows.push(message);
+    return ok(message);
+  }
+  async findById(id: string): Promise<Result<SessionMessage | null>> {
+    return ok(this.rows.find((row) => row.id === id) ?? null);
+  }
+  async listBySession(sessionId: string): Promise<Result<SessionMessage[]>> {
+    return ok(this.rows.filter((row) => row.sessionId === sessionId));
+  }
+  async updateDocument(): Promise<Result<SessionMessage>> {
+    return err(domainError("VALIDATION_FAILED", "unused"));
+  }
+  async updateDocumentStatus(): Promise<Result<SessionMessage>> {
+    return err(domainError("VALIDATION_FAILED", "unused"));
+  }
+  async updateAiPayload(): Promise<Result<SessionMessage>> {
+    return err(domainError("VALIDATION_FAILED", "unused"));
   }
 }
 
@@ -871,6 +916,63 @@ describe("DecideApproval", () => {
 
     expect(result.error?.code).toBe("FORBIDDEN");
   });
+
+  it("writes a system chat message recording the decision and comment", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const messages = new InMemoryMessages();
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      undefined,
+      messages,
+    );
+
+    await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "approved",
+      comment: "Looks good",
+    });
+
+    const decisionMessage = messages.rows.find((row) => row.role === "system");
+    expect(decisionMessage?.content).toContain("Approval granted.");
+    expect(decisionMessage?.content).toContain("Looks good");
+    expect(decisionMessage?.stepNodeId).toBe("node-appr");
+  });
+
+  it("records a routed-back message when a rejection routes back to the originator", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session({ graphCheckpoint: { currentNodeId: "node-appr", advancedFrom: "node-prev" } }));
+    const messages = new InMemoryMessages();
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      undefined,
+      messages,
+    );
+
+    await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "rejected",
+      routeBack: true,
+      comment: "Not yet",
+    });
+
+    const decisionMessage = messages.rows.find((row) => row.role === "system");
+    expect(decisionMessage?.content).toContain("routed back to the originator");
+  });
 });
 
 describe("ListPendingApprovals", () => {
@@ -923,5 +1025,136 @@ describe("ListPendingApprovals", () => {
 
     expect(result.data).toHaveLength(1);
     expect(result.data?.[0]?.approverEmail).toBe("manager@corp.test");
+  });
+});
+
+describe("ListPendingApprovalsWithContext", () => {
+  const previousNode = (overrides: Partial<FlowNode> = {}): FlowNode =>
+    approvalNode({ id: "node-prev", type: "conversational", name: "Draft the memo", ...overrides });
+
+  const checkpointed = () =>
+    session({ graphCheckpoint: { currentNodeId: "node-appr", advancedFrom: "node-prev" } });
+
+  const seedPending = async (approvals: InMemoryApprovals) => {
+    const created = await approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      approverUserId: "manager-1",
+    });
+    return created.data!;
+  };
+
+  const build = (parts: {
+    approvals: InMemoryApprovals;
+    sessions?: InMemorySessions;
+    users?: InMemoryUsers;
+    messages?: InMemoryMessages;
+    stepOutputs?: InMemoryStepOutputs;
+    nodes?: InMemoryFlowNodes;
+  }) =>
+    new ListPendingApprovalsWithContext(
+      parts.approvals,
+      parts.sessions ?? new InMemorySessions(),
+      parts.users ?? new InMemoryUsers(),
+      parts.messages ?? new InMemoryMessages(),
+      parts.stepOutputs ?? new InMemoryStepOutputs(),
+      parts.nodes ?? new InMemoryFlowNodes(),
+    );
+
+  it("enriches a pending approval with chat name and originator", async () => {
+    const approvals = new InMemoryApprovals();
+    await seedPending(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointed());
+    const users = new InMemoryUsers();
+    users.add({ ...user("operator-1", "operator@corp.test"), name: "Olivia Operator" });
+
+    const sut = build({ approvals, sessions, users });
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(1);
+    expect(result.data?.[0]?.chatName).toBe("A session");
+    expect(result.data?.[0]?.originatorName).toBe("Olivia Operator");
+    expect(result.data?.[0]?.originatorEmail).toBe("operator@corp.test");
+  });
+
+  it("surfaces the previous step's document as the key output", async () => {
+    const approvals = new InMemoryApprovals();
+    await seedPending(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointed());
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(previousNode());
+    const messages = new InMemoryMessages();
+    await messages.create({
+      sessionId: "session-1",
+      role: "assistant",
+      content: "Here is the draft.",
+      stepNodeId: "node-prev",
+      document: {
+        filename: "memo.docx",
+        storagePath: "s/memo.docx",
+        summary: "A memo",
+        generatedAt: new Date().toISOString(),
+      },
+      aiPayload: {
+        response: "Here is the draft.",
+        rationale: "",
+        stepCompleteConfidence: 95,
+        contextGathered: [],
+        documentGenerationConfidence: {
+          guidanceAlignmentConfidence: 90,
+          guidanceAlignmentRationale: "Aligned",
+          criteriaAlignmentConfidence: 88,
+          criteriaAlignmentRationale: "On criteria",
+        },
+      },
+    });
+
+    const sut = build({ approvals, sessions, messages, nodes });
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    const previous = result.data?.[0]?.previousStep;
+    expect(previous?.stepName).toBe("Draft the memo");
+    expect(previous?.document?.document.filename).toBe("memo.docx");
+    expect(previous?.document?.documentGenerationConfidence?.guidanceAlignmentConfidence).toBe(90);
+    expect(previous?.fields).toBeNull();
+  });
+
+  it("falls back to the previous step's output fields when there is no document", async () => {
+    const approvals = new InMemoryApprovals();
+    await seedPending(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(checkpointed());
+    const stepOutputs = new InMemoryStepOutputs();
+    await stepOutputs.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-prev",
+      fields: [{ key: "amount", label: "Amount", type: "text", value: "$1,200" }],
+    });
+
+    const sut = build({ approvals, sessions, stepOutputs });
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    const previous = result.data?.[0]?.previousStep;
+    expect(previous?.document).toBeNull();
+    expect(previous?.fields?.[0]?.value).toBe("$1,200");
+  });
+
+  it("returns a null previous step when the session has no checkpoint", async () => {
+    const approvals = new InMemoryApprovals();
+    await seedPending(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session({ graphCheckpoint: null }));
+
+    const sut = build({ approvals, sessions });
+    const result = await sut.execute({ approverUserId: "manager-1", approverEmail: null });
+
+    expect(result.data?.[0]?.previousStep).toBeNull();
   });
 });

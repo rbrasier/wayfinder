@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { isFlowDiscoverableBy } from "@rbrasier/domain";
+import type { Container } from "@/lib/container";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { orderStepIds } from "@/lib/step-order";
@@ -8,6 +9,25 @@ import { buildCompletedStepData } from "@/lib/step-data";
 import { confirmStep } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
+
+// An approver who is not the session owner may still open the session read-only
+// to see what they are signing off on. Matches by user id and by email so an
+// approval assigned before the recipient had an account is honoured (ADR-018).
+async function viewerIsSessionApprover(
+  container: Container,
+  userId: string,
+  sessionId: string,
+): Promise<boolean> {
+  const approvalsResult = await container.repos.approvals.listBySession(sessionId);
+  if (approvalsResult.error) return false;
+  const userResult = await container.repos.users.findById(userId);
+  const email = userResult.error ? null : userResult.data?.email ?? null;
+  return approvalsResult.data.some(
+    (approval) =>
+      approval.approverUserId === userId ||
+      (email !== null && approval.approverEmail === email),
+  );
+}
 
 export const sessionRouter = router({
   list: authenticatedProcedure.query(async ({ ctx }) => {
@@ -104,8 +124,13 @@ export const sessionRouter = router({
       if (!result.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
 
       const { session, messages } = result.data;
+      let readOnly = false;
       if (!ctx.isAdmin && session.userId !== ctx.userId) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+        const isApprover = await viewerIsSessionApprover(ctx.container, ctx.userId, session.id);
+        if (!isApprover) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+        }
+        readOnly = true;
       }
 
       const senderIds = new Set<string>([session.userId]);
@@ -120,7 +145,7 @@ export const sessionRouter = router({
         }),
       );
 
-      return { ...result.data, participants };
+      return { ...result.data, participants, readOnly };
     }),
 
   stepData: authenticatedProcedure
@@ -132,7 +157,10 @@ export const sessionRouter = router({
 
       const { session, messages, nodes, edges } = result.data;
       if (!ctx.isAdmin && session.userId !== ctx.userId) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+        const isApprover = await viewerIsSessionApprover(ctx.container, ctx.userId, session.id);
+        if (!isApprover) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+        }
       }
 
       const outputsResult = await ctx.container.repos.sessionStepOutputs.listBySession(input.sessionId);

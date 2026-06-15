@@ -3,42 +3,250 @@
 import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Stamp } from "lucide-react";
+import { Copy, Mail, Stamp } from "lucide-react";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "@/server/router";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { DocumentCard } from "@/components/chat/document-card";
 import { trpc } from "@/trpc/client";
 
 type Decision = "approved" | "rejected" | "changes_requested";
+type PendingApproval = inferRouterOutputs<AppRouter>["approval"]["listPending"][number];
+type StepField = NonNullable<NonNullable<PendingApproval["previousStep"]>["fields"]>[number];
 
-function ApprovalRow({ approvalId, sessionId, createdAt }: {
-  approvalId: string;
-  sessionId: string;
-  createdAt: Date;
+const DECISION_TITLE: Record<Decision, string> = {
+  approved: "Approve request",
+  rejected: "Reject request",
+  changes_requested: "Request changes",
+};
+
+function StepFields({ fields }: { fields: StepField[] }) {
+  return (
+    <div className="overflow-hidden rounded-[10px] border border-[#dedad2] bg-white">
+      <table className="w-full text-[12.5px]">
+        <tbody>
+          {fields.map((field) => (
+            <tr key={field.key} className="border-b border-[#efede8] last:border-0">
+              <td className="w-2/5 px-3 py-1.5 align-top font-medium text-[#918d87]">{field.label}</td>
+              <td className="px-3 py-1.5 align-top whitespace-pre-wrap text-[#1a1814]">{field.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PreviousStep({ previousStep }: { previousStep: PendingApproval["previousStep"] }) {
+  if (!previousStep) return null;
+  const { document, fields, stepName } = previousStep;
+
+  return (
+    <div className="rounded-[12px] bg-[#f7f6f3] p-3">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+        {stepName}
+      </p>
+      {document ? (
+        <DocumentCard
+          messageId={document.messageId}
+          document={document.document}
+          documentGenerationConfidence={document.documentGenerationConfidence}
+          canEdit={false}
+        />
+      ) : fields && fields.length > 0 ? (
+        <StepFields fields={fields} />
+      ) : (
+        <p className="text-[12.5px] text-[#918d87]">No preview available for this step.</p>
+      )}
+    </div>
+  );
+}
+
+function DecisionModal({
+  approval,
+  decision,
+  emailConfigured,
+  onClose,
+}: {
+  approval: PendingApproval;
+  decision: Decision;
+  emailConfigured: boolean;
+  onClose: () => void;
 }) {
   const utils = trpc.useUtils();
   const [comment, setComment] = useState("");
-  // Only consulted when rejecting: route the session back to the originator for
-  // revision, or close the request outright.
-  const [rejectRouteBack, setRejectRouteBack] = useState(true);
+  // Set once a decision is recorded but email could not deliver it, so the
+  // approver can notify the originator by hand before the row clears.
+  const [manualNotify, setManualNotify] = useState(false);
+
+  const sessionUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/chats/${approval.sessionId}`
+      : `/chats/${approval.sessionId}`;
+
   const decide = trpc.approval.decide.useMutation({
     onSuccess: async () => {
-      await utils.approval.listPending.invalidate();
-      toast.success("Decision recorded");
+      if (emailConfigured) {
+        await utils.approval.listPending.invalidate();
+        toast.success("Decision recorded");
+        onClose();
+        return;
+      }
+      // Keep the modal open so the manual-notify buttons stay mounted; the list
+      // is only refreshed when the approver closes.
+      setManualNotify(true);
     },
     onError: (error) => toast.error(error.message ?? "Could not record the decision"),
   });
 
-  const submit = (decision: Decision) =>
+  const submit = (routeBack?: boolean) =>
     decide.mutate({
-      approvalId,
+      approvalId: approval.approval.id,
       decision,
       comment: comment.trim() || null,
-      routeBack: decision === "rejected" ? rejectRouteBack : undefined,
+      routeBack: decision === "rejected" ? routeBack : undefined,
     });
+
+  const close = async () => {
+    if (manualNotify) await utils.approval.listPending.invalidate();
+    onClose();
+  };
+
+  const buildMailtoHref = (): string => {
+    const subject = `Re: your '${approval.chatName}' request`;
+    const summary =
+      decision === "approved"
+        ? "has been approved"
+        : decision === "changes_requested"
+          ? "needs changes"
+          : "has been rejected";
+    const body = [
+      `Your request "${approval.chatName}" ${summary}.`,
+      ...(comment.trim() ? ["", comment.trim()] : []),
+      "",
+      "View the session here:",
+      sessionUrl,
+    ].join("\n");
+    return `mailto:${encodeURIComponent(approval.originatorEmail ?? "")}?subject=${encodeURIComponent(
+      subject,
+    )}&body=${encodeURIComponent(body)}`;
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(sessionUrl);
+      toast.success("Session link copied");
+    } catch {
+      toast.error("Could not copy the link");
+    }
+  };
+
+  const commentRequired = decision === "changes_requested";
+
+  return (
+    <Dialog open onOpenChange={(open) => (open ? undefined : void close())}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{DECISION_TITLE[decision]}</DialogTitle>
+          <DialogDescription>
+            {manualNotify
+              ? "Email isn't configured, so let the originator know manually."
+              : `For "${approval.chatName}"${
+                  approval.originatorName ? ` from ${approval.originatorName}` : ""
+                }.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        {manualNotify ? (
+          <DialogBody>
+            <p className="text-[13px] text-[#5a5650]">
+              The decision was recorded and is shown in the session. Notify{" "}
+              <span className="font-medium">{approval.originatorName ?? "the originator"}</span> so
+              they can pick the request back up.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {approval.originatorEmail && (
+                <Button asChild size="sm">
+                  <a href={buildMailtoHref()}>
+                    <Mail className="h-4 w-4" />
+                    Email user
+                  </a>
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={copyLink}>
+                <Copy className="h-4 w-4" />
+                Copy link
+              </Button>
+            </div>
+          </DialogBody>
+        ) : (
+          <DialogBody>
+            <Textarea
+              aria-label="Decision comment"
+              rows={3}
+              autoFocus
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              placeholder={
+                commentRequired
+                  ? "Describe the changes needed (required)…"
+                  : "Add a comment (optional)…"
+              }
+            />
+          </DialogBody>
+        )}
+
+        <DialogFooter>
+          {manualNotify ? (
+            <Button size="sm" onClick={() => void close()}>
+              Done
+            </Button>
+          ) : decision === "rejected" ? (
+            <>
+              <Button size="sm" variant="outline" onClick={() => submit(false)} disabled={decide.isPending}>
+                Close request
+              </Button>
+              <Button size="sm" onClick={() => submit(true)} disabled={decide.isPending}>
+                Route back to user
+              </Button>
+            </>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => submit()}
+              disabled={decide.isPending || (commentRequired && !comment.trim())}
+            >
+              {decision === "approved" ? "Confirm approval" : "Request changes"}
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ApprovalRow({
+  approval,
+  emailConfigured,
+}: {
+  approval: PendingApproval;
+  emailConfigured: boolean;
+}) {
+  const [decision, setDecision] = useState<Decision | null>(null);
 
   return (
     <div
-      data-approval-id={approvalId}
+      data-approval-id={approval.approval.id}
       data-approval-status="pending"
       className="flex flex-col gap-3 rounded-[14px] border-[1.5px] border-[#dedad2] bg-white p-[16px_18px]"
     >
@@ -47,68 +255,39 @@ function ApprovalRow({ approvalId, sessionId, createdAt }: {
           <Stamp size={18} />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[14px] font-semibold text-[#1a1814]">Approval requested</p>
+          <p className="truncate text-[14px] font-semibold text-[#1a1814]">{approval.chatName}</p>
           <p className="mt-[3px] truncate text-[12.5px] text-[#918d87]">
-            Raised {new Date(createdAt).toLocaleString()} ·{" "}
-            <Link href={`/chats/${sessionId}`} className="font-medium text-[#3a5fd9]">
+            {approval.originatorName ? <>From {approval.originatorName} · </> : null}
+            Raised {new Date(approval.approval.createdAt).toLocaleString()} ·{" "}
+            <Link href={`/chats/${approval.sessionId}`} className="font-medium text-[#3a5fd9]">
               Open session
             </Link>
           </p>
         </div>
       </div>
 
-      <Textarea
-        aria-label="Decision comment"
-        rows={2}
-        value={comment}
-        onChange={(event) => setComment(event.target.value)}
-        placeholder="Add a comment (required to request changes)…"
-      />
-
-      <fieldset className="flex flex-wrap items-center gap-4" aria-label="On reject">
-        <legend className="sr-only">On reject</legend>
-        <span className="text-[12.5px] font-medium text-[#918d87]">On reject:</span>
-        <label className="flex items-center gap-1.5 text-[12.5px] text-[#1a1814]">
-          <input
-            type="radio"
-            name={`reject-route-${approvalId}`}
-            checked={rejectRouteBack}
-            onChange={() => setRejectRouteBack(true)}
-          />
-          Route back to originator
-        </label>
-        <label className="flex items-center gap-1.5 text-[12.5px] text-[#1a1814]">
-          <input
-            type="radio"
-            name={`reject-route-${approvalId}`}
-            checked={!rejectRouteBack}
-            onChange={() => setRejectRouteBack(false)}
-          />
-          Close request
-        </label>
-      </fieldset>
+      <PreviousStep previousStep={approval.previousStep} />
 
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => submit("approved")} disabled={decide.isPending}>
+        <Button size="sm" onClick={() => setDecision("approved")}>
           Approve
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => submit("changes_requested")}
-          disabled={decide.isPending || !comment.trim()}
-        >
+        <Button size="sm" variant="outline" onClick={() => setDecision("changes_requested")}>
           Request changes
         </Button>
-        <Button
-          size="sm"
-          variant="danger"
-          onClick={() => submit("rejected")}
-          disabled={decide.isPending}
-        >
+        <Button size="sm" variant="danger" onClick={() => setDecision("rejected")}>
           Reject
         </Button>
       </div>
+
+      {decision && (
+        <DecisionModal
+          approval={approval}
+          decision={decision}
+          emailConfigured={emailConfigured}
+          onClose={() => setDecision(null)}
+        />
+      )}
     </div>
   );
 }
@@ -117,6 +296,8 @@ export function ApprovalsContent() {
   const approvalsQuery = trpc.approval.listPending.useQuery(undefined, {
     refetchOnMount: "always",
   });
+  const emailStatusQuery = trpc.approval.emailStatus.useQuery();
+  const emailConfigured = emailStatusQuery.data?.configured ?? true;
   const approvals = approvalsQuery.data ?? [];
 
   return (
@@ -140,10 +321,9 @@ export function ApprovalsContent() {
             <div className="flex flex-col gap-3">
               {approvals.map((approval) => (
                 <ApprovalRow
-                  key={approval.id}
-                  approvalId={approval.id}
-                  sessionId={approval.sessionId}
-                  createdAt={approval.createdAt}
+                  key={approval.approval.id}
+                  approval={approval}
+                  emailConfigured={emailConfigured}
                 />
               ))}
             </div>

@@ -68,10 +68,12 @@ export const approvalRouter = router({
       return result.data;
     }),
 
+  // Enriched with the context the approver needs to decide: chat name, who
+  // raised it, and the previous step's key output (document or output fields).
   listPending: authenticatedProcedure.query(async ({ ctx }) => {
     const userResult = await ctx.container.repos.users.findById(ctx.userId);
     if (userResult.error) throw toTrpcError(userResult.error);
-    const result = await ctx.container.useCases.listPendingApprovals.execute({
+    const result = await ctx.container.useCases.listPendingApprovalsWithContext.execute({
       approverUserId: ctx.userId,
       approverEmail: userResult.data?.email ?? null,
     });

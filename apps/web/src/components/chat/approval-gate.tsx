@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, Mail, Stamp } from "lucide-react";
+import { Copy, Loader2, Mail, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,6 +116,22 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
       toast.error("Could not copy the link");
     }
   };
+
+  // Until the initial suggest resolves we cannot tell whether the request is
+  // already sent or still needs an approver, so show a loading state rather than
+  // flashing the empty confirm form (which makes a re-opened session feel as if
+  // the approver must be re-entered).
+  const requestResolved = suggest.isSuccess || suggest.isError;
+  if (!requestResolved) {
+    return (
+      <div className="border-t border-[#dedad2] bg-[#fffaf2] px-5 py-4">
+        <div className="mx-auto flex max-w-2xl items-center gap-2 text-[13px] text-[#918d87]">
+          <Loader2 className="h-4 w-4 animate-spin text-[#d97706]" />
+          Loading approval…
+        </div>
+      </div>
+    );
+  }
 
   if (sent) {
     return (

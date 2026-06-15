@@ -13,6 +13,8 @@ const SEED_SESSION_TITLE = "E2E SEED Session";
 const SEED_FORK_FLOW_NAME = "E2E SEED Fork Flow";
 const SEED_CONFIRM_FLOW_NAME = "E2E SEED Confirmation Flow";
 const SEED_CONFIRM_SESSION_TITLE = "E2E SEED Confirmation Session";
+const SEED_APPROVAL_FLOW_NAME = "E2E SEED Approval Flow";
+const SEED_APPROVAL_SESSION_TITLE = "E2E SEED Approval Session";
 
 const unwrap = <T>(result: Result<T>, context: string): T => {
   if (result.error) {
@@ -40,6 +42,7 @@ export interface SeedResult {
   sessionId: string;
   forkFlowId: string;
   confirmationSessionId: string;
+  approvalSessionId: string;
 }
 
 // A fork flow whose two mutually-exclusive branches capture the same `amount`
@@ -260,6 +263,145 @@ const seedConfirmationSession = async (
   return session.id;
 };
 
+// A flow whose document step feeds an approval node. The seeded session is
+// parked on the approval node with its checkpoint pointing back at the document
+// step, and a pending approval is assigned to the owner — so /approvals renders
+// the enriched card (chat name, originator, the document being approved) and the
+// decision modal deterministically, without driving a live AI turn. Drives the
+// enhance-approval-context e2e spec.
+const seedApprovalRequest = async (
+  container: Container,
+  ownerUserId: string,
+): Promise<string> => {
+  const flow = unwrap(
+    await container.useCases.createFlow.execute({
+      name: SEED_APPROVAL_FLOW_NAME,
+      description: "Seeded flow whose document step is gated by an approval",
+      expertRole: "Procurement Officer",
+      ownerUserId,
+    }),
+    "create approval flow",
+  );
+
+  const documentNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Draft purchase request",
+      positionX: 120,
+      positionY: 120,
+      config: {
+        aiInstruction: "Draft the purchase request document.",
+        doneWhen: "The document is drafted.",
+        outputType: "generate_document",
+        documentTemplatePath: "templates/e2e-seed-purchase.docx",
+        documentTemplateContent: "Purchase request for {{Item}}.",
+      },
+    }),
+    "create approval document node",
+  );
+
+  const approvalNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "approval",
+      name: "Manager sign-off",
+      positionX: 420,
+      positionY: 120,
+      config: { approverSource: "first_level_supervisor" },
+    }),
+    "create approval node",
+  );
+
+  unwrap(
+    await container.useCases.createFlowEdge.execute({
+      flowId: flow.id,
+      fromNodeId: documentNode.id,
+      toNodeId: approvalNode.id,
+    }),
+    "create approval edge",
+  );
+
+  unwrap(
+    await container.useCases.updateFlow.execute(
+      flow.id,
+      { status: "published", visibility: { kind: "global" } },
+      { canPublishToEveryone: true },
+    ),
+    "publish approval flow",
+  );
+
+  const session = unwrap(
+    await container.useCases.startSession.execute({ flowId: flow.id, userId: ownerUserId }),
+    "start approval session",
+  );
+
+  const documentMessage = unwrap(
+    await container.repos.sessionMessages.create({
+      sessionId: session.id,
+      role: "assistant",
+      content: "Here is the purchase request for the new laptops.",
+      confidence: 95,
+      stepNodeId: documentNode.id,
+      document: {
+        filename: "purchase-request.docx",
+        storagePath: "context/e2e-seed/purchase-request.docx",
+        summary: "Purchase request covering ten replacement laptops.",
+        generatedAt: new Date().toISOString(),
+      },
+      documentStatus: "complete",
+      aiPayload: {
+        response: "Here is the purchase request for the new laptops.",
+        rationale: "All required details gathered; the request was generated.",
+        stepCompleteConfidence: 95,
+        contextGathered: [{ key: "Item", value: "10 laptops" }],
+        documentGenerationConfidence: {
+          guidanceAlignmentConfidence: 92,
+          guidanceAlignmentRationale: "The request follows the procurement template.",
+          criteriaAlignmentConfidence: 88,
+          criteriaAlignmentRationale: "All completion criteria for the step are satisfied.",
+        },
+      },
+    }),
+    "create approval document message",
+  );
+
+  unwrap(
+    await container.repos.sessionStepOutputs.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: documentNode.id,
+      messageId: documentMessage.id,
+      fields: [{ key: "item", label: "Item", type: "text", value: "10 laptops" }],
+    }),
+    "create approval step output",
+  );
+
+  unwrap(
+    await container.repos.sessions.update(session.id, {
+      title: SEED_APPROVAL_SESSION_TITLE,
+      currentNodeId: approvalNode.id,
+      graphCheckpoint: { currentNodeId: approvalNode.id, advancedFrom: documentNode.id },
+    }),
+    "park approval session on the approval node",
+  );
+
+  unwrap(
+    await container.repos.approvals.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: approvalNode.id,
+      requestedByUserId: ownerUserId,
+      approverSource: "first_level_supervisor",
+      approverUserId: ownerUserId,
+      status: "pending",
+    }),
+    "create pending approval",
+  );
+
+  return session.id;
+};
+
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
 
@@ -434,8 +576,15 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
 
   const forkFlowId = await seedForkFlow(container, ownerUserId);
   const confirmationSessionId = await seedConfirmationSession(container, ownerUserId);
+  const approvalSessionId = await seedApprovalRequest(container, ownerUserId);
 
-  return { flowId: flow.id, sessionId: session.id, forkFlowId, confirmationSessionId };
+  return {
+    flowId: flow.id,
+    sessionId: session.id,
+    forkFlowId,
+    confirmationSessionId,
+    approvalSessionId,
+  };
 };
 
 // Clears only the E2E admin user's flows and sessions — in foreign-key-safe
@@ -463,6 +612,9 @@ export const teardownE2EFixtures = async (container: Container): Promise<void> =
     .where(eq(schema.app_notification_log.recipient_user_id, adminUserId));
 
   if (sessionIds.length > 0) {
+    await db
+      .delete(schema.app_session_approvals)
+      .where(inArray(schema.app_session_approvals.session_id, sessionIds));
     await db
       .delete(schema.app_session_schedule_runs)
       .where(inArray(schema.app_session_schedule_runs.session_id, sessionIds));

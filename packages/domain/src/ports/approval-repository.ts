@@ -14,6 +14,9 @@ export interface IApprovalRepository {
     approverUserId: string;
     approverEmail: string | null;
   }): Promise<Result<Approval[]>>;
+  // Every approval raised on a session, newest first. Used to grant an approver
+  // read-only access to the session they were asked to sign off on.
+  listBySession(sessionId: string): Promise<Result<Approval[]>>;
   update(id: string, patch: ApprovalUpdate): Promise<Result<Approval>>;
   // True once any approval in the session has recorded a snapshot — the point
   // after which the snapshot, not the live document, is the governed record.

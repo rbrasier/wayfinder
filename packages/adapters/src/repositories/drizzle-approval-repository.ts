@@ -115,6 +115,19 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
     }
   }
 
+  async listBySession(sessionId: string): Promise<Result<Approval[]>> {
+    try {
+      const rows = await this.db
+        .select()
+        .from(app_session_approvals)
+        .where(eq(app_session_approvals.session_id, sessionId))
+        .orderBy(desc(app_session_approvals.created_at));
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list approvals for session.", cause));
+    }
+  }
+
   async hasRecordedSnapshot(sessionId: string): Promise<Result<boolean>> {
     try {
       const [row] = await this.db
