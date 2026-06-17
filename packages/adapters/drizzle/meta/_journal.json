@@ -176,6 +176,13 @@
       "when": 1781474230849,
       "tag": "0024_next_hitman",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781694822314,
+      "tag": "0025_omniscient_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

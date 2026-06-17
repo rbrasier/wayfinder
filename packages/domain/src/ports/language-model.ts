@@ -18,6 +18,8 @@ export interface TokenUsage {
 export interface GenerateObjectInput<TSchema = unknown> {
   readonly purpose: string;
   readonly userId?: string | null;
+  readonly flowId?: string | null;
+  readonly sessionId?: string | null;
   readonly model?: string;
   readonly system?: string;
   readonly prompt?: string;
@@ -30,6 +32,8 @@ export interface GenerateObjectInput<TSchema = unknown> {
 export interface StreamTextInput {
   readonly purpose: string;
   readonly userId?: string | null;
+  readonly flowId?: string | null;
+  readonly sessionId?: string | null;
   readonly model?: string;
   readonly system?: string;
   readonly prompt?: string;
@@ -41,6 +45,8 @@ export interface StreamTextInput {
 export interface StreamObjectInput<TSchema = unknown> {
   readonly purpose: string;
   readonly userId?: string | null;
+  readonly flowId?: string | null;
+  readonly sessionId?: string | null;
   readonly model?: string;
   readonly system?: string;
   readonly prompt?: string;

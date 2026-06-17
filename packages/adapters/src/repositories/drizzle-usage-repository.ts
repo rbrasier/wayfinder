@@ -5,8 +5,10 @@ import {
   type IUsageRepository,
   type NewUsageEvent,
   type Result,
+  type UsageDimension,
   type UsageEvent,
   type UsageFilter,
+  type UsageGroupSummary,
   type UsageSummary,
 } from "@rbrasier/domain";
 import { and, eq, gte, lte, sum, count, type SQL } from "drizzle-orm";
@@ -17,6 +19,8 @@ const toEntity = (row: typeof ai_usage_events.$inferSelect): UsageEvent => ({
   id: row.id,
   userId: row.user_id,
   conversationId: row.conversation_id,
+  flowId: row.flow_id,
+  sessionId: row.session_id,
   purpose: row.purpose,
   provider: row.provider,
   model: row.model,
@@ -41,6 +45,8 @@ export class DrizzleUsageRepository implements IUsageRepository {
         .values({
           user_id: input.userId ?? null,
           conversation_id: input.conversationId ?? null,
+          flow_id: input.flowId ?? null,
+          session_id: input.sessionId ?? null,
           purpose: input.purpose,
           provider: input.provider,
           model: input.model,
@@ -60,14 +66,23 @@ export class DrizzleUsageRepository implements IUsageRepository {
     }
   }
 
+  private buildConditions(filter?: UsageFilter): SQL[] {
+    const conds: SQL[] = [];
+    if (filter?.userId) conds.push(eq(ai_usage_events.user_id, filter.userId));
+    if (filter?.flowId) conds.push(eq(ai_usage_events.flow_id, filter.flowId));
+    if (filter?.sessionId) conds.push(eq(ai_usage_events.session_id, filter.sessionId));
+    if (filter?.provider) conds.push(eq(ai_usage_events.provider, filter.provider));
+    if (filter?.model) conds.push(eq(ai_usage_events.model, filter.model));
+    const from = filter?.from ?? filter?.since;
+    const to = filter?.to ?? filter?.until;
+    if (from) conds.push(gte(ai_usage_events.created_at, from));
+    if (to) conds.push(lte(ai_usage_events.created_at, to));
+    return conds;
+  }
+
   async summarize(filter?: UsageFilter): Promise<Result<UsageSummary[]>> {
     try {
-      const conds: SQL[] = [];
-      if (filter?.userId) conds.push(eq(ai_usage_events.user_id, filter.userId));
-      if (filter?.provider) conds.push(eq(ai_usage_events.provider, filter.provider));
-      if (filter?.model) conds.push(eq(ai_usage_events.model, filter.model));
-      if (filter?.from) conds.push(gte(ai_usage_events.created_at, filter.from));
-      if (filter?.to) conds.push(lte(ai_usage_events.created_at, filter.to));
+      const conds = this.buildConditions(filter);
 
       const rows = await this.db
         .select({
@@ -98,6 +113,38 @@ export class DrizzleUsageRepository implements IUsageRepository {
       );
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to summarize usage.", cause));
+    }
+  }
+
+  async summarizeBy(
+    dimension: UsageDimension,
+    filter?: UsageFilter,
+  ): Promise<Result<UsageGroupSummary[]>> {
+    try {
+      const groupColumn =
+        dimension === "user" ? ai_usage_events.user_id : ai_usage_events.flow_id;
+      const conds = this.buildConditions(filter);
+
+      const rows = await this.db
+        .select({
+          key: groupColumn,
+          totalCostUsd: sum(ai_usage_events.cost_usd),
+          eventCount: count(),
+        })
+        .from(ai_usage_events)
+        .where(conds.length ? and(...conds) : undefined)
+        .groupBy(groupColumn);
+
+      return ok(
+        rows.map((r) => ({
+          dimension,
+          key: r.key,
+          totalCostUsd: Number(r.totalCostUsd ?? 0),
+          eventCount: Number(r.eventCount),
+        })),
+      );
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to summarize usage by dimension.", cause));
     }
   }
 }

@@ -6,6 +6,7 @@ export type DomainErrorCode =
   | "FORBIDDEN"
   | "AI_PROVIDER_FAILED"
   | "AGENT_FAILED"
+  | "QUOTA_EXCEEDED"
   | "INFRA_FAILURE";
 
 export interface DomainError {

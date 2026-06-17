@@ -18,6 +18,9 @@ export interface ResolveFieldValuesInput {
   contextDocs: FlowContextDoc[];
   instruction: string;
   purpose: string;
+  userId?: string | null;
+  flowId?: string | null;
+  sessionId?: string | null;
 }
 
 export const lookupStepField = (
@@ -70,6 +73,9 @@ export const resolveFieldValues = async (
     contextDocs: input.contextDocs,
     instruction: input.instruction,
     purpose: input.purpose,
+    userId: input.userId,
+    flowId: input.flowId,
+    sessionId: input.sessionId,
     priorStepOutputs: input.priorStepOutputs,
     insights: input.insights,
   });

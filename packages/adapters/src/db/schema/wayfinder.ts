@@ -6,6 +6,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  real,
   smallint,
   text,
   timestamp,
@@ -442,6 +443,31 @@ export const app_notification_log = pgTable(
       t.status,
       t.created_at,
     ),
+  }),
+);
+
+// Per-user spend caps (ADR-026). A cap is off by default; at most one per
+// period per user (the unique index), so up to three caps apply to one user.
+export const app_usage_budgets = pgTable(
+  "app_usage_budgets",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "cascade" }),
+    period: text("period", { enum: ["daily", "weekly", "monthly"] }).notNull(),
+    limit_usd: real("limit_usd").notNull(),
+    warn_threshold_pct: smallint("warn_threshold_pct").notNull().default(80),
+    enabled: boolean("enabled").notNull().default(false),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    user_period_unique: uniqueIndex("app_usage_budgets_user_id_period_unique").on(
+      t.user_id,
+      t.period,
+    ),
+    by_user: index("app_usage_budgets_user_id_idx").on(t.user_id),
   }),
 );
 

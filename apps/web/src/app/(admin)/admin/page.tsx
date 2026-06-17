@@ -37,6 +37,17 @@ export default function AdminIndexPage() {
           </CardContent>
         </Card>
       </Link>
+      <Link href="/admin/dashboards/governance">
+        <Card className="transition-shadow hover:shadow-md">
+          <CardHeader>
+            <CardTitle>Cost governance</CardTitle>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            Spend by user and flow, plus per-user spend caps with warn-then-block
+            enforcement and cap utilisation.
+          </CardContent>
+        </Card>
+      </Link>
       <Link href="/admin/users">
         <Card className="transition-shadow hover:shadow-md">
           <CardHeader>

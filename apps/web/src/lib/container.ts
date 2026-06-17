@@ -14,6 +14,11 @@ import {
   DeleteFlowEdge,
   DeleteFlowNode,
   DeleteUser,
+  CreateBudget,
+  UpdateBudget,
+  DeleteBudget,
+  ListBudgets,
+  GetGovernanceDashboard,
   FailJob,
   GenerateDocument,
   GetEffectivePermissions,
@@ -116,6 +121,7 @@ import {
   DrizzleScheduleRepository,
   DrizzleScheduleRunRepository,
   DrizzleAnalyticsRepository,
+  DrizzleBudgetRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
   DrizzleUsageRepository,
@@ -136,6 +142,7 @@ import {
   NodemailerEmailSender,
   PinoLogger,
   PkiCertAdapter,
+  QuotaEnforcer,
   RuntimeConfigStore,
   SpreadsheetParser,
   SystemClock,
@@ -146,6 +153,7 @@ import {
   seedAdmin,
   seedRoles,
   withOptionalLangfuse,
+  withQuotaEnforcement,
   withUsageTracking,
   type AuthMethod,
 } from "@rbrasier/adapters";
@@ -170,6 +178,7 @@ const build = () => {
   const roles = new DrizzleRoleRepository(db);
   const userRoles = new DrizzleUserRoleRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
+  const budgets = new DrizzleBudgetRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
   const flows = new DrizzleFlowRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
@@ -223,7 +232,14 @@ const build = () => {
   });
 
   const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);
-  const llm = withOptionalLangfuse(withUsageTracking(baseLlm, usageRepo), env);
+  // Decorator order (ADR-026 §3): quota enforcement is outermost so it blocks
+  // before the inner usage-tracking + provider call runs. The same enforcer is
+  // shared with the chat stream route, which calls the SDK outside the port.
+  const quotaEnforcer = new QuotaEnforcer(budgets, usageRepo, auditLogger);
+  const llm = withOptionalLangfuse(
+    withQuotaEnforcement(withUsageTracking(baseLlm, usageRepo), quotaEnforcer),
+    env,
+  );
   const agent = new LangGraphAgentRunner(llm);
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
@@ -425,8 +441,8 @@ const build = () => {
     runtimeConfig,
     connectivityTester,
     resolveSession: (token: string) => resolveSession(db, token),
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog, approvals, hrDatasets },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       updateDocumentFields: new UpdateDocumentFields(
@@ -513,6 +529,11 @@ const build = () => {
       heartbeatTyping: new HeartbeatTyping(sessionTyping),
       listTypingUsers: new ListTypingUsers(sessionTyping, users),
       getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
+      getGovernanceDashboard: new GetGovernanceDashboard(usageRepo, budgets, users, flows),
+      createBudget: new CreateBudget(budgets),
+      updateBudget: new UpdateBudget(budgets),
+      deleteBudget: new DeleteBudget(budgets),
+      listBudgets: new ListBudgets(budgets),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
       suggestApprover: new SuggestApprover(
         approvals,

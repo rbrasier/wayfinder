@@ -1,4 +1,4 @@
-import { createDataStreamResponse, generateObject } from "ai";
+import { createDataStreamResponse, formatDataStreamPart, generateObject } from "ai";
 import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
 import type { AiTurnPayload, ConversationalNodeConfig } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
@@ -137,6 +137,22 @@ export async function POST(
         throw cause instanceof Error ? cause : new Error(userMsgResult.error.message);
       }
 
+      // Enforce the acting user's spend caps before the model runs (ADR-026 §6).
+      // The chat path calls the SDK directly, outside the ILanguageModel port, so
+      // it shares the container's enforcer. A blocked user gets a system message
+      // and the session stays active — raising/disabling the cap resumes it.
+      const quotaCheck = await container.services.quotaEnforcer.check(authSession.userId);
+      if (quotaCheck.error) {
+        dataStream.write(formatDataStreamPart("text", quotaCheck.error.message));
+        await container.repos.sessionMessages.create({
+          sessionId: session.id,
+          role: "system",
+          content: quotaCheck.error.message,
+          stepNodeId: session.currentNodeId,
+        });
+        return;
+      }
+
       const streamResult = await streamTurn({
         model: chatModel,
         schema: turnResponseSchema,
@@ -152,6 +168,8 @@ export async function POST(
           purpose: "chat-turn",
           userId: authSession.userId,
           conversationId: sessionId,
+          flowId: flow.id,
+          sessionId,
           model: chatModelName,
           provider,
         },
@@ -195,6 +213,8 @@ export async function POST(
                 purpose: "chat-branch-choice",
                 userId: authSession.userId,
                 conversationId: sessionId,
+                flowId: flow.id,
+                sessionId,
                 model: branchingModelName,
                 provider,
               },

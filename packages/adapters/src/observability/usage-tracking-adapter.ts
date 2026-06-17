@@ -48,13 +48,23 @@ const estimateCost = (model: string, usage: TokenUsage): number => {
 
 export const recordTokenUsage = (
   repo: IUsageRepository,
-  input: { purpose: string; userId?: string | null; conversationId?: string | null; model?: string; provider: ProviderName },
+  input: {
+    purpose: string;
+    userId?: string | null;
+    conversationId?: string | null;
+    flowId?: string | null;
+    sessionId?: string | null;
+    model?: string;
+    provider: ProviderName;
+  },
   usage: TokenUsage,
 ): void => {
   const model = input.model ?? defaultModelFor(input.provider);
   repo.create({
     userId: input.userId ?? null,
     conversationId: input.conversationId ?? null,
+    flowId: input.flowId ?? null,
+    sessionId: input.sessionId ?? null,
     purpose: input.purpose,
     provider: input.provider,
     model,

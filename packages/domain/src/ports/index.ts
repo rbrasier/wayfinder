@@ -9,6 +9,7 @@ export * from "./audit-logger";
 export * from "./feature-flag-repository";
 export * from "./role-repository";
 export * from "./usage-repository";
+export * from "./budget-repository";
 export * from "./job-repository";
 export * from "./health-checker";
 export * from "./connectivity-tester";

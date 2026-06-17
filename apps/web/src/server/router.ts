@@ -5,6 +5,7 @@ import { errorRouter } from "./routers/error";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
 import { flowVersionRouter } from "./routers/flow-version";
+import { governanceRouter } from "./routers/governance";
 import { hrRouter } from "./routers/hr";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
@@ -31,6 +32,7 @@ export const appRouter = router({
   settings: settingsRouter,
   n8n: n8nRouter,
   analytics: analyticsRouter,
+  governance: governanceRouter,
   approval: approvalRouter,
   document: documentRouter,
   people: peopleRouter,

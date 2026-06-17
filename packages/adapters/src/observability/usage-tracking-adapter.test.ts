@@ -7,6 +7,7 @@ const createMockRepo = (
 ): IUsageRepository => ({
   create: createImpl ?? vi.fn().mockResolvedValue(ok({ id: "usage-1" })),
   summarize: vi.fn(),
+  summarizeBy: vi.fn(),
 });
 
 const baseUsage: TokenUsage = {
@@ -101,5 +102,45 @@ describe("estimateCost via recordTokenUsage", () => {
 
     const call = createFn.mock.calls[0]![0];
     expect(call.costUsd).toBeGreaterThan(0);
+  });
+
+  it("records flow_id and session_id when supplied", async () => {
+    const createFn = vi.fn().mockResolvedValue(ok({ id: "usage-1" }));
+    const repo = createMockRepo(createFn);
+
+    recordTokenUsage(
+      repo,
+      {
+        purpose: "chat-turn",
+        provider: "anthropic",
+        userId: "user-1",
+        flowId: "flow-1",
+        sessionId: "session-1",
+      },
+      { promptTokens: 10, completionTokens: 5, systemTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    );
+
+    await vi.waitFor(() => {
+      expect(createFn).toHaveBeenCalled();
+    });
+
+    const call = createFn.mock.calls[0]![0];
+    expect(call.flowId).toBe("flow-1");
+    expect(call.sessionId).toBe("session-1");
+  });
+
+  it("defaults flow_id and session_id to null when omitted", async () => {
+    const createFn = vi.fn().mockResolvedValue(ok({ id: "usage-1" }));
+    const repo = createMockRepo(createFn);
+
+    recordTokenUsage(repo, { purpose: "chat", provider: "anthropic" }, baseUsage);
+
+    await vi.waitFor(() => {
+      expect(createFn).toHaveBeenCalled();
+    });
+
+    const call = createFn.mock.calls[0]![0];
+    expect(call.flowId).toBeNull();
+    expect(call.sessionId).toBeNull();
   });
 });

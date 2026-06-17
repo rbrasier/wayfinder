@@ -94,6 +94,9 @@ export class RunAutoNode {
       contextDocs: input.flow.contextDocs,
       instruction: config.instruction,
       purpose: "autoNodeFields",
+      userId: input.userId,
+      flowId: input.flow.id,
+      sessionId: input.session.id,
     });
     if (fieldsResult.error) return fieldsResult;
 

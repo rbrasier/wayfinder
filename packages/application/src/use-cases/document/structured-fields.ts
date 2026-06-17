@@ -25,6 +25,11 @@ export interface ExtractStructuredFieldsInput {
   contextDocs: FlowContextDoc[];
   instruction: string;
   purpose: string;
+  // Enforcement key + dashboard attribution (ADR-026); passed straight to the
+  // model call. Optional so existing callers are unaffected.
+  userId?: string | null;
+  flowId?: string | null;
+  sessionId?: string | null;
   // Higher-priority context than the transcript: structured values captured by
   // earlier steps, then insights accumulated across the conversation. Optional
   // so document generation keeps its existing prompt byte-for-byte.
@@ -83,6 +88,9 @@ export const extractStructuredFields = async (
 
   const result = await languageModel.generateObject<Record<string, string>>({
     purpose: input.purpose,
+    userId: input.userId,
+    flowId: input.flowId,
+    sessionId: input.sessionId,
     system: input.instruction,
     prompt: [
       `Return a JSON object with exactly these keys: ${JSON.stringify(keys)}.`,

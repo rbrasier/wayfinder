@@ -6,6 +6,7 @@ export * from "./feature-flag";
 export * from "./role";
 export * from "./permission";
 export * from "./usage-event";
+export * from "./budget";
 export * from "./job";
 export * from "./system-health";
 export * from "./connectivity";
