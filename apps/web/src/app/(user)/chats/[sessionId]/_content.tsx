@@ -332,7 +332,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   return (
     <main className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] min-w-0 shrink-0 items-center justify-between border-b border-[#dedad2] bg-white px-5">
+      <header className="flex h-[52px] min-w-0 shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
         <div className="flex min-w-0 items-center gap-3">
           <Link href="/chats" className="shrink-0 text-[13px] text-[#5a5650] hover:text-[#1a1814]">
             ← My Chats

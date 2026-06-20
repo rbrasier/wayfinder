@@ -38,7 +38,7 @@ export function ChatsContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white px-5">
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
         <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">My Chats</h1>
         <Button onClick={() => setNewChatOpen(true)}>New Chat</Button>
       </header>
