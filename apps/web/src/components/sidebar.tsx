@@ -314,6 +314,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
             </div>
           </Link>
           <span className="text-[14px] font-bold tracking-[-0.3px] text-[#1a1814]">Wayfinder</span>
+          <span className="rounded-[5px] bg-[#eef1fc] px-[5px] py-[1px] text-[9px] font-semibold uppercase tracking-[0.06em] text-[#3a5fd9]">
+            Alpha
+          </span>
         </div>
         {navBody}
         {footer}
@@ -332,6 +335,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                   W
                 </div>
                 <span className="text-[14px] font-bold tracking-[-0.2px] text-[#1a1814]">Wayfinder</span>
+                <span className="rounded-[5px] bg-[#eef1fc] px-[5px] py-[1px] text-[9px] font-semibold uppercase tracking-[0.06em] text-[#3a5fd9]">
+                  Alpha
+                </span>
               </div>
               <button
                 onClick={closeMobile}

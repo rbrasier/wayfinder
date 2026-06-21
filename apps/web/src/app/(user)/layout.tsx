@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
+import { HelpMenu } from "@/components/help-menu";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { createServerHelpers } from "@/trpc/server";
 import { getContainer } from "@/lib/container";
@@ -35,6 +36,7 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
           <div className="flex flex-1 flex-col overflow-hidden bg-[#f7f6f3]">
             {children}
           </div>
+          <HelpMenu />
         </div>
       </HydrateClient>
     </SidebarProvider>
