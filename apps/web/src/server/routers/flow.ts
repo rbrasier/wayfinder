@@ -56,6 +56,11 @@ const nodeRouter = router({
       const orgSettingResult = await ctx.container.repos.systemSettings.get("organisation_name");
       const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
 
+      const globalInstructionsResult = await ctx.container.repos.systemSettings.get("global_prompt");
+      const globalInstructions = globalInstructionsResult.error
+        ? null
+        : (globalInstructionsResult.data?.value ?? null);
+
       const promptResult = ctx.container.services.sessionAgent.buildSystemPrompt({
         nodeConfig: {
           aiInstruction: input.aiInstruction,
@@ -65,6 +70,7 @@ const nodeRouter = router({
         gatheredContext: "",
         workflowName: flow.name,
         organisationName,
+        globalInstructions,
         expertRole: flow.expertRole,
       });
 

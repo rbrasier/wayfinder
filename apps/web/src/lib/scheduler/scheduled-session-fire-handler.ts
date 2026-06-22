@@ -112,6 +112,7 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
       userId: session.userId,
       provider,
       gatheredContext,
+      globalInstructions: await this.resolveGlobalInstructions(),
     });
     return ok(undefined);
   }
@@ -182,6 +183,11 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
 
   private async resolveOrganisationName(): Promise<string | null> {
     const setting = await this.container.repos.systemSettings.get("organisation_name");
+    return setting.error ? null : (setting.data?.value ?? null);
+  }
+
+  private async resolveGlobalInstructions(): Promise<string | null> {
+    const setting = await this.container.repos.systemSettings.get("global_prompt");
     return setting.error ? null : (setting.data?.value ?? null);
   }
 

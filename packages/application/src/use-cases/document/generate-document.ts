@@ -63,16 +63,21 @@ export class GenerateDocument {
     const fields = fieldsResult.data;
     const transcript = this.buildTranscript(input.messages);
 
-    const dataResult = await extractStructuredFields(this.languageModel, {
-      fields,
-      transcript,
-      contextDocs: input.flow.contextDocs,
-      instruction: config.aiInstruction,
-      purpose: "documentGeneration",
-    });
-    if (dataResult.error) return dataResult;
-
-    const fieldValues = dataResult.data;
+    // Generate the document in field batches rather than one giant call: this
+    // keeps each prompt and structured output bounded so a large template or
+    // reference set cannot overflow the model context window in a single turn.
+    const fieldValues: Record<string, string> = {};
+    for (const batch of this.batchFields(fields)) {
+      const batchResult = await extractStructuredFields(this.languageModel, {
+        fields: batch,
+        transcript,
+        contextDocs: input.flow.contextDocs,
+        instruction: config.aiInstruction,
+        purpose: "documentGeneration",
+      });
+      if (batchResult.error) return batchResult;
+      Object.assign(fieldValues, batchResult.data);
+    }
 
     const generateResult = this.documentGenerator.generate({
       templateBytes: templateResult.data,
@@ -135,6 +140,20 @@ export class GenerateDocument {
     });
 
     return ok({ document });
+  }
+
+  // Number of template fields gathered per model call. Small enough to keep each
+  // prompt and structured output bounded; large enough that typical templates
+  // resolve in one or two calls.
+  private static readonly FIELD_BATCH_SIZE = 12;
+
+  private batchFields(fields: TemplateField[]): TemplateField[][] {
+    if (fields.length === 0) return [];
+    const batches: TemplateField[][] = [];
+    for (let index = 0; index < fields.length; index += GenerateDocument.FIELD_BATCH_SIZE) {
+      batches.push(fields.slice(index, index + GenerateDocument.FIELD_BATCH_SIZE));
+    }
+    return batches;
   }
 
   private resolveFields(

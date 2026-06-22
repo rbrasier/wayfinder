@@ -1,5 +1,7 @@
 import {
   buildFieldConstraintsText,
+  domainError,
+  err,
   type FlowContextDoc,
   type ILanguageModel,
   type Result,
@@ -9,13 +11,41 @@ import {
 } from "@rbrasier/domain";
 import { documentDataSchema } from "@rbrasier/shared";
 
-export const buildContextDocsSection = (docs: FlowContextDoc[]): string => {
+// Rough char-per-token ratio for English prose, used only to keep prompts under
+// the model context window — it does not need to be exact, only conservative.
+const CHARS_PER_TOKEN = 4;
+
+// Hard cap on the combined context-document text injected into a single prompt.
+// ~100k tokens, leaving generous headroom under a 200k window for the field
+// constraints, transcript, and the model's structured output. Without this, a
+// large reference set (e.g. a 177k-token security manual) overflows the window.
+export const CONTEXT_DOCS_CHAR_BUDGET = 400_000;
+
+// Refuse to call the model when the assembled prompt would still exceed this,
+// failing with a clear message instead of letting the provider throw
+// "prompt is too long".
+const MAX_PROMPT_TOKENS = 180_000;
+
+export const estimateTokens = (text: string): number => Math.ceil(text.length / CHARS_PER_TOKEN);
+
+export const buildContextDocsSection = (
+  docs: FlowContextDoc[],
+  maxChars: number = CONTEXT_DOCS_CHAR_BUDGET,
+): string => {
   if (docs.length === 0) return "";
-  const lines = docs.map((doc) =>
-    doc.extractionStatus === "complete" && doc.extractedText
-      ? `\n[${doc.filename}]\n${doc.extractedText}`
-      : `- ${doc.filename}`,
-  );
+  let remaining = Math.max(0, maxChars);
+  const lines = docs.map((doc) => {
+    if (!(doc.extractionStatus === "complete" && doc.extractedText)) {
+      return `- ${doc.filename}`;
+    }
+    if (remaining <= 0) {
+      return `- ${doc.filename} [omitted: context budget exhausted]`;
+    }
+    const text = doc.extractedText.slice(0, remaining);
+    const wasTruncated = text.length < doc.extractedText.length;
+    remaining -= text.length;
+    return `\n[${doc.filename}]\n${text}${wasTruncated ? "\n[Document truncated to fit the context budget.]" : ""}`;
+  });
   return `\nFlow context documents:\n${lines.join("\n")}`;
 };
 
@@ -86,25 +116,39 @@ export const extractStructuredFields = async (
   const stepOutputsSection = buildStepOutputsSection(input.priorStepOutputs ?? []);
   const insightsSection = buildInsightsSection(input.insights ?? []);
 
+  const prompt = [
+    `Return a JSON object with exactly these keys: ${JSON.stringify(keys)}.`,
+    `Fill each value using the session context below.`,
+    `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
+    `\n<field_constraints>\n${buildFieldConstraintsText(input.fields)}\n</field_constraints>`,
+    generationGuidance,
+    stepOutputsSection,
+    insightsSection,
+    contextDocsSection,
+    `\nSession transcript:\n${input.transcript}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  // The context-doc section is already budget-capped, but a very large template
+  // (many field constraints) or transcript could still push a single batch over.
+  // Fail with a clear message rather than letting the provider throw.
+  if (estimateTokens(input.instruction) + estimateTokens(prompt) > MAX_PROMPT_TOKENS) {
+    return err(
+      domainError(
+        "VALIDATION_FAILED",
+        "The information for this step is too large to fit the model context, even after truncating reference documents. Reduce the flow's context documents or split the step.",
+      ),
+    );
+  }
+
   const result = await languageModel.generateObject<Record<string, string>>({
     purpose: input.purpose,
     userId: input.userId,
     flowId: input.flowId,
     sessionId: input.sessionId,
     system: input.instruction,
-    prompt: [
-      `Return a JSON object with exactly these keys: ${JSON.stringify(keys)}.`,
-      `Fill each value using the session context below.`,
-      `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
-      `\n<field_constraints>\n${buildFieldConstraintsText(input.fields)}\n</field_constraints>`,
-      generationGuidance,
-      stepOutputsSection,
-      insightsSection,
-      contextDocsSection,
-      `\nSession transcript:\n${input.transcript}`,
-    ]
-      .filter(Boolean)
-      .join("\n"),
+    prompt,
     schema: documentDataSchema,
     temperature: 0.3,
   });

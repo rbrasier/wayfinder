@@ -1,12 +1,18 @@
 import { createDataStreamResponse, formatDataStreamPart, generateObject } from "ai";
 import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
-import type { AiTurnPayload, ConversationalNodeConfig } from "@rbrasier/domain";
+import {
+  normaliseAdvanceConfidenceThreshold,
+  type AiTurnPayload,
+  type ConversationalNodeConfig,
+} from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { streamTurn } from "./stream-turn";
 import {
   applyAdvanceSideEffects,
+  buildAttachmentAnnotation,
   buildGatheredContext,
+  buildPromptSessionUploads,
   generateTitle,
 } from "./turn-helpers";
 
@@ -62,10 +68,26 @@ export async function POST(
   // A never-completing step has nothing to confirm; confirmation only applies to
   // a step that can actually reach its threshold.
   const requireConfirmation = Boolean(nodeConfig.requireConfirmation) && !isNeverDone;
-  const realThreshold = nodeConfig.advanceConfidenceThreshold ?? 90;
+  // Normalise on read: flow-authored data may store this as a fraction (0.7)
+  // rather than a 0-100 percentage, which would otherwise auto-advance every turn.
+  const realThreshold = normaliseAdvanceConfidenceThreshold(nodeConfig.advanceConfidenceThreshold);
 
   const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
   const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
+
+  const globalInstructionsResult = await container.repos.systemSettings.get("global_prompt");
+  const globalInstructions = globalInstructionsResult.error
+    ? null
+    : (globalInstructionsResult.data?.value ?? null);
+
+  // Inject the user's own attachments into the turn independent of RAG: a thin
+  // message ("here is the solution") retrieves nothing, so without this the agent
+  // never sees the file it was just given.
+  const uploadsResult = await container.repos.sessionUploads.listBySession(sessionId);
+  const uploadConfig = await container.runtimeConfig.getSessionUploadConfig();
+  const sessionUploads = uploadsResult.error
+    ? []
+    : buildPromptSessionUploads(uploadsResult.data, uploadConfig.totalBudgetChars);
 
   const userResult = await container.repos.users.findById(authSession.userId);
   const userProfile =
@@ -85,9 +107,11 @@ export async function POST(
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
     retrievedChunks,
+    sessionUploads,
     gatheredContext,
     workflowName: flow.name,
     organisationName,
+    globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
   });
@@ -112,9 +136,12 @@ export async function POST(
     content: m.content,
   }));
 
+  // The model sees the attachment marker; the persisted user message stays the
+  // raw text the user typed (persistUserMessage uses lastUserMessage).
+  const annotatedUserMessage = `${lastUserMessage}${buildAttachmentAnnotation(sessionUploads)}`;
   const messagesWithNew = [
     ...coreMessages,
-    { role: "user" as const, content: lastUserMessage },
+    { role: "user" as const, content: annotatedUserMessage },
   ];
 
   const aiConfig = await container.runtimeConfig.getAiConfig();
@@ -267,6 +294,7 @@ export async function POST(
           isAdmin: authSession.isAdmin,
           model: branchingModel,
           provider,
+          globalInstructions,
         });
       }
 

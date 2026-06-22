@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { MockLanguageModelV1 } from "ai/test";
-import type { AiTurnPayload, Flow, FlowNode, SessionMessage } from "@rbrasier/domain";
+import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@rbrasier/domain";
 import {
   applyAdvanceSideEffects,
+  buildAttachmentAnnotation,
   buildGatheredContext,
+  buildPromptSessionUploads,
   generateDocument,
   generateInitialMessage,
 } from "./turn-helpers";
@@ -121,7 +123,11 @@ describe("generateInitialMessage", () => {
       },
       repos: {
         sessionMessages: { create },
+        sessionUploads: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
         usageRepo: {},
+      },
+      runtimeConfig: {
+        getSessionUploadConfig: vi.fn().mockResolvedValue({ maxFileSizeBytes: 1, totalBudgetChars: 1000 }),
       },
       useCases: {
         retrieveDocumentChunks,
@@ -140,12 +146,67 @@ describe("generateInitialMessage", () => {
       userId: "user-1",
       provider: "anthropic",
       gatheredContext: "- Full Name: John Dutton\n- Department: Sales",
+      globalInstructions: "Use Australian English spelling.",
     });
 
     expect(buildSystemPrompt).toHaveBeenCalledTimes(1);
     const call = buildSystemPrompt.mock.calls[0]![0];
     expect(call.gatheredContext).toContain("John Dutton");
     expect(call.gatheredContext).toContain("Sales");
+    expect(call.globalInstructions).toBe("Use Australian English spelling.");
+  });
+});
+
+describe("buildPromptSessionUploads", () => {
+  const makeUpload = (overrides: Partial<SessionUpload> = {}): SessionUpload => ({
+    id: "u-1",
+    sessionId: "sess-1",
+    messageId: null,
+    filename: "doc.txt",
+    mimeType: "text/plain",
+    sizeBytes: 10,
+    storagePath: "session/sess-1/doc.txt",
+    extractedText: "hello world",
+    extractionStatus: "complete",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...overrides,
+  });
+
+  it("includes completed uploads with extracted text", () => {
+    const result = buildPromptSessionUploads([makeUpload()], 1000);
+    expect(result).toEqual([{ filename: "doc.txt", extractedText: "hello world" }]);
+  });
+
+  it("skips uploads still extracting or with no text", () => {
+    const result = buildPromptSessionUploads(
+      [
+        makeUpload({ id: "u-2", extractionStatus: "pending", extractedText: null }),
+        makeUpload({ id: "u-3", extractedText: "   " }),
+      ],
+      1000,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("truncates extracted text to the remaining budget and marks it", () => {
+    const result = buildPromptSessionUploads([makeUpload({ extractedText: "abcdefghij" })], 4);
+    expect(result[0]!.extractedText).toContain("abcd");
+    expect(result[0]!.extractedText).toContain("[Document truncated to fit the context budget.]");
+  });
+});
+
+describe("buildAttachmentAnnotation", () => {
+  it("returns empty when there are no uploads", () => {
+    expect(buildAttachmentAnnotation([])).toBe("");
+  });
+
+  it("lists the attached filenames", () => {
+    const annotation = buildAttachmentAnnotation([
+      { filename: "a.pdf", extractedText: "x" },
+      { filename: "b.docx", extractedText: "y" },
+    ]);
+    expect(annotation).toContain("[Attached: a.pdf, b.docx]");
   });
 });
 
@@ -453,7 +514,14 @@ describe("applyAdvanceSideEffects", () => {
     });
 
     const container = {
-      repos: { sessionMessages: { listBySession, updateDocumentStatus: vi.fn(), create }, usageRepo: {} },
+      repos: {
+        sessionMessages: { listBySession, updateDocumentStatus: vi.fn(), create },
+        sessionUploads: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
+        usageRepo: {},
+      },
+      runtimeConfig: {
+        getSessionUploadConfig: vi.fn().mockResolvedValue({ maxFileSizeBytes: 1, totalBudgetChars: 1000 }),
+      },
       useCases: {
         generateDocument: { execute: vi.fn() },
         retrieveDocumentChunks: { execute: retrieveExecute },

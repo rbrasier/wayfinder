@@ -1,7 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { ok, err, domainError } from "@rbrasier/domain";
 import type { FlowContextDoc, ILanguageModel, TemplateField } from "@rbrasier/domain";
-import { coerceStructuredFields, extractStructuredFields } from "./structured-fields";
+import {
+  CONTEXT_DOCS_CHAR_BUDGET,
+  buildContextDocsSection,
+  coerceStructuredFields,
+  estimateTokens,
+  extractStructuredFields,
+} from "./structured-fields";
 
 const usage = {
   promptTokens: 10,
@@ -131,6 +137,69 @@ describe("extractStructuredFields", () => {
 
     expect(result.error).toBeDefined();
     expect(result.error?.code).toBe("INFRA_FAILURE");
+  });
+});
+
+describe("buildContextDocsSection budgeting", () => {
+  const completeDoc = (filename: string, text: string): FlowContextDoc => ({
+    id: filename,
+    filename,
+    mimeType: "text/plain",
+    sizeBytes: text.length,
+    storagePath: `ctx/${filename}`,
+    extractedText: text,
+    extractionStatus: "complete",
+  });
+
+  it("includes short documents in full", () => {
+    const section = buildContextDocsSection([completeDoc("a.txt", "short text")]);
+    expect(section).toContain("short text");
+    expect(section).not.toContain("truncated");
+  });
+
+  it("truncates a document that exceeds the budget and marks it", () => {
+    const huge = "x".repeat(CONTEXT_DOCS_CHAR_BUDGET + 5_000);
+    const section = buildContextDocsSection([completeDoc("big.txt", huge)]);
+    expect(section).toContain("[Document truncated to fit the context budget.]");
+    expect(section.length).toBeLessThan(huge.length);
+  });
+
+  it("omits later documents once the budget is exhausted", () => {
+    const first = "a".repeat(CONTEXT_DOCS_CHAR_BUDGET);
+    const section = buildContextDocsSection([
+      completeDoc("first.txt", first),
+      completeDoc("second.txt", "this should be omitted"),
+    ]);
+    expect(section).toContain("second.txt [omitted: context budget exhausted]");
+    expect(section).not.toContain("this should be omitted");
+  });
+});
+
+describe("extractStructuredFields budget guard", () => {
+  it("fails gracefully when the assembled prompt still exceeds the token cap", async () => {
+    const languageModel = makeLanguageModel({});
+    // A transcript far beyond the model window forces the pre-flight guard.
+    const giantTranscript = "word ".repeat(1_000_000);
+
+    const result = await extractStructuredFields(languageModel, {
+      fields: [field({})],
+      transcript: giantTranscript,
+      contextDocs: [],
+      instruction: "x",
+      purpose: "documentGeneration",
+    });
+
+    expect(result.error).toBeDefined();
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(languageModel.generateObject).not.toHaveBeenCalled();
+  });
+});
+
+describe("estimateTokens", () => {
+  it("estimates conservatively at ~4 chars per token", () => {
+    expect(estimateTokens("")).toBe(0);
+    expect(estimateTokens("abcd")).toBe(1);
+    expect(estimateTokens("abcde")).toBe(2);
   });
 });
 
