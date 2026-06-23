@@ -4,6 +4,7 @@ import {
   type BuildBranchChoicePromptInput,
   type BuildSystemPromptInput,
   type ISessionAgent,
+  type PromptSessionUpload,
   type PromptUserProfile,
   type Result,
   type RetrievedChunk,
@@ -14,8 +15,20 @@ export class FlowSessionGraph implements ISessionAgent {
   buildSystemPrompt(input: BuildSystemPromptInput): Result<string> {
     const { nodeConfig, gatheredContext, workflowName, organisationName, expertRole } = input;
     const retrievedChunks = input.retrievedChunks ?? [];
+    const sessionUploads = input.sessionUploads ?? [];
 
     const roleBlock = buildRoleBlock(expertRole, organisationName, workflowName, input.userProfile ?? null);
+
+    const globalInstructionsBlock = input.globalInstructions?.trim()
+      ? `\n\n<global_instructions>\n  ${input.globalInstructions.trim()}\n</global_instructions>`
+      : "";
+
+    // Attached documents are the user's own files for this request, injected in
+    // full and independent of RAG, so a thin message ("here is the solution")
+    // still lets the agent see them. Framed distinctly from <reference_documents>.
+    const attachedDocumentsBlock = sessionUploads.length > 0
+      ? buildAttachedDocumentsBlock(sessionUploads)
+      : "";
 
     const gatheredBlock = gatheredContext.trim()
       ? `\n  <gathered_context>\n    ${gatheredContext.trim()}\n    You may ask nuanced follow-up questions to clarify or deepen anything captured here if it would help complete this step more accurately.\n  </gathered_context>`
@@ -50,7 +63,7 @@ export class FlowSessionGraph implements ISessionAgent {
         ? buildFieldFormatsBlock(templateFields)
         : "";
 
-    const prompt = `${roleBlock}
+    const prompt = `${roleBlock}${globalInstructionsBlock}
 
 <instructions>
   ${nodeConfig.aiInstruction}
@@ -81,7 +94,7 @@ export class FlowSessionGraph implements ISessionAgent {
       { "key": "descriptive label", "value": "what the user provided" }
     ]
   }
-</output>${referenceBlock}`;
+</output>${attachedDocumentsBlock}${referenceBlock}`;
 
     return ok(prompt);
   }
@@ -117,6 +130,15 @@ const buildFieldFormatsBlock = (templateFields: TemplateField[]): string => {
 
 ${indented}
 </field_formats>`;
+};
+
+const buildAttachedDocumentsBlock = (uploads: PromptSessionUpload[]): string => {
+  const manifest = uploads.map((upload) => `  - ${upload.filename}`).join("\n");
+  const documents = uploads
+    .map((upload) => `  <document filename="${upload.filename}">\n${upload.extractedText}\n  </document>`)
+    .join("\n");
+
+  return `\n\n<attached_documents>\n  The user has attached the following document(s) to this conversation. Treat their full contents below as provided by the user for this step — do not ask them to paste what is already here.\n${manifest}\n${documents}\n</attached_documents>`;
 };
 
 const buildReferenceDocumentsBlock = (chunks: RetrievedChunk[]): string => {

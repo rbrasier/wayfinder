@@ -9,7 +9,14 @@ import {
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
 } from "@rbrasier/shared";
-import { DEFAULT_MODELS_FOR, RuntimeConfigStore, type EnvDefaults } from "./runtime-config-store";
+import { DOCUMENT_GENERATION_CONFIG_SETTING_KEY } from "@rbrasier/domain";
+import {
+  DEFAULT_DOCUMENT_GENERATION_CONFIG,
+  DEFAULT_MODELS_FOR,
+  RuntimeConfigStore,
+  resolveContextWindow,
+  type EnvDefaults,
+} from "./runtime-config-store";
 
 const baseStorage: StorageConfig = {
   endpoint: "localhost",
@@ -371,5 +378,114 @@ describe("RuntimeConfigStore — getAuthConfig", () => {
     expect(redacted.entra.tenantId).toBe("t");
     expect(redacted.entra.clientId).toBe("c");
     expect(redacted.entra.clientSecret).toBe("set");
+  });
+});
+
+// Routes get() by key so AI config and document-generation config can be stored
+// independently in one fake repo.
+const makeKeyedRepo = (values: Record<string, string>): ISystemSettingsRepository =>
+  ({
+    get: vi.fn().mockImplementation(async (key: string) => ({
+      data: values[key] ? { key, value: values[key], updatedAt: new Date() } : null,
+    })),
+    set: vi.fn(),
+    list: vi.fn(),
+    delete: vi.fn(),
+  }) as unknown as ISystemSettingsRepository;
+
+describe("RuntimeConfigStore — document generation config", () => {
+  it("returns the v1.49.0 defaults when nothing is stored", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getDocumentGenerationConfig();
+
+    expect(config).toEqual(DEFAULT_DOCUMENT_GENERATION_CONFIG);
+    expect(config.contextBudgetMode).toBe("tokens");
+    expect(config.fieldBatchSize).toBe(12);
+    expect(config.maxPromptTokens).toBe(180_000);
+  });
+
+  it("falls back field-by-field for invalid stored values", async () => {
+    const stored = JSON.stringify({
+      contextBudgetMode: "model_percent",
+      contextBudgetTokens: -1,
+      contextBudgetPercent: 25,
+      fieldBatchSize: 0,
+      maxPromptTokens: 50_000,
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getDocumentGenerationConfig();
+
+    // Valid fields are kept; invalid ones revert to defaults.
+    expect(config.contextBudgetMode).toBe("model_percent");
+    expect(config.contextBudgetPercent).toBe(25);
+    expect(config.maxPromptTokens).toBe(50_000);
+    expect(config.contextBudgetTokens).toBe(DEFAULT_DOCUMENT_GENERATION_CONFIG.contextBudgetTokens);
+    expect(config.fieldBatchSize).toBe(DEFAULT_DOCUMENT_GENERATION_CONFIG.fieldBatchSize);
+  });
+
+  it("falls back to defaults for an unparseable stored value", async () => {
+    const store = new RuntimeConfigStore(makeRepo("not json"), makeEnv());
+
+    const config = await store.getDocumentGenerationConfig();
+
+    expect(config).toEqual(DEFAULT_DOCUMENT_GENERATION_CONFIG);
+  });
+
+  it("caches the config and re-reads only after invalidation", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getDocumentGenerationConfig();
+    await store.getDocumentGenerationConfig();
+    store.invalidateDocumentGeneration();
+    await store.getDocumentGenerationConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("resolveContextWindow", () => {
+  it("returns the known window for a mapped model", () => {
+    const resolution = resolveContextWindow("anthropic", "claude-sonnet-4-5-20250929");
+
+    expect(resolution.tokens).toBe(200_000);
+    expect(resolution.estimated).toBe(false);
+  });
+
+  it("falls back to the default window for an unknown model and flags it estimated", () => {
+    const resolution = resolveContextWindow("anthropic", "some-future-model");
+
+    expect(resolution.tokens).toBe(128_000);
+    expect(resolution.estimated).toBe(true);
+  });
+});
+
+describe("RuntimeConfigStore — resolveDocumentGenerationBudget", () => {
+  it("uses the explicit token cap in tokens mode (chars = tokens × 4)", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv({ provider: "anthropic" }));
+
+    const budget = await store.resolveDocumentGenerationBudget();
+
+    // Default 100k tokens × 4 chars/token = 400k chars, matching v1.49.0.
+    expect(budget.contextBudgetChars).toBe(400_000);
+    expect(budget.fieldBatchSize).toBe(12);
+    expect(budget.maxPromptTokens).toBe(180_000);
+  });
+
+  it("derives the budget from the model window in model_percent mode", async () => {
+    // Anthropic doc-gen model has a 200k window; 25% → 50k tokens → 200k chars.
+    const repo = makeKeyedRepo({
+      [DOCUMENT_GENERATION_CONFIG_SETTING_KEY]: JSON.stringify({
+        contextBudgetMode: "model_percent",
+        contextBudgetPercent: 25,
+      }),
+    });
+    const store = new RuntimeConfigStore(repo, makeEnv({ provider: "anthropic" }));
+
+    const budget = await store.resolveDocumentGenerationBudget();
+
+    expect(budget.contextBudgetChars).toBe(200_000);
   });
 });

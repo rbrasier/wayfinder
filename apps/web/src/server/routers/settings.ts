@@ -4,6 +4,7 @@ import {
   AI_CONFIG_SETTING_KEY,
   CONNECTIVITY_TARGETS,
   AUTH_CONFIG_SETTING_KEY,
+  DOCUMENT_GENERATION_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
@@ -29,7 +30,7 @@ import {
   EMBEDDINGS_DIMENSION,
   EMBEDDINGS_PROVIDERS,
 } from "@rbrasier/shared";
-import { DEFAULT_MODELS_FOR, RuntimeConfigStore } from "@rbrasier/adapters";
+import { DEFAULT_MODELS_FOR, RuntimeConfigStore, resolveContextWindow } from "@rbrasier/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
@@ -78,6 +79,14 @@ const n8nConfigInputSchema = z.object({
 const sessionUploadConfigInputSchema = z.object({
   maxFileSizeBytes: z.number().int().positive(),
   totalBudgetChars: z.number().int().positive(),
+});
+
+export const documentGenerationConfigInputSchema = z.object({
+  contextBudgetMode: z.enum(["tokens", "model_percent"]),
+  contextBudgetTokens: z.number().int().positive(),
+  contextBudgetPercent: z.number().int().min(1).max(100),
+  fieldBatchSize: z.number().int().positive(),
+  maxPromptTokens: z.number().int().positive(),
 });
 
 const emailConfigInputSchema = z.object({
@@ -421,6 +430,33 @@ export const settingsRouter = router({
       );
       if (result.error) throw toTrpcError(result.error);
       ctx.container.runtimeConfig.invalidateSessionUpload();
+      return { ok: true };
+    }),
+
+  getDocumentGenerationConfig: adminProcedure.query(async ({ ctx }) => {
+    const config = await ctx.container.runtimeConfig.getDocumentGenerationConfig();
+    const aiConfig = await ctx.container.runtimeConfig.getAiConfig();
+    const contextWindow = resolveContextWindow(aiConfig.provider, aiConfig.models.documentGeneration);
+    return {
+      config,
+      model: {
+        provider: aiConfig.provider,
+        model: aiConfig.models.documentGeneration,
+        contextWindowTokens: contextWindow.tokens,
+        estimated: contextWindow.estimated,
+      },
+    };
+  }),
+
+  setDocumentGenerationConfig: adminProcedure
+    .input(documentGenerationConfigInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.repos.systemSettings.set(
+        DOCUMENT_GENERATION_CONFIG_SETTING_KEY,
+        JSON.stringify(input),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      ctx.container.runtimeConfig.invalidateDocumentGeneration();
       return { ok: true };
     }),
 
