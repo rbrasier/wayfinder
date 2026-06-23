@@ -183,6 +183,13 @@
       "when": 1781694822314,
       "tag": "0025_omniscient_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1782211548777,
+      "tag": "0026_volatile_stellaris",
+      "breakpoints": true
     }
   ]
 }

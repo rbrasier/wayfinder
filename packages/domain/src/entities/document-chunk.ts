@@ -40,3 +40,36 @@ export interface RetrievedChunk {
   sourceType: ChunkSourceType;
   similarity: number;
 }
+
+// Curation lifecycle (ADR-028). Inference retrieval only ever sees `active`
+// chunks; `archived` is retained for audit, `draft` is staged from a correction
+// and not yet retrievable.
+export type ChunkStatus = "active" | "archived" | "draft";
+
+// A chunk as the SME curation surface sees it: identity, content, source
+// attribution, lifecycle, tags, and usage. Distinct from RetrievedChunk, which
+// is the lean shape the inference path injects into the prompt.
+export interface CuratedChunk {
+  id: string;
+  flowId: string | null;
+  sessionId: string | null;
+  sourceType: ChunkSourceType;
+  storagePath: string;
+  filename: string;
+  chunkIndex: number;
+  chunkText: string;
+  status: ChunkStatus;
+  tags: string[];
+  retrievalCount: number;
+  lastRetrievedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// A hybrid-search hit (ADR-029): a curated chunk plus the fused relevance score
+// and the keyword lexemes that matched, used to bold them in the preview.
+export interface ChunkSearchResult {
+  chunk: CuratedChunk;
+  score: number;
+  matchedTerms: string[];
+}

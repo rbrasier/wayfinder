@@ -9,6 +9,8 @@ export * from "./notifications/index";
 export * from "./approvals/index";
 export * from "./people/index";
 export * from "./hr/index";
+export * from "./feedback/index";
+export * from "./knowledge/index";
 export * from "./create-user";
 export * from "./update-user";
 export * from "./delete-user";

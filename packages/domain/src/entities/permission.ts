@@ -4,7 +4,9 @@ export type PermissionKey =
   | "chat:create"
   | "workflow:create_own"
   | "workflow:publish_to_everyone"
-  | "flow:advanced_config";
+  | "flow:advanced_config"
+  | "knowledge:submit_feedback"
+  | "knowledge:curate";
 
 export interface PermissionDefinition {
   readonly key: PermissionKey;
@@ -34,6 +36,16 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
     key: "flow:advanced_config",
     label: "Advanced flow configuration",
     description: "Use advanced-mode flow and step configuration.",
+  },
+  {
+    key: "knowledge:submit_feedback",
+    label: "Submit answer corrections",
+    description: "Flag a wrong answer and submit corrected text.",
+  },
+  {
+    key: "knowledge:curate",
+    label: "Curate the knowledge base",
+    description: "Edit, archive, tag, revert, and search knowledge content.",
   },
 ];
 

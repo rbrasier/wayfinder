@@ -27,6 +27,8 @@ export * from "./session";
 export * from "./session-message";
 export * from "./session-upload";
 export * from "./document-chunk";
+export * from "./chunk-version";
+export * from "./answer-feedback";
 export * from "./reindexable-document";
 export * from "./session-typing";
 export * from "./session-step-output";
