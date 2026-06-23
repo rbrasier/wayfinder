@@ -193,6 +193,54 @@ describe("extractStructuredFields budget guard", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(languageModel.generateObject).not.toHaveBeenCalled();
   });
+
+  it("honours an injected maxPromptTokens cap below the default", async () => {
+    const languageModel = makeLanguageModel({});
+    // ~1000 chars ≈ 250 tokens — well under the 180k default, but over the tiny
+    // injected cap, so the guard must fire only because of the override.
+    const modestTranscript = "word ".repeat(200);
+
+    const result = await extractStructuredFields(languageModel, {
+      fields: [field({})],
+      transcript: modestTranscript,
+      contextDocs: [],
+      instruction: "x",
+      purpose: "documentGeneration",
+      maxPromptTokens: 10,
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(languageModel.generateObject).not.toHaveBeenCalled();
+  });
+});
+
+describe("extractStructuredFields injected context budget", () => {
+  it("truncates context docs to an injected contextBudgetChars", async () => {
+    const languageModel = makeLanguageModel({ field: "value" });
+    const docs: FlowContextDoc[] = [
+      {
+        id: "doc-1",
+        filename: "policy.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 1000,
+        storagePath: "ctx/policy.pdf",
+        extractedText: "z".repeat(1000),
+        extractionStatus: "complete",
+      },
+    ];
+
+    await extractStructuredFields(languageModel, {
+      fields: [field({})],
+      transcript: "User: hi",
+      contextDocs: docs,
+      instruction: "x",
+      purpose: "documentGeneration",
+      contextBudgetChars: 50,
+    });
+
+    const call = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.prompt).toContain("[Document truncated to fit the context budget.]");
+  });
 });
 
 describe("estimateTokens", () => {

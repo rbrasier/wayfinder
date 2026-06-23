@@ -266,6 +266,33 @@ describe("generateDocument wrapper", () => {
     expect(errorLog).toHaveBeenCalledTimes(1);
   });
 
+  it("threads the runtime-resolved budget into the use case", async () => {
+    const budget = { contextBudgetChars: 400_000, fieldBatchSize: 8, maxPromptTokens: 150_000 };
+    const execute = vi.fn().mockResolvedValue({
+      data: { document: { filename: "f", storagePath: "p", summary: null, generatedAt: "now" } },
+      error: null,
+    });
+
+    const container = {
+      useCases: { generateDocument: { execute } },
+      runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(budget) },
+      repos: { sessionMessages: { updateDocumentStatus: vi.fn() } },
+      services: { errorLogger: { log: vi.fn() } },
+    } as unknown as Parameters<typeof generateDocument>[0];
+
+    await generateDocument(
+      container,
+      "msg-budget",
+      "sess-1",
+      makeFlow(),
+      [],
+      [],
+      makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+    );
+
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({ budget }));
+  });
+
   it("does not touch status when use case succeeds (updateDocument already set complete)", async () => {
     const updateDocumentStatus = vi.fn();
     const errorLog = vi.fn();

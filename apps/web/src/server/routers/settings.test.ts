@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AiConfig } from "@rbrasier/domain";
-import { mergeApiKeys } from "./settings";
+import { documentGenerationConfigInputSchema, mergeApiKeys } from "./settings";
 
 const stored: AiConfig["apiKeys"] = {
   anthropic: "sk-stored-anthropic",
@@ -93,6 +93,48 @@ describe("settings router — mergeApiKeys (bedrock)", () => {
     expect(merged.openai).toBeNull();
     expect(merged.mistral).toBeNull();
     expect(merged.bedrock).toEqual(stored.bedrock);
+  });
+});
+
+describe("settings router — documentGenerationConfigInputSchema", () => {
+  const valid = {
+    contextBudgetMode: "tokens" as const,
+    contextBudgetTokens: 100_000,
+    contextBudgetPercent: 50,
+    fieldBatchSize: 12,
+    maxPromptTokens: 180_000,
+  };
+
+  it("accepts a valid configuration", () => {
+    expect(documentGenerationConfigInputSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("rejects a zero field batch size", () => {
+    expect(
+      documentGenerationConfigInputSchema.safeParse({ ...valid, fieldBatchSize: 0 }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a context budget percent outside 1–100", () => {
+    expect(
+      documentGenerationConfigInputSchema.safeParse({ ...valid, contextBudgetPercent: 0 }).success,
+    ).toBe(false);
+    expect(
+      documentGenerationConfigInputSchema.safeParse({ ...valid, contextBudgetPercent: 101 }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a non-positive context budget token cap", () => {
+    expect(
+      documentGenerationConfigInputSchema.safeParse({ ...valid, contextBudgetTokens: -1 }).success,
+    ).toBe(false);
+  });
+
+  it("rejects an unknown budget mode", () => {
+    expect(
+      documentGenerationConfigInputSchema.safeParse({ ...valid, contextBudgetMode: "bananas" })
+        .success,
+    ).toBe(false);
   });
 });
 

@@ -5,6 +5,7 @@ export * from "./confidence";
 export * from "./document";
 export * from "./context-docs";
 export * from "./session-uploads";
+export * from "./document-generation";
 export * from "./templates";
 export * from "./embeddings";
 export * from "./approvals";

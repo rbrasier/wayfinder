@@ -274,6 +274,44 @@ describe("GenerateDocument", () => {
     expect(generationCalls.length).toBe(2);
   });
 
+  it("uses an injected fieldBatchSize from the resolved budget", async () => {
+    const manyFields = Array.from({ length: 14 }, (_, index) => ({
+      key: `field_${index}`,
+      label: `Field ${index}`,
+      type: "text" as const,
+      optional: false,
+      raw: `Field ${index}`,
+    }));
+    const documentGenerator = makeDocumentGenerator();
+    (documentGenerator.extractFields as ReturnType<typeof vi.fn>).mockReturnValue(ok({ fields: manyFields }));
+
+    const languageModel = makeLanguageModel();
+
+    const useCase = new GenerateDocument(
+      documentGenerator,
+      makeObjectStorage(),
+      languageModel,
+      makeSessionMessages(),
+      makeStepOutputs(),
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+      budget: { contextBudgetChars: 400_000, fieldBatchSize: 5, maxPromptTokens: 180_000 },
+    });
+
+    expect(result.error).toBeUndefined();
+    // 14 fields over an injected batch size of 5 means three documentGeneration calls.
+    const generationCalls = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call) => call[0]?.purpose === "documentGeneration",
+    );
+    expect(generationCalls.length).toBe(3);
+  });
+
   it("returns an error when node has no template configured", async () => {
     const useCase = new GenerateDocument(
       makeDocumentGenerator(),

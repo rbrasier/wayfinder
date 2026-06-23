@@ -9,6 +9,7 @@ import {
   type FlowNode,
   type PromptSessionUpload,
   type PromptUserProfile,
+  type ResolvedDocumentGenerationBudget,
   type Result,
   type Session,
   type SessionMessage,
@@ -77,12 +78,22 @@ export async function generateDocument(
   node: FlowNode,
 ): Promise<boolean> {
   try {
+    // Resolve the admin-configured budget at the edge (ADR-027). A failure here
+    // must never block generation, which falls back to the use-case defaults.
+    let budget: ResolvedDocumentGenerationBudget | undefined;
+    try {
+      budget = await container.runtimeConfig.resolveDocumentGenerationBudget();
+    } catch {
+      budget = undefined;
+    }
+
     const result = await container.useCases.generateDocument.execute({
       messageId,
       sessionId,
       messages,
       flow,
       node,
+      budget,
     });
     if (result.error) {
       const status = await container.repos.sessionMessages.updateDocumentStatus(messageId, "failed");

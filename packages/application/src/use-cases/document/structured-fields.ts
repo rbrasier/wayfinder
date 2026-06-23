@@ -65,6 +65,10 @@ export interface ExtractStructuredFieldsInput {
   // so document generation keeps its existing prompt byte-for-byte.
   priorStepOutputs?: SessionStepOutput[];
   insights?: { key: string; value: string }[];
+  // Admin-configurable budgets (ADR-027). When omitted, the v1.49.0 module
+  // constants apply so existing callers behave identically.
+  contextBudgetChars?: number;
+  maxPromptTokens?: number;
 }
 
 const buildStepOutputsSection = (outputs: SessionStepOutput[]): string => {
@@ -111,7 +115,10 @@ export const extractStructuredFields = async (
   input: ExtractStructuredFieldsInput,
 ): Promise<Result<Record<string, string>>> => {
   const keys = input.fields.map((field) => field.key);
-  const contextDocsSection = buildContextDocsSection(input.contextDocs);
+  const contextDocsSection = buildContextDocsSection(
+    input.contextDocs,
+    input.contextBudgetChars ?? CONTEXT_DOCS_CHAR_BUDGET,
+  );
   const generationGuidance = buildGenerationGuidance(input.fields);
   const stepOutputsSection = buildStepOutputsSection(input.priorStepOutputs ?? []);
   const insightsSection = buildInsightsSection(input.insights ?? []);
@@ -133,7 +140,8 @@ export const extractStructuredFields = async (
   // The context-doc section is already budget-capped, but a very large template
   // (many field constraints) or transcript could still push a single batch over.
   // Fail with a clear message rather than letting the provider throw.
-  if (estimateTokens(input.instruction) + estimateTokens(prompt) > MAX_PROMPT_TOKENS) {
+  const maxPromptTokens = input.maxPromptTokens ?? MAX_PROMPT_TOKENS;
+  if (estimateTokens(input.instruction) + estimateTokens(prompt) > maxPromptTokens) {
     return err(
       domainError(
         "VALIDATION_FAILED",
