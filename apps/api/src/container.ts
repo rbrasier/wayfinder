@@ -56,7 +56,7 @@ import { EMBEDDINGS_DEFAULT_PROVIDER } from "@rbrasier/shared";
 import type { Env } from "./env.js";
 
 export const buildContainer = (env: Env) => {
-  const db = createDatabase(env.DATABASE_URL);
+  const db = createDatabase(env.DATABASE_URL, env.DATABASE_POOL_MAX);
   const logger = new PinoLogger(env.NODE_ENV !== "production");
 
   const users = new DrizzleUserRepository(db);

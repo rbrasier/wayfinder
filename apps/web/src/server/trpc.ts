@@ -26,7 +26,7 @@ export const resolvePermissions = async (
   isAdmin: boolean,
 ): Promise<Set<PermissionKey>> => {
   if (!userId) return new Set();
-  const result = await container.useCases.getEffectivePermissions.execute(userId, isAdmin);
+  const result = await container.resolveEffectivePermissions(userId, isAdmin);
   return result.error ? new Set() : result.data;
 };
 

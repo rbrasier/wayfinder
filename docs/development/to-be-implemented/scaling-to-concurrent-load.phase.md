@@ -1,6 +1,8 @@
 # Phase — Scaling to Concurrent Load (~500 concurrent users)
 
-- **Status**: Proposed — awaiting `/doc-review`
+- **Status**: In progress — **P0 code delivered in v1.49.0** (env-driven pool +
+  request-path session/permission cache); P1/P2 remain to-be-implemented and will
+  land as their own ADRs/phases. This roadmap stays here until all tiers ship.
 - **Date**: 2026-06-22
 - **Target version**: staged; each sub-phase bumps independently (P0 likely
   MINOR — env-driven pool + cache adapter, no schema change; later phases
@@ -111,26 +113,32 @@ prompt caching (ADR-007) reduces token volume but not request count.
 
 ### P0 — Lift the obvious ceilings (low risk: config + caching)
 
-1. **Make the DB pool size configurable.** Replace the hardcoded `max: 10` in
-   `packages/adapters/src/db/client.ts` with an env-driven value (e.g.
-   `DATABASE_POOL_MAX`, default kept low for dev). Document the
-   `pool × replicas < max_connections` constraint.
+1. ✅ **Make the DB pool size configurable.** *(Delivered v1.49.0.)* The
+   hardcoded `max: 10` in `packages/adapters/src/db/client.ts` is now an
+   env-driven `DATABASE_POOL_MAX` (default kept low for dev), wired in both
+   app containers. The `pool × replicas < max_connections` constraint is
+   documented at the call site and in both env schemas.
 2. **Put a connection pooler in front of Postgres.** PgBouncer / RDS Proxy /
    Supabase pooler (transaction mode) so multiple app instances multiplex a
    bounded set of real Postgres connections. This is what actually makes
    horizontal scaling safe — without it, more instances just exhaust
-   `max_connections`.
-3. **Cache session + permission resolution on the request path.** Add a
-   short-TTL cache (seconds) in front of `resolveSession`
-   (`packages/adapters/src/auth/session-resolver.ts`) and
-   `getEffectivePermissions()`. Start with an in-process LRU (correct for a
-   single instance); promote to **Redis** the moment there is more than one
-   instance, so invalidation is shared. This removes 2 DB round-trips from the
-   hottest path.
-4. **Confirm/keep the app stateless.** Verify no per-instance in-memory state is
-   load-bearing across requests (the compiled-graph cache in ADR-007 is a
-   rebuildable cache, which is fine). Statelessness is the precondition for
-   running N replicas behind a load balancer.
+   `max_connections`. *(Infra/ops — not code; out of the v1.49.0 build.)*
+3. ✅ **Cache session + permission resolution on the request path.**
+   *(Delivered v1.49.0.)* A short-TTL in-process cache (`TtlCache`) now fronts
+   `resolveSession` and effective-permission resolution, removing 2 DB
+   round-trips from the hottest path. Positive-only for sessions (a missing
+   token is never negatively cached). TTL/size are env-driven
+   (`AUTH_CACHE_TTL_MS`, `AUTH_CACHE_MAX_ENTRIES`); set TTL to 0 to disable.
+   Correct for a single instance — promote to **Redis** the moment there is more
+   than one instance so invalidation is shared (the cache lives behind a clean
+   seam to make that swap local).
+4. ✅ **Confirm/keep the app stateless.** *(Audited v1.49.0.)* The only
+   load-bearing per-instance state is rebuildable cache (the ADR-007
+   compiled-graph cache and the new auth caches) plus the lazily-built auth
+   instance — all reconstructable on any instance. No cross-request session
+   state is held in memory. See the v1.49.0 implementation summary for the full
+   audit. Statelessness holds, so N replicas behind a load balancer is safe
+   (pending the shared cache promotion in item 3 once >1 instance runs).
 
 P0 alone — env-driven pool, a pooler, a session cache, and 2–4 stateless
 replicas — should comfortably carry the ~500-concurrent target for the common

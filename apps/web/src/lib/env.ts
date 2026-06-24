@@ -3,6 +3,16 @@ import { z } from "zod";
 const serverEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   DATABASE_URL: z.string().url(),
+  // Per-instance Postgres connection pool size. Keep low for dev; in production
+  // size it so `DATABASE_POOL_MAX × instances < Postgres max_connections`, ideally
+  // behind a transaction-mode pooler. See the scaling-to-concurrent-load phase doc.
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+  // Short-TTL cache for session + permission resolution on the request path. A few
+  // seconds removes the per-request auth DB round-trips while bounding staleness after
+  // a logout or role change. Set to 0 to disable (e.g. a multi-instance deployment that
+  // has not yet promoted this cache to a shared store). See the scaling phase doc.
+  AUTH_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(5000),
+  AUTH_CACHE_MAX_ENTRIES: z.coerce.number().int().positive().default(10000),
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_SEED_EMAIL: z.string().email().optional(),

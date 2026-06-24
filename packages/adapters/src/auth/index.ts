@@ -3,3 +3,4 @@ export * from "./pki-cert-adapter";
 export * from "./seed-admin";
 export * from "./seed-roles";
 export * from "./session-resolver";
+export * from "./cached-session-resolver";

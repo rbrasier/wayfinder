@@ -634,7 +634,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-3 border-b bg-white px-4 py-3">
+      <div className="flex shrink-0 items-center gap-3 border-b bg-white px-4 py-3 pr-14">
         <Link href="/admin/flows" className="shrink-0 text-[13px] text-[#5a5650] hover:text-[#1a1814]">
           ← Flows
         </Link>

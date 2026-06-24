@@ -639,7 +639,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b bg-white px-4 py-3 shrink-0">
+      <div className="flex items-center gap-3 border-b bg-white px-4 py-3 pr-14 shrink-0">
         <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Home</Link>
         <div className="h-4 w-px bg-border" />
         <span className="text-sm font-semibold">{flowName}</span>
