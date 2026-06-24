@@ -13,6 +13,7 @@ import {
   type ILanguageModel,
   type ISessionMessageRepository,
   type ISessionStepOutputRepository,
+  type ResolvedDocumentGenerationBudget,
   type Result,
   type SessionDocument,
   type SessionMessage,
@@ -32,6 +33,9 @@ export interface GenerateDocumentInput {
   messages: SessionMessage[];
   flow: Flow;
   node: FlowNode;
+  // Admin-configurable budget (ADR-027). When omitted, the v1.49.0 module
+  // constants apply so behaviour is unchanged.
+  budget?: ResolvedDocumentGenerationBudget;
 }
 
 export interface GenerateDocumentOutput {
@@ -63,16 +67,23 @@ export class GenerateDocument {
     const fields = fieldsResult.data;
     const transcript = this.buildTranscript(input.messages);
 
-    const dataResult = await extractStructuredFields(this.languageModel, {
-      fields,
-      transcript,
-      contextDocs: input.flow.contextDocs,
-      instruction: config.aiInstruction,
-      purpose: "documentGeneration",
-    });
-    if (dataResult.error) return dataResult;
-
-    const fieldValues = dataResult.data;
+    // Generate the document in field batches rather than one giant call: this
+    // keeps each prompt and structured output bounded so a large template or
+    // reference set cannot overflow the model context window in a single turn.
+    const fieldValues: Record<string, string> = {};
+    for (const batch of this.batchFields(fields, input.budget?.fieldBatchSize)) {
+      const batchResult = await extractStructuredFields(this.languageModel, {
+        fields: batch,
+        transcript,
+        contextDocs: input.flow.contextDocs,
+        instruction: config.aiInstruction,
+        purpose: "documentGeneration",
+        contextBudgetChars: input.budget?.contextBudgetChars,
+        maxPromptTokens: input.budget?.maxPromptTokens,
+      });
+      if (batchResult.error) return batchResult;
+      Object.assign(fieldValues, batchResult.data);
+    }
 
     const generateResult = this.documentGenerator.generate({
       templateBytes: templateResult.data,
@@ -135,6 +146,24 @@ export class GenerateDocument {
     });
 
     return ok({ document });
+  }
+
+  // Number of template fields gathered per model call. Small enough to keep each
+  // prompt and structured output bounded; large enough that typical templates
+  // resolve in one or two calls.
+  private static readonly FIELD_BATCH_SIZE = 12;
+
+  private batchFields(
+    fields: TemplateField[],
+    batchSize: number = GenerateDocument.FIELD_BATCH_SIZE,
+  ): TemplateField[][] {
+    if (fields.length === 0) return [];
+    const size = batchSize > 0 ? batchSize : GenerateDocument.FIELD_BATCH_SIZE;
+    const batches: TemplateField[][] = [];
+    for (let index = 0; index < fields.length; index += size) {
+      batches.push(fields.slice(index, index + size));
+    }
+    return batches;
   }
 
   private resolveFields(

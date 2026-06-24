@@ -235,6 +235,44 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("stepCompleteConfidence");
     expect(result.data).toContain("contextGathered");
   });
+
+  it("omits <global_instructions> when none are set", () => {
+    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<global_instructions>");
+    expect(
+      agent.buildSystemPrompt({ ...baseInput, globalInstructions: "   " }).data,
+    ).not.toContain("<global_instructions>");
+  });
+
+  it("renders <global_instructions> when operator guidance is set", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      globalInstructions: "Use Australian English spelling. Be matter-of-fact.",
+    });
+    expect(result.data).toContain("<global_instructions>");
+    expect(result.data).toContain("Australian English spelling");
+  });
+
+  it("omits <attached_documents> when there are no session uploads", () => {
+    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<attached_documents>");
+    expect(
+      agent.buildSystemPrompt({ ...baseInput, sessionUploads: [] }).data,
+    ).not.toContain("<attached_documents>");
+  });
+
+  it("injects attached session uploads framed as documents the user provided", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      sessionUploads: [
+        { filename: "Dave.docx", extractedText: "Please buy Office 365 licences, about $99 each." },
+      ],
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("<attached_documents>");
+    expect(result.data).toContain("Dave.docx");
+    expect(result.data).toContain("Office 365 licences");
+    // It must read as the user's own attachment, not a generic reference excerpt.
+    expect(result.data?.toLowerCase()).toContain("the user has attached");
+  });
 });
 
 // ── buildBranchChoicePrompt ──────────────────────────────────────────────────
