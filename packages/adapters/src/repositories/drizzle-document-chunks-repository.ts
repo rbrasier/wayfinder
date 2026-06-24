@@ -93,7 +93,10 @@ export class DrizzleDocumentChunksRepository implements IDocumentChunkRepository
         .orderBy(desc(similarity))
         .limit(input.limit);
 
-      await this.bumpUsage(rows.map((row) => row.id));
+      // Fire-and-forget: usage counters are non-critical analytics and must not
+      // add latency to the inference hot path. bumpUsage swallows its own errors,
+      // so the floating promise can never reject.
+      void this.bumpUsage(rows.map((row) => row.id));
 
       return ok(
         rows.map(({ id: _id, ...row }) => ({ ...row, similarity: Number(row.similarity) })),
