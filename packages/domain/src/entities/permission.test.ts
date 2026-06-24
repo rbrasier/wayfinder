@@ -97,4 +97,16 @@ describe("PERMISSIONS registry", () => {
       expect(permission.description.length).toBeGreaterThan(0);
     }
   });
+
+  it("registers the knowledge-base curation permission keys", () => {
+    const keys = PERMISSIONS.map((permission) => permission.key);
+
+    expect(keys).toContain("knowledge:submit_feedback");
+    expect(keys).toContain("knowledge:curate");
+
+    for (const permission of PERMISSIONS) {
+      expect(permission.label.length).toBeGreaterThan(0);
+      expect(permission.description.length).toBeGreaterThan(0);
+    }
+  });
 });

@@ -7,15 +7,58 @@ import {
   type Flow,
   type FlowEdge,
   type FlowNode,
+  type PromptSessionUpload,
   type PromptUserProfile,
+  type ResolvedDocumentGenerationBudget,
   type Result,
   type Session,
   type SessionMessage,
+  type SessionUpload,
 } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 
 type Container = ReturnType<typeof getContainer>;
+
+// Turn completed session uploads into prompt-ready documents, truncating the
+// combined extracted text to the configured budget. Uploads store full text with
+// no upload-time cap (see uploads/route.ts), so the budget must be applied here
+// before the text reaches the prompt.
+export const buildPromptSessionUploads = (
+  uploads: SessionUpload[],
+  budgetChars: number,
+): PromptSessionUpload[] => {
+  const completed = uploads.filter(
+    (upload) =>
+      upload.extractionStatus === "complete" &&
+      upload.extractedText !== null &&
+      upload.extractedText.trim().length > 0,
+  );
+
+  const result: PromptSessionUpload[] = [];
+  let remaining = Math.max(0, budgetChars);
+  for (const upload of completed) {
+    if (remaining <= 0) break;
+    const fullText = upload.extractedText ?? "";
+    const slice = fullText.slice(0, remaining);
+    const wasTruncated = slice.length < fullText.length;
+    result.push({
+      filename: upload.filename,
+      extractedText: wasTruncated
+        ? `${slice}\n\n[Document truncated to fit the context budget.]`
+        : slice,
+    });
+    remaining -= slice.length;
+  }
+  return result;
+};
+
+// Marker appended to the user turn shown to the model so a thin message still
+// signals that files are attached. Empty when there are no uploads.
+export const buildAttachmentAnnotation = (uploads: PromptSessionUpload[]): string => {
+  if (uploads.length === 0) return "";
+  return `\n\n[Attached: ${uploads.map((upload) => upload.filename).join(", ")}]`;
+};
 
 export const buildGatheredContext = (messages: SessionMessage[]): string => {
   const items = messages
@@ -35,12 +78,22 @@ export async function generateDocument(
   node: FlowNode,
 ): Promise<boolean> {
   try {
+    // Resolve the admin-configured budget at the edge (ADR-027). A failure here
+    // must never block generation, which falls back to the use-case defaults.
+    let budget: ResolvedDocumentGenerationBudget | undefined;
+    try {
+      budget = await container.runtimeConfig.resolveDocumentGenerationBudget();
+    } catch {
+      budget = undefined;
+    }
+
     const result = await container.useCases.generateDocument.execute({
       messageId,
       sessionId,
       messages,
       flow,
       node,
+      budget,
     });
     if (result.error) {
       const status = await container.repos.sessionMessages.updateDocumentStatus(messageId, "failed");
@@ -310,6 +363,7 @@ export interface GenerateInitialMessageInput {
   userId: string;
   provider: string;
   gatheredContext: string;
+  globalInstructions?: string | null;
 }
 
 export async function generateInitialMessage(input: GenerateInitialMessageInput): Promise<void> {
@@ -325,6 +379,7 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     userId,
     provider,
     gatheredContext,
+    globalInstructions,
   } = input;
   try {
     const newNodeConfig = newNode.config as unknown as ConversationalNodeConfig;
@@ -338,12 +393,22 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     });
     const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
+    // Carry the user's attachments into the opener too, so a step that follows an
+    // upload sees the document without the user re-stating it.
+    const uploadsResult = await container.repos.sessionUploads.listBySession(sessionId);
+    const uploadConfig = await container.runtimeConfig.getSessionUploadConfig();
+    const sessionUploads = uploadsResult.error
+      ? []
+      : buildPromptSessionUploads(uploadsResult.data, uploadConfig.totalBudgetChars);
+
     const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
       nodeConfig: newNodeConfig,
       retrievedChunks,
+      sessionUploads,
       gatheredContext,
       workflowName: flow.name,
       organisationName,
+      globalInstructions,
       expertRole: flow.expertRole,
       userProfile,
     });
@@ -418,6 +483,7 @@ export interface ApplyAdvanceSideEffectsInput {
   isAdmin: boolean;
   model: LanguageModel;
   provider: string;
+  globalInstructions?: string | null;
 }
 
 // The post-advance side effects shared by the auto-advance turn and the operator
@@ -440,6 +506,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
     isAdmin,
     model,
     provider,
+    globalInstructions,
   } = input;
 
   const completedNodeConfig = completedNode.config as unknown as ConversationalNodeConfig;
@@ -512,6 +579,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
       userId,
       provider,
       gatheredContext: nextStepContext,
+      globalInstructions,
     });
   }
 }
@@ -630,6 +698,11 @@ export async function confirmStep(input: ConfirmStepInput): Promise<Result<Confi
   const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
   const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
 
+  const globalInstructionsResult = await container.repos.systemSettings.get("global_prompt");
+  const globalInstructions = globalInstructionsResult.error
+    ? null
+    : (globalInstructionsResult.data?.value ?? null);
+
   const userResult = await container.repos.users.findById(confirmedByUserId);
   const userProfile =
     userResult.error || !userResult.data
@@ -655,6 +728,7 @@ export async function confirmStep(input: ConfirmStepInput): Promise<Result<Confi
     isAdmin,
     model: branchingModel,
     provider,
+    globalInstructions,
   });
 
   return ok({ advanced, needsManualBranch, newNodeId });

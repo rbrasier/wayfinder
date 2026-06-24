@@ -163,7 +163,14 @@ describe("ListRoles", () => {
       ["flow:advanced_config", "workflow:publish_to_everyone"].sort(),
     );
     expect(byKey.get("admins")!.sort()).toEqual(
-      ["chat:create", "flow:advanced_config", "workflow:create_own", "workflow:publish_to_everyone"].sort(),
+      [
+        "chat:create",
+        "flow:advanced_config",
+        "knowledge:curate",
+        "knowledge:submit_feedback",
+        "workflow:create_own",
+        "workflow:publish_to_everyone",
+      ].sort(),
     );
   });
 });

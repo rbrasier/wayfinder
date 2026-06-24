@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { DocumentCard } from "./document-card";
+import { FixAnswerModal } from "./fix-answer-modal";
 import { MessageInfoModal } from "./message-info-modal";
 import { FlowCompletePill, MilestonePill } from "./milestone-pill";
 import { TypingIndicator } from "./typing-indicator";
@@ -40,6 +41,10 @@ interface MessageFeedProps {
   // The step held open awaiting operator confirmation. Its milestone pill is
   // suppressed because the step has not actually completed yet (ADR-026).
   awaitingConfirmationNodeId?: string | null;
+  // When the viewer holds knowledge:submit_feedback, persisted assistant
+  // messages gain a "Fix this answer" affordance that opens the correction modal.
+  sessionId?: string;
+  canSubmitFeedback?: boolean;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -77,8 +82,11 @@ export function MessageFeed({
   userFirstInitial,
   senderNamesById,
   awaitingConfirmationNodeId,
+  sessionId,
+  canSubmitFeedback,
 }: MessageFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [fixing, setFixing] = useState<{ id: string; content: string } | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -169,6 +177,15 @@ export function MessageFeed({
                   )}
                   {msg.role === "assistant" && msg.aiPayload && (
                     <MessageInfoModal message={msg} allMessages={dbMessages} />
+                  )}
+                  {msg.role === "assistant" && canSubmitFeedback && sessionId && (
+                    <button
+                      type="button"
+                      onClick={() => setFixing({ id: msg.id, content: msg.content })}
+                      className="mt-1 text-[10px] font-medium text-[#918d87] underline-offset-2 hover:text-[#3a5fd9] hover:underline"
+                    >
+                      Fix this answer
+                    </button>
                   )}
                 </div>
                 {msg.role === "user" && (
@@ -297,6 +314,16 @@ export function MessageFeed({
       )}
 
       <div ref={bottomRef} />
+
+      {sessionId && fixing && (
+        <FixAnswerModal
+          open
+          onClose={() => setFixing(null)}
+          sessionId={sessionId}
+          messageId={fixing.id}
+          flaggedAnswer={fixing.content}
+        />
+      )}
     </div>
   );
 }

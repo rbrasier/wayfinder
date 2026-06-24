@@ -2,11 +2,13 @@ import { analyticsRouter } from "./routers/analytics";
 import { approvalRouter } from "./routers/approval";
 import { documentRouter } from "./routers/document";
 import { errorRouter } from "./routers/error";
+import { feedbackRouter } from "./routers/feedback";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
 import { flowVersionRouter } from "./routers/flow-version";
 import { governanceRouter } from "./routers/governance";
 import { hrRouter } from "./routers/hr";
+import { knowledgeRouter } from "./routers/knowledge";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
 import { peopleRouter } from "./routers/people";
@@ -37,6 +39,8 @@ export const appRouter = router({
   document: documentRouter,
   people: peopleRouter,
   hr: hrRouter,
+  knowledge: knowledgeRouter,
+  feedback: feedbackRouter,
 });
 
 export type AppRouter = typeof appRouter;

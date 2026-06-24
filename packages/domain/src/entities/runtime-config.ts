@@ -33,6 +33,34 @@ export interface SessionUploadConfig {
   totalBudgetChars: number;
 }
 
+// How the document-generation context budget is expressed: a fixed token cap,
+// or a percentage of the configured model's context window.
+export type DocumentGenerationContextBudgetMode = "tokens" | "model_percent";
+
+// Admin-controlled safety limits for document generation (the v1.49.0 budgeting
+// and batching, made configurable). Stored as one system_settings row.
+export interface DocumentGenerationConfig {
+  contextBudgetMode: DocumentGenerationContextBudgetMode;
+  // Used when contextBudgetMode === "tokens".
+  contextBudgetTokens: number;
+  // Used when contextBudgetMode === "model_percent": share of the model's
+  // context window allotted to reference documents (1–100).
+  contextBudgetPercent: number;
+  // Template fields gathered per model call.
+  fieldBatchSize: number;
+  // Pre-flight ceiling: a batch whose prompt would exceed this fails with a
+  // clear message instead of letting the provider throw.
+  maxPromptTokens: number;
+}
+
+// The concrete numbers the generation use-case consumes, after resolving the
+// budget mode against the configured model's context window.
+export interface ResolvedDocumentGenerationBudget {
+  contextBudgetChars: number;
+  fieldBatchSize: number;
+  maxPromptTokens: number;
+}
+
 export type EmailProvider = "smtp" | "m365";
 
 export interface EmailConfig {
@@ -106,6 +134,7 @@ export const AI_CONFIG_SETTING_KEY = "ai_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
 export const REGISTRATION_ENABLED_SETTING_KEY = "registration_enabled";
 export const SESSION_UPLOAD_CONFIG_SETTING_KEY = "session_upload_config";
+export const DOCUMENT_GENERATION_CONFIG_SETTING_KEY = "document_generation_config";
 export const EMAIL_CONFIG_SETTING_KEY = "email_config";
 export const EMBEDDINGS_CONFIG_SETTING_KEY = "embeddings_config";
 export const N8N_CONFIG_SETTING_KEY = "n8n_config";

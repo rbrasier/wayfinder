@@ -1,6 +1,7 @@
 import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
+  DOCUMENT_GENERATION_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
@@ -11,15 +12,24 @@ import {
   type AiPurpose,
   type AuthConfig,
   type BedrockCredentials,
+  type DocumentGenerationConfig,
+  type DocumentGenerationContextBudgetMode,
   type EmbeddingsConfig,
   type EntraCredentials,
   type ISystemSettingsRepository,
   type N8nConfig,
   type ProviderName,
+  type ResolvedDocumentGenerationBudget,
   type SessionUploadConfig,
   type StorageConfig,
 } from "@rbrasier/domain";
 import {
+  DOCUMENT_GENERATION_CHARS_PER_TOKEN,
+  DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_PERCENT,
+  DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_TOKENS,
+  DOCUMENT_GENERATION_DEFAULT_CONTEXT_WINDOW_TOKENS,
+  DOCUMENT_GENERATION_DEFAULT_FIELD_BATCH_SIZE,
+  DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
   EMBEDDINGS_DEFAULT_MODELS,
   isEmbeddingsProvider,
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
@@ -169,6 +179,86 @@ const parseSessionUploadConfig = (
   }
 };
 
+export const DEFAULT_DOCUMENT_GENERATION_CONFIG: DocumentGenerationConfig = {
+  contextBudgetMode: "tokens",
+  contextBudgetTokens: DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_TOKENS,
+  contextBudgetPercent: DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_PERCENT,
+  fieldBatchSize: DOCUMENT_GENERATION_DEFAULT_FIELD_BATCH_SIZE,
+  maxPromptTokens: DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
+};
+
+// Known context windows (in tokens) per provider/model. Used to size the
+// document-generation budget in percentage mode and to show headroom on the
+// admin card. An unknown model falls back to the conservative default below and
+// is flagged as estimated.
+export const MODEL_CONTEXT_WINDOWS: Record<ProviderName, Record<string, number>> = {
+  anthropic: {
+    "claude-haiku-4-5-20251001": 200_000,
+    "claude-sonnet-4-5-20250929": 200_000,
+  },
+  openai: {
+    "gpt-4o": 128_000,
+    "gpt-4o-mini": 128_000,
+  },
+  mistral: {
+    "mistral-small-latest": 128_000,
+    "mistral-large-latest": 128_000,
+  },
+  bedrock: {
+    "anthropic.claude-haiku-4-5-20251001-v1:0": 200_000,
+    "anthropic.claude-sonnet-4-5-20250929-v1:0": 200_000,
+  },
+};
+
+export interface ContextWindowResolution {
+  tokens: number;
+  estimated: boolean;
+}
+
+export const resolveContextWindow = (
+  provider: ProviderName,
+  model: string,
+): ContextWindowResolution => {
+  const known = MODEL_CONTEXT_WINDOWS[provider]?.[model];
+  if (typeof known === "number") return { tokens: known, estimated: false };
+  return { tokens: DOCUMENT_GENERATION_DEFAULT_CONTEXT_WINDOW_TOKENS, estimated: true };
+};
+
+const isContextBudgetMode = (value: unknown): value is DocumentGenerationContextBudgetMode =>
+  value === "tokens" || value === "model_percent";
+
+const isPercent = (value: unknown): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 100;
+
+const parseDocumentGenerationConfig = (
+  raw: string,
+  fallback: DocumentGenerationConfig,
+): DocumentGenerationConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    return {
+      contextBudgetMode: isContextBudgetMode(parsed.contextBudgetMode)
+        ? parsed.contextBudgetMode
+        : fallback.contextBudgetMode,
+      contextBudgetTokens: isPositiveInteger(parsed.contextBudgetTokens)
+        ? parsed.contextBudgetTokens
+        : fallback.contextBudgetTokens,
+      contextBudgetPercent: isPercent(parsed.contextBudgetPercent)
+        ? parsed.contextBudgetPercent
+        : fallback.contextBudgetPercent,
+      fieldBatchSize: isPositiveInteger(parsed.fieldBatchSize)
+        ? parsed.fieldBatchSize
+        : fallback.fieldBatchSize,
+      maxPromptTokens: isPositiveInteger(parsed.maxPromptTokens)
+        ? parsed.maxPromptTokens
+        : fallback.maxPromptTokens,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 const buildEnvAiConfig = (env: EnvDefaults): AiConfig => ({
   provider: env.provider,
   apiKeys: env.apiKeys,
@@ -261,6 +351,8 @@ export class RuntimeConfigStore {
   private storageVersion = 0;
   private sessionUploadCache: SessionUploadConfig | null = null;
   private sessionUploadPending: Promise<SessionUploadConfig> | null = null;
+  private documentGenerationCache: DocumentGenerationConfig | null = null;
+  private documentGenerationPending: Promise<DocumentGenerationConfig> | null = null;
   private embeddingsCache: EmbeddingsConfig | null = null;
   private embeddingsPending: Promise<EmbeddingsConfig> | null = null;
   private n8nCache: N8nConfig | null = null;
@@ -316,6 +408,40 @@ export class RuntimeConfigStore {
       return config;
     })();
     return this.sessionUploadPending;
+  }
+
+  async getDocumentGenerationConfig(): Promise<DocumentGenerationConfig> {
+    if (this.documentGenerationCache) return this.documentGenerationCache;
+    if (this.documentGenerationPending) return this.documentGenerationPending;
+    this.documentGenerationPending = (async () => {
+      const result = await this.settingsRepo.get(DOCUMENT_GENERATION_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseDocumentGenerationConfig(result.data.value, DEFAULT_DOCUMENT_GENERATION_CONFIG)
+          : DEFAULT_DOCUMENT_GENERATION_CONFIG;
+      this.documentGenerationCache = config;
+      this.documentGenerationPending = null;
+      return config;
+    })();
+    return this.documentGenerationPending;
+  }
+
+  // Resolves the stored budget mode against the configured document-generation
+  // model's context window, producing the concrete numbers the generation
+  // use-case consumes (ADR-027).
+  async resolveDocumentGenerationBudget(): Promise<ResolvedDocumentGenerationBudget> {
+    const config = await this.getDocumentGenerationConfig();
+    const aiConfig = await this.getAiConfig();
+    const contextWindow = resolveContextWindow(aiConfig.provider, aiConfig.models.documentGeneration);
+    const budgetTokens =
+      config.contextBudgetMode === "model_percent"
+        ? Math.floor((contextWindow.tokens * config.contextBudgetPercent) / 100)
+        : config.contextBudgetTokens;
+    return {
+      contextBudgetChars: budgetTokens * DOCUMENT_GENERATION_CHARS_PER_TOKEN,
+      fieldBatchSize: config.fieldBatchSize,
+      maxPromptTokens: config.maxPromptTokens,
+    };
   }
 
   async getEmbeddingsConfig(): Promise<EmbeddingsConfig> {
@@ -387,6 +513,11 @@ export class RuntimeConfigStore {
   invalidateSessionUpload(): void {
     this.sessionUploadCache = null;
     this.sessionUploadPending = null;
+  }
+
+  invalidateDocumentGeneration(): void {
+    this.documentGenerationCache = null;
+    this.documentGenerationPending = null;
   }
 
   invalidateEmbeddings(): void {

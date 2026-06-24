@@ -388,6 +388,11 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         userFirstInitial={userFirstInitial}
         senderNamesById={senderNamesById}
         awaitingConfirmationNodeId={awaitingConfirmationNodeId}
+        sessionId={sessionId}
+        canSubmitFeedback={
+          (meQuery.data?.isAdmin ?? false) ||
+          (meQuery.data?.permissions ?? []).includes("knowledge:submit_feedback")
+        }
       />
 
       {showBranchOverride && (

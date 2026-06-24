@@ -71,6 +71,16 @@ import {
   RemoveSessionUpload,
   RemoveUserRole,
   RetrieveDocumentChunks,
+  SubmitAnswerFeedback,
+  ListAnswerFeedback,
+  TriageAnswerFeedback,
+  ListCuratedChunks,
+  SearchKnowledge,
+  EditChunk,
+  SetChunkStatus,
+  TagChunks,
+  RevertChunk,
+  ListChunkVersions,
   ApplyAutoNodeResult,
   RunAutoNode,
   RunTurn,
@@ -101,6 +111,9 @@ import {
   DrizzleContextDocContentRepository,
   DrizzleConversationRepository,
   DrizzleDocumentChunksRepository,
+  DrizzleChunkCurationRepository,
+  DrizzleAnswerFeedbackRepository,
+  DrizzleHybridRetriever,
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
   DrizzleFeatureFlagRepository,
@@ -364,6 +377,9 @@ const build = () => {
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);
+  const chunkCuration = new DrizzleChunkCurationRepository(db);
+  const answerFeedback = new DrizzleAnswerFeedbackRepository(db);
+  const hybridRetriever = new DrizzleHybridRetriever(db);
   const embeddings = createEmbeddingsProvider(() => runtimeConfig.getEmbeddingsConfig(), {
     openaiApiKey: env.OPENAI_API_KEY ?? null,
     localEnvOptions: {
@@ -466,7 +482,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, reindexSource, notificationLog, approvals, hrDatasets },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       updateDocumentFields: new UpdateDocumentFields(
@@ -529,6 +545,16 @@ const build = () => {
       addSessionUpload: new AddSessionUpload(sessionUploads),
       removeSessionUpload: new RemoveSessionUpload(sessionUploads),
       retrieveDocumentChunks: new RetrieveDocumentChunks(embeddings, documentChunks),
+      submitAnswerFeedback: new SubmitAnswerFeedback(answerFeedback),
+      listAnswerFeedback: new ListAnswerFeedback(answerFeedback),
+      triageAnswerFeedback: new TriageAnswerFeedback(answerFeedback),
+      listCuratedChunks: new ListCuratedChunks(chunkCuration),
+      searchKnowledge: new SearchKnowledge(embeddings, hybridRetriever),
+      editChunk: new EditChunk(chunkCuration, embeddings),
+      setChunkStatus: new SetChunkStatus(chunkCuration),
+      tagChunks: new TagChunks(chunkCuration),
+      revertChunk: new RevertChunk(chunkCuration),
+      listChunkVersions: new ListChunkVersions(chunkCuration),
       reindexAllDocuments: new ReindexAllDocuments(reindexSource, documentIndexer, jobRepo),
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges, flowVersions),
