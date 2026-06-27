@@ -15,9 +15,18 @@ NC='\033[0m'
 
 PASS=0
 FAIL=0
+FAILED_CHECKS=()
+
+TEST_LOG=$(mktemp -t validate-tests.XXXXXX)
+COVERAGE_LOG=$(mktemp -t validate-coverage.XXXXXX)
+trap 'rm -f "$TEST_LOG" "$COVERAGE_LOG"' EXIT
 
 pass() { echo -e "${GREEN}PASS${NC} — $1"; PASS=$((PASS + 1)); }
-fail() { echo -e "${RED}FAIL${NC} — $1"; FAIL=$((FAIL + 1)); }
+fail() {
+  echo -e "${RED}FAIL${NC} — $1"
+  FAIL=$((FAIL + 1))
+  FAILED_CHECKS+=("$1")
+}
 skip() { echo -e "${YELLOW}SKIP${NC} — $1"; }
 section() { echo; echo -e "${YELLOW}── $1 ──${NC}"; }
 
@@ -31,7 +40,12 @@ if pnpm -s lint; then pass "lint"; else fail "lint"; fi
 
 # ── 3. tests ──────────────────────────────────────────────────────────────────
 section "3. pnpm test"
-if pnpm -s test; then pass "tests"; else fail "tests"; fi
+if pnpm -s test 2>&1 | tee "$TEST_LOG"; then
+  pass "tests"
+else
+  # pipefail propagates the pnpm exit code
+  fail "tests"
+fi
 
 # ── 4. drizzle schema check ───────────────────────────────────────────────────
 section "4. drizzle-kit check"
@@ -203,8 +217,8 @@ fi
 section "13. test coverage thresholds (domain + application)"
 DOMAIN_PKG=$(node -e "process.stdout.write(require('./packages/domain/package.json').name)")
 APP_PKG=$(node -e "process.stdout.write(require('./packages/application/package.json').name)")
-if pnpm --filter "$DOMAIN_PKG" -s test:coverage && \
-   pnpm --filter "$APP_PKG" -s test:coverage; then
+if { pnpm --filter "$DOMAIN_PKG" -s test:coverage && \
+     pnpm --filter "$APP_PKG" -s test:coverage; } 2>&1 | tee "$COVERAGE_LOG"; then
   pass "coverage meets thresholds"
 else
   fail "coverage below thresholds — see output above (targets: 70% lines, 70% functions)"
@@ -245,5 +259,55 @@ if [ $FAIL -eq 0 ]; then
   echo -e "${GREEN}All validations passed.${NC}"
   exit 0
 fi
+
+echo
+echo -e "${RED}Failed checks:${NC}"
+for check in "${FAILED_CHECKS[@]}"; do
+  echo "  - $check"
+done
+
+# If the test or coverage step failed, surface the individual failing tests
+# from the captured logs. Vitest marks failures with "FAIL <path>" lines
+# and "× <test name>" / " ✗ <test name>" lines; we union both styles.
+extract_failing_tests() {
+  local log="$1"
+  [ -s "$log" ] || return 0
+  grep -E '(^|[[:space:]])(FAIL[[:space:]]|×[[:space:]]|✗[[:space:]])' "$log" \
+    | sed -E 's/\x1B\[[0-9;]*[mK]//g' \
+    | sort -u
+}
+
+TESTS_FAILED=false
+COVERAGE_FAILED=false
+for check in "${FAILED_CHECKS[@]}"; do
+  case "$check" in
+    tests) TESTS_FAILED=true ;;
+    "coverage below thresholds"*) COVERAGE_FAILED=true ;;
+  esac
+done
+
+if [ "$TESTS_FAILED" = true ]; then
+  echo
+  echo -e "${RED}Failing tests (from pnpm test):${NC}"
+  failing=$(extract_failing_tests "$TEST_LOG")
+  if [ -n "$failing" ]; then
+    echo "$failing" | sed 's/^/  /'
+  else
+    echo "  (no per-test failure lines detected — see full output above)"
+  fi
+fi
+
+if [ "$COVERAGE_FAILED" = true ]; then
+  echo
+  echo -e "${RED}Failing tests (from coverage run):${NC}"
+  failing=$(extract_failing_tests "$COVERAGE_LOG")
+  if [ -n "$failing" ]; then
+    echo "$failing" | sed 's/^/  /'
+  else
+    echo "  (no per-test failure lines detected — coverage threshold likely the cause; see output above)"
+  fi
+fi
+
+echo
 echo -e "${RED}Validation failed.${NC}"
 exit 1
