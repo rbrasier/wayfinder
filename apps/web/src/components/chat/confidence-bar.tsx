@@ -10,7 +10,7 @@ export function ConfidenceBar({ score, evaluating = false }: ConfidenceBarProps)
     return (
       <div className="mt-2 flex items-center gap-2">
         <div className="h-[3px] w-24 animate-pulse rounded-full bg-[#e6e3dc]" />
-        <span className="font-mono text-[10px] text-[#918d87]">Evaluating…</span>
+        <span className="font-mono text-[10px] text-[#6d6a65]">Evaluating…</span>
       </div>
     );
   }
@@ -18,7 +18,7 @@ export function ConfidenceBar({ score, evaluating = false }: ConfidenceBarProps)
   const fillColour =
     score >= 80 ? "bg-[#2e9e6a]" : score >= 50 ? "bg-[#c17a1a]" : "bg-[#918d87]";
   const textColour =
-    score >= 80 ? "text-[#2e9e6a]" : score >= 50 ? "text-[#c17a1a]" : "text-[#918d87]";
+    score >= 80 ? "text-[#247c53]" : score >= 50 ? "text-[#9b6215]" : "text-[#6d6a65]";
   const label =
     score >= 80 ? "High confidence" : score >= 50 ? "Medium confidence" : "Low confidence";
 

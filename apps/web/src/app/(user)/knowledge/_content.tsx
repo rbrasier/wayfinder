@@ -304,7 +304,7 @@ export function KnowledgeContent() {
                         </span>
                       </TableCell>
                       <TableCell
-                        className="truncate font-mono text-[11px] text-[#918d87]"
+                        className="truncate font-mono text-[11px] text-[#6d6a65]"
                         onClick={() => openDrawer(chunk)}
                       >
                         {chunk.filename}
@@ -350,7 +350,7 @@ export function KnowledgeContent() {
                 <TableBody>
                   {(feedbackQuery.data ?? []).map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell className="text-xs text-[#918d87]">
+                      <TableCell className="text-xs text-[#6d6a65]">
                         <span className="line-clamp-2">{item.flaggedAnswer}</span>
                       </TableCell>
                       <TableCell className="text-xs text-[#1a1814]">
@@ -391,7 +391,7 @@ export function KnowledgeContent() {
             <button
               type="button"
               onClick={() => setDrawerChunkId(null)}
-              className="text-[#918d87] hover:text-[#1a1814]"
+              className="text-[#6d6a65] hover:text-[#1a1814]"
             >
               ✕
             </button>
@@ -416,7 +416,7 @@ export function KnowledgeContent() {
 
             {showSource && (
               <div className="rounded-md border border-[#dedad2] bg-[#f7f6f3] p-3 text-xs text-[#5a554d]">
-                <p className="mb-1 font-mono text-[11px] text-[#918d87]">
+                <p className="mb-1 font-mono text-[11px] text-[#6d6a65]">
                   {drawerChunk.filename} · segment #{drawerChunk.chunkIndex}
                 </p>
                 <p className="whitespace-pre-wrap">{drawerChunk.chunkText}</p>
@@ -424,7 +424,7 @@ export function KnowledgeContent() {
             )}
 
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#918d87]">
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#6d6a65]">
                 Version history
               </h3>
               {(versionsQuery.data ?? []).length === 0 ? (
@@ -435,7 +435,7 @@ export function KnowledgeContent() {
                     <li key={version.id} className="rounded-md border border-[#dedad2] p-2">
                       <p className="mb-1 line-clamp-2 text-xs text-[#5a554d]">{version.chunkText}</p>
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-[10px] text-[#918d87]">
+                        <span className="font-mono text-[10px] text-[#6d6a65]">
                           {new Date(version.createdAt).toLocaleString()}
                           {version.reason ? ` · ${version.reason}` : ""}
                         </span>

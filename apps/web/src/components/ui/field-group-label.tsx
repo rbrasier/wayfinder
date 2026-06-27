@@ -14,7 +14,7 @@ export const FieldGroupLabel = React.forwardRef<
   <span
     ref={ref}
     className={cn(
-      "block text-[11px] font-semibold uppercase tracking-[0.05em] text-[#918d87]",
+      "block text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]",
       className,
     )}
     {...props}

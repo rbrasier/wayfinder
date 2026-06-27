@@ -19,7 +19,7 @@ const badgeClass: Record<StepState, string> = {
 };
 
 const labelClass: Record<StepState, string> = {
-  complete: "text-[#2e9e6a]",
+  complete: "text-[#247c53]",
   current:  "font-semibold text-[#3a5fd9]",
   pending:  "text-[#5a5650]",
 };

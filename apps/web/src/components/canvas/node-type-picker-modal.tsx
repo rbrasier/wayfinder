@@ -81,7 +81,7 @@ function PrimaryCard({
       </span>
       <span className="min-w-0">
         <span className="block text-[13px] font-medium text-[#1a1814]">{label}</span>
-        <span className="block text-[11.5px] leading-snug text-[#918d87]">{description}</span>
+        <span className="block text-[11.5px] leading-snug text-[#6d6a65]">{description}</span>
       </span>
     </button>
   );
@@ -110,7 +110,7 @@ function AdvancedCard({
       </span>
       <span className="min-w-0">
         <span className="block text-[12px] font-medium text-[#1a1814]">{label}</span>
-        <span className="block text-[11px] leading-snug text-[#918d87]">{description}</span>
+        <span className="block text-[11px] leading-snug text-[#6d6a65]">{description}</span>
       </span>
     </button>
   );
@@ -166,7 +166,7 @@ export function NodeTypePickerModal({
             <>
               <div className="border-t border-[#eceae4]" />
               <div className="space-y-2">
-                <p className="text-[11px] font-medium uppercase tracking-wide text-[#b8b4ad]">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-[#716f6a]">
                   Advanced
                 </p>
                 {advancedOptions.map((option) => (

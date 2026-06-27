@@ -93,7 +93,7 @@ export function N8nExtractionInfoDialog({ open, onClose, variant }: N8nExtractio
               </li>
             ))}
           </ol>
-          <p className="text-[12px] leading-[1.55] text-[#918d87]">
+          <p className="text-[12px] leading-[1.55] text-[#6d6a65]">
             To make the {noun} explicit, add an Edit Fields (Set) node named
             {" "}
             <code className="font-mono">{variant === "inputs" ? "Inputs" : "Outputs"}</code> to your

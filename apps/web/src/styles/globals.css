@@ -20,7 +20,9 @@
     --secondary: 40 15% 92%;
     --secondary-foreground: 35 12% 10%;
     --muted: 40 15% 92%;
-    --muted-foreground: 35 8% 46%;
+    /* 42% lightness keeps muted text at ≥4.5:1 on white/cards (WCAG 1.4.3 AA).
+       Lighter values (the previous 46%) fall to ~4.4:1 and fail. */
+    --muted-foreground: 35 8% 42%;
     --accent: 40 15% 88%;
     --accent-foreground: 35 12% 10%;
     --destructive: 0 84% 60%;
@@ -42,7 +44,9 @@
     --border-strong: #c9c4ba;
     --wf-text:       #1a1814;
     --text2:         #5a5650;
-    --text3:         #918d87;
+    /* Muted text token, darkened from #918d87 (3.3:1) to meet WCAG 1.4.3 AA
+       (≥4.5:1 on white and the light card surfaces). */
+    --text3:         #6d6a65;
     --success:       #2e9e6a;
     --success-bg:    #eaf6f0;
     --warning:       #c17a1a;

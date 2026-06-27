@@ -138,7 +138,7 @@ export function MessageFeed({
           return (
             <div key={msg.id}>
               {isNewStep && node && (
-                <div className="my-1 text-center font-mono text-[10px] text-[#918d87]">
+                <div className="my-1 text-center font-mono text-[10px] text-[#6d6a65]">
                   — {node.name} —
                 </div>
               )}
@@ -167,7 +167,7 @@ export function MessageFeed({
                   </p>
                   <p
                     className={`mt-1 text-right font-mono text-[10px] ${
-                      msg.role === "user" ? "text-white/50" : "text-[#918d87]"
+                      msg.role === "user" ? "text-white/50" : "text-[#6d6a65]"
                     }`}
                   >
                     {formatRelativeTime(msg.createdAt)}
@@ -182,7 +182,7 @@ export function MessageFeed({
                     <button
                       type="button"
                       onClick={() => setFixing({ id: msg.id, content: msg.content })}
-                      className="mt-1 text-[10px] font-medium text-[#918d87] underline-offset-2 hover:text-[#3a5fd9] hover:underline"
+                      className="mt-1 text-[10px] font-medium text-[#6d6a65] underline-offset-2 hover:text-[#3a5fd9] hover:underline"
                     >
                       Fix this answer
                     </button>
@@ -308,7 +308,7 @@ export function MessageFeed({
       {isComplete && !isStreaming && <FlowCompletePill />}
 
       {dbMessages.length === 0 && !isStreaming && !error && (
-        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#918d87]">
+        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#6d6a65]">
           <p>The conversation will begin once you send your first message.</p>
         </div>
       )}

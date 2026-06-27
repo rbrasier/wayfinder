@@ -52,7 +52,7 @@ export function ChatsContent() {
             className={`px-3 py-[10px] text-[13px] font-medium transition-colors ${
               tab === key
                 ? "border-b-2 border-[#3a5fd9] text-[#3a5fd9]"
-                : "text-[#918d87] hover:text-[#5a5650]"
+                : "text-[#6d6a65] hover:text-[#5a5650]"
             }`}
           >
             {label}

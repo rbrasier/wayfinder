@@ -37,7 +37,7 @@ function StepFields({ fields }: { fields: StepField[] }) {
         <tbody>
           {fields.map((field) => (
             <tr key={field.key} className="border-b border-[#efede8] last:border-0">
-              <td className="w-2/5 px-3 py-1.5 align-top font-medium text-[#918d87]">{field.label}</td>
+              <td className="w-2/5 px-3 py-1.5 align-top font-medium text-[#6d6a65]">{field.label}</td>
               <td className="px-3 py-1.5 align-top whitespace-pre-wrap text-[#1a1814]">{field.value}</td>
             </tr>
           ))}
@@ -53,7 +53,7 @@ function PreviousStep({ previousStep }: { previousStep: PendingApproval["previou
 
   return (
     <div className="rounded-[12px] bg-[#f7f6f3] p-3">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65]">
         {stepName}
       </p>
       {document ? (
@@ -66,7 +66,7 @@ function PreviousStep({ previousStep }: { previousStep: PendingApproval["previou
       ) : fields && fields.length > 0 ? (
         <StepFields fields={fields} />
       ) : (
-        <p className="text-[12.5px] text-[#918d87]">No preview available for this step.</p>
+        <p className="text-[12.5px] text-[#6d6a65]">No preview available for this step.</p>
       )}
     </div>
   );
@@ -262,12 +262,12 @@ function ApprovalRow({
       className="flex flex-col gap-3 rounded-[14px] border-[1.5px] border-[#dedad2] bg-white p-[16px_18px]"
     >
       <div className="flex items-center gap-[14px]">
-        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#fef3e2] text-[#d97706]">
+        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#fef3e2] text-[#a65b05]">
           <Stamp size={18} />
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[14px] font-semibold text-[#1a1814]">{approval.chatName}</p>
-          <p className="mt-[3px] truncate text-[12.5px] text-[#918d87]">
+          <p className="mt-[3px] truncate text-[12.5px] text-[#6d6a65]">
             {approval.originatorName ? <>From {approval.originatorName} · </> : null}
             Raised {new Date(approval.approval.createdAt).toLocaleString()} ·{" "}
             <Link href={`/chats/${approval.sessionId}`} className="font-medium text-[#3a5fd9]">
@@ -320,11 +320,11 @@ export function ApprovalsContent() {
       <div className="flex-1 overflow-auto">
         <div className="container py-6">
           {approvalsQuery.isLoading ? (
-            <p className="text-[13px] text-[#918d87]">Loading…</p>
+            <p className="text-[13px] text-[#6d6a65]">Loading…</p>
           ) : approvals.length === 0 ? (
             <div className="rounded-[14px] border border-dashed border-[#dedad2] bg-white p-8 text-center">
               <p className="text-[14px] font-semibold text-[#1a1814]">No approvals awaiting you</p>
-              <p className="mt-1 text-[13px] text-[#918d87]">
+              <p className="mt-1 text-[13px] text-[#6d6a65]">
                 Requests routed to you for sign-off will appear here.
               </p>
             </div>

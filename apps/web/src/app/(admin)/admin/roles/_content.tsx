@@ -86,7 +86,7 @@ export function AdminRolesContent() {
                         <div className="font-medium">
                           {permission.label}
                           {PENDING_PERMISSIONS.has(permission.key) && (
-                            <Badge variant="outline" className="ml-2 font-normal text-[#c17a1a]">
+                            <Badge variant="outline" className="ml-2 font-normal text-[#9b6215]">
                               feature not enabled yet
                             </Badge>
                           )}

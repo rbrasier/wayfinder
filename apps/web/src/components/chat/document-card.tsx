@@ -79,15 +79,15 @@ export function DocumentCard({
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-semibold text-[#1a1814]">{document.filename}</p>
             {document.summary && (
-              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[#918d87]">
+              <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[#6d6a65]">
                 {document.summary}
               </p>
             )}
-            <p className="mt-1 font-mono text-[10px] text-[#918d87]">
+            <p className="mt-1 font-mono text-[10px] text-[#6d6a65]">
               Generated {new Date(document.generatedAt).toLocaleDateString()}
             </p>
             {document.editedAt && (
-              <p className="mt-0.5 text-[10px] font-medium text-[#c17a1a]">
+              <p className="mt-0.5 text-[10px] font-medium text-[#9b6215]">
                 Edited {new Date(document.editedAt).toLocaleDateString()}
               </p>
             )}
@@ -97,7 +97,7 @@ export function DocumentCard({
         <div className="mt-3 flex gap-2">
           {isUnavailable ? (
             <div className="flex-1 space-y-2">
-              <p className="text-[12px] text-[#c17a1a]">File no longer available. Try regenerating.</p>
+              <p className="text-[12px] text-[#9b6215]">File no longer available. Try regenerating.</p>
               {onRegenerate && (
                 <Button size="sm" variant="secondary" onClick={handleRegenerate} className="w-full">
                   Regenerate

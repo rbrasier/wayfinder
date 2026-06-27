@@ -99,7 +99,7 @@ export function ChatComposer({
 
   if (readOnly) {
     return (
-      <div className="shrink-0 border-t border-[#dedad2] bg-[#f7f6f3] px-5 py-3 text-center text-[13px] text-[#918d87]">
+      <div className="shrink-0 border-t border-[#dedad2] bg-[#f7f6f3] px-5 py-3 text-center text-[13px] text-[#6d6a65]">
         This is a shared session — view only.
       </div>
     );
@@ -114,14 +114,14 @@ export function ChatComposer({
               key={upload.id}
               className="flex items-center gap-[6px] rounded-[7px] border border-[#dedad2] bg-[#f7f6f3] px-[8px] py-[4px] text-[12px] text-[#1a1814]"
             >
-              <Paperclip className="h-3 w-3 text-[#918d87]" />
+              <Paperclip className="h-3 w-3 text-[#6d6a65]" />
               <span className="max-w-[180px] truncate">{upload.filename}</span>
               <button
                 type="button"
                 aria-label={`Remove ${upload.filename}`}
                 onClick={() => handleRemove(upload.id)}
                 disabled={disabled}
-                className="text-[#918d87] hover:text-[#1a1814] disabled:cursor-not-allowed"
+                className="text-[#6d6a65] hover:text-[#1a1814] disabled:cursor-not-allowed"
               >
                 <X className="h-3 w-3" />
               </button>
@@ -154,7 +154,7 @@ export function ChatComposer({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           placeholder="Message Wayfinder…"
-          className="flex-1 resize-none rounded-[9px] border-[1.5px] border-[#dedad2] bg-[#f7f6f3] px-[14px] py-[10px] text-[13px] leading-[1.45] text-[#1a1814] outline-none placeholder:text-[#918d87] focus:border-[#c5d0f7] focus:bg-white disabled:cursor-not-allowed"
+          className="flex-1 resize-none rounded-[9px] border-[1.5px] border-[#dedad2] bg-[#f7f6f3] px-[14px] py-[10px] text-[13px] leading-[1.45] text-[#1a1814] outline-none placeholder:text-[#6d6a65] focus:border-[#c5d0f7] focus:bg-white disabled:cursor-not-allowed"
           style={{ minHeight: "40px", maxHeight: "120px", overflowY: "auto" }}
         />
         <button
@@ -167,7 +167,7 @@ export function ChatComposer({
           <ArrowUp className="h-4 w-4" />
         </button>
       </div>
-      <p className="mt-[6px] text-center text-[11px] text-[#918d87]">
+      <p className="mt-[6px] text-center text-[11px] text-[#6d6a65]">
         {isUploading
           ? "Uploading file…"
           : "Wayfinder works agentically — it asks follow-up questions and signals when each step is complete."}

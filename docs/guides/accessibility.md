@@ -46,6 +46,13 @@ relevant success criteria:
   gated on the reveal state, or a dialog's `onOpenAutoFocus` handler.
 - **Overlays/backdrops** — a click-to-dismiss backdrop is a `<button>`, not a
   `<div onClick>`, so it is keyboard-focusable and activatable.
+- **Colour contrast (1.4.3)** — body and UI text meets ≥4.5:1 against its
+  surface. Muted/secondary text is the usual offender: the `--muted-foreground`
+  / `--text3` tokens (`src/styles/globals.css`) and the hard-coded
+  `text-[#…]` greys were darkened to clear 4.5:1 on white and the light card
+  surfaces (`#f7f6f3` / `#efede8`). Decorative glyphs (e.g. a `|` separator)
+  are marked `aria-hidden` instead. When adding muted text, reuse
+  `text-muted-foreground` / `#6d6a65` rather than a lighter grey.
 
 ## Runtime checks (Playwright + axe-core)
 
