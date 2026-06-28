@@ -227,7 +227,7 @@ fi
 # handlers, no positive tabindex). Runtime-only criteria (contrast, focus
 # order, target size) are documented in docs/accessibility.md.
 section "15. web accessibility (jsx-a11y strict)"
-A11Y_CONFIG="apps/web/.eslintrc.a11y.cjs"
+A11Y_CONFIG="apps/web/eslint.config.a11y.js"
 if [ ! -f "$A11Y_CONFIG" ]; then
   fail "accessibility config missing — expected $A11Y_CONFIG"
 elif pnpm --filter "@wayfinder/web" -s lint:a11y; then

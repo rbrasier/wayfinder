@@ -8,8 +8,8 @@
     "dev": "../../scripts/migrate-if-configured.sh && next dev -p 3000",
     "start": "../../scripts/migrate-if-configured.sh && next start -p 3000",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint src --ext .ts,.tsx",
-    "lint:a11y": "eslint src --ext .ts,.tsx --no-eslintrc -c .eslintrc.a11y.cjs",
+    "lint": "eslint src",
+    "lint:a11y": "eslint src -c eslint.config.a11y.js",
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
