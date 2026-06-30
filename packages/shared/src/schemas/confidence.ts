@@ -38,6 +38,19 @@ export const documentGenerationConfidenceSchema = z.object({
     .describe("Why the generated document does or does not satisfy the step's completion criteria"),
 });
 
+// The pre-generation evaluation reuses the document-generation confidences and
+// rationales, plus a list of outstanding items the doc-gen model judges still
+// missing or wrong — each a short, user-facing description the gate appends to
+// the conversation's gathered context so the cheap model knows to ask for them.
+export const preGenerationEvaluationSchema = documentGenerationConfidenceSchema.extend({
+  missingInformation: z
+    .array(z.string())
+    .describe(
+      "Each piece of information that is missing or wrong and still needs to be gathered from the user, as a short user-facing description. Empty when nothing is outstanding.",
+    ),
+});
+
 export type TurnResponse = z.infer<typeof turnResponseSchema>;
 export type BranchChoice = z.infer<typeof branchChoiceSchema>;
 export type DocumentGenerationConfidenceData = z.infer<typeof documentGenerationConfidenceSchema>;
+export type PreGenerationEvaluationData = z.infer<typeof preGenerationEvaluationSchema>;

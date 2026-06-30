@@ -20,12 +20,15 @@ import {
   type StepOutputField,
   type TemplateField,
 } from "@rbrasier/domain";
+import { documentSummarySchema } from "@rbrasier/shared";
 import {
-  documentGenerationConfidenceSchema,
-  documentSummarySchema,
-} from "@rbrasier/shared";
+  batchTemplateFields,
+  buildDocumentTranscript,
+  resolveTemplateFields,
+} from "./field-resolution";
+import { gradeDocumentFields } from "./grade-document";
 import { buildRenderData } from "./render-data";
-import { buildContextDocsSection, extractStructuredFields } from "./structured-fields";
+import { extractStructuredFields } from "./structured-fields";
 
 export interface GenerateDocumentInput {
   messageId: string;
@@ -36,6 +39,14 @@ export interface GenerateDocumentInput {
   // Admin-configurable budget (ADR-027). When omitted, the v1.49.0 module
   // constants apply so behaviour is unchanged.
   budget?: ResolvedDocumentGenerationBudget;
+  // Field values already extracted by the pre-generation evaluation gate. When
+  // supplied, generation renders from them instead of re-running the (expensive)
+  // batch extraction.
+  fieldValues?: Record<string, string>;
+  // Grade already produced by the pre-generation evaluation gate. When supplied,
+  // it is persisted as the message's documentGenerationConfidence and the
+  // redundant in-generation grading call is skipped.
+  grade?: DocumentGenerationConfidence;
 }
 
 export interface GenerateDocumentOutput {
@@ -61,29 +72,18 @@ export class GenerateDocument {
     const templateResult = await this.objectStorage.get(config.documentTemplatePath);
     if (templateResult.error) return templateResult;
 
-    const fieldsResult = this.resolveFields(config, templateResult.data);
+    const fieldsResult = resolveTemplateFields(this.documentGenerator, config, templateResult.data);
     if (fieldsResult.error) return fieldsResult;
 
     const fields = fieldsResult.data;
-    const transcript = this.buildTranscript(input.messages);
 
-    // Generate the document in field batches rather than one giant call: this
-    // keeps each prompt and structured output bounded so a large template or
-    // reference set cannot overflow the model context window in a single turn.
-    const fieldValues: Record<string, string> = {};
-    for (const batch of this.batchFields(fields, input.budget?.fieldBatchSize)) {
-      const batchResult = await extractStructuredFields(this.languageModel, {
-        fields: batch,
-        transcript,
-        contextDocs: input.flow.contextDocs,
-        instruction: config.aiInstruction,
-        purpose: "documentGeneration",
-        contextBudgetChars: input.budget?.contextBudgetChars,
-        maxPromptTokens: input.budget?.maxPromptTokens,
-      });
-      if (batchResult.error) return batchResult;
-      Object.assign(fieldValues, batchResult.data);
-    }
+    // Reuse the values the pre-generation evaluation already extracted when the
+    // gate threaded them through; otherwise generate the document in field
+    // batches so a large template or reference set cannot overflow the context
+    // window in a single turn.
+    const fieldValuesResult = await this.resolveFieldValues(input, config, fields);
+    if (fieldValuesResult.error) return fieldValuesResult;
+    const fieldValues = fieldValuesResult.data;
 
     const generateResult = this.documentGenerator.generate({
       templateBytes: templateResult.data,
@@ -138,44 +138,47 @@ export class GenerateDocument {
       values: fieldValues,
     });
 
-    await this.persistDocumentGrading({
-      messageId: input.messageId,
-      documentData: fieldValues,
-      contextDocs: input.flow.contextDocs,
-      stepCriteria: config.doneWhen,
-    });
+    // A grade computed by the gate is persisted as-is; otherwise grade now so
+    // the audit metadata is never lost when generation runs without the gate.
+    if (input.grade) {
+      await this.mergeGradeIntoPayload(input.messageId, input.grade);
+    } else {
+      await this.persistDocumentGrading({
+        messageId: input.messageId,
+        documentData: fieldValues,
+        contextDocs: input.flow.contextDocs,
+        stepCriteria: config.doneWhen,
+      });
+    }
 
     return ok({ document });
   }
 
-  // Number of template fields gathered per model call. Small enough to keep each
-  // prompt and structured output bounded; large enough that typical templates
-  // resolve in one or two calls.
-  private static readonly FIELD_BATCH_SIZE = 12;
-
-  private batchFields(
-    fields: TemplateField[],
-    batchSize: number = GenerateDocument.FIELD_BATCH_SIZE,
-  ): TemplateField[][] {
-    if (fields.length === 0) return [];
-    const size = batchSize > 0 ? batchSize : GenerateDocument.FIELD_BATCH_SIZE;
-    const batches: TemplateField[][] = [];
-    for (let index = 0; index < fields.length; index += size) {
-      batches.push(fields.slice(index, index + size));
-    }
-    return batches;
-  }
-
-  private resolveFields(
+  private async resolveFieldValues(
+    input: GenerateDocumentInput,
     config: ConversationalNodeConfig,
-    templateBytes: Buffer,
-  ): Result<TemplateField[]> {
-    if (config.documentTemplateFields && config.documentTemplateFields.length > 0) {
-      return ok(config.documentTemplateFields);
+    fields: TemplateField[],
+  ): Promise<Result<Record<string, string>>> {
+    if (input.fieldValues) {
+      return ok(input.fieldValues);
     }
-    const fieldsResult = this.documentGenerator.extractFields({ templateBytes });
-    if (fieldsResult.error) return fieldsResult;
-    return ok(fieldsResult.data.fields);
+
+    const transcript = buildDocumentTranscript(input.messages);
+    const fieldValues: Record<string, string> = {};
+    for (const batch of batchTemplateFields(fields, input.budget?.fieldBatchSize)) {
+      const batchResult = await extractStructuredFields(this.languageModel, {
+        fields: batch,
+        transcript,
+        contextDocs: input.flow.contextDocs,
+        instruction: config.aiInstruction,
+        purpose: "documentGeneration",
+        contextBudgetChars: input.budget?.contextBudgetChars,
+        maxPromptTokens: input.budget?.maxPromptTokens,
+      });
+      if (batchResult.error) return batchResult;
+      Object.assign(fieldValues, batchResult.data);
+    }
+    return ok(fieldValues);
   }
 
   // Captured for reporting (end-of-step structured data). Best-effort: a failure
@@ -211,37 +214,30 @@ export class GenerateDocument {
     contextDocs: FlowContextDoc[];
     stepCriteria: string;
   }): Promise<void> {
-    const existing = await this.sessionMessages.findById(input.messageId);
-    if (existing.error || !existing.data || !existing.data.aiPayload) return;
-
-    const gradingResult = await this.languageModel.generateObject<DocumentGenerationConfidence>({
-      purpose: "documentGrading",
-      prompt: [
-        "Grade the generated document against (a) the flow's guidance documentation and (b) the step's completion criteria.",
-        "Return integers 0-100 for each confidence and short rationale strings.",
-        `\nStep criteria:\n${input.stepCriteria}`,
-        buildContextDocsSection(input.contextDocs),
-        `\nGenerated document field values:\n${JSON.stringify(input.documentData).slice(0, 4000)}`,
-      ].filter(Boolean).join("\n"),
-      schema: documentGenerationConfidenceSchema,
-      temperature: 0.2,
+    const gradeResult = await gradeDocumentFields(this.languageModel, {
+      fieldValues: input.documentData,
+      contextDocs: input.contextDocs,
+      stepCriteria: input.stepCriteria,
     });
-    if (gradingResult.error) return;
+    if (gradeResult.error) return;
+
+    const { missingInformation: _missingInformation, ...confidence } = gradeResult.data;
+    await this.mergeGradeIntoPayload(input.messageId, confidence);
+  }
+
+  private async mergeGradeIntoPayload(
+    messageId: string,
+    grade: DocumentGenerationConfidence,
+  ): Promise<void> {
+    const existing = await this.sessionMessages.findById(messageId);
+    if (existing.error || !existing.data || !existing.data.aiPayload) return;
 
     const mergedPayload: AiTurnPayload = {
       ...existing.data.aiPayload,
-      documentGenerationConfidence: gradingResult.data.object,
+      documentGenerationConfidence: grade,
     };
 
-    await this.sessionMessages.updateAiPayload(input.messageId, mergedPayload);
-  }
-
-  private buildTranscript(messages: SessionMessage[]): string {
-    return messages
-      .filter((m) => m.role === "user" || m.role === "assistant")
-      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-      .join("\n\n")
-      .slice(0, 8000);
+    await this.sessionMessages.updateAiPayload(messageId, mergedPayload);
   }
 
   private buildFilename(flowName: string, nodeName: string, sessionId: string): string {

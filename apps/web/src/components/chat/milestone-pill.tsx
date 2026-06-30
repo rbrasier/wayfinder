@@ -77,6 +77,20 @@ export function MilestonePill({
   );
 }
 
+// Transient indicator shown while the pre-generation evaluation gate runs the
+// higher-quality doc-gen model before the step advances. Mirrors the
+// "Generating document" badge styling; it clears when the turn resolves.
+export function CrossCheckingBadge() {
+  return (
+    <div className="my-3 flex justify-center">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
+        <Spinner />
+        <span>Cross-checking…</span>
+      </div>
+    </div>
+  );
+}
+
 export function FlowCompletePill() {
   return (
     <div className="my-4 flex justify-center">
