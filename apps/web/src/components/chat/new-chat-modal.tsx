@@ -43,7 +43,7 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <div>
-            <div className="mb-[3px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#918d87]">
+            <div className="mb-[3px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]">
               New Chat Session
             </div>
             <DialogTitle>Choose a workflow</DialogTitle>
@@ -57,7 +57,7 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
           </p>
 
           {publishedFlows.length === 0 ? (
-            <p className="py-4 text-center text-[13px] text-[#918d87]">
+            <p className="py-4 text-center text-[13px] text-[#6d6a65]">
               No published flows available. Publish one of your own flows or ask an admin to publish one for everyone.
             </p>
           ) : (
@@ -77,11 +77,11 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
                     <span className="text-[13px] font-semibold text-[#1a1814]">{flow.name}</span>
                   </div>
                   {flow.description && (
-                    <p className="line-clamp-2 text-[11px] leading-snug text-[#918d87]">
+                    <p className="line-clamp-2 text-[11px] leading-snug text-[#6d6a65]">
                       {flow.description}
                     </p>
                   )}
-                  <span className="text-[10.5px] font-medium uppercase tracking-[0.04em] text-[#a8a39c]">
+                  <span className="text-[10.5px] font-medium uppercase tracking-[0.04em] text-[#726f6a]">
                     {flow.visibility.kind === "global" ? "Everyone" : "Only you"}
                   </span>
                   <span className="mt-auto text-[12px] font-semibold text-[#3a5fd9]">Start →</span>

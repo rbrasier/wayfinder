@@ -132,7 +132,7 @@ export function FieldValueList({
         >
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-[13px] font-medium text-[#1a1814]">{field.label}</span>
-            <span className="shrink-0 rounded bg-[#efede8] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#918d87]">
+            <span className="shrink-0 rounded bg-[#efede8] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#6d6a65]">
               {field.type}
             </span>
           </div>
@@ -160,7 +160,7 @@ export function FieldValueList({
 }
 
 export function ReadOnlyFieldList({ fields, emptyText }: { fields: TemplateField[]; emptyText: string }) {
-  if (fields.length === 0) return <p className="text-[12px] text-[#918d87]">{emptyText}</p>;
+  if (fields.length === 0) return <p className="text-[12px] text-[#6d6a65]">{emptyText}</p>;
   return (
     <div className="flex flex-wrap gap-1.5">
       {fields.map((field) => (
@@ -169,7 +169,7 @@ export function ReadOnlyFieldList({ fields, emptyText }: { fields: TemplateField
           className="inline-flex items-center gap-1 rounded-md border border-[#dedad2] bg-[#f7f6f3] px-2 py-1 text-[12px] text-[#5a5650]"
         >
           {field.label}
-          <span className="text-[10px] uppercase tracking-wide text-[#918d87]">{field.type}</span>
+          <span className="text-[10px] uppercase tracking-wide text-[#6d6a65]">{field.type}</span>
         </span>
       ))}
     </div>

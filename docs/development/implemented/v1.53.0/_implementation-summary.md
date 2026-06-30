@@ -1,91 +1,101 @@
-# Implementation Summary — MCP Integration, Phase 2a (v1.53.0)
+# Implementation Summary — Pre-Generation Evaluation Gate (v1.53.0)
 
-Foundation and admin management for Model Context Protocol (MCP) servers — the
-first half of Phase 2 of the Flow Skills & MCP PRD. Admins can register, manage,
-and connection-test remote MCP servers, and the platform can discover their tools.
+**Version bump:** MINOR (`1.52.2` → `1.53.0`) — new behaviour gating
+`generate_document` step advancement; no DB schema change, no migration.
 
-- **Version bump**: MINOR — `1.52.0` → `1.53.0` (new feature + `admin_mcp_servers`
-  / `admin_mcp_tools` tables).
-- **PRD**: `docs/development/prd/flow-skills-and-mcp.prd.md`
-- **ADR**: `docs/development/adr/032-mcp-integration-and-tool-calling.adr.md`
-- **Phase doc**: the MCP integration phase doc remains in `to-be-implemented/`
-  with a status banner — Phase 2a is done; Phase 2b (flow consumption) is pending.
+## What was built
 
-## What was built (Phase 2a)
+A `generate_document` step previously advanced the instant the *cheap* chat
+model's `stepCompleteConfidence` crossed the node threshold; the *high-quality*
+doc-gen model only graded the work afterwards, as post-hoc audit metadata. This
+phase reorders that evaluation into a **gate**: when the cheap model crosses the
+threshold on a `generate_document` step, the doc-gen model now extracts the
+template fields and grades them **before** the session advances.
 
-- **Domain** — `McpServer`/`NewMcpServer`/`McpServerUpdate`/`McpTool`/`McpToolRef`/
-  `McpServerWithTools` entities; `IMcpClient`, `IMcpServerRepository`,
-  `IMcpServerDirectory` ports. Forward-looking config for 2b is also in place: the
-  `"mcp"` `FlowNodeType`, `McpNodeConfig`, and `ConversationalNodeConfig.allowedMcpToolRefs`.
-- **Adapter** — `admin_mcp_servers` + `admin_mcp_tools` tables;
-  `DrizzleMcpServerRepository`; `AiSdkMcpClient` (Vercel AI SDK
-  `experimental_createMCPClient`, SSE transport, env-referenced bearer credential);
-  `McpServerDirectory` (lists active servers with their tools, tolerant of an
-  unreachable server). The `flow_nodes.type` DB enum gained `mcp`.
-- **Application** — `RegisterMcpServer`, `UpdateMcpServer`, `ListMcpServers`,
-  `DisableMcpServer`, `EnableMcpServer`, `TestMcpServer` (connection test via the
-  client), `ListMcpServersWithTools`. URL/label validation returns typed
-  `VALIDATION_FAILED` errors.
-- **API/wiring** — `mcpServer` tRPC router (admin-gated list/register/update/
-  disable/enable/test + `listWithTools`); container registration of the repo,
-  client, directory, and use-cases.
-- **UI** — `/admin/mcp-servers` page (register, list, test, enable/disable) and a
-  sidebar link.
+- **Pass** (both `guidanceAlignmentConfidence` and `criteriaAlignmentConfidence`
+  ≥ the node's existing `advanceConfidenceThreshold`): the step advances and the
+  document is generated, **reusing the already-extracted field values** and the
+  grade — so a pass adds no net expensive calls (extraction + grade replace the
+  former post-generation grade).
+- **Fail**: the step does **not** advance. The evaluation's `missingInformation`
+  items are appended to the threshold turn's `aiPayload.contextGathered`, clearly
+  labelled outstanding, and a follow-up assistant turn streams immediately to ask
+  the user about the gaps. Because the gaps now live in gathered context, the
+  cheap model will not re-report ≥ threshold until the user supplies them — which
+  self-rate-limits the expensive evaluation.
+- A transient **"Cross-checking…"** indicator shows in the chat while the gate
+  runs, mirroring the document-generation loading badge.
 
-## Files
+The gate **fails open**: a thrown or errored evaluation advances exactly as
+before, so it can never wedge a step. It is always on for `generate_document`
+steps with a template; `conversation_only`, `requireConfirmation`, branching,
+scheduled/auto/approval nodes, and the sub-threshold path are unchanged.
 
-**Created**
-- `packages/domain/src/entities/mcp-server.ts`
-- `packages/domain/src/ports/mcp-client.ts`, `mcp-server-repository.ts`,
-  `mcp-server-directory.ts`
-- `packages/adapters/src/repositories/drizzle-mcp-server-repository.ts`
-- `packages/adapters/src/mcp/ai-sdk-mcp-client.ts`, `mcp-server-directory.ts`,
-  `index.ts`
-- `packages/application/src/use-cases/mcp/mcp.ts` (+ `.test.ts`, `index.ts`)
-- `apps/web/src/server/routers/mcp-server.ts`
-- `apps/web/src/app/(admin)/admin/mcp-servers/page.tsx` + `_content.tsx`
-- `apps/web/e2e/phase-mcp-integration.spec.ts`
+## Files created
 
-**Modified**
-- `packages/domain/src/entities/flow-node.ts` (`mcp` type, `McpNodeConfig`,
-  `allowedMcpToolRefs`), `.../entities/index.ts`, `.../ports/index.ts`
-- `packages/adapters/src/db/schema/admin.ts` (MCP tables),
-  `.../db/schema/wayfinder.ts` (flow_nodes type enum)
-- `packages/adapters/src/repositories/index.ts`, `packages/adapters/src/index.ts`
-- `packages/application/src/use-cases/index.ts`
-- `apps/web/src/lib/container.ts`, `apps/web/src/server/router.ts`
-- `apps/web/src/components/sidebar.tsx`
-- `apps/web/src/app/(admin)/admin/flows/[id]/_content.tsx` and
-  `apps/web/src/app/(user)/flows/[id]/config/_content.tsx` (`RawNode` type widened
-  to include `mcp`)
-- `VERSION`, `package.json`
+- `packages/application/src/use-cases/document/field-resolution.ts` (+ test) —
+  shared `resolveTemplateFields` / `batchTemplateFields` / `buildDocumentTranscript`
+  helpers, extracted from `GenerateDocument` so the gate and generation resolve
+  and batch fields identically.
+- `packages/application/src/use-cases/document/grade-document.ts` (+ test) —
+  `gradeDocumentFields(...)`, the grading prompt factored out of
+  `persistDocumentGrading`, returning the pre-generation eval schema (the two
+  confidences/rationales plus `missingInformation`).
+- `packages/application/src/use-cases/session/evaluate-step-readiness.ts` (+ test)
+  — `EvaluateStepReadiness`: resolves fields, extracts with the doc-gen model,
+  grades via the shared helper, and decides `passed` against the normalised
+  `advanceConfidenceThreshold`; returns the extracted `fieldValues` for reuse.
+- `apps/web/e2e/enhance-pre-generation-evaluation.spec.ts` — Playwright e2e
+  covering the pass (advance + document, no duplicate extraction, transient
+  indicator) and fail (no advance, follow-up question, persisted gap) paths.
 
-## Migrations
+## Files modified
 
-`admin_mcp_servers` and `admin_mcp_tools` added to the Drizzle schema; the
-`flow_nodes.type` check constraint now allows `mcp`. Generate and apply a
-migration (`pnpm --filter @rbrasier/adapters db:generate && db:migrate`) against a
-running Postgres — not run in this environment (no DB).
+- `packages/shared/src/schemas/confidence.ts` (+ test) — added
+  `preGenerationEvaluationSchema` (extends `documentGenerationConfidenceSchema`
+  with `missingInformation: string[]`) and `PreGenerationEvaluationData`.
+- `packages/application/src/use-cases/document/generate-document.ts` (+ test) —
+  accepts optional precomputed `fieldValues` (skips extraction) and `grade`
+  (persisted as `documentGenerationConfidence`, skipping the internal grading
+  call); now uses the shared field-resolution helpers and `gradeDocumentFields`.
+- `packages/application/src/use-cases/{document,session}/index.ts` — export the
+  new modules.
+- `apps/web/src/lib/container.ts` — construct + expose
+  `useCases.evaluateStepReadiness`.
+- `apps/web/src/app/api/chat/[sessionId]/stream/route.ts` — insert the gate:
+  write the `cross-checking` annotation, run `evaluateStepReadiness`, and branch
+  pass/fail; branch-choice is now computed lazily (only on an actual advance) and
+  the extracted `fieldValues` + grade are threaded onward on a pass.
+- `apps/web/src/app/api/chat/[sessionId]/stream/turn-helpers.ts` (+ test) —
+  thread `precomputedDocument` through `applyAdvanceSideEffects` →
+  `generateDocument`; added `appendShortcomingsToContext(...)` and
+  `streamGapFollowup(...)`.
+- `apps/web/src/components/chat/message-feed.tsx` &
+  `apps/web/src/components/chat/milestone-pill.tsx` — render the transient
+  `CrossCheckingBadge` from the `cross-checking` stream annotation.
+- `VERSION`, root `package.json` — `1.53.0`.
 
-## Tests
+## Migrations run
 
-- Unit (vitest, run + passing): MCP management use-cases incl. validation,
-  enable/disable visibility, and connection-test success/failure/not-found (8).
-- E2E: `apps/web/e2e/phase-mcp-integration.spec.ts` — register, invalid-URL error,
-  disable. Driven by the `/e2e` skill against a running stack; not executed here.
+None. The outstanding gaps ride the existing `aiPayload.contextGathered` jsonb;
+no persisted eval status.
 
-## Known limitations / deferred to Phase 2b
+## Tests / e2e
 
-- **Flow consumption is not built yet.** The deterministic `mcp` node (canvas UI +
-  `RunMcpNode` dispatch + ADR-020 persistence) and the conversational tool-loop
-  (tool-calling in conversational steps bounded by `allowedMcpToolRefs`) are
-  deferred. ADR-032 gates the tool-loop on a runtime spike (live LLM + live MCP
-  server) that the build sandbox cannot run.
-- Only SSE transport is supported (SDK 4.3.19's transport config); Streamable HTTP
-  needs a custom transport.
-- `AiSdkMcpClient` opens a client per call (no pooling) and surfaces tool
-  `inputSchema` as null; the `admin_mcp_tools` cache table exists but is not yet
-  populated (the directory lists live).
-- Credentials use an env-referenced bearer token (`credentialRef` → env var); a
-  richer secret store is a future option per ADR-032.
-- `validate.sh` DB-dependent checks (drizzle) skip without `DATABASE_URL`.
+- Unit: shared schema (`confidence.test.ts`), `field-resolution.test.ts`,
+  `grade-document.test.ts`, `evaluate-step-readiness.test.ts`, extended
+  `generate-document.test.ts` (reuse paths), extended `turn-helpers.test.ts`
+  (`appendShortcomingsToContext`, `streamGapFollowup`, precomputed-document
+  threading). `./validate.sh` passes (15/15).
+- e2e: `apps/web/e2e/enhance-pre-generation-evaluation.spec.ts` covers the
+  pass and fail user-visible paths (driven by the `/e2e` MCP skill against a
+  running stack; excluded from the vitest unit run).
+
+## Known limitations
+
+- The follow-up correction streams into the same response after the cheap
+  model's threshold reply, so on a fail the user briefly sees the "done"-ish
+  reply before the correction (accepted trade-off; preserves token streaming).
+- No hard escape valve for a doc-gen model that never reaches the bar — the
+  cheap-model gating limits expensive retries, and the existing
+  `requireConfirmation` Proceed path composes cleanly if one is later wanted.

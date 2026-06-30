@@ -463,6 +463,85 @@ describe("GenerateDocument", () => {
     expect(sessionMessages.updateAiPayload).not.toHaveBeenCalled();
   });
 
+  it("reuses precomputed field values instead of re-running the extraction", async () => {
+    const languageModel = makeLanguageModel();
+    const documentGenerator = makeDocumentGenerator();
+
+    const useCase = new GenerateDocument(
+      documentGenerator,
+      makeObjectStorage(),
+      languageModel,
+      makeSessionMessages(),
+      makeStepOutputs(),
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+      fieldValues: { project_title: "Reused Title", background: "Reused Background" },
+    });
+
+    expect(result.error).toBeUndefined();
+    const generationCalls = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call) => call[0]?.purpose === "documentGeneration",
+    );
+    expect(generationCalls.length).toBe(0);
+    const renderCall = (documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(renderCall.data.project_title).toBe("Reused Title");
+  });
+
+  it("persists a precomputed grade and does not run the internal grading call", async () => {
+    const languageModel = makeLanguageModel();
+    const sessionMessages = makeSessionMessages();
+    const existingPayload = {
+      response: "Step complete",
+      rationale: "All inputs gathered.",
+      stepCompleteConfidence: 95,
+      contextGathered: [],
+    };
+    (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(makeMessage({ aiPayload: existingPayload })),
+    );
+
+    const useCase = new GenerateDocument(
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+      languageModel,
+      sessionMessages,
+      makeStepOutputs(),
+    );
+
+    const precomputedGrade = {
+      guidanceAlignmentConfidence: 81,
+      guidanceAlignmentRationale: "Precomputed guidance rationale.",
+      criteriaAlignmentConfidence: 84,
+      criteriaAlignmentRationale: "Precomputed criteria rationale.",
+    };
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+      fieldValues: { project_title: "x", background: "y" },
+      grade: precomputedGrade,
+    });
+
+    expect(result.error).toBeUndefined();
+    const gradingCalls = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls.filter(
+      (call) => call[0]?.purpose === "documentGrading",
+    );
+    expect(gradingCalls.length).toBe(0);
+    expect(sessionMessages.updateAiPayload).toHaveBeenCalledWith("msg-1", {
+      ...existingPayload,
+      documentGenerationConfidence: precomputedGrade,
+    });
+  });
+
   it("skips the payload write when the milestone message has no existing aiPayload", async () => {
     const sessionMessages = makeSessionMessages();
     (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(

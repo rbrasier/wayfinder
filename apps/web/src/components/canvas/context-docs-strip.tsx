@@ -1,5 +1,7 @@
 "use client";
 
+import { BookOpen } from "lucide-react";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import type { FlowContextDoc } from "@rbrasier/domain";
 import {
@@ -119,7 +121,13 @@ export function ContextDocsStrip({ flowId, docs, onDocsChange }: ContextDocsStri
           })}
         </div>
 
-        <div className="shrink-0">
+        <div className="flex shrink-0 items-center gap-2">
+          <Button size="sm" variant="outline" asChild>
+            <Link href={`/knowledge?flowId=${flowId}`}>
+              <BookOpen size={14} />
+              View knowledge
+            </Link>
+          </Button>
           <input
             ref={fileInputRef}
             type="file"

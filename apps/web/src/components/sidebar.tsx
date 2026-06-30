@@ -128,7 +128,7 @@ function NavGroups({
                   onClick={() =>
                     setCollapsed((prev) => ({ ...prev, [group.label as string]: !prev[group.label as string] }))
                   }
-                  className="flex w-full items-center justify-between px-[10px] pb-[6px] pt-[8px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87] transition-colors hover:text-[#5a5650]"
+                  className="flex w-full items-center justify-between px-[10px] pb-[6px] pt-[8px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65] transition-colors hover:text-[#5a5650]"
                 >
                   {group.label}
                   <ChevronDown
@@ -136,7 +136,7 @@ function NavGroups({
                   />
                 </button>
               ) : (
-                <div className="px-[10px] pb-[6px] pt-[8px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+                <div className="px-[10px] pb-[6px] pt-[8px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65]">
                   {group.label}
                 </div>
               ))}
@@ -234,7 +234,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const recentChatsBlock = recentChats.length > 0 && (
     <>
       <hr className="my-[10px] border-[#dedad2]" />
-      <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+      <div className="px-[10px] pb-[6px] pt-[4px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65]">
         Recent Chats
       </div>
       {recentChats.map((chat) => (
@@ -252,7 +252,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
             aria-label={chat.status === "complete" ? "Complete" : "In progress"}
             className={`shrink-0 rounded-full px-[7px] py-[1px] text-[9.5px] font-semibold ${
               chat.status === "complete"
-                ? "bg-[#eaf6f0] text-[#2e9e6a]"
+                ? "bg-[#eaf6f0] text-[#247c53]"
                 : "bg-[#eef1fc] text-[#3a5fd9]"
             }`}
           >
@@ -271,7 +271,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
             closeMobile();
             router.push("/chats");
           }}
-          className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#c17a1a] transition-colors hover:border-[#d4a265] hover:bg-[#fae8ce]"
+          className="mb-[10px] flex w-full items-center gap-[7px] rounded-[8px] border border-[#e8b87c] bg-[#fdf3e3] px-[10px] py-[8px] text-[12px] font-medium text-[#9b6215] transition-colors hover:border-[#d4a265] hover:bg-[#fae8ce]"
         >
           <ShieldOff className="h-[13px] w-[13px] shrink-0" />
           <span>Exit admin mode</span>
@@ -296,7 +296,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           </div>
           <div className="min-w-0">
             <div className="truncate text-[13px] font-medium text-[#1a1814]">{displayName}</div>
-            {user.email && <div className="truncate text-[11px] text-[#918d87]">{user.email}</div>}
+            {user.email && <div className="truncate text-[11px] text-[#6d6a65]">{user.email}</div>}
           </div>
         </div>
       )}
@@ -347,8 +347,13 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       {/* Mobile: hamburger triggers the drawer managed by parent context */}
       {mobileOpen && (
         <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-40 bg-[rgba(20,18,15,0.35)]" onClick={closeMobile} />
+          {/* Backdrop — a button so it is keyboard-focusable and dismissable */}
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="fixed inset-0 z-40 bg-[rgba(20,18,15,0.35)]"
+            onClick={closeMobile}
+          />
           {/* Drawer */}
           <div className="fixed bottom-0 left-0 top-0 z-50 flex w-[220px] flex-col bg-white shadow-[4px_0_20px_rgba(0,0,0,.12)]">
             <div className="flex items-center justify-between border-b border-[#dedad2] px-[14px] py-[14px] pb-[12px]">
@@ -363,7 +368,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
               </div>
               <button
                 onClick={closeMobile}
-                className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border border-[#dedad2] text-[#918d87] hover:bg-[#efede8]"
+                className="flex h-[26px] w-[26px] items-center justify-center rounded-[6px] border border-[#dedad2] text-[#6d6a65] hover:bg-[#efede8]"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

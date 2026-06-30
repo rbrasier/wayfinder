@@ -41,6 +41,7 @@ export function ChatActionsMenu({
   const [showDataOpen, setShowDataOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(sessionTitle ?? "");
   const menuRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -148,7 +149,15 @@ export function ChatActionsMenu({
       </div>
 
       <Dialog open={renameOpen} onOpenChange={(open) => !open && setRenameOpen(false)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent
+          className="max-w-sm"
+          onOpenAutoFocus={(event) => {
+            // Focus the name field rather than the header close button (Radix's
+            // default first focusable). Replaces autoFocus (jsx-a11y/no-autofocus).
+            event.preventDefault();
+            renameInputRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Rename chat</DialogTitle>
             <DialogCloseButton />
@@ -157,11 +166,11 @@ export function ChatActionsMenu({
             <div className="space-y-1">
               <Label htmlFor="rename-input">Name</Label>
               <Input
+                ref={renameInputRef}
                 id="rename-input"
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleRenameSave()}
-                autoFocus
               />
             </div>
           </DialogBody>

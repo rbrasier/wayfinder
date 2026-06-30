@@ -4,6 +4,7 @@ import {
   ok,
   type AiTurnPayload,
   type ConversationalNodeConfig,
+  type DocumentGenerationConfidence,
   type Flow,
   type FlowEdge,
   type FlowNode,
@@ -17,6 +18,7 @@ import {
 } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
+import { streamTurn, type StreamTurnWriter } from "./stream-turn";
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -68,6 +70,108 @@ export const buildGatheredContext = (messages: SessionMessage[]): string => {
   return items.map((item) => `- ${item.key}: ${item.value}`).join("\n");
 };
 
+// Key prefix marking a gathered-context item as still outstanding, so the cheap
+// chat model treats it as something to ask about rather than a satisfied fact.
+// The same prefix self-rate-limits the expensive evaluation: the cheap model
+// will not re-report >= threshold until the user supplies these.
+export const OUTSTANDING_CONTEXT_KEY = "OUTSTANDING — still required from the user";
+
+// Merge the pre-generation evaluation's missing-information items into an
+// assistant message's gathered context, labelled outstanding. Best-effort: a
+// failure here must not break the turn.
+export async function appendShortcomingsToContext(
+  container: Container,
+  messageId: string,
+  items: string[],
+): Promise<void> {
+  if (items.length === 0) return;
+  const existing = await container.repos.sessionMessages.findById(messageId);
+  if (existing.error || !existing.data || !existing.data.aiPayload) return;
+
+  const outstanding = items.map((item) => ({ key: OUTSTANDING_CONTEXT_KEY, value: item }));
+  const mergedPayload: AiTurnPayload = {
+    ...existing.data.aiPayload,
+    contextGathered: [...existing.data.aiPayload.contextGathered, ...outstanding],
+  };
+
+  await container.repos.sessionMessages.updateAiPayload(messageId, mergedPayload).catch(() => undefined);
+}
+
+export interface StreamGapFollowupInput {
+  container: Container;
+  writer: StreamTurnWriter;
+  session: Session;
+  flowId: string;
+  system: string;
+  messages: { role: "user" | "assistant" | "system"; content: string }[];
+  missingInformation: string[];
+  model: LanguageModel;
+  modelName: string;
+  provider: Parameters<typeof recordTokenUsage>[1]["provider"];
+  userId: string;
+}
+
+// After a failed pre-generation evaluation, generate and stream a follow-up
+// assistant turn that asks the user for the outstanding items, then persist it.
+// The step does not advance, so the follow-up keeps the conversation on the same
+// node until the gaps are filled.
+export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<void> {
+  const gaps = input.missingInformation.map((item) => `- ${item}`).join("\n");
+  const followupSystem = [
+    input.system,
+    "",
+    "[Cross-check correction] Your previous reply implied this step was complete, but a higher-quality review found outstanding information. Do not claim the step is complete or advance it. In your next reply, ask the user — in a single, friendly message — to provide the following still-required items:",
+    gaps,
+  ].join("\n");
+
+  const streamResult = await streamTurn({
+    model: input.model,
+    schema: turnResponseSchema,
+    system: followupSystem,
+    messages: input.messages,
+    writer: input.writer,
+  });
+  const turnResult = streamResult.object;
+
+  recordTokenUsage(
+    input.container.repos.usageRepo,
+    {
+      purpose: "chat-gap-followup",
+      userId: input.userId,
+      conversationId: input.session.id,
+      flowId: input.flowId,
+      sessionId: input.session.id,
+      model: input.modelName,
+      provider: input.provider,
+    },
+    {
+      promptTokens: streamResult.usage.promptTokens,
+      completionTokens: streamResult.usage.completionTokens,
+      systemTokens: 0,
+      cacheReadTokens: streamResult.usage.cacheReadTokens,
+      cacheWriteTokens: streamResult.usage.cacheWriteTokens,
+    },
+  );
+
+  const aiPayload: AiTurnPayload = {
+    response: turnResult.response,
+    rationale: turnResult.rationale,
+    stepCompleteConfidence: turnResult.stepCompleteConfidence,
+    contextGathered: turnResult.contextGathered,
+  };
+
+  await input.container.repos.sessionMessages
+    .create({
+      sessionId: input.session.id,
+      role: "assistant",
+      content: turnResult.response,
+      confidence: Math.round(turnResult.stepCompleteConfidence),
+      stepNodeId: input.session.currentNodeId,
+      aiPayload,
+    })
+    .catch(() => undefined);
+}
+
 export async function generateDocument(
   container: Container,
   messageId: string,
@@ -76,6 +180,9 @@ export async function generateDocument(
   _nodes: FlowNode[],
   messages: SessionMessage[],
   node: FlowNode,
+  // Threaded by the pre-generation evaluation gate on a pass so generation
+  // reuses the already-extracted values and grade rather than recomputing them.
+  precomputed?: { fieldValues?: Record<string, string>; grade?: DocumentGenerationConfidence },
 ): Promise<boolean> {
   try {
     // Resolve the admin-configured budget at the edge (ADR-027). A failure here
@@ -94,6 +201,8 @@ export async function generateDocument(
       flow,
       node,
       budget,
+      fieldValues: precomputed?.fieldValues,
+      grade: precomputed?.grade,
     });
     if (result.error) {
       const status = await container.repos.sessionMessages.updateDocumentStatus(messageId, "failed");
@@ -607,6 +716,10 @@ export interface ApplyAdvanceSideEffectsInput {
   model: LanguageModel;
   provider: string;
   globalInstructions?: string | null;
+  // Threaded from the pre-generation evaluation gate on a pass: the values it
+  // already extracted and the grade it produced, so document generation skips
+  // the redundant second extraction and grading.
+  precomputedDocument?: { fieldValues: Record<string, string>; grade: DocumentGenerationConfidence };
 }
 
 // The post-advance side effects shared by the auto-advance turn and the operator
@@ -630,6 +743,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
     model,
     provider,
     globalInstructions,
+    precomputedDocument,
   } = input;
 
   const completedNodeConfig = completedNode.config as unknown as ConversationalNodeConfig;
@@ -655,6 +769,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
         nodes,
         assistantMessages.data,
         completedNode,
+        precomputedDocument,
       );
     }
   }

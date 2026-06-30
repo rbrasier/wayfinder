@@ -82,11 +82,11 @@ export function DocumentEditDialog({ open, messageId, onClose, onSaved }: Docume
 
         <DialogBody className="max-h-[60vh] overflow-y-auto">
           {fieldsQuery.isLoading ? (
-            <p className="text-[13px] text-[#918d87]">Loading fields…</p>
+            <p className="text-[13px] text-[#6d6a65]">Loading fields…</p>
           ) : !data ? (
             <p className="text-[13px] text-[#c2385a]">Could not load document fields.</p>
           ) : !isEditable ? (
-            <p className="rounded-[9px] border border-[#f5d0a9] bg-[#fdf3e3] px-3 py-2 text-[12px] text-[#c17a1a]">
+            <p className="rounded-[9px] border border-[#f5d0a9] bg-[#fdf3e3] px-3 py-2 text-[12px] text-[#9b6215]">
               {data.reason ?? "This document can no longer be edited."}
             </p>
           ) : (
@@ -133,7 +133,7 @@ function FieldInput({ field, value, error, onChange }: FieldInputProps) {
     <div className="space-y-1">
       <Label htmlFor={`field-${field.key}`}>
         {field.label}
-        {field.optional && <span className="ml-1 text-[11px] text-[#918d87]">(optional)</span>}
+        {field.optional && <span className="ml-1 text-[11px] text-[#6d6a65]">(optional)</span>}
       </Label>
       <FieldControl field={field} value={value} onChange={onChange} />
       {error && <p className="text-[12px] text-[#c2385a]">{error}</p>}

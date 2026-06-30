@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 
@@ -92,8 +93,13 @@ export function FixAnswerModal({
           >
             <DialogBody>
               <div className="space-y-2">
-                <Label>The answer you're fixing</Label>
-                <p className="max-h-28 overflow-auto rounded-md border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-xs text-[#5a554d]">
+                <FieldGroupLabel id="flagged-answer-label">
+                  The answer you&apos;re fixing
+                </FieldGroupLabel>
+                <p
+                  aria-labelledby="flagged-answer-label"
+                  className="max-h-28 overflow-auto rounded-md border border-[#dedad2] bg-[#f7f6f3] px-3 py-2 text-xs text-[#5a554d]"
+                >
                   {flaggedAnswer}
                 </p>
               </div>

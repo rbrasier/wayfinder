@@ -163,6 +163,14 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const actionsMenuRef = useRef<HTMLDivElement>(null);
+  const editNameInputRef = useRef<HTMLInputElement>(null);
+
+  // Move focus to the rename field when it is revealed (replaces autoFocus,
+  // which jsx-a11y/no-autofocus forbids). Gated on editingName so it only fires
+  // in response to the user clicking the name, never on page load.
+  useEffect(() => {
+    if (editingName) editNameInputRef.current?.focus();
+  }, [editingName]);
 
   // Tracks whether the live definition diverges from the published version, so
   // the header can show a "Draft · unpublished" indicator and the menu can offer
@@ -673,7 +681,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
         {editingName ? (
           <input
-            autoFocus
+            ref={editNameInputRef}
             className="rounded border px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/30"
             value={flowName}
             onChange={(e) => setFlowName(e.target.value)}
@@ -898,7 +906,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
           <MiniMap zoomable pannable />
         </ReactFlow>
         {staleReferences.length > 0 && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2 text-center text-[12px] text-[#8a6d00] shadow-md">
+          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2 text-center text-[12px] text-[#886b00] shadow-md">
             ⚠ Some steps reference data that no longer exists: {staleReferences.join(", ")}. Re-open them to fix.
           </div>
         )}

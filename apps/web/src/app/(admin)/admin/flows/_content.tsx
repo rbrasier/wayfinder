@@ -141,7 +141,7 @@ export function AdminFlowsContent() {
                         {flow.icon && <span className="mr-1">{flow.icon}</span>}
                         {flow.name}
                       </TableCell>
-                      <TableCell className="max-w-xs truncate text-[#918d87]">
+                      <TableCell className="max-w-xs truncate text-[#6d6a65]">
                         {flow.description ?? "—"}
                       </TableCell>
                       <TableCell>
@@ -157,7 +157,7 @@ export function AdminFlowsContent() {
                           <span className="text-[13px]">{getOwnerName(flow)}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-[13px] text-[#918d87]">
+                      <TableCell className="text-[13px] text-[#6d6a65]">
                         {new Date(flow.updatedAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell className="space-x-2 text-right">

@@ -79,7 +79,7 @@ export function AdminFlowDeepDive() {
       <div className="container space-y-4 py-8">
         <div>
           <h1 className="text-lg font-semibold text-[#1a1814]">Flow usage</h1>
-          <p className="text-[13px] text-[#918d87]">
+          <p className="text-[13px] text-[#6d6a65]">
             Select a flow to see its node-level breakdown — drop-off, confidence and completion.
           </p>
         </div>
@@ -172,7 +172,7 @@ export function AdminFlowDeepDive() {
                 ))}
                 {data.nodeBreakdown.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-[13px] text-[#918d87]">
+                    <TableCell colSpan={7} className="text-center text-[13px] text-[#6d6a65]">
                       No node activity recorded for this flow yet.
                     </TableCell>
                   </TableRow>
@@ -201,7 +201,7 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 
 function EmptyChart() {
   return (
-    <div className="flex h-full items-center justify-center text-[13px] text-[#918d87]">
+    <div className="flex h-full items-center justify-center text-[13px] text-[#6d6a65]">
       Not enough data yet.
     </div>
   );

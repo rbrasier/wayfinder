@@ -1,20 +1,27 @@
 import { createDataStreamResponse, formatDataStreamPart, generateObject } from "ai";
 import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
+import type { EvaluateStepReadinessOutput } from "@rbrasier/application";
 import {
   normaliseAdvanceConfidenceThreshold,
   type AiTurnPayload,
   type ConversationalNodeConfig,
+  type ResolvedDocumentGenerationBudget,
 } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { streamTurn } from "./stream-turn";
 import {
+  appendShortcomingsToContext,
   applyAdvanceSideEffects,
   buildAttachmentAnnotation,
   buildGatheredContext,
   buildPromptSessionUploads,
   generateTitle,
+<<<<<<< claude/skill-upload-mcp-servers-5vvoxr
   runMcpToolPrepass,
+=======
+  streamGapFollowup,
+>>>>>>> main
 } from "./turn-helpers";
 
 const getSessionToken = (req: Request): string | null => {
@@ -240,42 +247,133 @@ export async function POST(
         score: aiPayload.stepCompleteConfidence,
       });
 
-      let branchChoice: string | null = null;
-      // When the step requires confirmation it does not advance now, so the
-      // branch is recomputed at Proceed time (ADR-026) — skip the call here.
-      if (!isNeverDone && !requireConfirmation && aiPayload.stepCompleteConfidence >= 90 && branchNodes.length > 1) {
+      // Branch choice only matters on an actual advance, so it is computed
+      // lazily — after the pre-generation gate decides the step is ready. When
+      // the step requires confirmation it does not advance now, so the branch is
+      // recomputed at Proceed time (ADR-026) — skip the call here.
+      const computeBranchChoice = async (): Promise<string | null> => {
+        if (
+          isNeverDone ||
+          requireConfirmation ||
+          aiPayload.stepCompleteConfidence < 90 ||
+          branchNodes.length <= 1
+        ) {
+          return null;
+        }
         const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
-        if (!branchPromptResult.error) {
-          const branchResult = await generateObject({
-            model: branchingModel,
-            schema: branchChoiceSchema,
-            system: branchPromptResult.data,
-            messages: messagesWithNew,
-          }).catch(() => null);
-          if (branchResult) {
-            recordTokenUsage(
-              container.repos.usageRepo,
-              {
-                purpose: "chat-branch-choice",
-                userId: authSession.userId,
-                conversationId: sessionId,
-                flowId: flow.id,
-                sessionId,
-                model: branchingModelName,
-                provider,
-              },
-              {
-                promptTokens: branchResult.usage.promptTokens ?? 0,
-                completionTokens: branchResult.usage.completionTokens ?? 0,
-                systemTokens: 0,
-                cacheReadTokens: 0,
-                cacheWriteTokens: 0,
-              },
-            );
-          }
-          branchChoice = branchResult?.object.branchChoice ?? null;
+        if (branchPromptResult.error) return null;
+        const branchResult = await generateObject({
+          model: branchingModel,
+          schema: branchChoiceSchema,
+          system: branchPromptResult.data,
+          messages: messagesWithNew,
+        }).catch(() => null);
+        if (branchResult) {
+          recordTokenUsage(
+            container.repos.usageRepo,
+            {
+              purpose: "chat-branch-choice",
+              userId: authSession.userId,
+              conversationId: sessionId,
+              flowId: flow.id,
+              sessionId,
+              model: branchingModelName,
+              provider,
+            },
+            {
+              promptTokens: branchResult.usage.promptTokens ?? 0,
+              completionTokens: branchResult.usage.completionTokens ?? 0,
+              systemTokens: 0,
+              cacheReadTokens: 0,
+              cacheWriteTokens: 0,
+            },
+          );
+        }
+        return branchResult?.object.branchChoice ?? null;
+      };
+
+      // Pre-generation evaluation gate: when the cheap model crosses the
+      // threshold on a generate_document step, the doc-gen model confirms the
+      // would-be document is ready *before* the session advances. The gate fails
+      // open — a thrown or errored eval advances exactly as today.
+      const shouldEvaluateReadiness =
+        !isNeverDone &&
+        !requireConfirmation &&
+        nodeConfig.outputType === "generate_document" &&
+        Boolean(nodeConfig.documentTemplatePath) &&
+        aiPayload.stepCompleteConfidence >= realThreshold;
+
+      let evaluation: EvaluateStepReadinessOutput | null = null;
+      if (shouldEvaluateReadiness) {
+        dataStream.writeMessageAnnotation({ type: "cross-checking", active: true });
+        let budget: ResolvedDocumentGenerationBudget | undefined;
+        try {
+          budget = await container.runtimeConfig.resolveDocumentGenerationBudget();
+        } catch {
+          budget = undefined;
+        }
+        const evalResult = await container.useCases.evaluateStepReadiness
+          .execute({
+            messages: [...messagesWithNew, { role: "assistant" as const, content: aiPayload.response }],
+            flow,
+            node: currentNode,
+            budget,
+          })
+          .catch(() => null);
+        if (evalResult && !evalResult.error) {
+          evaluation = evalResult.data;
         }
       }
+
+      // Gate failed: hold the step open, record the gaps as outstanding context,
+      // and ask the user about them straight away.
+      if (evaluation && !evaluation.passed) {
+        const failResult = await container.useCases.runTurn.persistAssistantTurn({
+          session,
+          flowId: flow.id,
+          assistantMessage: aiPayload.response,
+          aiPayload,
+          branchChoice: null,
+          advanceThreshold: Number.POSITIVE_INFINITY,
+          requireConfirmation: false,
+          confirmationThreshold: realThreshold,
+        });
+        if (failResult.error) {
+          const cause = failResult.error.cause;
+          throw cause instanceof Error ? cause : new Error(failResult.error.message);
+        }
+
+        const refreshed = await container.repos.sessionMessages.listBySession(session.id);
+        const thresholdMessage = refreshed.error
+          ? null
+          : [...refreshed.data]
+              .reverse()
+              .find((m) => m.role === "assistant" && m.stepNodeId === session.currentNodeId);
+        if (thresholdMessage) {
+          await appendShortcomingsToContext(container, thresholdMessage.id, evaluation.missingInformation);
+        }
+
+        await streamGapFollowup({
+          container,
+          writer: dataStream,
+          session,
+          flowId: flow.id,
+          system: systemPromptResult.data,
+          messages: messagesWithNew,
+          missingInformation: evaluation.missingInformation,
+          model: chatModel,
+          modelName: chatModelName,
+          provider,
+          userId: authSession.userId,
+        });
+
+        if (dbMessages.filter((m) => m.role === "user").length === 0) {
+          void generateTitle(container, session.id, lastUserMessage, provider, chatModelName, apiKey, authSession.userId);
+        }
+        return;
+      }
+
+      const branchChoice = await computeBranchChoice();
 
       const runResult = await container.useCases.runTurn.persistAssistantTurn({
         session,
@@ -314,6 +412,19 @@ export async function POST(
           model: branchingModel,
           provider,
           globalInstructions,
+          // On a pass the gate already extracted the fields and graded them;
+          // thread both onward so generation skips the second extraction.
+          precomputedDocument: evaluation
+            ? {
+                fieldValues: evaluation.fieldValues,
+                grade: {
+                  guidanceAlignmentConfidence: evaluation.guidanceAlignmentConfidence,
+                  guidanceAlignmentRationale: evaluation.guidanceAlignmentRationale,
+                  criteriaAlignmentConfidence: evaluation.criteriaAlignmentConfidence,
+                  criteriaAlignmentRationale: evaluation.criteriaAlignmentRationale,
+                },
+              }
+            : undefined,
         });
       }
 

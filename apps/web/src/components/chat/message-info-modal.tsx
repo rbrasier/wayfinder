@@ -37,7 +37,7 @@ export function MessageInfoModal({ message, allMessages }: MessageInfoModalProps
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Show AI reasoning"
-        className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#5a5650]"
+        className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#5a5650]"
       >
         <Info className="h-3 w-3" strokeWidth={1.8} />
       </button>
@@ -48,7 +48,7 @@ export function MessageInfoModal({ message, allMessages }: MessageInfoModalProps
         </DialogHeader>
         <DialogBody>
           <div>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#918d87]">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65]">
               Confidence rationale
             </p>
             <p className="whitespace-pre-wrap text-[13px] leading-[1.55] text-[#1a1814]">
@@ -62,12 +62,12 @@ export function MessageInfoModal({ message, allMessages }: MessageInfoModalProps
               Insights gathered so far ({insights.length})
             </summary>
             {insights.length === 0 ? (
-              <p className="mt-2 text-[12px] text-[#918d87]">No insights gathered yet.</p>
+              <p className="mt-2 text-[12px] text-[#6d6a65]">No insights gathered yet.</p>
             ) : (
               <dl className="mt-2 space-y-1.5">
                 {insights.map((insight) => (
                   <div key={insight.key} className="flex flex-col gap-0.5">
-                    <dt className="font-mono text-[10px] uppercase tracking-[0.06em] text-[#918d87]">
+                    <dt className="font-mono text-[10px] uppercase tracking-[0.06em] text-[#6d6a65]">
                       {insight.key}
                     </dt>
                     <dd className="text-[12px] text-[#1a1814]">{insight.value}</dd>

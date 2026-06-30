@@ -14,6 +14,7 @@ import {
   DeleteFlowEdge,
   DeleteFlowNode,
   DeleteUser,
+  EvaluateStepReadiness,
   CreateBudget,
   UpdateBudget,
   DeleteBudget,
@@ -513,6 +514,7 @@ const build = () => {
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills, mcpServers },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
+      evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
       updateDocumentFields: new UpdateDocumentFields(
         docxGenerator,
         objectStorage,

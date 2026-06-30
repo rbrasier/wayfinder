@@ -60,7 +60,7 @@ export function TemplateFieldEditor({ label, helpText, lines, onChange }: Templa
   return (
     <div className="space-y-1">
       <Label>{label}</Label>
-      <p className="text-[12px] text-[#918d87]">{helpText}</p>
+      <p className="text-[12px] text-[#6d6a65]">{helpText}</p>
       <div className="space-y-2">
         {rows.map((line, index) => {
           const error = lineError(line);
@@ -77,7 +77,7 @@ export function TemplateFieldEditor({ label, helpText, lines, onChange }: Templa
                 <button
                   type="button"
                   aria-label="Remove field"
-                  className="shrink-0 rounded-md p-1.5 text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#c2385a]"
+                  className="shrink-0 rounded-md p-1.5 text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#c2385a]"
                   onClick={() => removeRow(index)}
                 >
                   <X size={14} />

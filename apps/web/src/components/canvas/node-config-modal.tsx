@@ -16,6 +16,7 @@ import { deriveFieldKey } from "@rbrasier/domain";
 import type { FieldValueSource, McpToolRef, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
@@ -177,7 +178,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+      className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
       {copied ? "Copied!" : "Copy"}
@@ -548,7 +549,7 @@ export function NodeConfigModal({
                 <button
                   type="button"
                   aria-label={view === "edit" ? "Preview prompt" : "Back to edit"}
-                  className="ml-auto mr-1 rounded-md p-1 text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#1a1814] disabled:opacity-50"
+                  className="ml-auto mr-1 rounded-md p-1 text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814] disabled:opacity-50"
                   onClick={handleToggleView}
                   disabled={isLoadingPreview}
                 >
@@ -566,7 +567,7 @@ export function NodeConfigModal({
                   ) : (
                     <>
                       <div className="flex items-center justify-between">
-                        <p className="text-[12px] text-[#918d87]">
+                        <p className="text-[12px] text-[#6d6a65]">
                           System prompt sent to the AI for this step (read-only)
                         </p>
                         <CopyButton text={previewPrompt ?? ""} />
@@ -598,8 +599,8 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label>Step colour</Label>
-                <div className="flex gap-2">
+                <FieldGroupLabel id="ncm-step-colour">Step colour</FieldGroupLabel>
+                <div className="flex gap-2" role="group" aria-labelledby="ncm-step-colour">
                   {COLOURS.map((colour) => (
                     <button
                       key={colour.hex}
@@ -632,83 +633,8 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label>Skills</Label>
-                <p className="text-[12px] text-[#857f76]">
-                  Attach reusable skills to steer the AI. Upload skills on the
-                  Skills page.
-                </p>
-                {skills.length === 0 ? (
-                  <p className="text-[13px] text-[#857f76]">No skills available yet.</p>
-                ) : (
-                  <div className="space-y-1.5 rounded-[9px] border border-[#dedad2] p-2.5">
-                    {skills.map((skill) => (
-                      <label
-                        key={skill.id}
-                        className="flex cursor-pointer items-start gap-2 text-[13px]"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={values.skillRefs.includes(skill.id)}
-                          onChange={() => toggleSkill(skill.id)}
-                        />
-                        <span>
-                          <span className="font-medium">{skill.name}</span>
-                          {skill.description ? (
-                            <span className="text-[#857f76]"> — {skill.description}</span>
-                          ) : null}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <Label>MCP tools</Label>
-                <p className="text-[12px] text-[#857f76]">
-                  Let the AI call these tools mid-conversation. Register servers on
-                  the MCP Servers page.
-                </p>
-                {mcpServers.length === 0 ? (
-                  <p className="text-[13px] text-[#857f76]">No MCP servers available.</p>
-                ) : (
-                  <div className="space-y-2 rounded-[9px] border border-[#dedad2] p-2.5">
-                    {mcpServers.map((entry) => (
-                      <div key={entry.server.id} className="space-y-1">
-                        <p className="text-[12px] font-medium text-[#5a5650]">{entry.server.label}</p>
-                        {entry.tools.length === 0 ? (
-                          <p className="text-[12px] text-[#857f76]">No tools discovered.</p>
-                        ) : (
-                          entry.tools.map((tool) => (
-                            <label
-                              key={tool.name}
-                              className="flex cursor-pointer items-start gap-2 text-[13px]"
-                            >
-                              <input
-                                type="checkbox"
-                                className="mt-0.5"
-                                checked={isToolAllowed(entry.server.id, tool.name)}
-                                onChange={() => toggleAllowedTool(entry.server.id, tool.name)}
-                              />
-                              <span>
-                                <span className="font-medium">{tool.name}</span>
-                                {tool.description ? (
-                                  <span className="text-[#857f76]"> — {tool.description}</span>
-                                ) : null}
-                              </span>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <Label>Output type</Label>
-                <div className="flex gap-3">
+                <FieldGroupLabel id="ncm-output-type">Output type</FieldGroupLabel>
+                <div className="flex gap-3" role="radiogroup" aria-labelledby="ncm-output-type">
                   {(["conversation_only", "generate_document"] as const).map((type) => (
                     <label
                       key={type}
@@ -734,32 +660,32 @@ export function NodeConfigModal({
               {values.outputType === "generate_document" && (
                 <div className="space-y-1">
                   <div className="flex items-center gap-1.5">
-                    <Label>DOCX template</Label>
+                    <FieldGroupLabel>DOCX template</FieldGroupLabel>
                     <button
                       type="button"
                       aria-label="How template tags work"
-                      className="flex h-4 w-4 items-center justify-center rounded-full text-[#918d87] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                      className="flex h-4 w-4 items-center justify-center rounded-full text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
                       onClick={() => setHelpDialogOpen(true)}
                     >
                       <HelpCircle size={13} />
                     </button>
                   </div>
-                  <p className="text-[12px] text-[#918d87]">
+                  <p className="text-[12px] text-[#6d6a65]">
                     Works best using variables marked with tags (e.g{" "}
                     <code className="font-mono">{EXAMPLE_TAG}</code>)
                   </p>
                   {!onUploadTemplate ? (
-                    <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#918d87]">
+                    <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#6d6a65]">
                       Save this step first, then re-open to upload a template.
                     </p>
                   ) : values.documentTemplateFilename ? (
                     <div className="flex items-center gap-2 rounded-[9px] border border-[#c0e8d5] bg-[#eaf6f0] px-3 py-2">
-                      <span className="flex-1 truncate text-[12px] text-[#2e9e6a]">
+                      <span className="flex-1 truncate text-[12px] text-[#247c53]">
                         {values.documentTemplateFilename}
                       </span>
                       <button
                         type="button"
-                        className="shrink-0 text-[12px] text-[#918d87] hover:text-[#5a5650]"
+                        className="shrink-0 text-[12px] text-[#6d6a65] hover:text-[#5a5650]"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={isUploading}
                       >
@@ -782,7 +708,7 @@ export function NodeConfigModal({
                   ) : (
                     <button
                       type="button"
-                      className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-4 text-center text-[13px] text-[#918d87] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
+                      className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-4 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isUploading}
                     >
@@ -806,7 +732,7 @@ export function NodeConfigModal({
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-0.5">
                     <Label htmlFor="allow-manual-edit">Allow manual field editing</Label>
-                    <p className="text-[12px] text-[#918d87]">
+                    <p className="text-[12px] text-[#6d6a65]">
                       Operators can correct the generated document&apos;s field values before approval.
                     </p>
                   </div>
@@ -864,7 +790,7 @@ export function NodeConfigModal({
                 <div className="flex items-start justify-between gap-3">
                   <div className="space-y-0.5">
                     <Label htmlFor="require-confirmation">Require confirmation before completing this step</Label>
-                    <p className="text-[12px] text-[#918d87]">
+                    <p className="text-[12px] text-[#6d6a65]">
                       When this step is complete, hold it open until the operator clicks Proceed instead of advancing automatically.
                     </p>
                   </div>
@@ -904,8 +830,8 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label>Executor</Label>
-                <div className="flex gap-3">
+                <FieldGroupLabel id="ncm-executor">Executor</FieldGroupLabel>
+                <div className="flex gap-3" role="radiogroup" aria-labelledby="ncm-executor">
                   {(["n8n", "mock"] as const).map((executor) => (
                     <label
                       key={executor}
@@ -932,7 +858,7 @@ export function NodeConfigModal({
                 <div className="space-y-1">
                   <Label htmlFor="auto-workflow">n8n workflow</Label>
                   {workflowsQuery.isLoading ? (
-                    <p className="text-[12px] text-[#918d87]">Loading workflows…</p>
+                    <p className="text-[12px] text-[#6d6a65]">Loading workflows…</p>
                   ) : workflowsQuery.error ? (
                     <p className="text-[12px] text-[#c2385a]">
                       Could not load workflows. Configure an n8n instance in Admin → Settings.
@@ -963,13 +889,13 @@ export function NodeConfigModal({
 
               {usesN8n && values.workflowId && (
                 <>
-                  <div className="space-y-2">
-                    <Label>Add request fields</Label>
-                    <p className="text-[12px] text-[#918d87]">
+                  <div className="space-y-2" role="group" aria-labelledby="ncm-request-fields">
+                    <FieldGroupLabel id="ncm-request-fields">Add request fields</FieldGroupLabel>
+                    <p className="text-[12px] text-[#6d6a65]">
                       Choose where each value comes from: the AI, an earlier step, a typed value, or none.
                     </p>
                     {schemaQuery.isLoading ? (
-                      <p className="text-[12px] text-[#918d87]">Reading the workflow schema…</p>
+                      <p className="text-[12px] text-[#6d6a65]">Reading the workflow schema…</p>
                     ) : (
                       <>
                         <FieldValueList
@@ -979,7 +905,7 @@ export function NodeConfigModal({
                           priorStepFields={priorStepFields}
                         />
                         {derivedInputs.length === 0 && (
-                          <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#918d87]">
+                          <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#6d6a65]">
                             No inputs found for this workflow
                             {schema && !schema.hasExecutions ? " (it hasn't run yet)" : ""}.{" "}
                             <button
@@ -1026,7 +952,7 @@ export function NodeConfigModal({
                         </button>
                         {advancedDerivedInputs.length > 0 && (
                           <details className="group mt-1">
-                            <summary className="cursor-pointer list-none text-[13px] font-medium text-[#918d87] hover:text-[#605c57] [&::-webkit-details-marker]:hidden">
+                            <summary className="cursor-pointer list-none text-[13px] font-medium text-[#6d6a65] hover:text-[#605c57] [&::-webkit-details-marker]:hidden">
                               <span className="group-open:hidden">▶ Advanced fields</span>
                               <span className="hidden group-open:inline">▼ Advanced fields</span>
                             </summary>
@@ -1044,17 +970,17 @@ export function NodeConfigModal({
                     )}
                   </div>
 
-                  <div className="space-y-1">
-                    <Label>Expected outputs (from n8n)</Label>
-                    <p className="text-[12px] text-[#918d87]">
+                  <div className="space-y-1" role="group" aria-labelledby="ncm-expected-outputs">
+                    <FieldGroupLabel id="ncm-expected-outputs">Expected outputs (from n8n)</FieldGroupLabel>
+                    <p className="text-[12px] text-[#6d6a65]">
                       Returned by the workflow and stored as this step&apos;s output.
                     </p>
                     {schemaQuery.isLoading ? (
-                      <p className="text-[12px] text-[#918d87]">Reading the workflow schema…</p>
+                      <p className="text-[12px] text-[#6d6a65]">Reading the workflow schema…</p>
                     ) : derivedOutputs.length > 0 ? (
                       <ReadOnlyFieldList fields={derivedOutputs} emptyText="" />
                     ) : (
-                      <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#918d87]">
+                      <p className="rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-[12px] text-[#6d6a65]">
                         No outputs found for this workflow
                         {schema && !schema.hasExecutions ? " (it hasn't run yet)" : ""}.{" "}
                         <button
@@ -1079,8 +1005,8 @@ export function NodeConfigModal({
                     onChange={setRequestLines}
                   />
                   {mockRequestFields.length > 0 && (
-                    <div className="space-y-2">
-                      <Label>Field values</Label>
+                    <div className="space-y-2" role="group" aria-labelledby="ncm-field-values">
+                      <FieldGroupLabel id="ncm-field-values">Field values</FieldGroupLabel>
                       <FieldValueList
                         fields={mockRequestFields}
                         values={values.requestFieldValues}
@@ -1117,14 +1043,14 @@ export function NodeConfigModal({
               </div>
 
               {values.scheduleWhen === "ai" && (
-                <p className="text-[12px] text-[#918d87]">
+                <p className="text-[12px] text-[#6d6a65]">
                   The AI chooses the fire time from the session context, or asks the user.
                 </p>
               )}
 
               {values.scheduleWhen === "specific" && (
-                <div className="space-y-1">
-                  <Label>Fire this step</Label>
+                <div className="space-y-1" role="group" aria-labelledby="ncm-fire-step">
+                  <FieldGroupLabel id="ncm-fire-step">Fire this step</FieldGroupLabel>
                   <ScheduleSentenceBuilder
                     number={values.scheduleNumber}
                     unit={values.scheduleUnit}
@@ -1149,7 +1075,7 @@ export function NodeConfigModal({
                     onChange={(e) => set("scheduleDescribeText", e.target.value)}
                     placeholder="e.g. two business days after the invoice is approved"
                   />
-                  <p className="text-[12px] text-[#918d87]">
+                  <p className="text-[12px] text-[#6d6a65]">
                     The AI works out the exact date and time from the session at runtime.
                   </p>
                 </div>
@@ -1171,7 +1097,7 @@ export function NodeConfigModal({
                   <option value="second_level_supervisor">Second-level supervisor</option>
                   <option value="dynamic">Dynamic — resolved from policy/context</option>
                 </select>
-                <p className="text-[12px] text-[#918d87]">
+                <p className="text-[12px] text-[#6d6a65]">
                   The operator always confirms the suggested approver, and can choose someone else.
                 </p>
               </div>
@@ -1295,7 +1221,7 @@ export function NodeConfigModal({
               <div className="flex items-start justify-between gap-3 border-t border-[#ece9e3] pt-3">
                 <div className="space-y-0.5">
                   <Label htmlFor="notify-on-complete">Notify chat participants when step complete</Label>
-                  <p className="text-[12px] text-[#918d87]">
+                  <p className="text-[12px] text-[#6d6a65]">
                     Emails everyone in the chat once this step finishes.
                   </p>
                 </div>

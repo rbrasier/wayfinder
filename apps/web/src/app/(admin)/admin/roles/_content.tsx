@@ -1,7 +1,7 @@
 "use client";
 
 import { PERMISSIONS, type PermissionKey } from "@rbrasier/domain";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -86,7 +86,7 @@ export function AdminRolesContent() {
                         <div className="font-medium">
                           {permission.label}
                           {PENDING_PERMISSIONS.has(permission.key) && (
-                            <Badge variant="outline" className="ml-2 font-normal text-[#c17a1a]">
+                            <Badge variant="outline" className="ml-2 font-normal text-[#9b6215]">
                               feature not enabled yet
                             </Badge>
                           )}
@@ -139,6 +139,7 @@ function RolesManagementCard() {
   const rolesQuery = trpc.role.list.useQuery();
   const [newRoleName, setNewRoleName] = useState("");
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = () => Promise.all([utils.role.list.invalidate(), utils.featureFlag.list.invalidate()]);
 
@@ -242,7 +243,14 @@ function RolesManagementCard() {
       </CardContent>
 
       <Dialog open={renaming !== null} onOpenChange={(open) => !open && setRenaming(null)}>
-        <DialogContent>
+        <DialogContent
+          onOpenAutoFocus={(event) => {
+            // Focus the name field on open. Replaces autoFocus, forbidden by
+            // jsx-a11y/no-autofocus.
+            event.preventDefault();
+            renameInputRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Rename role</DialogTitle>
           </DialogHeader>
@@ -258,10 +266,10 @@ function RolesManagementCard() {
               <div className="space-y-2">
                 <Label htmlFor="role-name">Name</Label>
                 <Input
+                  ref={renameInputRef}
                   id="role-name"
                   value={renaming.name}
                   onChange={(event) => setRenaming({ ...renaming, name: event.target.value })}
-                  autoFocus
                 />
               </div>
               <DialogFooter>

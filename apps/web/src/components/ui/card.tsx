@@ -26,6 +26,8 @@ export const CardTitle = React.forwardRef<
   HTMLParagraphElement,
   React.HTMLAttributes<HTMLHeadingElement>
 >(({ className, ...props }, ref) => (
+  // Content arrives via children in {...props}; the rule cannot see it statically.
+  // eslint-disable-next-line jsx-a11y/heading-has-content
   <h3
     ref={ref}
     className={cn("text-[14px] font-semibold leading-none tracking-tight text-[#1a1814]", className)}

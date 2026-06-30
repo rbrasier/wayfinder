@@ -94,7 +94,7 @@ function AnnotationTable({ rows }: { rows: AnnotationRow[] }) {
 
 function SectionHeading({ children }: { children: ReactNode }) {
   return (
-    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#918d87]">{children}</h3>
+    <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#6d6a65]">{children}</h3>
   );
 }
 
@@ -175,7 +175,7 @@ Fee: {{ Contract Value (currency) (optional) }}`}
             </div>
           </div>
 
-          <p className="text-[12px] leading-[1.55] text-[#918d87]">
+          <p className="text-[12px] leading-[1.55] text-[#6d6a65]">
             Spacing inside the brackets doesn&apos;t matter — <code className="font-mono">( email )</code>,{" "}
             <code className="font-mono">(email)</code> and <code className="font-mono">(min:&nbsp;&nbsp;60)</code>{" "}
             all work. If an annotation isn&apos;t recognised, the upload is rejected with an
@@ -183,7 +183,7 @@ Fee: {{ Contract Value (currency) (optional) }}`}
           </p>
         </DialogBody>
         <DialogFooter>
-          <Button type="button" onClick={onClose} autoFocus>
+          <Button type="button" onClick={onClose}>
             Got it
           </Button>
         </DialogFooter>

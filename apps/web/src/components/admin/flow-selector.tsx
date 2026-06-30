@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useFocusOnMount } from "@/lib/use-focus-on-mount";
 
 export interface FlowSelectorFlow {
   flowId: string;
@@ -58,7 +59,7 @@ export function FlowSelector({
             }`}
           >
             <span className="block text-[13px] font-medium text-[#1a1814]">{flow.flowName}</span>
-            <span className="block text-[12px] text-[#918d87]">
+            <span className="block text-[12px] text-[#6d6a65]">
               {flow.sessionCount} session{flow.sessionCount === 1 ? "" : "s"}
             </span>
           </button>
@@ -88,7 +89,7 @@ export function FlowSelector({
             onClick={() => setShowSearch(true)}
             className="rounded-[9px] border border-[#dedad2] bg-white px-3 py-2 text-left transition-colors hover:bg-[#f7f6f3]"
           >
-            <span className="block text-[13px] font-medium text-[#918d87]">Search for more</span>
+            <span className="block text-[13px] font-medium text-[#6d6a65]">Search for more</span>
           </button>
         ))}
     </div>
@@ -115,11 +116,12 @@ function FlowSearchInput({
   const filtered = flows.filter((flow) =>
     flow.flowName.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  const searchInputRef = useFocusOnMount<HTMLInputElement>();
 
   return (
     <div ref={containerRef} className="relative">
       <input
-        autoFocus
+        ref={searchInputRef}
         type="text"
         value={searchQuery}
         onChange={(event) => onQueryChange(event.target.value)}
@@ -127,7 +129,7 @@ function FlowSearchInput({
           if (event.key === "Escape") onDismiss();
         }}
         placeholder="Search flows…"
-        className="rounded-[9px] border border-[#3a5fd9] bg-white px-3 py-2 text-[13px] text-[#1a1814] outline-none placeholder:text-[#c4bfb8]"
+        className="rounded-[9px] border border-[#3a5fd9] bg-white px-3 py-2 text-[13px] text-[#1a1814] outline-none placeholder:text-[#726f6b]"
       />
       {filtered.length > 0 && (
         <ul className="absolute left-0 top-full z-10 mt-1 w-[240px] overflow-hidden rounded-[9px] border border-[#dedad2] bg-white shadow-md">
@@ -144,7 +146,7 @@ function FlowSearchInput({
                 className="w-full px-3 py-2 text-left hover:bg-[#f7f6f3]"
               >
                 <span className="block text-[13px] font-medium text-[#1a1814]">{flow.flowName}</span>
-                <span className="block text-[12px] text-[#918d87]">
+                <span className="block text-[12px] text-[#6d6a65]">
                   {flow.sessionCount} session{flow.sessionCount === 1 ? "" : "s"}
                 </span>
               </button>

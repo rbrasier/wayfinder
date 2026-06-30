@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldGroupLabel } from "@/components/ui/field-group-label";
 
 const ICONS = ["🗂️", "🏗️", "💬", "📋", "🔄", "⚙️"];
 
@@ -105,8 +106,8 @@ export function FlowMetadataDialog({
             />
           </div>
           <div className="space-y-1">
-            <Label>Icon</Label>
-            <div className="flex gap-2">
+            <FieldGroupLabel id="flow-icon-label">Icon</FieldGroupLabel>
+            <div className="flex gap-2" role="group" aria-labelledby="flow-icon-label">
               {ICONS.map((icon) => (
                 <button
                   key={icon}

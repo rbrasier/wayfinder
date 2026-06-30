@@ -31,7 +31,7 @@ interface MetricWithDelta {
 function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   if (deltaPct === null) {
     return (
-      <span className="inline-flex items-center gap-1 text-[12px] text-[#918d87]">
+      <span className="inline-flex items-center gap-1 text-[12px] text-[#6d6a65]">
         <Minus size={12} /> no prior data
       </span>
     );
@@ -39,7 +39,7 @@ function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   const rounded = Math.round(deltaPct);
   if (rounded === 0) {
     return (
-      <span className="inline-flex items-center gap-1 text-[12px] text-[#918d87]">
+      <span className="inline-flex items-center gap-1 text-[12px] text-[#6d6a65]">
         <Minus size={12} /> 0%
       </span>
     );
@@ -48,7 +48,7 @@ function DeltaBadge({ deltaPct }: { deltaPct: number | null }) {
   return (
     <span
       className={`inline-flex items-center gap-1 text-[12px] font-medium ${
-        positive ? "text-[#2e9e6a]" : "text-[#c2385a]"
+        positive ? "text-[#247c53]" : "text-[#c2385a]"
       }`}
     >
       {positive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -116,7 +116,7 @@ export function AdminOverviewDashboard() {
       <div className="container space-y-4 py-8">
         <div>
           <h1 className="text-lg font-semibold text-[#1a1814]">Overview</h1>
-          <p className="text-[13px] text-[#918d87]">
+          <p className="text-[13px] text-[#6d6a65]">
             Last {data.periodDays} days, compared with the prior {data.periodDays} days.
           </p>
         </div>
@@ -218,7 +218,7 @@ export function AdminOverviewDashboard() {
 
 function EmptyChart() {
   return (
-    <div className="flex h-full items-center justify-center text-[13px] text-[#918d87]">
+    <div className="flex h-full items-center justify-center text-[13px] text-[#6d6a65]">
       Not enough data yet.
     </div>
   );

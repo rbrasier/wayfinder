@@ -76,7 +76,7 @@ export function CalendarPicker({ year, month, day, onSelect, onMonthChange }: Ca
       </div>
       <div className="grid grid-cols-7 gap-1 text-center">
         {WEEKDAY_HEADINGS.map((heading, index) => (
-          <span key={index} className="text-[11px] font-medium text-[#918d87]">
+          <span key={index} className="text-[11px] font-medium text-[#6d6a65]">
             {heading}
           </span>
         ))}

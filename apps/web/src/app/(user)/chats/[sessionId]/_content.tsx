@@ -295,7 +295,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   if (sessionQuery.isLoading) {
     return (
       <main className="flex h-screen flex-col items-center justify-center gap-4">
-        <p className="text-[13px] text-[#918d87]">Loading session…</p>
+        <p className="text-[13px] text-[#6d6a65]">Loading session…</p>
       </main>
     );
   }
@@ -337,7 +337,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           <Link href="/chats" className="shrink-0 text-[13px] text-[#5a5650] hover:text-[#1a1814]">
             ← My Chats
           </Link>
-          <span className="text-[13px] text-[#dedad2]">|</span>
+          <span aria-hidden="true" className="text-[13px] text-[#777570]">|</span>
           <span className="text-[18px]">{flow.icon ?? "💬"}</span>
           <h1 className="truncate text-[13px] font-semibold text-[#1a1814]">
             {session.title ?? flow.name}
@@ -367,7 +367,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
       {isFlowDeleted && (
         <div className="flex justify-center border-b border-[#f5d0a9] bg-[#fdf3e3] px-4 py-2">
-          <p className="text-[13px] text-[#c17a1a]">
+          <p className="text-[13px] text-[#9b6215]">
             This flow has been deleted. You can read this chat but can no longer send new messages.
           </p>
         </div>
@@ -398,7 +398,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       {showBranchOverride && (
         <div className="flex justify-center border-t border-[#dedad2] bg-[#fdf3e3] px-4 py-3">
           <div className="flex items-center gap-3">
-            <p className="text-[13px] text-[#c17a1a]">Wayfinder could not determine the next step.</p>
+            <p className="text-[13px] text-[#9b6215]">Wayfinder could not determine the next step.</p>
             <Button size="sm" variant="secondary" onClick={() => setOverrideOpen(true)}>
               Pick a step manually
             </Button>
@@ -409,7 +409,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       {typingLabel && (
         <div className="flex shrink-0 items-center gap-2 border-t border-[#dedad2] bg-white px-5 pt-2">
           <TypingIndicator />
-          <span className="text-[12px] text-[#918d87]">{typingLabel}</span>
+          <span className="text-[12px] text-[#6d6a65]">{typingLabel}</span>
         </div>
       )}
 

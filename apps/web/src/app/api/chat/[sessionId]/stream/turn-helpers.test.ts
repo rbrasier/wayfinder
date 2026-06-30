@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import { MockLanguageModelV1 } from "ai/test";
+import { MockLanguageModelV1, simulateReadableStream } from "ai/test";
 import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@rbrasier/domain";
 import {
+  appendShortcomingsToContext,
   applyAdvanceSideEffects,
   buildAttachmentAnnotation,
   buildGatheredContext,
   buildPromptSessionUploads,
   generateDocument,
   generateInitialMessage,
+  OUTSTANDING_CONTEXT_KEY,
+  streamGapFollowup,
 } from "./turn-helpers";
 import type { Session } from "@rbrasier/domain";
 
@@ -508,6 +511,39 @@ describe("applyAdvanceSideEffects", () => {
     expect(generateDocumentExecute).toHaveBeenCalledTimes(1);
   });
 
+  it("threads precomputed field values and grade from the gate into generation", async () => {
+    const updateDocumentStatus = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const generateDocumentExecute = vi.fn().mockResolvedValue({ data: { document: {} }, error: null });
+    const listBySession = vi.fn().mockResolvedValue({
+      data: [makeAssistantMessage({ id: "milestone", stepNodeId: "node-1" })],
+      error: null,
+    });
+
+    const container = {
+      repos: { sessionMessages: { listBySession, updateDocumentStatus }, usageRepo: {} },
+      runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
+      useCases: { generateDocument: { execute: generateDocumentExecute } },
+      services: { errorLogger: { log: vi.fn().mockResolvedValue({ error: null }) } },
+    };
+
+    const grade = {
+      guidanceAlignmentConfidence: 91,
+      guidanceAlignmentRationale: "g",
+      criteriaAlignmentConfidence: 93,
+      criteriaAlignmentRationale: "c",
+    };
+    const fieldValues = { project_title: "Reused" };
+
+    await applyAdvanceSideEffects({
+      ...baseInput({ container, nodes: [completedDocNode], newNodeId: null }),
+      precomputedDocument: { fieldValues, grade },
+    });
+
+    expect(generateDocumentExecute).toHaveBeenCalledWith(
+      expect.objectContaining({ fieldValues, grade }),
+    );
+  });
+
   it("skips the AI opener for an approval new node", async () => {
     const retrieveExecute = vi.fn().mockResolvedValue({ data: [], error: null });
     const listBySession = vi.fn().mockResolvedValue({ data: [], error: null });
@@ -568,6 +604,119 @@ describe("applyAdvanceSideEffects", () => {
 
     expect(retrieveExecute).toHaveBeenCalled();
     expect(create).toHaveBeenCalled();
+  });
+});
+
+describe("appendShortcomingsToContext", () => {
+  it("appends the outstanding gaps to the message's gathered context, labelled", async () => {
+    const findById = vi.fn().mockResolvedValue({
+      data: makeAssistantMessage({
+        id: "msg-1",
+        aiPayload: {
+          response: "ok",
+          rationale: "r",
+          stepCompleteConfidence: 92,
+          contextGathered: [{ key: "Project name", value: "Cloud migration" }],
+        },
+      }),
+      error: null,
+    });
+    const updateAiPayload = vi.fn().mockResolvedValue({ data: {}, error: null });
+
+    const container = {
+      repos: { sessionMessages: { findById, updateAiPayload } },
+    } as unknown as Parameters<typeof appendShortcomingsToContext>[0];
+
+    await appendShortcomingsToContext(container, "msg-1", ["The end date is missing."]);
+
+    const payload = updateAiPayload.mock.calls[0]![1] as AiTurnPayload;
+    expect(payload.contextGathered).toContainEqual({ key: "Project name", value: "Cloud migration" });
+    expect(payload.contextGathered).toContainEqual({
+      key: OUTSTANDING_CONTEXT_KEY,
+      value: "The end date is missing.",
+    });
+  });
+
+  it("does nothing when there are no gaps", async () => {
+    const updateAiPayload = vi.fn();
+    const container = {
+      repos: { sessionMessages: { findById: vi.fn(), updateAiPayload } },
+    } as unknown as Parameters<typeof appendShortcomingsToContext>[0];
+
+    await appendShortcomingsToContext(container, "msg-1", []);
+
+    expect(updateAiPayload).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the message has no aiPayload", async () => {
+    const findById = vi.fn().mockResolvedValue({ data: makeAssistantMessage({ aiPayload: null }), error: null });
+    const updateAiPayload = vi.fn();
+    const container = {
+      repos: { sessionMessages: { findById, updateAiPayload } },
+    } as unknown as Parameters<typeof appendShortcomingsToContext>[0];
+
+    await appendShortcomingsToContext(container, "msg-1", ["x"]);
+
+    expect(updateAiPayload).not.toHaveBeenCalled();
+  });
+});
+
+describe("streamGapFollowup", () => {
+  const gapModel = () =>
+    new MockLanguageModelV1({
+      defaultObjectGenerationMode: "tool",
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            {
+              type: "tool-call-delta",
+              toolCallType: "function",
+              toolCallId: "c1",
+              toolName: "json",
+              argsTextDelta:
+                '{"response":"Could you share the end date?","rationale":"gap","stepCompleteConfidence":20,"contextGathered":[]}',
+            },
+            { type: "finish", finishReason: "stop", usage: { promptTokens: 2, completionTokens: 4 } },
+          ],
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+
+  const session = (): Session =>
+    ({ id: "sess-1", currentNodeId: "node-1" } as unknown as Session);
+
+  it("streams a follow-up asking for the gaps and persists it on the same node", async () => {
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const written: string[] = [];
+
+    const container = {
+      repos: {
+        sessionMessages: { create },
+        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+      },
+    } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
+
+    await streamGapFollowup({
+      container,
+      writer: { write: (s: string) => written.push(s) },
+      session: session(),
+      flowId: "flow-1",
+      system: "base system prompt",
+      messages: [{ role: "user", content: "All done" }],
+      missingInformation: ["The end date is missing."],
+      model: gapModel(),
+      modelName: "claude-haiku-4-5-20251001",
+      provider: "anthropic",
+      userId: "user-1",
+    });
+
+    expect(written.join("")).toContain("Could you share the end date?");
+    expect(create).toHaveBeenCalledTimes(1);
+    const createArg = create.mock.calls[0]![0];
+    expect(createArg.role).toBe("assistant");
+    expect(createArg.stepNodeId).toBe("node-1");
+    expect(createArg.content).toContain("end date");
   });
 });
 

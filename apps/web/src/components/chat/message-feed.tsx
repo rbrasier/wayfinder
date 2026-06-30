@@ -7,7 +7,7 @@ import { ConfidenceBar } from "./confidence-bar";
 import { DocumentCard } from "./document-card";
 import { FixAnswerModal } from "./fix-answer-modal";
 import { MessageInfoModal } from "./message-info-modal";
-import { FlowCompletePill, MilestonePill } from "./milestone-pill";
+import { CrossCheckingBadge, FlowCompletePill, MilestonePill } from "./milestone-pill";
 import { TypingIndicator } from "./typing-indicator";
 
 interface ConfidenceAnnotation {
@@ -21,6 +21,9 @@ const toConfidenceAnnotation = (a: unknown): ConfidenceAnnotation | null => {
   if (obj["type"] !== "confidence" || typeof obj["score"] !== "number") return null;
   return obj as unknown as ConfidenceAnnotation;
 };
+
+const isCrossCheckingAnnotation = (a: unknown): boolean =>
+  typeof a === "object" && a !== null && (a as Record<string, unknown>)["type"] === "cross-checking";
 
 interface MessageFeedProps {
   dbMessages: SessionMessage[];
@@ -138,7 +141,7 @@ export function MessageFeed({
           return (
             <div key={msg.id}>
               {isNewStep && node && (
-                <div className="my-1 text-center font-mono text-[10px] text-[#918d87]">
+                <div className="my-1 text-center font-mono text-[10px] text-[#6d6a65]">
                   — {node.name} —
                 </div>
               )}
@@ -167,7 +170,7 @@ export function MessageFeed({
                   </p>
                   <p
                     className={`mt-1 text-right font-mono text-[10px] ${
-                      msg.role === "user" ? "text-white/50" : "text-[#918d87]"
+                      msg.role === "user" ? "text-white/50" : "text-[#6d6a65]"
                     }`}
                   >
                     {formatRelativeTime(msg.createdAt)}
@@ -182,7 +185,7 @@ export function MessageFeed({
                     <button
                       type="button"
                       onClick={() => setFixing({ id: msg.id, content: msg.content })}
-                      className="mt-1 text-[10px] font-medium text-[#918d87] underline-offset-2 hover:text-[#3a5fd9] hover:underline"
+                      className="mt-1 text-[10px] font-medium text-[#6d6a65] underline-offset-2 hover:text-[#3a5fd9] hover:underline"
                     >
                       Fix this answer
                     </button>
@@ -232,13 +235,18 @@ export function MessageFeed({
           {streamingMessages.map((msg) => {
             const confidenceAnnotation =
               msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
+            const isCrossChecking =
+              isStreaming &&
+              msg.role === "assistant" &&
+              Boolean(msg.annotations?.some(isCrossCheckingAnnotation));
             const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
             const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
             const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
             const streamingIsNeverDone = Boolean(streamingConfig?.["neverDone"]);
 
             return (
-              <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div key={msg.id}>
+              <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.role !== "user" && (
                   <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
                     {botInitials}
@@ -270,6 +278,8 @@ export function MessageFeed({
                     {userInitials}
                   </div>
                 )}
+              </div>
+              {isCrossChecking && <CrossCheckingBadge />}
               </div>
             );
           })}
@@ -308,7 +318,7 @@ export function MessageFeed({
       {isComplete && !isStreaming && <FlowCompletePill />}
 
       {dbMessages.length === 0 && !isStreaming && !error && (
-        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#918d87]">
+        <div className="flex flex-1 items-center justify-center text-center text-[13px] text-[#6d6a65]">
           <p>The conversation will begin once you send your first message.</p>
         </div>
       )}

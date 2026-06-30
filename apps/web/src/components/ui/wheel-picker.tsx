@@ -73,7 +73,7 @@ export function WheelPicker({ options, value, onChange, ariaLabel }: WheelPicker
             aria-selected={option.value === value}
             onClick={() => onChange(option.value)}
             className={`flex w-full snap-center items-center justify-center text-[14px] ${
-              option.value === value ? "font-semibold text-[#1a1814]" : "text-[#918d87]"
+              option.value === value ? "font-semibold text-[#1a1814]" : "text-[#6d6a65]"
             }`}
             style={{ height: ITEM_HEIGHT }}
           >

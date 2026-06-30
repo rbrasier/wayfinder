@@ -126,7 +126,7 @@ const buildDisplayColumns = (
 const selectStyle =
   "h-9 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 text-[13px] text-[#1a1814] outline-none focus:border-[#3a5fd9] focus:bg-white";
 
-const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#918d87] mb-1";
+const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#6d6a65] mb-1";
 
 const formatDate = (date: Date | string): string =>
   new Date(date).toISOString().slice(0, 10).split("-").reverse().join("-");
@@ -138,9 +138,9 @@ const formatStatus = (status: string): string => {
 };
 
 const statusBadgeClass = (status: string): string => {
-  if (status === "complete") return "text-[#2e9e6a]";
+  if (status === "complete") return "text-[#247c53]";
   if (status === "abandoned") return "text-[#c2385a]";
-  return "text-[#d98a3a]";
+  return "text-[#9a6229]";
 };
 
 const getDateThreshold = (preset: DatePreset, now: Date): Date | null => {
@@ -420,7 +420,7 @@ export function FieldReportSection({
             Template field reporting
           </CardTitle>
         </CardHeader>
-        <CardContent className="text-[13px] text-[#918d87]">
+        <CardContent className="text-[13px] text-[#6d6a65]">
           No template field values captured yet. Add validation annotations to your template tags
           (e.g.{" "}
           <code className="font-mono">
@@ -486,10 +486,10 @@ export function FieldReportSection({
             <span className="font-semibold text-[#1a1814]">{sessionSummary.total}</span> sessions
           </span>
           <span>
-            <span className="font-semibold text-[#2e9e6a]">{sessionSummary.completed}</span> completed
+            <span className="font-semibold text-[#247c53]">{sessionSummary.completed}</span> completed
           </span>
           <span>
-            <span className="font-semibold text-[#918d87]">
+            <span className="font-semibold text-[#6d6a65]">
               {sessionSummary.active + sessionSummary.abandoned}
             </span>{" "}
             in progress or abandoned
@@ -609,7 +609,7 @@ export function FieldReportSection({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-[12px] text-[#918d87]">
+        <div className="flex items-center gap-2 text-[12px] text-[#6d6a65]">
           <span>
             <span className="font-medium text-[#1a1814]">{filteredRows.length}</span> of{" "}
             {report.rows.length} sessions match
@@ -640,7 +640,7 @@ export function FieldReportSection({
                   <TableHead key={col.columnKey}>
                     {col.label}
                     {col.stepNames.length > 1 && (
-                      <span className="block text-[10px] font-normal normal-case text-[#918d87]">
+                      <span className="block text-[10px] font-normal normal-case text-[#6d6a65]">
                         {col.stepNames.join(" · ")}
                       </span>
                     )}
@@ -653,7 +653,7 @@ export function FieldReportSection({
                 <TableRow>
                   <TableCell
                     colSpan={2 + displayedColumns.length}
-                    className="text-center text-[13px] text-[#918d87]"
+                    className="text-center text-[13px] text-[#6d6a65]"
                   >
                     No sessions match the current filters.
                   </TableCell>
@@ -661,7 +661,7 @@ export function FieldReportSection({
               )}
               {filteredRows.map((row) => (
                 <TableRow key={row.sessionId}>
-                  <TableCell className="whitespace-nowrap text-[12px] text-[#918d87]">
+                  <TableCell className="whitespace-nowrap text-[12px] text-[#6d6a65]">
                     {formatDate(row.startedAt)}
                   </TableCell>
                   <TableCell className={`text-[12px] font-medium ${statusBadgeClass(row.status)}`}>
@@ -686,12 +686,12 @@ export function FieldReportSection({
           </DialogHeader>
           <DialogBody className="space-y-4">
             <div>
-              <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#918d87]">
+              <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#6d6a65]">
                 Always shown
               </p>
               <div className="space-y-2">
                 {["Started", "Status"].map((label) => (
-                  <label key={label} className="flex cursor-not-allowed items-center gap-2 text-[13px] text-[#918d87]">
+                  <label key={label} className="flex cursor-not-allowed items-center gap-2 text-[13px] text-[#6d6a65]">
                     <input type="checkbox" checked disabled className="h-3.5 w-3.5" />
                     {label}
                   </label>
@@ -700,7 +700,7 @@ export function FieldReportSection({
             </div>
             {columnsByNode.map((group) => (
               <div key={group.nodeId}>
-                <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#918d87]">
+                <p className="mb-2 text-[12px] font-medium uppercase tracking-wide text-[#6d6a65]">
                   {group.nodeName}
                 </p>
                 <div className="space-y-2">
@@ -716,7 +716,7 @@ export function FieldReportSection({
                         onChange={(event) => handleColumnsChange(col.columnKey, event.target.checked)}
                       />
                       {col.label}
-                      <span className="ml-auto text-[11px] uppercase tracking-wide text-[#918d87]">
+                      <span className="ml-auto text-[11px] uppercase tracking-wide text-[#6d6a65]">
                         {col.type}
                       </span>
                     </label>

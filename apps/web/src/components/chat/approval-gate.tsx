@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Copy, Loader2, Mail, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,14 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
   const [chosen, setChosen] = useState<ChosenApprover | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Focus the approver search box when the operator reveals it (replaces
+  // autoFocus, forbidden by jsx-a11y/no-autofocus). Gated on showSearch so it
+  // fires only in response to the user toggling search open.
+  useEffect(() => {
+    if (showSearch) searchInputRef.current?.focus();
+  }, [showSearch]);
 
   // When email cannot be delivered the operator must notify the approver by hand,
   // so the confirm action only records the approver and surfaces manual options.
@@ -125,8 +133,8 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
   if (!requestResolved) {
     return (
       <div className="border-t border-[#dedad2] bg-[#fffaf2] px-5 py-4">
-        <div className="mx-auto flex max-w-2xl items-center gap-2 text-[13px] text-[#918d87]">
-          <Loader2 className="h-4 w-4 animate-spin text-[#d97706]" />
+        <div className="mx-auto flex max-w-2xl items-center gap-2 text-[13px] text-[#6d6a65]">
+          <Loader2 className="h-4 w-4 animate-spin text-[#a65b05]" />
           Loading approval…
         </div>
       </div>
@@ -138,7 +146,7 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
       <div className="border-t border-[#dedad2] bg-[#fef3e2] px-5 py-4">
         <div className="mx-auto flex max-w-2xl flex-col gap-3">
           <div className="flex items-center gap-3">
-            <Stamp className="h-5 w-5 text-[#d97706]" />
+            <Stamp className="h-5 w-5 text-[#a65b05]" />
             <p className="text-[13px] text-[#92400e]">
               {emailConfigured ? (
                 <>
@@ -178,7 +186,7 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
     <div className="border-t border-[#dedad2] bg-[#fffaf2] px-5 py-4" data-approval-gate>
       <div className="mx-auto flex max-w-2xl flex-col gap-3">
         <div className="flex items-center gap-2">
-          <Stamp className="h-5 w-5 text-[#d97706]" />
+          <Stamp className="h-5 w-5 text-[#a65b05]" />
           <p className="text-[14px] font-semibold text-[#1a1814]">Confirm the approver</p>
         </div>
         {instructions && <p className="text-[13px] text-[#5a5650]">{instructions}</p>}
@@ -188,11 +196,11 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
             <p className="text-[13px] text-[#1a1814]">
               Suggested: <span className="font-medium">{chosen.label}</span>
               {chosen.email && chosen.label !== chosen.email && (
-                <span className="text-[#918d87]"> ({chosen.email})</span>
+                <span className="text-[#6d6a65]"> ({chosen.email})</span>
               )}
             </p>
           ) : (
-            <p className="text-[13px] text-[#918d87]">
+            <p className="text-[13px] text-[#6d6a65]">
               {suggest.isPending ? "Resolving a suggestion…" : "No suggestion — choose someone."}
             </p>
           )}
@@ -207,7 +215,7 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
         {showSearch && (
           <div className="space-y-2 rounded-[10px] border border-[#dedad2] bg-white p-3">
             <Input
-              autoFocus
+              ref={searchInputRef}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search Entra, HR, or type any email…"
@@ -228,13 +236,13 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
                   }}
                 >
                   <span className="truncate">{person.displayName ?? person.email}</span>
-                  <span className="ml-2 shrink-0 text-[11px] uppercase text-[#918d87]">
+                  <span className="ml-2 shrink-0 text-[11px] uppercase text-[#6d6a65]">
                     {person.source}
                   </span>
                 </button>
               ))}
               {searchQuery.data?.length === 0 && query.trim().length > 1 && (
-                <p className="px-2 py-1 text-[12px] text-[#918d87]">No matches.</p>
+                <p className="px-2 py-1 text-[12px] text-[#6d6a65]">No matches.</p>
               )}
             </div>
           </div>
