@@ -18,6 +18,8 @@ import {
   GetSkill,
   ListSkills,
   ResolveStepSkills,
+  RestoreSkill,
+  UpdateSkill,
 } from "./skill";
 
 class InMemorySkillRepository implements ISkillRepository {
@@ -139,6 +141,60 @@ describe("GetSkill", () => {
     const repository = new InMemorySkillRepository();
     const result = await new GetSkill(repository).execute("missing");
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+
+  it("propagates a repository error", async () => {
+    const repository = {
+      findById: async () => err(domainError("INFRA_FAILURE", "db down")),
+    } as unknown as ISkillRepository;
+    const result = await new GetSkill(repository).execute("any");
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+  });
+});
+
+describe("UpdateSkill", () => {
+  let repository: InMemorySkillRepository;
+
+  beforeEach(() => {
+    repository = new InMemorySkillRepository();
+  });
+
+  it("re-parses the raw SKILL.md and bumps the version", async () => {
+    const created = await new CreateSkill(repository, fakeParser).execute({ raw: "first" });
+    const result = await new UpdateSkill(repository, fakeParser).execute({
+      id: created.data!.id,
+      raw: "second",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.version).toBe(2);
+    expect(result.data?.body).toBe("second");
+  });
+
+  it("propagates a parser error and does not update", async () => {
+    const created = await new CreateSkill(repository, fakeParser).execute({ raw: "first" });
+    const result = await new UpdateSkill(repository, fakeParser).execute({
+      id: created.data!.id,
+      raw: "INVALID",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    const reread = await repository.findById(created.data!.id);
+    expect(reread.data?.version).toBe(1);
+  });
+});
+
+describe("RestoreSkill", () => {
+  it("returns an archived skill to active", async () => {
+    const repository = new InMemorySkillRepository();
+    const created = await new CreateSkill(repository, fakeParser).execute({ raw: "x" });
+    await new ArchiveSkill(repository).execute(created.data!.id);
+
+    const restored = await new RestoreSkill(repository).execute(created.data!.id);
+    expect(restored.data?.status).toBe("active");
+
+    const active = await new ListSkills(repository).execute();
+    expect(active.data).toHaveLength(1);
   });
 });
 

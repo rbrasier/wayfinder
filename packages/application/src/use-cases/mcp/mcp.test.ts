@@ -143,6 +143,22 @@ describe("UpdateMcpServer", () => {
     });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
+
+  it("updates the label and url when valid", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const created = await new RegisterMcpServer(repository).execute({
+      label: "Old",
+      url: "https://old.example/sse",
+    });
+    const result = await new UpdateMcpServer(repository).execute({
+      id: created.data!.id,
+      label: "New",
+      url: "https://new.example/sse",
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data?.label).toBe("New");
+    expect(result.data?.url).toBe("https://new.example/sse");
+  });
 });
 
 describe("Disable / Enable / List", () => {
@@ -237,5 +253,15 @@ describe("ResolveStepTools", () => {
 
     expect(result.data?.refs).toEqual([]);
     expect(result.data?.servers).toEqual([]);
+  });
+
+  it("propagates a repository error", async () => {
+    const repository = {
+      list: async () => err(domainError("INFRA_FAILURE", "db down")),
+    } as unknown as IMcpServerRepository;
+    const result = await new ResolveStepTools(repository).execute([
+      { serverId: "x", toolName: "search" },
+    ]);
+    expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 });
