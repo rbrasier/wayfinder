@@ -142,13 +142,41 @@ insufficient.
 - Live tool discovery depends on server reachability; the `admin_mcp_tools` cache
   mitigates editor-time flakiness but can drift until refreshed.
 
-## Open questions (resolve during build)
+## Testing strategy
 
-- **Secret store for `credential_ref`** — encrypted column vs. env-referenced
-  secret vs. `system_setting`. Must guarantee no client exposure.
-- **Tool-loop + streaming + structured output** — confirm via a spike that the
-  chosen SDK can stream a tool-using turn and still yield the structured object.
-- **Per-tool timeouts / retry** — defaults and whether they are admin-configurable
-  per server.
-- **`allowed-tools` resolution** — soft warning when a skill names an unregistered
-  tool (ADR-031 leans soft); confirm the editor UX.
+What the build sandbox can and cannot verify, so "needs a live spike" is not
+treated as "untestable":
+
+- **Unit-testable in-sandbox (with fakes), and required:**
+  - The deterministic `mcp` node use-case (`RunMcpNode`) against a fake `IMcpClient`
+    and in-memory repos — field resolution, server lookup, disabled-server refusal,
+    output persistence, and error propagation.
+  - Tool **assembly and enforcement** for the conversational loop: resolving
+    `allowedMcpToolRefs` to a toolset, and the deny-by-default rule (a tool not in
+    the allow-list is never assembled), against a fake client.
+  - The tool-loop **orchestration** with a fake language model that emits scripted
+    tool calls, asserting the structured `{response, confidence, contextGathered}`
+    contract still holds after tools run.
+- **Not verifiable in-sandbox (deferred to a staging check):** a real provider
+  performing live tool-calling over a real remote MCP server end-to-end, including
+  streaming behaviour. This is a deployment smoke test, not a unit gate.
+
+Decision: build behind unit tests with fakes now; gate production enablement of the
+conversational loop on a staging smoke test rather than blocking the whole feature.
+The deterministic node has no such dependency and ships fully tested.
+
+## Decisions on former open questions
+
+- **Secret store for `credential_ref`** — env-referenced bearer token
+  (`credentialRef` names an env var). Resolved only inside the MCP adapter; never
+  returned to a client. A richer store can replace this behind the same field.
+- **Tool-loop + streaming + structured output** — the loop runs as a **non-streaming
+  pre-pass** (`generateText` with tools + `maxSteps`) that gathers tool results,
+  which are then injected as context into the existing structured turn. The
+  structured turn — and its streaming — is left untouched, side-stepping the
+  stream-with-tools concern entirely. Live behaviour is the staging smoke test above.
+- **Per-tool timeouts / retry** — rely on the SDK/transport default and surface a
+  failed tool call as a failed step/turn for now; per-server tuning is deferred
+  until a slow server demands it (YAGNI).
+- **`allowed-tools` resolution** — soft: an unresolved name warns in the editor and
+  is dropped from the assembled toolset at runtime; it never fails a turn.

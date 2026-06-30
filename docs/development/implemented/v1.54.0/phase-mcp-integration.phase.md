@@ -9,14 +9,14 @@
 ## Status
 
 - **Phase 2a — DONE (v1.53.0):** foundation + admin registry. Sub-components 1–4
-  below plus the `/admin/mcp-servers` admin page. MCP servers can be registered,
-  listed, tested, enabled/disabled; the directory lists servers with their tools.
-- **Phase 2b — PENDING:** flow consumption — the deterministic `mcp` node
-  (canvas + `RunMcpNode` dispatch) and the conversational tool-loop. Deferred
-  because both are large runtime/canvas integrations that need the ADR-032
-  tool-calling spike (live LLM + live MCP server), which the build sandbox can't
-  execute. The domain types (`McpNodeConfig`, `allowedMcpToolRefs`, the `"mcp"`
-  node type) are already in place for 2b.
+  plus the `/admin/mcp-servers` admin page.
+- **Phase 2b — DONE (v1.54.0):** flow consumption. The deterministic `mcp` node
+  (canvas node type + editor + `RunMcpNode` dispatch, applied via the shared
+  auto-node-result path) and the conversational tool-loop (a non-streaming
+  `generateText` pre-pass bounded by `allowedMcpToolRefs`, folded into the step
+  context — ADR-032). Per the ADR testing strategy, the deterministic node, the
+  deny-by-default tool selection, and tool resolution are unit-tested with fakes;
+  live LLM-over-MCP end-to-end behaviour is a staging smoke test.
 
 ## Scope
 

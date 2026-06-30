@@ -7,6 +7,7 @@ import type {
   McpServer,
   McpServerWithTools,
   McpTool,
+  McpToolRef,
   Result,
 } from "@rbrasier/domain";
 
@@ -114,6 +115,43 @@ export class ListMcpServersWithTools {
 
   async execute(): Promise<Result<McpServerWithTools[]>> {
     return this.directory.listServersWithTools();
+  }
+}
+
+export interface ResolvedStepTools {
+  // Only tool refs whose server is active are kept (deny-by-default, ADR-032).
+  readonly refs: McpToolRef[];
+  // The active servers referenced, deduplicated — the runner needs these to open
+  // connections.
+  readonly servers: McpServer[];
+}
+
+// Resolves a conversational step's allowedMcpToolRefs into the tools that may
+// actually be offered to the model. A ref naming a missing or disabled server is
+// dropped silently so a stale reference never fails a turn — the node's list, not
+// the skill, is the enforcement boundary.
+export class ResolveStepTools {
+  constructor(private readonly servers: IMcpServerRepository) {}
+
+  async execute(allowedToolRefs: McpToolRef[] | undefined): Promise<Result<ResolvedStepTools>> {
+    const refs = allowedToolRefs ?? [];
+    if (refs.length === 0) return ok({ refs: [], servers: [] });
+
+    const serversResult = await this.servers.list();
+    if (serversResult.error) return err(serversResult.error);
+
+    const activeById = new Map(serversResult.data.map((server) => [server.id, server]));
+    const keptRefs: McpToolRef[] = [];
+    const usedServers = new Map<string, McpServer>();
+
+    for (const ref of refs) {
+      const server = activeById.get(ref.serverId);
+      if (!server) continue;
+      keptRefs.push(ref);
+      usedServers.set(server.id, server);
+    }
+
+    return ok({ refs: keptRefs, servers: [...usedServers.values()] });
   }
 }
 

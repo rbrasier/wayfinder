@@ -1,15 +1,16 @@
-import { MessageSquare, Stamp, Timer, Zap } from "lucide-react";
+import { MessageSquare, Plug, Stamp, Timer, Zap } from "lucide-react";
 
-export type StepType = "conversational" | "auto" | "scheduled" | "approval";
+export type StepType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
 
 // Per-type accent colours, shared between the canvas nodes and the config
 // modal so a step's type reads the same everywhere: conversational = blue,
-// automated (n8n) = purple, scheduled = green, approval = amber.
+// automated (n8n) = purple, scheduled = green, approval = amber, MCP = teal.
 export const STEP_TYPE_ACCENT: Record<StepType, string> = {
   conversational: "#3a5fd9",
   auto: "#7c3aed",
   scheduled: "#1f8a4c",
   approval: "#d97706",
+  mcp: "#0e8a7a",
 };
 
 const ICONS = {
@@ -17,6 +18,7 @@ const ICONS = {
   auto: Zap,
   scheduled: Timer,
   approval: Stamp,
+  mcp: Plug,
 } as const;
 
 // A small type icon pinned to a node's top-right corner.

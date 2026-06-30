@@ -17,6 +17,7 @@ import {
   EnableMcpServer,
   ListMcpServers,
   RegisterMcpServer,
+  ResolveStepTools,
   TestMcpServer,
   UpdateMcpServer,
 } from "./mcp";
@@ -194,5 +195,47 @@ describe("TestMcpServer", () => {
   it("returns NOT_FOUND for an unknown server", async () => {
     const result = await new TestMcpServer(repository, okClient).execute("missing");
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("ResolveStepTools", () => {
+  it("returns empty when the step allows no tools", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const result = await new ResolveStepTools(repository).execute(undefined);
+    expect(result.data).toEqual({ refs: [], servers: [] });
+  });
+
+  it("keeps allowed tools on active servers and dedupes the server list", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const server = await new RegisterMcpServer(repository).execute({
+      label: "S",
+      url: "https://s.example/sse",
+    });
+    const id = server.data!.id;
+
+    const result = await new ResolveStepTools(repository).execute([
+      { serverId: id, toolName: "search" },
+      { serverId: id, toolName: "fetch" },
+    ]);
+
+    expect(result.data?.refs).toHaveLength(2);
+    expect(result.data?.servers).toHaveLength(1);
+  });
+
+  it("drops refs to a disabled server (deny-by-default)", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const server = await new RegisterMcpServer(repository).execute({
+      label: "S",
+      url: "https://s.example/sse",
+    });
+    const id = server.data!.id;
+    await new DisableMcpServer(repository).execute(id);
+
+    const result = await new ResolveStepTools(repository).execute([
+      { serverId: id, toolName: "search" },
+    ]);
+
+    expect(result.data?.refs).toEqual([]);
+    expect(result.data?.servers).toEqual([]);
   });
 });

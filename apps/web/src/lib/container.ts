@@ -46,6 +46,8 @@ import {
   EnableMcpServer,
   TestMcpServer,
   ListMcpServersWithTools,
+  ResolveStepTools,
+  RunMcpNode,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
@@ -142,6 +144,7 @@ import {
   DrizzleMcpServerRepository,
   AiSdkMcpClient,
   McpServerDirectory,
+  McpToolPrepass,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
   DrizzleReindexSourceRepository,
@@ -382,6 +385,7 @@ const build = () => {
   const mcpServers = new DrizzleMcpServerRepository(db);
   const mcpClient = new AiSdkMcpClient();
   const mcpServerDirectory = new McpServerDirectory(mcpServers, mcpClient);
+  const mcpToolPrepass = new McpToolPrepass();
   const spreadsheetParser = new SpreadsheetParser();
   // Reuses the Email-Notifications M365 app registration (ADR-018), degrading to
   // HR/manual resolution when the added Graph scopes are not yet consented.
@@ -505,7 +509,7 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, skillParser },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, skillParser, mcpToolPrepass },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills, mcpServers },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
@@ -658,6 +662,8 @@ const build = () => {
       enableMcpServer: new EnableMcpServer(mcpServers),
       testMcpServer: new TestMcpServer(mcpServers, mcpClient),
       listMcpServersWithTools: new ListMcpServersWithTools(mcpServerDirectory),
+      resolveStepTools: new ResolveStepTools(mcpServers),
+      runMcpNode: new RunMcpNode(sessions, llm, mcpServers, mcpClient, sessionStepOutputs),
     },
   };
 };
