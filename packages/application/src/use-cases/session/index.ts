@@ -8,6 +8,7 @@ export * from "./retrieve-document-chunks";
 export * from "./run-turn";
 export * from "./evaluate-step-readiness";
 export * from "./run-auto-node";
+export * from "./run-mcp-node";
 export * from "./apply-auto-node-result";
 export * from "./override-branch";
 export * from "./confirm-step-advance";

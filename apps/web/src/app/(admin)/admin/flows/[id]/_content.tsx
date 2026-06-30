@@ -30,6 +30,7 @@ import type { ConversationalNodeData } from "@/components/canvas/conversational-
 import { ConversationalNode } from "@/components/canvas/conversational-node";
 import type { AutoNodeData } from "@/components/canvas/auto-node";
 import { AutoNode } from "@/components/canvas/auto-node";
+import { McpNode, type McpNodeData } from "@/components/canvas/mcp-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import type { ApprovalNodeData } from "@/components/canvas/approval-node";
@@ -55,6 +56,7 @@ const NODE_TYPES = {
   autoNode: AutoNode,
   scheduledNode: ScheduledNode,
   approvalNode: ApprovalNode,
+  mcpNode: McpNode,
 };
 
 const DEBOUNCE_MS = 600;
@@ -63,7 +65,7 @@ interface RawNode {
   id: string;
   name: string;
   colour: string | null;
-  type?: "conversational" | "auto" | "scheduled" | "approval";
+  type?: "conversational" | "auto" | "scheduled" | "approval" | "mcp";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;
@@ -108,6 +110,17 @@ const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
       config: node.config,
     };
     return { id: node.id, type: "approvalNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  if (node.type === "mcp") {
+    const data: McpNodeData = {
+      name: node.name,
+      colour: node.colour,
+      toolName: (node.config.toolName as string | null) ?? null,
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "mcpNode", position: { x: node.positionX, y: node.positionY }, data };
   }
 
   const data: ConversationalNodeData = {
@@ -373,6 +386,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
           notifyOnComplete: values.notifyOnComplete,
         };
       }
+      if (values.type === "mcp") {
+        return {
+          instruction: values.instruction,
+          serverId: values.mcpServerId,
+          toolName: values.mcpToolName,
+          requestFields: values.requestFields,
+          requestFieldValues: values.requestFieldValues,
+          responseFields: values.responseFields,
+        };
+      }
       const hasTemplate = values.outputType === "generate_document" && !!values.documentTemplatePath;
       return {
         aiInstruction: values.aiInstruction,
@@ -386,6 +409,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateStructuredContent: hasTemplate ? (existingNodeConfig.documentTemplateStructuredContent ?? null) : null,
         allowManualEdit: values.allowManualEdit,
         requireConfirmation: values.neverDone ? false : values.requireConfirmation,
+        skillRefs: values.skillRefs,
+        allowedMcpToolRefs: values.allowedMcpToolRefs,
         notifyOnComplete: values.notifyOnComplete,
       };
     };
@@ -619,10 +644,16 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
         allowManualEdit: (editingConfig.allowManualEdit as boolean | undefined) ?? true,
         requireConfirmation: Boolean(editingConfig.requireConfirmation),
+        skillRefs: (editingConfig.skillRefs as string[] | undefined) ?? [],
+        allowedMcpToolRefs:
+          (editingConfig.allowedMcpToolRefs as NodeConfigValues["allowedMcpToolRefs"] | undefined) ??
+          [],
         instruction: (editingConfig.instruction as string | null) ?? "",
         executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
         workflowId: (editingConfig.workflowId as string | null) ?? null,
         webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
+        mcpServerId: (editingConfig.serverId as string | null) ?? "",
+        mcpToolName: (editingConfig.toolName as string | null) ?? "",
         requestFields: readFields(editingConfig.requestFields),
         requestFieldValues:
           (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},

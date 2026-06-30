@@ -9,6 +9,7 @@ import { flowVersionRouter } from "./routers/flow-version";
 import { governanceRouter } from "./routers/governance";
 import { hrRouter } from "./routers/hr";
 import { knowledgeRouter } from "./routers/knowledge";
+import { mcpServerRouter } from "./routers/mcp-server";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
 import { peopleRouter } from "./routers/people";
@@ -16,6 +17,7 @@ import { roleRouter } from "./routers/role";
 import { scheduleRouter } from "./routers/schedule";
 import { sessionRouter } from "./routers/session";
 import { settingsRouter } from "./routers/settings";
+import { skillRouter } from "./routers/skill";
 import { usageRouter } from "./routers/usage";
 import { userRouter } from "./routers/user";
 import { router } from "./trpc";
@@ -41,6 +43,8 @@ export const appRouter = router({
   hr: hrRouter,
   knowledge: knowledgeRouter,
   feedback: feedbackRouter,
+  skill: skillRouter,
+  mcpServer: mcpServerRouter,
 });
 
 export type AppRouter = typeof appRouter;

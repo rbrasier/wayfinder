@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { deriveFieldKey } from "@rbrasier/domain";
-import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, McpToolRef, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
@@ -57,7 +57,7 @@ function isAdvancedField(key: string): boolean {
   return [...ADVANCED_REQUEST_FIELD_KEYS].some((prefix) => key.startsWith(`${prefix}.`));
 }
 
-export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval";
+export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
 
 export type ApproverSourceMode =
   | "first_level_supervisor"
@@ -85,10 +85,16 @@ export interface NodeConfigValues {
   documentTemplateContent?: string | null;
   allowManualEdit: boolean;
   requireConfirmation: boolean;
+  // Ids of library skills (app_skills) attached to this conversational step.
+  skillRefs: string[];
+  // MCP tools this conversational step may call mid-conversation (ADR-032).
+  allowedMcpToolRefs: McpToolRef[];
   instruction: string;
   executor: "n8n" | "mock";
   workflowId: string | null;
   webhookUrl: string;
+  mcpServerId: string;
+  mcpToolName: string;
   requestFields: TemplateField[];
   requestFieldValues: Record<string, FieldValueSource>;
   responseFields: TemplateField[];
@@ -132,10 +138,14 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplateContent: null,
   allowManualEdit: true,
   requireConfirmation: false,
+  skillRefs: [],
+  allowedMcpToolRefs: [],
   instruction: "",
   executor: "n8n",
   workflowId: null,
   webhookUrl: "",
+  mcpServerId: "",
+  mcpToolName: "",
   requestFields: [],
   requestFieldValues: {},
   responseFields: [],
@@ -250,10 +260,35 @@ export function NodeConfigModal({
   const isScheduled = values.type === "scheduled";
   const isApproval = values.type === "approval";
   const isConversational = values.type === "conversational";
+  const isMcp = values.type === "mcp";
   const requestParsed = parseFieldLines(requestLines);
   const responseParsed = parseFieldLines(responseLines);
 
   const usesN8n = isAuto && values.executor === "n8n";
+  const mcpServersQuery = trpc.mcpServer.listWithTools.useQuery(undefined, {
+    enabled: open && (isMcp || isConversational),
+  });
+  const mcpServers = mcpServersQuery.data ?? [];
+  const selectedMcpServer = mcpServers.find((entry) => entry.server.id === values.mcpServerId) ?? null;
+  const isToolAllowed = (serverId: string, toolName: string) =>
+    values.allowedMcpToolRefs.some((ref) => ref.serverId === serverId && ref.toolName === toolName);
+  const toggleAllowedTool = (serverId: string, toolName: string) => {
+    const next = isToolAllowed(serverId, toolName)
+      ? values.allowedMcpToolRefs.filter(
+          (ref) => !(ref.serverId === serverId && ref.toolName === toolName),
+        )
+      : [...values.allowedMcpToolRefs, { serverId, toolName }];
+    set("allowedMcpToolRefs", next);
+  };
+  const skillsQuery = trpc.skill.list.useQuery(undefined, { enabled: open && isConversational });
+  const skills = skillsQuery.data ?? [];
+  const toggleSkill = (id: string) => {
+    const next = values.skillRefs.includes(id)
+      ? values.skillRefs.filter((existing) => existing !== id)
+      : [...values.skillRefs, id];
+    set("skillRefs", next);
+  };
+
   const workflowsQuery = trpc.n8n.listWorkflows.useQuery(undefined, { enabled: open && usesN8n });
   const workflows = workflowsQuery.data ?? [];
   const selectedWorkflow = workflows.find((workflow) => workflow.id === values.workflowId) ?? null;
@@ -344,6 +379,8 @@ export function NodeConfigModal({
         (values.scheduleModifier === "on" || Number(values.scheduleNumber) > 0)));
 
   const approvalValid = Boolean(values.name.trim()) && Boolean(values.approverSource);
+  const mcpValid =
+    Boolean(values.name.trim()) && Boolean(values.mcpServerId) && Boolean(values.mcpToolName);
 
   const canSave = isAuto
     ? autoValid
@@ -351,7 +388,9 @@ export function NodeConfigModal({
       ? scheduledValid
       : isApproval
         ? approvalValid
-        : conversationalValid;
+        : isMcp
+          ? mcpValid
+          : conversationalValid;
 
   const saveN8nAuto = (): NodeConfigValues => {
     const customTemplateFields: TemplateField[] = customFields
@@ -396,10 +435,27 @@ export function NodeConfigModal({
     };
   };
 
+  const saveMcp = (): NodeConfigValues => {
+    const keys = new Set(requestParsed.fields.map((field) => field.key));
+    const prunedValues = Object.fromEntries(
+      Object.entries(values.requestFieldValues).filter(([key]) => keys.has(key)),
+    );
+    return {
+      ...values,
+      requestFields: requestParsed.fields,
+      requestFieldValues: prunedValues,
+      responseFields: responseParsed.fields,
+    };
+  };
+
   const handleSave = () => {
     if (!canSave) return;
     if (isAuto) {
       onSave(usesN8n ? saveN8nAuto() : saveMockAuto());
+      return;
+    }
+    if (isMcp) {
+      onSave(saveMcp());
       return;
     }
     onSave(values);
@@ -574,6 +630,88 @@ export function NodeConfigModal({
                   onChange={(e) => set("aiInstruction", e.target.value)}
                   placeholder="Describe what the AI should do in this step…"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <FieldGroupLabel id="ncm-skills">Skills</FieldGroupLabel>
+                <p className="text-[12px] text-[#857f76]">
+                  Attach reusable skills to steer the AI. Upload skills on the Skills page.
+                </p>
+                {skills.length === 0 ? (
+                  <p className="text-[13px] text-[#857f76]">No skills available yet.</p>
+                ) : (
+                  <div
+                    className="space-y-1.5 rounded-[9px] border border-[#dedad2] p-2.5"
+                    role="group"
+                    aria-labelledby="ncm-skills"
+                  >
+                    {skills.map((skill) => (
+                      <label
+                        key={skill.id}
+                        className="flex cursor-pointer items-start gap-2 text-[13px]"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={values.skillRefs.includes(skill.id)}
+                          onChange={() => toggleSkill(skill.id)}
+                        />
+                        <span>
+                          <span className="font-medium">{skill.name}</span>
+                          {skill.description ? (
+                            <span className="text-[#857f76]"> — {skill.description}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <FieldGroupLabel id="ncm-mcp-tools">MCP tools</FieldGroupLabel>
+                <p className="text-[12px] text-[#857f76]">
+                  Let the AI call these tools mid-conversation. Register servers on the MCP
+                  Servers page.
+                </p>
+                {mcpServers.length === 0 ? (
+                  <p className="text-[13px] text-[#857f76]">No MCP servers available.</p>
+                ) : (
+                  <div
+                    className="space-y-2 rounded-[9px] border border-[#dedad2] p-2.5"
+                    role="group"
+                    aria-labelledby="ncm-mcp-tools"
+                  >
+                    {mcpServers.map((entry) => (
+                      <div key={entry.server.id} className="space-y-1">
+                        <p className="text-[12px] font-medium text-[#5a5650]">{entry.server.label}</p>
+                        {entry.tools.length === 0 ? (
+                          <p className="text-[12px] text-[#857f76]">No tools discovered.</p>
+                        ) : (
+                          entry.tools.map((tool) => (
+                            <label
+                              key={tool.name}
+                              className="flex cursor-pointer items-start gap-2 text-[13px]"
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={isToolAllowed(entry.server.id, tool.name)}
+                                onChange={() => toggleAllowedTool(entry.server.id, tool.name)}
+                              />
+                              <span>
+                                <span className="font-medium">{tool.name}</span>
+                                {tool.description ? (
+                                  <span className="text-[#857f76]"> — {tool.description}</span>
+                                ) : null}
+                              </span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">
@@ -1068,6 +1206,97 @@ export function NodeConfigModal({
                   placeholder="Shown to the operator and the approver…"
                 />
               </div>
+              </>
+              )}
+
+              {isMcp && (
+              <>
+              <div className="space-y-1">
+                <Label htmlFor="mcp-server">MCP server</Label>
+                <select
+                  id="mcp-server"
+                  className={SCHEDULE_SELECT_CLASS}
+                  value={values.mcpServerId}
+                  onChange={(e) => {
+                    set("mcpServerId", e.target.value);
+                    set("mcpToolName", "");
+                  }}
+                >
+                  <option value="">Select a server…</option>
+                  {mcpServers.map((entry) => (
+                    <option key={entry.server.id} value={entry.server.id}>
+                      {entry.server.label}
+                    </option>
+                  ))}
+                </select>
+                {!mcpServersQuery.isLoading && mcpServers.length === 0 && (
+                  <p className="text-[12px] text-[#918d87]">
+                    No active MCP servers. Register one on the MCP Servers page.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="mcp-tool">Tool</Label>
+                {selectedMcpServer && selectedMcpServer.tools.length === 0 ? (
+                  <Input
+                    id="mcp-tool"
+                    value={values.mcpToolName}
+                    onChange={(e) => set("mcpToolName", e.target.value)}
+                    placeholder="Type the tool name (server exposed none / unreachable)"
+                  />
+                ) : (
+                  <select
+                    id="mcp-tool"
+                    className={SCHEDULE_SELECT_CLASS}
+                    value={values.mcpToolName}
+                    disabled={!selectedMcpServer}
+                    onChange={(e) => set("mcpToolName", e.target.value)}
+                  >
+                    <option value="">Select a tool…</option>
+                    {selectedMcpServer?.tools.map((tool) => (
+                      <option key={tool.name} value={tool.name}>
+                        {tool.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="mcp-instruction">Instructions for resolving inputs</Label>
+                <Textarea
+                  id="mcp-instruction"
+                  rows={3}
+                  value={values.instruction}
+                  onChange={(e) => set("instruction", e.target.value)}
+                  placeholder="Describe how to fill the tool's request fields from the conversation…"
+                />
+              </div>
+
+              <TemplateFieldEditor
+                label="Request fields (tool arguments)"
+                helpText="Fields sent as the tool's arguments. Use the same Label (type) syntax as document templates."
+                lines={requestLines}
+                onChange={setRequestLines}
+              />
+              {requestParsed.fields.length > 0 && (
+                <div className="space-y-2">
+                  <FieldGroupLabel id="ncm-mcp-field-values">Field values</FieldGroupLabel>
+                  <FieldValueList
+                    fields={requestParsed.fields}
+                    values={values.requestFieldValues}
+                    onChange={setFieldValue}
+                    priorStepFields={priorStepFields}
+                  />
+                </div>
+              )}
+              <TemplateFieldEditor
+                label="Response fields (use a field with key “output” to capture the result)"
+                helpText="The tool result is provided under the key output. Add a response field named Output to store it."
+                lines={responseLines}
+                onChange={setResponseLines}
+              />
               </>
               )}
 

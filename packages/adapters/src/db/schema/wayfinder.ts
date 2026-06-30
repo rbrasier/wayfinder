@@ -68,7 +68,7 @@ export const app_flow_nodes = pgTable(
     flow_id: uuid("flow_id")
       .notNull()
       .references(() => app_flows.id, { onDelete: "cascade" }),
-    type: text("type", { enum: ["conversational", "auto", "scheduled", "approval"] })
+    type: text("type", { enum: ["conversational", "auto", "scheduled", "approval", "mcp"] })
       .notNull()
       .default("conversational"),
     name: text("name").notNull(),

@@ -134,6 +134,7 @@ describe("generateInitialMessage", () => {
       },
       useCases: {
         retrieveDocumentChunks,
+        resolveStepSkills: { execute: vi.fn().mockResolvedValue({ data: [], error: null }) },
       },
     } as unknown as Parameters<typeof generateInitialMessage>[0]["container"];
 
@@ -589,6 +590,7 @@ describe("applyAdvanceSideEffects", () => {
         generateDocument: { execute: vi.fn() },
         retrieveDocumentChunks: { execute: retrieveExecute },
         isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: false, error: null }) },
+        resolveStepSkills: { execute: vi.fn().mockResolvedValue({ data: [], error: null }) },
       },
       services: {
         errorLogger: { log: vi.fn() },

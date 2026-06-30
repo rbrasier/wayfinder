@@ -17,6 +17,7 @@ import {
   buildGatheredContext,
   buildPromptSessionUploads,
   generateTitle,
+  runMcpToolPrepass,
   streamGapFollowup,
 } from "./turn-helpers";
 
@@ -108,16 +109,34 @@ export async function POST(
   });
   const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
+  const skillsResult = await container.useCases.resolveStepSkills.execute(nodeConfig);
+  const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
+
+  // Conversational tool-loop (ADR-032): when a step allows MCP tools, let the model
+  // call them in a non-streaming pre-pass and fold the gathered results into the
+  // step context, leaving the structured streaming turn below untouched.
+  const gatheredContextWithTools = await runMcpToolPrepass({
+    container,
+    nodeConfig,
+    dbMessages,
+    lastUserMessage,
+    gatheredContext,
+    userId: authSession.userId,
+    flowId: flow.id,
+    sessionId,
+  });
+
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
     retrievedChunks,
     sessionUploads,
-    gatheredContext,
+    gatheredContext: gatheredContextWithTools,
     workflowName: flow.name,
     organisationName,
     globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
+    resolvedSkills,
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 

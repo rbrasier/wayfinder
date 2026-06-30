@@ -6,6 +6,7 @@ import {
   type ISessionAgent,
   type PromptSessionUpload,
   type PromptUserProfile,
+  type ResolvedSkill,
   type Result,
   type RetrievedChunk,
   type TemplateField,
@@ -22,6 +23,11 @@ export class FlowSessionGraph implements ISessionAgent {
     const globalInstructionsBlock = input.globalInstructions?.trim()
       ? `\n\n<global_instructions>\n  ${input.globalInstructions.trim()}\n</global_instructions>`
       : "";
+
+    // Skills are author-attached reusable instructions (ADR-031), rendered in the
+    // stable region of the prompt — above per-turn retrieved chunks — to preserve
+    // prompt-cache hits. They steer behaviour; they do not replace <instructions>.
+    const skillsBlock = buildSkillsBlock(input.resolvedSkills ?? []);
 
     // Attached documents are the user's own files for this request, injected in
     // full and independent of RAG, so a thin message ("here is the solution")
@@ -63,7 +69,7 @@ export class FlowSessionGraph implements ISessionAgent {
         ? buildFieldFormatsBlock(templateFields)
         : "";
 
-    const prompt = `${roleBlock}${globalInstructionsBlock}
+    const prompt = `${roleBlock}${globalInstructionsBlock}${skillsBlock}
 
 <instructions>
   ${nodeConfig.aiInstruction}
@@ -159,6 +165,14 @@ const buildColleagueDescription = (userProfile: PromptUserProfile | null): strin
   const subject = name ? name : "a colleague";
   const roleClause = role && team ? `, ${role} on the ${team} team` : role ? `, ${role}` : team ? ` on the ${team} team` : "";
   return `${subject}${roleClause}`;
+};
+
+const buildSkillsBlock = (skills: ResolvedSkill[]): string => {
+  if (skills.length === 0) return "";
+  const rendered = skills
+    .map((skill) => `  <skill name="${skill.name}">\n    ${skill.body.trim()}\n  </skill>`)
+    .join("\n");
+  return `\n\n<skills>\n${rendered}\n</skills>`;
 };
 
 const buildRoleBlock = (
