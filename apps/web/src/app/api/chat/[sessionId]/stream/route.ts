@@ -17,11 +17,8 @@ import {
   buildGatheredContext,
   buildPromptSessionUploads,
   generateTitle,
-<<<<<<< claude/skill-upload-mcp-servers-5vvoxr
   runMcpToolPrepass,
-=======
   streamGapFollowup,
->>>>>>> main
 } from "./turn-helpers";
 
 const getSessionToken = (req: Request): string | null => {

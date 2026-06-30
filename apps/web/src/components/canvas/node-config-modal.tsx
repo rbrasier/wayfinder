@@ -633,6 +633,88 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
+                <FieldGroupLabel id="ncm-skills">Skills</FieldGroupLabel>
+                <p className="text-[12px] text-[#857f76]">
+                  Attach reusable skills to steer the AI. Upload skills on the Skills page.
+                </p>
+                {skills.length === 0 ? (
+                  <p className="text-[13px] text-[#857f76]">No skills available yet.</p>
+                ) : (
+                  <div
+                    className="space-y-1.5 rounded-[9px] border border-[#dedad2] p-2.5"
+                    role="group"
+                    aria-labelledby="ncm-skills"
+                  >
+                    {skills.map((skill) => (
+                      <label
+                        key={skill.id}
+                        className="flex cursor-pointer items-start gap-2 text-[13px]"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={values.skillRefs.includes(skill.id)}
+                          onChange={() => toggleSkill(skill.id)}
+                        />
+                        <span>
+                          <span className="font-medium">{skill.name}</span>
+                          {skill.description ? (
+                            <span className="text-[#857f76]"> — {skill.description}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <FieldGroupLabel id="ncm-mcp-tools">MCP tools</FieldGroupLabel>
+                <p className="text-[12px] text-[#857f76]">
+                  Let the AI call these tools mid-conversation. Register servers on the MCP
+                  Servers page.
+                </p>
+                {mcpServers.length === 0 ? (
+                  <p className="text-[13px] text-[#857f76]">No MCP servers available.</p>
+                ) : (
+                  <div
+                    className="space-y-2 rounded-[9px] border border-[#dedad2] p-2.5"
+                    role="group"
+                    aria-labelledby="ncm-mcp-tools"
+                  >
+                    {mcpServers.map((entry) => (
+                      <div key={entry.server.id} className="space-y-1">
+                        <p className="text-[12px] font-medium text-[#5a5650]">{entry.server.label}</p>
+                        {entry.tools.length === 0 ? (
+                          <p className="text-[12px] text-[#857f76]">No tools discovered.</p>
+                        ) : (
+                          entry.tools.map((tool) => (
+                            <label
+                              key={tool.name}
+                              className="flex cursor-pointer items-start gap-2 text-[13px]"
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-0.5"
+                                checked={isToolAllowed(entry.server.id, tool.name)}
+                                onChange={() => toggleAllowedTool(entry.server.id, tool.name)}
+                              />
+                              <span>
+                                <span className="font-medium">{tool.name}</span>
+                                {tool.description ? (
+                                  <span className="text-[#857f76]"> — {tool.description}</span>
+                                ) : null}
+                              </span>
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1">
                 <FieldGroupLabel id="ncm-output-type">Output type</FieldGroupLabel>
                 <div className="flex gap-3" role="radiogroup" aria-labelledby="ncm-output-type">
                   {(["conversation_only", "generate_document"] as const).map((type) => (
@@ -1200,7 +1282,7 @@ export function NodeConfigModal({
               />
               {requestParsed.fields.length > 0 && (
                 <div className="space-y-2">
-                  <Label>Field values</Label>
+                  <FieldGroupLabel id="ncm-mcp-field-values">Field values</FieldGroupLabel>
                   <FieldValueList
                     fields={requestParsed.fields}
                     values={values.requestFieldValues}

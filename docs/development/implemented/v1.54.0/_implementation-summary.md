@@ -1,10 +1,20 @@
-# Implementation Summary — MCP Flow Consumption, Phase 2b (v1.54.0)
+# Implementation Summary — MCP Integration (v1.54.0)
 
-Completes Phase 2 of the Flow Skills & MCP PRD: MCP servers registered in Phase 2a
-can now be *used inside flows*, two ways (ADR-032).
+Delivers Phase 2 of the Flow Skills & MCP PRD as a single version: the admin MCP
+server registry (foundation, "Phase 2a") **and** flow consumption ("Phase 2b").
 
-- **Version bump**: MINOR — `1.53.0` → `1.54.0` (new feature; no new tables —
-  reuses `flow_nodes.config` and the existing step-output path).
+> Versioning note: this work was originally drafted across v1.53.0 (foundation)
+> and v1.54.0 (consumption). When this branch merged the latest `main`, that line
+> had independently shipped its own **v1.53.0** (pre-generation evaluation gate),
+> so the MCP work is consolidated here under **v1.54.0**. The foundation details
+> (entities, ports, `admin_mcp_servers`/`admin_mcp_tools` tables,
+> `DrizzleMcpServerRepository`, `AiSdkMcpClient`, `McpServerDirectory`, the
+> management use-cases, the `mcpServer` router, and `/admin/mcp-servers`) ship in
+> this same version alongside the flow-consumption changes below.
+
+- **Version bump**: MINOR — `1.53.0` → `1.54.0` (new feature; new
+  `admin_mcp_servers` / `admin_mcp_tools` tables from the foundation, plus the
+  `mcp` node which reuses `flow_nodes.config` and the existing step-output path).
 - **PRD**: `docs/development/prd/flow-skills-and-mcp.prd.md`
 - **ADR**: `docs/development/adr/032-mcp-integration-and-tool-calling.adr.md`
   (testing strategy + decisions sections updated this phase).

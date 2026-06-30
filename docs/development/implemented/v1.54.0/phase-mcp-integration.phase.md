@@ -4,11 +4,13 @@
 
 - **PRD**: `docs/development/prd/flow-skills-and-mcp.prd.md`
 - **ADR**: `docs/development/adr/032-mcp-integration-and-tool-calling.adr.md`
-- **Target version**: 1.53.0 (MINOR — new feature + new tables)
+- **Target version**: 1.54.0 (MINOR — new feature + new tables). Both sub-phases
+  ship in v1.54.0: the line's own v1.53.0 was taken by the pre-generation
+  evaluation gate when this branch merged `main`, so the MCP work consolidated up.
 
 ## Status
 
-- **Phase 2a — DONE (v1.53.0):** foundation + admin registry. Sub-components 1–4
+- **Phase 2a — DONE (v1.54.0):** foundation + admin registry. Sub-components 1–4
   plus the `/admin/mcp-servers` admin page.
 - **Phase 2b — DONE (v1.54.0):** flow consumption. The deterministic `mcp` node
   (canvas node type + editor + `RunMcpNode` dispatch, applied via the shared
