@@ -107,10 +107,3 @@ feat: add MinIO storage adapter
 fix: handle null branchChoice after three retries
 chore: bump version to 1.5.0
 ```
-
-## Code style
-
-- Return early; no nesting beyond 2 levels
-- No comments explaining what — only why
-- Result pattern at all package boundaries
-- Tests before implementation
