@@ -25,7 +25,9 @@
     --muted-foreground: 35 8% 42%;
     --accent: 40 15% 88%;
     --accent-foreground: 35 12% 10%;
-    --destructive: 0 84% 60%;
+    /* Darkened from 0 84% 60% (#ef4343, 3.78:1 with white text) to meet
+       WCAG 1.4.3 AA (≥4.5:1) — matches Tailwind red-600 (#dc2626, 4.83:1). */
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
     --border: 38 16% 83%;
     --input: 38 16% 83%;

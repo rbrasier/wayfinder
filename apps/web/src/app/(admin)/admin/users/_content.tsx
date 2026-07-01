@@ -121,6 +121,7 @@ export function AdminUsersContent() {
                   <TableCell>
                     <input
                       type="checkbox"
+                      aria-label={`Power user: ${u.name ?? u.email}`}
                       checked={u.isAdmin || powerUserIds.has(u.id)}
                       disabled={
                         u.isAdmin ||
