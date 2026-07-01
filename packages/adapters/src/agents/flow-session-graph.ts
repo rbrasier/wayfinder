@@ -76,7 +76,7 @@ export class FlowSessionGraph implements ISessionAgent {
 </goal>
 
 <constraints>
-  - Ask one question at a time — wait for the answer before continuing
+  - Ask one question at a time, but group closely related questions into a single message when doing so would let the user answer them together naturally — wait for the answer before continuing
   - Be plain-spoken — no jargon or technical terms
   - Do not discuss future steps
   - Do not re-ask for information already in gathered_context unless clarification would meaningfully improve the output

@@ -716,6 +716,59 @@ describe("streamGapFollowup", () => {
     expect(createArg.stepNodeId).toBe("node-1");
     expect(createArg.content).toContain("end date");
   });
+
+  it("falls back to a generic gap description when the grading model reported no specific items", async () => {
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    let capturedPrompt: { role: string; content: unknown }[] = [];
+
+    const model = new MockLanguageModelV1({
+      defaultObjectGenerationMode: "tool",
+      doStream: async (options) => {
+        capturedPrompt = options.prompt as { role: string; content: unknown }[];
+        return {
+          stream: simulateReadableStream({
+            chunks: [
+              {
+                type: "tool-call-delta",
+                toolCallType: "function",
+                toolCallId: "c1",
+                toolName: "json",
+                argsTextDelta:
+                  '{"response":"Could you confirm a few more details?","rationale":"gap","stepCompleteConfidence":20,"contextGathered":[]}',
+              },
+              { type: "finish", finishReason: "stop", usage: { promptTokens: 2, completionTokens: 4 } },
+            ],
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+
+    const container = {
+      repos: {
+        sessionMessages: { create },
+        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+      },
+    } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
+
+    await streamGapFollowup({
+      container,
+      writer: { write: () => undefined },
+      session: session(),
+      flowId: "flow-1",
+      system: "base system prompt",
+      messages: [{ role: "user", content: "All done" }],
+      missingInformation: [],
+      model,
+      modelName: "claude-haiku-4-5-20251001",
+      provider: "anthropic",
+      userId: "user-1",
+    });
+
+    const systemMessage = capturedPrompt.find((message) => message.role === "system");
+    expect(systemMessage?.content).toContain("still need to be confirmed");
+    expect(create).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("AiTurnPayload typing guard", () => {

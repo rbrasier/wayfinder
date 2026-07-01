@@ -116,11 +116,17 @@ export interface StreamGapFollowupInput {
 // The step does not advance, so the follow-up keeps the conversation on the same
 // node until the gaps are filled.
 export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<void> {
-  const gaps = input.missingInformation.map((item) => `- ${item}`).join("\n");
+  // The grading model can fail the gate on confidence alone without listing an
+  // item, so fall back to a generic line rather than handing the chat model an
+  // empty bullet list.
+  const gaps =
+    input.missingInformation.length > 0
+      ? input.missingInformation.map((item) => `- ${item}`).join("\n")
+      : "- Some details in your answers still need to be confirmed before this step can be marked complete.";
   const followupSystem = [
     input.system,
     "",
-    "[Cross-check correction] Your previous reply implied this step was complete, but a higher-quality review found outstanding information. Do not claim the step is complete or advance it. In your next reply, ask the user — in a single, friendly message — to provide the following still-required items:",
+    "[Cross-check correction] Your previous reply implied this step was complete, but a higher-quality review found outstanding information. Do not claim the step is complete or advance it. In your next reply, briefly tell the user what the review found is still missing or unclear, then ask them for it — in a single, friendly message. The still-required items are:",
     gaps,
   ].join("\n");
 
