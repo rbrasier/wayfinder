@@ -1,7 +1,5 @@
 # Wayfinder
 
-_Last updated: 5 June 2026_
-
 **AI-guided workflow agent for document-heavy processes.**
 
 Wayfinder helps organisations run structured, multi-step workflows where each step involves a
@@ -13,43 +11,19 @@ follow it via a chat interface; the AI handles all prompting, branching, and doc
 
 ## Features
 
-See [`docs/features.md`](docs/features.md) for full detail on every feature.
+Full detail on every feature — including approvals, knowledge base curation, cost
+governance, and accessibility — lives in [`docs/features.md`](docs/features.md).
+Highlights:
 
-### Workflow Design
-- **Visual Canvas Builder** — drag-and-drop node editor for designing multi-step workflows; admins configure each step's AI instructions, completion criteria, and output type without writing code.
-- **Flow Visibility Control** — flows can be set to private or global, giving admins control over which workflows users can access before they are ready.
-
-### Conversational AI Sessions
-- **Chat Interface** — users follow published flows via a streaming multi-turn chat powered by LangGraph; the AI gathers information per step and advances automatically when confidence is high enough.
-- **Structured AI Turns** — each AI reply includes a scored confidence assessment generated in parallel with the text stream, making step advancement deterministic and auditable.
-- **Real-time Collaborative Sessions** — multiple authenticated users can participate in the same session simultaneously via a share link, with typing indicators and near-real-time message propagation.
-- **AI Transparency Modals** — users can inspect the AI's reasoning, information sources, and confidence score for any message, presented in plain language.
-
-### Document Generation
-- **DOCX Document Generation** — flow steps automatically fill Word document templates with information gathered during chat, producing finished reports, contracts, and assessments.
-- **Template Field Annotations** — `{{ tags }}` support type annotations (`date`, `currency`, `email`, etc.) so the AI formats values correctly before inserting them.
-- **Narrative & Optional Sections** — steps can produce free-form narrative text and conditionally include document sections based on conversation outcomes.
-- **Context Document Extraction** — PDFs, DOCX, and XLSX files uploaded to a flow are parsed and injected as AI background knowledge for every session on that flow.
-- **Template Validation** — templates are validated at upload time; files with invalid tags or annotation syntax are rejected with a clear error message.
-
-### Knowledge Base & RAG
-- **RAG with pgvector** — documents are chunked, embedded, and stored in PostgreSQL with pgvector for semantic retrieval during sessions, keeping prompts focused for large corpora.
-- **Configurable Embeddings** — embedding model and vector dimensions are environment-variable configurable; a reindex-all command handles model migrations.
-- **Session File Upload** — users can upload files mid-session; uploaded files are processed and added to the AI's context immediately.
-
-### Automation & External Integrations
-- **n8n Automation Integration** — flow steps can trigger n8n workflows as auto-nodes, posting session context as structured JSON and resuming automatically when n8n responds.
-- **n8n Workflow Context Mapping** — outputs returned by n8n are mapped back into the session context so downstream AI steps can reference and build on them.
-- **Scheduled Sessions** — flows can start sessions automatically on a cron schedule or interval, running unattended through all auto-nodes.
-- **Plain-Language Schedule UX** — schedules are configured with plain-language recurrence patterns rather than raw cron syntax.
-
-### Analytics & Observability
-- **Overview Dashboard** — org-wide metrics including active sessions, completion rates, daily activity trends, and AI confidence over session lifetime.
-- **Flow Insights Dashboard** — per-flow step-level drop-off rates, average confidence, node breakdown, and template field value reporting.
-- **Langfuse Integration** — optional AI observability tracing for LLM call latency, token counts, and prompt/response inspection.
-
-### AI Providers
-- **Multi-Provider AI** — Anthropic, OpenAI, Mistral, and AWS Bedrock supported; provider and model are configurable per deployment via environment variables.
+- **Visual Canvas Builder** — drag-and-drop node editor; admins configure each step's AI instructions, completion criteria, and output type without writing code.
+- **Streaming Chat Sessions** — users follow published flows via a multi-turn chat that advances automatically as AI confidence crosses threshold, with full reasoning transparency and real-time collaboration.
+- **DOCX Document Generation** — flow steps fill Word templates from the conversation, with typed field annotations, optional sections, and a pre-generation evaluation gate that catches incomplete documents before they're created.
+- **Step Approvals** — flows can include a human sign-off gate with federated approver resolution (Entra, HR data, or RAG) and full decision context.
+- **Knowledge Base & RAG** — pgvector-backed retrieval over uploaded documents, with an SME curation workflow for correcting and improving what the AI knows.
+- **n8n Automation & Scheduling** — flow steps can trigger external workflows or run unattended on a cron schedule.
+- **Analytics & Cost Governance** — usage dashboards, per-flow insights, and per-user spend caps with warn-then-block enforcement.
+- **Multi-Provider AI** — Anthropic, OpenAI, Mistral, and AWS Bedrock, configurable per deployment.
+- **Enterprise Access Control** — Microsoft Entra ID login, custom roles, and WCAG 2.2 AA accessibility.
 
 ---
 
@@ -147,3 +121,7 @@ node configuration modal on the canvas (**Admin → Flows → [flow] → edit a 
 
 [GNU General Public License v3.0](LICENSE) — free to use, study, modify, and distribute;
 any modifications must be released under the same licence.
+
+---
+
+_Last updated: 1 July 2026_
