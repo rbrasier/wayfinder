@@ -1,6 +1,6 @@
 # Wayfinder
 
-**AI-guided workflow agent for document-heavy processes.**
+**AI-guided workflow agent.**
 
 Wayfinder helps organisations run structured, multi-step workflows where each step involves a
 conversational AI gathering information, and one or more steps produce filled-in DOCX documents
@@ -24,6 +24,14 @@ Highlights:
 - **Analytics & Cost Governance** — usage dashboards, per-flow insights, and per-user spend caps with warn-then-block enforcement.
 - **Multi-Provider AI** — Anthropic, OpenAI, Mistral, and AWS Bedrock, configurable per deployment.
 - **Enterprise Access Control** — Microsoft Entra ID login, custom roles, and WCAG 2.2 AA accessibility.
+
+---
+
+## Why Wayfinder
+
+Wayfinder is a tool designed to created an end-user focused, but strucutred approach to using AI. This is make it simpler to achieve AI powered efficiencies without end users needing to understand prompt engineering
+
+<img width="556" height="532" alt="image" src="https://github.com/user-attachments/assets/481ccfe5-7a61-4995-8e89-65ec4fa08806" />
 
 ---
 
