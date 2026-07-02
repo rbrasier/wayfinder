@@ -605,6 +605,7 @@ const build = () => {
         auditLogger,
         notifyOnApprovalDecided,
         sessionMessages,
+        users,
       ),
       listPendingApprovals: new ListPendingApprovals(approvals),
       listPendingApprovalsWithContext: new ListPendingApprovalsWithContext(

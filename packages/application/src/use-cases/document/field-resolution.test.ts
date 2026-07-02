@@ -127,4 +127,34 @@ describe("buildDocumentTranscript", () => {
 
     expect(transcript.length).toBeLessThanOrEqual(8000);
   });
+
+  it("keeps the most recent turns when the transcript exceeds the cap", () => {
+    // An early message alone overflows the cap; the distinctive value the user
+    // supplied in the final turn must still survive.
+    const transcript = buildDocumentTranscript([
+      message("user", "OLD ".repeat(3000)),
+      message("assistant", "Understood."),
+      message("user", "The budget is MARKER-BUDGET-42."),
+    ]);
+
+    expect(transcript).toContain("MARKER-BUDGET-42");
+    expect(transcript).not.toContain("OLD OLD");
+    expect(transcript.length).toBeLessThanOrEqual(8000);
+  });
+
+  it("tail-truncates a single message longer than the cap rather than dropping it", () => {
+    const transcript = buildDocumentTranscript([message("user", "y".repeat(20000))]);
+
+    expect(transcript.length).toBe(8000);
+    expect(transcript.length).toBeGreaterThan(0);
+  });
+
+  it("leaves a short transcript joined chronologically and unchanged", () => {
+    const transcript = buildDocumentTranscript([
+      message("user", "First"),
+      message("assistant", "Second"),
+    ]);
+
+    expect(transcript).toBe("User: First\n\nAssistant: Second");
+  });
 });

@@ -162,7 +162,9 @@ const makeApprovals = (hasSnapshot = false): IApprovalRepository => ({
   findById: vi.fn(),
   findPendingByNode: vi.fn(),
   listPendingForApprover: vi.fn(),
+  listBySession: vi.fn(),
   update: vi.fn(),
+  updateIfPending: vi.fn(),
   hasRecordedSnapshot: vi.fn().mockResolvedValue(ok(hasSnapshot)),
 });
 

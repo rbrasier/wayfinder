@@ -9,6 +9,7 @@ import {
 } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
+import { shouldComputeBranchChoice } from "./branch-gate";
 import { streamTurn } from "./stream-turn";
 import {
   appendShortcomingsToContext,
@@ -230,12 +231,17 @@ export async function POST(
       // the step requires confirmation it does not advance now, so the branch is
       // recomputed at Proceed time (ADR-026) — skip the call here.
       const computeBranchChoice = async (): Promise<string | null> => {
-        if (
-          isNeverDone ||
-          requireConfirmation ||
-          aiPayload.stepCompleteConfidence < 90 ||
-          branchNodes.length <= 1
-        ) {
+        // Gate on the node's configured threshold, not a hardcoded 90: a fork
+        // node with a lower threshold would otherwise report "complete" yet never
+        // resolve a branch, stalling the session on every turn.
+        const gate = shouldComputeBranchChoice({
+          isNeverDone,
+          requireConfirmation,
+          stepCompleteConfidence: aiPayload.stepCompleteConfidence,
+          advanceThreshold: realThreshold,
+          branchCount: branchNodes.length,
+        });
+        if (!gate) {
           return null;
         }
         const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });

@@ -46,11 +46,33 @@ export const batchTemplateFields = (
 // relevant to filling a template's fields.
 const TRANSCRIPT_CHAR_CAP = 8000;
 
+// Keeps the most recent turns within the cap: a document is filled from the
+// latest information the user gave, so truncating from the front (dropping older
+// turns) is correct — the previous head-slice discarded everything the user said
+// after the first ~8k characters. Whole messages are dropped oldest-first; a
+// single most-recent message that alone exceeds the cap is tail-sliced so it is
+// never dropped to empty.
 export const buildDocumentTranscript = (
   messages: readonly Pick<SessionMessage, "role" | "content">[],
-): string =>
-  messages
+): string => {
+  const lines = messages
     .filter((message) => message.role === "user" || message.role === "assistant")
-    .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
-    .join("\n\n")
-    .slice(0, TRANSCRIPT_CHAR_CAP);
+    .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`);
+
+  const SEPARATOR = "\n\n";
+  const kept: string[] = [];
+  let total = 0;
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index]!;
+    const addition = kept.length === 0 ? line.length : line.length + SEPARATOR.length;
+    if (total + addition > TRANSCRIPT_CHAR_CAP) {
+      if (kept.length === 0) {
+        kept.unshift(line.slice(line.length - TRANSCRIPT_CHAR_CAP));
+      }
+      break;
+    }
+    kept.unshift(line);
+    total += addition;
+  }
+  return kept.join(SEPARATOR);
+};
