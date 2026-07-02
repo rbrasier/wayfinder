@@ -40,9 +40,7 @@ export const defaultConfigForType = (type: NodeConfigType): Record<string, unkno
     return {
       instruction: "",
       serverId: "",
-      toolName: "",
-      requestFields: [],
-      requestFieldValues: {},
+      allowedToolNames: [],
       responseFields: [],
       // Write actions require operator confirmation by default (ADR-032).
       requireConfirmation: true,

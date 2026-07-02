@@ -3,15 +3,18 @@
 export type SessionStatus = "active" | "complete" | "abandoned" | "cancelled";
 
 // In-flight node execution keyed by correlationId on Session.pendingExecutions.
-// `pending` is an auto-node call awaiting an n8n callback. `awaiting_confirmation`
-// is an MCP action node whose arguments have been resolved and are parked for the
-// operator to confirm before the tool is actually called (ADR-032); `args` holds
-// the resolved tool arguments so what the operator previews is exactly what runs.
-// sentAt makes a stuck execution observable.
+// `pending` is an auto-node call awaiting an n8n callback, or an MCP action that has
+// been claimed and is running (its confirmation consumed). `awaiting_confirmation` is
+// an MCP action node whose tool call has been planned and is parked for the operator
+// to confirm before it actually runs (ADR-032); `toolName` is the AI-selected tool and
+// `args` the planned arguments, so what the operator previews (and edits) is exactly
+// what runs. Flipping `awaiting_confirmation → pending` claims the action, which makes
+// a second Proceed a no-op (idempotency). sentAt makes a stuck execution observable.
 export interface PendingExecution {
   nodeId: string;
   status: "pending" | "awaiting_confirmation";
   sentAt: string;
+  toolName?: string;
   args?: Record<string, unknown>;
 }
 

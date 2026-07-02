@@ -69,23 +69,33 @@ export interface AutoNodeConfig {
   customRequestFieldKeys?: string[];
 }
 
-// A deterministic single-tool MCP call (ADR-032), mirroring AutoNodeConfig. The
-// request fields are mapped to tool arguments via `requestFieldValues`; the
-// response fields are persisted to session_step_outputs (the ADR-020 path).
+// A governed write-action MCP node (ADR-032, Phase B). The author curates a set
+// of allowed write tools on one server plus instructions; at runtime the AI picks
+// one tool from the allow-list and generates its arguments from the tool's live
+// input schema. The operator can edit those arguments before the call runs. The
+// tool result is persisted to session_step_outputs under `output` (the ADR-020 path).
 export interface McpNodeConfig {
+  // Guides the AI on when to act and which tool to choose, and how to fill its
+  // arguments from the conversation.
   instruction: string;
   serverId: string;
-  toolName: string;
-  requestFields?: TemplateField[];
-  // Value source per request field, keyed by TemplateField.key. A missing entry
-  // means `ai` (matching AutoNodeConfig's default).
-  requestFieldValues?: Record<string, FieldValueSource>;
+  // The curated allow-list the AI may choose from. The AI selects exactly one per
+  // node run and generates its arguments from that tool's input schema.
+  allowedToolNames?: string[];
   responseFields?: TemplateField[];
   // Human-in-the-loop gate for write actions (ADR-032). When true (the default —
-  // absent is treated as true), reaching the node resolves the tool arguments and
-  // parks the session on the operator-confirmation gate; the tool only runs once
-  // the operator clicks Proceed. When false, the call fires automatically.
+  // absent is treated as true), reaching the node plans the tool call and parks the
+  // session on the operator-confirmation gate (arguments are editable); the tool only
+  // runs once the operator clicks Proceed. When false, the call fires automatically.
   requireConfirmation?: boolean;
+  // Deprecated (Phase A, read-only for back-compat). A node authored before the
+  // allow-list existed carries a single `toolName`; the runtime treats the allow-list
+  // as `[toolName]`. `requestFields`/`requestFieldValues` are no longer used — the AI
+  // now generates arguments from the tool schema — but are retained so old configs
+  // deserialize without loss.
+  toolName?: string;
+  requestFields?: TemplateField[];
+  requestFieldValues?: Record<string, FieldValueSource>;
 }
 
 export interface ScheduledNodeConfig {

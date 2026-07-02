@@ -390,24 +390,101 @@ const formatToolArgs = (args: Record<string, unknown>): string => {
     .join("\n");
 };
 
-// Runs a deterministic MCP action node. When the node requires confirmation (the
-// default), resolves the tool arguments and parks the session on the operator
-// confirmation gate instead of calling the tool — ConfirmMcpNode fires the call
-// on Proceed. When confirmation is off, calls the tool synchronously and applies
-// the result through the shared auto-node-result path (persist + advance).
+// The write tools the AI may choose from for this node: the curated allow-list, or
+// (back-compat) the single tool a Phase-A node was authored with.
+const allowedToolNamesFor = (config: McpNodeConfig): string[] => {
+  if (config.allowedToolNames && config.allowedToolNames.length > 0) return config.allowedToolNames;
+  return config.toolName ? [config.toolName] : [];
+};
+
+interface PlannedMcpCall {
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+// Asks the AI to choose one write tool from the node's allow-list and generate its
+// arguments from the tool's live schema (ADR-032, Phase B). Returns null when the
+// server is unavailable or the model declines to call a tool.
+async function planMcpCall(
+  input: DispatchMcpNodeInput,
+): Promise<Result<PlannedMcpCall | null>> {
+  const { container, node, messages } = input;
+  const config = node.config as unknown as McpNodeConfig;
+
+  const allowedToolNames = allowedToolNamesFor(config);
+  if (!config.serverId || allowedToolNames.length === 0) {
+    return { data: null };
+  }
+
+  const serverResult = await container.repos.mcpServers.findById(config.serverId);
+  if (serverResult.error) return { error: serverResult.error };
+  if (!serverResult.data || serverResult.data.status !== "active") {
+    return { data: null };
+  }
+
+  const aiConfig = await container.runtimeConfig.getAiConfig();
+  const model = resolveModel(aiConfig.provider, aiConfig.models.chat, aiConfig.apiKeys[aiConfig.provider]);
+
+  const priorTurns = messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => ({ role: message.role as "user" | "assistant", content: message.content }));
+
+  const planned = await container.services.mcpToolPlanner.plan({
+    model,
+    system: [
+      "You are performing an action step in a workflow. Choose exactly one of the available tools",
+      "and fill its arguments from the conversation. Only call a tool — do not reply with text.",
+      config.instruction ? `\nInstructions:\n${config.instruction}` : "",
+    ].join(" "),
+    messages: priorTurns,
+    server: serverResult.data,
+    allowedToolNames,
+    userId: input.userId,
+  });
+  if (planned.error) return { error: planned.error };
+  return { data: planned.data };
+}
+
+// Runs a governed write MCP action node (ADR-032, Phase B). Plans the tool call
+// (AI picks one tool from the allow-list + arguments), then: when the node requires
+// confirmation (the default) parks it on the operator confirmation gate — the args
+// are editable and ConfirmMcpNode fires the call on Proceed; otherwise calls the
+// tool synchronously and applies the result through the shared auto-node-result path.
 export async function dispatchMcpNode(input: DispatchMcpNodeInput): Promise<void> {
-  const { container, session, flow, node, messages, userId } = input;
+  const { container, session, node } = input;
   const config = node.config as unknown as McpNodeConfig;
   const requireConfirmation = config.requireConfirmation !== false;
 
-  if (requireConfirmation) {
-    try {
+  try {
+    const planned = await planMcpCall(input);
+    if (planned.error || !planned.data) {
+      const reason = planned.error
+        ? planned.error.message
+        : "the assistant did not choose a tool to run";
+      await container.repos.sessionMessages.create({
+        sessionId: session.id,
+        role: "system",
+        content: `This tool step (${node.name}) could not run: ${reason}.`,
+        stepNodeId: node.id,
+      });
+      if (planned.error) {
+        await container.services.errorLogger.log({
+          level: "error",
+          message: `MCP node planning failed: ${planned.error.message}`,
+          stack: planned.error.cause instanceof Error ? planned.error.cause.stack ?? null : null,
+          page: `api/chat/${session.id}/stream`,
+          metadata: { sessionId: session.id, nodeId: node.id, errorCode: planned.error.code },
+        });
+      }
+      return;
+    }
+
+    if (requireConfirmation) {
       const prepared = await container.useCases.prepareMcpNode.execute({
         session,
-        flow,
         node,
-        messages,
-        userId,
+        toolName: planned.data.toolName,
+        args: planned.data.args,
       });
       const content = prepared.error
         ? `This tool step (${node.name}) could not be prepared: ${prepared.error.message}`
@@ -427,25 +504,14 @@ export async function dispatchMcpNode(input: DispatchMcpNodeInput): Promise<void
           metadata: { sessionId: session.id, nodeId: node.id, errorCode: prepared.error.code },
         });
       }
-    } catch (cause) {
-      await container.services.errorLogger.log({
-        level: "error",
-        message: "MCP node preparation threw",
-        stack: cause instanceof Error ? cause.stack ?? null : null,
-        page: `api/chat/${session.id}/stream`,
-        metadata: { sessionId: session.id, nodeId: node.id },
-      });
+      return;
     }
-    return;
-  }
 
-  try {
     const result = await container.useCases.runMcpNode.execute({
       session,
-      flow,
       node,
-      messages,
-      userId,
+      toolName: planned.data.toolName,
+      args: planned.data.args,
     });
 
     if (!result.error && result.data.status === "completed") {
@@ -458,14 +524,12 @@ export async function dispatchMcpNode(input: DispatchMcpNodeInput): Promise<void
       });
     }
 
-    const content = result.error
-      ? `This tool step (${node.name}) could not run: ${result.error.message}`
-      : `Completed tool step: ${node.name}.`;
-
     await container.repos.sessionMessages.create({
       sessionId: session.id,
       role: "system",
-      content,
+      content: result.error
+        ? `This tool step (${node.name}) could not run: ${result.error.message}`
+        : `Completed tool step: ${node.name}.`,
       stepNodeId: node.id,
     });
 
@@ -995,6 +1059,8 @@ export interface ConfirmStepInput {
   messages: SessionMessage[];
   confirmedByUserId: string;
   isAdmin: boolean;
+  // Operator-edited MCP tool arguments (Phase B). Ignored for non-MCP steps.
+  mcpArgs?: Record<string, unknown>;
 }
 
 export interface ConfirmStepResult {
@@ -1048,16 +1114,28 @@ async function confirmMcpAction(input: {
   completedNode: FlowNode;
   confirmedByUserId: string;
   isAdmin: boolean;
+  editedArgs?: Record<string, unknown>;
 }): Promise<Result<ConfirmStepResult>> {
-  const { container, session, flow, nodes, completedNode, confirmedByUserId, isAdmin } = input;
+  const { container, session, flow, nodes, completedNode, confirmedByUserId, isAdmin, editedArgs } =
+    input;
 
-  const toolResult = await container.useCases.confirmMcpNode.execute({ session, node: completedNode });
+  const toolResult = await container.useCases.confirmMcpNode.execute({
+    session,
+    node: completedNode,
+    editedArgs,
+  });
 
   // Clear the confirmation gate whatever the outcome, so the operator is never
   // stuck on a card for a call that has already fired or failed.
   await container.repos.sessions
     .update(session.id, { awaitingConfirmationNodeId: null })
     .catch(() => undefined);
+
+  // A duplicate Proceed (double-click / refresh): the action already fired and
+  // advanced on the first Proceed, so there is nothing more to do.
+  if (!toolResult.error && toolResult.data.alreadyRan) {
+    return ok({ advanced: false, needsManualBranch: false, newNodeId: null });
+  }
 
   if (toolResult.error) {
     await container.repos.sessionMessages.create({
@@ -1140,7 +1218,8 @@ async function confirmMcpAction(input: {
 // outcome matches auto-advance (ADR-026). An MCP action node instead fires its
 // parked tool call and advances through the shared auto-node-result path.
 export async function confirmStep(input: ConfirmStepInput): Promise<Result<ConfirmStepResult>> {
-  const { container, session, flow, nodes, edges, messages, confirmedByUserId, isAdmin } = input;
+  const { container, session, flow, nodes, edges, messages, confirmedByUserId, isAdmin, mcpArgs } =
+    input;
 
   const completedNode = nodes.find((node) => node.id === session.currentNodeId);
   if (!session.currentNodeId || !completedNode) {
@@ -1148,7 +1227,16 @@ export async function confirmStep(input: ConfirmStepInput): Promise<Result<Confi
   }
 
   if (completedNode.type === "mcp") {
-    return confirmMcpAction({ container, session, flow, nodes, completedNode, confirmedByUserId, isAdmin });
+    return confirmMcpAction({
+      container,
+      session,
+      flow,
+      nodes,
+      completedNode,
+      confirmedByUserId,
+      isAdmin,
+      editedArgs: mcpArgs,
+    });
   }
 
   const branchChoice = await recomputeBranchChoice(container, session, nodes, edges, messages);

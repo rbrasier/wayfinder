@@ -149,6 +149,7 @@ import {
   AiSdkMcpClient,
   McpServerDirectory,
   McpToolPrepass,
+  McpToolPlanner,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
   DrizzleReindexSourceRepository,
@@ -390,6 +391,7 @@ const build = () => {
   const mcpClient = new AiSdkMcpClient();
   const mcpServerDirectory = new McpServerDirectory(mcpServers, mcpClient);
   const mcpToolPrepass = new McpToolPrepass();
+  const mcpToolPlanner = new McpToolPlanner();
   const spreadsheetParser = new SpreadsheetParser();
   // Reuses the Email-Notifications M365 app registration (ADR-018), degrading to
   // HR/manual resolution when the added Graph scopes are not yet consented.
@@ -513,7 +515,7 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, skillParser, mcpToolPrepass },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, skillParser, mcpToolPrepass, mcpToolPlanner },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills, mcpServers },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
@@ -669,9 +671,9 @@ const build = () => {
       testMcpServer: new TestMcpServer(mcpServers, mcpClient),
       listMcpServersWithTools: new ListMcpServersWithTools(mcpServerDirectory),
       resolveStepTools: new ResolveStepTools(mcpServers),
-      runMcpNode: new RunMcpNode(sessions, llm, mcpServers, mcpClient, sessionStepOutputs),
-      prepareMcpNode: new PrepareMcpNode(sessions, llm, mcpServers, sessionStepOutputs),
-      confirmMcpNode: new ConfirmMcpNode(mcpServers, mcpClient),
+      runMcpNode: new RunMcpNode(sessions, mcpServers, mcpClient),
+      prepareMcpNode: new PrepareMcpNode(sessions, mcpServers),
+      confirmMcpNode: new ConfirmMcpNode(sessions, mcpServers, mcpClient),
     },
   };
 };

@@ -4,6 +4,7 @@ import type {
   FlowNode,
   IMcpClient,
   IMcpServerRepository,
+  ISessionRepository,
   McpServer,
   Session,
 } from "@rbrasier/domain";
@@ -23,6 +24,7 @@ const makeSession = (overrides: Partial<Session> = {}): Session => ({
       nodeId: "node-1",
       status: "awaiting_confirmation",
       sentAt: "2026-06-30T00:00:00.000Z",
+      toolName: "create_ticket",
       args: { title: "Broken login" },
     },
   },
@@ -57,6 +59,15 @@ const actionsServer: McpServer = {
   updatedAt: new Date(),
 };
 
+const makeSessions = (session: Session): ISessionRepository =>
+  ({
+    create: vi.fn(),
+    findById: vi.fn().mockResolvedValue(ok(session)),
+    listByUser: vi.fn(),
+    listAll: vi.fn(),
+    update: vi.fn().mockImplementation(async (_id, patch) => ok({ ...session, ...patch })),
+  }) as unknown as ISessionRepository;
+
 const makeServers = (server: McpServer | null): IMcpServerRepository =>
   ({
     create: vi.fn(),
@@ -72,13 +83,15 @@ const makeClient = (overrides: Partial<IMcpClient> = {}): IMcpClient => ({
   ...overrides,
 });
 
-const config = { instruction: "x", serverId: "mcp-1", toolName: "create_ticket" };
+const config = { instruction: "x", serverId: "mcp-1", allowedToolNames: ["create_ticket"] };
 
 describe("ConfirmMcpNode", () => {
-  it("calls the tool with the parked args and returns its output", async () => {
+  it("claims the execution and calls the parked tool, returning its output", async () => {
+    const session = makeSession();
+    const sessions = makeSessions(session);
     const client = makeClient();
-    const result = await new ConfirmMcpNode(makeServers(actionsServer), client).execute({
-      session: makeSession(),
+    const result = await new ConfirmMcpNode(sessions, makeServers(actionsServer), client).execute({
+      session,
       node: makeNode(config),
     });
 
@@ -87,22 +100,52 @@ describe("ConfirmMcpNode", () => {
     expect(result.data?.status).toBe("completed");
     expect(result.data?.data).toEqual({ output: "ticket #42 created" });
     expect(client.callTool).toHaveBeenCalledWith(actionsServer, "create_ticket", { title: "Broken login" });
+    // The awaiting entry is claimed (flipped out of awaiting_confirmation) so a
+    // second Proceed is a no-op.
+    expect(sessions.update).toHaveBeenCalledWith("sess-1", {
+      pendingExecutions: {
+        "corr-1": {
+          nodeId: "node-1",
+          status: "pending",
+          sentAt: "2026-06-30T00:00:00.000Z",
+          toolName: "create_ticket",
+          args: { title: "Broken login" },
+        },
+      },
+    });
   });
 
-  it("fails when there is no action awaiting confirmation for the node", async () => {
-    const result = await new ConfirmMcpNode(makeServers(actionsServer), makeClient()).execute({
-      session: makeSession({ pendingExecutions: {} }),
+  it("runs the operator's edited arguments instead of the parked ones", async () => {
+    const client = makeClient();
+    await new ConfirmMcpNode(makeSessions(makeSession()), makeServers(actionsServer), client).execute({
+      session: makeSession(),
       node: makeNode(config),
+      editedArgs: { title: "Login broken on mobile" },
     });
 
-    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(client.callTool).toHaveBeenCalledWith(actionsServer, "create_ticket", {
+      title: "Login broken on mobile",
+    });
+  });
+
+  it("is idempotent: a second Proceed with no awaiting entry runs no tool", async () => {
+    const client = makeClient();
+    const result = await new ConfirmMcpNode(
+      makeSessions(makeSession({ pendingExecutions: {} })),
+      makeServers(actionsServer),
+      client,
+    ).execute({ session: makeSession({ pendingExecutions: {} }), node: makeNode(config) });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.alreadyRan).toBe(true);
+    expect(client.callTool).not.toHaveBeenCalled();
   });
 
   it("propagates a tool-call failure", async () => {
     const client = makeClient({
       callTool: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "unreachable"))),
     });
-    const result = await new ConfirmMcpNode(makeServers(actionsServer), client).execute({
+    const result = await new ConfirmMcpNode(makeSessions(makeSession()), makeServers(actionsServer), client).execute({
       session: makeSession(),
       node: makeNode(config),
     });

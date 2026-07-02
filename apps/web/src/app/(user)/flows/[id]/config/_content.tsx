@@ -430,9 +430,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         return {
           instruction: values.instruction,
           serverId: values.mcpServerId,
-          toolName: values.mcpToolName,
-          requestFields: values.requestFields,
-          requestFieldValues: values.requestFieldValues,
+          allowedToolNames: values.mcpAllowedToolNames,
           responseFields: values.responseFields,
           requireConfirmation: values.requireConfirmation,
         };
@@ -660,6 +658,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
         webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
         mcpServerId: (editingConfig.serverId as string | null) ?? "",
         mcpToolName: (editingConfig.toolName as string | null) ?? "",
+        mcpAllowedToolNames:
+          (editingConfig.allowedToolNames as string[] | undefined) ??
+          (editingConfig.toolName ? [editingConfig.toolName as string] : []),
         requestFields: readFields(editingConfig.requestFields),
         requestFieldValues:
           (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},

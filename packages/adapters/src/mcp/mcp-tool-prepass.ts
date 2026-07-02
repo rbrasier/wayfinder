@@ -91,7 +91,7 @@ export class McpToolPrepass {
   }
 }
 
-function transportFor(server: McpServer): { type: "sse"; url: string; headers?: Record<string, string> } {
+export function transportFor(server: McpServer): { type: "sse"; url: string; headers?: Record<string, string> } {
   const headers: Record<string, string> = {};
   if (server.credentialRef) {
     const token = process.env[server.credentialRef];

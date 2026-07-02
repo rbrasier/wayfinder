@@ -1,19 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { ok } from "@rbrasier/domain";
 import type {
-  Flow,
   FlowNode,
-  ILanguageModel,
   IMcpServerRepository,
   ISessionRepository,
-  ISessionStepOutputRepository,
   McpServer,
   Session,
-  SessionMessage,
 } from "@rbrasier/domain";
 import { PrepareMcpNode } from "./prepare-mcp-node";
-
-const usage = { promptTokens: 1, completionTokens: 1, systemTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
 const makeSession = (overrides: Partial<Session> = {}): Session => ({
   id: "sess-1",
@@ -29,23 +23,6 @@ const makeSession = (overrides: Partial<Session> = {}): Session => ({
   ...overrides,
 });
 
-const makeFlow = (): Flow => ({
-  id: "flow-1",
-  name: "Flow",
-  description: null,
-  icon: null,
-  expertRole: null,
-  ownerUserId: "user-1",
-  status: "published",
-  visibility: { kind: "private" },
-  permissions: [],
-  contextDocs: [],
-  contextMcpServerIds: [],
-  deletedAt: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-});
-
 const makeNode = (config: Record<string, unknown>): FlowNode => ({
   id: "node-1",
   flowId: "flow-1",
@@ -59,10 +36,6 @@ const makeNode = (config: Record<string, unknown>): FlowNode => ({
   updatedAt: new Date(),
 });
 
-const makeMessages = (): SessionMessage[] => [
-  { id: "m1", sessionId: "sess-1", role: "user", content: "raise a ticket", confidence: null, stepNodeId: "node-1", document: null, createdAt: new Date() },
-];
-
 const makeSessions = (session: Session): ISessionRepository =>
   ({
     create: vi.fn(),
@@ -71,20 +44,6 @@ const makeSessions = (session: Session): ISessionRepository =>
     listAll: vi.fn(),
     update: vi.fn().mockImplementation(async (_id, patch) => ok({ ...session, ...patch })),
   }) as unknown as ISessionRepository;
-
-const makeLanguageModel = (): ILanguageModel => ({
-  provider: "anthropic",
-  generateObject: vi.fn().mockResolvedValue(ok({ object: { title: "Broken login" }, usage })),
-  streamText: vi.fn(),
-  streamObject: vi.fn(),
-});
-
-const makeStepOutputs = (): ISessionStepOutputRepository =>
-  ({
-    create: vi.fn(),
-    listByFlow: vi.fn().mockResolvedValue(ok([])),
-    listBySession: vi.fn().mockResolvedValue(ok([])),
-  }) as unknown as ISessionStepOutputRepository;
 
 const actionsServer: McpServer = {
   id: "mcp-1",
@@ -108,28 +67,20 @@ const makeServers = (server: McpServer | null): IMcpServerRepository =>
     setStatus: vi.fn(),
   }) as unknown as IMcpServerRepository;
 
-const baseConfig = {
-  instruction: "Create a ticket for the reported issue.",
-  serverId: "mcp-1",
-  toolName: "create_ticket",
-  requestFields: [{ key: "title", label: "Title", type: "text", optional: false, raw: "Title" }],
-  responseFields: [{ key: "output", label: "Output", type: "text", optional: false, raw: "Output" }],
-};
-
+const baseConfig = { instruction: "Create a ticket.", serverId: "mcp-1", allowedToolNames: ["create_ticket"] };
 const clock = { generateCorrelationId: () => "corr-1", now: () => new Date("2026-06-30T00:00:00.000Z") };
 
 describe("PrepareMcpNode", () => {
-  it("resolves args and parks them as an awaiting_confirmation execution without calling any tool", async () => {
+  it("parks the planned tool call as an awaiting_confirmation execution without calling any tool", async () => {
     const session = makeSession();
     const sessions = makeSessions(session);
 
-    const result = await new PrepareMcpNode(
-      sessions,
-      makeLanguageModel(),
-      makeServers(actionsServer),
-      makeStepOutputs(),
-      clock,
-    ).execute({ session, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+    const result = await new PrepareMcpNode(sessions, makeServers(actionsServer), clock).execute({
+      session,
+      node: makeNode(baseConfig),
+      toolName: "create_ticket",
+      args: { title: "Broken login" },
+    });
 
     expect(result.error).toBeUndefined();
     expect(result.data?.toolName).toBe("create_ticket");
@@ -142,20 +93,20 @@ describe("PrepareMcpNode", () => {
           nodeId: "node-1",
           status: "awaiting_confirmation",
           sentAt: "2026-06-30T00:00:00.000Z",
+          toolName: "create_ticket",
           args: { title: "Broken login" },
         },
       },
     });
   });
 
-  it("fails when no server/tool is configured", async () => {
-    const result = await new PrepareMcpNode(
-      makeSessions(makeSession()),
-      makeLanguageModel(),
-      makeServers(actionsServer),
-      makeStepOutputs(),
-      clock,
-    ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode({ instruction: "x" }), messages: makeMessages(), userId: "user-1" });
+  it("fails when no server is configured", async () => {
+    const result = await new PrepareMcpNode(makeSessions(makeSession()), makeServers(actionsServer), clock).execute({
+      session: makeSession(),
+      node: makeNode({ instruction: "x" }),
+      toolName: "create_ticket",
+      args: {},
+    });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
@@ -163,11 +114,9 @@ describe("PrepareMcpNode", () => {
   it("refuses a disabled server", async () => {
     const result = await new PrepareMcpNode(
       makeSessions(makeSession()),
-      makeLanguageModel(),
       makeServers({ ...actionsServer, status: "disabled" }),
-      makeStepOutputs(),
       clock,
-    ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+    ).execute({ session: makeSession(), node: makeNode(baseConfig), toolName: "create_ticket", args: {} });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });

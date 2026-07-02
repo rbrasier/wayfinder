@@ -71,6 +71,7 @@ describe("scheduledConfigFromValues", () => {
     allowedMcpToolRefs: [],
     mcpServerId: "",
     mcpToolName: "",
+    mcpAllowedToolNames: [],
     instruction: "",
     executor: "n8n",
     workflowId: null,
