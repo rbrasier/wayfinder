@@ -31,13 +31,42 @@ const MODEL_RATES: Record<string, ModelRates> = {
   // Mistral — no prompt caching, use prompt rate for both
   "mistral-large-latest":       { prompt: 0.000003,    completion: 0.000009,   cacheRead: 0.000003,     cacheWrite: 0.000003 },
   "mistral-small-latest":       { prompt: 0.0000001,   completion: 0.0000003,  cacheRead: 0.0000001,    cacheWrite: 0.0000001 },
+  // Bedrock — Anthropic models served through AWS; priced as their Anthropic twins
+  "anthropic.claude-sonnet-4-5-20250929-v1:0": { prompt: 0.000003, completion: 0.000015, cacheRead: 0.0000003, cacheWrite: 0.000003750 },
 };
 
-const estimateCost = (model: string, usage: TokenUsage): number => {
-  const rates = MODEL_RATES[model];
-  if (!rates) return 0;
-  // Regular input = total prompt minus tokens billed at cache rates
-  const regularInput = usage.promptTokens - usage.cacheReadTokens - usage.cacheWriteTokens;
+// Providers whose reported promptTokens already *includes* cached tokens, so
+// cache tokens must be subtracted out to avoid double-counting. Anthropic (and
+// Bedrock-hosted Anthropic) report input_tokens *excluding* cache, so they must
+// not subtract — the old unconditional subtraction drove their cost negative on
+// every cached turn.
+const PROMPT_INCLUDES_CACHE_TOKENS = new Set<ProviderName>(["openai"]);
+
+// A sane per-provider estimate for any model absent from MODEL_RATES, so an
+// unrecognised or newly-released model is never billed at $0 (which would let it
+// slip past spend caps). Mid-tier rate per provider.
+const PROVIDER_FALLBACK_RATES: Record<ProviderName, ModelRates> = {
+  anthropic: MODEL_RATES["claude-sonnet-4-6"]!,
+  openai: MODEL_RATES["gpt-4o"]!,
+  mistral: MODEL_RATES["mistral-large-latest"]!,
+  bedrock: MODEL_RATES["claude-sonnet-4-6"]!,
+};
+
+const estimateCost = (model: string, usage: TokenUsage, provider: ProviderName): number => {
+  const exact = MODEL_RATES[model];
+  const rates = exact ?? PROVIDER_FALLBACK_RATES[provider];
+  if (!exact) {
+    console.warn(
+      `[usage-tracking] No rate for model "${model}" (provider ${provider}); using provider fallback rate.`,
+    );
+  }
+
+  // Only subtract cache tokens for providers that fold them into promptTokens;
+  // clamp so an inconsistent report can never yield a negative billable input.
+  const regularInput = PROMPT_INCLUDES_CACHE_TOKENS.has(provider)
+    ? Math.max(0, usage.promptTokens - usage.cacheReadTokens - usage.cacheWriteTokens)
+    : usage.promptTokens;
+
   return (
     regularInput * rates.prompt +
     usage.cacheWriteTokens * rates.cacheWrite +
@@ -73,7 +102,7 @@ export const recordTokenUsage = (
     systemTokens: usage.systemTokens,
     cacheReadTokens: usage.cacheReadTokens,
     cacheWriteTokens: usage.cacheWriteTokens,
-    costUsd: estimateCost(model, usage),
+    costUsd: estimateCost(model, usage, input.provider),
   }).then((result) => {
     if (result.error) {
       console.error(`[usage-tracking] Failed to record ${input.purpose} usage: ${result.error.message}`);

@@ -37,6 +37,16 @@ interface SearchRow {
 
 const SELECTED_COLUMNS = sql`id, flow_id, session_id, source_type, storage_path, filename, chunk_index, chunk_text, status, tags, retrieval_count, last_retrieved_at, created_at, updated_at`;
 
+// Strip author-typed wrapping quotes, then escape LIKE metacharacters so the
+// term matches literally. Without this, `%` and `_` in a SKU/code (e.g. `100%`,
+// `ITEM_42`) act as wildcards and the "exact" guardrail silently over-matches.
+// Postgres's default LIKE escape is backslash, so no ESCAPE clause is needed.
+export const buildExactLikePattern = (rawText: string): string => {
+  const term = rawText.replace(/^"|"$/g, "");
+  const escaped = term.replace(/[\\%_]/g, "\\$&");
+  return `%${escaped}%`;
+};
+
 const scopeCondition = (scope: HybridRetrievalQuery["scope"]): SQL =>
   "flowId" in scope
     ? sql`flow_id = ${scope.flowId}`
@@ -96,8 +106,7 @@ export class DrizzleHybridRetriever implements IHybridRetriever {
   // and legal references where a near-miss is a wrong answer. ILIKE guarantees the
   // exact term is present; vector similarity is irrelevant here.
   private exactQuery(query: HybridRetrievalQuery): SQL {
-    const term = query.text.replace(/^"|"$/g, "");
-    const pattern = `%${term}%`;
+    const pattern = buildExactLikePattern(query.text);
     return sql`
       SELECT ${SELECTED_COLUMNS}, 1 AS score
       FROM kb_document_chunks

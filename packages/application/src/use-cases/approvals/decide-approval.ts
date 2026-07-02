@@ -10,6 +10,7 @@ import {
   type ISessionMessageRepository,
   type ISessionRepository,
   type ISessionStepOutputRepository,
+  type IUserRepository,
   type Result,
   type StepOutputField,
 } from "@rbrasier/domain";
@@ -54,6 +55,9 @@ export class DecideApproval {
     private readonly auditLogger: IAuditLogger,
     private readonly notifier?: IApprovalDecidedNotifier,
     private readonly messages?: ISessionMessageRepository,
+    // Needed to authorise decisions on email-assigned approvals — the decider's
+    // account email must match the assigned address.
+    private readonly users?: IUserRepository,
   ) {}
 
   async execute(input: DecideApprovalInput): Promise<Result<DecideApprovalOutput>> {
@@ -66,11 +70,7 @@ export class DecideApproval {
     if (approval.status !== "pending") {
       return err(domainError("VALIDATION_FAILED", "This approval has already been decided."));
     }
-    if (
-      approval.approverUserId &&
-      approval.approverUserId !== input.decidedByUserId &&
-      !input.isAdmin
-    ) {
+    if (!(await this.isAuthorisedDecider(approval, input))) {
       return err(domainError("FORBIDDEN", "Only the confirmed approver can decide this."));
     }
 
@@ -80,7 +80,9 @@ export class DecideApproval {
         ? await this.snapshot(approval.sessionId)
         : approval.recordSnapshot;
 
-    const updated = await this.approvals.update(approval.id, {
+    // Conditional write: null means a concurrent decider already resolved this
+    // approval, so we must not run the decision side effects a second time.
+    const updated = await this.approvals.updateIfPending(approval.id, {
       status: input.decision,
       decidedByUserId: input.decidedByUserId,
       decidedAt,
@@ -88,8 +90,12 @@ export class DecideApproval {
       recordSnapshot,
     });
     if (updated.error) return updated;
+    if (!updated.data) {
+      return err(domainError("VALIDATION_FAILED", "This approval has already been decided."));
+    }
+    const decided = updated.data;
 
-    await this.projectDecision(updated.data, decidedAt);
+    await this.projectDecision(decided, decidedAt);
 
     await this.auditLogger.log({
       actorId: input.decidedByUserId,
@@ -100,12 +106,35 @@ export class DecideApproval {
     });
 
     if (input.decision === "approved") {
-      await this.recordDecisionMessage(updated.data, input.decision, false);
-      this.notify(updated.data, input.decision, false);
-      return this.advance(updated.data);
+      await this.recordDecisionMessage(decided, input.decision, false);
+      this.notify(decided, input.decision, false);
+      return this.advance(decided);
     }
 
-    return this.routeBackOrCancel(updated.data, input);
+    return this.routeBackOrCancel(decided, input);
+  }
+
+  // Approve/reject is gated to the assigned approver (or an admin). A user-id
+  // assignment matches on id; an email-only assignment (ADR-018, before the
+  // recipient has claimed an account) matches on the decider's account email.
+  // With no assignment there is no one to match, so only an admin may decide.
+  private async isAuthorisedDecider(
+    approval: Approval,
+    input: DecideApprovalInput,
+  ): Promise<boolean> {
+    if (input.isAdmin) return true;
+    if (approval.approverUserId) return approval.approverUserId === input.decidedByUserId;
+    if (approval.approverEmail) {
+      return this.deciderEmailMatches(input.decidedByUserId, approval.approverEmail);
+    }
+    return false;
+  }
+
+  private async deciderEmailMatches(userId: string, approverEmail: string): Promise<boolean> {
+    if (!this.users) return false;
+    const found = await this.users.findById(userId);
+    if (found.error || !found.data) return false;
+    return found.data.email.toLowerCase() === approverEmail.toLowerCase();
   }
 
   private notify(approval: Approval, decision: ApprovalDecision, routedBack: boolean): void {
