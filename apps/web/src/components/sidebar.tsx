@@ -204,13 +204,17 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }, { enabled: isAdmin }).data ?? false;
   const skillsEnabled =
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }, { enabled: isAdmin }).data ?? false;
+  // n8n only powers automated (auto) nodes, so its page follows the auto_node flag.
+  const autoNodeEnabled =
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }, { enabled: isAdmin }).data ?? false;
 
-  // Drop Skills / MCP Servers from "Flow Settings" unless the flag entitles the user.
+  // Drop Skills / MCP Servers / n8n from "Flow Settings" unless the flag entitles the user.
   const gatedAdminNav = adminNav.map((group) => {
     if (group.label !== "Flow Settings") return group;
     const items = group.items.filter((item) => {
       if (item.href === "/admin/skills") return skillsEnabled;
       if (item.href === "/admin/mcp-servers") return mcpEnabled;
+      if (item.href === "/admin/n8n") return autoNodeEnabled;
       return true;
     });
     return { ...group, items };

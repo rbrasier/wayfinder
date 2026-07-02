@@ -128,6 +128,8 @@ function N8nIntegrationCard() {
 }
 
 export default function AdminN8nPage() {
+  const featureQuery = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" });
+
   return (
     <div className="h-full overflow-auto">
       <div className="container py-8">
@@ -138,7 +140,22 @@ export default function AdminN8nPage() {
               Connect an n8n instance so automated (n8n) flow steps can call your workflows.
             </p>
           </div>
-          <N8nIntegrationCard />
+          {featureQuery.data === false ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">n8n unavailable</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Automated (n8n) nodes are turned off for your account. An administrator can enable
+                  the <span className="font-mono">auto_node</span> feature flag to manage the n8n
+                  connection here.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <N8nIntegrationCard />
+          )}
         </div>
       </div>
     </div>
