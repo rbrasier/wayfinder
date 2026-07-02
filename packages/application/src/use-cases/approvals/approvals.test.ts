@@ -117,6 +117,14 @@ class InMemoryApprovals implements IApprovalRepository {
     this.rows.set(id, next);
     return ok(next);
   }
+
+  async updateIfPending(id: string, patch: ApprovalUpdate): Promise<Result<Approval | null>> {
+    const row = this.rows.get(id);
+    if (!row || row.status !== "pending") return ok(null);
+    const next: Approval = { ...row, ...patch, updatedAt: new Date() };
+    this.rows.set(id, next);
+    return ok(next);
+  }
 }
 
 class InMemoryFlowNodes implements IFlowNodeRepository {
@@ -915,6 +923,138 @@ describe("DecideApproval", () => {
     });
 
     expect(result.error?.code).toBe("FORBIDDEN");
+  });
+
+  it("forbids deciding an email-assigned approval when the decider's email does not match", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals, {
+      approverUserId: null,
+      approverEmail: "manager@corp.test",
+    });
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const users = new InMemoryUsers();
+    users.add(user("intruder-1", "intruder@corp.test"));
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      undefined,
+      undefined,
+      users,
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "intruder-1",
+      decision: "approved",
+    });
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+  });
+
+  it("allows deciding an email-assigned approval when the decider's email matches (case-insensitively)", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals, {
+      approverUserId: null,
+      approverEmail: "manager@corp.test",
+    });
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const users = new InMemoryUsers();
+    users.add(user("manager-1", "Manager@Corp.test"));
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      undefined,
+      undefined,
+      users,
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "approved",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.sessionCompleted).toBe(true);
+  });
+
+  it("lets an admin decide an email-assigned approval regardless of email", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals, {
+      approverUserId: null,
+      approverEmail: "manager@corp.test",
+    });
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      new InMemoryFlowEdges(),
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+      undefined,
+      undefined,
+      new InMemoryUsers(),
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "some-admin",
+      decision: "approved",
+      isAdmin: true,
+    });
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("does not run decision side effects when a concurrent decider already won the race", async () => {
+    class RaceLostApprovals extends InMemoryApprovals {
+      async updateIfPending(): Promise<Result<Approval | null>> {
+        return ok(null);
+      }
+    }
+    const approvals = new RaceLostApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const audit = new RecordingAuditLogger();
+    const notifier = new RecordingNotifier();
+    const edges = new InMemoryFlowEdges();
+    edges.rows.push({
+      id: "edge-1",
+      flowId: "flow-1",
+      fromNodeId: "node-appr",
+      toNodeId: "node-next",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const sut = new DecideApproval(
+      approvals,
+      sessions,
+      edges,
+      new InMemoryStepOutputs(),
+      audit,
+      notifier,
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "approved",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(audit.entries).toHaveLength(0);
+    expect(notifier.calls).toHaveLength(0);
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-appr");
   });
 
   it("writes a system chat message recording the decision and comment", async () => {

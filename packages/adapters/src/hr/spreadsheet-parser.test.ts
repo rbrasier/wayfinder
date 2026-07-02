@@ -76,6 +76,44 @@ describe("SpreadsheetParser", () => {
     ]);
   });
 
+  it("reads the workbook's first tab even when it maps to a non-first part", async () => {
+    // The first visible tab ("Data") maps to sheet2.xml; the lexicographically
+    // first part (sheet1.xml) is a different tab ("Notes"). The old code sorted
+    // part names and read the wrong sheet.
+    const dataSheet =
+      '<?xml version="1.0"?><worksheet xmlns="x"><sheetData>' +
+      '<row r="1"><c r="A1" t="inlineStr"><is><t>Full Name</t></is></c></row>' +
+      '<row r="2"><c r="A2" t="inlineStr"><is><t>Ada Lovelace</t></is></c></row>' +
+      "</sheetData></worksheet>";
+    const notesSheet =
+      '<?xml version="1.0"?><worksheet xmlns="x"><sheetData>' +
+      '<row r="1"><c r="A1" t="inlineStr"><is><t>Ignore Me</t></is></c></row>' +
+      "</sheetData></worksheet>";
+    const workbook =
+      '<?xml version="1.0"?><workbook xmlns:r="r"><sheets>' +
+      '<sheet name="Data" sheetId="1" r:id="rId1"/>' +
+      '<sheet name="Notes" sheetId="2" r:id="rId2"/>' +
+      "</sheets></workbook>";
+    const rels =
+      '<?xml version="1.0"?><Relationships>' +
+      '<Relationship Id="rId1" Target="worksheets/sheet2.xml"/>' +
+      '<Relationship Id="rId2" Target="worksheets/sheet1.xml"/>' +
+      "</Relationships>";
+
+    const zip = new PizZip();
+    zip.file("xl/workbook.xml", workbook);
+    zip.file("xl/_rels/workbook.xml.rels", rels);
+    zip.file("xl/worksheets/sheet1.xml", notesSheet);
+    zip.file("xl/worksheets/sheet2.xml", dataSheet);
+    const content = zip.generate({ type: "uint8array" });
+
+    const result = await new SpreadsheetParser().parse({ content, format: "xlsx" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.columns).toEqual(["Full Name"]);
+    expect(result.data?.rows).toEqual([{ "Full Name": "Ada Lovelace" }]);
+  });
+
   it("returns no columns for an empty CSV", async () => {
     const result = await new SpreadsheetParser().parse({ content: encode(""), format: "csv" });
     expect(result.data?.columns).toEqual([]);

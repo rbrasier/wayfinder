@@ -110,13 +110,46 @@ const parseCsv = (text: string): string[][] => {
 const parseXlsx = (content: Uint8Array): string[][] => {
   const zip = new PizZip(content);
   const sharedStrings = readSharedStrings(zip);
-  const sheetName = Object.keys(zip.files)
-    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
-    .sort()[0];
+  const preferred = firstSheetPart(zip);
+  const sheetName = preferred && zip.file(preferred) ? preferred : fallbackSheetPart(zip);
   if (!sheetName) return [];
   const sheetXml = zip.file(sheetName)?.asText() ?? "";
   return readSheet(sheetXml, sharedStrings);
 };
+
+// The worksheet *part* name (sheet1.xml, sheet2.xml…) does not track tab order:
+// after a tab is reordered or deleted, the first visible tab can map to any
+// part. The authoritative order is the first <sheet> in xl/workbook.xml,
+// resolved through the workbook relationships to its part. Returns null when the
+// workbook/rels are absent so the caller can fall back to the old part-sort.
+const firstSheetPart = (zip: PizZip): string | null => {
+  const workbookXml = zip.file("xl/workbook.xml")?.asText();
+  if (!workbookXml) return null;
+  const firstSheet = /<sheet\b[^>]*>/.exec(workbookXml)?.[0];
+  if (!firstSheet) return null;
+  const relationshipId = /r:id="([^"]+)"/.exec(firstSheet)?.[1];
+  if (!relationshipId) return null;
+
+  const relsXml = zip.file("xl/_rels/workbook.xml.rels")?.asText();
+  if (!relsXml) return null;
+  for (const relationship of relsXml.matchAll(/<Relationship\b([^>]*)>/g)) {
+    const attributes = relationship[1] ?? "";
+    if (/Id="([^"]+)"/.exec(attributes)?.[1] !== relationshipId) continue;
+    const target = /Target="([^"]+)"/.exec(attributes)?.[1];
+    return target ? normaliseSheetPath(target) : null;
+  }
+  return null;
+};
+
+// Relationship targets are relative to the xl/ directory (e.g. "worksheets/
+// sheet2.xml") but may arrive absolute ("/xl/worksheets/sheet2.xml").
+const normaliseSheetPath = (target: string): string =>
+  `xl/${target.replace(/^\//, "").replace(/^xl\//, "")}`;
+
+const fallbackSheetPart = (zip: PizZip): string | undefined =>
+  Object.keys(zip.files)
+    .filter((name) => /^xl\/worksheets\/sheet\d+\.xml$/.test(name))
+    .sort()[0];
 
 const readSharedStrings = (zip: PizZip): string[] => {
   const file = zip.file("xl/sharedStrings.xml");

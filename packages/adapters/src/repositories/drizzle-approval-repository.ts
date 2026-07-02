@@ -150,23 +150,7 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
     try {
       const [row] = await this.db
         .update(app_session_approvals)
-        .set({
-          ...(patch.approverUserId !== undefined
-            ? { approver_user_id: patch.approverUserId }
-            : {}),
-          ...(patch.approverEmail !== undefined ? { approver_email: patch.approverEmail } : {}),
-          ...(patch.isOverride !== undefined ? { is_override: patch.isOverride } : {}),
-          ...(patch.status !== undefined ? { status: patch.status } : {}),
-          ...(patch.decidedByUserId !== undefined
-            ? { decided_by_user_id: patch.decidedByUserId }
-            : {}),
-          ...(patch.decidedAt !== undefined ? { decided_at: patch.decidedAt } : {}),
-          ...(patch.comment !== undefined ? { comment: patch.comment } : {}),
-          ...(patch.recordSnapshot !== undefined
-            ? { record_snapshot: patch.recordSnapshot }
-            : {}),
-          updated_at: new Date(),
-        })
+        .set(this.patchToColumns(patch))
         .where(eq(app_session_approvals.id, id))
         .returning();
       if (!row) return err(domainError("NOT_FOUND", `Approval ${id} not found.`));
@@ -174,5 +158,37 @@ export class DrizzleApprovalRepository implements IApprovalRepository {
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update approval.", cause));
     }
+  }
+
+  async updateIfPending(id: string, patch: ApprovalUpdate): Promise<Result<Approval | null>> {
+    try {
+      // The status='pending' predicate makes the guard atomic: a concurrent
+      // decider that already flipped the row out of pending matches no row here,
+      // so its rival gets null and skips the decision side effects.
+      const [row] = await this.db
+        .update(app_session_approvals)
+        .set(this.patchToColumns(patch))
+        .where(and(eq(app_session_approvals.id, id), eq(app_session_approvals.status, "pending")))
+        .returning();
+      return ok(row ? toEntity(row) : null);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to update approval.", cause));
+    }
+  }
+
+  private patchToColumns(patch: ApprovalUpdate): Record<string, unknown> {
+    return {
+      ...(patch.approverUserId !== undefined ? { approver_user_id: patch.approverUserId } : {}),
+      ...(patch.approverEmail !== undefined ? { approver_email: patch.approverEmail } : {}),
+      ...(patch.isOverride !== undefined ? { is_override: patch.isOverride } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.decidedByUserId !== undefined
+        ? { decided_by_user_id: patch.decidedByUserId }
+        : {}),
+      ...(patch.decidedAt !== undefined ? { decided_at: patch.decidedAt } : {}),
+      ...(patch.comment !== undefined ? { comment: patch.comment } : {}),
+      ...(patch.recordSnapshot !== undefined ? { record_snapshot: patch.recordSnapshot } : {}),
+      updated_at: new Date(),
+    };
   }
 }
