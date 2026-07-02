@@ -20,5 +20,7 @@ export interface IFlowRepository {
   softDelete(id: string): Promise<Result<Flow>>;
   addContextDoc(flowId: string, doc: FlowContextDoc): Promise<Result<Flow>>;
   removeContextDoc(flowId: string, docId: string): Promise<Result<Flow>>;
+  // Replaces the flow-wide `context`-kind MCP server allow-list (ADR-032).
+  setContextMcpServers(flowId: string, serverIds: string[]): Promise<Result<Flow>>;
   setPermission(flowId: string, userId: string, role: FlowPermissionRole): Promise<Result<Flow>>;
 }

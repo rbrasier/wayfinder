@@ -39,3 +39,5 @@ export * from "./notification-log";
 export * from "./approval";
 export * from "./person";
 export * from "./hr-dataset";
+export * from "./skill";
+export * from "./mcp-server";

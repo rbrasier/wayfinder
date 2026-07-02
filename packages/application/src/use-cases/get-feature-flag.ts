@@ -8,7 +8,7 @@ import type {
 } from "@rbrasier/domain";
 import { ok } from "@rbrasier/domain";
 
-const DEFAULT_ENABLED_FLAGS = new Set(["scheduled_node"]);
+const DEFAULT_ENABLED_FLAGS = new Set(["scheduled_node", "mcp", "skills"]);
 const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
   {
     id: "default:scheduled_node",
@@ -16,6 +16,25 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
     enabled: true,
     rolloutPct: 100,
     description: "Enables scheduled nodes in flow builder and at runtime",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "default:mcp",
+    key: "mcp",
+    enabled: true,
+    rolloutPct: 100,
+    description:
+      "Enables MCP in the flow builder — flow-wide context servers and MCP action nodes (scoped to Power Users)",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "default:skills",
+    key: "skills",
+    enabled: true,
+    rolloutPct: 100,
+    description: "Enables attaching library skills to conversational steps (scoped to Power Users)",
     createdAt: new Date(0),
     updatedAt: new Date(0),
   },

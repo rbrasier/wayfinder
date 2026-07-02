@@ -13,6 +13,7 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import { ApprovalGate } from "@/components/chat/approval-gate";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { ConfirmStepCard } from "@/components/chat/confirm-step-card";
+import { McpConfirmCard } from "@/components/chat/mcp-confirm-card";
 import { MessageFeed } from "@/components/chat/message-feed";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
@@ -131,6 +132,13 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const awaitingConfirmationNodeId = sessionData?.session.awaitingConfirmationNodeId ?? null;
   const isAwaitingConfirmation =
     awaitingConfirmationNodeId !== null && awaitingConfirmationNodeId === currentNodeId;
+  // A parked write MCP action shows an editable argument preview instead of the
+  // plain Proceed card (Phase B).
+  const pendingMcpConfirmation =
+    isAwaitingConfirmation &&
+    sessionData?.pendingMcpConfirmation?.nodeId === currentNodeId
+      ? sessionData.pendingMcpConfirmation
+      : null;
 
   const senderNamesById = useMemo(() => {
     const namesById: Record<string, string> = {};
@@ -413,13 +421,25 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {isAwaitingConfirmation && currentNode && session.status === "active" && !isReadOnly && (
-        <ConfirmStepCard
-          stepName={currentNode.name}
-          onProceed={() => confirmStepMutation.mutate({ sessionId })}
-          isPending={confirmStepMutation.isPending}
-        />
-      )}
+      {isAwaitingConfirmation &&
+        currentNode &&
+        session.status === "active" &&
+        !isReadOnly &&
+        (pendingMcpConfirmation ? (
+          <McpConfirmCard
+            stepName={currentNode.name}
+            toolName={pendingMcpConfirmation.toolName}
+            args={pendingMcpConfirmation.args}
+            onProceed={(mcpArgs) => confirmStepMutation.mutate({ sessionId, mcpArgs })}
+            isPending={confirmStepMutation.isPending}
+          />
+        ) : (
+          <ConfirmStepCard
+            stepName={currentNode.name}
+            onProceed={() => confirmStepMutation.mutate({ sessionId })}
+            isPending={confirmStepMutation.isPending}
+          />
+        ))}
 
       {isApprovalGate && currentNode && session.status === "active" && !isReadOnly && (
         <ApprovalGate

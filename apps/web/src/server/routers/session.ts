@@ -145,7 +145,26 @@ export const sessionRouter = router({
         }),
       );
 
-      return { ...result.data, participants, readOnly };
+      // The MCP write action parked on the confirmation gate (Phase B), so the chat
+      // can render an editable preview of the tool arguments before Proceed.
+      const awaitingNodeId = session.awaitingConfirmationNodeId ?? null;
+      const parkedEntry = awaitingNodeId
+        ? Object.values(session.pendingExecutions).find(
+            (execution) =>
+              execution.nodeId === awaitingNodeId &&
+              execution.status === "awaiting_confirmation" &&
+              Boolean(execution.toolName),
+          )
+        : undefined;
+      const pendingMcpConfirmation = parkedEntry
+        ? {
+            nodeId: parkedEntry.nodeId,
+            toolName: parkedEntry.toolName as string,
+            args: parkedEntry.args ?? {},
+          }
+        : null;
+
+      return { ...result.data, participants, readOnly, pendingMcpConfirmation };
     }),
 
   stepData: authenticatedProcedure
@@ -267,7 +286,13 @@ export const sessionRouter = router({
     }),
 
   confirmStep: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        // Operator-edited MCP tool arguments (Phase B). Ignored for non-MCP steps.
+        mcpArgs: z.record(z.string(), z.unknown()).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);
@@ -289,6 +314,7 @@ export const sessionRouter = router({
         messages,
         confirmedByUserId: ctx.userId,
         isAdmin: ctx.isAdmin,
+        mcpArgs: input.mcpArgs,
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

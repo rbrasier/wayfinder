@@ -42,6 +42,7 @@ const toEntity = (row: typeof app_flows.$inferSelect, contentRows: ContentRow[] 
     visibility: row.visibility,
     permissions: row.permissions,
     contextDocs: row.context_docs.map((d) => toContextDoc(d, contentByPath.get(d.storagePath))),
+    contextMcpServerIds: row.context_mcp_server_ids ?? [],
     deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -195,6 +196,24 @@ export class DrizzleFlowRepository implements IFlowRepository {
     } catch (cause) {
       logRepoError("DrizzleFlowRepository.removeContextDoc", cause);
       return err(domainError("INFRA_FAILURE", "Failed to remove context doc.", cause));
+    }
+  }
+
+  async setContextMcpServers(flowId: string, serverIds: string[]): Promise<Result<Flow>> {
+    try {
+      // De-duplicate so a server is never listed twice regardless of caller input.
+      const unique = [...new Set(serverIds)];
+      const [row] = await this.db
+        .update(app_flows)
+        .set({ context_mcp_server_ids: unique, updated_at: new Date() })
+        .where(eq(app_flows.id, flowId))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", `Flow ${flowId} not found.`));
+      const contentRows = await this.enrichContextDocs(row.context_docs);
+      return ok(toEntity(row, contentRows));
+    } catch (cause) {
+      logRepoError("DrizzleFlowRepository.setContextMcpServers", cause);
+      return err(domainError("INFRA_FAILURE", "Failed to set context MCP servers.", cause));
     }
   }
 

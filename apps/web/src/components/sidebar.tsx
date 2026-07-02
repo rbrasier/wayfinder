@@ -16,11 +16,14 @@ import {
   Menu,
   MessageSquare,
   PieChart,
+  Plug,
   Settings,
   ShieldOff,
   ShieldCheck,
+  Sparkles,
   Stamp,
   Users,
+  Workflow,
   X,
 } from "lucide-react";
 import { useSidebar } from "@/components/sidebar-context";
@@ -60,6 +63,14 @@ const adminNav: NavGroup[] = [
       { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
       { href: "/admin/flows", icon: GitBranch, label: "Flows" },
       { href: "/admin/settings", icon: Settings, label: "Configuration" },
+    ],
+  },
+  {
+    label: "Flow Settings",
+    items: [
+      { href: "/admin/skills", icon: Sparkles, label: "Skills" },
+      { href: "/admin/mcp-servers", icon: Plug, label: "MCP Servers" },
+      { href: "/admin/n8n", icon: Workflow, label: "n8n" },
     ],
   },
   {
@@ -185,19 +196,48 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const canCurate =
     (userQuery.data?.isAdmin ?? false) ||
     (userQuery.data?.permissions ?? []).includes("knowledge:curate");
-  const baseNav = isAdmin ? adminNav : userNav;
-  const nav: NavGroup[] = canCurate
-    ? [
-        {
-          ...baseNav[0]!,
-          items: [
-            ...baseNav[0]!.items,
-            { href: "/knowledge", icon: BookOpen, label: "Knowledge" },
-          ],
-        },
-        ...baseNav.slice(1),
-      ]
-    : baseNav;
+
+  // Skills / MCP Servers are power-user features (ADR-022). Hide their nav entries
+  // when the caller lacks the flag — `isEnabledForMe` already accounts for role
+  // scoping, so this covers both "flag off" and "not entitled by role".
+  const mcpEnabled =
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }, { enabled: isAdmin }).data ?? false;
+  const skillsEnabled =
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }, { enabled: isAdmin }).data ?? false;
+  // n8n only powers automated (auto) nodes, so its page follows the auto_node flag.
+  const autoNodeEnabled =
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }, { enabled: isAdmin }).data ?? false;
+
+  // Drop Skills / MCP Servers / n8n from "Flow Settings" unless the flag entitles the user.
+  const gatedAdminNav = adminNav.map((group) => {
+    if (group.label !== "Flow Settings") return group;
+    const items = group.items.filter((item) => {
+      if (item.href === "/admin/skills") return skillsEnabled;
+      if (item.href === "/admin/mcp-servers") return mcpEnabled;
+      if (item.href === "/admin/n8n") return autoNodeEnabled;
+      return true;
+    });
+    return { ...group, items };
+  });
+
+  const baseNav = isAdmin ? gatedAdminNav : userNav;
+  const knowledgeItem: NavItem = { href: "/knowledge", icon: BookOpen, label: "Knowledge" };
+  // Curators reach Knowledge from their primary nav. For admins it belongs with the
+  // other flow-authoring surfaces under "Flow Settings"; for users it sits in the
+  // single top group.
+  const nav: NavGroup[] = (!canCurate
+    ? baseNav
+    : isAdmin
+      ? baseNav.map((group) =>
+          group.label === "Flow Settings"
+            ? { ...group, items: [...group.items, knowledgeItem] }
+            : group,
+        )
+      : [
+          { ...baseNav[0]!, items: [...baseNav[0]!.items, knowledgeItem] },
+          ...baseNav.slice(1),
+        ]
+  ).filter((group) => group.items.length > 0);
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin

@@ -55,6 +55,12 @@ export const app_flows = pgTable(
       .default({ kind: "private" }),
     permissions: jsonb("permissions").$type<FlowPermission[]>().notNull().default([]),
     context_docs: jsonb("context_docs").$type<StoredContextDoc[]>().notNull().default([]),
+    // Ids of `context`-kind MCP servers attached flow-wide (ADR-032). Stored as a
+    // jsonb array alongside context_docs — read-only grounding for every step.
+    context_mcp_server_ids: jsonb("context_mcp_server_ids")
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     deleted_at: timestamp("deleted_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -68,7 +74,7 @@ export const app_flow_nodes = pgTable(
     flow_id: uuid("flow_id")
       .notNull()
       .references(() => app_flows.id, { onDelete: "cascade" }),
-    type: text("type", { enum: ["conversational", "auto", "scheduled", "approval"] })
+    type: text("type", { enum: ["conversational", "auto", "scheduled", "approval", "mcp"] })
       .notNull()
       .default("conversational"),
     name: text("name").notNull(),

@@ -14,6 +14,8 @@ export interface FlowSnapshotMeta {
   icon: string | null;
   expertRole: string | null;
   contextDocs: Flow["contextDocs"];
+  // Optional for snapshots captured before flow-wide context MCP shipped.
+  contextMcpServerIds?: string[];
 }
 
 // Node as captured in a snapshot. Node `id`s are preserved so a restore can
@@ -82,6 +84,7 @@ export const buildFlowSnapshot = (
     icon: flow.icon,
     expertRole: flow.expertRole,
     contextDocs: flow.contextDocs,
+    contextMcpServerIds: flow.contextMcpServerIds,
   },
   nodes: nodes.map((node) => ({
     id: node.id,

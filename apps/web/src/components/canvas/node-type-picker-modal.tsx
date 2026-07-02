@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, Stamp, Timer, Zap } from "lucide-react";
+import { MessageSquare, Plug, Stamp, Timer, Zap } from "lucide-react";
 import {
   Dialog,
   DialogBody,
@@ -47,6 +47,12 @@ const ADVANCED_OPTIONS: NodeTypeOption[] = [
     description: "Runs automatically via an n8n sub-workflow — no conversation.",
     Icon: Zap,
   },
+  {
+    type: "mcp",
+    label: "MCP Tool",
+    description: "Runs automatically by calling one tool on a registered MCP server.",
+    Icon: Plug,
+  },
 ];
 
 interface NodeTypePickerModalProps {
@@ -54,6 +60,7 @@ interface NodeTypePickerModalProps {
   autoNodeEnabled?: boolean;
   scheduledNodeEnabled?: boolean;
   approvalNodeEnabled?: boolean;
+  mcpNodeEnabled?: boolean;
   onSelect: (type: NodeConfigType) => void;
   onClose: () => void;
 }
@@ -121,6 +128,7 @@ export function NodeTypePickerModal({
   autoNodeEnabled = false,
   scheduledNodeEnabled = false,
   approvalNodeEnabled = true,
+  mcpNodeEnabled = true,
   onSelect,
   onClose,
 }: NodeTypePickerModalProps) {
@@ -132,6 +140,7 @@ export function NodeTypePickerModal({
 
   const advancedOptions = ADVANCED_OPTIONS.filter((option) => {
     if (option.type === "auto") return autoNodeEnabled;
+    if (option.type === "mcp") return mcpNodeEnabled;
     return true;
   });
 

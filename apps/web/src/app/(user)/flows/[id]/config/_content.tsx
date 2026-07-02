@@ -40,6 +40,7 @@ import type { ConversationalNodeData } from "@/components/canvas/conversational-
 import { ConversationalNode } from "@/components/canvas/conversational-node";
 import type { AutoNodeData } from "@/components/canvas/auto-node";
 import { AutoNode } from "@/components/canvas/auto-node";
+import { McpNode, type McpNodeData } from "@/components/canvas/mcp-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import type { ApprovalNodeData } from "@/components/canvas/approval-node";
@@ -64,6 +65,7 @@ import { orderStepIds } from "@/lib/step-order";
 const NODE_TYPES = {
   conversationalNode: ConversationalNode,
   autoNode: AutoNode,
+  mcpNode: McpNode,
   scheduledNode: ScheduledNode,
   approvalNode: ApprovalNode,
 };
@@ -73,7 +75,7 @@ interface RawNode {
   id: string;
   name: string;
   colour: string | null;
-  type?: "conversational" | "auto" | "scheduled" | "approval";
+  type?: "conversational" | "auto" | "scheduled" | "approval" | "mcp";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;
@@ -120,6 +122,17 @@ const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
     return { id: node.id, type: "approvalNode", position: { x: node.positionX, y: node.positionY }, data };
   }
 
+  if (node.type === "mcp") {
+    const data: McpNodeData = {
+      name: node.name,
+      colour: node.colour,
+      toolName: (node.config.toolName as string | null) ?? null,
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "mcpNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
   const data: ConversationalNodeData = {
     name: node.name,
     colour: node.colour,
@@ -152,6 +165,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [rfNodes, setRfNodes] = useState<Node[]>([]);
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
   const [contextDocs, setContextDocs] = useState<FlowContextDoc[]>([]);
+  const [contextMcpServerIds, setContextMcpServerIds] = useState<string[]>([]);
   const [flowName, setFlowName] = useState("");
   const [flowDescription, setFlowDescription] = useState<string>("");
   const [flowIcon, setFlowIcon] = useState<string>("");
@@ -166,6 +180,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
   const scheduledNodeEnabled =
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
+  const mcpEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }).data ?? false;
+  const skillsEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }).data ?? false;
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -220,6 +236,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setRfNodes(data.nodes.map((n) => toRfNode(n, null)));
     setRfEdges(data.edges.map(toRfEdge));
     setContextDocs(data.flow.contextDocs);
+    setContextMcpServerIds(data.flow.contextMcpServerIds ?? []);
     setFlowName(data.flow.name);
     setFlowDescription(data.flow.description ?? "");
     setFlowIcon(data.flow.icon ?? "");
@@ -409,6 +426,15 @@ function CanvasInner({ flowId }: { flowId: string }) {
           notifyOnComplete: values.notifyOnComplete,
         };
       }
+      if (values.type === "mcp") {
+        return {
+          instruction: values.instruction,
+          serverId: values.mcpServerId,
+          allowedToolNames: values.mcpAllowedToolNames,
+          responseFields: values.responseFields,
+          requireConfirmation: values.requireConfirmation,
+        };
+      }
       const hasTemplate = values.outputType === "generate_document" && !!values.documentTemplatePath;
       return {
         aiInstruction: values.aiInstruction,
@@ -422,6 +448,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateStructuredContent: hasTemplate ? (existingNodeConfig.documentTemplateStructuredContent ?? null) : null,
         allowManualEdit: values.allowManualEdit,
         requireConfirmation: values.neverDone ? false : values.requireConfirmation,
+        skillRefs: values.skillRefs,
+        allowedMcpToolRefs: values.allowedMcpToolRefs,
         notifyOnComplete: values.notifyOnComplete,
       };
     };
@@ -620,10 +648,19 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
         allowManualEdit: (editingConfig.allowManualEdit as boolean | undefined) ?? true,
         requireConfirmation: Boolean(editingConfig.requireConfirmation),
+        skillRefs: (editingConfig.skillRefs as string[] | undefined) ?? [],
+        allowedMcpToolRefs:
+          (editingConfig.allowedMcpToolRefs as NodeConfigValues["allowedMcpToolRefs"] | undefined) ??
+          [],
         instruction: (editingConfig.instruction as string | null) ?? "",
         executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
         workflowId: (editingConfig.workflowId as string | null) ?? null,
         webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
+        mcpServerId: (editingConfig.serverId as string | null) ?? "",
+        mcpToolName: (editingConfig.toolName as string | null) ?? "",
+        mcpAllowedToolNames:
+          (editingConfig.allowedToolNames as string[] | undefined) ??
+          (editingConfig.toolName ? [editingConfig.toolName as string] : []),
         requestFields: readFields(editingConfig.requestFields),
         requestFieldValues:
           (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},
@@ -834,12 +871,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
         )}
       </div>
 
-      <ContextDocsStrip flowId={flowId} docs={contextDocs} onDocsChange={setContextDocs} />
+      <ContextDocsStrip
+        flowId={flowId}
+        docs={contextDocs}
+        onDocsChange={setContextDocs}
+        mcpEnabled={mcpEnabled}
+        contextMcpServerIds={contextMcpServerIds}
+        onContextMcpServerIdsChange={setContextMcpServerIds}
+      />
 
       <NodeTypePickerModal
         open={typePickerOpen}
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
+        mcpNodeEnabled={mcpEnabled}
         onSelect={handleSelectNodeType}
         onClose={() => setTypePickerOpen(false)}
       />
@@ -852,6 +897,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onDelete={editingNodeId ? handleNodeDelete : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
+        skillsEnabled={skillsEnabled}
+        mcpEnabled={mcpEnabled}
         priorStepFields={priorStepFields}
         onUploadTemplate={editingNodeId ? handleUploadTemplate : undefined}
       />

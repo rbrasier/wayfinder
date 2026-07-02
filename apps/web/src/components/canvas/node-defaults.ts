@@ -36,6 +36,16 @@ export const defaultConfigForType = (type: NodeConfigType): Record<string, unkno
       notifyOnComplete: true,
     };
   }
+  if (type === "mcp") {
+    return {
+      instruction: "",
+      serverId: "",
+      allowedToolNames: [],
+      responseFields: [],
+      // Write actions require operator confirmation by default (ADR-032).
+      requireConfirmation: true,
+    };
+  }
   return {
     aiInstruction: "",
     doneWhen: "",

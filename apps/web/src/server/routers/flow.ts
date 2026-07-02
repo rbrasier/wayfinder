@@ -90,7 +90,7 @@ const nodeRouter = router({
         // renders an "Untitled step" fallback while the name is empty.
         name: z.string(),
         colour: z.string().nullable().optional(),
-        type: z.enum(["conversational", "auto", "scheduled", "approval"]).optional(),
+        type: z.enum(["conversational", "auto", "scheduled", "approval", "mcp"]).optional(),
         positionX: z.number(),
         positionY: z.number(),
         config: z.record(z.unknown()).default({}),
@@ -122,7 +122,7 @@ const nodeRouter = router({
         // Blank names are allowed (v1.36.0) — canvas shows an "Untitled step" fallback.
         name: z.string().optional(),
         colour: z.string().nullable().optional(),
-        type: z.enum(["conversational", "auto", "scheduled", "approval"]).optional(),
+        type: z.enum(["conversational", "auto", "scheduled", "approval", "mcp"]).optional(),
         config: z.record(z.unknown()).optional(),
       }),
     )
@@ -344,6 +344,25 @@ export const flowRouter = router({
           await ctx.container.repos.documentChunks.deleteByStoragePath(removedDoc.storagePath);
         }
         return { ok: true };
+      }),
+  }),
+
+  contextMcp: router({
+    // Replaces the flow-wide context MCP server allow-list. The use-case keeps only
+    // active `context`-kind servers, so passing an actions server is a no-op.
+    setServers: authenticatedProcedure
+      .input(z.object({ flowId: z.string().uuid(), serverIds: z.array(z.string().uuid()) }))
+      .mutation(async ({ ctx, input }) => {
+        if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
+        }
+        const result = await ctx.container.useCases.setFlowContextMcpServers.execute(
+          input.flowId,
+          input.serverIds,
+        );
+        if (result.error) throw toTrpcError(result.error);
+        syncDraft(ctx.container, input.flowId);
+        return result.data;
       }),
   }),
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { ConnectivityResult, ConnectivityTarget } from "@rbrasier/domain";
+import type { ConnectivityTarget } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,6 +18,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
+import {
+  ConnectivityTest,
+  useConnectivity,
+  type ConnectivityController,
+} from "@/components/admin/connectivity";
 
 type Provider = "anthropic" | "openai" | "mistral" | "bedrock";
 
@@ -28,138 +33,15 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   bedrock: "Amazon Bedrock",
 };
 
-// Targets exercised by the header "Test all" button, in card order.
+// Targets exercised by the header "Test all" button, in card order. n8n moved to
+// its own Flow Settings page, so it is no longer probed from here.
 const ALL_CONNECTIVITY_TARGETS: ConnectivityTarget[] = [
   "ai",
-  "n8n",
   "embeddings",
   "storage",
   "email",
   "entra",
 ];
-
-type BadgeState =
-  | { status: "idle" }
-  | { status: "testing" }
-  | { status: "ok"; latencyMs?: number; message?: string }
-  | { status: "skipped"; message?: string }
-  | { status: "failed"; message?: string };
-
-interface ConnectivityController {
-  states: Partial<Record<ConnectivityTarget, BadgeState>>;
-  runTest: (target: ConnectivityTarget) => Promise<void>;
-  runAll: (targets: ConnectivityTarget[]) => Promise<void>;
-  isBusy: boolean;
-}
-
-const toBadge = (result: ConnectivityResult): BadgeState => {
-  if (result.skipped) return { status: "skipped", message: result.message };
-  if (result.ok) return { status: "ok", latencyMs: result.latencyMs, message: result.message };
-  return { status: "failed", message: result.message };
-};
-
-function useConnectivity(): ConnectivityController {
-  const [states, setStates] = useState<Partial<Record<ConnectivityTarget, BadgeState>>>({});
-  const mutation = trpc.settings.testConnectivity.useMutation();
-
-  const runTest = useCallback(
-    async (target: ConnectivityTarget) => {
-      setStates((prev) => ({ ...prev, [target]: { status: "testing" } }));
-      try {
-        const result = await mutation.mutateAsync({ target });
-        setStates((prev) => ({ ...prev, [target]: toBadge(result) }));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Probe failed";
-        setStates((prev) => ({ ...prev, [target]: { status: "failed", message } }));
-      }
-    },
-    [mutation],
-  );
-
-  // Fan out to per-card probes in parallel so each badge resolves independently.
-  const runAll = useCallback(
-    async (targets: ConnectivityTarget[]) => {
-      await Promise.all(targets.map((target) => runTest(target)));
-    },
-    [runTest],
-  );
-
-  const isBusy = Object.values(states).some((state) => state?.status === "testing");
-
-  return { states, runTest, runAll, isBusy };
-}
-
-function ConnectivityBadge({ target, state }: { target: ConnectivityTarget; state?: BadgeState }) {
-  if (!state || state.status === "idle") return null;
-
-  const testId = `connectivity-badge-${target}`;
-  if (state.status === "testing") {
-    return (
-      <span
-        data-testid={testId}
-        data-status="testing"
-        className="inline-flex items-center gap-1 rounded-md border border-[#dedad2] bg-[#f7f6f3] px-2 py-1 text-xs text-muted-foreground"
-      >
-        <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground" /> Testing…
-      </span>
-    );
-  }
-  if (state.status === "ok") {
-    return (
-      <span
-        data-testid={testId}
-        data-status="ok"
-        className="inline-flex rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs text-emerald-900"
-      >
-        Reachable{typeof state.latencyMs === "number" ? ` · ${state.latencyMs} ms` : ""}
-      </span>
-    );
-  }
-  if (state.status === "skipped") {
-    return (
-      <span
-        data-testid={testId}
-        data-status="skipped"
-        className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-900"
-      >
-        {state.message ?? "Not configured"}
-      </span>
-    );
-  }
-  return (
-    <span
-      data-testid={testId}
-      data-status="failed"
-      className="inline-flex rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs text-red-900"
-    >
-      Failed{state.message ? `: ${state.message}` : ""}
-    </span>
-  );
-}
-
-function ConnectivityTest({
-  target,
-  controller,
-}: {
-  target: ConnectivityTarget;
-  controller: ConnectivityController;
-}) {
-  const state = controller.states[target];
-  return (
-    <div className="flex items-center gap-2 border-t border-[#ece9e3] pt-3">
-      <Button
-        size="sm"
-        variant="secondary"
-        data-testid={`test-connectivity-${target}`}
-        onClick={() => void controller.runTest(target)}
-        disabled={state?.status === "testing"}
-      >
-        {state?.status === "testing" ? "Testing…" : "Test connectivity"}
-      </Button>
-      <ConnectivityBadge target={target} state={state} />
-    </div>
-  );
-}
 
 function OrganisationNameCard() {
   const orgNameQuery = trpc.settings.get.useQuery({ key: "organisation_name" });
@@ -739,114 +621,6 @@ function AiProviderCard({ connectivity }: { connectivity: ConnectivityController
                 placeholder={
                   config?.apiKeys.bedrock.secretAccessKey === "set" ? "•••••• (stored)" : "Not set"
                 }
-              />
-            </div>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saveMutation.isPending}>
-              {saveMutation.isPending ? "Saving…" : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  );
-}
-
-function N8nIntegrationCard({ connectivity }: { connectivity: ConnectivityController }) {
-  const utils = trpc.useUtils();
-  const configQuery = trpc.settings.getN8nConfig.useQuery();
-  const saveMutation = trpc.settings.setN8nConfig.useMutation({
-    onSuccess: async () => {
-      toast.success("n8n settings saved");
-      await utils.settings.getN8nConfig.invalidate();
-      setOpen(false);
-    },
-    onError: (error) => toast.error(error.message ?? "Failed to save n8n settings"),
-  });
-
-  const [open, setOpen] = useState(false);
-  const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
-
-  const config = configQuery.data;
-
-  useEffect(() => {
-    if (!open || !config) return;
-    setBaseUrl(config.baseUrl);
-    setApiKey("");
-  }, [open, config]);
-
-  const handleSave = () => {
-    if (baseUrl.trim() === "") {
-      toast.error("Base URL is required");
-      return;
-    }
-    saveMutation.mutate({ baseUrl: baseUrl.trim(), apiKey: apiKey.length > 0 ? apiKey : null });
-  };
-
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">n8n Integration</CardTitle>
-        <Button size="sm" variant="outline" onClick={() => setOpen(true)} disabled={!config}>
-          Edit
-        </Button>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        <p className="text-muted-foreground">
-          Connect an n8n instance so auto nodes can pick from your workflows instead of
-          hand-typing a webhook URL.
-        </p>
-        {!config ? (
-          <p className="text-muted-foreground">Loading…</p>
-        ) : (
-          <>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Base URL</span>
-              <span className="font-mono text-xs">{config.baseUrl || "—"}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">API key</span>
-              <span className="font-mono text-xs">{config.apiKey === "set" ? "•••• set" : "unset"}</span>
-            </div>
-          </>
-        )}
-        {config && Boolean(config.baseUrl) && config.apiKey === "set" && (
-          <ConnectivityTest target="n8n" controller={connectivity} />
-        )}
-      </CardContent>
-
-      <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Edit n8n settings</DialogTitle>
-            <DialogCloseButton />
-          </DialogHeader>
-          <DialogBody className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              Saved values override <code>.env</code>. Leave the API key blank to keep the stored one.
-            </p>
-            <div className="space-y-1">
-              <Label htmlFor="n8n-base-url">Base URL</Label>
-              <Input
-                id="n8n-base-url"
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="https://n8n.example.com"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="n8n-api-key">API key</Label>
-              <Input
-                id="n8n-api-key"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={config?.apiKey === "set" ? "•••••• (stored)" : "Not set"}
               />
             </div>
           </DialogBody>
@@ -2167,7 +1941,6 @@ export default function AppSettingsPage() {
             <AiProviderCard connectivity={connectivity} />
             <DocumentGenerationCard />
 
-            <N8nIntegrationCard connectivity={connectivity} />
             <RagEmbeddingsCard connectivity={connectivity} />
             <StorageCard connectivity={connectivity} />
             <SessionUploadsCard />

@@ -11,6 +11,7 @@ export * from "./create-flow-edge";
 export * from "./delete-flow-edge";
 export * from "./add-context-doc";
 export * from "./remove-context-doc";
+export * from "./set-context-mcp-servers";
 export * from "./grant-flow-owner";
 export * from "./publish-flow-version";
 export * from "./list-flow-versions";

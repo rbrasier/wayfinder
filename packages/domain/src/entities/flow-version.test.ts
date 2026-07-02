@@ -15,6 +15,7 @@ const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
   visibility: { kind: "private" },
   permissions: [{ userId: "user-1", role: "owner" }],
   contextDocs: [],
+  contextMcpServerIds: [],
   deletedAt: null,
   createdAt: new Date("2026-01-01"),
   updatedAt: new Date("2026-02-01"),
@@ -55,6 +56,7 @@ describe("buildFlowSnapshot", () => {
       icon: "📋",
       expertRole: "Procurement Officer",
       contextDocs: [],
+      contextMcpServerIds: [],
     });
     expect(snapshot.flow).not.toHaveProperty("ownerUserId");
     expect(snapshot.flow).not.toHaveProperty("createdAt");

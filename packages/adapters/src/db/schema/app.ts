@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { core_users } from "./core";
 
 export const app_error_log = pgTable(
@@ -25,5 +25,32 @@ export const app_error_log = pgTable(
   (t) => ({
     by_status: index("app_error_log_status_idx").on(t.status),
     by_message_page: index("app_error_log_msg_page_idx").on(t.message, t.page),
+  }),
+);
+
+// Uploaded SKILL.md library (ADR-031). `frontmatter` keeps the raw parsed
+// key/value pairs; `allowed_tools` is the normalised allowed-tools declaration
+// (used in Phase 2 for MCP). Editing bumps `version`.
+export const app_skills = pgTable(
+  "app_skills",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    description: text("description"),
+    body: text("body").notNull(),
+    allowed_tools: jsonb("allowed_tools").$type<string[]>().notNull().default([]),
+    frontmatter: jsonb("frontmatter").$type<Record<string, string>>().notNull().default({}),
+    version: integer("version").notNull().default(1),
+    status: text("status", { enum: ["active", "archived"] })
+      .notNull()
+      .default("active"),
+    created_by_user_id: uuid("created_by_user_id").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_status: index("app_skills_status_idx").on(t.status),
   }),
 );

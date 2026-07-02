@@ -29,4 +29,6 @@ export * from "./drizzle-feature-flag-role-repository";
 export * from "./drizzle-notification-log-repository";
 export * from "./drizzle-approval-repository";
 export * from "./drizzle-hr-dataset-repository";
+export * from "./drizzle-skill-repository";
+export * from "./drizzle-mcp-server-repository";
 export * from "./drizzle-budget-repository";

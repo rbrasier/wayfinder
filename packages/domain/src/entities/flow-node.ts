@@ -1,8 +1,10 @@
 import type { FieldValueSource } from "./field-value-source";
+import type { McpToolRef } from "./mcp-server";
 import type { ScheduleAnchor, ScheduleKind } from "./session-schedule";
+import type { ParsedSkill } from "./skill";
 import type { TemplateField } from "./template-field";
 
-export type FlowNodeType = "conversational" | "auto" | "scheduled" | "approval";
+export type FlowNodeType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
 
 export type ApproverSourceMode =
   | "first_level_supervisor"
@@ -34,6 +36,17 @@ export interface ConversationalNodeConfig {
   // the operator clicks Proceed, instead of auto-advancing. Absent/false keeps
   // today's auto-advance behaviour.
   requireConfirmation?: boolean;
+  // Ids of library skills (app_skills) applied to this step, in author order
+  // (ADR-031). Resolved to their current version at prompt-build time.
+  skillRefs?: string[];
+  // A one-off skill uploaded directly onto this step, not stored in the library.
+  // Injected after any referenced skills.
+  inlineSkill?: ParsedSkill | null;
+  // MCP tools this conversational step may call mid-conversation (ADR-032).
+  // Deny-by-default: a tool not listed here is never offered to the model. The
+  // editor pre-fills this from applied skills' allowedTools, but this list — not
+  // the skill — is the enforcement boundary.
+  allowedMcpToolRefs?: McpToolRef[];
 }
 
 export type NodeExecutorKind = "n8n" | "mock";
@@ -54,6 +67,35 @@ export interface AutoNodeConfig {
   // Keys of author-added (custom) request fields. These are removable in the
   // editor; workflow-derived fields are not. Missing means no custom fields.
   customRequestFieldKeys?: string[];
+}
+
+// A governed write-action MCP node (ADR-032, Phase B). The author curates a set
+// of allowed write tools on one server plus instructions; at runtime the AI picks
+// one tool from the allow-list and generates its arguments from the tool's live
+// input schema. The operator can edit those arguments before the call runs. The
+// tool result is persisted to session_step_outputs under `output` (the ADR-020 path).
+export interface McpNodeConfig {
+  // Guides the AI on when to act and which tool to choose, and how to fill its
+  // arguments from the conversation.
+  instruction: string;
+  serverId: string;
+  // The curated allow-list the AI may choose from. The AI selects exactly one per
+  // node run and generates its arguments from that tool's input schema.
+  allowedToolNames?: string[];
+  responseFields?: TemplateField[];
+  // Human-in-the-loop gate for write actions (ADR-032). When true (the default —
+  // absent is treated as true), reaching the node plans the tool call and parks the
+  // session on the operator-confirmation gate (arguments are editable); the tool only
+  // runs once the operator clicks Proceed. When false, the call fires automatically.
+  requireConfirmation?: boolean;
+  // Deprecated (Phase A, read-only for back-compat). A node authored before the
+  // allow-list existed carries a single `toolName`; the runtime treats the allow-list
+  // as `[toolName]`. `requestFields`/`requestFieldValues` are no longer used — the AI
+  // now generates arguments from the tool schema — but are retained so old configs
+  // deserialize without loss.
+  toolName?: string;
+  requestFields?: TemplateField[];
+  requestFieldValues?: Record<string, FieldValueSource>;
 }
 
 export interface ScheduledNodeConfig {

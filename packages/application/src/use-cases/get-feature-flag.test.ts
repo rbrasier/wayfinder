@@ -106,8 +106,12 @@ describe("IsFeatureEnabledForUser", () => {
       new FakeUserRoleRepository(),
     );
     const enabled = await useCase.execute("user-1", "scheduled_node", false);
+    const mcp = await useCase.execute("user-1", "mcp", false);
+    const skills = await useCase.execute("user-1", "skills", false);
     const disabled = await useCase.execute("user-1", "auto_node", false);
     expect(enabled.data).toBe(true);
+    expect(mcp.data).toBe(true);
+    expect(skills.data).toBe(true);
     expect(disabled.data).toBe(false);
   });
 

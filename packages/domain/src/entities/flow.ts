@@ -34,6 +34,10 @@ export interface Flow {
   visibility: FlowVisibility;
   permissions: FlowPermission[];
   contextDocs: FlowContextDoc[];
+  // Ids of `context`-kind MCP servers attached flow-wide (ADR-032). Their tools
+  // are offered read-only to the conversational AI across every step, the same
+  // way context docs ground the whole flow.
+  contextMcpServerIds: string[];
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
