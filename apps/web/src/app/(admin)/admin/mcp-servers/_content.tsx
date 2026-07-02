@@ -18,6 +18,7 @@ import { trpc } from "@/trpc/client";
 
 export function AdminMcpServersContent() {
   const utils = trpc.useUtils();
+  const featureQuery = trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" });
   const serversQuery = trpc.mcpServer.list.useQuery({ includeDisabled: true });
 
   const [label, setLabel] = useState("");
@@ -61,6 +62,27 @@ export function AdminMcpServersContent() {
       credentialRef: credentialRef.trim() ? credentialRef.trim() : null,
     });
   };
+
+  if (featureQuery.data === false) {
+    return (
+      <div className="h-full overflow-auto">
+        <div className="container py-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>MCP servers unavailable</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                The MCP feature is turned off for your account. An administrator can
+                enable the <span className="font-mono">mcp</span> feature flag to manage
+                servers here.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-auto">

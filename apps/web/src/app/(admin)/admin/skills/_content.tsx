@@ -28,6 +28,7 @@ termination clauses. Ask the user about anything ambiguous.`;
 
 export function AdminSkillsContent() {
   const utils = trpc.useUtils();
+  const featureQuery = trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" });
   const skillsQuery = trpc.skill.list.useQuery({ includeArchived: true });
 
   const [raw, setRaw] = useState("");
@@ -52,6 +53,27 @@ export function AdminSkillsContent() {
     if (!raw.trim()) return;
     create.mutate({ raw });
   };
+
+  if (featureQuery.data === false) {
+    return (
+      <div className="h-full overflow-auto">
+        <div className="container py-8">
+          <Card>
+            <CardHeader>
+              <CardTitle>Skills unavailable</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                The Skills feature is turned off for your account. An administrator can
+                enable the <span className="font-mono">skills</span> feature flag to
+                manage skills here.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-auto">

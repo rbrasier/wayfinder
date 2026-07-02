@@ -194,12 +194,32 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const canCurate =
     (userQuery.data?.isAdmin ?? false) ||
     (userQuery.data?.permissions ?? []).includes("knowledge:curate");
-  const baseNav = isAdmin ? adminNav : userNav;
+
+  // Skills / MCP Servers are power-user features (ADR-022). Hide their nav entries
+  // when the caller lacks the flag — `isEnabledForMe` already accounts for role
+  // scoping, so this covers both "flag off" and "not entitled by role".
+  const mcpEnabled =
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }, { enabled: isAdmin }).data ?? false;
+  const skillsEnabled =
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }, { enabled: isAdmin }).data ?? false;
+
+  // Drop Skills / MCP Servers from "Flow Settings" unless the flag entitles the user.
+  const gatedAdminNav = adminNav.map((group) => {
+    if (group.label !== "Flow Settings") return group;
+    const items = group.items.filter((item) => {
+      if (item.href === "/admin/skills") return skillsEnabled;
+      if (item.href === "/admin/mcp-servers") return mcpEnabled;
+      return true;
+    });
+    return { ...group, items };
+  });
+
+  const baseNav = isAdmin ? gatedAdminNav : userNav;
   const knowledgeItem: NavItem = { href: "/knowledge", icon: BookOpen, label: "Knowledge" };
   // Curators reach Knowledge from their primary nav. For admins it belongs with the
   // other flow-authoring surfaces under "Flow Settings"; for users it sits in the
   // single top group.
-  const nav: NavGroup[] = !canCurate
+  const nav: NavGroup[] = (!canCurate
     ? baseNav
     : isAdmin
       ? baseNav.map((group) =>
@@ -210,7 +230,8 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
       : [
           { ...baseNav[0]!, items: [...baseNav[0]!.items, knowledgeItem] },
           ...baseNav.slice(1),
-        ];
+        ]
+  ).filter((group) => group.items.length > 0);
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin
