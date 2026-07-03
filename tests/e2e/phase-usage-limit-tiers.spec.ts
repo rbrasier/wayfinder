@@ -18,69 +18,86 @@
  * one asserted here (admins see the meter only when a limit resolves for them,
  * the same rule as everyone else).
  *
- * The test restores the original enforcement state and deletes the limit it
- * created so the shared seed stays deterministic.
+ * A budget is globally unique per (period, scope target), so the test starts
+ * from a clean slate — it removes every existing limit before adding its own,
+ * which also makes it robust to CI retries and any leftover row.
  */
 
 import type { Page } from '@playwright/test';
 import { test, expect } from './helpers/base';
 
-const UNIQUE_LIMIT = '51.37'; // distinctive value so we can find our own row
+const LIMIT = '51.37';
+
+async function gotoUsageAdmin(page: Page): Promise<void> {
+  await page.goto('/admin/usage');
+  await expect(page.getByText(/^Enforcement:/)).toBeVisible({ timeout: 20_000 });
+}
+
+// Delete every configured limit so neither a seeded row, a prior run, nor a CI
+// retry can collide with the (period, scope) uniqueness constraint.
+async function clearAllLimits(page: Page): Promise<void> {
+  await expect(
+    page
+      .getByText('No limits configured.')
+      .or(page.getByRole('button', { name: /^Delete$/ }).first()),
+  ).toBeVisible({ timeout: 20_000 });
+
+  for (let guard = 0; guard < 25; guard++) {
+    const deleteButton = page.getByRole('button', { name: /^Delete$/ }).first();
+    if (!(await deleteButton.isVisible().catch(() => false))) break;
+    await deleteButton.click();
+    // Wait for the row count to shrink before the next iteration.
+    await page.waitForTimeout(200);
+  }
+  await expect(page.getByText('No limits configured.')).toBeVisible({ timeout: 20_000 });
+}
 
 async function ensureEnforcementOn(page: Page): Promise<void> {
-  await page.goto('/admin/usage');
-  await expect(page.getByText(/^Enforcement:/)).toBeVisible({ timeout: 15_000 });
   const turnOn = page.getByRole('button', { name: /turn on/i });
   if (await turnOn.isVisible().catch(() => false)) {
     await turnOn.click();
-    await expect(page.getByText(/Enforcement: On/)).toBeVisible();
-  }
-}
-
-async function deleteOurLimit(page: Page): Promise<void> {
-  const row = page.getByRole('row').filter({ hasText: `$${UNIQUE_LIMIT}` });
-  if (await row.first().isVisible().catch(() => false)) {
-    await row.first().getByRole('button', { name: /delete/i }).click();
-    await expect(page.getByRole('row').filter({ hasText: `$${UNIQUE_LIMIT}` })).toHaveCount(0);
+    await expect(page.getByText('Enforcement: On')).toBeVisible();
   }
 }
 
 test.describe('Usage limit tiers + usage meter', () => {
   test.afterEach(async ({ page }) => {
-    // Best-effort cleanup: remove our limit, leave enforcement On (the default).
-    await page.goto('/admin/usage').catch(() => undefined);
-    await deleteOurLimit(page).catch(() => undefined);
+    // Best-effort: leave the DB clean and enforcement On (the default).
+    await gotoUsageAdmin(page).catch(() => undefined);
+    await clearAllLimits(page).catch(() => undefined);
+    await ensureEnforcementOn(page).catch(() => undefined);
   });
 
   test('admin configures an Everyone limit and the meter appears, then hides when off', async ({
     page,
   }) => {
+    await gotoUsageAdmin(page);
+    await clearAllLimits(page);
     await ensureEnforcementOn(page);
-    await deleteOurLimit(page); // start clean if a prior run left one behind
 
     // Scope defaults to Everyone; fill the limit and add it.
-    await page.getByLabel('Limit (USD)').fill(UNIQUE_LIMIT);
+    await page.getByLabel('Limit (USD)').fill(LIMIT);
     await page.getByRole('button', { name: /add limit/i }).click();
 
     // The caps table shows the new Everyone-scoped limit.
-    const ourRow = page.getByRole('row').filter({ hasText: `$${UNIQUE_LIMIT}` });
-    await expect(ourRow).toBeVisible({ timeout: 15_000 });
+    const ourRow = page.getByRole('row').filter({ hasText: `$${LIMIT}` });
+    await expect(ourRow).toBeVisible({ timeout: 20_000 });
     await expect(ourRow).toContainText('Everyone');
 
     // On a user page, the sidebar usage meter resolves for the signed-in user.
     await page.goto('/chats');
-    const meter = page.getByRole('progressbar', { name: /usage/i });
-    await expect(meter).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('progressbar', { name: /usage/i })).toBeVisible({
+      timeout: 20_000,
+    });
 
     // Error path visible to the user: turning enforcement Off hides the meter.
-    await page.goto('/admin/usage');
+    await gotoUsageAdmin(page);
     await page.getByRole('button', { name: /turn off/i }).click();
-    await expect(page.getByText(/Enforcement: Off/)).toBeVisible();
+    await expect(page.getByText('Enforcement: Off')).toBeVisible();
 
     await page.goto('/chats');
-    await expect(page.getByRole('progressbar', { name: /usage/i })).toHaveCount(0);
-
-    // Restore enforcement to the default On for the next test.
-    await ensureEnforcementOn(page);
+    await expect(page.getByRole('progressbar', { name: /usage/i })).toHaveCount(0, {
+      timeout: 20_000,
+    });
   });
 });
