@@ -4,12 +4,15 @@ import {
   err,
   evaluateBudget,
   ok,
+  resolveEffectiveBudget,
   type Budget,
+  type BudgetPeriod,
   type GenerateObjectInput,
   type IAuditLogger,
   type IBudgetRepository,
   type ILanguageModel,
   type IUsageRepository,
+  type IUserRoleRepository,
   type ProviderName,
   type Result,
   type StreamObjectInput,
@@ -23,6 +26,8 @@ interface CapEvaluation {
   ratio: number;
 }
 
+const PERIODS: BudgetPeriod[] = ["daily", "weekly", "monthly"];
+
 // Shared budget check used by both the decorator (port calls) and the chat
 // stream route (which calls the Vercel SDK directly, bypassing the port). Holds
 // the per-process warn de-duplication set (ADR-026 open question: one warn per
@@ -34,24 +39,36 @@ export class QuotaEnforcer {
     private readonly budgetRepo: IBudgetRepository,
     private readonly usageRepo: IUsageRepository,
     private readonly auditLog: IAuditLogger,
+    private readonly userRoles: IUserRoleRepository,
+    private readonly isUsageLimitsEnabled: () => Promise<boolean>,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  // Returns err(QUOTA_EXCEEDED) when an enabled cap is at/over its limit; ok
-  // otherwise. Fails open (proceeds) on a budget/usage lookup error — a cap is a
-  // governance ceiling, not a hard wall, and an infra blip must not halt all AI.
+  // Returns err(QUOTA_EXCEEDED) when the user's effective cap is at/over its
+  // limit; ok otherwise. Fails open (proceeds) on a switch/role/budget/usage
+  // lookup error — a cap is a governance ceiling, not a hard wall, and an infra
+  // blip must not halt all AI (ADR-026 / ADR-031).
   async check(userId?: string | null): Promise<Result<true>> {
     if (!userId) return ok(true as const);
 
-    const enabledResult = await this.budgetRepo.findEnabledForUser(userId);
-    if (enabledResult.error) return ok(true as const);
+    // Master switch off → zero-cost fast path, no role/budget/spend queries.
+    const enabled = await this.masterSwitchEnabled();
+    if (!enabled) return ok(true as const);
 
-    const caps = enabledResult.data;
-    if (caps.length === 0) return ok(true as const);
+    const rolesResult = await this.userRoles.listRolesForUser(userId);
+    const roleKeys = rolesResult.error ? [] : rolesResult.data.map((role) => role.key);
+
+    const candidatesResult = await this.budgetRepo.findEnabledCandidatesForUser(userId, roleKeys);
+    if (candidatesResult.error) return ok(true as const);
+
+    const candidates = candidatesResult.data;
+    if (candidates.length === 0) return ok(true as const);
 
     const now = this.now();
     const evaluations: CapEvaluation[] = [];
-    for (const budget of caps) {
+    for (const period of PERIODS) {
+      const budget = resolveEffectiveBudget(candidates, roleKeys, period);
+      if (!budget) continue;
       const spendUsd = await this.currentSpend(userId, budget, now);
       const { ratio } = evaluateBudget(budget, spendUsd);
       evaluations.push({ budget, spendUsd, ratio });
@@ -85,6 +102,17 @@ export class QuotaEnforcer {
     const summary = await this.usageRepo.summarize({ userId, since });
     if (summary.error) return 0;
     return summary.data.reduce((total, row) => total + row.totalCostUsd, 0);
+  }
+
+  // Fail open: an unreadable switch must not halt AI. The injected reader itself
+  // falls back to the on-by-default config, so this only guards an unexpected
+  // throw — in which case the following budget query fails open too.
+  private async masterSwitchEnabled(): Promise<boolean> {
+    try {
+      return await this.isUsageLimitsEnabled();
+    } catch {
+      return true;
+    }
   }
 
   private markWarned(userId: string, budget: Budget, now: Date): boolean {

@@ -456,26 +456,37 @@ export const app_notification_log = pgTable(
   }),
 );
 
-// Per-user spend caps (ADR-026). A cap is off by default; at most one per
-// period per user (the unique index), so up to three caps apply to one user.
+// Scoped spend caps (ADR-031, generalising ADR-026). A cap is configured at one
+// of three scopes — everyone / role / user — but always evaluated against an
+// individual user's own spend. Off by default. `scope_ref` is a generated,
+// always-non-null key (user_id | role_key | 'everyone') so the unique index can
+// enforce at most one cap per target per period across all scopes (Postgres
+// treats raw NULLs as distinct, which a plain composite index could not).
 export const app_usage_budgets = pgTable(
   "app_usage_budgets",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    user_id: uuid("user_id")
+    scope: text("scope", { enum: ["everyone", "role", "user"] })
       .notNull()
-      .references(() => core_users.id, { onDelete: "cascade" }),
+      .default("user"),
+    role_key: text("role_key"),
+    // Nullable now: only user-scoped rows carry a user_id. FK + cascade retained
+    // so deleting a user still removes their per-user caps.
+    user_id: uuid("user_id").references(() => core_users.id, { onDelete: "cascade" }),
     period: text("period", { enum: ["daily", "weekly", "monthly"] }).notNull(),
     limit_usd: real("limit_usd").notNull(),
     warn_threshold_pct: smallint("warn_threshold_pct").notNull().default(80),
     enabled: boolean("enabled").notNull().default(false),
+    scope_ref: text("scope_ref").generatedAlwaysAs(
+      sql`COALESCE("user_id"::text, "role_key", 'everyone')`,
+    ),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    user_period_unique: uniqueIndex("app_usage_budgets_user_id_period_unique").on(
-      t.user_id,
+    period_scope_ref_unique: uniqueIndex("app_usage_budgets_period_scope_ref_unique").on(
       t.period,
+      t.scope_ref,
     ),
     by_user: index("app_usage_budgets_user_id_idx").on(t.user_id),
   }),

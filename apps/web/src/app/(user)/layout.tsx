@@ -27,6 +27,7 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
   void trpc.user.me.prefetch();
   void trpc.session.list.prefetch();
   void trpc.session.listPublishedFlows.prefetch();
+  void trpc.usage.myUsage.prefetch();
 
   return (
     <SidebarProvider>

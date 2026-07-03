@@ -1,8 +1,16 @@
 import { z } from "zod";
-import { adminProcedure, router } from "../trpc";
+import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export const usageRouter = router({
+  // The signed-in user's own effective limits + current spend for the sidebar
+  // meter. Non-admin; exposes only the caller's own numbers (ADR-031).
+  myUsage: authenticatedProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.getUserUsage.execute(ctx.userId);
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
   summary: adminProcedure
     .input(
       z

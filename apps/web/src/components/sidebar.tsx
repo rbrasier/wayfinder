@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { useSidebar } from "@/components/sidebar-context";
+import { UsageMeter } from "@/components/usage-meter";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/trpc/client";
 
@@ -285,6 +286,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           <span>Enter admin mode</span>
         </button>
       )}
+      <UsageMeter />
       {user && (
         <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px] hover:bg-[#efede8]">
           <div className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[11px] font-bold text-white">

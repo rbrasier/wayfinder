@@ -1,7 +1,10 @@
 import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
+  DEFAULT_USAGE_LIMITS_CONFIG,
   DOCUMENT_GENERATION_CONFIG_SETTING_KEY,
+  USAGE_LIMITS_CONFIG_SETTING_KEY,
+  parseUsageLimitsConfig,
   EMBEDDINGS_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
@@ -22,6 +25,7 @@ import {
   type ResolvedDocumentGenerationBudget,
   type SessionUploadConfig,
   type StorageConfig,
+  type UsageLimitsConfig,
 } from "@rbrasier/domain";
 import {
   DOCUMENT_GENERATION_CHARS_PER_TOKEN,
@@ -360,6 +364,8 @@ export class RuntimeConfigStore {
   private authCache: AuthConfig | null = null;
   private authPending: Promise<AuthConfig> | null = null;
   private authVersion = 0;
+  private usageLimitsCache: UsageLimitsConfig | null = null;
+  private usageLimitsPending: Promise<UsageLimitsConfig> | null = null;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -491,6 +497,25 @@ export class RuntimeConfigStore {
     return this.authPending;
   }
 
+  // Master switch for usage-limit enforcement (ADR-031). Cached like the other
+  // configs and read on the enforcement hot path; a missing/malformed row falls
+  // back to the default (on), so a read blip never silently disables limits.
+  async getUsageLimitsConfig(): Promise<UsageLimitsConfig> {
+    if (this.usageLimitsCache) return this.usageLimitsCache;
+    if (this.usageLimitsPending) return this.usageLimitsPending;
+    this.usageLimitsPending = (async () => {
+      const result = await this.settingsRepo.get(USAGE_LIMITS_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseUsageLimitsConfig(result.data.value)
+          : DEFAULT_USAGE_LIMITS_CONFIG;
+      this.usageLimitsCache = config;
+      this.usageLimitsPending = null;
+      return config;
+    })();
+    return this.usageLimitsPending;
+  }
+
   getStorageVersion(): number {
     return this.storageVersion;
   }
@@ -534,6 +559,11 @@ export class RuntimeConfigStore {
     this.authCache = null;
     this.authPending = null;
     this.authVersion++;
+  }
+
+  invalidateUsageLimits(): void {
+    this.usageLimitsCache = null;
+    this.usageLimitsPending = null;
   }
 
   /**

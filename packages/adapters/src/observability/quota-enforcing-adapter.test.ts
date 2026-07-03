@@ -7,7 +7,9 @@ import {
   type IBudgetRepository,
   type ILanguageModel,
   type IUsageRepository,
+  type IUserRoleRepository,
   type NewAuditLog,
+  type Role,
   type TokenUsage,
 } from "@rbrasier/domain";
 import { QuotaEnforcer, withQuotaEnforcement } from "./quota-enforcing-adapter";
@@ -22,6 +24,8 @@ const usage: TokenUsage = {
 
 const makeBudget = (overrides: Partial<Budget> = {}): Budget => ({
   id: "budget-1",
+  scope: "user",
+  roleKey: null,
   userId: "user-1",
   period: "daily",
   limitUsd: 100,
@@ -32,13 +36,26 @@ const makeBudget = (overrides: Partial<Budget> = {}): Budget => ({
   ...overrides,
 });
 
-const fakeBudgetRepo = (enabled: Budget[]): IBudgetRepository => ({
+// Fake repo that narrows candidates the same way the real query does, so tests
+// exercise the resolver rather than a hand-fed candidate list.
+const fakeBudgetRepo = (candidates: Budget[]): IBudgetRepository => ({
   create: vi.fn(),
   update: vi.fn(),
   delete: vi.fn(),
   findById: vi.fn(),
   list: vi.fn(),
-  findEnabledForUser: vi.fn().mockResolvedValue(ok(enabled)),
+  findEnabledCandidatesForUser: vi.fn(async (userId: string, roleKeys: string[]) => {
+    const held = new Set(roleKeys);
+    return ok(
+      candidates.filter(
+        (budget) =>
+          budget.enabled &&
+          (budget.scope === "everyone" ||
+            (budget.scope === "user" && budget.userId === userId) ||
+            (budget.scope === "role" && budget.roleKey !== null && held.has(budget.roleKey))),
+      ),
+    );
+  }),
 });
 
 // summarize returns a single row whose totalCostUsd is the recorded spend.
@@ -59,6 +76,15 @@ const fakeUsageRepo = (spendUsd: number): IUsageRepository => ({
     ]),
   ),
   summarizeBy: vi.fn(),
+});
+
+const fakeUserRoles = (roleKeys: string[] = []): IUserRoleRepository => ({
+  listRolesForUser: vi.fn(async () =>
+    ok(roleKeys.map((key, index) => ({ id: `role-${index}`, key }) as Role)),
+  ),
+  listUsersForRole: vi.fn(),
+  assign: vi.fn(),
+  remove: vi.fn(),
 });
 
 const fakeAuditLog = (): { logger: IAuditLogger; events: NewAuditLog[] } => {
@@ -85,13 +111,36 @@ const fakeInner = (): ILanguageModel => ({
 
 const input: GenerateObjectInput = { purpose: "chat", userId: "user-1", schema: {} };
 
+const on = async () => true;
+const off = async () => false;
+
 describe("QuotaEnforcer / QuotaEnforcingLanguageModel", () => {
+  const buildEnforcer = (
+    budgetRepo: IBudgetRepository,
+    usageRepo: IUsageRepository,
+    auditLog: IAuditLogger,
+    options: {
+      roleKeys?: string[];
+      enabled?: () => Promise<boolean>;
+      now?: () => Date;
+    } = {},
+  ) =>
+    new QuotaEnforcer(
+      budgetRepo,
+      usageRepo,
+      auditLog,
+      fakeUserRoles(options.roleKeys),
+      options.enabled ?? on,
+      options.now,
+    );
+
   const buildModel = (
     inner: ILanguageModel,
     budgetRepo: IBudgetRepository,
     usageRepo: IUsageRepository,
     auditLog: IAuditLogger,
-  ) => withQuotaEnforcement(inner, new QuotaEnforcer(budgetRepo, usageRepo, auditLog));
+    options?: { roleKeys?: string[]; enabled?: () => Promise<boolean> },
+  ) => withQuotaEnforcement(inner, buildEnforcer(budgetRepo, usageRepo, auditLog, options));
 
   it("passes straight through when the user has no enabled cap (off by default)", async () => {
     const usageRepo = fakeUsageRepo(9999);
@@ -102,7 +151,7 @@ describe("QuotaEnforcer / QuotaEnforcingLanguageModel", () => {
 
     expect(result.error).toBeUndefined();
     expect(inner.generateObject).toHaveBeenCalledOnce();
-    // No spend query on the hot path when no cap exists.
+    // No spend query on the hot path when no cap resolves.
     expect(usageRepo.summarize).not.toHaveBeenCalled();
   });
 
@@ -114,7 +163,34 @@ describe("QuotaEnforcer / QuotaEnforcingLanguageModel", () => {
     const result = await model.generateObject({ purpose: "chat", schema: {} });
 
     expect(result.error).toBeUndefined();
-    expect(budgetRepo.findEnabledForUser).not.toHaveBeenCalled();
+    expect(budgetRepo.findEnabledCandidatesForUser).not.toHaveBeenCalled();
+  });
+
+  it("does not enforce and runs no queries when the master switch is off", async () => {
+    const budgetRepo = fakeBudgetRepo([makeBudget({ limitUsd: 1 })]);
+    const usageRepo = fakeUsageRepo(9999);
+    const inner = fakeInner();
+    const model = buildModel(inner, budgetRepo, usageRepo, fakeAuditLog().logger, { enabled: off });
+
+    const result = await model.generateObject(input);
+
+    expect(result.error).toBeUndefined();
+    expect(inner.generateObject).toHaveBeenCalledOnce();
+    expect(budgetRepo.findEnabledCandidatesForUser).not.toHaveBeenCalled();
+    expect(usageRepo.summarize).not.toHaveBeenCalled();
+  });
+
+  it("enforces the everyone budget for a user with no role/user override", async () => {
+    const audit = fakeAuditLog();
+    const budgetRepo = fakeBudgetRepo([
+      makeBudget({ id: "e", scope: "everyone", userId: null, period: "monthly", limitUsd: 50 }),
+    ]);
+    const enforcer = buildEnforcer(budgetRepo, fakeUsageRepo(50), audit.logger);
+
+    const result = await enforcer.check("user-1");
+
+    expect(result.error?.code).toBe("QUOTA_EXCEEDED");
+    expect(audit.events.map((event) => event.action)).toContain("budget.blocked");
   });
 
   it("proceeds and writes budget.warn at the warn threshold", async () => {
@@ -126,7 +202,7 @@ describe("QuotaEnforcer / QuotaEnforcingLanguageModel", () => {
 
     expect(result.error).toBeUndefined();
     expect(inner.generateObject).toHaveBeenCalledOnce();
-    expect(audit.events.map((e) => e.action)).toContain("budget.warn");
+    expect(audit.events.map((event) => event.action)).toContain("budget.warn");
   });
 
   it("blocks with QUOTA_EXCEEDED and writes budget.blocked at the limit", async () => {
@@ -138,38 +214,57 @@ describe("QuotaEnforcer / QuotaEnforcingLanguageModel", () => {
 
     expect(result.error?.code).toBe("QUOTA_EXCEEDED");
     expect(inner.generateObject).not.toHaveBeenCalled();
-    expect(audit.events.map((e) => e.action)).toContain("budget.blocked");
+    expect(audit.events.map((event) => event.action)).toContain("budget.blocked");
+  });
+
+  it("lets a role budget override the everyone budget for a held role", async () => {
+    // Everyone would block at 50; the role the user holds raises the cap to 500.
+    const budgetRepo = fakeBudgetRepo([
+      makeBudget({ id: "e", scope: "everyone", userId: null, period: "monthly", limitUsd: 50 }),
+      makeBudget({
+        id: "r",
+        scope: "role",
+        roleKey: "power_users",
+        userId: null,
+        period: "monthly",
+        limitUsd: 500,
+      }),
+    ]);
+    const enforcer = buildEnforcer(budgetRepo, fakeUsageRepo(60), fakeAuditLog().logger, {
+      roleKeys: ["power_users"],
+    });
+
+    const result = await enforcer.check("user-1");
+
+    expect(result.error).toBeUndefined();
   });
 
   it("de-duplicates budget.warn to one event per user per period window", async () => {
     const audit = fakeAuditLog();
-    const enforcer = new QuotaEnforcer(
-      fakeBudgetRepo([makeBudget()]),
-      fakeUsageRepo(85),
-      audit.logger,
-      () => new Date("2026-06-17T10:00:00Z"),
-    );
+    const enforcer = buildEnforcer(fakeBudgetRepo([makeBudget()]), fakeUsageRepo(85), audit.logger, {
+      now: () => new Date("2026-06-17T10:00:00Z"),
+    });
 
     await enforcer.check("user-1");
     await enforcer.check("user-1");
 
-    expect(audit.events.filter((e) => e.action === "budget.warn")).toHaveLength(1);
+    expect(audit.events.filter((event) => event.action === "budget.warn")).toHaveLength(1);
   });
 
-  it("applies the stricter cap when multiple are enabled (block wins over warn)", async () => {
+  it("applies the stricter cap when multiple periods resolve (block wins over warn)", async () => {
     const audit = fakeAuditLog();
-    // Daily warns (85/100); monthly blocks (1000/1000).
+    // Daily warns (85/100); monthly blocks (150/100).
     const budgetRepo = fakeBudgetRepo([
       makeBudget({ id: "daily", period: "daily", limitUsd: 100 }),
       makeBudget({ id: "monthly", period: "monthly", limitUsd: 100 }),
     ]);
     // Both periods see the same recorded spend in this fake.
-    const enforcer = new QuotaEnforcer(budgetRepo, fakeUsageRepo(150), audit.logger);
+    const enforcer = buildEnforcer(budgetRepo, fakeUsageRepo(150), audit.logger);
 
     const result = await enforcer.check("user-1");
 
     expect(result.error?.code).toBe("QUOTA_EXCEEDED");
-    expect(audit.events.map((e) => e.action)).toContain("budget.blocked");
-    expect(audit.events.map((e) => e.action)).not.toContain("budget.warn");
+    expect(audit.events.map((event) => event.action)).toContain("budget.blocked");
+    expect(audit.events.map((event) => event.action)).not.toContain("budget.warn");
   });
 });

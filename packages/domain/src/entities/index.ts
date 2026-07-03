@@ -7,6 +7,7 @@ export * from "./role";
 export * from "./permission";
 export * from "./usage-event";
 export * from "./budget";
+export * from "./budget-resolution";
 export * from "./job";
 export * from "./system-health";
 export * from "./connectivity";

@@ -20,6 +20,9 @@ import {
   DeleteBudget,
   ListBudgets,
   GetGovernanceDashboard,
+  GetUserUsage,
+  GetUsageLimitsEnabled,
+  SetUsageLimitsEnabled,
   FailJob,
   GenerateDocument,
   GetEffectivePermissions,
@@ -266,7 +269,13 @@ const build = () => {
   // Decorator order (ADR-026 §3): quota enforcement is outermost so it blocks
   // before the inner usage-tracking + provider call runs. The same enforcer is
   // shared with the chat stream route, which calls the SDK outside the port.
-  const quotaEnforcer = new QuotaEnforcer(budgets, usageRepo, auditLogger);
+  const quotaEnforcer = new QuotaEnforcer(
+    budgets,
+    usageRepo,
+    auditLogger,
+    userRoles,
+    async () => (await runtimeConfig.getUsageLimitsConfig()).enabled,
+  );
   const llm = withOptionalLangfuse(
     withQuotaEnforcement(withUsageTracking(baseLlm, usageRepo), quotaEnforcer),
     env,
@@ -586,6 +595,9 @@ const build = () => {
       updateBudget: new UpdateBudget(budgets),
       deleteBudget: new DeleteBudget(budgets),
       listBudgets: new ListBudgets(budgets),
+      getUserUsage: new GetUserUsage(systemSettings, budgets, userRoles, usageRepo),
+      getUsageLimitsEnabled: new GetUsageLimitsEnabled(systemSettings),
+      setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
       suggestApprover: new SuggestApprover(
         approvals,

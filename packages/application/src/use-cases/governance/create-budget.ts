@@ -3,12 +3,16 @@ import {
   err,
   type Budget,
   type BudgetPeriod,
+  type BudgetScope,
   type IBudgetRepository,
+  type NewBudget,
   type Result,
 } from "@rbrasier/domain";
 
 export interface CreateBudgetInput {
-  userId: string;
+  scope: BudgetScope;
+  roleKey?: string | null;
+  userId?: string | null;
   period: BudgetPeriod;
   limitUsd: number;
   warnThresholdPct?: number;
@@ -27,12 +31,41 @@ const validate = (input: { limitUsd: number; warnThresholdPct?: number }): Resul
 
 export { validate as validateBudgetInput };
 
+// The scope/target combination the DB uniqueness index and resolver rely on: a
+// user budget needs a userId, a role budget needs a roleKey, an everyone budget
+// needs neither. Returns the normalised NewBudget so foreign targets can never
+// leak in on the wrong scope.
+const validateScopeTarget = (input: CreateBudgetInput): Result<NewBudget> => {
+  if (input.scope === "user") {
+    if (!input.userId) {
+      return err(domainError("VALIDATION_FAILED", "A user budget requires a userId."));
+    }
+    return { data: { ...baseFields(input), scope: "user", userId: input.userId, roleKey: null } };
+  }
+  if (input.scope === "role") {
+    if (!input.roleKey) {
+      return err(domainError("VALIDATION_FAILED", "A role budget requires a roleKey."));
+    }
+    return { data: { ...baseFields(input), scope: "role", roleKey: input.roleKey, userId: null } };
+  }
+  return { data: { ...baseFields(input), scope: "everyone", roleKey: null, userId: null } };
+};
+
+const baseFields = (input: CreateBudgetInput) => ({
+  period: input.period,
+  limitUsd: input.limitUsd,
+  warnThresholdPct: input.warnThresholdPct,
+  enabled: input.enabled,
+});
+
 export class CreateBudget {
   constructor(private readonly budgets: IBudgetRepository) {}
 
   async execute(input: CreateBudgetInput): Promise<Result<Budget>> {
     const validation = validate(input);
     if (validation.error) return validation;
-    return this.budgets.create(input);
+    const target = validateScopeTarget(input);
+    if (target.error) return target;
+    return this.budgets.create(target.data);
   }
 }

@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { budgetPeriodStart, evaluateBudget, type Budget } from "./budget";
+import { budgetPeriodEnd, budgetPeriodStart, evaluateBudget, type Budget } from "./budget";
 
 const makeBudget = (overrides: Partial<Budget> = {}): Budget => ({
   id: "budget-1",
+  scope: "user",
+  roleKey: null,
   userId: "user-1",
   period: "daily",
   limitUsd: 100,
@@ -71,5 +73,27 @@ describe("budgetPeriodStart", () => {
   it("weekly window starts on the same day when now is a Monday", () => {
     const now = new Date("2026-06-15T23:59:59Z");
     expect(budgetPeriodStart("weekly", now).toISOString()).toBe("2026-06-15T00:00:00.000Z");
+  });
+});
+
+describe("budgetPeriodEnd", () => {
+  it("daily window resets at 00:00 UTC the next day", () => {
+    const now = new Date("2026-06-17T13:45:09Z");
+    expect(budgetPeriodEnd("daily", now).toISOString()).toBe("2026-06-18T00:00:00.000Z");
+  });
+
+  it("weekly window resets at 00:00 UTC the following Monday", () => {
+    const now = new Date("2026-06-17T13:45:09Z");
+    expect(budgetPeriodEnd("weekly", now).toISOString()).toBe("2026-06-22T00:00:00.000Z");
+  });
+
+  it("monthly window resets on the 1st of the next month", () => {
+    const now = new Date("2026-06-17T13:45:09Z");
+    expect(budgetPeriodEnd("monthly", now).toISOString()).toBe("2026-07-01T00:00:00.000Z");
+  });
+
+  it("monthly window rolls over the year on December", () => {
+    const now = new Date("2026-12-09T13:45:09Z");
+    expect(budgetPeriodEnd("monthly", now).toISOString()).toBe("2027-01-01T00:00:00.000Z");
   });
 });

@@ -130,6 +130,34 @@ export const isEntraConfigured = (entra: EntraCredentials): boolean =>
 export const isAtLeastOneMethodEnabled = (config: AuthConfig): boolean =>
   config.emailPasswordEnabled || config.entraEnabled;
 
+// Master switch for usage-limit enforcement (ADR-031). Stored as one JSON row in
+// admin_system_settings. Fresh installs default to enabled: nothing is enforced
+// until an admin configures a limit, so "on" is safe.
+export interface UsageLimitsConfig {
+  enabled: boolean;
+}
+
+export const DEFAULT_USAGE_LIMITS_CONFIG: UsageLimitsConfig = { enabled: true };
+
+// Pure: tolerant parse of the stored JSON, falling back to the default on any
+// malformed value so a bad row never disables (or silently enables) enforcement
+// in a surprising way.
+export const parseUsageLimitsConfig = (raw: string): UsageLimitsConfig => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      typeof (parsed as { enabled?: unknown }).enabled === "boolean"
+    ) {
+      return { enabled: (parsed as { enabled: boolean }).enabled };
+    }
+    return DEFAULT_USAGE_LIMITS_CONFIG;
+  } catch {
+    return DEFAULT_USAGE_LIMITS_CONFIG;
+  }
+};
+
 export const AI_CONFIG_SETTING_KEY = "ai_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
 export const REGISTRATION_ENABLED_SETTING_KEY = "registration_enabled";
@@ -140,3 +168,4 @@ export const EMBEDDINGS_CONFIG_SETTING_KEY = "embeddings_config";
 export const N8N_CONFIG_SETTING_KEY = "n8n_config";
 export const NOTIFICATION_PREFS_SETTING_KEY = "notification_prefs";
 export const AUTH_CONFIG_SETTING_KEY = "auth_config";
+export const USAGE_LIMITS_CONFIG_SETTING_KEY = "usage_limits_config";
