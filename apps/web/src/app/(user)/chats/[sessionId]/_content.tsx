@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { toast } from "sonner";
 import type { FlowEdge, FlowNode } from "@rbrasier/domain";
@@ -44,8 +44,6 @@ function countStalls(
 
 export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isShared = searchParams.get("shared") === "true";
 
   const utils = trpc.useUtils();
   const sessionQuery = trpc.session.get.useQuery({ sessionId });
@@ -54,7 +52,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   // The server grants approvers read-only access to sessions they don't own so
   // they can open the request for context. Treated like a shared viewer: no
   // composer, gate, or step actions.
-  const isReadOnly = isShared || sessionData?.readOnly === true;
+  const isReadOnly = sessionData?.readOnly === true;
   const isAdmin = meQuery.data?.isAdmin ?? false;
 
   const heartbeatMutation = trpc.session.heartbeatTyping.useMutation();
@@ -161,7 +159,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const railSteps = buildStepRail(nodes, edges, currentNodeId, completedNodeIds);
 
   const stallCount = countStalls(dbMessages, currentNodeId, edges);
-  const showBranchOverride = isAdmin && !isShared && stallCount >= NULL_BRANCH_THRESHOLD;
+  const showBranchOverride = isAdmin && !isReadOnly && stallCount >= NULL_BRANCH_THRESHOLD;
 
   const outgoingBranches = edges
     .filter((e) => e.fromNodeId === currentNodeId)

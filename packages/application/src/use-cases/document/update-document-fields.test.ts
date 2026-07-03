@@ -146,6 +146,9 @@ const makeSessions = (session = makeSession()): ISessionRepository => ({
   listByUser: vi.fn(),
   listAll: vi.fn(),
   update: vi.fn(),
+  claimTurn: vi.fn(),
+  heartbeatTurn: vi.fn(),
+  releaseTurn: vi.fn(),
 });
 
 const makeFlowNodes = (node = makeNode()): IFlowNodeRepository => ({

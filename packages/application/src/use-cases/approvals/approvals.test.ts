@@ -278,6 +278,15 @@ class InMemorySessions implements ISessionRepository {
     this.rows.set(id, next);
     return ok(next);
   }
+  async claimTurn(): Promise<Result<never>> {
+    throw new Error("not used");
+  }
+  async heartbeatTurn(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+  async releaseTurn(): Promise<Result<void>> {
+    return ok(undefined);
+  }
 }
 
 class InMemoryFlowEdges implements IFlowEdgeRepository {

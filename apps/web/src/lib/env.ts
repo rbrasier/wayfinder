@@ -30,6 +30,14 @@ const serverEnvSchema = z.object({
   // versions are immutable, so this can be generous; a long TTL just keeps hot
   // snapshots resident. 0 disables the cache.
   FLOW_VERSION_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(300_000),
+  // Server-side turn lease (scaling wall #3). A send that finds a fresh lease is
+  // rejected with 409; a crashed turn's lease is taken over after this window, so
+  // it must comfortably exceed p99 turn duration (long doc-gen turns re-stamp the
+  // lease via a heartbeat while streaming).
+  TURN_LEASE_SECONDS: z.coerce.number().int().positive().default(120),
+  // How often a long, still-streaming turn re-stamps its lease so it never
+  // expires under the holder. Keep well below TURN_LEASE_SECONDS × 1000.
+  TURN_HEARTBEAT_MS: z.coerce.number().int().positive().default(30_000),
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_SEED_EMAIL: z.string().email().optional(),

@@ -71,6 +71,8 @@ import {
   RemoveContextDoc,
   RemoveSessionUpload,
   RemoveUserRole,
+  ResolveSessionAccess,
+  RevokeSessionParticipant,
   RetrieveDocumentChunks,
   SubmitAnswerFeedback,
   ListAnswerFeedback,
@@ -130,6 +132,7 @@ import {
   DrizzleReindexSourceRepository,
   DrizzleRoleRepository,
   DrizzleSessionMessageRepository,
+  DrizzleSessionParticipantRepository,
   DrizzleSessionUploadRepository,
   DrizzleSessionTypingRepository,
   DrizzleSessionStepOutputRepository,
@@ -227,6 +230,7 @@ const build = () => {
     new TtlCache<FlowVersion>({ ttlMs: env.FLOW_VERSION_CACHE_TTL_MS, maxEntries: 256 }),
   );
   const sessions = new DrizzleSessionRepository(db);
+  const sessionParticipants = new DrizzleSessionParticipantRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
   const sessionTyping = new DrizzleSessionTypingRepository(db);
@@ -522,7 +526,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
@@ -602,6 +606,8 @@ const build = () => {
       listSessions: new ListSessions(sessions),
       listAllSessions: new ListAllSessions(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
+      revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
       publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
       listFlowVersions: new ListFlowVersions(flowVersions),

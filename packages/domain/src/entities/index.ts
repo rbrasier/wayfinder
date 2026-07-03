@@ -24,6 +24,7 @@ export * from "./template-field";
 export * from "./flow-edge";
 export * from "./flow-graph";
 export * from "./session";
+export * from "./session-participant";
 export * from "./session-message";
 export * from "./session-upload";
 export * from "./document-chunk";

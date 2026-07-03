@@ -59,8 +59,6 @@ export async function POST(
 
   const { session, flow, nodes, edges, messages: dbMessages } = sessionResult.data;
 
-  // Collaborative sessions: any authenticated user holding the link may send.
-  // The session UUID is the shared secret, identical to the read-only share model.
   if (session.status !== "active") {
     return new Response("Session is not active", { status: 400 });
   }
@@ -69,8 +67,47 @@ export async function POST(
     return new Response("This flow has been deleted", { status: 410 });
   }
 
+  // Authorise against the participants table, not knowledge of the URL (scaling
+  // wall #11). Opening the link auto-enrols the caller as a collaborator when the
+  // flow is visible to them; a viewer (or a revoked collaborator downgraded to
+  // viewer) may read but not send, and a non-visible flow is 403.
+  const accessResult = await container.useCases.resolveSessionAccess.execute({
+    session,
+    flow,
+    userId: authSession.userId,
+    isAdmin: authSession.isAdmin,
+    isApprover: false,
+    allowAutoEnrol: true,
+  });
+  if (accessResult.error || !accessResult.data.canSend) {
+    return new Response("You do not have permission to send in this session", { status: 403 });
+  }
+
   const currentNode = nodes.find((n) => n.id === session.currentNodeId);
   if (!currentNode) return new Response("Current node not found", { status: 500 });
+
+  // Server-side turn lease (scaling wall #3): claim the single active turn before
+  // any write. A second concurrent send finds the lease held and gets 409 with
+  // the holder's name, instead of both turns running (double message, double
+  // spend, double advance). A crashed turn's lease is taken over after the window.
+  const turnId = crypto.randomUUID();
+  const claimResult = await container.repos.sessions.claimTurn(
+    session.id,
+    turnId,
+    authSession.userId,
+    container.env.TURN_LEASE_SECONDS,
+  );
+  if (claimResult.error) return new Response("Server error", { status: 500 });
+  if (!claimResult.data.claimed) {
+    const holderId = claimResult.data.heldBy;
+    const holderResult = holderId ? await container.repos.users.findById(holderId) : null;
+    const holderName =
+      holderResult && !holderResult.error && holderResult.data ? holderResult.data.name : null;
+    const message = holderName
+      ? `${holderName}'s turn is in progress. Please wait for it to finish.`
+      : "A turn is already in progress on this session. Please wait for it to finish.";
+    return new Response(message, { status: 409 });
+  }
 
   const nodeConfig = currentNode.config as unknown as ConversationalNodeConfig & { neverDone?: boolean };
   const isNeverDone = Boolean(nodeConfig.neverDone);
@@ -167,6 +204,13 @@ export async function POST(
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
+      // A doc-gen-heavy turn can outlive the lease window, so re-stamp it while
+      // the stream is open; the release in `finally` frees it the instant the
+      // turn ends (success or failure) rather than waiting for expiry.
+      const heartbeat = setInterval(() => {
+        void container.repos.sessions.heartbeatTurn(session.id, turnId);
+      }, container.env.TURN_HEARTBEAT_MS);
+      try {
       const userMsgResult = await container.useCases.runTurn.persistUserMessage({
         session,
         userMessage: lastUserMessage,
@@ -431,6 +475,12 @@ export async function POST(
 
       if (dbMessages.filter((m) => m.role === "user").length === 0) {
         void generateTitle(container, session.id, lastUserMessage, provider, chatModelName, apiKey, authSession.userId);
+      }
+      } finally {
+        clearInterval(heartbeat);
+        // Release in the same lifecycle that persisted the turn (or on the error
+        // path); guarded on turnId so a stale release never clears a newer claim.
+        await container.repos.sessions.releaseTurn(session.id, turnId);
       }
     },
     onError: (error) => {

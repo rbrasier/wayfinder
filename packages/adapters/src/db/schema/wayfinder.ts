@@ -169,6 +169,14 @@ export const app_sessions = pgTable(
       .$type<PendingExecutions>()
       .notNull()
       .default({}),
+    // Server-side turn lease (scaling wall #3): one turn in flight at a time.
+    active_turn_id: uuid("active_turn_id"),
+    active_turn_claimed_by: uuid("active_turn_claimed_by").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    active_turn_claimed_at: timestamp("active_turn_claimed_at", { withTimezone: true }),
+    // Optimistic-concurrency guard for non-lease writers (scaling wall #3).
+    version: integer("version").notNull().default(1),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -268,6 +276,39 @@ export const app_session_messages = pgTable(
       t.session_id,
       t.created_at,
     ),
+  }),
+);
+
+// Collaborative-session membership as rows (scaling wall #11). The owner is not
+// stored here — it is app_sessions.user_id — so this table holds only invited
+// collaborators and viewers. Joining stays link-based (opening the collaborate
+// link auto-enrols the authenticated user), but the stream route authorises
+// against the stored role, so revocation actually works.
+export const app_session_participants = pgTable(
+  "app_session_participants",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["owner", "collaborator", "viewer"] })
+      .notNull()
+      .default("collaborator"),
+    joined_at: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+    invited_by: uuid("invited_by").references(() => core_users.id, { onDelete: "set null" }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    session_user_unique: unique("app_session_participants_session_id_user_id_unique").on(
+      t.session_id,
+      t.user_id,
+    ),
+    by_session: index("app_session_participants_session_id_idx").on(t.session_id),
+    by_user: index("app_session_participants_user_id_idx").on(t.user_id),
   }),
 );
 

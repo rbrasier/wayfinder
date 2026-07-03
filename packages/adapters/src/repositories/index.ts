@@ -16,6 +16,7 @@ export * from "./drizzle-flow-edge-repository";
 export * from "./drizzle-flow-version-repository";
 export * from "./cached-flow-version-repository";
 export * from "./drizzle-session-repository";
+export * from "./drizzle-session-participant-repository";
 export * from "./drizzle-session-message-repository";
 export * from "./drizzle-session-upload-repository";
 export * from "./drizzle-session-typing-repository";

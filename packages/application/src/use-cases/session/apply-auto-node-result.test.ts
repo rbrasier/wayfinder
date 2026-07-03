@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@rbrasier/domain";
 import type {
   FlowEdge,
   FlowNode,
@@ -278,6 +278,48 @@ describe("ApplyAutoNodeResult", () => {
     expect(advanceUpdate).toBeUndefined();
     const clearUpdate = updates.find((patch) => "pendingExecutions" in patch);
     expect((clearUpdate?.pendingExecutions as PendingExecutions)["corr-1"]).toBeUndefined();
+  });
+
+  it("reloads and retries once when a concurrent writer wins the version race", async () => {
+    const session = { ...makeSession(pending()), version: 3 };
+    const updates: Array<Record<string, unknown>> = [];
+    let updateCalls = 0;
+    const sessions = {
+      create: vi.fn(),
+      // Fresh read each attempt returns the (still-pending) session; the second
+      // read carries the bumped version the retry writes against.
+      findById: vi.fn().mockResolvedValue(ok(session)),
+      listByUser: vi.fn(),
+      listAll: vi.fn(),
+      update: vi.fn().mockImplementation(async (_id, patch) => {
+        updates.push(patch);
+        updateCalls += 1;
+        // First write loses the optimistic-version race, second wins.
+        if (updateCalls === 1) return err(domainError("CONFLICT", "modified concurrently"));
+        return ok({ ...session, ...patch });
+      }),
+    } as unknown as ISessionRepository;
+
+    const useCase = new ApplyAutoNodeResult(
+      sessions,
+      makeNodes(),
+      makeEdges([edge("node-1", "node-2")]),
+      makeStepOutputs(),
+    );
+
+    const result = await useCase.execute({
+      sessionId: "sess-1",
+      correlationId: "corr-1",
+      nodeId: "node-1",
+      status: "completed",
+      data: { vendor: "Acme" },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.advanced).toBe(true);
+    expect(updateCalls).toBe(2);
+    // Both attempts thread the expected version so the guard can fire.
+    expect(updates.every((patch) => "expectedVersion" in patch)).toBe(true);
   });
 
   it("matches by nodeId when the callback omits a correlation id", async () => {

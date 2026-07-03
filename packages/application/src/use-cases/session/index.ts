@@ -2,6 +2,8 @@ export * from "./start-session";
 export * from "./list-sessions";
 export * from "./list-all-sessions";
 export * from "./get-session";
+export * from "./resolve-session-access";
+export * from "./revoke-session-participant";
 export * from "./add-session-upload";
 export * from "./remove-session-upload";
 export * from "./retrieve-document-chunks";

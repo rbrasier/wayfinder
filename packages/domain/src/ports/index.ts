@@ -20,6 +20,7 @@ export * from "./flow-version-repository";
 export * from "./flow-node-repository";
 export * from "./flow-edge-repository";
 export * from "./session-repository";
+export * from "./session-participant-repository";
 export * from "./session-message-repository";
 export * from "./session-upload-repository";
 export * from "./session-typing-repository";
