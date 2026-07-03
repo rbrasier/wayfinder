@@ -1,4 +1,31 @@
-# Scaling Within the Current Stack
+# Phase — Scaling Within the Current Stack (no new services)
+
+- **Status**: Awaiting review (`/doc-review`), then staged implementation
+- **Date**: 2026-07-03
+- **Target version**: staged; each group ships as its own sub-phase and bumps
+  independently —
+  - Group A (pure code fixes; no schema change): **MINOR**
+  - Group B (turn lease + version column + participants — new columns and one
+    table): **MINOR**
+  - Group C (event bus + SSE — `seq` column): **MINOR**
+  - Group D (archival/partitioning + load tests): **MINOR**
+- **Depends on / relates to**:
+  - [`scaling-new-infrastructure.phase.md`](./scaling-new-infrastructure.phase.md)
+    — the enhancements that *do* require new services (connection pooler,
+    Redis, job-queue backend, read replica, cloud platform). Nothing there
+    blocks this phase; this phase comes first.
+  - `implemented/v1.49.0/scaling-p0-pool-and-auth-cache.md` — P0 delivered
+    (env-driven pool, session/permission TTL cache, statelessness audit).
+  - `implemented/v1.17.0/realtime-collaborative-sessions.phase.md` — groups
+    B–C supersede its polling-based architecture (it was explicitly built as
+    the smallest possible delta, with SSE/push named as the follow-up).
+  - ADR-006 (session schema), ADR-007 (session-scoped LangGraph), ADR-019
+    (in-app scheduler), ADR-026 (usage governance), ADR-032 (MCP tool
+    calling).
+
+---
+
+## Scope
 
 Enhancements that improve performance under concurrent usage **without adding
 any new service**: code and schema changes only, running on the existing
@@ -7,17 +34,13 @@ scaling work starts — most of the headroom to ~500 concurrent users comes
 from making each request cheaper and making concurrent writes correct, not
 from more hardware.
 
-Companion guide: [`scaling-new-infrastructure.md`](./scaling-new-infrastructure.md)
-covers the enhancements that *do* require new services (connection pooler,
-Redis, job-queue backend, read replica, cloud platform) — most of which
-become mandatory the moment more than one app instance runs.
-
-Both guides consolidate two former phase docs (*Scaling to Concurrent Load*,
-2026-06-22, and *Concurrency Efficiency, Collaborative-Session
-Re-architecture & Cloud Readiness*, 2026-07-01). Implementation of any group
-below should go through the normal skill workflow (`/new-feature` →
-`/doc-review` → `/build`) with a phase doc scoped to that group; this guide
-is the reference, not the build spec.
+This phase doc and its companion re-partition two former phase docs
+(*Scaling to Concurrent Load*, 2026-06-22, and *Concurrency Efficiency,
+Collaborative-Session Re-architecture & Cloud Readiness*, 2026-07-01) by
+infrastructure requirement. Each group below is implemented as its own
+sub-phase; when a group lands, its implementation summary goes to
+`implemented/v<version>/` and this doc stays here until the last group
+lands (the former roadmap's convention).
 
 ---
 
@@ -60,7 +83,7 @@ Already in place — leverage, don't rebuild:
   (`AUTH_CACHE_TTL_MS`, `AUTH_CACHE_MAX_ENTRIES`) fronting `resolveSession`
   and effective permissions, and a statelessness audit confirming N replicas
   behind a load balancer are safe once the shared-cache promotion happens
-  (see the new-infrastructure guide).
+  (see the scaling-new-infrastructure phase doc).
 
 ---
 
@@ -76,7 +99,7 @@ wall-clock.
 below Postgres `max_connections` (default 100), reserving headroom for
 migrations, the scheduler, and admin tooling. For ~500 concurrent across ~4
 web instances, a per-instance pool of ~15–20 is a sane start — behind a
-transaction-mode pooler (new-infrastructure guide) once instance count grows.
+transaction-mode pooler (scaling-new-infrastructure phase doc) once instance count grows.
 Validate with load tests rather than guessing.
 
 **LLM throughput**: one conversational turn can issue up to **six** model
@@ -91,7 +114,7 @@ caching reduces token volume but not request count.
 ## Where it breaks — the walls
 
 All twelve walls, for context. Walls marked ↗ are closed by the
-new-infrastructure guide; everything else is closed here.
+scaling-new-infrastructure phase doc; everything else is closed here.
 
 | # | Wall | Evidence | Effect at ~500 concurrent |
 | - | --- | --- | --- |
@@ -101,7 +124,7 @@ new-infrastructure guide; everything else is closed here.
 | 4 | Serial awaits in the stream-route prologue | `apps/web/src/app/api/chat/[sessionId]/stream/route.ts` awaits org name → global instructions → uploads → upload config → user profile → RAG sequentially | ~6 round-trips of pure latency on every turn while a pool connection is held |
 | 5 | Unbounded LLM concurrency | No limiter or budget around any of the per-turn model calls | Provider rate limits and per-stream memory both bite (see capacity model) |
 | 6 | Participant hydration N+1 | tRPC `session.get` issues one `users.findById` per participant per poll | Multiplies wall #2 |
-| 7 ↗ | Fire-and-forget background work is process-bound | `void generateDocument(...)`, `void generateTitle(...)`, notifier fire-and-forgets run detached in the web process | A deploy/restart mid-generation silently loses work — closed by the job queue (new-infrastructure guide; pg-boss is the no-new-service fallback) |
+| 7 ↗ | Fire-and-forget background work is process-bound | `void generateDocument(...)`, `void generateTitle(...)`, notifier fire-and-forgets run detached in the web process | A deploy/restart mid-generation silently loses work — closed by the job queue (scaling-new-infrastructure phase doc; pg-boss is the no-new-service fallback) |
 | 8 | Single scheduler worker, batch 50 / 60 s tick | `scheduler-worker.ts`, `fire-due-schedules.ts` | Backlogs when many schedules come due together (drains ≤ ~50/min) |
 | 9 | Unbounded-growth tables | `ai_usage_events`, `app_session_messages`, `core_audit_log`, `app_error_log`, `app_notification_log` | Index/table bloat over months; slower hot-path queries |
 | 10 | In-memory upload buffering | uploads route does `Buffer.from(await file.arrayBuffer())` + sync extraction | Concurrent large uploads spike memory and block the request path |
@@ -160,12 +183,12 @@ code-only and independently shippable as one phase.
    `FOR UPDATE SKIP LOCKED` claim already supports it (ADR-019).
 8. **Stream uploads** (wall #10). Stream straight to MinIO/S3 instead of
    buffering whole files in memory. Moving text extraction off the request
-   path depends on the job queue (new-infrastructure guide) — the streaming
+   path depends on the job queue (scaling-new-infrastructure phase doc) — the streaming
    half stands alone and removes the memory spike now.
 
 ### Group B — Correctness under concurrency (schema: columns + one table)
 
-The single most important correctness work across both guides.
+The single most important correctness work across both phase docs.
 
 9. **Server-side turn lease** (wall #3). Add `active_turn_id`,
    `active_turn_claimed_by`, `active_turn_claimed_at` to `app_sessions`.
@@ -236,7 +259,7 @@ changes.
     seq}`, under the 8 KB NOTIFY limit); the SSE handler fetches the delta
     via `listSince`. Multi-instance correct from day one because publishes
     traverse the bus, never process memory. A Redis pub/sub adapter can later
-    drop in behind the same port (new-infrastructure guide) — the port is the
+    drop in behind the same port (scaling-new-infrastructure phase doc) — the port is the
     seam that makes that swap local.
 13. **SSE fan-out, not WebSockets.** Data flow is one-directional — sends
     already go through the existing POST (which must stay HTTP for the AI
@@ -272,7 +295,7 @@ changes.
     runtime service), define SLOs (p95 turn latency, error rate at 500
     concurrent), and run it before and after each group so sizing is
     measured, not guessed. Stand this up **early** — it gates every group's
-    exit in both guides.
+    exit in both phase docs.
 
 ---
 
@@ -305,7 +328,7 @@ changes.
 - **SSE + tRPC coexistence**: the SSE route is a plain route handler (like
   the chat stream), not a tRPC subscription — keeps tRPC v11 usage unchanged.
 - **LISTEN/NOTIFY through transaction poolers**: LISTEN needs a session-mode
-  connection. Once a pooler exists (new-infrastructure guide), the adapter
+  connection. Once a pooler exists (scaling-new-infrastructure phase doc), the adapter
   must take a direct DB URL for its one listener connection
   (`DATABASE_LISTEN_URL`, defaulting to `DATABASE_URL`) while the app pool
   goes through the pooler. The Redis adapter removes this wrinkle.

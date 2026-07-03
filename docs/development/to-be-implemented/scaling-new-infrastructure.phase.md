@@ -1,23 +1,42 @@
-# Scaling With New Infrastructure
+# Phase — Scaling With New Infrastructure
+
+- **Status**: Awaiting review (`/doc-review`); implementation is gated on
+  going multi-instance and/or picking the cloud platform
+- **Date**: 2026-07-03
+- **Target version**: staged; mostly infra/ops. Code slices ship as their own
+  sub-phases and bump independently —
+  - Redis adapters (shared auth cache, event-bus adapter 2): **MINOR**
+  - Job queue + first migrated producers: **MINOR**
+  - Dockerfiles + object-storage parametrisation: **MINOR**
+  - Connection pooler and read replica: infra only, no code bump (the
+    `DATABASE_LISTEN_URL` caveat in item 1 is part of the event-bus slice)
+- **Depends on / relates to**:
+  - [`scaling-current-stack.phase.md`](./scaling-current-stack.phase.md) —
+    do that phase first; it delivers most of the headroom to ~500 concurrent
+    users and none of it is blocked on infrastructure decisions.
+  - `implemented/v1.49.0/scaling-p0-pool-and-auth-cache.md` — the env-driven
+    pool and the in-process auth cache this phase promotes to shared services.
+  - ADR-017 (embedding providers), ADR-019 (in-app scheduler, queue
+    candidates), ADR-023 (email transport).
+
+---
+
+## Scope
 
 Enhancements that improve concurrent-usage performance but **require standing
 up a new service**: a connection pooler, Redis, a job-queue backend, a read
 replica, and the cloud platform itself. Everything code-only lives in the
-companion guide, [`scaling-current-stack.md`](./scaling-current-stack.md) —
-do that work first; it delivers most of the headroom to ~500 concurrent
-users and none of it is blocked on infrastructure decisions.
+companion phase doc.
 
-The trigger for this guide is **horizontal scale**: the moment more than one
+The trigger for this phase is **horizontal scale**: the moment more than one
 app instance runs, three in-process mechanisms must be promoted to shared
 services (auth cache → Redis, event bus → Redis, background work → queue),
 and the DB connection budget must be managed by a pooler rather than raw
 Postgres. Until then, single-instance deployments need nothing here.
 
-Both guides consolidate two former phase docs (*Scaling to Concurrent Load*,
-2026-06-22, and *Concurrency Efficiency, Collaborative-Session
-Re-architecture & Cloud Readiness*, 2026-07-01). Implementation should go
-through the normal skill workflow with a phase doc scoped per item; this
-guide is the reference, not the build spec.
+Each item below is implemented as its own sub-phase; when an item lands, its
+implementation summary goes to `implemented/v<version>/` and this doc stays
+here until the last code slice lands (the former roadmap's convention).
 
 ---
 
@@ -29,8 +48,7 @@ guide is the reference, not the build spec.
    `max_connections` (default 100). The app side is already prepared: the
    per-instance pool is env-driven (`DATABASE_POOL_MAX`, delivered v1.49.0),
    and the sizing rule (`pool × instances < max_connections`, ~15–20 per
-   instance behind the pooler for ~500 concurrent) lives in the companion
-   guide's capacity model. Ops work, not code — with one code caveat: the
+   instance behind the pooler for ~500 concurrent) lives in the companion phase doc's capacity model. Ops work, not code — with one code caveat: the
    `LISTEN/NOTIFY` event-bus adapter needs one session-mode connection, so
    it must take a direct DB URL (`DATABASE_LISTEN_URL`, defaulting to
    `DATABASE_URL`) while the app pool goes through the pooler.
@@ -42,11 +60,11 @@ guide is the reference, not the build spec.
      instances within TTL. The cache sits behind a clean seam precisely to
      make this swap local.
    - **Event-bus adapter 2**: Redis pub/sub drops in behind the
-     `ISessionEventBus` port (companion guide, group C), replacing the
+     `ISessionEventBus` port (companion phase doc, group C), replacing the
      per-instance Postgres LISTEN connection and scaling fan-out
      independently of the database. No client or event-vocabulary change.
    - **Queue backend** for item 3.
-3. **A real job queue for fire-and-forget work** (companion guide, wall #7).
+3. **A real job queue for fire-and-forget work** (companion phase doc, wall #7).
    Document generation, title generation, embedding/indexing, extraction,
    and email currently run detached inside the web process — a deploy or
    crash mid-generation silently loses them. ADR-019 sanctions **BullMQ**
@@ -57,7 +75,7 @@ guide is the reference, not the build spec.
    primary database. First migrated producers: document generation and
    step-advance side effects (doc-gen, auto-node dispatch, initial-message
    generation) — they hold LLM calls open inside a streaming HTTP response
-   today. Upload text extraction moves here too (companion guide, item 8).
+   today. Upload text extraction moves here too (companion phase doc, item 8).
 4. **Read replica.** Route analytics/reporting and vector-heavy reads to a
    replica to protect the primary's write throughput. Driven by measured
    need (load tests, production metrics), not pre-emptively.
@@ -124,7 +142,7 @@ bus, never process memory.
   auth cache).
 - A mid-generation deploy re-runs document generation from the queue instead
   of losing it.
-- Load tests (companion guide, item 16) gate each item's exit; `./validate.sh`
+- Load tests (companion phase doc, item 16) gate each item's exit; `./validate.sh`
   passes; versioning rules honoured per implementing phase.
 
 ---
@@ -137,7 +155,7 @@ bus, never process memory.
 - **Air-gap signals**: if PKI/on-prem requirements harden, revisit the
   BullMQ-vs-pg-boss default (item 3) and the Kubernetes row before
   committing to Redis-dependent choices.
-- **Sequencing**: nothing here blocks the companion guide's groups A–D; the
+- **Sequencing**: nothing here blocks the companion phase doc's groups A–D; the
   `ISessionEventBus` port and cache seams are designed so each promotion is
   a local adapter swap when the service arrives.
 
