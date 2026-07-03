@@ -6,7 +6,7 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   // Per-instance Postgres connection pool size for the scheduler/webhook service.
   // Keep this within the same `pool × instances < max_connections` budget as the
-  // web app. See docs/guides/scaling-current-stack.md.
+  // web app. See the scaling-current-stack phase doc.
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
   N8N_WEBHOOK_SECRET: z.string().optional(),
   AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral", "bedrock"]).default("anthropic"),

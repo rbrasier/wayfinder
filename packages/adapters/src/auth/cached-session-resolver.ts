@@ -7,7 +7,7 @@ type SessionLoader = (db: Database, cookieValue: string) => Promise<ResolvedSess
 /**
  * Wraps {@link resolveSession} with a short-TTL cache so repeat requests on the same
  * session token skip the auth DB query — the second-hottest source of pool pressure
- * after the connection limit itself (see docs/guides/scaling-current-stack.md).
+ * after the connection limit itself (see the scaling-current-stack phase doc).
  *
  * Only successful resolutions are cached. A missing/expired token is re-checked on
  * every request so a user who just logged in is never locked out by a negative cache

@@ -17,7 +17,7 @@ interface CacheEntry<Value> {
  * In-process, time-bounded cache for hot-path lookups (session + permission
  * resolution on the request path). Correct for a single instance; when more than
  * one instance runs, promote callers to a shared store (Redis) so invalidation is
- * cross-instance — see docs/guides/scaling-new-infrastructure.md. Keys are insertion
+ * cross-instance — see the scaling-new-infrastructure phase doc. Keys are insertion
  * ordered so eviction removes the least-recently-written entry.
  */
 export class TtlCache<Value> {
