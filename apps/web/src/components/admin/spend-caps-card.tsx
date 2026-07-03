@@ -54,13 +54,20 @@ export function SpendCapsCard() {
   const invalidate = () => {
     void utils.governance.dashboard.invalidate();
     void utils.governance.budgets.list.invalidate();
+    // The sidebar usage meter reads usage.myUsage; refresh it so adding, editing,
+    // or removing a limit updates the meter live without a page reload.
+    void utils.usage.myUsage.invalidate();
   };
 
   const createMutation = trpc.governance.budgets.create.useMutation({ onSuccess: invalidate });
   const updateMutation = trpc.governance.budgets.update.useMutation({ onSuccess: invalidate });
   const deleteMutation = trpc.governance.budgets.delete.useMutation({ onSuccess: invalidate });
   const setEnabledMutation = trpc.governance.settings.setUsageLimitsEnabled.useMutation({
-    onSuccess: () => void utils.governance.settings.getUsageLimitsEnabled.invalidate(),
+    onSuccess: () => {
+      void utils.governance.settings.getUsageLimitsEnabled.invalidate();
+      // Flipping the master switch shows/hides the meter for everyone.
+      void utils.usage.myUsage.invalidate();
+    },
   });
 
   const [form, setForm] = useState<CapForm>({ ...emptyForm });
