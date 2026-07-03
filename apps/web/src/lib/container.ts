@@ -188,7 +188,7 @@ const build = () => {
 
   // Short-TTL caches in front of the two hottest auth lookups (session +
   // permission resolution). Single-instance correct; promote to a shared store
-  // when running multiple instances. See docs/guides/scaling-and-concurrency.md.
+  // when running multiple instances. See docs/guides/scaling-new-infrastructure.md.
   const sessionCache = new TtlCache<ResolvedSession>({
     ttlMs: env.AUTH_CACHE_TTL_MS,
     maxEntries: env.AUTH_CACHE_MAX_ENTRIES,

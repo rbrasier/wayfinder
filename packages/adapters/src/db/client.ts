@@ -8,7 +8,7 @@ export type Database = ReturnType<typeof createDatabase>;
 // (default 100), leaving headroom for migrations, the scheduler, and admin tooling.
 // Behind a transaction-mode pooler (PgBouncer/RDS Proxy) the real Postgres
 // connections are multiplexed, so a per-instance value of ~15–20 is a sane start
-// for ~500 concurrent users across a few instances (see docs/guides/scaling-and-concurrency.md).
+// for ~500 concurrent users across a few instances (see docs/guides/scaling-current-stack.md).
 // Defaults low so local development never exhausts a dev database.
 const DEFAULT_POOL_MAX = 10;
 
