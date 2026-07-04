@@ -11,6 +11,7 @@ import {
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { shouldComputeBranchChoice } from "./branch-gate";
+import { shouldEvaluateStepReadiness } from "./readiness-gate";
 import { streamTurn } from "./stream-turn";
 import {
   appendShortcomingsToContext,
@@ -352,13 +353,18 @@ export async function POST(
       // Pre-generation evaluation gate: when the cheap model crosses the
       // threshold on a generate_document step, the doc-gen model confirms the
       // would-be document is ready *before* the session advances. The gate fails
-      // open — a thrown or errored eval advances exactly as today.
-      const shouldEvaluateReadiness =
-        !isNeverDone &&
-        !requireConfirmation &&
-        nodeConfig.outputType === "generate_document" &&
-        Boolean(nodeConfig.documentTemplatePath) &&
-        aiPayload.stepCompleteConfidence >= realThreshold;
+      // open — a thrown or errored eval advances exactly as today. It is skipped
+      // for flows with no context docs, which have no guidance for the larger
+      // model to grade against.
+      const shouldEvaluateReadiness = shouldEvaluateStepReadiness({
+        isNeverDone,
+        requireConfirmation,
+        outputType: nodeConfig.outputType,
+        hasTemplate: Boolean(nodeConfig.documentTemplatePath),
+        hasContextDocs: flow.contextDocs.length > 0,
+        stepCompleteConfidence: aiPayload.stepCompleteConfidence,
+        advanceThreshold: realThreshold,
+      });
 
       let evaluation: EvaluateStepReadinessOutput | null = null;
       if (shouldEvaluateReadiness) {

@@ -7,6 +7,7 @@ import { ConfidenceBar } from "./confidence-bar";
 import { DocumentCard } from "./document-card";
 import { MessageInfoModal } from "./message-info-modal";
 import { CrossCheckingBadge, FlowCompletePill, MilestonePill } from "./milestone-pill";
+import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
 
 interface ConfidenceAnnotation {
@@ -43,6 +44,10 @@ interface MessageFeedProps {
   // The step held open awaiting operator confirmation. Its milestone pill is
   // suppressed because the step has not actually completed yet (ADR-026).
   awaitingConfirmationNodeId?: string | null;
+  // The node the session is currently parked on. A high-confidence turn still on
+  // this step has not advanced (e.g. the pre-generation gate held it), so it must
+  // not render a milestone pill or a phantom "Generating document" badge.
+  currentNodeId?: string | null;
   // When the viewer holds knowledge:submit_feedback, the info modal on each
   // assistant message exposes a "Fix this answer" affordance.
   sessionId?: string;
@@ -84,6 +89,7 @@ export function MessageFeed({
   userFirstInitial,
   senderNamesById,
   awaitingConfirmationNodeId,
+  currentNodeId,
   sessionId,
   canSubmitFeedback,
 }: MessageFeedProps) {
@@ -110,31 +116,23 @@ export function MessageFeed({
             msg.role === "user" && msg.senderUserId ? senderNamesById?.[msg.senderUserId] ?? null : null;
           const messageUserInitials = senderName ? getRoleInitials(senderName, userInitials) : userInitials;
 
-          const isAdvancingMsg =
-            msg.role === "assistant" &&
-            msg.confidence !== null &&
-            msg.confidence >= 90 &&
-            dbMessages[index + 1]?.stepNodeId !== msg.stepNodeId &&
-            // A step awaiting confirmation has reached threshold but not advanced;
-            // it gets the pinned ConfirmStepCard, not the auto-advance milestone.
-            msg.stepNodeId !== awaitingConfirmationNodeId;
-
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";
           const hasTemplate = Boolean(config?.["documentTemplatePath"]);
           const isNeverDone = Boolean(config?.["neverDone"]);
 
-          type DocState = "generating" | "no_template" | "failed" | "done" | null;
-          const docState: DocState =
-            isAdvancingMsg && isDocNode
-              ? !hasTemplate
-                ? "no_template"
-                : msg.documentStatus === "failed"
-                ? "failed"
-                : msg.document || msg.documentStatus === "complete"
-                ? "done"
-                : "generating"
-              : null;
+          const { isAdvancing: isAdvancingMsg, docState } = resolveMilestoneState({
+            role: msg.role,
+            confidence: msg.confidence,
+            stepNodeId: msg.stepNodeId,
+            documentStatus: msg.documentStatus,
+            hasDocument: Boolean(msg.document),
+            nextStepNodeId: dbMessages[index + 1]?.stepNodeId,
+            currentNodeId: currentNodeId ?? null,
+            awaitingConfirmationNodeId,
+            isDocNode,
+            hasTemplate,
+          });
 
           return (
             <div key={msg.id}>

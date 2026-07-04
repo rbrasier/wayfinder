@@ -149,6 +149,29 @@ describe("EvaluateStepReadiness", () => {
     expect(result.data?.missingInformation).toEqual(["The budget figure is not provided."]);
   });
 
+  it("passes when a confidence dips below the threshold but nothing concrete is missing", async () => {
+    // The gate exists to catch actionable gaps: a pure-confidence dip with an
+    // empty missingInformation list must not hold the step (it would emit a
+    // confusing "nothing to ask" follow-up).
+    const languageModel = makeLanguageModel({
+      guidanceConfidence: 88,
+      criteriaConfidence: 72,
+      missingInformation: [],
+    });
+
+    const useCase = new EvaluateStepReadiness(
+      languageModel,
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+    );
+
+    const result = await useCase.execute({ messages, flow: makeFlow(), node: makeNode() });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.passed).toBe(true);
+    expect(result.data?.missingInformation).toEqual([]);
+  });
+
   it("returns the extraction error without calling the grader", async () => {
     const languageModel = makeLanguageModel({ extractionError: true });
 

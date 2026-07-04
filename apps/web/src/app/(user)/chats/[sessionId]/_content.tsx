@@ -434,6 +434,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         userFirstInitial={userFirstInitial}
         senderNamesById={senderNamesById}
         awaitingConfirmationNodeId={awaitingConfirmationNodeId}
+        currentNodeId={currentNodeId}
         sessionId={sessionId}
         canSubmitFeedback={
           (meQuery.data?.isAdmin ?? false) ||
