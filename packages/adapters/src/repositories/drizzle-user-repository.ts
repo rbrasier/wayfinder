@@ -8,9 +8,16 @@ import {
   type User,
   type UserUpdate,
 } from "@rbrasier/domain";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_users } from "../db/schema/core";
+
+// One IN query over the requested ids — the batch read that removes the
+// per-participant N+1 (scaling wall #6). Callers guarantee a non-empty list.
+export const buildFindByIdsStatement = (ids: readonly string[]): SQL => sql`
+  SELECT * FROM ${core_users}
+  WHERE ${inArray(core_users.id, [...ids])}
+`;
 
 const toEntity = (row: typeof core_users.$inferSelect): User => ({
   id: row.id,
@@ -51,6 +58,18 @@ export class DrizzleUserRepository implements IUserRepository {
       return ok(row ? toEntity(row) : null);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to find user.", cause));
+    }
+  }
+
+  async findByIds(ids: readonly string[]): Promise<Result<User[]>> {
+    if (ids.length === 0) return ok([]);
+    try {
+      const rows = (await this.db.execute(
+        buildFindByIdsStatement(ids),
+      )) as unknown as (typeof core_users.$inferSelect)[];
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to find users by ids.", cause));
     }
   }
 

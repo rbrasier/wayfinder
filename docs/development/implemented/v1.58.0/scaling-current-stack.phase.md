@@ -1,6 +1,7 @@
 # Phase — Scaling Within the Current Stack (no new services)
 
-- **Status**: Awaiting review (`/doc-review`), then staged implementation
+- **Status**: Implemented — all groups (A–D) shipped. See the per-version
+  implementation summaries: A (v1.55.0), B (v1.56.0), C (v1.57.0), D (v1.58.0).
 - **Date**: 2026-07-03
 - **Target version**: staged; each group ships as its own sub-phase and bumps
   independently —
@@ -10,10 +11,10 @@
   - Group C (event bus + SSE — `seq` column): **MINOR**
   - Group D (archival/partitioning + load tests): **MINOR**
 - **Depends on / relates to**:
-  - [`scaling-new-infrastructure.phase.md`](./scaling-new-infrastructure.phase.md)
-    — the enhancements that *do* require new services (connection pooler,
-    Redis, job-queue backend, read replica, cloud platform). Nothing there
-    blocks this phase; this phase comes first.
+  - the companion **Scaling with New Infrastructure** phase (still in
+    `to-be-implemented/`) — the enhancements that *do* require new services
+    (connection pooler, Redis, job-queue backend, read replica, cloud
+    platform). Nothing there blocks this phase; this phase came first.
   - `implemented/v1.49.0/scaling-p0-pool-and-auth-cache.md` — P0 delivered
     (env-driven pool, session/permission TTL cache, statelessness audit).
   - `implemented/v1.17.0/realtime-collaborative-sessions.phase.md` — groups

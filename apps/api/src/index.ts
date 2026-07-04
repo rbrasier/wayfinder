@@ -20,28 +20,39 @@ const server = app.listen(env.API_PORT, () => {
   console.log(`[api] listening on http://localhost:${env.API_PORT}`);
 });
 
-if (env.SCHEDULER_ENABLED && container.schedulerWorker) {
-  void container.schedulerWorker.start().then(
-    () => {
-      // eslint-disable-next-line no-console
-      console.log("[api] scheduler heartbeat started");
-    },
-    (error: unknown) => {
+if (env.SCHEDULER_ENABLED && container.schedulerWorkers.length > 0) {
+  for (const worker of container.schedulerWorkers) {
+    void worker.start().catch((error: unknown) => {
       container.logger.error("Scheduler heartbeat failed to start.", {
         reason: error instanceof Error ? error.message : String(error),
       });
-    },
-  );
+    });
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[api] scheduler heartbeat started (${container.schedulerWorkers.length} worker(s))`);
 } else if (env.SCHEDULER_ENABLED) {
   container.logger.warn(
     "Scheduler enabled but not started: set SCHEDULER_TICK_URL and SCHEDULER_TICK_SECRET.",
   );
 }
 
+if (env.RETENTION_ENABLED && container.retentionWorkers.length > 0) {
+  for (const worker of container.retentionWorkers) {
+    void worker.start().catch((error: unknown) => {
+      container.logger.error("Retention worker failed to start.", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[api] retention worker started (${container.retentionWorkers.length} worker(s))`);
+}
+
 const shutdown = (signal: string) => {
   // eslint-disable-next-line no-console
   console.log(`[api] received ${signal}, shutting down`);
-  container.schedulerWorker?.stop();
+  for (const worker of container.schedulerWorkers) worker.stop();
+  for (const worker of container.retentionWorkers) worker.stop();
   server.close(() => process.exit(0));
 };
 

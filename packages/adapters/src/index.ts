@@ -1,5 +1,6 @@
 export * from "./db/index";
 export * from "./repositories/index";
+export * from "./messaging/index";
 export * from "./ai/index";
 export * from "./agents/index";
 export * from "./auth/index";
@@ -18,6 +19,7 @@ export * from "./storage/index";
 export * from "./config/index";
 export * from "./email/index";
 export * from "./scheduling/index";
+export * from "./retention/index";
 export * from "./directory/index";
 export * from "./hr/index";
 export * from "./factory";

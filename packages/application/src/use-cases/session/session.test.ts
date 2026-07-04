@@ -189,6 +189,18 @@ class FakeSessionRepository implements ISessionRepository {
     this.sessions.set(id, updated);
     return ok(updated);
   }
+
+  async claimTurn(): Promise<Result<never>> {
+    throw new Error("not used");
+  }
+
+  async heartbeatTurn(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+
+  async releaseTurn(): Promise<Result<void>> {
+    return ok(undefined);
+  }
 }
 
 class FakeSessionMessageRepository implements ISessionMessageRepository {

@@ -15,6 +15,7 @@ import {
 import { generateObject, streamObject, streamText } from "ai";
 import { resolveModel, type ProviderCredentials } from "./providers";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
+import { LlmCallGovernor } from "./llm-concurrency";
 
 interface AnthropicMeta {
   cacheCreationInputTokens?: number;
@@ -56,7 +57,14 @@ export class LanguageModelAdapter implements ILanguageModel {
   constructor(
     public readonly provider: ProviderName,
     private readonly runtimeConfig: RuntimeConfigStore,
+    // Optional so existing single-instance/test wiring stays a plain provider
+    // call; when supplied it bounds concurrency and retries transient failures.
+    private readonly governor?: LlmCallGovernor,
   ) {}
+
+  private runGoverned<R>(call: () => Promise<R>): Promise<R> {
+    return this.governor ? this.governor.run(call) : call();
+  }
 
   async generateObject<T>(
     input: GenerateObjectInput,
@@ -64,15 +72,17 @@ export class LanguageModelAdapter implements ILanguageModel {
     try {
       const config = await this.runtimeConfig.getAiConfig();
       const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
-      const result = await generateObject({
-        model: resolveModel(provider, model, credentials),
-        schema: input.schema as never,
-        system: input.system,
-        prompt: input.prompt,
-        messages: input.messages as never,
-        temperature: input.temperature,
-        maxTokens: input.maxTokens,
-      });
+      const result = await this.runGoverned(() =>
+        generateObject({
+          model: resolveModel(provider, model, credentials),
+          schema: input.schema as never,
+          system: input.system,
+          prompt: input.prompt,
+          messages: input.messages as never,
+          temperature: input.temperature,
+          maxTokens: input.maxTokens,
+        }),
+      );
       const meta = extractMeta(
         result.experimental_providerMetadata as Record<string, unknown> | undefined,
       );
