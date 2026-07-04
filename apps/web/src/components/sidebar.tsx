@@ -181,24 +181,25 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     window.location.href = "/login";
   };
 
-  // Curators reach the knowledge base from their primary nav, admin or not; the
-  // page and its tRPC procedures enforce knowledge:curate regardless (ADR-021).
+  // Knowledge lives in the admin menu only; the page and its tRPC procedures
+  // still enforce knowledge:curate regardless (ADR-021).
   const canCurate =
     (userQuery.data?.isAdmin ?? false) ||
     (userQuery.data?.permissions ?? []).includes("knowledge:curate");
   const baseNav = isAdmin ? adminNav : userNav;
-  const nav: NavGroup[] = canCurate
-    ? [
-        {
-          ...baseNav[0]!,
-          items: [
-            ...baseNav[0]!.items,
-            { href: "/knowledge", icon: BookOpen, label: "Knowledge" },
-          ],
-        },
-        ...baseNav.slice(1),
-      ]
-    : baseNav;
+  const nav: NavGroup[] =
+    isAdmin && canCurate
+      ? [
+          {
+            ...baseNav[0]!,
+            items: [
+              ...baseNav[0]!.items,
+              { href: "/knowledge", icon: BookOpen, label: "Knowledge" },
+            ],
+          },
+          ...baseNav.slice(1),
+        ]
+      : baseNav;
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin

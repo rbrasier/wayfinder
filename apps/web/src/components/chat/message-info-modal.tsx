@@ -4,25 +4,38 @@ import { useState } from "react";
 import { Info } from "lucide-react";
 import { accumulateInsights } from "@rbrasier/application";
 import type { SessionMessage } from "@rbrasier/domain";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogBody,
   DialogCloseButton,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ConfidenceBar } from "./confidence-bar";
+import { FixAnswerModal } from "./fix-answer-modal";
 
 interface MessageInfoModalProps {
   message: SessionMessage;
   allMessages: SessionMessage[];
+  sessionId?: string;
+  canSubmitFeedback?: boolean;
 }
 
-export function MessageInfoModal({ message, allMessages }: MessageInfoModalProps) {
+export function MessageInfoModal({
+  message,
+  allMessages,
+  sessionId,
+  canSubmitFeedback,
+}: MessageInfoModalProps) {
   const [open, setOpen] = useState(false);
+  const [fixOpen, setFixOpen] = useState(false);
   const payload = message.aiPayload;
   if (!payload) return null;
+
+  const canFix = Boolean(canSubmitFeedback && sessionId);
 
   // Only count insights that existed when this message was generated — that is,
   // every message up to and including this one. Accumulating the whole thread
@@ -77,7 +90,30 @@ export function MessageInfoModal({ message, allMessages }: MessageInfoModalProps
             )}
           </details>
         </DialogBody>
+        {canFix && (
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setOpen(false);
+                setFixOpen(true);
+              }}
+            >
+              Fix this answer
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
+      {canFix && sessionId && (
+        <FixAnswerModal
+          open={fixOpen}
+          onClose={() => setFixOpen(false)}
+          sessionId={sessionId}
+          messageId={message.id}
+          flaggedAnswer={message.content}
+        />
+      )}
     </Dialog>
   );
 }
