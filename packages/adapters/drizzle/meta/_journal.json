@@ -197,6 +197,13 @@
       "when": 1783106686417,
       "tag": "0027_group_b_turn_lease_versioning_participants",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1783123733625,
+      "tag": "0028_group_c_message_seq_and_retire_typing",
+      "breakpoints": true
     }
   ]
 }

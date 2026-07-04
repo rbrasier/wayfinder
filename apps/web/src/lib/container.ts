@@ -31,7 +31,6 @@ import {
   GetSession,
   GetUsageSummary,
   GrantFlowOwner,
-  HeartbeatTyping,
   ImportHrDataset,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
@@ -50,7 +49,6 @@ import {
   ListPendingApprovals,
   ListPendingApprovalsWithContext,
   ListSessions,
-  ListTypingUsers,
   ListUsers,
   ListUsersForRole,
   LogAuditEvent,
@@ -134,7 +132,6 @@ import {
   DrizzleSessionMessageRepository,
   DrizzleSessionParticipantRepository,
   DrizzleSessionUploadRepository,
-  DrizzleSessionTypingRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleScheduleRepository,
   DrizzleScheduleRunRepository,
@@ -170,6 +167,7 @@ import {
   createCachedSessionResolver,
   createDatabase,
   createNodeExecutors,
+  createPostgresSessionEventBus,
   seedAdmin,
   seedRoles,
   withOptionalLangfuse,
@@ -233,8 +231,11 @@ const build = () => {
   const sessionParticipants = new DrizzleSessionParticipantRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
-  const sessionTyping = new DrizzleSessionTypingRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  // Real-time transport replacing the 2 s/3 s polls (scaling wall #2). Backed by
+  // Postgres LISTEN/NOTIFY on its own direct connection so it stays correct
+  // across instances without adding a new service.
+  const sessionEvents = createPostgresSessionEventBus(env.DATABASE_LISTEN_URL ?? env.DATABASE_URL);
   const schedules = new DrizzleScheduleRepository(db);
   const scheduleRuns = new DrizzleScheduleRunRepository(db);
   const clock = new SystemClock();
@@ -525,8 +526,8 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
@@ -623,8 +624,6 @@ const build = () => {
       listScheduleRuns: new ListScheduleRuns(scheduleRuns),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       confirmStepAdvance: new ConfirmStepAdvance(sessions, flowEdges, flowVersions, notifyOnStepComplete),
-      heartbeatTyping: new HeartbeatTyping(sessionTyping),
-      listTypingUsers: new ListTypingUsers(sessionTyping, users),
       getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
       getGovernanceDashboard: new GetGovernanceDashboard(usageRepo, budgets, users, flows),
       createBudget: new CreateBudget(budgets),

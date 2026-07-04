@@ -180,6 +180,7 @@ export const sessionRouter = router({
         revokedByUserId: ctx.userId,
       });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return { ok: true as const };
     }),
 
@@ -210,26 +211,19 @@ export const sessionRouter = router({
       });
     }),
 
-  heartbeatTyping: authenticatedProcedure
+  // Ephemeral typing presence over the event bus (scaling wall #2): no DB row,
+  // no heartbeat poll. Each keystroke burst publishes a transient `typing` event
+  // that every other open window's EventSource receives. The name is resolved
+  // client-side from the participant list.
+  emitTyping: authenticatedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.heartbeatTyping.execute({
-        sessionId: input.sessionId,
+      await ctx.container.services.sessionEvents.publish(input.sessionId, {
+        type: "typing",
         userId: ctx.userId,
+        userName: null,
       });
-      if (result.error) throw toTrpcError(result.error);
       return { ok: true as const };
-    }),
-
-  typingUsers: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.listTypingUsers.execute({
-        sessionId: input.sessionId,
-        excludeUserId: ctx.userId,
-      });
-      if (result.error) throw toTrpcError(result.error);
-      return result.data;
     }),
 
   create: authenticatedProcedure
@@ -267,6 +261,7 @@ export const sessionRouter = router({
       }
       const result = await ctx.container.repos.sessions.update(input.sessionId, { title: input.title });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
     }),
 
@@ -281,6 +276,7 @@ export const sessionRouter = router({
       }
       const result = await ctx.container.repos.sessions.update(input.sessionId, { status: "abandoned" });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
     }),
 
@@ -298,6 +294,7 @@ export const sessionRouter = router({
         targetNodeId: input.targetNodeId,
       });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
     }),
 
@@ -326,6 +323,7 @@ export const sessionRouter = router({
         isAdmin: ctx.isAdmin,
       });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
     }),
 });

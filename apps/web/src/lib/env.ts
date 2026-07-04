@@ -7,6 +7,14 @@ const serverEnvSchema = z.object({
   // size it so `DATABASE_POOL_MAX × instances < Postgres max_connections`, ideally
   // behind a transaction-mode pooler. See the scaling-current-stack phase doc.
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+  // Direct database URL for the session event bus's LISTEN connection (scaling
+  // wall #2). LISTEN needs a session-mode connection, so once a transaction-mode
+  // pooler fronts DATABASE_URL this must point at the direct endpoint. Defaults
+  // to DATABASE_URL, which is direct on the current stack.
+  DATABASE_LISTEN_URL: z.string().url().optional(),
+  // Interval for the SSE keepalive comment on the session events stream. Keeps
+  // proxies from closing an idle real-time connection between events.
+  SSE_HEARTBEAT_MS: z.coerce.number().int().positive().default(25_000),
   // Short-TTL cache for session + permission resolution on the request path. A few
   // seconds removes the per-request auth DB round-trips while bounding staleness after
   // a logout or role change. Set to 0 to disable (e.g. a multi-instance deployment that

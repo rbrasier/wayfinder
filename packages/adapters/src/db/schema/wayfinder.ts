@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigserial,
   boolean,
   check,
   customType,
@@ -269,12 +270,21 @@ export const app_session_messages = pgTable(
     document: jsonb("document").$type<SessionDocument>(),
     document_status: text("document_status", { enum: ["pending", "complete", "failed"] }),
     ai_payload: jsonb("ai_payload").$type<AiTurnPayload>(),
+    // Monotonic per-session cursor for real-time replay (scaling wall #2). A
+    // global bigserial is strictly increasing within any one session, so an SSE
+    // reconnect replays losslessly with `WHERE seq > lastEventId`; cross-session
+    // ordering is irrelevant because every subscription is scoped to one session.
+    seq: bigserial("seq", { mode: "number" }).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     by_session: index("app_session_messages_session_id_created_at_idx").on(
       t.session_id,
       t.created_at,
+    ),
+    by_session_seq: index("app_session_messages_session_id_seq_idx").on(
+      t.session_id,
+      t.seq,
     ),
   }),
 );
@@ -336,36 +346,6 @@ export const app_session_uploads = pgTable(
   (t) => ({
     storage_path_unique: unique("app_session_uploads_storage_path_unique").on(t.storage_path),
     by_session: index("app_session_uploads_session_id_idx").on(t.session_id),
-  }),
-);
-
-export const app_session_typing = pgTable(
-  "app_session_typing",
-  {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    session_id: uuid("session_id")
-      .notNull()
-      .references(() => app_sessions.id, { onDelete: "cascade" }),
-    user_id: uuid("user_id")
-      .notNull()
-      .references(() => core_users.id, { onDelete: "cascade" }),
-    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
-    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    session_user_unique: unique("app_session_typing_session_id_user_id_unique").on(
-      t.session_id,
-      t.user_id,
-    ),
-    by_session_expires: index("app_session_typing_session_id_expires_at_idx").on(
-      t.session_id,
-      t.expires_at,
-    ),
-    by_user_expires: index("app_session_typing_user_id_expires_at_idx").on(
-      t.user_id,
-      t.expires_at,
-    ),
   }),
 );
 

@@ -628,9 +628,6 @@ export const teardownE2EFixtures = async (container: Container): Promise<void> =
       .delete(schema.app_session_uploads)
       .where(inArray(schema.app_session_uploads.session_id, sessionIds));
     await db
-      .delete(schema.app_session_typing)
-      .where(inArray(schema.app_session_typing.session_id, sessionIds));
-    await db
       .delete(schema.app_session_messages)
       .where(inArray(schema.app_session_messages.session_id, sessionIds));
     await db

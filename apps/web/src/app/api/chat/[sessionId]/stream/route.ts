@@ -6,6 +6,7 @@ import {
   type AiTurnPayload,
   type ConversationalNodeConfig,
   type ResolvedDocumentGenerationBudget,
+  type SessionEvent,
 } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
@@ -38,6 +39,12 @@ export async function POST(
 ) {
   const { sessionId } = await params;
   const container = getContainer();
+
+  // Fire-and-forget real-time notifications (scaling wall #2). A NOTIFY failure
+  // must never fail the turn — the slow-poll fallback still catches every change.
+  const publishEvent = (event: SessionEvent) => {
+    void container.services.sessionEvents.publish(sessionId, event);
+  };
 
   const token = getSessionToken(req);
   if (!token) return new Response("Unauthorized", { status: 401 });
@@ -148,6 +155,10 @@ export async function POST(
       : { name: userResult.data.name, role: userResult.data.role, team: userResult.data.team };
   const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
+  // The lease is claimed; tell every open window whose turn it now is so they
+  // disable Send and can attribute the hold ("Alex's turn is in progress").
+  publishEvent({ type: "turn.claimed", userId: authSession.userId, userName: userProfile?.name ?? null });
+
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
     retrievedChunks,
@@ -219,6 +230,12 @@ export async function POST(
       if (userMsgResult.error) {
         const cause = userMsgResult.error.cause;
         throw cause instanceof Error ? cause : new Error(userMsgResult.error.message);
+      }
+
+      // Surface the human's message to collaborators immediately, before the AI
+      // reply finishes streaming.
+      if (typeof userMsgResult.data.seq === "number") {
+        publishEvent({ type: "message.created", seq: userMsgResult.data.seq });
       }
 
       // Enforce the acting user's spend caps before the model runs (ADR-026 §6).
@@ -478,9 +495,19 @@ export async function POST(
       }
       } finally {
         clearInterval(heartbeat);
+        // Announce the final state so every watching window reconciles: publish
+        // the latest message seq (advances their Last-Event-ID) and a state sync,
+        // then release the lease and signal Send can re-enable.
+        const latest = await container.repos.sessionMessages.latestBySession(session.id, 1);
+        const latestSeq = latest.error ? undefined : latest.data.at(-1)?.seq;
+        if (typeof latestSeq === "number") {
+          publishEvent({ type: "message.created", seq: latestSeq });
+        }
+        publishEvent({ type: "session.updated" });
         // Release in the same lifecycle that persisted the turn (or on the error
         // path); guarded on turnId so a stale release never clears a newer claim.
         await container.repos.sessions.releaseTurn(session.id, turnId);
+        publishEvent({ type: "turn.released" });
       }
     },
     onError: (error) => {

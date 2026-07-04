@@ -13,6 +13,10 @@ export interface ISessionMessageRepository {
   // incremental polling/replay so a client only ever fetches the delta, never
   // the whole transcript.
   listSince(sessionId: string, afterCreatedAt: Date): Promise<Result<SessionMessage[]>>;
+  // Messages with `seq` strictly greater than `afterSeq`, chronological. Backs
+  // SSE reconnect replay: the client passes its Last-Event-ID (the seq of the
+  // last message it saw) and gets exactly the rows it missed.
+  listSinceSeq(sessionId: string, afterSeq: number): Promise<Result<SessionMessage[]>>;
   updateDocument(id: string, document: SessionDocument): Promise<Result<SessionMessage>>;
   updateDocumentStatus(id: string, status: DocumentStatus): Promise<Result<SessionMessage>>;
   updateAiPayload(id: string, aiPayload: AiTurnPayload): Promise<Result<SessionMessage>>;

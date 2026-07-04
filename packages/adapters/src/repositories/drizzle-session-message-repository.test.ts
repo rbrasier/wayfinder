@@ -3,6 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import {
   buildLatestBySessionStatement,
   buildListSinceStatement,
+  buildListSinceSeqStatement,
 } from "./drizzle-session-message-repository";
 
 // The pagination queries are what keep a long session's per-turn read bounded
@@ -42,5 +43,19 @@ describe("buildListSinceStatement", () => {
     expect(text).toContain("asc");
     expect(params).toContain("session-2");
     expect(params).toContain(after);
+  });
+});
+
+describe("buildListSinceSeqStatement", () => {
+  it("returns only rows after the seq cursor, ordered by seq ascending", () => {
+    const { sql, params } = render(buildListSinceSeqStatement("session-3", 42));
+    const text = sql.toLowerCase();
+
+    expect(text).toContain("where");
+    expect(text).toContain("seq");
+    expect(text).toContain("order by");
+    expect(text).toContain("asc");
+    expect(params).toContain("session-3");
+    expect(params).toContain(42);
   });
 });

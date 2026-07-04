@@ -60,6 +60,11 @@ export interface SessionMessage {
   document: SessionDocument | null;
   documentStatus: DocumentStatus | null;
   aiPayload: AiTurnPayload | null;
+  // Monotonic per-session cursor assigned by the database on insert. Drives
+  // lossless SSE replay (Last-Event-ID) and incremental delta fetches. Optional
+  // because rows constructed in tests or read before this column existed may
+  // omit it; the DB always assigns one.
+  seq?: number;
   createdAt: Date;
 }
 
