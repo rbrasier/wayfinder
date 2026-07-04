@@ -204,6 +204,13 @@
       "when": 1783123733625,
       "tag": "0028_group_c_message_seq_and_retire_typing",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1783125937141,
+      "tag": "0029_group_d_retention_created_at_indexes",
+      "breakpoints": true
     }
   ]
 }

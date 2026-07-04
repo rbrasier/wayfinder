@@ -286,6 +286,8 @@ export const app_session_messages = pgTable(
       t.session_id,
       t.seq,
     ),
+    // Backs the retention sweep's oldest-first range scan (scaling wall #9).
+    by_created: index("app_session_messages_created_at_idx").on(t.created_at),
   }),
 );
 
@@ -474,6 +476,8 @@ export const app_notification_log = pgTable(
       t.status,
       t.created_at,
     ),
+    // Backs the retention sweep's oldest-first range scan (scaling wall #9).
+    by_created: index("app_notification_log_created_at_idx").on(t.created_at),
   }),
 );
 

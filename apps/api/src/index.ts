@@ -36,10 +36,23 @@ if (env.SCHEDULER_ENABLED && container.schedulerWorkers.length > 0) {
   );
 }
 
+if (env.RETENTION_ENABLED && container.retentionWorkers.length > 0) {
+  for (const worker of container.retentionWorkers) {
+    void worker.start().catch((error: unknown) => {
+      container.logger.error("Retention worker failed to start.", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[api] retention worker started (${container.retentionWorkers.length} worker(s))`);
+}
+
 const shutdown = (signal: string) => {
   // eslint-disable-next-line no-console
   console.log(`[api] received ${signal}, shutting down`);
   for (const worker of container.schedulerWorkers) worker.stop();
+  for (const worker of container.retentionWorkers) worker.stop();
   server.close(() => process.exit(0));
 };
 

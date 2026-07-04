@@ -1,5 +1,7 @@
+import { buildRetentionPolicies } from "@rbrasier/domain";
 import {
   ApplyAutoNodeResult,
+  ApplyRetentionPolicies,
   CreateUser,
   DeleteUser,
   FailJob,
@@ -36,6 +38,7 @@ import {
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
+  DrizzleRetentionRepository,
   DrizzleSessionMessageRepository,
   DrizzleSessionRepository,
   DrizzleSessionStepOutputRepository,
@@ -45,8 +48,10 @@ import {
   LanguageModelAdapter,
   NodemailerEmailSender,
   PinoLogger,
+  RetentionWorker,
   RuntimeConfigStore,
   SchedulerWorker,
+  SystemClock,
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
@@ -175,12 +180,41 @@ export const buildContainer = (env: Env) => {
         )
       : [];
 
+  // Retention sweep (scaling wall #9): a slow background worker that prunes the
+  // unbounded-growth tables. Only started when explicitly enabled; windows come
+  // from env, with audit and conversation history defaulting to keep-forever.
+  const retentionRepository = new DrizzleRetentionRepository(db);
+  const retentionPolicies = buildRetentionPolicies({
+    aiUsageEventsDays: env.RETENTION_USAGE_EVENTS_DAYS,
+    appSessionMessagesDays: env.RETENTION_SESSION_MESSAGES_DAYS,
+    coreAuditLogDays: env.RETENTION_AUDIT_LOG_DAYS,
+    appErrorLogDays: env.RETENTION_ERROR_LOG_DAYS,
+    appNotificationLogDays: env.RETENTION_NOTIFICATION_LOG_DAYS,
+  });
+  const applyRetentionPolicies = new ApplyRetentionPolicies(
+    retentionRepository,
+    retentionPolicies,
+    new SystemClock(),
+    {
+      batchSize: env.RETENTION_BATCH_SIZE,
+      maxBatchesPerTarget: env.RETENTION_MAX_BATCHES_PER_TARGET,
+    },
+  );
+  const retentionWorkers = env.RETENTION_ENABLED
+    ? [
+        new RetentionWorker(applyRetentionPolicies, jobRepo, logger, {
+          tickIntervalMs: env.RETENTION_TICK_MS,
+        }),
+      ]
+    : [];
+
   return {
     env,
     db,
     logger,
     runtimeConfig,
     schedulerWorkers,
+    retentionWorkers,
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {
