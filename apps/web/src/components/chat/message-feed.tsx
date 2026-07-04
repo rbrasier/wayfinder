@@ -9,6 +9,7 @@ import { MessageInfoModal } from "./message-info-modal";
 import { CrossCheckingBadge, FlowCompletePill, MilestonePill } from "./milestone-pill";
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
+import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
 
 interface ConfidenceAnnotation {
   type: "confidence";
@@ -116,6 +117,11 @@ export function MessageFeed({
             msg.role === "user" && msg.senderUserId ? senderNamesById?.[msg.senderUserId] ?? null : null;
           const messageUserInitials = senderName ? getRoleInitials(senderName, userInitials) : userInitials;
 
+          const scheduled = msg.role === "system" ? parseScheduledMessage(msg.content) : null;
+          const displayContent = scheduled
+            ? formatScheduledResume(scheduled.stepName, scheduled.nextFireAt)
+            : msg.content;
+
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";
           const hasTemplate = Boolean(config?.["documentTemplatePath"]);
@@ -162,7 +168,7 @@ export function MessageFeed({
                       msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
                     }`}
                   >
-                    {msg.content}
+                    {displayContent}
                   </p>
                   <p
                     className={`mt-1 text-right font-mono text-[10px] ${
