@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
 interface MilestonePillProps {
   nodeName: string;
   confidence: number;
@@ -77,15 +81,35 @@ export function MilestonePill({
   );
 }
 
+// How long each document label stays on screen before the badge cycles to the
+// next one.
+const CROSS_CHECK_CYCLE_MS = 3000;
+
 // Transient indicator shown while the pre-generation evaluation gate runs the
 // higher-quality doc-gen model before the step advances. Mirrors the
-// "Generating document" badge styling; it clears when the turn resolves.
-export function CrossCheckingBadge() {
+// "Generating document" badge styling; it clears when the turn resolves. When
+// the flow has context documents it cycles through them ("Cross-checking
+// <document>…") so the operator sees which references are being checked.
+export function CrossCheckingBadge({ documents = [] }: { documents?: string[] }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (documents.length <= 1) return;
+    const timer = setInterval(
+      () => setIndex((current) => (current + 1) % documents.length),
+      CROSS_CHECK_CYCLE_MS,
+    );
+    return () => clearInterval(timer);
+  }, [documents.length]);
+
+  const currentDocument = documents.length > 0 ? documents[index % documents.length] : null;
+  const label = currentDocument ? `Cross-checking ${currentDocument}…` : "Cross-checking…";
+
   return (
     <div className="my-3 flex justify-center">
       <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
         <Spinner />
-        <span>Cross-checking…</span>
+        <span>{label}</span>
       </div>
     </div>
   );

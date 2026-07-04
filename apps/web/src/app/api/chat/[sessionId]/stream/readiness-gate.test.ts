@@ -9,6 +9,8 @@ const base: ReadinessGateInput = {
   hasContextDocs: true,
   stepCompleteConfidence: 95,
   advanceThreshold: 90,
+  priorGateHolds: 0,
+  maxGateHolds: 1,
 };
 
 describe("shouldEvaluateStepReadiness", () => {
@@ -35,5 +37,21 @@ describe("shouldEvaluateStepReadiness", () => {
   it("skips never-done and confirmation-gated steps", () => {
     expect(shouldEvaluateStepReadiness({ ...base, isNeverDone: true })).toBe(false);
     expect(shouldEvaluateStepReadiness({ ...base, requireConfirmation: true })).toBe(false);
+  });
+
+  it("still runs before the hold limit is reached", () => {
+    expect(shouldEvaluateStepReadiness({ ...base, priorGateHolds: 0, maxGateHolds: 1 })).toBe(true);
+  });
+
+  it("skips once the node has already been held the maximum number of times", () => {
+    // The gate becomes advisory after it has surfaced its gaps once — the step
+    // advances rather than livelocking on a flaky grader.
+    expect(shouldEvaluateStepReadiness({ ...base, priorGateHolds: 1, maxGateHolds: 1 })).toBe(false);
+    expect(shouldEvaluateStepReadiness({ ...base, priorGateHolds: 2, maxGateHolds: 1 })).toBe(false);
+  });
+
+  it("honours a higher hold limit", () => {
+    expect(shouldEvaluateStepReadiness({ ...base, priorGateHolds: 1, maxGateHolds: 2 })).toBe(true);
+    expect(shouldEvaluateStepReadiness({ ...base, priorGateHolds: 2, maxGateHolds: 2 })).toBe(false);
   });
 });

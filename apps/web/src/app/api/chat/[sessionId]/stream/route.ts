@@ -11,6 +11,7 @@ import {
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { shouldComputeBranchChoice } from "./branch-gate";
+import { countGateHoldsOnNode } from "./gate-holds";
 import { shouldEvaluateStepReadiness } from "./readiness-gate";
 import { streamTurn } from "./stream-turn";
 import {
@@ -26,6 +27,16 @@ import {
 // The most recent turns the model is given as context, mirrored from the
 // client's own slice so the two agree (scaling wall #1).
 const CONTEXT_WINDOW_MESSAGES = 20;
+
+// How many times the pre-generation gate may hold a single node before it
+// becomes advisory and the step advances on the cheap model's threshold. Bounds
+// the gate so a flaky grader cannot livelock a step (surface gaps once, then
+// let the operator's correction through).
+const MAX_GATE_HOLDS = 1;
+
+// The label shown for a context document in the cross-checking badge: the
+// filename without its extension (FlowContextDoc has no separate title field).
+const documentLabel = (filename: string): string => filename.replace(/\.[^/.]+$/, "");
 
 const getSessionToken = (req: Request): string | null => {
   const cookie = req.headers.get("cookie");
@@ -364,64 +375,52 @@ export async function POST(
         hasContextDocs: flow.contextDocs.length > 0,
         stepCompleteConfidence: aiPayload.stepCompleteConfidence,
         advanceThreshold: realThreshold,
+        // Bound the gate: once it has already surfaced this node's gaps, a later
+        // threshold turn advances rather than looping on a flaky grader.
+        priorGateHolds: countGateHoldsOnNode(dbMessages, session.currentNodeId),
+        maxGateHolds: MAX_GATE_HOLDS,
       });
 
       let evaluation: EvaluateStepReadinessOutput | null = null;
       if (shouldEvaluateReadiness) {
-        dataStream.writeMessageAnnotation({ type: "cross-checking", active: true });
-        let budget: ResolvedDocumentGenerationBudget | undefined;
+        dataStream.writeMessageAnnotation({
+          type: "cross-checking",
+          active: true,
+          documents: flow.contextDocs.map((doc) => documentLabel(doc.filename)),
+        });
         try {
-          budget = await container.runtimeConfig.resolveDocumentGenerationBudget();
-        } catch {
-          budget = undefined;
-        }
-        const evalResult = await container.useCases.evaluateStepReadiness
-          .execute({
-            messages: [...messagesWithNew, { role: "assistant" as const, content: aiPayload.response }],
-            flow,
-            node: currentNode,
-            budget,
-          })
-          .catch(() => null);
-        if (evalResult && !evalResult.error) {
-          evaluation = evalResult.data;
+          let budget: ResolvedDocumentGenerationBudget | undefined;
+          try {
+            budget = await container.runtimeConfig.resolveDocumentGenerationBudget();
+          } catch {
+            budget = undefined;
+          }
+          const evalResult = await container.useCases.evaluateStepReadiness
+            .execute({
+              messages: [...messagesWithNew, { role: "assistant" as const, content: aiPayload.response }],
+              flow,
+              node: currentNode,
+              budget,
+            })
+            .catch(() => null);
+          if (evalResult && !evalResult.error) {
+            evaluation = evalResult.data;
+          }
+        } finally {
+          // Explicit off-signal so the badge clears the moment the cross-check
+          // finishes, rather than lingering through the fail-path follow-up.
+          dataStream.writeMessageAnnotation({ type: "cross-checking", active: false });
         }
       }
 
-      // Gate failed: hold the step open, record the gaps as outstanding context,
-      // and ask the user about them straight away.
+      // Gate failed: hold the step open and ask the user about the gaps. The
+      // cheap model's optimistic "ready to submit" reply is deliberately NOT
+      // persisted — the gate has overruled it, so showing it would contradict
+      // the follow-up. Only the corrective follow-up is streamed and stored, and
+      // the outstanding items are attached to it (which also records this hold so
+      // the gate can bound itself on the next turn).
       if (evaluation && !evaluation.passed) {
-        const failResult = await container.useCases.runTurn.persistAssistantTurn({
-          session,
-          flowId: flow.id,
-          assistantMessage: aiPayload.response,
-          aiPayload,
-          branchChoice: null,
-          advanceThreshold: Number.POSITIVE_INFINITY,
-          requireConfirmation: false,
-          confirmationThreshold: realThreshold,
-        });
-        if (failResult.error) {
-          const cause = failResult.error.cause;
-          throw cause instanceof Error ? cause : new Error(failResult.error.message);
-        }
-
-        // Only the just-persisted assistant turn is needed, so read the tail
-        // rather than the whole history (scaling wall #1).
-        const refreshed = await container.repos.sessionMessages.latestBySession(
-          session.id,
-          CONTEXT_WINDOW_MESSAGES,
-        );
-        const thresholdMessage = refreshed.error
-          ? null
-          : [...refreshed.data]
-              .reverse()
-              .find((m) => m.role === "assistant" && m.stepNodeId === session.currentNodeId);
-        if (thresholdMessage) {
-          await appendShortcomingsToContext(container, thresholdMessage.id, evaluation.missingInformation);
-        }
-
-        await streamGapFollowup({
+        const followup = await streamGapFollowup({
           container,
           writer: dataStream,
           session,
@@ -434,6 +433,10 @@ export async function POST(
           provider,
           userId: authSession.userId,
         });
+
+        if (followup.messageId) {
+          await appendShortcomingsToContext(container, followup.messageId, evaluation.missingInformation);
+        }
 
         if (dbMessages.filter((m) => m.role === "user").length === 0) {
           void generateTitle(container, session.id, lastUserMessage, provider, chatModelName, apiKey, authSession.userId);

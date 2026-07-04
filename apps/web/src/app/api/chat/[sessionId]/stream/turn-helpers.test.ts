@@ -717,6 +717,60 @@ describe("streamGapFollowup", () => {
     expect(createArg.content).toContain("end date");
   });
 
+  it("returns the persisted follow-up message id so the caller can record the hold", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { id: "followup-1" }, error: null });
+
+    const container = {
+      repos: {
+        sessionMessages: { create },
+        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+      },
+    } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
+
+    const result = await streamGapFollowup({
+      container,
+      writer: { write: () => undefined },
+      session: session(),
+      flowId: "flow-1",
+      system: "base system prompt",
+      messages: [{ role: "user", content: "All done" }],
+      missingInformation: ["The end date is missing."],
+      model: gapModel(),
+      modelName: "claude-haiku-4-5-20251001",
+      provider: "anthropic",
+      userId: "user-1",
+    });
+
+    expect(result.messageId).toBe("followup-1");
+  });
+
+  it("returns a null message id when persistence fails so no hold is recorded", async () => {
+    const create = vi.fn().mockResolvedValue({ data: null, error: { code: "DB", message: "boom" } });
+
+    const container = {
+      repos: {
+        sessionMessages: { create },
+        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+      },
+    } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
+
+    const result = await streamGapFollowup({
+      container,
+      writer: { write: () => undefined },
+      session: session(),
+      flowId: "flow-1",
+      system: "base system prompt",
+      messages: [{ role: "user", content: "All done" }],
+      missingInformation: ["The end date is missing."],
+      model: gapModel(),
+      modelName: "claude-haiku-4-5-20251001",
+      provider: "anthropic",
+      userId: "user-1",
+    });
+
+    expect(result.messageId).toBeNull();
+  });
+
   it("falls back to a generic gap description when the grading model reported no specific items", async () => {
     const create = vi.fn().mockResolvedValue({ data: {}, error: null });
     let capturedPrompt: { role: string; content: unknown }[] = [];

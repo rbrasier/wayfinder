@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
+import { resolveCrossCheckingState } from "./cross-checking-state";
 import { DocumentCard } from "./document-card";
 import { MessageInfoModal } from "./message-info-modal";
 import { CrossCheckingBadge, FlowCompletePill, MilestonePill } from "./milestone-pill";
@@ -22,9 +23,6 @@ const toConfidenceAnnotation = (a: unknown): ConfidenceAnnotation | null => {
   if (obj["type"] !== "confidence" || typeof obj["score"] !== "number") return null;
   return obj as unknown as ConfidenceAnnotation;
 };
-
-const isCrossCheckingAnnotation = (a: unknown): boolean =>
-  typeof a === "object" && a !== null && (a as Record<string, unknown>)["type"] === "cross-checking";
 
 interface MessageFeedProps {
   dbMessages: SessionMessage[];
@@ -233,10 +231,9 @@ export function MessageFeed({
           {streamingMessages.map((msg) => {
             const confidenceAnnotation =
               msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
+            const crossCheckingState = resolveCrossCheckingState(msg.annotations);
             const isCrossChecking =
-              isStreaming &&
-              msg.role === "assistant" &&
-              Boolean(msg.annotations?.some(isCrossCheckingAnnotation));
+              isStreaming && msg.role === "assistant" && crossCheckingState.active;
             const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
             const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
             const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
@@ -277,7 +274,7 @@ export function MessageFeed({
                   </div>
                 )}
               </div>
-              {isCrossChecking && <CrossCheckingBadge />}
+              {isCrossChecking && <CrossCheckingBadge documents={crossCheckingState.documents} />}
               </div>
             );
           })}
