@@ -4,7 +4,7 @@
 
 - **PRD**: `docs/development/prd/flow-skills-and-mcp.prd.md`
 - **ADR**: `docs/development/adr/031-runtime-skills-injected-step-instructions.adr.md`
-- **Target version**: 1.52.0 (MINOR — new feature + DB table)
+- **Target version**: 2.1.0 (MINOR — new feature + DB table)
 
 ## Scope
 

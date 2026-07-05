@@ -59,7 +59,8 @@ Write at least one Playwright e2e test that exercises the fixed behaviour throug
 
 ### Step 6 — On completion
 
-- Move bug-fix doc: `to-be-implemented/<name>.md` → `implemented/v[version]/<name>.md`
+- Move bug-fix doc: `to-be-implemented/<name>.md` → `implemented/alpha-<major>/v[version]/<name>.md`
+  (`alpha-<major>` is the current release line — `alpha-2` for `2.x.x`; see `docs/guides/versioning.md`)
 - Write an implementation summary: root cause, fix applied, regression test added, e2e test added
 - Apply a PATCH version bump
 - Update `VERSION` and root `package.json` `version`

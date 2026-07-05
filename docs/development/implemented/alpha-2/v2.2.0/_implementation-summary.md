@@ -1,18 +1,19 @@
-# Implementation Summary — MCP Integration (v1.54.0)
+# Implementation Summary — MCP Integration (v2.2.0)
 
-Delivers Phase 2 of the Flow Skills & MCP PRD as a single version: the admin MCP
-server registry (foundation, "Phase 2a") **and** flow consumption ("Phase 2b").
+Delivers Phase 2 of the Flow Skills & MCP PRD on the alpha-2 line: the admin MCP
+server registry (foundation, "Phase 2a"), flow consumption ("Phase 2b"), **and**
+the governed agentic write node (Phase B, see the final section).
 
-> Versioning note: this work was originally drafted across v1.53.0 (foundation)
-> and v1.54.0 (consumption). When this branch merged the latest `main`, that line
-> had independently shipped its own **v1.53.0** (pre-generation evaluation gate),
-> so the MCP work is consolidated here under **v1.54.0**. The foundation details
-> (entities, ports, `admin_mcp_servers`/`admin_mcp_tools` tables,
-> `DrizzleMcpServerRepository`, `AiSdkMcpClient`, `McpServerDirectory`, the
+> Versioning note: the MCP work was originally drafted on the alpha-1 (`1.x`) line
+> across several patch versions and consolidated for the alpha-2 release. On the
+> `2.x` line it lands as a single feature version, `2.2.0`, together with the
+> Phase B agentic write node that supersedes the deterministic write path below.
+> The foundation details (entities, ports, `admin_mcp_servers`/`admin_mcp_tools`
+> tables, `DrizzleMcpServerRepository`, `AiSdkMcpClient`, `McpServerDirectory`, the
 > management use-cases, the `mcpServer` router, and `/admin/mcp-servers`) ship in
 > this same version alongside the flow-consumption changes below.
 
-- **Version bump**: MINOR — `1.53.0` → `1.54.0` (new feature; new
+- **Version bump**: MINOR — `2.1.0` → `2.2.0` (new feature; new
   `admin_mcp_servers` / `admin_mcp_tools` tables from the foundation, plus the
   `mcp` node which reuses `flow_nodes.config` and the existing step-output path).
 - **PRD**: `docs/development/prd/flow-skills-and-mcp.prd.md`
@@ -93,6 +94,25 @@ server registry (foundation, "Phase 2a") **and** flow consumption ("Phase 2b").
 - The tool-loop is a pre-pass (gather-then-answer), not interleaved with the
   streaming structured turn — a deliberate ADR-032 decision to avoid
   stream-with-tools complexity.
-- `mcp` request fields are author-defined (the tool's input schema is not
-  auto-derived); the tool result is captured via a response field keyed `output`.
 - `validate.sh` DB-dependent checks (drizzle) skip without `DATABASE_URL`.
+
+## Phase B — governed agentic write node (folded into v2.2.0)
+
+The deterministic single-tool write path above was superseded within the same
+alpha-2 feature version by a **governed agentic action step**:
+
+- **Author** curates a set of allowed write tools (`allowedToolNames`) on the
+  actions-kind MCP node plus AI instructions; author-defined request fields are
+  removed (the tool's live input schema drives argument generation).
+- **Runtime** — `McpToolPlanner` runs a propose-only `generateText` (tools with
+  `execute` stripped, `maxSteps: 1`) so the model picks one allowed tool per run
+  and generates its arguments; `PrepareMcpNode` parks the proposed
+  `{ toolName, args }` as an `awaiting_confirmation` pending execution.
+- **Confirm** — the operator edits every resolved argument in `McpConfirmCard`,
+  then Proceed runs exactly what they see. `ConfirmMcpNode` claims the awaiting
+  entry (flips it to `pending`) before calling the tool, so a duplicate
+  Proceed / refresh is a benign no-op (**idempotency: dedupe, no undo**).
+- **n8n settings** moved to their own Flow Settings page (`/admin/n8n`), gated on
+  the `auto_node` feature flag; MCP and Skills admin surfaces are likewise gated
+  on the `mcp` / `skills` flags (ADR-022).
+- No migration — `McpNodeConfig` and `Session.pendingExecutions` are `jsonb`.

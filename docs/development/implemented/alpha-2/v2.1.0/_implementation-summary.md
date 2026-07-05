@@ -1,10 +1,10 @@
-# Implementation Summary — Flow Skills (v1.52.0)
+# Implementation Summary — Flow Skills (v2.1.0)
 
-Phase 1 of the Flow Skills & MCP PRD. Lets a flow author reuse an externally
-authored `SKILL.md` in a conversational step. MCP / tool-calling (Phase 2) is not
-included; `allowedTools` is parsed and stored but not yet enforced.
+Phase 1 of the Flow Skills & MCP PRD (alpha-2 line). Lets a flow author reuse an
+externally authored `SKILL.md` in a conversational step. MCP / tool-calling
+(Phase 2) is not included; `allowedTools` is parsed and stored but not yet enforced.
 
-- **Version bump**: MINOR — `1.51.0` → `1.52.0` (new feature + new `app_skills` table).
+- **Version bump**: MINOR — `2.0.0` → `2.1.0` (new feature + new `app_skills` table).
 - **PRD**: `docs/development/prd/flow-skills-and-mcp.prd.md`
 - **ADR**: `docs/development/adr/031-runtime-skills-injected-step-instructions.adr.md`
 - **Phase doc**: `phase-flow-skills.phase.md` (this directory)

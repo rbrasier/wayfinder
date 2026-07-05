@@ -1,18 +1,17 @@
 # Phase — MCP Integration
 
-> Phase 2 of the Flow Skills & MCP PRD. Builds on Phase 1 (v1.52.0 skills).
+> Phase 2 of the Flow Skills & MCP PRD. Builds on Phase 1 (v2.1.0 skills).
 
 - **PRD**: `docs/development/prd/flow-skills-and-mcp.prd.md`
 - **ADR**: `docs/development/adr/032-mcp-integration-and-tool-calling.adr.md`
-- **Target version**: 1.54.0 (MINOR — new feature + new tables). Both sub-phases
-  ship in v1.54.0: the line's own v1.53.0 was taken by the pre-generation
-  evaluation gate when this branch merged `main`, so the MCP work consolidated up.
+- **Target version**: 2.2.0 (MINOR — new feature + new tables) on the alpha-2 line.
+  Both sub-phases plus the Phase B agentic write node ship together in v2.2.0.
 
 ## Status
 
-- **Phase 2a — DONE (v1.54.0):** foundation + admin registry. Sub-components 1–4
+- **Phase 2a — DONE (v2.2.0):** foundation + admin registry. Sub-components 1–4
   plus the `/admin/mcp-servers` admin page.
-- **Phase 2b — DONE (v1.54.0):** flow consumption. The deterministic `mcp` node
+- **Phase 2b — DONE (v2.2.0):** flow consumption. The deterministic `mcp` node
   (canvas node type + editor + `RunMcpNode` dispatch, applied via the shared
   auto-node-result path) and the conversational tool-loop (a non-streaming
   `generateText` pre-pass bounded by `allowedMcpToolRefs`, folded into the step
