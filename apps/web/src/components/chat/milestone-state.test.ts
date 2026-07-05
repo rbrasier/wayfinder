@@ -12,6 +12,7 @@ const base: MilestoneStateInput = {
   awaitingConfirmationNodeId: null,
   isDocNode: true,
   hasTemplate: true,
+  isSessionComplete: false,
 };
 
 describe("resolveMilestoneState", () => {
@@ -24,6 +25,39 @@ describe("resolveMilestoneState", () => {
       stepNodeId: "step-1",
       currentNodeId: "step-1",
       nextStepNodeId: undefined,
+    });
+
+    expect(state.isAdvancing).toBe(false);
+    expect(state.docState).toBeNull();
+  });
+
+  it("renders the terminal step's milestone once the session is complete", () => {
+    // Advancing into a terminal node only flips status to complete; currentNodeId
+    // stays on the final node, so the last message keeps stepNodeId ===
+    // currentNodeId. Regression guard for the missing terminal document/pill.
+    const state = resolveMilestoneState({
+      ...base,
+      stepNodeId: "step-final",
+      currentNodeId: "step-final",
+      nextStepNodeId: undefined,
+      isSessionComplete: true,
+      hasDocument: true,
+      documentStatus: "complete",
+    });
+
+    expect(state.isAdvancing).toBe(true);
+    expect(state.docState).toBe("done");
+  });
+
+  it("still suppresses a gate-held current step while the session is active", () => {
+    // The complete-session relaxation must not leak into an active session: a
+    // high-confidence turn held on the current node by the gate is not a milestone.
+    const state = resolveMilestoneState({
+      ...base,
+      stepNodeId: "step-1",
+      currentNodeId: "step-1",
+      nextStepNodeId: undefined,
+      isSessionComplete: false,
     });
 
     expect(state.isAdvancing).toBe(false);

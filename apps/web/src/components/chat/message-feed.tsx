@@ -5,9 +5,15 @@ import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
+import { resolveGeneratingDocumentState } from "./generating-document-state";
 import { DocumentCard } from "./document-card";
 import { MessageInfoModal } from "./message-info-modal";
-import { CrossCheckingBadge, FlowCompletePill, MilestonePill } from "./milestone-pill";
+import {
+  CrossCheckingBadge,
+  FlowCompletePill,
+  GeneratingDocumentBadge,
+  MilestonePill,
+} from "./milestone-pill";
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
 import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
@@ -136,6 +142,7 @@ export function MessageFeed({
             awaitingConfirmationNodeId,
             isDocNode,
             hasTemplate,
+            isSessionComplete: Boolean(isComplete),
           });
 
           return (
@@ -234,6 +241,9 @@ export function MessageFeed({
             const crossCheckingState = resolveCrossCheckingState(msg.annotations);
             const isCrossChecking =
               isStreaming && msg.role === "assistant" && crossCheckingState.active;
+            const generatingDocumentState = resolveGeneratingDocumentState(msg.annotations);
+            const isGeneratingDocument =
+              isStreaming && msg.role === "assistant" && generatingDocumentState.active;
             const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
             const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
             const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
@@ -275,6 +285,7 @@ export function MessageFeed({
                 )}
               </div>
               {isCrossChecking && <CrossCheckingBadge documents={crossCheckingState.documents} />}
+              {isGeneratingDocument && <GeneratingDocumentBadge />}
               </div>
             );
           })}

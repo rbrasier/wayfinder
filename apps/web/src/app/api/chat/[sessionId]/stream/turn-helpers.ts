@@ -605,6 +605,10 @@ export interface ApplyAdvanceSideEffectsInput {
   // already extracted and the grade it produced, so document generation skips
   // the redundant second extraction and grading.
   precomputedDocument?: { fieldValues: Record<string, string>; grade: DocumentGenerationConfidence };
+  // Called with true while the completed step's document is generated and false
+  // once it finishes. The streaming route uses it to write the transient
+  // "Generating document…" badge annotation; the Proceed path omits it.
+  onDocumentGenerationChange?: (active: boolean) => void;
 }
 
 // The post-advance side effects shared by the auto-advance turn and the operator
@@ -629,6 +633,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
     provider,
     globalInstructions,
     precomputedDocument,
+    onDocumentGenerationChange,
   } = input;
 
   const completedNodeConfig = completedNode.config as unknown as ConversationalNodeConfig;
@@ -646,16 +651,24 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
       await container.repos.sessionMessages
         .updateDocumentStatus(milestone.id, "pending")
         .catch(() => undefined);
-      void generateDocument(
-        container,
-        milestone.id,
-        session.id,
-        flow,
-        nodes,
-        assistantMessages.data,
-        completedNode,
-        precomputedDocument,
-      );
+      // Await generation before opening the next step: a fire-and-forget call
+      // raced the opener onto the screen and, on a terminal step (no opener to
+      // keep the turn alive), was orphaned before it could persist the document.
+      onDocumentGenerationChange?.(true);
+      try {
+        await generateDocument(
+          container,
+          milestone.id,
+          session.id,
+          flow,
+          nodes,
+          assistantMessages.data,
+          completedNode,
+          precomputedDocument,
+        );
+      } finally {
+        onDocumentGenerationChange?.(false);
+      }
     }
   }
 

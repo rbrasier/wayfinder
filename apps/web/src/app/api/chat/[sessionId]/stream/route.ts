@@ -483,6 +483,10 @@ export async function POST(
           model: branchingModel,
           provider,
           globalInstructions,
+          // Live "Generating document…" feedback while generation is awaited
+          // before the next step opens.
+          onDocumentGenerationChange: (active) =>
+            dataStream.writeMessageAnnotation({ type: "generating-document", active }),
           // On a pass the gate already extracted the fields and graded them;
           // thread both onward so generation skips the second extraction.
           precomputedDocument: evaluation

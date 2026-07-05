@@ -325,45 +325,6 @@ describe("generateDocument wrapper", () => {
   });
 });
 
-describe("sequence: document generation is fire-and-forget", () => {
-  it("does not block initial message generation on document generation", async () => {
-    const sequence: string[] = [];
-    let resolveDocGen: (() => void) | null = null;
-    const docGenPromise = new Promise<void>((resolve) => {
-      resolveDocGen = resolve;
-    });
-
-    const generateDocFn = vi.fn().mockImplementation(async () => {
-      sequence.push("doc-start");
-      await docGenPromise;
-      sequence.push("doc-end");
-    });
-
-    const generateInitialFn = vi.fn().mockImplementation(async () => {
-      sequence.push("initial-start");
-      sequence.push("initial-end");
-    });
-
-    // Fire-and-forget: void the doc gen promise, do NOT await it
-    const runAdvance = async () => {
-      void generateDocFn();
-      await generateInitialFn();
-    };
-
-    await runAdvance();
-
-    // Initial message finished without waiting for doc gen
-    expect(sequence).toContain("initial-start");
-    expect(sequence).toContain("initial-end");
-    expect(sequence).toContain("doc-start");
-    expect(sequence).not.toContain("doc-end");
-
-    // Clean up the dangling promise
-    resolveDocGen!();
-    await docGenPromise;
-  });
-});
-
 describe("generateDocument return value", () => {
   it("returns false when the use case returns Result.error", async () => {
     const execute = vi.fn().mockResolvedValue({
@@ -602,6 +563,95 @@ describe("applyAdvanceSideEffects", () => {
 
     expect(retrieveExecute).toHaveBeenCalled();
     expect(create).toHaveBeenCalled();
+  });
+
+  it("awaits document generation before opening the next step", async () => {
+    // Regression guard (bug 1): the next-step opener must not run until the
+    // document has finished generating. Generation is held open on a deferred
+    // promise; the opener's retrieval must not fire until it resolves.
+    let resolveDocGen: ((value: { data: { document: object }; error: null }) => void) | null = null;
+    const generateDocumentExecute = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDocGen = resolve;
+        }),
+    );
+    const retrieveExecute = vi.fn().mockResolvedValue({ data: [], error: null });
+    const listBySession = vi.fn().mockResolvedValue({
+      data: [makeAssistantMessage({ id: "milestone", stepNodeId: "node-1" })],
+      error: null,
+    });
+    const conversationalNode = makeNode({
+      id: "node-2",
+      config: { aiInstruction: "Help", doneWhen: "done", outputType: "conversation_only" } as unknown as FlowNode["config"],
+    });
+
+    const container = {
+      repos: {
+        sessionMessages: {
+          listBySession,
+          updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }),
+          create: vi.fn().mockResolvedValue({ data: {}, error: null }),
+        },
+        sessionUploads: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
+        usageRepo: {},
+      },
+      runtimeConfig: {
+        resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined),
+        getSessionUploadConfig: vi.fn().mockResolvedValue({ maxFileSizeBytes: 1, totalBudgetChars: 1000 }),
+      },
+      useCases: {
+        generateDocument: { execute: generateDocumentExecute },
+        retrieveDocumentChunks: { execute: retrieveExecute },
+        isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: false, error: null }) },
+      },
+      services: {
+        errorLogger: { log: vi.fn().mockResolvedValue({ error: null }) },
+        sessionAgent: { buildSystemPrompt: vi.fn().mockReturnValue({ data: "prompt", error: null }) },
+      },
+    };
+
+    const pending = applyAdvanceSideEffects(
+      baseInput({ container, nodes: [completedDocNode, conversationalNode], newNodeId: "node-2" }),
+    );
+
+    // Let the microtask queue drain up to the awaited generation (several awaits
+    // precede it: the message list, the pending-status write, the budget resolve).
+    for (let tick = 0; tick < 20; tick += 1) await Promise.resolve();
+    expect(generateDocumentExecute).toHaveBeenCalledTimes(1);
+    expect(retrieveExecute).not.toHaveBeenCalled();
+
+    resolveDocGen!({ data: { document: {} }, error: null });
+    await pending;
+
+    // Only once generation resolves does the opener run.
+    expect(retrieveExecute).toHaveBeenCalled();
+  });
+
+  it("signals document-generation start and end around the awaited generation", async () => {
+    const signals: boolean[] = [];
+    const generateDocumentExecute = vi.fn().mockResolvedValue({ data: { document: {} }, error: null });
+    const listBySession = vi.fn().mockResolvedValue({
+      data: [makeAssistantMessage({ id: "milestone", stepNodeId: "node-1" })],
+      error: null,
+    });
+
+    const container = {
+      repos: {
+        sessionMessages: { listBySession, updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+        usageRepo: {},
+      },
+      runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
+      useCases: { generateDocument: { execute: generateDocumentExecute } },
+      services: { errorLogger: { log: vi.fn().mockResolvedValue({ error: null }) } },
+    };
+
+    await applyAdvanceSideEffects({
+      ...baseInput({ container, nodes: [completedDocNode], newNodeId: null }),
+      onDocumentGenerationChange: (active: boolean) => signals.push(active),
+    });
+
+    expect(signals).toEqual([true, false]);
   });
 });
 

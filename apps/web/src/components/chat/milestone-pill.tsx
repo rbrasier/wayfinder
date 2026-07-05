@@ -115,6 +115,21 @@ export function CrossCheckingBadge({ documents = [] }: { documents?: string[] })
   );
 }
 
+// Transient indicator shown while the awaited document generation runs after a
+// step advances, before the next step opens. Mirrors the "Generating document"
+// milestone badge styling; it clears when the turn resolves (the persisted
+// milestone then carries the finished document).
+export function GeneratingDocumentBadge() {
+  return (
+    <div className="my-3 flex justify-center">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
+        <Spinner />
+        <span>Generating document…</span>
+      </div>
+    </div>
+  );
+}
+
 export function FlowCompletePill() {
   return (
     <div className="my-4 flex justify-center">
