@@ -1,209 +1,216 @@
 {
-	"version": "7",
-	"dialect": "postgresql",
-	"entries": [
-		{
-			"idx": 0,
-			"version": "7",
-			"when": 1778237474214,
-			"tag": "0000_premium_ikaris",
-			"breakpoints": true
-		},
-		{
-			"idx": 1,
-			"version": "7",
-			"when": 1778362887519,
-			"tag": "0001_wise_the_santerians",
-			"breakpoints": true
-		},
-		{
-			"idx": 2,
-			"version": "7",
-			"when": 1778364818891,
-			"tag": "0002_shallow_skaar",
-			"breakpoints": true
-		},
-		{
-			"idx": 3,
-			"version": "7",
-			"when": 1778967661162,
-			"tag": "0003_naive_venom",
-			"breakpoints": true
-		},
-		{
-			"idx": 4,
-			"version": "7",
-			"when": 1747612800000,
-			"tag": "0004_app_wayfinder_schema",
-			"breakpoints": true
-		},
-		{
-			"idx": 5,
-			"version": "7",
-			"when": 1748304000000,
-			"tag": "0005_structured_ai_turn",
-			"breakpoints": true
-		},
-		{
-			"idx": 6,
-			"version": "7",
-			"when": 1748908800000,
-			"tag": "0006_flow_soft_delete",
-			"breakpoints": true
-		},
-		{
-			"idx": 7,
-			"version": "7",
-			"when": 1779820739565,
-			"tag": "0007_peaceful_captain_stacy",
-			"breakpoints": true
-		},
-		{
-			"idx": 8,
-			"version": "7",
-			"when": 1779880777748,
-			"tag": "0008_empty_joystick",
-			"breakpoints": true
-		},
-		{
-			"idx": 9,
-			"version": "7",
-			"when": 1779914647078,
-			"tag": "0009_bent_freak",
-			"breakpoints": true
-		},
-		{
-			"idx": 10,
-			"version": "7",
-			"when": 1779920605434,
-			"tag": "0010_certain_ikaris",
-			"breakpoints": true
-		},
-		{
-			"idx": 11,
-			"version": "7",
-			"when": 1780087227256,
-			"tag": "0011_elite_lester",
-			"breakpoints": true
-		},
-		{
-			"idx": 12,
-			"version": "7",
-			"when": 1780145876164,
-			"tag": "0012_realtime_collab_sessions",
-			"breakpoints": true
-		},
-		{
-			"idx": 13,
-			"version": "7",
-			"when": 1780198607654,
-			"tag": "0013_mighty_groot",
-			"breakpoints": true
-		},
-		{
-			"idx": 14,
-			"version": "7",
-			"when": 1780277712143,
-			"tag": "0014_session_uploads",
-			"breakpoints": true
-		},
-		{
-			"idx": 15,
-			"version": "7",
-			"when": 1780309664800,
-			"tag": "0015_outstanding_ultimatum",
-			"breakpoints": true
-		},
-		{
-			"idx": 16,
-			"version": "7",
-			"when": 1780350363572,
-			"tag": "0016_careless_misty_knight",
-			"breakpoints": true
-		},
-		{
-			"idx": 17,
-			"version": "7",
-			"when": 1780391802589,
-			"tag": "0017_stormy_gunslinger",
-			"breakpoints": true
-		},
-		{
-			"idx": 18,
-			"version": "7",
-			"when": 1780484350532,
-			"tag": "0018_purple_epoch",
-			"breakpoints": true
-		},
-		{
-			"idx": 19,
-			"version": "7",
-			"when": 1780515372011,
-			"tag": "0019_confused_jetstream",
-			"breakpoints": true
-		},
-		{
-			"idx": 20,
-			"version": "7",
-			"when": 1780817444459,
-			"tag": "0020_flippant_runaways",
-			"breakpoints": true
-		},
-		{
-			"idx": 21,
-			"version": "7",
-			"when": 1781085752901,
-			"tag": "0021_email_notification_log",
-			"breakpoints": true
-		},
-		{
-			"idx": 22,
-			"version": "7",
-			"when": 1781162335051,
-			"tag": "0022_empty_misty_knight",
-			"breakpoints": true
-		},
-		{
-			"idx": 23,
-			"version": "7",
-			"when": 1781380796751,
-			"tag": "0023_flow_versioning",
-			"breakpoints": true
-		},
-		{
-			"idx": 24,
-			"version": "7",
-			"when": 1781474230849,
-			"tag": "0024_next_hitman",
-			"breakpoints": true
-		},
-		{
-			"idx": 25,
-			"version": "7",
-			"when": 1781694822314,
-			"tag": "0025_omniscient_winter_soldier",
-			"breakpoints": true
-		},
-		{
-			"idx": 26,
-			"version": "7",
-			"when": 1782211548777,
-			"tag": "0026_volatile_stellaris",
-			"breakpoints": true
-		},
-		{
-			"idx": 27,
-			"version": "7",
-			"when": 1783105990282,
-			"tag": "0027_clumsy_bushwacker",
-			"breakpoints": true
-		},
-		{
-			"idx": 28,
-			"version": "7",
-			"when": 1783142347058,
-			"tag": "0028_scaling_current_stack_groups_b_c_d",
-			"breakpoints": true
-		}
-	]
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1778237474214,
+      "tag": "0000_premium_ikaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778362887519,
+      "tag": "0001_wise_the_santerians",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778364818891,
+      "tag": "0002_shallow_skaar",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778967661162,
+      "tag": "0003_naive_venom",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1747612800000,
+      "tag": "0004_app_wayfinder_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1748304000000,
+      "tag": "0005_structured_ai_turn",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1748908800000,
+      "tag": "0006_flow_soft_delete",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779820739565,
+      "tag": "0007_peaceful_captain_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779880777748,
+      "tag": "0008_empty_joystick",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779914647078,
+      "tag": "0009_bent_freak",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779920605434,
+      "tag": "0010_certain_ikaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780087227256,
+      "tag": "0011_elite_lester",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780145876164,
+      "tag": "0012_realtime_collab_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780198607654,
+      "tag": "0013_mighty_groot",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1780277712143,
+      "tag": "0014_session_uploads",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1780309664800,
+      "tag": "0015_outstanding_ultimatum",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1780350363572,
+      "tag": "0016_careless_misty_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780391802589,
+      "tag": "0017_stormy_gunslinger",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780484350532,
+      "tag": "0018_purple_epoch",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1780515372011,
+      "tag": "0019_confused_jetstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1780817444459,
+      "tag": "0020_flippant_runaways",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781085752901,
+      "tag": "0021_email_notification_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1781162335051,
+      "tag": "0022_empty_misty_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781380796751,
+      "tag": "0023_flow_versioning",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1781474230849,
+      "tag": "0024_next_hitman",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1781694822314,
+      "tag": "0025_omniscient_winter_soldier",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1782211548777,
+      "tag": "0026_volatile_stellaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1783105990282,
+      "tag": "0027_clumsy_bushwacker",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1783142347058,
+      "tag": "0028_scaling_current_stack_groups_b_c_d",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1783236642561,
+      "tag": "0029_powerful_rhodey",
+      "breakpoints": true
+    }
+  ]
 }
