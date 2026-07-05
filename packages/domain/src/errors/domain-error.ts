@@ -4,6 +4,9 @@ export type DomainErrorCode =
   | "VALIDATION_FAILED"
   | "UNAUTHORIZED"
   | "FORBIDDEN"
+  // A conditional write found no matching row: the optimistic-version guard lost
+  // to a concurrent writer, or a turn lease is already held (scaling wall #3).
+  | "CONFLICT"
   | "AI_PROVIDER_FAILED"
   | "AGENT_FAILED"
   | "QUOTA_EXCEEDED"

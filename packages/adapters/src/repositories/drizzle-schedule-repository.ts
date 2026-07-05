@@ -24,13 +24,18 @@ const CLAIM_LEASE_MS = 15 * 60 * 1000;
 // concurrent claimants get disjoint batches and a crash mid-fire self-heals.
 // The previous SELECT-in-a-transaction released its locks on commit and marked
 // nothing, so any second claimant (or a retried tick) re-fired the same rows.
+// The timestamps are bound as ISO strings with an explicit ::timestamptz cast:
+// this is a raw sql template, so Drizzle applies no column serializer and would
+// hand bare Date objects to postgres.js — which has no text encoder for a Date
+// and throws before the query reaches Postgres. ISO strings give it a defined
+// encoding while the cast keeps the comparison timestamptz <= timestamptz.
 export const buildClaimDueStatement = (now: Date, batchSize: number, leaseUntil: Date): SQL =>
   sql`
     UPDATE ${app_session_schedules}
-    SET next_fire_at = ${leaseUntil}, updated_at = now()
+    SET next_fire_at = ${leaseUntil.toISOString()}::timestamptz, updated_at = now()
     WHERE id IN (
       SELECT id FROM ${app_session_schedules}
-      WHERE status = 'active' AND next_fire_at <= ${now}
+      WHERE status = 'active' AND next_fire_at <= ${now.toISOString()}::timestamptz
       ORDER BY next_fire_at ASC
       LIMIT ${batchSize}
       FOR UPDATE SKIP LOCKED

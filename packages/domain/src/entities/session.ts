@@ -39,6 +39,19 @@ export interface Session {
   awaitingConfirmationNodeId?: string | null;
   graphCheckpoint: Record<string, unknown> | null;
   pendingExecutions: PendingExecutions;
+  // Server-side turn lease (scaling wall #3). While `activeTurnId` is set and the
+  // lease is fresh, one turn is in flight and a second send is rejected with a
+  // CONFLICT. The lease is self-healing: a crash mid-turn leaves the row stamped,
+  // and the next claim after the lease window elapses takes over. Optional so
+  // rows/fixtures created before the lease shipped still satisfy the type.
+  activeTurnId?: string | null;
+  activeTurnClaimedBy?: string | null;
+  activeTurnClaimedAt?: Date | null;
+  // Optimistic-concurrency guard for every non-lease session write (scaling wall
+  // #3). Each successful update increments it; a stale expected version loses the
+  // conditional update and surfaces a CONFLICT instead of silently overwriting.
+  // Optional/back-filled: absent is treated as version 1.
+  version?: number;
   createdAt: Date;
   updatedAt: Date;
 }

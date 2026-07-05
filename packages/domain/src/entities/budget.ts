@@ -2,9 +2,18 @@ export type BudgetPeriod = "daily" | "weekly" | "monthly";
 
 export type BudgetStatus = "ok" | "warn" | "blocked";
 
+// The level a limit's *value* is configured at (ADR-031). The ceiling is always
+// evaluated against an individual user's own spend — role/everyone rows are
+// templates, not pooled budgets. Resolution picks the most specific match.
+export type BudgetScope = "everyone" | "role" | "user";
+
 export interface Budget {
   readonly id: string;
-  readonly userId: string;
+  readonly scope: BudgetScope;
+  // Set only when scope === "role"; the logical key of admin_roles.
+  readonly roleKey: string | null;
+  // Set only when scope === "user"; null for everyone/role templates.
+  readonly userId: string | null;
   readonly period: BudgetPeriod;
   readonly limitUsd: number;
   readonly warnThresholdPct: number;
@@ -14,7 +23,9 @@ export interface Budget {
 }
 
 export interface NewBudget {
-  readonly userId: string;
+  readonly scope: BudgetScope;
+  readonly roleKey?: string | null;
+  readonly userId?: string | null;
   readonly period: BudgetPeriod;
   readonly limitUsd: number;
   readonly warnThresholdPct?: number;
@@ -66,4 +77,21 @@ export const budgetPeriodStart = (period: BudgetPeriod, now: Date): Date => {
   }
 
   return new Date(Date.UTC(year, month, date));
+};
+
+// End of the current period window in UTC (exclusive) — the instant the
+// allowance resets: daily = 00:00 tomorrow, weekly = 00:00 next Monday, monthly
+// = the 1st of next month. Pure function of (period, now), used by the usage
+// meter to show "resets" (ADR-031).
+export const budgetPeriodEnd = (period: BudgetPeriod, now: Date): Date => {
+  const start = budgetPeriodStart(period, now);
+
+  if (period === "monthly") {
+    return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+  }
+
+  const days = period === "weekly" ? 7 : 1;
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + days);
+  return end;
 };

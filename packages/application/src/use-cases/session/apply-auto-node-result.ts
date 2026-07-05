@@ -1,4 +1,6 @@
 import {
+  domainError,
+  err,
   ok,
   type AutoNodeConfig,
   type IFlowEdgeRepository,
@@ -8,6 +10,8 @@ import {
   type NodeExecutionOutput,
   type PendingExecutions,
   type Result,
+  type Session,
+  type SessionUpdate,
 } from "@rbrasier/domain";
 import { coerceStructuredFields } from "../document/structured-fields";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
@@ -48,11 +52,8 @@ export class ApplyAutoNodeResult {
     const correlationId = this.resolveCorrelationId(session.pendingExecutions, input);
     if (!correlationId) return ignored;
 
-    const remaining = { ...session.pendingExecutions };
-    delete remaining[correlationId];
-
     if (input.status !== "completed") {
-      const cleared = await this.sessions.update(session.id, { pendingExecutions: remaining });
+      const cleared = await this.commit(session.id, correlationId, {});
       if (cleared.error) return cleared;
       return ok({ applied: true, advanced: false });
     }
@@ -65,7 +66,38 @@ export class ApplyAutoNodeResult {
       ?.execute({ session, completedNodeId: input.nodeId })
       .catch(() => undefined);
 
-    return this.advance(session.id, session.flowId, session.currentNodeId, input.nodeId, remaining);
+    return this.advance(session.id, session.flowId, session.currentNodeId, input.nodeId, correlationId);
+  }
+
+  // The pending-executions blob is read-modify-written by concurrent auto/MCP
+  // callbacks, so this write is optimistically versioned and reloads once on a
+  // lost race (scaling wall #3). Each attempt re-reads the session, so `remaining`
+  // is recomputed from the latest blob rather than a stale snapshot.
+  private async commit(
+    sessionId: string,
+    correlationId: string,
+    extra: Pick<SessionUpdate, "status" | "currentNodeId" | "graphCheckpoint">,
+  ): Promise<Result<Session>> {
+    let lastError = domainError("CONFLICT", "Session was modified concurrently.");
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const sessionResult = await this.sessions.findById(sessionId);
+      if (sessionResult.error) return sessionResult;
+      if (!sessionResult.data) return err(domainError("NOT_FOUND", "Session not found."));
+      const session = sessionResult.data;
+
+      const remaining = { ...session.pendingExecutions };
+      delete remaining[correlationId];
+
+      const updated = await this.sessions.update(sessionId, {
+        ...extra,
+        pendingExecutions: remaining,
+        expectedVersion: session.version,
+      });
+      if (!updated.error) return updated;
+      if (updated.error.code !== "CONFLICT") return updated;
+      lastError = updated.error;
+    }
+    return err(lastError);
   }
 
   private resolveCorrelationId(
@@ -104,7 +136,7 @@ export class ApplyAutoNodeResult {
     flowId: string,
     currentNodeId: string | null,
     nodeId: string,
-    remaining: PendingExecutions,
+    correlationId: string,
   ): Promise<Result<ApplyAutoNodeResultOutput>> {
     const edgesResult = await this.flowEdges.listByFlow(flowId);
     if (edgesResult.error) return edgesResult;
@@ -112,10 +144,7 @@ export class ApplyAutoNodeResult {
     const outgoing = edgesResult.data.filter((edge) => edge.fromNodeId === nodeId);
 
     if (outgoing.length === 0) {
-      const completed = await this.sessions.update(sessionId, {
-        pendingExecutions: remaining,
-        status: "complete",
-      });
+      const completed = await this.commit(sessionId, correlationId, { status: "complete" });
       if (completed.error) return completed;
       // Fire-and-forget so a slow SMTP server can never stall the callback;
       // the notifier records its own outcome in the outbox and never throws.
@@ -126,14 +155,13 @@ export class ApplyAutoNodeResult {
     // An auto callback cannot make an AI branch choice, so a fork is left at the
     // current node (observable via the cleared pending map) rather than guessed.
     if (outgoing.length > 1) {
-      const cleared = await this.sessions.update(sessionId, { pendingExecutions: remaining });
+      const cleared = await this.commit(sessionId, correlationId, {});
       if (cleared.error) return cleared;
       return ok({ applied: true, advanced: false });
     }
 
     const newNodeId = outgoing[0]!.toNodeId;
-    const updated = await this.sessions.update(sessionId, {
-      pendingExecutions: remaining,
+    const updated = await this.commit(sessionId, correlationId, {
       currentNodeId: newNodeId,
       graphCheckpoint: { currentNodeId: newNodeId, advancedFrom: currentNodeId },
     });

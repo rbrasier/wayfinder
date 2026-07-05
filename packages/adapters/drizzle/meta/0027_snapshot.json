@@ -1,5 +1,5 @@
 {
-  "id": "9aece1ae-5eec-4d5a-8931-fade42fd5aab",
+  "id": "3f898852-c3ac-4674-939a-f540b7e947b4",
   "prevId": "c802481c-6971-4902-bc08-20829422b6c4",
   "version": "7",
   "dialect": "postgresql",
@@ -749,203 +749,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.admin_mcp_servers": {
-      "name": "admin_mcp_servers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "label": {
-          "name": "label",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "transport": {
-          "name": "transport",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'sse'"
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'context'"
-        },
-        "url": {
-          "name": "url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "credential_ref": {
-          "name": "credential_ref",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "admin_mcp_servers_created_by_user_id_core_users_id_fk": {
-          "name": "admin_mcp_servers_created_by_user_id_core_users_id_fk",
-          "tableFrom": "admin_mcp_servers",
-          "tableTo": "core_users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.admin_mcp_tools": {
-      "name": "admin_mcp_tools",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "server_id": {
-          "name": "server_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "input_schema": {
-          "name": "input_schema",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_synced_at": {
-          "name": "last_synced_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "admin_mcp_tools_server_id_idx": {
-          "name": "admin_mcp_tools_server_id_idx",
-          "columns": [
-            {
-              "expression": "server_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "admin_mcp_tools_server_id_admin_mcp_servers_id_fk": {
-          "name": "admin_mcp_tools_server_id_admin_mcp_servers_id_fk",
-          "tableFrom": "admin_mcp_tools",
-          "tableTo": "admin_mcp_servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "admin_mcp_tools_server_id_name_unique": {
-          "name": "admin_mcp_tools_server_id_name_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "server_id",
-            "name"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.admin_role_permissions": {
       "name": "admin_role_permissions",
       "schema": "",
@@ -1649,122 +1452,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.app_skills": {
-      "name": "app_skills",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "allowed_tools": {
-          "name": "allowed_tools",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "frontmatter": {
-          "name": "frontmatter",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'{}'::jsonb"
-        },
-        "version": {
-          "name": "version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "app_skills_status_idx": {
-          "name": "app_skills_status_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "app_skills_created_by_user_id_core_users_id_fk": {
-          "name": "app_skills_created_by_user_id_core_users_id_fk",
-          "tableFrom": "app_skills",
-          "tableTo": "core_users",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.job_registry": {
       "name": "job_registry",
       "schema": "",
@@ -2341,13 +2028,6 @@
         },
         "context_docs": {
           "name": "context_docs",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "context_mcp_server_ids": {
-          "name": "context_mcp_server_ids",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": true,
@@ -3904,11 +3584,24 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'user'"
+        },
+        "role_key": {
+          "name": "role_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "user_id": {
           "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "period": {
           "name": "period",
@@ -3936,6 +3629,16 @@
           "notNull": true,
           "default": false
         },
+        "scope_ref": {
+          "name": "scope_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "generated": {
+            "as": "COALESCE(\"user_id\"::text, \"role_key\", 'everyone')",
+            "type": "stored"
+          }
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3952,17 +3655,17 @@
         }
       },
       "indexes": {
-        "app_usage_budgets_user_id_period_unique": {
-          "name": "app_usage_budgets_user_id_period_unique",
+        "app_usage_budgets_period_scope_ref_unique": {
+          "name": "app_usage_budgets_period_scope_ref_unique",
           "columns": [
             {
-              "expression": "user_id",
+              "expression": "period",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "period",
+              "expression": "scope_ref",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

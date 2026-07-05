@@ -25,6 +25,8 @@ export const app_error_log = pgTable(
   (t) => ({
     by_status: index("app_error_log_status_idx").on(t.status),
     by_message_page: index("app_error_log_msg_page_idx").on(t.message, t.page),
+    // Backs the retention sweep's oldest-first range scan (scaling wall #9).
+    by_created: index("app_error_log_created_at_idx").on(t.created_at),
   }),
 );
 

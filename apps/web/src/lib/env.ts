@@ -5,14 +5,47 @@ const serverEnvSchema = z.object({
   DATABASE_URL: z.string().url(),
   // Per-instance Postgres connection pool size. Keep low for dev; in production
   // size it so `DATABASE_POOL_MAX × instances < Postgres max_connections`, ideally
-  // behind a transaction-mode pooler. See the scaling-to-concurrent-load phase doc.
+  // behind a transaction-mode pooler. See the scaling-current-stack phase doc.
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
+  // Direct database URL for the session event bus's LISTEN connection (scaling
+  // wall #2). LISTEN needs a session-mode connection, so once a transaction-mode
+  // pooler fronts DATABASE_URL this must point at the direct endpoint. Defaults
+  // to DATABASE_URL, which is direct on the current stack.
+  DATABASE_LISTEN_URL: z.string().url().optional(),
+  // Interval for the SSE keepalive comment on the session events stream. Keeps
+  // proxies from closing an idle real-time connection between events.
+  SSE_HEARTBEAT_MS: z.coerce.number().int().positive().default(25_000),
   // Short-TTL cache for session + permission resolution on the request path. A few
   // seconds removes the per-request auth DB round-trips while bounding staleness after
   // a logout or role change. Set to 0 to disable (e.g. a multi-instance deployment that
-  // has not yet promoted this cache to a shared store). See the scaling phase doc.
+  // has not yet promoted this cache to a shared store). See the scaling-new-infrastructure phase doc.
   AUTH_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(5000),
   AUTH_CACHE_MAX_ENTRIES: z.coerce.number().int().positive().default(10000),
+  // Per-instance ceiling on concurrent in-flight provider (LLM) calls. A single
+  // turn issues several model calls, so under concurrent load this is what keeps a
+  // web instance from stampeding a provider past its TPM/RPM limits (scaling wall
+  // #5). 0 disables the limit (unbounded, the prior behaviour).
+  LLM_MAX_CONCURRENCY: z.coerce.number().int().nonnegative().default(0),
+  // Attempts (not retries) per provider call; backoff is applied only to rate
+  // limits and transient 5xx/network errors, honouring any Retry-After header.
+  LLM_MAX_ATTEMPTS: z.coerce.number().int().positive().default(4),
+  // TTL for the near-static admin settings (org name, global instructions,
+  // upload config) the chat stream route reads every turn (scaling wall #4).
+  // They change only on an admin edit, so seconds of staleness is fine. 0
+  // disables the cache (every turn re-reads).
+  ADMIN_SETTINGS_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(30_000),
+  // TTL for cached published flow-version snapshots (scaling wall #4). Published
+  // versions are immutable, so this can be generous; a long TTL just keeps hot
+  // snapshots resident. 0 disables the cache.
+  FLOW_VERSION_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(300_000),
+  // Server-side turn lease (scaling wall #3). A send that finds a fresh lease is
+  // rejected with 409; a crashed turn's lease is taken over after this window, so
+  // it must comfortably exceed p99 turn duration (long doc-gen turns re-stamp the
+  // lease via a heartbeat while streaming).
+  TURN_LEASE_SECONDS: z.coerce.number().int().positive().default(120),
+  // How often a long, still-streaming turn re-stamps its lease so it never
+  // expires under the holder. Keep well below TURN_LEASE_SECONDS × 1000.
+  TURN_HEARTBEAT_MS: z.coerce.number().int().positive().default(30_000),
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_SEED_EMAIL: z.string().email().optional(),
@@ -20,6 +53,10 @@ const serverEnvSchema = z.object({
   // Shared secret the API scheduler heartbeat presents to the internal tick
   // endpoint. The endpoint refuses to fire unless this is set and matches.
   SCHEDULER_TICK_SECRET: z.string().optional(),
+  // How many due schedules one tick claims and fires. Raise it (with more API
+  // workers) to drain a backlog faster; the claim is FOR UPDATE SKIP LOCKED so
+  // concurrent ticks never double-fire (ADR-019, scaling wall #8).
+  SCHEDULER_BATCH_SIZE: z.coerce.number().int().positive().default(50),
   AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral", "bedrock"]).default("anthropic"),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),

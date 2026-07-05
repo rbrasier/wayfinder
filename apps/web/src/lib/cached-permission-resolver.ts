@@ -8,8 +8,8 @@ type PermissionLoader = (
 
 /**
  * Wraps effective-permission resolution with a short-TTL cache so repeat authenticated
- * requests skip the role/permission DB round-trips on the hot path (scaling phase doc,
- * wall #3). Keyed by `userId:isAdmin` — admin status changes the granted set, so it is
+ * requests skip the role/permission DB round-trips on the hot path (see
+ * the scaling-current-stack phase doc). Keyed by `userId:isAdmin` — admin status changes the granted set, so it is
  * part of the key rather than collapsed. Only successful results are cached; the short
  * TTL bounds how long a role/permission change stays stale.
  */

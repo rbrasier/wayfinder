@@ -27,6 +27,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   void trpc.user.me.prefetch();
   void trpc.flow.list.prefetch();
   void trpc.user.list.prefetch({});
+  void trpc.usage.myUsage.prefetch();
 
   return (
     <SidebarProvider>

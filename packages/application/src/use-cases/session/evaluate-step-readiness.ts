@@ -95,9 +95,14 @@ export class EvaluateStepReadiness {
 
     const threshold = normaliseAdvanceConfidenceThreshold(config.advanceConfidenceThreshold);
     const grade = gradeResult.data;
-    const passed =
+    const meetsThreshold =
       grade.guidanceAlignmentConfidence >= threshold &&
       grade.criteriaAlignmentConfidence >= threshold;
+    // The gate exists to catch actionable gaps. A confidence dip with nothing
+    // concrete to fix must not hold the step: the fail path would then stream a
+    // "nothing to ask" follow-up that duplicates the previous turn and leaves the
+    // step stuck. Only hold when the grader names something still missing.
+    const passed = meetsThreshold || grade.missingInformation.length === 0;
 
     return ok({
       passed,

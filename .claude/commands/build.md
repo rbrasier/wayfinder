@@ -5,7 +5,9 @@ or when the user explicitly asks to implement a specific phase or feature.
 
 **Pre-flight:** Confirm the phase doc in `docs/development/to-be-implemented/`
 exists and has passed `/doc-review`. Read the PRD, ADR(s), and phase doc in
-full before writing a single line of code.
+full before writing a single line of code. Create the working branch
+(`feature/<slug>`) from `main` — new features land on the next alpha, never
+on a `release/alpha-N` branch (see **Release Branching** in `CLAUDE.md`).
 
 ---
 
@@ -51,4 +53,4 @@ Once all sub-components pass validation, write at least one Playwright e2e test 
 - Update `VERSION` file and root `package.json` `version` (they must match)
 - Run `./validate.sh` one final time — fix all failures before declaring done
 - State the version bump applied (MAJOR / MINOR / PATCH)
-- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` so CI runs automatically. Include in the PR body: phase summary, files changed, version bump, and which e2e tests cover the new functionality.
+- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` against `main` so CI runs automatically — new features never target a `release/alpha-N` branch (see **Release Branching** in `CLAUDE.md`). Include in the PR body: phase summary, files changed, version bump, and which e2e tests cover the new functionality.

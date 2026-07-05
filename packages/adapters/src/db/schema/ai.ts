@@ -51,5 +51,7 @@ export const ai_usage_events = pgTable(
     by_user_created: index("ai_usage_events_user_id_created_at_idx").on(t.user_id, t.created_at),
     by_flow_created: index("ai_usage_events_flow_id_created_at_idx").on(t.flow_id, t.created_at),
     by_session: index("ai_usage_events_session_id_idx").on(t.session_id),
+    // Backs the retention sweep's oldest-first range scan (scaling wall #9).
+    by_created: index("ai_usage_events_created_at_idx").on(t.created_at),
   }),
 );

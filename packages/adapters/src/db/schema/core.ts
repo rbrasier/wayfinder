@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, jsonb, pgTable, real, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, jsonb, pgTable, real, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const core_users = pgTable("core_users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -65,7 +65,10 @@ export const core_audit_log = pgTable("core_audit_log", {
   metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // Backs the retention sweep's oldest-first range scan (scaling wall #9).
+  by_created: index("core_audit_log_created_at_idx").on(t.created_at),
+}));
 
 export const core_feature_flag = pgTable("core_feature_flag", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

@@ -103,7 +103,10 @@ export class GetGovernanceDashboard {
 
     const utilisation: CapUtilisationRow[] = [];
     for (const budget of budgetsResult.data) {
-      if (!budget.enabled) continue;
+      // Cap utilisation is a per-user view; everyone/role templates have no
+      // single user to attribute spend to and are surfaced in the caps table
+      // instead (ADR-031).
+      if (!budget.enabled || budget.scope !== "user" || budget.userId === null) continue;
       const spendUsd = await this.currentSpend(budget.userId, budget.period, now);
       const { status, ratio } = evaluateBudget(budget, spendUsd);
       utilisation.push({

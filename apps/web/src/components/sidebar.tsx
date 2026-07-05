@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { useSidebar } from "@/components/sidebar-context";
+import { UsageMeter } from "@/components/usage-meter";
 import { authClient } from "@/lib/auth-client";
 import { trpc } from "@/trpc/client";
 
@@ -191,8 +192,8 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     window.location.href = "/login";
   };
 
-  // Curators reach the knowledge base from their primary nav, admin or not; the
-  // page and its tRPC procedures enforce knowledge:curate regardless (ADR-021).
+  // Knowledge lives in the admin menu only; the page and its tRPC procedures
+  // still enforce knowledge:curate regardless (ADR-021).
   const canCurate =
     (userQuery.data?.isAdmin ?? false) ||
     (userQuery.data?.permissions ?? []).includes("knowledge:curate");
@@ -325,6 +326,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           <span>Enter admin mode</span>
         </button>
       )}
+      <UsageMeter />
       {user && (
         <div className="flex items-center gap-[8px] rounded-[8px] px-[10px] py-[8px] hover:bg-[#efede8]">
           <div className="flex h-[28px] w-[28px] shrink-0 items-center justify-center rounded-full bg-[#3a5fd9] text-[11px] font-bold text-white">

@@ -37,8 +37,14 @@ Wayfinder is a tool designed to created an end-user focused, but strucutred appr
 
 ## Quickstart (Docker Compose)
 
+**Current release: alpha-1** (the `1.x.x` line, branch `release/alpha-1`).
+Install from the release branch — `main` carries the next alpha in active
+development and is not guaranteed stable. See
+[`docs/guides/managing-releases.md`](docs/guides/managing-releases.md) for
+the release model.
+
 ```bash
-git clone https://github.com/rbrasier/wayfinder
+git clone --branch release/alpha-1 https://github.com/rbrasier/wayfinder
 cd wayfinder
 cp .env.example .env
 # Edit .env: set ADMIN_SEED_EMAIL, ANTHROPIC_API_KEY (or OPENAI_API_KEY / MISTRAL_API_KEY)
@@ -132,4 +138,4 @@ any modifications must be released under the same licence.
 
 ---
 
-_Last updated: 1 July 2026_
+_Last updated: 5 July 2026_

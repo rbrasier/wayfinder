@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { toast } from "sonner";
 import type { FlowEdge, FlowNode } from "@rbrasier/domain";
@@ -45,8 +45,6 @@ function countStalls(
 
 export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isShared = searchParams.get("shared") === "true";
 
   const utils = trpc.useUtils();
   const sessionQuery = trpc.session.get.useQuery({ sessionId });
@@ -55,19 +53,17 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   // The server grants approvers read-only access to sessions they don't own so
   // they can open the request for context. Treated like a shared viewer: no
   // composer, gate, or step actions.
-  const isReadOnly = isShared || sessionData?.readOnly === true;
+  const isReadOnly = sessionData?.readOnly === true;
   const isAdmin = meQuery.data?.isAdmin ?? false;
 
-  const heartbeatMutation = trpc.session.heartbeatTyping.useMutation();
-  const lastTypingHeartbeatRef = useRef(0);
-  const typingUsersQuery = trpc.session.typingUsers.useQuery(
-    { sessionId },
-    {
-      refetchInterval: 2000,
-      refetchIntervalInBackground: false,
-      enabled: sessionData?.session.status === "active",
-    },
-  );
+  const myUserId = meQuery.data?.userId ?? null;
+  const emitTypingMutation = trpc.session.emitTyping.useMutation();
+  const lastTypingEmitRef = useRef(0);
+  // Live typing presence over the event bus instead of a 2 s poll (scaling wall
+  // #2): each `typing` event stamps an expiry a few seconds out, and a light tick
+  // recomputes the indicator so it fades when the events stop.
+  const typingExpiryRef = useRef<Map<string, number>>(new Map());
+  const [typingTick, setTypingTick] = useState(0);
 
   const [_regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -148,6 +144,20 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     return namesById;
   }, [sessionData?.participants]);
 
+  // Derived from the typing-event expiry map; `typingTick` forces recompute as
+  // entries arrive and lapse. The current user is filtered out so they never see
+  // their own indicator echoed back over the bus.
+  const typingUsers = useMemo(() => {
+    void typingTick;
+    const now = Date.now();
+    const active: { userId: string; name: string | null }[] = [];
+    for (const [userId, expiresAt] of typingExpiryRef.current) {
+      if (expiresAt <= now || userId === myUserId) continue;
+      active.push({ userId, name: senderNamesById[userId] ?? null });
+    }
+    return active;
+  }, [typingTick, myUserId, senderNamesById]);
+
   const completedNodeIds: string[] = [];
   if (dbMessages.length > 0) {
     const messagesByNode = new Map<string, { maxConfidence: number; lastStepNodeId: string }>();
@@ -169,7 +179,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const railSteps = buildStepRail(nodes, edges, currentNodeId, completedNodeIds);
 
   const stallCount = countStalls(dbMessages, currentNodeId, edges);
-  const showBranchOverride = isAdmin && !isShared && stallCount >= NULL_BRANCH_THRESHOLD;
+  const showBranchOverride = isAdmin && !isReadOnly && stallCount >= NULL_BRANCH_THRESHOLD;
 
   const outgoingBranches = edges
     .filter((e) => e.fromNodeId === currentNodeId)
@@ -245,13 +255,49 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     });
   }, [dbMessages, currentNodeId, rawNodes]);
 
-  // Poll session.get so collaborators' messages and AI replies appear while the
-  // session is active, and so the document spinner still resolves once generation
-  // finishes. Polling pauses while the tab is hidden to limit load.
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessionStatus = sessionData?.session.status ?? null;
+  const isSessionActive = sessionStatus === "active";
+
+  // One EventSource replaces the 2 s typing poll and 3 s session poll (scaling
+  // wall #2). The server pushes message/turn/state events; each triggers a state
+  // refetch (definitions are cached), and `typing` events feed the presence map.
+  // EventSource reconnects automatically with Last-Event-ID for lossless replay.
   useEffect(() => {
-    const shouldPoll = hasGeneratingDoc || sessionStatus === "active";
+    if (!isSessionActive) return;
+    const source = new EventSource(`/api/sessions/${sessionId}/events`);
+    const refetch = () => {
+      void utils.session.get.invalidate({ sessionId });
+    };
+    source.addEventListener("message.created", refetch);
+    source.addEventListener("session.updated", refetch);
+    source.addEventListener("turn.claimed", refetch);
+    source.addEventListener("turn.released", refetch);
+    source.addEventListener("typing", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as { userId?: string };
+        if (!data.userId || data.userId === myUserId) return;
+        typingExpiryRef.current.set(data.userId, Date.now() + 4000);
+        setTypingTick((tick) => tick + 1);
+      } catch {
+        // Ignore malformed events; the fallback poll keeps state fresh.
+      }
+    });
+    return () => source.close();
+  }, [sessionId, isSessionActive, myUserId, utils.session.get]);
+
+  // Light tick so typing indicators fade out once events stop arriving.
+  useEffect(() => {
+    if (typingExpiryRef.current.size === 0 && !isSessionActive) return;
+    const interval = setInterval(() => setTypingTick((tick) => tick + 1), 1500);
+    return () => clearInterval(interval);
+  }, [isSessionActive]);
+
+  // Degraded fallback (scaling wall #2): a slow poll if the SSE stream is ever
+  // interrupted, and a faster one only while a document is still generating so
+  // the spinner resolves promptly. Pauses while the tab is hidden.
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    const shouldPoll = hasGeneratingDoc || isSessionActive;
     const stop = () => {
       if (pollingRef.current) {
         clearInterval(pollingRef.current);
@@ -262,15 +308,16 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       stop();
       return;
     }
+    const intervalMs = hasGeneratingDoc ? 3000 : 20000;
     const start = () => {
       if (pollingRef.current) return;
       pollingRef.current = setInterval(() => {
         void utils.session.get.invalidate({ sessionId });
-      }, 3000);
+      }, intervalMs);
     };
     const handleVisibility = () => {
-      if (document.visibilityState === "hidden") stop();
-      else start();
+      stop();
+      if (document.visibilityState !== "hidden") start();
     };
     if (document.visibilityState !== "hidden") start();
     document.addEventListener("visibilitychange", handleVisibility);
@@ -278,7 +325,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       stop();
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [hasGeneratingDoc, sessionStatus, sessionId, utils.session.get]);
+  }, [hasGeneratingDoc, isSessionActive, sessionId, utils.session.get]);
 
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
@@ -327,7 +374,6 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const userFirstInitial = me?.name?.trim()?.[0]?.toUpperCase() ?? "U";
   const isFlowDeleted = flow.deletedAt !== null;
 
-  const typingUsers = typingUsersQuery.data ?? [];
   const firstTyperName = typingUsers[0]?.name?.trim();
   const typingLabel =
     typingUsers.length === 0
@@ -396,6 +442,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         userFirstInitial={userFirstInitial}
         senderNamesById={senderNamesById}
         awaitingConfirmationNodeId={awaitingConfirmationNodeId}
+        currentNodeId={currentNodeId}
         sessionId={sessionId}
         canSubmitFeedback={
           (meQuery.data?.isAdmin ?? false) ||
@@ -459,9 +506,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             setInput(value);
             if (session.status !== "active") return;
             const now = Date.now();
-            if (now - lastTypingHeartbeatRef.current < 2000) return;
-            lastTypingHeartbeatRef.current = now;
-            heartbeatMutation.mutate({ sessionId });
+            if (now - lastTypingEmitRef.current < 2000) return;
+            lastTypingEmitRef.current = now;
+            emitTypingMutation.mutate({ sessionId });
           }}
           onSubmit={handleSend}
           disabled={isLoading || session.status !== "active" || isFlowDeleted || isApprovalGate}

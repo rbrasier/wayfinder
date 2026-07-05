@@ -102,6 +102,7 @@ export function AdminRolesContent() {
                           <TableCell key={entry.role.id} className="text-center">
                             <input
                               type="checkbox"
+                              aria-label={`${permission.label} for ${entry.role.name}`}
                               checked={granted}
                               disabled={locked || updatePermissions.isPending}
                               onChange={() =>
@@ -353,6 +354,7 @@ function FeatureAccessCard() {
                     <TableCell key={role.id} className="text-center">
                       <input
                         type="checkbox"
+                        aria-label={`${flag.key} for ${role.name}`}
                         checked={flag.roleIds.includes(role.id)}
                         disabled={!flag.enabled || setRoles.isPending}
                         onChange={() => toggleRole(flag.key, flag.roleIds, role.id)}
@@ -398,6 +400,7 @@ function RoleMembershipPanel({ roleId, roleName }: { roleId: string; roleName: s
       <CardContent className="space-y-4">
         <div className="flex gap-2">
           <select
+            aria-label={`Add a user to ${roleName}`}
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
             value={selectedUserId}
             onChange={(event) => setSelectedUserId(event.target.value)}

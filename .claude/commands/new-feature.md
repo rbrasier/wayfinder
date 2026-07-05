@@ -6,6 +6,10 @@ template.
 
 **Important:** This skill produces documentation only. Do NOT write code.
 
+New features always target `main` — the next alpha — never a `release/alpha-N`
+branch (see **Release Branching** in `CLAUDE.md`). Plan version bumps against
+`main`'s version line.
+
 ---
 
 ## Required Clarifying Questions

@@ -23,6 +23,7 @@ one that matches what you're doing — routing rules are in [`CLAUDE.md`](CLAUDE
 | Implement a reviewed phase | `/build` |
 | Change or extend existing behaviour | `/enhance` |
 | Fix something broken | `/bugfix` |
+| Cut or tag an alpha release (maintainers) | `/release` |
 
 Each skill follows the same shape: **write the spec, write the test, write
 the code, validate, document, version, ship.** A few things to know going in:
@@ -43,7 +44,51 @@ the code, validate, document, version, ship.** A few things to know going in:
 You don't need to memorise the skill internals; just run `/new-feature`,
 `/enhance`, or `/bugfix` and answer the clarifying questions it asks.
 
-## 2. Respect the architecture
+## 2. Target the right release
+
+Wayfinder is in alpha, and releases follow a deliberately lightweight
+two-branch model:
+
+| Branch | What it is | What lands there |
+|---|---|---|
+| `release/alpha-1` | The **current** alpha (the `1.x.x` version line) | Bug fixes and enhancements only |
+| `main` | The **next** alpha (alpha-2, the `2.x.x` line), in active development | New features — plus fixes for things that only exist on `main` |
+
+The branching strategy in one picture:
+
+```
+release/alpha-1  ──o───o───o──▶   bug fixes + enhancements (1.x.x)
+                  /     \
+                 /       \  (maintainers merge forward periodically)
+main  ──────────o─────────o───o──▶   new features (2.x.x = alpha-2)
+```
+
+Rules:
+
+1. **Fixing a bug or enhancing existing behaviour?** Branch from
+   `release/alpha-1` (name it `fix/<slug>` or `enhance/<slug>`) and open your
+   PR against `release/alpha-1`.
+2. **Building a new feature?** Branch from `main` (name it `feature/<slug>`)
+   and open your PR against `main`. New features never target a release
+   branch.
+3. **Not sure which one you have?** Open an issue first and ask.
+
+You never need to land the same change twice. Maintainers periodically merge
+the release branch forward into `main`, so a fix on the alpha automatically
+reaches the next release. The reverse is forbidden — merging `main` into a
+release branch would pull unfinished features into the stable alpha.
+
+The `/bugfix` and `/enhance` skills ask which release your change targets and
+handle the branching for you. The current alpha branch is recorded in one
+place — the **Release Branching** section of [`CLAUDE.md`](CLAUDE.md) — so
+check there if you suspect this table is stale.
+
+For the full picture — why the model is shaped this way, how versions map to
+alphas, how fixes flow forward, CI behaviour, and the maintainer runbook for
+cutting and publishing alphas — see
+[`docs/guides/managing-releases.md`](docs/guides/managing-releases.md).
+
+## 3. Respect the architecture
 
 Wayfinder follows **hexagonal architecture** (ports and adapters — see
 [ADR-001](docs/development/adr/001-hexagonal-architecture.adr.md)). The
@@ -92,7 +137,7 @@ that violates it won't pass checks. The rules that matter most day to day:
 `{{tag}}` placeholders (docxtemplater syntax). Drop examples in
 `docs/templates/` and upload real ones via the admin canvas.
 
-## 3. Running checks
+## 4. Running checks
 
 ```bash
 ./validate.sh

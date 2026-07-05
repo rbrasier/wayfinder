@@ -20,7 +20,12 @@ import {
 } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
+import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
 import { streamTurn, type StreamTurnWriter } from "./stream-turn";
+
+// Re-exported from its lightweight home so existing importers keep working while
+// the gate-hold counter can depend on the constant without pulling this module.
+export { OUTSTANDING_CONTEXT_KEY };
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -72,12 +77,6 @@ export const buildGatheredContext = (messages: SessionMessage[]): string => {
   return items.map((item) => `- ${item.key}: ${item.value}`).join("\n");
 };
 
-// Key prefix marking a gathered-context item as still outstanding, so the cheap
-// chat model treats it as something to ask about rather than a satisfied fact.
-// The same prefix self-rate-limits the expensive evaluation: the cheap model
-// will not re-report >= threshold until the user supplies these.
-export const OUTSTANDING_CONTEXT_KEY = "OUTSTANDING — still required from the user";
-
 // Merge the pre-generation evaluation's missing-information items into an
 // assistant message's gathered context, labelled outstanding. Best-effort: a
 // failure here must not break the turn.
@@ -116,8 +115,9 @@ export interface StreamGapFollowupInput {
 // After a failed pre-generation evaluation, generate and stream a follow-up
 // assistant turn that asks the user for the outstanding items, then persist it.
 // The step does not advance, so the follow-up keeps the conversation on the same
-// node until the gaps are filled.
-export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<void> {
+// node until the gaps are filled. Returns the persisted follow-up's id (or null
+// if persistence failed) so the caller can attach the outstanding items to it.
+export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<{ messageId: string | null }> {
   // The grading model can fail the gate on confidence alone without listing an
   // item, so fall back to a generic line rather than handing the chat model an
   // empty bullet list.
@@ -168,7 +168,7 @@ export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<
     contextGathered: turnResult.contextGathered,
   };
 
-  await input.container.repos.sessionMessages
+  const created = await input.container.repos.sessionMessages
     .create({
       sessionId: input.session.id,
       role: "assistant",
@@ -177,7 +177,9 @@ export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<
       stepNodeId: input.session.currentNodeId,
       aiPayload,
     })
-    .catch(() => undefined);
+    .catch(() => null);
+
+  return { messageId: created && !created.error ? created.data.id : null };
 }
 
 export async function generateDocument(

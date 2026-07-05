@@ -2,9 +2,9 @@ name: E2E Tests (Playwright)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "release/**"]
   push:
-    branches: [main]
+    branches: [main, "release/**"]
   workflow_dispatch:
     inputs:
       use_real_ai:
@@ -56,6 +56,9 @@ jobs:
       AI_DEFAULT_PROVIDER: anthropic
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ADMIN_SEED_EMAIL: admin@example.com
+      # Lets the authenticated scheduler-tick spec reach the durable-claim path
+      # (otherwise the endpoint short-circuits with 503 before claimDue runs).
+      SCHEDULER_TICK_SECRET: e2e-scheduler-tick-secret
       TEST_AUTH_BYPASS: "true"
       TEST_ADMIN_EMAIL: admin@example.com
       USE_REAL_AI: ${{ inputs.use_real_ai == true && 'true' || 'false' }}

@@ -30,7 +30,9 @@ class FakeBudgetRepo implements IBudgetRepository {
   async create(input: NewBudget): Promise<Result<Budget>> {
     const budget: Budget = {
       id: `budget-${this.budgets.length + 1}`,
-      userId: input.userId,
+      scope: input.scope,
+      roleKey: input.roleKey ?? null,
+      userId: input.userId ?? null,
       period: input.period,
       limitUsd: input.limitUsd,
       warnThresholdPct: input.warnThresholdPct ?? 80,
@@ -56,13 +58,27 @@ class FakeBudgetRepo implements IBudgetRepository {
   async list(): Promise<Result<Budget[]>> {
     return ok(this.budgets);
   }
-  async findEnabledForUser(userId: string): Promise<Result<Budget[]>> {
-    return ok(this.budgets.filter((b) => b.userId === userId && b.enabled));
+  async findEnabledCandidatesForUser(
+    userId: string,
+    roleKeys: string[],
+  ): Promise<Result<Budget[]>> {
+    const held = new Set(roleKeys);
+    return ok(
+      this.budgets.filter(
+        (b) =>
+          b.enabled &&
+          (b.scope === "everyone" ||
+            (b.scope === "user" && b.userId === userId) ||
+            (b.scope === "role" && b.roleKey !== null && held.has(b.roleKey))),
+      ),
+    );
   }
 }
 
 const makeBudget = (overrides: Partial<Budget> = {}): Budget => ({
   id: "budget-1",
+  scope: "user",
+  roleKey: null,
   userId: "user-1",
   period: "daily",
   limitUsd: 100,
@@ -77,6 +93,7 @@ describe("Budget CRUD use-cases", () => {
   it("creates a valid budget", async () => {
     const repo = new FakeBudgetRepo();
     const result = await new CreateBudget(repo).execute({
+      scope: "user",
       userId: "user-1",
       period: "daily",
       limitUsd: 50,
@@ -87,6 +104,7 @@ describe("Budget CRUD use-cases", () => {
 
   it("rejects a non-positive limit", async () => {
     const result = await new CreateBudget(new FakeBudgetRepo()).execute({
+      scope: "user",
       userId: "user-1",
       period: "daily",
       limitUsd: 0,
@@ -96,12 +114,42 @@ describe("Budget CRUD use-cases", () => {
 
   it("rejects an out-of-range warn threshold", async () => {
     const result = await new CreateBudget(new FakeBudgetRepo()).execute({
+      scope: "user",
       userId: "user-1",
       period: "daily",
       limitUsd: 50,
       warnThresholdPct: 150,
     });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects a user budget with no userId", async () => {
+    const result = await new CreateBudget(new FakeBudgetRepo()).execute({
+      scope: "user",
+      period: "daily",
+      limitUsd: 50,
+    });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects a role budget with no roleKey", async () => {
+    const result = await new CreateBudget(new FakeBudgetRepo()).execute({
+      scope: "role",
+      period: "daily",
+      limitUsd: 50,
+    });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("creates an everyone budget with no target", async () => {
+    const repo = new FakeBudgetRepo();
+    const result = await new CreateBudget(repo).execute({
+      scope: "everyone",
+      period: "monthly",
+      limitUsd: 50,
+    });
+    expect(result.error).toBeUndefined();
+    expect(repo.budgets[0]!.scope).toBe("everyone");
   });
 
   it("updates and toggles a budget", async () => {

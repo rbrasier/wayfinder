@@ -1,5 +1,7 @@
+import { buildRetentionPolicies } from "@rbrasier/domain";
 import {
   ApplyAutoNodeResult,
+  ApplyRetentionPolicies,
   CreateUser,
   DeleteUser,
   FailJob,
@@ -36,6 +38,7 @@ import {
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
+  DrizzleRetentionRepository,
   DrizzleSessionMessageRepository,
   DrizzleSessionRepository,
   DrizzleSessionStepOutputRepository,
@@ -45,8 +48,10 @@ import {
   LanguageModelAdapter,
   NodemailerEmailSender,
   PinoLogger,
+  RetentionWorker,
   RuntimeConfigStore,
   SchedulerWorker,
+  SystemClock,
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
@@ -157,22 +162,59 @@ export const buildContainer = (env: Env) => {
   // each interval and reports health to job_registry. The firing logic itself
   // lives behind that endpoint (where the AI turn machinery is). Only started
   // when both the URL and shared secret are configured.
-  const schedulerWorker =
-    env.SCHEDULER_TICK_URL && env.SCHEDULER_TICK_SECRET
-      ? new SchedulerWorker(
-          new HttpTickFirer(env.SCHEDULER_TICK_URL, env.SCHEDULER_TICK_SECRET),
-          jobRepo,
-          logger,
-          { tickIntervalMs: env.SCHEDULER_TICK_MS },
+  // One worker per configured slot; the SKIP LOCKED claim keeps their batches
+  // disjoint, so running several simply drains the queue faster (ADR-019).
+  const schedulerTickUrl = env.SCHEDULER_TICK_URL;
+  const schedulerTickSecret = env.SCHEDULER_TICK_SECRET;
+  const schedulerWorkers =
+    schedulerTickUrl && schedulerTickSecret
+      ? Array.from(
+          { length: env.SCHEDULER_WORKER_COUNT },
+          () =>
+            new SchedulerWorker(
+              new HttpTickFirer(schedulerTickUrl, schedulerTickSecret),
+              jobRepo,
+              logger,
+              { tickIntervalMs: env.SCHEDULER_TICK_MS },
+            ),
         )
-      : null;
+      : [];
+
+  // Retention sweep (scaling wall #9): a slow background worker that prunes the
+  // unbounded-growth tables. Only started when explicitly enabled; windows come
+  // from env, with audit and conversation history defaulting to keep-forever.
+  const retentionRepository = new DrizzleRetentionRepository(db);
+  const retentionPolicies = buildRetentionPolicies({
+    aiUsageEventsDays: env.RETENTION_USAGE_EVENTS_DAYS,
+    appSessionMessagesDays: env.RETENTION_SESSION_MESSAGES_DAYS,
+    coreAuditLogDays: env.RETENTION_AUDIT_LOG_DAYS,
+    appErrorLogDays: env.RETENTION_ERROR_LOG_DAYS,
+    appNotificationLogDays: env.RETENTION_NOTIFICATION_LOG_DAYS,
+  });
+  const applyRetentionPolicies = new ApplyRetentionPolicies(
+    retentionRepository,
+    retentionPolicies,
+    new SystemClock(),
+    {
+      batchSize: env.RETENTION_BATCH_SIZE,
+      maxBatchesPerTarget: env.RETENTION_MAX_BATCHES_PER_TARGET,
+    },
+  );
+  const retentionWorkers = env.RETENTION_ENABLED
+    ? [
+        new RetentionWorker(applyRetentionPolicies, jobRepo, logger, {
+          tickIntervalMs: env.RETENTION_TICK_MS,
+        }),
+      ]
+    : [];
 
   return {
     env,
     db,
     logger,
     runtimeConfig,
-    schedulerWorker,
+    schedulerWorkers,
+    retentionWorkers,
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {

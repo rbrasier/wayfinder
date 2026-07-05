@@ -8,12 +8,14 @@ import {
   type NewBudget,
   type Result,
 } from "@rbrasier/domain";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, or, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_usage_budgets } from "../db/schema/wayfinder";
 
 const toEntity = (row: typeof app_usage_budgets.$inferSelect): Budget => ({
   id: row.id,
+  scope: row.scope,
+  roleKey: row.role_key,
   userId: row.user_id,
   period: row.period,
   limitUsd: row.limit_usd,
@@ -31,7 +33,9 @@ export class DrizzleBudgetRepository implements IBudgetRepository {
       const [row] = await this.db
         .insert(app_usage_budgets)
         .values({
-          user_id: input.userId,
+          scope: input.scope,
+          role_key: input.roleKey ?? null,
+          user_id: input.userId ?? null,
           period: input.period,
           limit_usd: input.limitUsd,
           warn_threshold_pct: input.warnThresholdPct ?? 80,
@@ -98,15 +102,33 @@ export class DrizzleBudgetRepository implements IBudgetRepository {
     }
   }
 
-  async findEnabledForUser(userId: string): Promise<Result<Budget[]>> {
+  async findEnabledCandidatesForUser(
+    userId: string,
+    roleKeys: string[],
+  ): Promise<Result<Budget[]>> {
     try {
+      // Every enabled row that could apply to this user: everyone templates, the
+      // user's own row, and role rows for the roles they actually hold. The pure
+      // resolver narrows these to one effective cap per period.
+      const scopeMatches: SQL[] = [
+        eq(app_usage_budgets.scope, "everyone"),
+        and(eq(app_usage_budgets.scope, "user"), eq(app_usage_budgets.user_id, userId)) as SQL,
+      ];
+      if (roleKeys.length > 0) {
+        scopeMatches.push(
+          and(
+            eq(app_usage_budgets.scope, "role"),
+            inArray(app_usage_budgets.role_key, roleKeys),
+          ) as SQL,
+        );
+      }
       const rows = await this.db
         .select()
         .from(app_usage_budgets)
-        .where(and(eq(app_usage_budgets.user_id, userId), eq(app_usage_budgets.enabled, true)));
+        .where(and(eq(app_usage_budgets.enabled, true), or(...scopeMatches)));
       return ok(rows.map(toEntity));
     } catch (cause) {
-      return err(domainError("INFRA_FAILURE", "Failed to find budgets for user.", cause));
+      return err(domainError("INFRA_FAILURE", "Failed to find budget candidates for user.", cause));
     }
   }
 }

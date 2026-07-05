@@ -12,12 +12,20 @@ Ask all of these via `AskUserQuestion` before proceeding:
 2. How do you reproduce it?
 3. Which page or feature is affected?
 4. Severity: blocker / major / minor?
+5. Which release does this affect? Default is the current alpha branch (see
+   **Release Branching** in `CLAUDE.md`); choose `main` only if the bug exists
+   solely in unreleased work.
 
 **After gathering answers:** Output a bulleted plan to the chat covering the suspected area of the codebase, files likely involved, and the planned diagnostic approach. Do this as regular chat text — do NOT put it inside `AskUserQuestion`. Then use `AskUserQuestion` to ask: "Does this plan look right?" Wait for confirmation before starting the workflow.
 
 ---
 
 ## Workflow
+
+### Step 0 — Branch from the target release
+
+Create the working branch (`fix/<slug>`) from the base branch chosen in
+question 5. The PR at the end must target that same base branch.
 
 ### Step 1 — Diagnose first, code second
 
@@ -56,4 +64,4 @@ Write at least one Playwright e2e test that exercises the fixed behaviour throug
 - Apply a PATCH version bump
 - Update `VERSION` and root `package.json` `version`
 - Run `./validate.sh` one final time
-- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` so CI runs automatically. Include in the PR body: symptom, root cause, fix summary, and which e2e test covers it.
+- Commit all changes, push the branch, then open a pull request via `mcp__github__create_pull_request` against the base branch from Step 0 (not necessarily `main`) so CI runs automatically. Include in the PR body: symptom, root cause, fix summary, and which e2e test covers it.

@@ -28,9 +28,27 @@ describe("buildClaimDueStatement", () => {
 
     expect(text).toContain("set next_fire_at");
     // leaseUntil (SET), now (due cutoff), and batchSize (LIMIT) are all bound.
-    expect(params).toContain(leaseUntil);
-    expect(params).toContain(now);
+    expect(params).toContain(leaseUntil.toISOString());
+    expect(params).toContain(now.toISOString());
     expect(params.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("binds the timestamps as serializable ISO strings cast to timestamptz", () => {
+    // Regression: postgres.js cannot serialize a bare Date passed through a raw
+    // sql template (no column serializer applies), so the tick threw
+    // "The 'string' argument must be of type string ... Received an instance of
+    // Date". The params must be strings and the SQL must cast them to timestamptz
+    // so the timestamptz comparison stays correct.
+    const { sql, params } = render(now, 10, leaseUntil);
+
+    expect(sql.toLowerCase()).toContain("::timestamptz");
+    for (const value of [now, leaseUntil]) {
+      expect(params).not.toContain(value);
+      expect(params).toContain(value.toISOString());
+    }
+    for (const param of params) {
+      expect(param).not.toBeInstanceOf(Date);
+    }
   });
 
   it("orders by soonest due and bounds the batch", () => {

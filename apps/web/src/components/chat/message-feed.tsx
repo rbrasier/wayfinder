@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
+import { resolveCrossCheckingState } from "./cross-checking-state";
 import { DocumentCard } from "./document-card";
-import { FixAnswerModal } from "./fix-answer-modal";
 import { MessageInfoModal } from "./message-info-modal";
 import { CrossCheckingBadge, FlowCompletePill, MilestonePill } from "./milestone-pill";
+import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
+import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
 
 interface ConfidenceAnnotation {
   type: "confidence";
@@ -21,9 +23,6 @@ const toConfidenceAnnotation = (a: unknown): ConfidenceAnnotation | null => {
   if (obj["type"] !== "confidence" || typeof obj["score"] !== "number") return null;
   return obj as unknown as ConfidenceAnnotation;
 };
-
-const isCrossCheckingAnnotation = (a: unknown): boolean =>
-  typeof a === "object" && a !== null && (a as Record<string, unknown>)["type"] === "cross-checking";
 
 interface MessageFeedProps {
   dbMessages: SessionMessage[];
@@ -44,8 +43,12 @@ interface MessageFeedProps {
   // The step held open awaiting operator confirmation. Its milestone pill is
   // suppressed because the step has not actually completed yet (ADR-026).
   awaitingConfirmationNodeId?: string | null;
-  // When the viewer holds knowledge:submit_feedback, persisted assistant
-  // messages gain a "Fix this answer" affordance that opens the correction modal.
+  // The node the session is currently parked on. A high-confidence turn still on
+  // this step has not advanced (e.g. the pre-generation gate held it), so it must
+  // not render a milestone pill or a phantom "Generating document" badge.
+  currentNodeId?: string | null;
+  // When the viewer holds knowledge:submit_feedback, the info modal on each
+  // assistant message exposes a "Fix this answer" affordance.
   sessionId?: string;
   canSubmitFeedback?: boolean;
 }
@@ -85,11 +88,11 @@ export function MessageFeed({
   userFirstInitial,
   senderNamesById,
   awaitingConfirmationNodeId,
+  currentNodeId,
   sessionId,
   canSubmitFeedback,
 }: MessageFeedProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [fixing, setFixing] = useState<{ id: string; content: string } | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -112,31 +115,28 @@ export function MessageFeed({
             msg.role === "user" && msg.senderUserId ? senderNamesById?.[msg.senderUserId] ?? null : null;
           const messageUserInitials = senderName ? getRoleInitials(senderName, userInitials) : userInitials;
 
-          const isAdvancingMsg =
-            msg.role === "assistant" &&
-            msg.confidence !== null &&
-            msg.confidence >= 90 &&
-            dbMessages[index + 1]?.stepNodeId !== msg.stepNodeId &&
-            // A step awaiting confirmation has reached threshold but not advanced;
-            // it gets the pinned ConfirmStepCard, not the auto-advance milestone.
-            msg.stepNodeId !== awaitingConfirmationNodeId;
+          const scheduled = msg.role === "system" ? parseScheduledMessage(msg.content) : null;
+          const displayContent = scheduled
+            ? formatScheduledResume(scheduled.stepName, scheduled.nextFireAt)
+            : msg.content;
 
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";
           const hasTemplate = Boolean(config?.["documentTemplatePath"]);
           const isNeverDone = Boolean(config?.["neverDone"]);
 
-          type DocState = "generating" | "no_template" | "failed" | "done" | null;
-          const docState: DocState =
-            isAdvancingMsg && isDocNode
-              ? !hasTemplate
-                ? "no_template"
-                : msg.documentStatus === "failed"
-                ? "failed"
-                : msg.document || msg.documentStatus === "complete"
-                ? "done"
-                : "generating"
-              : null;
+          const { isAdvancing: isAdvancingMsg, docState } = resolveMilestoneState({
+            role: msg.role,
+            confidence: msg.confidence,
+            stepNodeId: msg.stepNodeId,
+            documentStatus: msg.documentStatus,
+            hasDocument: Boolean(msg.document),
+            nextStepNodeId: dbMessages[index + 1]?.stepNodeId,
+            currentNodeId: currentNodeId ?? null,
+            awaitingConfirmationNodeId,
+            isDocNode,
+            hasTemplate,
+          });
 
           return (
             <div key={msg.id}>
@@ -166,7 +166,7 @@ export function MessageFeed({
                       msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
                     }`}
                   >
-                    {msg.content}
+                    {displayContent}
                   </p>
                   <p
                     className={`mt-1 text-right font-mono text-[10px] ${
@@ -179,16 +179,12 @@ export function MessageFeed({
                     <ConfidenceBar score={msg.confidence} />
                   )}
                   {msg.role === "assistant" && msg.aiPayload && (
-                    <MessageInfoModal message={msg} allMessages={dbMessages} />
-                  )}
-                  {msg.role === "assistant" && canSubmitFeedback && sessionId && (
-                    <button
-                      type="button"
-                      onClick={() => setFixing({ id: msg.id, content: msg.content })}
-                      className="mt-1 text-[10px] font-medium text-[#6d6a65] underline-offset-2 hover:text-[#3a5fd9] hover:underline"
-                    >
-                      Fix this answer
-                    </button>
+                    <MessageInfoModal
+                      message={msg}
+                      allMessages={dbMessages}
+                      sessionId={sessionId}
+                      canSubmitFeedback={canSubmitFeedback}
+                    />
                   )}
                 </div>
                 {msg.role === "user" && (
@@ -235,10 +231,9 @@ export function MessageFeed({
           {streamingMessages.map((msg) => {
             const confidenceAnnotation =
               msg.annotations?.map(toConfidenceAnnotation).find(Boolean) ?? null;
+            const crossCheckingState = resolveCrossCheckingState(msg.annotations);
             const isCrossChecking =
-              isStreaming &&
-              msg.role === "assistant" &&
-              Boolean(msg.annotations?.some(isCrossCheckingAnnotation));
+              isStreaming && msg.role === "assistant" && crossCheckingState.active;
             const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
             const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
             const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
@@ -279,7 +274,7 @@ export function MessageFeed({
                   </div>
                 )}
               </div>
-              {isCrossChecking && <CrossCheckingBadge />}
+              {isCrossChecking && <CrossCheckingBadge documents={crossCheckingState.documents} />}
               </div>
             );
           })}
@@ -324,16 +319,6 @@ export function MessageFeed({
       )}
 
       <div ref={bottomRef} />
-
-      {sessionId && fixing && (
-        <FixAnswerModal
-          open
-          onClose={() => setFixing(null)}
-          sessionId={sessionId}
-          messageId={fixing.id}
-          flaggedAnswer={fixing.content}
-        />
-      )}
     </div>
   );
 }

@@ -6,10 +6,13 @@ import {
   type AiTurnPayload,
   type ConversationalNodeConfig,
   type ResolvedDocumentGenerationBudget,
+  type SessionEvent,
 } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { shouldComputeBranchChoice } from "./branch-gate";
+import { countGateHoldsOnNode } from "./gate-holds";
+import { shouldEvaluateStepReadiness } from "./readiness-gate";
 import { streamTurn } from "./stream-turn";
 import {
   appendShortcomingsToContext,
@@ -21,6 +24,20 @@ import {
   runMcpToolPrepass,
   streamGapFollowup,
 } from "./turn-helpers";
+
+// The most recent turns the model is given as context, mirrored from the
+// client's own slice so the two agree (scaling wall #1).
+const CONTEXT_WINDOW_MESSAGES = 20;
+
+// How many times the pre-generation gate may hold a single node before it
+// becomes advisory and the step advances on the cheap model's threshold. Bounds
+// the gate so a flaky grader cannot livelock a step (surface gaps once, then
+// let the operator's correction through).
+const MAX_GATE_HOLDS = 1;
+
+// The label shown for a context document in the cross-checking badge: the
+// filename without its extension (FlowContextDoc has no separate title field).
+const documentLabel = (filename: string): string => filename.replace(/\.[^/.]+$/, "");
 
 const getSessionToken = (req: Request): string | null => {
   const cookie = req.headers.get("cookie");
@@ -35,6 +52,12 @@ export async function POST(
 ) {
   const { sessionId } = await params;
   const container = getContainer();
+
+  // Fire-and-forget real-time notifications (scaling wall #2). A NOTIFY failure
+  // must never fail the turn — the slow-poll fallback still catches every change.
+  const publishEvent = (event: SessionEvent) => {
+    void container.services.sessionEvents.publish(sessionId, event);
+  };
 
   const token = getSessionToken(req);
   if (!token) return new Response("Unauthorized", { status: 401 });
@@ -56,8 +79,6 @@ export async function POST(
 
   const { session, flow, nodes, edges, messages: dbMessages } = sessionResult.data;
 
-  // Collaborative sessions: any authenticated user holding the link may send.
-  // The session UUID is the shared secret, identical to the read-only share model.
   if (session.status !== "active") {
     return new Response("Session is not active", { status: 400 });
   }
@@ -66,8 +87,47 @@ export async function POST(
     return new Response("This flow has been deleted", { status: 410 });
   }
 
+  // Authorise against the participants table, not knowledge of the URL (scaling
+  // wall #11). Opening the link auto-enrols the caller as a collaborator when the
+  // flow is visible to them; a viewer (or a revoked collaborator downgraded to
+  // viewer) may read but not send, and a non-visible flow is 403.
+  const accessResult = await container.useCases.resolveSessionAccess.execute({
+    session,
+    flow,
+    userId: authSession.userId,
+    isAdmin: authSession.isAdmin,
+    isApprover: false,
+    allowAutoEnrol: true,
+  });
+  if (accessResult.error || !accessResult.data.canSend) {
+    return new Response("You do not have permission to send in this session", { status: 403 });
+  }
+
   const currentNode = nodes.find((n) => n.id === session.currentNodeId);
   if (!currentNode) return new Response("Current node not found", { status: 500 });
+
+  // Server-side turn lease (scaling wall #3): claim the single active turn before
+  // any write. A second concurrent send finds the lease held and gets 409 with
+  // the holder's name, instead of both turns running (double message, double
+  // spend, double advance). A crashed turn's lease is taken over after the window.
+  const turnId = crypto.randomUUID();
+  const claimResult = await container.repos.sessions.claimTurn(
+    session.id,
+    turnId,
+    authSession.userId,
+    container.env.TURN_LEASE_SECONDS,
+  );
+  if (claimResult.error) return new Response("Server error", { status: 500 });
+  if (!claimResult.data.claimed) {
+    const holderId = claimResult.data.heldBy;
+    const holderResult = holderId ? await container.repos.users.findById(holderId) : null;
+    const holderName =
+      holderResult && !holderResult.error && holderResult.data ? holderResult.data.name : null;
+    const message = holderName
+      ? `${holderName}'s turn is in progress. Please wait for it to finish.`
+      : "A turn is already in progress on this session. Please wait for it to finish.";
+    return new Response(message, { status: 409 });
+  }
 
   const nodeConfig = currentNode.config as unknown as ConversationalNodeConfig & { neverDone?: boolean };
   const isNeverDone = Boolean(nodeConfig.neverDone);
@@ -78,36 +138,34 @@ export async function POST(
   // rather than a 0-100 percentage, which would otherwise auto-advance every turn.
   const realThreshold = normaliseAdvanceConfidenceThreshold(nodeConfig.advanceConfidenceThreshold);
 
-  const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
-  const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
+  const gatheredContext = buildGatheredContext(dbMessages);
 
-  const globalInstructionsResult = await container.repos.systemSettings.get("global_prompt");
-  const globalInstructions = globalInstructionsResult.error
-    ? null
-    : (globalInstructionsResult.data?.value ?? null);
+  // These reads are mutually independent, so run them as one round-trip instead
+  // of six serial awaits while a pool connection is held (scaling wall #4). The
+  // near-static admin settings come from a short-TTL cache rather than the DB.
+  const [adminSettings, uploadsResult, userResult, retrievalResult] = await Promise.all([
+    container.adminSettings.get(),
+    // Inject the user's own attachments into the turn independent of RAG: a thin
+    // message ("here is the solution") retrieves nothing, so without this the
+    // agent never sees the file it was just given.
+    container.repos.sessionUploads.listBySession(sessionId),
+    container.repos.users.findById(authSession.userId),
+    container.useCases.retrieveDocumentChunks.execute({
+      flowId: flow.id,
+      sessionId,
+      query: lastUserMessage,
+    }),
+  ]);
 
-  // Inject the user's own attachments into the turn independent of RAG: a thin
-  // message ("here is the solution") retrieves nothing, so without this the agent
-  // never sees the file it was just given.
-  const uploadsResult = await container.repos.sessionUploads.listBySession(sessionId);
-  const uploadConfig = await container.runtimeConfig.getSessionUploadConfig();
+  const organisationName = adminSettings.organisationName;
+  const globalInstructions = adminSettings.globalInstructions;
   const sessionUploads = uploadsResult.error
     ? []
-    : buildPromptSessionUploads(uploadsResult.data, uploadConfig.totalBudgetChars);
-
-  const userResult = await container.repos.users.findById(authSession.userId);
+    : buildPromptSessionUploads(uploadsResult.data, adminSettings.uploadConfig.totalBudgetChars);
   const userProfile =
     userResult.error || !userResult.data
       ? null
       : { name: userResult.data.name, role: userResult.data.role, team: userResult.data.team };
-
-  const gatheredContext = buildGatheredContext(dbMessages);
-
-  const retrievalResult = await container.useCases.retrieveDocumentChunks.execute({
-    flowId: flow.id,
-    sessionId,
-    query: lastUserMessage,
-  });
   const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
   const skillsResult = await container.useCases.resolveStepSkills.execute(nodeConfig);
@@ -127,6 +185,10 @@ export async function POST(
     flowId: flow.id,
     sessionId,
   });
+
+  // The lease is claimed; tell every open window whose turn it now is so they
+  // disable Send and can attribute the hold ("Alex's turn is in progress").
+  publishEvent({ type: "turn.claimed", userId: authSession.userId, userName: userProfile?.name ?? null });
 
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
@@ -156,10 +218,16 @@ export async function POST(
       return { id: node.id, name: node.name, purpose };
     });
 
-  const coreMessages = dbMessages.map((m) => ({
-    role: m.role as "user" | "assistant" | "system",
-    content: m.content,
-  }));
+  // Server-side context window: the model sees only the most recent turns, the
+  // same 20 the client already slices to (scaling wall #1). Bounding it here (not
+  // trusting a client-supplied transcript) keeps prompt size and read cost flat
+  // as a session's history grows unbounded.
+  const coreMessages = dbMessages
+    .slice(-CONTEXT_WINDOW_MESSAGES)
+    .map((m) => ({
+      role: m.role as "user" | "assistant" | "system",
+      content: m.content,
+    }));
 
   // The model sees the attachment marker; the persisted user message stays the
   // raw text the user typed (persistUserMessage uses lastUserMessage).
@@ -179,6 +247,13 @@ export async function POST(
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
+      // A doc-gen-heavy turn can outlive the lease window, so re-stamp it while
+      // the stream is open; the release in `finally` frees it the instant the
+      // turn ends (success or failure) rather than waiting for expiry.
+      const heartbeat = setInterval(() => {
+        void container.repos.sessions.heartbeatTurn(session.id, turnId);
+      }, container.env.TURN_HEARTBEAT_MS);
+      try {
       const userMsgResult = await container.useCases.runTurn.persistUserMessage({
         session,
         userMessage: lastUserMessage,
@@ -187,6 +262,12 @@ export async function POST(
       if (userMsgResult.error) {
         const cause = userMsgResult.error.cause;
         throw cause instanceof Error ? cause : new Error(userMsgResult.error.message);
+      }
+
+      // Surface the human's message to collaborators immediately, before the AI
+      // reply finishes streaming.
+      if (typeof userMsgResult.data.seq === "number") {
+        publishEvent({ type: "message.created", seq: userMsgResult.data.seq });
       }
 
       // Enforce the acting user's spend caps before the model runs (ADR-026 §6).
@@ -266,12 +347,16 @@ export async function POST(
         }
         const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
         if (branchPromptResult.error) return null;
-        const branchResult = await generateObject({
-          model: branchingModel,
-          schema: branchChoiceSchema,
-          system: branchPromptResult.data,
-          messages: messagesWithNew,
-        }).catch(() => null);
+        const branchResult = await container.services.llmGovernor
+          .run(() =>
+            generateObject({
+              model: branchingModel,
+              schema: branchChoiceSchema,
+              system: branchPromptResult.data,
+              messages: messagesWithNew,
+            }),
+          )
+          .catch(() => null);
         if (branchResult) {
           recordTokenUsage(
             container.repos.usageRepo,
@@ -299,65 +384,63 @@ export async function POST(
       // Pre-generation evaluation gate: when the cheap model crosses the
       // threshold on a generate_document step, the doc-gen model confirms the
       // would-be document is ready *before* the session advances. The gate fails
-      // open — a thrown or errored eval advances exactly as today.
-      const shouldEvaluateReadiness =
-        !isNeverDone &&
-        !requireConfirmation &&
-        nodeConfig.outputType === "generate_document" &&
-        Boolean(nodeConfig.documentTemplatePath) &&
-        aiPayload.stepCompleteConfidence >= realThreshold;
+      // open — a thrown or errored eval advances exactly as today. It is skipped
+      // for flows with no context docs, which have no guidance for the larger
+      // model to grade against.
+      const shouldEvaluateReadiness = shouldEvaluateStepReadiness({
+        isNeverDone,
+        requireConfirmation,
+        outputType: nodeConfig.outputType,
+        hasTemplate: Boolean(nodeConfig.documentTemplatePath),
+        hasContextDocs: flow.contextDocs.length > 0,
+        stepCompleteConfidence: aiPayload.stepCompleteConfidence,
+        advanceThreshold: realThreshold,
+        // Bound the gate: once it has already surfaced this node's gaps, a later
+        // threshold turn advances rather than looping on a flaky grader.
+        priorGateHolds: countGateHoldsOnNode(dbMessages, session.currentNodeId),
+        maxGateHolds: MAX_GATE_HOLDS,
+      });
 
       let evaluation: EvaluateStepReadinessOutput | null = null;
       if (shouldEvaluateReadiness) {
-        dataStream.writeMessageAnnotation({ type: "cross-checking", active: true });
-        let budget: ResolvedDocumentGenerationBudget | undefined;
+        dataStream.writeMessageAnnotation({
+          type: "cross-checking",
+          active: true,
+          documents: flow.contextDocs.map((doc) => documentLabel(doc.filename)),
+        });
         try {
-          budget = await container.runtimeConfig.resolveDocumentGenerationBudget();
-        } catch {
-          budget = undefined;
-        }
-        const evalResult = await container.useCases.evaluateStepReadiness
-          .execute({
-            messages: [...messagesWithNew, { role: "assistant" as const, content: aiPayload.response }],
-            flow,
-            node: currentNode,
-            budget,
-          })
-          .catch(() => null);
-        if (evalResult && !evalResult.error) {
-          evaluation = evalResult.data;
+          let budget: ResolvedDocumentGenerationBudget | undefined;
+          try {
+            budget = await container.runtimeConfig.resolveDocumentGenerationBudget();
+          } catch {
+            budget = undefined;
+          }
+          const evalResult = await container.useCases.evaluateStepReadiness
+            .execute({
+              messages: [...messagesWithNew, { role: "assistant" as const, content: aiPayload.response }],
+              flow,
+              node: currentNode,
+              budget,
+            })
+            .catch(() => null);
+          if (evalResult && !evalResult.error) {
+            evaluation = evalResult.data;
+          }
+        } finally {
+          // Explicit off-signal so the badge clears the moment the cross-check
+          // finishes, rather than lingering through the fail-path follow-up.
+          dataStream.writeMessageAnnotation({ type: "cross-checking", active: false });
         }
       }
 
-      // Gate failed: hold the step open, record the gaps as outstanding context,
-      // and ask the user about them straight away.
+      // Gate failed: hold the step open and ask the user about the gaps. The
+      // cheap model's optimistic "ready to submit" reply is deliberately NOT
+      // persisted — the gate has overruled it, so showing it would contradict
+      // the follow-up. Only the corrective follow-up is streamed and stored, and
+      // the outstanding items are attached to it (which also records this hold so
+      // the gate can bound itself on the next turn).
       if (evaluation && !evaluation.passed) {
-        const failResult = await container.useCases.runTurn.persistAssistantTurn({
-          session,
-          flowId: flow.id,
-          assistantMessage: aiPayload.response,
-          aiPayload,
-          branchChoice: null,
-          advanceThreshold: Number.POSITIVE_INFINITY,
-          requireConfirmation: false,
-          confirmationThreshold: realThreshold,
-        });
-        if (failResult.error) {
-          const cause = failResult.error.cause;
-          throw cause instanceof Error ? cause : new Error(failResult.error.message);
-        }
-
-        const refreshed = await container.repos.sessionMessages.listBySession(session.id);
-        const thresholdMessage = refreshed.error
-          ? null
-          : [...refreshed.data]
-              .reverse()
-              .find((m) => m.role === "assistant" && m.stepNodeId === session.currentNodeId);
-        if (thresholdMessage) {
-          await appendShortcomingsToContext(container, thresholdMessage.id, evaluation.missingInformation);
-        }
-
-        await streamGapFollowup({
+        const followup = await streamGapFollowup({
           container,
           writer: dataStream,
           session,
@@ -370,6 +453,10 @@ export async function POST(
           provider,
           userId: authSession.userId,
         });
+
+        if (followup.messageId) {
+          await appendShortcomingsToContext(container, followup.messageId, evaluation.missingInformation);
+        }
 
         if (dbMessages.filter((m) => m.role === "user").length === 0) {
           void generateTitle(container, session.id, lastUserMessage, provider, chatModelName, apiKey, authSession.userId);
@@ -434,6 +521,22 @@ export async function POST(
 
       if (dbMessages.filter((m) => m.role === "user").length === 0) {
         void generateTitle(container, session.id, lastUserMessage, provider, chatModelName, apiKey, authSession.userId);
+      }
+      } finally {
+        clearInterval(heartbeat);
+        // Announce the final state so every watching window reconciles: publish
+        // the latest message seq (advances their Last-Event-ID) and a state sync,
+        // then release the lease and signal Send can re-enable.
+        const latest = await container.repos.sessionMessages.latestBySession(session.id, 1);
+        const latestSeq = latest.error ? undefined : latest.data.at(-1)?.seq;
+        if (typeof latestSeq === "number") {
+          publishEvent({ type: "message.created", seq: latestSeq });
+        }
+        publishEvent({ type: "session.updated" });
+        // Release in the same lifecycle that persisted the turn (or on the error
+        // path); guarded on turnId so a stale release never clears a newer claim.
+        await container.repos.sessions.releaseTurn(session.id, turnId);
+        publishEvent({ type: "turn.released" });
       }
     },
     onError: (error) => {

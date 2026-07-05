@@ -260,4 +260,34 @@ describe("FireDueSchedules", () => {
     expect(calls.completed.sort()).toEqual(["a", "b"]);
     expect(recorded.map((run) => run.scheduleId).sort()).toEqual(["a", "b"]);
   });
+
+  it("claims the default batch size when none is configured", async () => {
+    let claimedBatchSize = -1;
+    const repo = {
+      ...makeRepo([]).repo,
+      claimDue: async (_now: Date, batchSize: number) => {
+        claimedBatchSize = batchSize;
+        return ok([]);
+      },
+    } as IScheduleRepository;
+    const { runs } = makeRunRepo();
+    await new FireDueSchedules(repo, runs, makeHandler(), fixedClock).execute();
+
+    expect(claimedBatchSize).toBe(50);
+  });
+
+  it("claims the configured batch size so a backlog can be drained faster", async () => {
+    let claimedBatchSize = -1;
+    const repo = {
+      ...makeRepo([]).repo,
+      claimDue: async (_now: Date, batchSize: number) => {
+        claimedBatchSize = batchSize;
+        return ok([]);
+      },
+    } as IScheduleRepository;
+    const { runs } = makeRunRepo();
+    await new FireDueSchedules(repo, runs, makeHandler(), fixedClock, 200).execute();
+
+    expect(claimedBatchSize).toBe(200);
+  });
 });

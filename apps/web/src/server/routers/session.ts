@@ -123,27 +123,42 @@ export const sessionRouter = router({
       if (result.error) throw toTrpcError(result.error);
       if (!result.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
 
-      const { session, messages } = result.data;
-      let readOnly = false;
-      if (!ctx.isAdmin && session.userId !== ctx.userId) {
-        const isApprover = await viewerIsSessionApprover(ctx.container, ctx.userId, session.id);
-        if (!isApprover) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
-        }
-        readOnly = true;
-      }
+      const { session, flow, messages } = result.data;
+
+      // Authorise against participant rows, not knowledge of the URL (scaling
+      // wall #11). Opening the collaborate link auto-enrols a flow-visible
+      // visitor as a collaborator; the server-computed role — not ?shared=true —
+      // decides read-only. The approver read grant (ADR-018) is only computed for
+      // non-owners so owners never pay the approvals lookup on a poll.
+      const isOwnerOrAdmin = ctx.isAdmin || session.userId === ctx.userId;
+      const isApprover = isOwnerOrAdmin
+        ? false
+        : await viewerIsSessionApprover(ctx.container, ctx.userId, session.id);
+      const accessResult = await ctx.container.useCases.resolveSessionAccess.execute({
+        session,
+        flow,
+        userId: ctx.userId,
+        isAdmin: ctx.isAdmin,
+        isApprover,
+        allowAutoEnrol: true,
+      });
+      if (accessResult.error) throw toTrpcError(accessResult.error);
+      const readOnly = accessResult.data.readOnly;
 
       const senderIds = new Set<string>([session.userId]);
       for (const message of messages) {
         if (message.senderUserId) senderIds.add(message.senderUserId);
       }
-      const participants = await Promise.all(
-        [...senderIds].map(async (id) => {
-          const userResult = await ctx.container.repos.users.findById(id);
-          const name = userResult.error ? null : userResult.data?.name ?? null;
-          return { id, name };
-        }),
+      // One IN query instead of one findById per participant per poll
+      // (scaling wall #6).
+      const usersResult = await ctx.container.repos.users.findByIds([...senderIds]);
+      const namesById = new Map(
+        (usersResult.error ? [] : usersResult.data).map((user) => [user.id, user.name] as const),
       );
+      const participants = [...senderIds].map((id) => ({
+        id,
+        name: namesById.get(id) ?? null,
+      }));
 
       // The MCP write action parked on the confirmation gate (Phase B), so the chat
       // can render an editable preview of the tool arguments before Proceed.
@@ -165,6 +180,27 @@ export const sessionRouter = router({
         : null;
 
       return { ...result.data, participants, readOnly, pendingMcpConfirmation };
+    }),
+
+  revokeParticipant: authenticatedProcedure
+    .input(z.object({ sessionId: z.string().uuid(), participantUserId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
+      if (sessionResult.error) throw toTrpcError(sessionResult.error);
+      if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
+      // Only the session owner or an admin may revoke a collaborator's send
+      // access; the revoke downgrades them to viewer so their next send is 403.
+      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+      }
+      const result = await ctx.container.useCases.revokeSessionParticipant.execute({
+        sessionId: input.sessionId,
+        participantUserId: input.participantUserId,
+        revokedByUserId: ctx.userId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
+      return { ok: true as const };
     }),
 
   stepData: authenticatedProcedure
@@ -194,26 +230,19 @@ export const sessionRouter = router({
       });
     }),
 
-  heartbeatTyping: authenticatedProcedure
+  // Ephemeral typing presence over the event bus (scaling wall #2): no DB row,
+  // no heartbeat poll. Each keystroke burst publishes a transient `typing` event
+  // that every other open window's EventSource receives. The name is resolved
+  // client-side from the participant list.
+  emitTyping: authenticatedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.heartbeatTyping.execute({
-        sessionId: input.sessionId,
+      await ctx.container.services.sessionEvents.publish(input.sessionId, {
+        type: "typing",
         userId: ctx.userId,
+        userName: null,
       });
-      if (result.error) throw toTrpcError(result.error);
       return { ok: true as const };
-    }),
-
-  typingUsers: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
-    .query(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.listTypingUsers.execute({
-        sessionId: input.sessionId,
-        excludeUserId: ctx.userId,
-      });
-      if (result.error) throw toTrpcError(result.error);
-      return result.data;
     }),
 
   create: authenticatedProcedure
@@ -251,6 +280,7 @@ export const sessionRouter = router({
       }
       const result = await ctx.container.repos.sessions.update(input.sessionId, { title: input.title });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
     }),
 
@@ -265,6 +295,7 @@ export const sessionRouter = router({
       }
       const result = await ctx.container.repos.sessions.update(input.sessionId, { status: "abandoned" });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
     }),
 
@@ -282,6 +313,7 @@ export const sessionRouter = router({
         targetNodeId: input.targetNodeId,
       });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
     }),
 
@@ -317,6 +349,7 @@ export const sessionRouter = router({
         mcpArgs: input.mcpArgs,
       });
       if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
     }),
 });

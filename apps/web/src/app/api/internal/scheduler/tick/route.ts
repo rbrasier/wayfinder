@@ -23,6 +23,7 @@ export async function POST(req: Request): Promise<Response> {
     container.repos.scheduleRuns,
     new ScheduledSessionFireHandler(container),
     new SystemClock(),
+    container.env.SCHEDULER_BATCH_SIZE,
   );
 
   const result = await fireDueSchedules.execute();

@@ -3,6 +3,7 @@ import { adminProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const periodEnum = z.enum(["daily", "weekly", "monthly"]);
+const scopeEnum = z.enum(["everyone", "role", "user"]);
 
 export const governanceRouter = router({
   dashboard: adminProcedure
@@ -25,7 +26,11 @@ export const governanceRouter = router({
     create: adminProcedure
       .input(
         z.object({
-          userId: z.string().uuid(),
+          scope: scopeEnum,
+          // The use case validates the scope/target combination; userId and
+          // roleKey are conditional on scope.
+          roleKey: z.string().min(1).optional(),
+          userId: z.string().uuid().optional(),
           period: periodEnum,
           limitUsd: z.number().positive(),
           warnThresholdPct: z.number().int().min(1).max(100).optional(),
@@ -60,6 +65,25 @@ export const governanceRouter = router({
       .mutation(async ({ ctx, input }) => {
         const result = await ctx.container.useCases.deleteBudget.execute(input.id);
         if (result.error) throw toTrpcError(result.error);
+        return result.data;
+      }),
+  }),
+
+  settings: router({
+    getUsageLimitsEnabled: adminProcedure.query(async ({ ctx }) => {
+      const result = await ctx.container.useCases.getUsageLimitsEnabled.execute();
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+    setUsageLimitsEnabled: adminProcedure
+      .input(z.object({ enabled: z.boolean() }))
+      .mutation(async ({ ctx, input }) => {
+        const result = await ctx.container.useCases.setUsageLimitsEnabled.execute(input.enabled);
+        if (result.error) throw toTrpcError(result.error);
+        // The enforcer reads the switch through the cached runtime config, so the
+        // change must take effect on the next AI call without a restart.
+        ctx.container.runtimeConfig.invalidateUsageLimits();
         return result.data;
       }),
   }),

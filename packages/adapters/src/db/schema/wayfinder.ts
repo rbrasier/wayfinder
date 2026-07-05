@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigserial,
   boolean,
   check,
   customType,
@@ -175,6 +176,14 @@ export const app_sessions = pgTable(
       .$type<PendingExecutions>()
       .notNull()
       .default({}),
+    // Server-side turn lease (scaling wall #3): one turn in flight at a time.
+    active_turn_id: uuid("active_turn_id"),
+    active_turn_claimed_by: uuid("active_turn_claimed_by").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    active_turn_claimed_at: timestamp("active_turn_claimed_at", { withTimezone: true }),
+    // Optimistic-concurrency guard for non-lease writers (scaling wall #3).
+    version: integer("version").notNull().default(1),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -267,6 +276,11 @@ export const app_session_messages = pgTable(
     document: jsonb("document").$type<SessionDocument>(),
     document_status: text("document_status", { enum: ["pending", "complete", "failed"] }),
     ai_payload: jsonb("ai_payload").$type<AiTurnPayload>(),
+    // Monotonic per-session cursor for real-time replay (scaling wall #2). A
+    // global bigserial is strictly increasing within any one session, so an SSE
+    // reconnect replays losslessly with `WHERE seq > lastEventId`; cross-session
+    // ordering is irrelevant because every subscription is scoped to one session.
+    seq: bigserial("seq", { mode: "number" }).notNull(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
@@ -274,6 +288,45 @@ export const app_session_messages = pgTable(
       t.session_id,
       t.created_at,
     ),
+    by_session_seq: index("app_session_messages_session_id_seq_idx").on(
+      t.session_id,
+      t.seq,
+    ),
+    // Backs the retention sweep's oldest-first range scan (scaling wall #9).
+    by_created: index("app_session_messages_created_at_idx").on(t.created_at),
+  }),
+);
+
+// Collaborative-session membership as rows (scaling wall #11). The owner is not
+// stored here — it is app_sessions.user_id — so this table holds only invited
+// collaborators and viewers. Joining stays link-based (opening the collaborate
+// link auto-enrols the authenticated user), but the stream route authorises
+// against the stored role, so revocation actually works.
+export const app_session_participants = pgTable(
+  "app_session_participants",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    session_id: uuid("session_id")
+      .notNull()
+      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "cascade" }),
+    role: text("role", { enum: ["owner", "collaborator", "viewer"] })
+      .notNull()
+      .default("collaborator"),
+    joined_at: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+    invited_by: uuid("invited_by").references(() => core_users.id, { onDelete: "set null" }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    session_user_unique: unique("app_session_participants_session_id_user_id_unique").on(
+      t.session_id,
+      t.user_id,
+    ),
+    by_session: index("app_session_participants_session_id_idx").on(t.session_id),
+    by_user: index("app_session_participants_user_id_idx").on(t.user_id),
   }),
 );
 
@@ -301,36 +354,6 @@ export const app_session_uploads = pgTable(
   (t) => ({
     storage_path_unique: unique("app_session_uploads_storage_path_unique").on(t.storage_path),
     by_session: index("app_session_uploads_session_id_idx").on(t.session_id),
-  }),
-);
-
-export const app_session_typing = pgTable(
-  "app_session_typing",
-  {
-    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    session_id: uuid("session_id")
-      .notNull()
-      .references(() => app_sessions.id, { onDelete: "cascade" }),
-    user_id: uuid("user_id")
-      .notNull()
-      .references(() => core_users.id, { onDelete: "cascade" }),
-    expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
-    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    session_user_unique: unique("app_session_typing_session_id_user_id_unique").on(
-      t.session_id,
-      t.user_id,
-    ),
-    by_session_expires: index("app_session_typing_session_id_expires_at_idx").on(
-      t.session_id,
-      t.expires_at,
-    ),
-    by_user_expires: index("app_session_typing_user_id_expires_at_idx").on(
-      t.user_id,
-      t.expires_at,
-    ),
   }),
 );
 
@@ -459,29 +482,42 @@ export const app_notification_log = pgTable(
       t.status,
       t.created_at,
     ),
+    // Backs the retention sweep's oldest-first range scan (scaling wall #9).
+    by_created: index("app_notification_log_created_at_idx").on(t.created_at),
   }),
 );
 
-// Per-user spend caps (ADR-026). A cap is off by default; at most one per
-// period per user (the unique index), so up to three caps apply to one user.
+// Scoped spend caps (ADR-031, generalising ADR-026). A cap is configured at one
+// of three scopes — everyone / role / user — but always evaluated against an
+// individual user's own spend. Off by default. `scope_ref` is a generated,
+// always-non-null key (user_id | role_key | 'everyone') so the unique index can
+// enforce at most one cap per target per period across all scopes (Postgres
+// treats raw NULLs as distinct, which a plain composite index could not).
 export const app_usage_budgets = pgTable(
   "app_usage_budgets",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    user_id: uuid("user_id")
+    scope: text("scope", { enum: ["everyone", "role", "user"] })
       .notNull()
-      .references(() => core_users.id, { onDelete: "cascade" }),
+      .default("user"),
+    role_key: text("role_key"),
+    // Nullable now: only user-scoped rows carry a user_id. FK + cascade retained
+    // so deleting a user still removes their per-user caps.
+    user_id: uuid("user_id").references(() => core_users.id, { onDelete: "cascade" }),
     period: text("period", { enum: ["daily", "weekly", "monthly"] }).notNull(),
     limit_usd: real("limit_usd").notNull(),
     warn_threshold_pct: smallint("warn_threshold_pct").notNull().default(80),
     enabled: boolean("enabled").notNull().default(false),
+    scope_ref: text("scope_ref").generatedAlwaysAs(
+      sql`COALESCE("user_id"::text, "role_key", 'everyone')`,
+    ),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    user_period_unique: uniqueIndex("app_usage_budgets_user_id_period_unique").on(
-      t.user_id,
+    period_scope_ref_unique: uniqueIndex("app_usage_budgets_period_scope_ref_unique").on(
       t.period,
+      t.scope_ref,
     ),
     by_user: index("app_usage_budgets_user_id_idx").on(t.user_id),
   }),

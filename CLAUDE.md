@@ -24,6 +24,7 @@ code, run `./validate.sh` and fix all failures before declaring done.
 | Implement a phase, build a spec, write code                | `/build`       |
 | Change or extend existing functionality                    | `/enhance`     |
 | Fix something broken or not working                        | `/bugfix`      |
+| Cut the next alpha, tag a build, forward-merge fixes       | `/release`     |
 | Anything else                                              | Answer directly |
 
 ---
@@ -109,12 +110,37 @@ Wayfinder is purpose-built for the top-left quadrant: a **procurement officer, H
 
 ---
 
+## Release Branching
+
+Two long-lived branch types. Full contributor-facing rules live in
+[`CONTRIBUTING.md`](CONTRIBUTING.md); the complete release model and
+maintainer runbook live in
+[`docs/guides/managing-releases.md`](docs/guides/managing-releases.md).
+
+- `main` — the **next** alpha, in active development. New features land here.
+- `release/alpha-N` — the **current** alpha, stabilisation only. Bug fixes and
+  enhancements land here; never new features, never a merge from `main`.
+
+**Current alpha branch: `release/alpha-1`** ← skills read the base branch from
+this line; update it when a new alpha is cut.
+
+| Skill | Base branch (branch from it, open the PR against it) |
+|---|---|
+| `/new-feature`, `/build` | `main` |
+| `/bugfix`, `/enhance` | Current alpha branch — unless the change only affects unreleased work, then `main` |
+| `/release` | Operates on `main` and release branches directly (maintainers only) |
+
+---
+
 ## Versioning
 
 `VERSION` and root `package.json` `version` must always match. `validate.sh` enforces this.
 
-- **MAJOR** (x.0.0): Breaking API or domain changes
+Each alpha owns a MAJOR line: **alpha-N = the N.x.x line** (alpha-1 = 1.x.x,
+alpha-2 = 2.x.x).
+
+- **MAJOR** (x.0.0): New alpha line — bumped on `main` immediately after a `release/alpha-N` branch is cut. Breaking API or domain changes go to `main` (the next alpha), never to a release branch.
 - **MINOR** (0.x.0): DB schema change, new phase, new feature
 - **PATCH** (0.0.x): Bug fixes, UI tweaks, no schema impact
 
-Starting version: `0.1.0`. Every code-writing skill must state the version bump.
+Every code-writing skill must state the version bump.

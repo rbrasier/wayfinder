@@ -20,6 +20,9 @@ import {
   DeleteBudget,
   ListBudgets,
   GetGovernanceDashboard,
+  GetUserUsage,
+  GetUsageLimitsEnabled,
+  SetUsageLimitsEnabled,
   FailJob,
   GenerateDocument,
   GetEffectivePermissions,
@@ -31,7 +34,6 @@ import {
   GetSession,
   GetUsageSummary,
   GrantFlowOwner,
-  HeartbeatTyping,
   ImportHrDataset,
   CreateSkill,
   UpdateSkill,
@@ -68,7 +70,6 @@ import {
   ListPendingApprovals,
   ListPendingApprovalsWithContext,
   ListSessions,
-  ListTypingUsers,
   ListUsers,
   ListUsersForRole,
   LogAuditEvent,
@@ -90,6 +91,8 @@ import {
   SetFlowContextMcpServers,
   RemoveSessionUpload,
   RemoveUserRole,
+  ResolveSessionAccess,
+  RevokeSessionParticipant,
   RetrieveDocumentChunks,
   SubmitAnswerFeedback,
   ListAnswerFeedback,
@@ -142,6 +145,7 @@ import {
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
   DrizzleFlowVersionRepository,
+  CachedFlowVersionRepository,
   DrizzleHrDatasetRepository,
   DrizzleSkillRepository,
   SkillParser,
@@ -155,8 +159,8 @@ import {
   DrizzleReindexSourceRepository,
   DrizzleRoleRepository,
   DrizzleSessionMessageRepository,
+  DrizzleSessionParticipantRepository,
   DrizzleSessionUploadRepository,
-  DrizzleSessionTypingRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleScheduleRepository,
   DrizzleScheduleRunRepository,
@@ -176,6 +180,7 @@ import {
   HrPeopleDirectory,
   LangGraphAgentRunner,
   LanguageModelAdapter,
+  LlmCallGovernor,
   createEmbeddingsProvider,
   MinioStorageAdapter,
   N8nHttpWorkflowDirectory,
@@ -191,6 +196,7 @@ import {
   createCachedSessionResolver,
   createDatabase,
   createNodeExecutors,
+  createPostgresSessionEventBus,
   seedAdmin,
   seedRoles,
   withOptionalLangfuse,
@@ -199,8 +205,12 @@ import {
   type AuthMethod,
   type ResolvedSession,
 } from "@rbrasier/adapters";
-import type { PermissionKey } from "@rbrasier/domain";
+import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
+import {
+  createCachedAdminSettings,
+  type ResolvedAdminSettings,
+} from "./cached-admin-settings";
 import { serverEnv } from "./env";
 
 const globalForContainer = globalThis as typeof globalThis & {
@@ -214,7 +224,7 @@ const build = () => {
 
   // Short-TTL caches in front of the two hottest auth lookups (session +
   // permission resolution). Single-instance correct; promote to a shared store
-  // when running multiple instances. See the scaling-to-concurrent-load phase doc.
+  // when running multiple instances. See the scaling-new-infrastructure phase doc.
   const sessionCache = new TtlCache<ResolvedSession>({
     ttlMs: env.AUTH_CACHE_TTL_MS,
     maxEntries: env.AUTH_CACHE_MAX_ENTRIES,
@@ -240,12 +250,21 @@ const build = () => {
   const flows = new DrizzleFlowRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
   const flowEdges = new DrizzleFlowEdgeRepository(db);
-  const flowVersions = new DrizzleFlowVersionRepository(db);
+  // Published versions are immutable snapshots, so cache getById per version id
+  // (scaling wall #4) — the runner re-reads the pinned snapshot every turn/poll.
+  const flowVersions = new CachedFlowVersionRepository(
+    new DrizzleFlowVersionRepository(db),
+    new TtlCache<FlowVersion>({ ttlMs: env.FLOW_VERSION_CACHE_TTL_MS, maxEntries: 256 }),
+  );
   const sessions = new DrizzleSessionRepository(db);
+  const sessionParticipants = new DrizzleSessionParticipantRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
-  const sessionTyping = new DrizzleSessionTypingRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  // Real-time transport replacing the 2 s/3 s polls (scaling wall #2). Backed by
+  // Postgres LISTEN/NOTIFY on its own direct connection so it stays correct
+  // across instances without adding a new service.
+  const sessionEvents = createPostgresSessionEventBus(env.DATABASE_LISTEN_URL ?? env.DATABASE_URL);
   const schedules = new DrizzleScheduleRepository(db);
   const scheduleRuns = new DrizzleScheduleRunRepository(db);
   const clock = new SystemClock();
@@ -288,11 +307,44 @@ const build = () => {
         : undefined,
   });
 
-  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig);
+  // Near-static admin settings cache (scaling wall #4): the chat stream route
+  // reads org name, global instructions, and upload config every turn; front
+  // them with the same TtlCache shape as the auth caches so a turn no longer
+  // pays three settings reads.
+  const adminSettingsCache = new TtlCache<ResolvedAdminSettings>({
+    ttlMs: env.ADMIN_SETTINGS_CACHE_TTL_MS,
+    maxEntries: 1,
+  });
+  const adminSettings = createCachedAdminSettings(
+    {
+      getSystemSetting: async (key) => {
+        const result = await systemSettings.get(key);
+        return result.error ? null : (result.data ?? null);
+      },
+      getSessionUploadConfig: () => runtimeConfig.getSessionUploadConfig(),
+    },
+    adminSettingsCache,
+  );
+
+  // Shared per-instance provider-call governor (scaling wall #5): bounds
+  // concurrent in-flight LLM calls and retries rate limits / transient failures.
+  // The same instance governs both the port (LanguageModelAdapter) and the chat
+  // stream route's direct SDK calls, so one budget covers every provider request.
+  const llmGovernor = new LlmCallGovernor({
+    maxConcurrent: env.LLM_MAX_CONCURRENCY,
+    maxAttempts: env.LLM_MAX_ATTEMPTS,
+  });
+  const baseLlm = new LanguageModelAdapter(env.AI_DEFAULT_PROVIDER, runtimeConfig, llmGovernor);
   // Decorator order (ADR-026 §3): quota enforcement is outermost so it blocks
   // before the inner usage-tracking + provider call runs. The same enforcer is
   // shared with the chat stream route, which calls the SDK outside the port.
-  const quotaEnforcer = new QuotaEnforcer(budgets, usageRepo, auditLogger);
+  const quotaEnforcer = new QuotaEnforcer(
+    budgets,
+    usageRepo,
+    auditLogger,
+    userRoles,
+    async () => (await runtimeConfig.getUsageLimitsConfig()).enabled,
+  );
   const llm = withOptionalLangfuse(
     withQuotaEnforcement(withUsageTracking(baseLlm, usageRepo), quotaEnforcer),
     env,
@@ -512,11 +564,12 @@ const build = () => {
     logger,
     objectStorage,
     runtimeConfig,
+    adminSettings,
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, skillParser, mcpToolPrepass, mcpToolPlanner },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionMessages, sessionUploads, sessionTyping, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills, mcpServers },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, skillParser, mcpToolPrepass, mcpToolPlanner },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, skills, mcpServers },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
@@ -597,6 +650,8 @@ const build = () => {
       listSessions: new ListSessions(sessions),
       listAllSessions: new ListAllSessions(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
+      revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessions, sessionMessages, flowEdges, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
       publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
       listFlowVersions: new ListFlowVersions(flowVersions),
@@ -612,14 +667,15 @@ const build = () => {
       listScheduleRuns: new ListScheduleRuns(scheduleRuns),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
       confirmStepAdvance: new ConfirmStepAdvance(sessions, flowEdges, flowVersions, notifyOnStepComplete),
-      heartbeatTyping: new HeartbeatTyping(sessionTyping),
-      listTypingUsers: new ListTypingUsers(sessionTyping, users),
       getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
       getGovernanceDashboard: new GetGovernanceDashboard(usageRepo, budgets, users, flows),
       createBudget: new CreateBudget(budgets),
       updateBudget: new UpdateBudget(budgets),
       deleteBudget: new DeleteBudget(budgets),
       listBudgets: new ListBudgets(budgets),
+      getUserUsage: new GetUserUsage(systemSettings, budgets, userRoles, usageRepo),
+      getUsageLimitsEnabled: new GetUsageLimitsEnabled(systemSettings),
+      setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
       suggestApprover: new SuggestApprover(
         approvals,
