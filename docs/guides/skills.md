@@ -51,7 +51,7 @@ If the prompt doesn't clearly match a skill, Claude asks:
 
 - **Documentation before code**: skills that produce code MUST have a phase
   doc in `to-be-implemented/` first. The Build skill moves it to
-  `implemented/v[version]/` on completion.
+  `implemented/alpha-<major>/v[version]/` on completion.
 - **One responsibility per skill**: don't combine planning and building.
   Split into two steps with the Documentation Review skill in between.
 - **Versioning is mandatory**: every code-writing skill must specify the

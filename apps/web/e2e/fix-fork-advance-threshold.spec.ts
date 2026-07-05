@@ -5,7 +5,7 @@ import { expect, test } from "@playwright/test";
 // threshold. The regression gated the branch-choice call on a hardcoded 90, so a
 // fork at threshold 70 reported "complete" at confidence 80 yet never advanced —
 // the session silently stalled on the fork, turn after turn, with no error.
-// (docs/development/implemented/v1.54.0/codebase-bug-fixes.phase.md)
+// (docs/development/implemented/alpha-1/v1.54.0/codebase-bug-fixes.phase.md)
 //
 // Driven by the /e2e (Playwright MCP) skill against a running stack in AI-mock
 // mode — excluded from the vitest unit run. The pure gating predicate is unit

@@ -1,7 +1,7 @@
 /**
  * enhance-flow-selector-search.spec.ts
  *
- * Covers docs/development/implemented/v1.23.4/flow-selector-search.md:
+ * Covers docs/development/implemented/alpha-1/v1.23.4/flow-selector-search.md:
  * when the flow selector on /admin/dashboards/flows has more than 5 cards
  * only the top 5 are shown and a "Search for more" button appears.
  * Clicking it opens an auto-suggest input; selecting a flow closes the input

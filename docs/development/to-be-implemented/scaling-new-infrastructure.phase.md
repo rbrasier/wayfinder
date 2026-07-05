@@ -14,7 +14,7 @@
   - [`scaling-current-stack.phase.md`](./scaling-current-stack.phase.md) —
     do that phase first; it delivers most of the headroom to ~500 concurrent
     users and none of it is blocked on infrastructure decisions.
-  - `implemented/v1.49.0/scaling-p0-pool-and-auth-cache.md` — the env-driven
+  - `implemented/alpha-1/v1.49.0/scaling-p0-pool-and-auth-cache.md` — the env-driven
     pool and the in-process auth cache this phase promotes to shared services.
   - ADR-017 (embedding providers), ADR-019 (in-app scheduler, queue
     candidates), ADR-023 (email transport).
@@ -35,7 +35,7 @@ and the DB connection budget must be managed by a pooler rather than raw
 Postgres. Until then, single-instance deployments need nothing here.
 
 Each item below is implemented as its own sub-phase; when an item lands, its
-implementation summary goes to `implemented/v<version>/` and this doc stays
+implementation summary goes to `implemented/alpha-<major>/v<version>/` and this doc stays
 here until the last code slice lands (the former roadmap's convention).
 
 ---

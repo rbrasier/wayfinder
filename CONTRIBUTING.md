@@ -35,8 +35,9 @@ the code, validate, document, version, ship.** A few things to know going in:
   implementation, in-memory fakes for ports (never mock what you own), and
   run `./validate.sh` after every sub-component — not just at the end.
 - Every code-writing skill finishes by moving its phase doc into
-  `docs/development/implemented/v[version]/`, writing an implementation
-  summary, and bumping `VERSION` / root `package.json` (they must match).
+  `docs/development/implemented/alpha-<major>/v[version]/`, writing an
+  implementation summary, and bumping `VERSION` / root `package.json` (they
+  must match).
 - If you're not using a skill — a tiny fix, a doc typo — that's fine, but
   still follow the same discipline by hand: test first, `./validate.sh`
   before you're done, version bump if the change touches shipped behaviour.

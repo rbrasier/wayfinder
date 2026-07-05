@@ -3,7 +3,7 @@
  *
  * Covers v1.15.0 — AI transparency info modals.
  *
- * Visual spec (docs/development/implemented/v1.15.0/ai-transparency-modals.md
+ * Visual spec (docs/development/implemented/alpha-1/v1.15.0/ai-transparency-modals.md
  * + message-info-modal.tsx / document-info-modal.tsx):
  *   Every assistant message with a persisted aiPayload shows an Info button
  *   (aria-label "Show AI reasoning") opening a "Why this response" modal with

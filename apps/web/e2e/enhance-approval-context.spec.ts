@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // E2E for the approval-screen context & decision UX enhancement.
-// (docs/development/implemented/v1.47.5/approval-context-ux.phase.md)
+// (docs/development/implemented/alpha-1/v1.47.5/approval-context-ux.phase.md)
 //
 // Driven by the /e2e (Playwright MCP) skill against a running stack — excluded
 // from the vitest unit run. Assumes the seeded pending approval from

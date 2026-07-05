@@ -1,7 +1,7 @@
 /**
  * fix-logout-and-register-sidebar.spec.ts
  *
- * Covers the bug fix in docs/development/implemented/v1.23.2/
+ * Covers the bug fix in docs/development/implemented/alpha-1/v1.23.2/
  * fix-logout-and-register-sidebar.md:
  *
  *   1. A signed-in user can sign out from the sidebar footer and lands on

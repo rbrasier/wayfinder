@@ -47,8 +47,9 @@ Once all sub-components pass validation, write at least one Playwright e2e test 
 
 ### Step 4 — On completion
 
-- Move phase doc: `to-be-implemented/<name>.md` → `implemented/v[version]/<name>.md`
-- Write an implementation summary in `implemented/v[version]/` covering:
+- Move phase doc: `to-be-implemented/<name>.md` → `implemented/alpha-<major>/v[version]/<name>.md`
+  where `alpha-<major>` is the current release line — `alpha-2` for `2.x.x`, `alpha-1` for `1.x.x` (see `docs/guides/versioning.md`)
+- Write an implementation summary in `implemented/alpha-<major>/v[version]/` covering:
   what was built, files created/modified, migrations run, known limitations, e2e tests added
 - Update `VERSION` file and root `package.json` `version` (they must match)
 - Run `./validate.sh` one final time — fix all failures before declaring done

@@ -7,7 +7,7 @@
  * tests deliberately use a FRESH context with no stored session so the real
  * login/register surfaces render.
  *
- * Visual spec (docs/development/implemented/v1.14.0/username-password-auth.md
+ * Visual spec (docs/development/implemented/alpha-1/v1.14.0/username-password-auth.md
  * + selectors in app):
  *   /login    → "Sign in" card, #email, #password, "Sign in" submit,
  *               "No account? Register" link
