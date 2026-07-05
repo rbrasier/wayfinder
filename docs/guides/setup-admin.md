@@ -117,33 +117,35 @@ run `pnpm install` first.
 
 ### Everyday development workflow
 
+Branch from the right base for the kind of change — see
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md#2-target-the-right-release):
+
 ```bash
-# Create a feature branch
-git checkout -b feat/my-feature
+# New feature: branch from main
+git checkout -b feature/my-feature origin/main
+
+# Bug fix or enhancement: branch from the current alpha branch
+git checkout -b fix/my-fix origin/release/alpha-1
 
 # Make changes, then verify
 ./validate.sh
 
-# Describe the change for the release
-pnpm changeset
-
-# Commit and push
-git add .changeset/ <changed-files>
+# Commit and push, then open a PR against the branch you started from
+git add <changed-files>
 git commit -m "feat: ..."
-git push origin feat/my-feature
+git push origin feature/my-feature
 ```
 
 ### Cutting a release
 
-Releases are automated via the GitHub Actions release workflow. See
-[`docs/guides/publishing-a-release.md`](./publishing-a-release.md) for the
-full step-by-step.
+Alpha releases follow the two-branch model described in
+[`docs/guides/managing-releases.md`](./managing-releases.md): bug fixes and
+enhancements stabilise the current `release/alpha-N` branch while new
+features build the next alpha on `main`.
 
-The short version:
-1. `pnpm changeset` — describe the change and choose the semver bump
-2. Push the changeset file to `main`
-3. The release GitHub Action opens (or updates) a Release PR with version bumps
-4. Merge the Release PR — packages are published automatically
+Maintainers run the `/release` skill to cut the next alpha, tag an alpha
+build, or forward-merge fixes into `main` — it derives the next alpha number
+from `main`'s `VERSION` and updates every current-alpha reference.
 
 ---
 

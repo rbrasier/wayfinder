@@ -24,6 +24,7 @@ code, run `./validate.sh` and fix all failures before declaring done.
 | Implement a phase, build a spec, write code                | `/build`       |
 | Change or extend existing functionality                    | `/enhance`     |
 | Fix something broken or not working                        | `/bugfix`      |
+| Cut the next alpha, tag a build, forward-merge fixes       | `/release`     |
 | Anything else                                              | Answer directly |
 
 ---
@@ -84,6 +85,7 @@ this line; update it when a new alpha is cut.
 |---|---|
 | `/new-feature`, `/build` | `main` |
 | `/bugfix`, `/enhance` | Current alpha branch — unless the change only affects unreleased work, then `main` |
+| `/release` | Operates on `main` and release branches directly (maintainers only) |
 
 ---
 

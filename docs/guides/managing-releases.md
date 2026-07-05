@@ -6,11 +6,6 @@ know **where to open your PR**, the short version is in
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md#2-target-the-right-release) — this
 guide explains the machinery behind it.
 
-> **Not to be confused with package publishing.** This guide covers releasing
-> the Wayfinder *application* (alpha-1, alpha-2, …). Publishing the
-> `@rbrasier/*` framework packages to GitHub Packages is a separate process —
-> see [`publishing-a-release.md`](./publishing-a-release.md).
-
 ---
 
 ## The model in one picture
@@ -124,6 +119,11 @@ Two things worth understanding about this:
   work-in-progress. Open the PR (draft is fine) when you want feedback.
 
 ## Maintainer runbook
+
+The `/release` skill (`.claude/commands/release.md`) automates all three
+operations below — it derives the next alpha number from `main`'s `VERSION`,
+runs the pre-flight checks, and updates every current-alpha reference. The
+manual steps are kept here so the skill's behaviour is auditable.
 
 ### Cutting the next alpha
 

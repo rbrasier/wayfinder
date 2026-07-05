@@ -3,7 +3,7 @@
 This template uses a **skill routing layer** in `CLAUDE.md` to make
 Claude Code's behaviour predictable across a project's lifecycle.
 
-Every prompt is routed to one of five skills. Each skill has a documented
+Every prompt is routed to one of six skills. Each skill has a documented
 workflow that produces (a) documentation, then (b) code, then runs
 `./validate.sh`.
 
@@ -23,7 +23,7 @@ If the prompt doesn't clearly match a skill, Claude asks:
 
 …and then routes accordingly.
 
-## The five built-in skills
+## The six built-in skills
 
 | Skill                       | Triggers when…                                                     | Output                                   |
 | --------------------------- | ------------------------------------------------------------------ | ---------------------------------------- |
@@ -32,6 +32,7 @@ If the prompt doesn't clearly match a skill, Claude asks:
 | Build — New Phase / Feature | "implement phase X", "build the spec"                              | Code + moved phase doc + impl summary    |
 | Enhancement / Revision      | "change…", "extend…", "tweak…"                                     | Updated phase doc → routed to Review     |
 | Bug Fix                     | "broken", "not working", "should be doing"                         | Fix doc + code + impl summary + PATCH    |
+| Release                     | "cut the next alpha", "tag a build", "merge fixes forward"         | Release branch / tag / forward-merge (maintainers — see `managing-releases.md`) |
 
 ## Adding a new skill
 

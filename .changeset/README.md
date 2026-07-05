@@ -1,23 +1,13 @@
 # Changesets
 
-This directory is managed by [Changesets](https://github.com/changesets/changesets).
+This directory is managed by [Changesets](https://github.com/changesets/changesets),
+which coordinates per-package version bumps and changelog entries inside the
+monorepo. `pnpm changeset` writes a `.md` file here describing a change;
+`pnpm changeset version` consumes those files to bump the affected
+`packages/*` versions and write CHANGELOG entries.
 
-## How to cut a release
-
-1. After merging one or more features, run:
-   ```bash
-   pnpm changeset
-   ```
-   This prompts you to describe what changed (which packages, which bump level, summary).
-   A `.md` file is written to this directory.
-
-2. When ready to publish, run:
-   ```bash
-   pnpm changeset version   # bumps versions in package.json + writes CHANGELOG entries
-   pnpm changeset publish   # builds and publishes to the configured registry
-   ```
-
-Or push to `main` — the release GitHub Action runs `changeset publish` automatically
-when changeset files are present.
-
-See `docs/guides/publishing-a-release.md` for the full workflow.
+Note: this tooling versions the internal workspace packages only. It is not
+part of releasing the Wayfinder application — alpha releases are cut from
+branches as described in
+[`docs/guides/managing-releases.md`](../docs/guides/managing-releases.md),
+and the application version lives in `VERSION` / root `package.json`.

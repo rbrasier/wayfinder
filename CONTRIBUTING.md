@@ -23,6 +23,7 @@ one that matches what you're doing — routing rules are in [`CLAUDE.md`](CLAUDE
 | Implement a reviewed phase | `/build` |
 | Change or extend existing behaviour | `/enhance` |
 | Fix something broken | `/bugfix` |
+| Cut or tag an alpha release (maintainers) | `/release` |
 
 Each skill follows the same shape: **write the spec, write the test, write
 the code, validate, document, version, ship.** A few things to know going in:
