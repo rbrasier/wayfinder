@@ -3,7 +3,7 @@
  *
  * Covers v1.16.0 — Two admin analytics dashboards + template field reporting.
  *
- * Visual spec (docs/development/implemented/v1.16.0/summary.md + app):
+ * Visual spec (docs/development/implemented/alpha-1/v1.16.0/summary.md + app):
  *   /admin/dashboards/overview  → analytics overview dashboard
  *   /admin/dashboards/flows     → "Flow usage" heading, description
  *     "Select a flow to see its node-level breakdown …", and charts
