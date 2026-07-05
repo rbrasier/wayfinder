@@ -54,58 +54,57 @@ export const sessionRouter = router({
       }),
     );
 
-    const enriched = await Promise.all(
-      sessions.map(async (session) => {
-        const graph = flowGraphs.get(session.flowId);
-        if (!graph || graph.nodeIds.length === 0) return { ...session, lastMessage: null, stepInfo: null };
-
-        const totalSteps = graph.nodeIds.length;
-        const currentIndex = session.currentNodeId
-          ? graph.nodeIds.indexOf(session.currentNodeId)
-          : -1;
-
-        const messagesResult = await ctx.container.repos.sessionMessages.listBySession(session.id);
-        const messages = messagesResult.error ? [] : messagesResult.data;
-
-        const lastAssistantMessage = [...messages].reverse().find((m) => m.role === "assistant");
-        const lastMessage = lastAssistantMessage?.content ?? null;
-
-        const bestConfidenceByStep = new Map<string, number>();
-        for (const message of messages) {
-          if (message.role !== "assistant" || !message.stepNodeId || message.confidence === null) continue;
-          const previous = bestConfidenceByStep.get(message.stepNodeId) ?? -1;
-          if (message.confidence > previous) {
-            bestConfidenceByStep.set(message.stepNodeId, message.confidence);
-          }
-        }
-
-        let completedSteps = 0;
-        for (const [nodeId, confidence] of bestConfidenceByStep) {
-          if (confidence >= COMPLETE_CONFIDENCE_THRESHOLD && nodeId !== session.currentNodeId) {
-            completedSteps++;
-          }
-        }
-        if (session.status === "complete") completedSteps = totalSteps;
-
-        const currentConfidence =
-          session.status === "complete"
-            ? 0
-            : session.currentNodeId
-              ? bestConfidenceByStep.get(session.currentNodeId) ?? 0
-              : 0;
-
-        return {
-          ...session,
-          lastMessage,
-          stepInfo: {
-            currentIndex: currentIndex >= 0 ? currentIndex + 1 : 0,
-            totalSteps,
-            completedSteps,
-            currentConfidence,
-          },
-        };
-      }),
+    // One batch aggregation for every session's last-message and per-step best
+    // confidence, instead of loading each session's full history in turn
+    // (scaling wall #1). Missing sessions have no assistant messages yet.
+    const summariesResult = await ctx.container.repos.sessionMessages.summariseForSessionList(
+      sessions.map((session) => session.id),
     );
+    const summaryBySession = new Map(
+      (summariesResult.error ? [] : summariesResult.data).map(
+        (summary) => [summary.sessionId, summary] as const,
+      ),
+    );
+
+    const enriched = sessions.map((session) => {
+      const graph = flowGraphs.get(session.flowId);
+      if (!graph || graph.nodeIds.length === 0) return { ...session, lastMessage: null, stepInfo: null };
+
+      const totalSteps = graph.nodeIds.length;
+      const currentIndex = session.currentNodeId
+        ? graph.nodeIds.indexOf(session.currentNodeId)
+        : -1;
+
+      const summary = summaryBySession.get(session.id);
+      const lastMessage = summary?.lastAssistantContent ?? null;
+      const bestConfidenceByStep = summary?.bestConfidenceByStep ?? {};
+
+      let completedSteps = 0;
+      for (const [nodeId, confidence] of Object.entries(bestConfidenceByStep)) {
+        if (confidence >= COMPLETE_CONFIDENCE_THRESHOLD && nodeId !== session.currentNodeId) {
+          completedSteps++;
+        }
+      }
+      if (session.status === "complete") completedSteps = totalSteps;
+
+      const currentConfidence =
+        session.status === "complete"
+          ? 0
+          : session.currentNodeId
+            ? bestConfidenceByStep[session.currentNodeId] ?? 0
+            : 0;
+
+      return {
+        ...session,
+        lastMessage,
+        stepInfo: {
+          currentIndex: currentIndex >= 0 ? currentIndex + 1 : 0,
+          totalSteps,
+          completedSteps,
+          currentConfidence,
+        },
+      };
+    });
 
     return enriched;
   }),

@@ -1,4 +1,4 @@
-import { asc, eq, sql, type SQL } from "drizzle-orm";
+import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -9,6 +9,7 @@ import {
   type NewSessionMessage,
   type Result,
   type SessionDocument,
+  type SessionListSummary,
   type SessionMessage,
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
@@ -40,6 +41,35 @@ export const buildListSinceSeqStatement = (sessionId: string, afterSeq: number):
   WHERE ${app_session_messages.session_id} = ${sessionId}
     AND ${app_session_messages.seq} > ${afterSeq}
   ORDER BY ${app_session_messages.seq} ASC
+`;
+
+// Newest assistant message per session for the whole batch in one round-trip.
+// DISTINCT ON keeps the first row per session under the seq-DESC ordering — the
+// latest assistant message — so the list view never scans a session's history.
+export const buildSessionListLastAssistantStatement = (sessionIds: readonly string[]): SQL => sql`
+  SELECT DISTINCT ON (${app_session_messages.session_id})
+    ${app_session_messages.session_id} AS session_id,
+    ${app_session_messages.content} AS content
+  FROM ${app_session_messages}
+  WHERE ${inArray(app_session_messages.session_id, [...sessionIds])}
+    AND ${app_session_messages.role} = 'assistant'
+  ORDER BY ${app_session_messages.session_id}, ${app_session_messages.seq} DESC
+`;
+
+// Highest confidence per (session, step) across the batch, aggregated SQL-side
+// so the per-step best the list view shows is one grouped query, not a
+// per-session in-memory reduction over full histories.
+export const buildSessionListBestConfidenceStatement = (sessionIds: readonly string[]): SQL => sql`
+  SELECT
+    ${app_session_messages.session_id} AS session_id,
+    ${app_session_messages.step_node_id} AS step_node_id,
+    MAX(${app_session_messages.confidence}) AS best_confidence
+  FROM ${app_session_messages}
+  WHERE ${inArray(app_session_messages.session_id, [...sessionIds])}
+    AND ${app_session_messages.role} = 'assistant'
+    AND ${app_session_messages.step_node_id} IS NOT NULL
+    AND ${app_session_messages.confidence} IS NOT NULL
+  GROUP BY ${app_session_messages.session_id}, ${app_session_messages.step_node_id}
 `;
 
 const toEntity = (row: typeof app_session_messages.$inferSelect): SessionMessage => ({
@@ -146,6 +176,46 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to load session messages since seq.", cause));
+    }
+  }
+
+  async summariseForSessionList(
+    sessionIds: readonly string[],
+  ): Promise<Result<SessionListSummary[]>> {
+    if (sessionIds.length === 0) return ok([]);
+    try {
+      const [lastRows, confidenceRows] = await Promise.all([
+        this.db.execute(buildSessionListLastAssistantStatement(sessionIds)) as unknown as Promise<
+          { session_id: string; content: string | null }[]
+        >,
+        this.db.execute(buildSessionListBestConfidenceStatement(sessionIds)) as unknown as Promise<
+          { session_id: string; step_node_id: string; best_confidence: number }[]
+        >,
+      ]);
+
+      const summaries = new Map<string, SessionListSummary>();
+      const summaryFor = (sessionId: string): SessionListSummary => {
+        const existing = summaries.get(sessionId);
+        if (existing) return existing;
+        const created: SessionListSummary = {
+          sessionId,
+          lastAssistantContent: null,
+          bestConfidenceByStep: {},
+        };
+        summaries.set(sessionId, created);
+        return created;
+      };
+
+      for (const row of lastRows) {
+        summaryFor(row.session_id).lastAssistantContent = row.content ?? null;
+      }
+      for (const row of confidenceRows) {
+        summaryFor(row.session_id).bestConfidenceByStep[row.step_node_id] = Number(row.best_confidence);
+      }
+
+      return ok([...summaries.values()]);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to summarise sessions for list.", cause));
     }
   }
 

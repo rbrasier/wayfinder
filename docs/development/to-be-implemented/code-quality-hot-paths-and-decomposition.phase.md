@@ -76,6 +76,10 @@ areas that only hurt under data growth and change velocity:
 
 ### Group A — Hot-path data access (do first)
 
+> **Progress**: items 1 and 2 landed in **v2.0.2** (query-side fix; summary at
+> `implemented/v2.0.2/code-quality-hot-paths-group-a-slice-1.md`). Items 3 and 4
+> remain.
+
 1. **`session.list` N+1** (`apps/web/src/server/routers/session.ts`): today
    it loads full flow graphs and the **entire message history of every
    session** to derive `lastMessage` and per-step best confidence. Replace

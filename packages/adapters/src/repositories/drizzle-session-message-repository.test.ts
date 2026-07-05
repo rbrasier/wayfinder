@@ -4,6 +4,8 @@ import {
   buildLatestBySessionStatement,
   buildListSinceStatement,
   buildListSinceSeqStatement,
+  buildSessionListLastAssistantStatement,
+  buildSessionListBestConfidenceStatement,
 } from "./drizzle-session-message-repository";
 
 // The pagination queries are what keep a long session's per-turn read bounded
@@ -43,6 +45,40 @@ describe("buildListSinceStatement", () => {
     expect(text).toContain("asc");
     expect(params).toContain("session-2");
     expect(params).toContain(after);
+  });
+});
+
+describe("buildSessionListLastAssistantStatement", () => {
+  it("takes one newest assistant row per session across the whole batch", () => {
+    const { sql, params } = render(
+      buildSessionListLastAssistantStatement(["session-1", "session-2"]),
+    );
+    const text = sql.toLowerCase();
+
+    // DISTINCT ON + seq DESC is what keeps this the latest assistant message per
+    // session rather than a full-history scan (scaling wall #1).
+    expect(text).toContain("distinct on");
+    expect(text).toContain("order by");
+    expect(text).toContain("desc");
+    expect(text).toContain("'assistant'");
+    expect(params).toContain("session-1");
+    expect(params).toContain("session-2");
+  });
+});
+
+describe("buildSessionListBestConfidenceStatement", () => {
+  it("aggregates the highest confidence per session and step in one grouped query", () => {
+    const { sql, params } = render(
+      buildSessionListBestConfidenceStatement(["session-1", "session-2"]),
+    );
+    const text = sql.toLowerCase();
+
+    expect(text).toContain("max(");
+    expect(text).toContain("group by");
+    expect(text).toContain("'assistant'");
+    expect(text).toContain("is not null");
+    expect(params).toContain("session-1");
+    expect(params).toContain("session-2");
   });
 });
 

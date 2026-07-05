@@ -84,11 +84,13 @@ export class RunTurn {
   async persistUserMessage(
     input: PersistUserMessageInput,
   ): Promise<Result<SessionMessage>> {
-    const existing = await this.sessionMessages.listBySession(input.session.id);
-    if (existing.error) return existing;
+    // Only the most recent row decides idempotency, so read just that row rather
+    // than the whole history (scaling wall #1).
+    const latest = await this.sessionMessages.latestBySession(input.session.id, 1);
+    if (latest.error) return latest;
 
     const senderUserId = input.senderUserId ?? null;
-    const last = existing.data.at(-1);
+    const last = latest.data.at(-1);
     if (
       last &&
       last.role === "user" &&

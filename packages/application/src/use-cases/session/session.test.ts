@@ -229,11 +229,41 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
   }
 
   async listBySession(sessionId: string): Promise<Result<SessionMessage[]>> {
-    return ok(
-      [...this.messages.values()]
-        .filter((m) => m.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
-    );
+    return ok(this.chronological(sessionId));
+  }
+
+  async latestBySession(sessionId: string, limit: number): Promise<Result<SessionMessage[]>> {
+    const chronological = this.chronological(sessionId);
+    return ok(chronological.slice(-limit));
+  }
+
+  private chronological(sessionId: string): SessionMessage[] {
+    return [...this.messages.values()]
+      .filter((m) => m.sessionId === sessionId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async summariseForSessionList(
+    sessionIds: readonly string[],
+  ): Promise<Result<import("@rbrasier/domain").SessionListSummary[]>> {
+    const summaries = sessionIds.flatMap((sessionId) => {
+      const assistantMessages = this.chronological(sessionId).filter((m) => m.role === "assistant");
+      if (assistantMessages.length === 0) return [];
+      const bestConfidenceByStep: Record<string, number> = {};
+      for (const message of assistantMessages) {
+        if (!message.stepNodeId || message.confidence === null) continue;
+        const previous = bestConfidenceByStep[message.stepNodeId] ?? -1;
+        if (message.confidence > previous) bestConfidenceByStep[message.stepNodeId] = message.confidence;
+      }
+      return [
+        {
+          sessionId,
+          lastAssistantContent: assistantMessages.at(-1)?.content ?? null,
+          bestConfidenceByStep,
+        },
+      ];
+    });
+    return ok(summaries);
   }
 
   async updateDocument(id: string, document: SessionMessage["document"]): Promise<Result<SessionMessage>> {
@@ -720,6 +750,20 @@ describe("RunTurn", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]!.role).toBe("user");
     expect(messages[0]!.content).toBe("Hello");
+  });
+
+  it("persistUserMessage reads only the tail, never the full history", async () => {
+    // A long-running session must not load its whole transcript to check the last
+    // message (scaling wall #1). Making listBySession explode proves the bounded
+    // read is the one in use.
+    sessionMessages.listBySession = async () => {
+      throw new Error("persistUserMessage must not scan the full history");
+    };
+
+    const result = await useCase.persistUserMessage({ session, userMessage: "Hello" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.content).toBe("Hello");
   });
 
   it("persistUserMessage is idempotent when last message matches (retry)", async () => {
