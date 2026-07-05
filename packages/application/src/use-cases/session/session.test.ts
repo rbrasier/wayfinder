@@ -11,6 +11,7 @@ import type {
   IFlowVersionRepository,
   ISessionMessageRepository,
   ISessionRepository,
+  IUnitOfWork,
   NewFlowEdge,
   NewFlowNode,
   NewSession,
@@ -19,6 +20,7 @@ import type {
   Session,
   SessionMessage,
   SessionUpdate,
+  TransactionalRepositories,
 } from "@rbrasier/domain";
 import { buildFlowSnapshot } from "@rbrasier/domain";
 import { StartSession } from "./start-session";
@@ -291,6 +293,22 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
   }
 }
 
+// Runs the work against the same in-memory repositories the test inspects, and
+// counts invocations so a test can assert the writes went through a transaction.
+// Rollback semantics are covered by the adapter's own test.
+class FakeUnitOfWork implements IUnitOfWork {
+  transactionCount = 0;
+
+  constructor(private readonly repositories: TransactionalRepositories) {}
+
+  async withTransaction<T>(
+    work: (repositories: TransactionalRepositories) => Promise<Result<T>>,
+  ): Promise<Result<T>> {
+    this.transactionCount++;
+    return work(this.repositories);
+  }
+}
+
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
 const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
@@ -540,6 +558,7 @@ describe("RunTurn", () => {
   let sessions: FakeSessionRepository;
   let sessionMessages: FakeSessionMessageRepository;
   let edges: FakeFlowEdgeRepository;
+  let unitOfWork: FakeUnitOfWork;
   let useCase: RunTurn;
 
   const session = makeSession();
@@ -548,8 +567,9 @@ describe("RunTurn", () => {
     sessions = new FakeSessionRepository();
     sessionMessages = new FakeSessionMessageRepository();
     edges = new FakeFlowEdgeRepository();
+    unitOfWork = new FakeUnitOfWork({ sessions, sessionMessages });
     sessions.sessions.set("session-1", session);
-    useCase = new RunTurn(sessions, sessionMessages, edges);
+    useCase = new RunTurn(sessionMessages, edges, unitOfWork);
   });
 
   it("persists user and assistant messages with aiPayload", async () => {
@@ -694,7 +714,7 @@ describe("RunTurn", () => {
         return ok(null);
       },
     };
-    const notifyingUseCase = new RunTurn(sessions, sessionMessages, edges, notifier);
+    const notifyingUseCase = new RunTurn(sessionMessages, edges, unitOfWork, notifier);
 
     await notifyingUseCase.execute({
       session,
@@ -725,7 +745,7 @@ describe("RunTurn", () => {
         return ok(null);
       },
     };
-    const notifyingUseCase = new RunTurn(sessions, sessionMessages, edges, notifier);
+    const notifyingUseCase = new RunTurn(sessionMessages, edges, unitOfWork, notifier);
 
     await notifyingUseCase.execute({
       session,
@@ -818,6 +838,31 @@ describe("RunTurn", () => {
     const messages = [...sessionMessages.messages.values()];
     expect(messages).toHaveLength(1);
     expect(messages[0]!.role).toBe("assistant");
+  });
+
+  it("commits the assistant message and the session advance in one transaction", async () => {
+    edges.edges.set("edge-1", {
+      id: "edge-1",
+      flowId: "flow-1",
+      fromNodeId: "node-1",
+      toNodeId: "node-2",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await useCase.persistAssistantTurn({
+      session,
+      flowId: "flow-1",
+      assistantMessage: "Advancing",
+      aiPayload: makeAiPayload(95),
+      branchChoice: null,
+    });
+
+    // Both writes (message create + session advance) go through a single
+    // transaction so a crash between them cannot leave a half-applied turn.
+    expect(unitOfWork.transactionCount).toBe(1);
+    expect([...sessionMessages.messages.values()]).toHaveLength(1);
+    expect(sessions.sessions.get("session-1")?.currentNodeId).toBe("node-2");
   });
 
   // ── requireConfirmation: hold the completed step open ──────────────────────

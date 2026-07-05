@@ -142,6 +142,7 @@ import {
   DrizzleBudgetRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
+  DrizzleUnitOfWork,
   DrizzleUsageRepository,
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
@@ -231,6 +232,7 @@ const build = () => {
     new TtlCache<FlowVersion>({ ttlMs: env.FLOW_VERSION_CACHE_TTL_MS, maxEntries: 256 }),
   );
   const sessions = new DrizzleSessionRepository(db);
+  const unitOfWork = new DrizzleUnitOfWork(db);
   const sessionParticipants = new DrizzleSessionParticipantRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
@@ -618,7 +620,7 @@ const build = () => {
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
-      runTurn: new RunTurn(sessions, sessionMessages, flowEdges, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
+      runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
       publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),

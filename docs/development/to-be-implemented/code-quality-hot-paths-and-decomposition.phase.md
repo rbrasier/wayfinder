@@ -123,6 +123,11 @@ usage recording, and governor wrapping (ADR-026 decorators).
 
 ### Group C — Unit-of-work port
 
+> **Progress**: item 7 (the port + adapter) and item 8's first target
+> (`persistAssistantTurn`) landed in **v2.1.0** (summary at
+> `implemented/v2.1.0/code-quality-hot-paths-group-c-unit-of-work.md`).
+> `DecideApproval` and `ApplyAutoNodeResult` remain.
+
 7. Add a `UnitOfWork` (transaction) port to `packages/domain` — e.g.
    `withTransaction<T>(work: (repos: TransactionalRepos) => Promise<Result<T>>): Promise<Result<T>>`
    — implemented in adapters over `db.transaction`, exposing transactional
