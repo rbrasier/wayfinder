@@ -1,4 +1,4 @@
-import { createDataStreamResponse, formatDataStreamPart, generateObject } from "ai";
+import { createDataStreamResponse, formatDataStreamPart } from "ai";
 import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
 import type { EvaluateStepReadinessOutput } from "@rbrasier/application";
 import {
@@ -8,7 +8,7 @@ import {
   type ResolvedDocumentGenerationBudget,
   type SessionEvent,
 } from "@rbrasier/domain";
-import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
+import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
 import { shouldComputeBranchChoice } from "./branch-gate";
@@ -231,6 +231,8 @@ export async function POST(
   const chatModelName = aiConfig.models.chat;
   const branchingModelName = aiConfig.models.branching;
   const chatModel = resolveModel(provider, chatModelName, apiKey);
+  // Still resolved as an SDK model for applyAdvanceSideEffects (turn-helpers'
+  // doc-gen/branch path, not yet ported — Group B streaming follow-up).
   const branchingModel = resolveModel(provider, branchingModelName, apiKey);
 
   return createDataStreamResponse({
@@ -335,38 +337,21 @@ export async function POST(
         }
         const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
         if (branchPromptResult.error) return null;
-        const branchResult = await container.services.llmGovernor
-          .run(() =>
-            generateObject({
-              model: branchingModel,
-              schema: branchChoiceSchema,
-              system: branchPromptResult.data,
-              messages: messagesWithNew,
-            }),
-          )
-          .catch(() => null);
-        if (branchResult) {
-          recordTokenUsage(
-            container.repos.usageRepo,
-            {
-              purpose: "chat-branch-choice",
-              userId: authSession.userId,
-              conversationId: sessionId,
-              flowId: flow.id,
-              sessionId,
-              model: branchingModelName,
-              provider,
-            },
-            {
-              promptTokens: branchResult.usage.promptTokens ?? 0,
-              completionTokens: branchResult.usage.completionTokens ?? 0,
-              systemTokens: 0,
-              cacheReadTokens: 0,
-              cacheWriteTokens: 0,
-            },
-          );
-        }
-        return branchResult?.object.branchChoice ?? null;
+        // Through the ILanguageModel port: the concurrency governor, usage
+        // recording, and quota enforcement all apply as decorators (ADR-026), so
+        // there is no hand-rolled governor run or recordTokenUsage here.
+        const branchResult = await container.services.llm.generateObject<BranchChoice>({
+          purpose: "chat-branch-choice",
+          userId: authSession.userId,
+          flowId: flow.id,
+          sessionId,
+          model: branchingModelName,
+          schema: branchChoiceSchema,
+          system: branchPromptResult.data,
+          messages: messagesWithNew,
+        });
+        if (branchResult.error) return null;
+        return branchResult.data.object.branchChoice ?? null;
       };
 
       // Pre-generation evaluation gate: when the cheap model crosses the

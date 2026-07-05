@@ -104,6 +104,13 @@ areas that only hurt under data growth and change velocity:
 
 ### Group B — Streaming inside the `ILanguageModel` port
 
+> **Progress**: a first slice of item 5 landed in **v2.2.1** — the route's
+> branch-choice `generateObject` now goes through the port (summary at
+> `implemented/v2.2.1/code-quality-hot-paths-group-b-slice-1.md`). The streaming
+> turn (`stream-turn.ts`, which uses Anthropic `cache_control` prompt caching not
+> yet exposed by the port), the remaining `turn-helpers.ts` SDK calls, and item 6
+> (`ExecuteTurn` extraction) remain — best landed behind the chat e2e.
+
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,
 usage recording, and governor wrapping (ADR-026 decorators).
