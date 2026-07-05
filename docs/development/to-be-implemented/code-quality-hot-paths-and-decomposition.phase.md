@@ -179,6 +179,10 @@ allowlist is empty.
 
 ### Group F — In-process rate limiting
 
+> **Progress**: item 19 landed in **v2.2.0** (summary at
+> `implemented/v2.2.0/code-quality-hot-paths-group-f-rate-limiting.md`). Group F
+> is complete.
+
 19. Rate-limit the auth endpoints and the chat stream POST with a
     per-instance token bucket behind a small `IRateLimiter` port (keyed by
     user id / IP). No new service: in-memory, same pattern as `TtlCache`.

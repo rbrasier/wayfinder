@@ -42,3 +42,4 @@ export * from "./retention-policy";
 export * from "./approval";
 export * from "./person";
 export * from "./hr-dataset";
+export * from "./rate-limit";

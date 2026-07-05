@@ -143,6 +143,7 @@ import {
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
   DrizzleUnitOfWork,
+  InMemoryRateLimiter,
   DrizzleUsageRepository,
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
@@ -244,6 +245,19 @@ const build = () => {
   const schedules = new DrizzleScheduleRepository(db);
   const scheduleRuns = new DrizzleScheduleRunRepository(db);
   const clock = new SystemClock();
+  // Per-instance rate limiters (group F): auth POST keyed by IP, chat stream POST
+  // keyed by user id. Same in-process pattern as the auth cache — promoted to a
+  // shared store when instance count > 1 (scaling-new-infrastructure phase doc).
+  const authRateLimiter = new InMemoryRateLimiter(
+    { capacity: env.AUTH_RATE_LIMIT_BURST, refillPerSecond: env.AUTH_RATE_LIMIT_REFILL_PER_SEC },
+    env.RATE_LIMIT_MAX_KEYS,
+    clock,
+  );
+  const chatRateLimiter = new InMemoryRateLimiter(
+    { capacity: env.CHAT_RATE_LIMIT_BURST, refillPerSecond: env.CHAT_RATE_LIMIT_REFILL_PER_SEC },
+    env.RATE_LIMIT_MAX_KEYS,
+    clock,
+  );
   const analyticsRepo = new DrizzleAnalyticsRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
@@ -537,7 +551,7 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),

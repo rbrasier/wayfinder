@@ -53,3 +53,4 @@ export * from "./hr-dataset-repository";
 export * from "./spreadsheet-parser";
 export * from "./column-mapping-detector";
 export * from "./unit-of-work";
+export * from "./rate-limiter";

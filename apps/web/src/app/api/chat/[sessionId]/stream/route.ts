@@ -10,6 +10,7 @@ import {
 } from "@rbrasier/domain";
 import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
+import { tooManyRequestsResponse } from "@/lib/rate-limit";
 import { shouldComputeBranchChoice } from "./branch-gate";
 import { countGateHoldsOnNode } from "./gate-holds";
 import { shouldEvaluateStepReadiness } from "./readiness-gate";
@@ -63,6 +64,13 @@ export async function POST(
 
   const authSession = await container.resolveSession(token);
   if (!authSession) return new Response("Unauthorized", { status: 401 });
+
+  // Throttle turns per user so one account cannot stampede the model or the DB
+  // (scaling wall #5 at the edge). Fail open if the limiter itself errors.
+  const rateDecision = await container.services.chatRateLimiter.consume(`chat:${authSession.userId}`);
+  if (!rateDecision.error && !rateDecision.data.allowed) {
+    return tooManyRequestsResponse(rateDecision.data.retryAfterMs);
+  }
 
   const body = await req.json() as { messages?: { role: string; content: string }[] };
   const incomingMessages = body.messages ?? [];

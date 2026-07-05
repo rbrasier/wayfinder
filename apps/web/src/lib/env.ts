@@ -46,6 +46,19 @@ const serverEnvSchema = z.object({
   // How often a long, still-streaming turn re-stamps its lease so it never
   // expires under the holder. Keep well below TURN_LEASE_SECONDS × 1000.
   TURN_HEARTBEAT_MS: z.coerce.number().int().positive().default(30_000),
+  // In-process rate limiting (code-quality phase, group F). Per-instance token
+  // buckets on the auth and chat-stream POST endpoints, keyed by IP / user id.
+  // `*_BURST` is the bucket capacity (largest instantaneous burst); `*_REFILL_
+  // PER_SEC` is the sustained rate. Set a BURST to 0 to disable that limiter.
+  // The IRateLimiter port is the seam the infrastructure phase promotes to a
+  // shared store (Redis) when instance count > 1.
+  AUTH_RATE_LIMIT_BURST: z.coerce.number().int().nonnegative().default(20),
+  AUTH_RATE_LIMIT_REFILL_PER_SEC: z.coerce.number().nonnegative().default(1),
+  CHAT_RATE_LIMIT_BURST: z.coerce.number().int().nonnegative().default(30),
+  CHAT_RATE_LIMIT_REFILL_PER_SEC: z.coerce.number().nonnegative().default(1),
+  // Hard cap on distinct rate-limit keys retained per limiter, bounding memory
+  // under a flood of distinct IPs/users (oldest bucket evicted first).
+  RATE_LIMIT_MAX_KEYS: z.coerce.number().int().positive().default(10_000),
   BETTER_AUTH_SECRET: z.string().min(16),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_SEED_EMAIL: z.string().email().optional(),
