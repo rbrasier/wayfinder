@@ -112,7 +112,9 @@ Wayfinder is purpose-built for the top-left quadrant: a **procurement officer, H
 ## Release Branching
 
 Two long-lived branch types. Full contributor-facing rules live in
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+[`CONTRIBUTING.md`](CONTRIBUTING.md); the complete release model and
+maintainer runbook live in
+[`docs/guides/managing-releases.md`](docs/guides/managing-releases.md).
 
 - `main` — the **next** alpha, in active development. New features land here.
 - `release/alpha-N` — the **current** alpha, stabilisation only. Bug fixes and

@@ -11,13 +11,15 @@ Two places, must always match:
 
 ## Bump rules
 
+Each alpha release owns a MAJOR line: **alpha-N = the `N.x.x` line**
+(alpha-1 = `1.x.x`, alpha-2 = `2.x.x`). See
+[`managing-releases.md`](./managing-releases.md) for the release branch model.
+
 | Bump  | When…                                                   |
 | ----- | ------------------------------------------------------- |
-| MAJOR | Breaking API or domain changes                          |
+| MAJOR | New alpha line — bumped on `main` immediately after a `release/alpha-N` branch is cut. Breaking API or domain changes go to `main` (the next alpha), never to a release branch |
 | MINOR | DB schema change, new phase implementation, new feature |
 | PATCH | Bug fixes, UI tweaks, config changes (no schema impact) |
-
-Starting version: `0.1.0`.
 
 ## Doc lifecycle
 

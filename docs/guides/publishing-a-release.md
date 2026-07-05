@@ -3,6 +3,10 @@
 This project uses [Changesets](https://github.com/changesets/changesets) to
 coordinate version bumps and changelog generation across all published packages.
 
+> **Scope:** this guide is about publishing the `@rbrasier/*` framework
+> *packages*. Releasing the Wayfinder *application* (alpha-1, alpha-2, …) is
+> a different process — see [`managing-releases.md`](./managing-releases.md).
+
 ## Packages that are published
 
 | Package | Scope | Registry |

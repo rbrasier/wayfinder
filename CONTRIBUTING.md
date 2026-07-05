@@ -82,21 +82,10 @@ handle the branching for you. The current alpha branch is recorded in one
 place — the **Release Branching** section of [`CLAUDE.md`](CLAUDE.md) — so
 check there if you suspect this table is stale.
 
-### For maintainers: cutting the next alpha
-
-When `main` is feature-complete for alpha-N:
-
-1. Cut the branch:
-   `git fetch origin && git checkout -B release/alpha-N origin/main && git push -u origin release/alpha-N`
-2. On `main`, bump `VERSION` and root `package.json` to `(N+1).0.0`
-   (`chore: start alpha-(N+1)`).
-3. Update the current-alpha references: the **Release Branching** section of
-   `CLAUDE.md` and the table at the top of this section.
-4. The previous release branch stops receiving changes — critical fixes only,
-   at maintainer discretion.
-
-To publish an alpha build, tag the release branch at the commit you're
-shipping: `git tag v$(cat VERSION) && git push origin --tags`.
+For the full picture — why the model is shaped this way, how versions map to
+alphas, how fixes flow forward, CI behaviour, and the maintainer runbook for
+cutting and publishing alphas — see
+[`docs/guides/managing-releases.md`](docs/guides/managing-releases.md).
 
 ## 3. Respect the architecture
 
