@@ -166,6 +166,10 @@ allowlist is empty.
 
 ### Group E — Boundary tightening (small, independent slices)
 
+> **Progress**: items 15, 17, 18 landed in **v2.2.2** (summary at
+> `implemented/v2.2.2/code-quality-hot-paths-group-e.md`). Items 14 and 16 remain
+> — both fall out of Group B's `ExecuteTurn` extraction.
+
 14. **Narrow the container surface handed to routes**: expose use cases and
     a small set of named services; stop `container.repos.*` reach-through
     (the stream route reads `repos.sessionUploads`, `repos.users`,

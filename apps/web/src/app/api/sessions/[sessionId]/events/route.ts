@@ -1,19 +1,10 @@
 import type { SessionEvent } from "@rbrasier/domain";
 import { getContainer, type Container } from "@/lib/container";
+import { getSessionTokenFromRequest } from "@/lib/session-token";
 
 // A long-lived Node connection, never cached or statically rendered.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const getSessionToken = (req: Request): string | null => {
-  const cookie = req.headers.get("cookie");
-  if (!cookie) return null;
-  const pair = cookie
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith("better-auth.session_token="));
-  return pair ? pair.slice("better-auth.session_token=".length) : null;
-};
 
 // Mirrors the session router: a non-owner approver may watch the session they are
 // signing off on, matched by user id or by the email the approval was assigned to
@@ -45,7 +36,7 @@ export async function GET(
   const { sessionId } = await params;
   const container = getContainer();
 
-  const token = getSessionToken(req);
+  const token = getSessionTokenFromRequest(req);
   if (!token) return new Response("Unauthorized", { status: 401 });
   const authSession = await container.resolveSession(token);
   if (!authSession) return new Response("Unauthorized", { status: 401 });

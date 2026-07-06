@@ -1,5 +1,12 @@
 # ADR-015 — Flow Versioning via Immutable Snapshots
 
+> **Numbering note**: two ADRs share the number 015. This one — *Flow Versioning
+> via Immutable Snapshots* — is the ADR-015 the code cites (publish/restore flow
+> versions, pinned session snapshots; e.g.
+> `use-cases/flow/publish-flow-version.ts`, `entities/flow-version.ts`). The
+> other is *Step-Level AI Overrides*. Deliberately not renumbered — code comments
+> cite these numbers.
+
 - **Status**: Proposed (Phase 6+; scoped by `flow-versioning.prd.md`)
 - **Date**: 2026-05-31
 

@@ -8,9 +8,10 @@ import {
   type ResolvedDocumentGenerationBudget,
   type SessionEvent,
 } from "@rbrasier/domain";
-import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@rbrasier/shared";
+import { branchChoiceSchema, streamTurnRequestSchema, turnResponseSchema, type BranchChoice } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
+import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { shouldComputeBranchChoice } from "./branch-gate";
 import { countGateHoldsOnNode } from "./gate-holds";
 import { shouldEvaluateStepReadiness } from "./readiness-gate";
@@ -39,13 +40,6 @@ const MAX_GATE_HOLDS = 1;
 // filename without its extension (FlowContextDoc has no separate title field).
 const documentLabel = (filename: string): string => filename.replace(/\.[^/.]+$/, "");
 
-const getSessionToken = (req: Request): string | null => {
-  const cookie = req.headers.get("cookie");
-  if (!cookie) return null;
-  const pair = cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("better-auth.session_token="));
-  return pair ? pair.slice("better-auth.session_token=".length) : null;
-};
-
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ sessionId: string }> },
@@ -59,7 +53,7 @@ export async function POST(
     void container.services.sessionEvents.publish(sessionId, event);
   };
 
-  const token = getSessionToken(req);
+  const token = getSessionTokenFromRequest(req);
   if (!token) return new Response("Unauthorized", { status: 401 });
 
   const authSession = await container.resolveSession(token);
@@ -72,8 +66,11 @@ export async function POST(
     return tooManyRequestsResponse(rateDecision.data.retryAfterMs);
   }
 
-  const body = await req.json() as { messages?: { role: string; content: string }[] };
-  const incomingMessages = body.messages ?? [];
+  // Validate the request body instead of trusting a bare cast (a malformed body
+  // otherwise threw deep in the turn). Bad JSON or a bad shape is a clean 400.
+  const parsedBody = streamTurnRequestSchema.safeParse(await req.json().catch(() => null));
+  if (!parsedBody.success) return new Response("Invalid request body", { status: 400 });
+  const incomingMessages = parsedBody.data.messages ?? [];
   const lastUserMessage = incomingMessages.filter((m) => m.role === "user").at(-1)?.content ?? "";
 
   if (!lastUserMessage.trim()) {
