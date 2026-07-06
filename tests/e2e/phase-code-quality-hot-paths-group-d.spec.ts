@@ -8,16 +8,32 @@
  * settings section under components/settings/, with the shared connectivity
  * hook/badge/test extracted alongside. The decomposition is meant to be
  * byte-for-byte behaviour, so the risk it introduces is a *dropped* card. This
- * spec loads /admin/settings and asserts every extracted section still renders
- * (the AI section anchor, the header "Test all" button, and each of the six
- * connectivity cards' own test button) with no console errors.
+ * spec loads /admin/settings and asserts every extracted section's card title
+ * still renders (each CardTitle is an <h3>, rendered unconditionally — unlike
+ * the connectivity test buttons, some of which are gated on the section being
+ * configured), plus the AI section anchor and header "Test all" button, with no
+ * console errors.
  */
 
 import { test, expect } from './helpers/base';
 
-// The six connectivity-bearing cards, each rendering a ConnectivityTest with a
-// `test-connectivity-<target>` button — one per extracted card file.
-const CONNECTIVITY_TARGETS = ['ai', 'n8n', 'embeddings', 'storage', 'email', 'entra'] as const;
+// One title per extracted card file — each an <h3> rendered unconditionally.
+const CARD_TITLES = [
+  'General',
+  'User Registration',
+  'Authentication',
+  'Global AI Instructions',
+  'AI Provider',
+  'Document Generation',
+  'n8n Integration',
+  'RAG Embeddings',
+  'Object Storage (S3 / MinIO)',
+  'Session Uploads',
+  'Email',
+  'Notifications',
+  'HR Directory Data',
+  'Approver Directory (Microsoft Entra)',
+];
 
 test.describe('Code quality Group D: settings page decomposition', () => {
   test('every extracted settings section still renders', async ({ page, consoleLogs }) => {
@@ -29,10 +45,13 @@ test.describe('Code quality Group D: settings page decomposition', () => {
     // Header control that fans out to every connectivity card.
     await expect(page.getByTestId('test-all-connectivity')).toBeVisible();
 
-    // Each connectivity card contributes its own test button; all six must be
-    // present, proving no card was dropped in the split.
-    for (const target of CONNECTIVITY_TARGETS) {
-      await expect(page.getByTestId(`test-connectivity-${target}`)).toBeVisible();
+    // Each extracted card contributes its own <h3> title; all must be present,
+    // proving no card was dropped in the split. Substring match tolerates any
+    // inline status badge some card headers render alongside the title.
+    for (const title of CARD_TITLES) {
+      await expect(
+        page.getByRole('heading', { level: 3, name: title }).first(),
+      ).toBeVisible();
     }
 
     const errors = consoleLogs.filter((entry) => entry.type === 'error');
