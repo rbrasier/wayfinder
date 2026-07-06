@@ -146,6 +146,12 @@ usage recording, and governor wrapping (ADR-026 decorators).
 
 ### Group D — Frontend and file decomposition
 
+> **Progress**: item 9 landed in **v2.2.3** — the 2,183-line settings page was
+> split into one file per section under `components/settings/` (plus a shared
+> `connectivity.tsx`), dropping the page to 75 lines and off the size allowlist
+> (summary at `implemented/v2.2.3/code-quality-hot-paths-group-d.md`). Items
+> 10–13 remain on the allowlist.
+
 Works in tandem with the new `validate.sh` file-size ratchet (warn ≥ 700,
 fail ≥ 800, legacy allowlist below). Exit criterion for each slice: the file
 drops under 700 lines and leaves the allowlist; the phase is done when the
