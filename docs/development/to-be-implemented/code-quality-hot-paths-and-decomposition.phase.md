@@ -133,7 +133,15 @@ usage recording, and governor wrapping (ADR-026 decorators).
 > **Progress**: item 7 (the port + adapter) and item 8's first target
 > (`persistAssistantTurn`) landed in **v2.1.0** (summary at
 > `implemented/v2.1.0/code-quality-hot-paths-group-c-unit-of-work.md`).
-> `DecideApproval` and `ApplyAutoNodeResult` remain.
+> `DecideApproval` landed in **v2.3.0** — the concurrency-gated approval
+> update and the session advance/route now commit in one transaction
+> (`TransactionalRepositories` grew an `approvals` repo; summary at
+> `implemented/v2.3.0/code-quality-hot-paths-group-c-decide-approval.md`).
+> `ApplyAutoNodeResult` was assessed and left unwrapped: it has a single
+> authoritative write (the optimistically-versioned session commit); its
+> step-output persist is deliberately best-effort and must not roll the
+> advance back, so a transaction would couple writes that should stay
+> independent. Item 8 is therefore complete.
 
 7. Add a `UnitOfWork` (transaction) port to `packages/domain` — e.g.
    `withTransaction<T>(work: (repos: TransactionalRepos) => Promise<Result<T>>): Promise<Result<T>>`

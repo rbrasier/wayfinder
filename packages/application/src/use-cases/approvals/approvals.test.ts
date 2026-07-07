@@ -20,6 +20,7 @@ import {
   type ISessionMessageRepository,
   type ISessionRepository,
   type ISessionStepOutputRepository,
+  type IUnitOfWork,
   type IUserRepository,
   type NewApproval,
   type NewAuditLog,
@@ -37,6 +38,7 @@ import {
   type SessionStepOutput,
   type SessionUpdate,
   type TokenUsage,
+  type TransactionalRepositories,
   type UnresolvedSuggestion,
   type User,
 } from "@rbrasier/domain";
@@ -380,6 +382,23 @@ class RecordingNotifier implements IApprovalDecidedNotifier {
   }
 }
 
+// Runs the work against the same in-memory repositories the test inspects, and
+// counts invocations so a test can assert the approval update and session write
+// went through one transaction. Rollback semantics live in the adapter's test.
+class FakeUnitOfWork implements IUnitOfWork {
+  transactionCount = 0;
+  constructor(private readonly repositories: TransactionalRepositories) {}
+  async withTransaction<T>(
+    work: (repositories: TransactionalRepositories) => Promise<Result<T>>,
+  ): Promise<Result<T>> {
+    this.transactionCount++;
+    return work(this.repositories);
+  }
+}
+
+const unitOfWorkFor = (approvals: IApprovalRepository, sessions: ISessionRepository) =>
+  new FakeUnitOfWork({ approvals, sessions, sessionMessages: new InMemoryMessages() });
+
 const approvalNode = (overrides: Partial<FlowNode> = {}): FlowNode => ({
   id: "node-appr",
   flowId: "flow-1",
@@ -712,7 +731,14 @@ describe("DecideApproval", () => {
     });
     const stepOutputs = new InMemoryStepOutputs();
     const audit = new RecordingAuditLogger();
-    const sut = new DecideApproval(approvals, sessions, edges, stepOutputs, audit);
+    const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
+      approvals,
+      sessions,
+      edges,
+      stepOutputs,
+      audit,
+    );
 
     const result = await sut.execute({
       approvalId: approval.id,
@@ -730,12 +756,54 @@ describe("DecideApproval", () => {
     expect(projected?.fields.find((f) => f.key === "outcome")?.value).toBe("approved");
   });
 
+  it("commits the approval update and the session advance through one transaction", async () => {
+    const approvals = new InMemoryApprovals();
+    const approval = await seedConfirmed(approvals);
+    const sessions = new InMemorySessions();
+    sessions.add(session());
+    const edges = new InMemoryFlowEdges();
+    edges.rows.push({
+      id: "edge-1",
+      flowId: "flow-1",
+      fromNodeId: "node-appr",
+      toNodeId: "node-next",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const unitOfWork = new FakeUnitOfWork({
+      approvals,
+      sessions,
+      sessionMessages: new InMemoryMessages(),
+    });
+    const sut = new DecideApproval(
+      unitOfWork,
+      approvals,
+      sessions,
+      edges,
+      new InMemoryStepOutputs(),
+      new RecordingAuditLogger(),
+    );
+
+    const result = await sut.execute({
+      approvalId: approval.id,
+      decidedByUserId: "manager-1",
+      decision: "approved",
+    });
+
+    expect(result.error).toBeUndefined();
+    // Decision and advance are one atomic unit — a single transaction carries both.
+    expect(unitOfWork.transactionCount).toBe(1);
+    expect(approvals.rows.get(approval.id)?.status).toBe("approved");
+    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-next");
+  });
+
   it("completes the session when the approval node has no outgoing edge", async () => {
     const approvals = new InMemoryApprovals();
     const approval = await seedConfirmed(approvals);
     const sessions = new InMemorySessions();
     sessions.add(session());
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -763,6 +831,7 @@ describe("DecideApproval", () => {
     sessions.add(checkpointedSession());
     const notifier = new RecordingNotifier();
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -792,6 +861,7 @@ describe("DecideApproval", () => {
     const sessions = new InMemorySessions();
     sessions.add(checkpointedSession());
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -817,6 +887,7 @@ describe("DecideApproval", () => {
     const sessions = new InMemorySessions();
     sessions.add(checkpointedSession());
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -844,6 +915,7 @@ describe("DecideApproval", () => {
     sessions.add(checkpointedSession());
     const notifier = new RecordingNotifier();
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -871,6 +943,7 @@ describe("DecideApproval", () => {
     const sessions = new InMemorySessions();
     sessions.add(session({ graphCheckpoint: null }));
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -895,6 +968,7 @@ describe("DecideApproval", () => {
     const sessions = new InMemorySessions();
     sessions.add(session());
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -918,6 +992,7 @@ describe("DecideApproval", () => {
     const sessions = new InMemorySessions();
     sessions.add(session());
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -945,6 +1020,7 @@ describe("DecideApproval", () => {
     const users = new InMemoryUsers();
     users.add(user("intruder-1", "intruder@corp.test"));
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -975,6 +1051,7 @@ describe("DecideApproval", () => {
     const users = new InMemoryUsers();
     users.add(user("manager-1", "Manager@Corp.test"));
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -1004,6 +1081,7 @@ describe("DecideApproval", () => {
     const sessions = new InMemorySessions();
     sessions.add(session());
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -1046,6 +1124,7 @@ describe("DecideApproval", () => {
       updatedAt: new Date(),
     });
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       edges,
@@ -1073,6 +1152,7 @@ describe("DecideApproval", () => {
     sessions.add(session());
     const messages = new InMemoryMessages();
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),
@@ -1102,6 +1182,7 @@ describe("DecideApproval", () => {
     sessions.add(session({ graphCheckpoint: { currentNodeId: "node-appr", advancedFrom: "node-prev" } }));
     const messages = new InMemoryMessages();
     const sut = new DecideApproval(
+      unitOfWorkFor(approvals, sessions),
       approvals,
       sessions,
       new InMemoryFlowEdges(),

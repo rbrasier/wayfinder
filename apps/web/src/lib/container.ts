@@ -670,6 +670,7 @@ const build = () => {
       ),
       confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
       decideApproval: new DecideApproval(
+        unitOfWork,
         approvals,
         sessions,
         flowEdges,

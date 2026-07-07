@@ -10,6 +10,7 @@ import {
 import type { Database } from "./client";
 import { DrizzleSessionRepository } from "../repositories/drizzle-session-repository";
 import { DrizzleSessionMessageRepository } from "../repositories/drizzle-session-message-repository";
+import { DrizzleApprovalRepository } from "../repositories/drizzle-approval-repository";
 
 // Drizzle only rolls a transaction back when its callback throws, but the
 // application layer signals failure with an error Result, never an exception.
@@ -38,6 +39,7 @@ export class DrizzleUnitOfWork implements IUnitOfWork {
         const repositories: TransactionalRepositories = {
           sessions: new DrizzleSessionRepository(scoped),
           sessionMessages: new DrizzleSessionMessageRepository(scoped),
+          approvals: new DrizzleApprovalRepository(scoped),
         };
         const result = await work(repositories);
         if (result.error) throw new TransactionRollback(result.error);

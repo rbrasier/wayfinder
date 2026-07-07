@@ -1,3 +1,4 @@
+import type { IApprovalRepository } from "./approval-repository";
 import type { ISessionMessageRepository } from "./session-message-repository";
 import type { ISessionRepository } from "./session-repository";
 import type { Result } from "../result";
@@ -9,6 +10,7 @@ import type { Result } from "../result";
 export interface TransactionalRepositories {
   sessions: ISessionRepository;
   sessionMessages: ISessionMessageRepository;
+  approvals: IApprovalRepository;
 }
 
 export interface IUnitOfWork {

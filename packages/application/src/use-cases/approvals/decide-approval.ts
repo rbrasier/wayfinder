@@ -10,9 +10,11 @@ import {
   type ISessionMessageRepository,
   type ISessionRepository,
   type ISessionStepOutputRepository,
+  type IUnitOfWork,
   type IUserRepository,
   type Result,
   type StepOutputField,
+  type TransactionalRepositories,
 } from "@rbrasier/domain";
 import type { IApprovalDecidedNotifier } from "../notifications/notify-on-approval-decided";
 
@@ -43,11 +45,19 @@ const field = (key: string, label: string, value: string): StepOutputField => ({
   value,
 });
 
+// A committed decision plus how the chat and notification side effects should
+// describe it. Produced inside the transaction, consumed after it commits.
+interface DecisionEffect {
+  output: DecideApprovalOutput;
+  routedBack: boolean;
+}
+
 // Records an approver's decision. Approve snapshots the step outputs and advances
 // the session; reject / changes-requested surface the comment and hold. The
 // outcome is projected onto the node's step-output metadata for reporting.
 export class DecideApproval {
   constructor(
+    private readonly unitOfWork: IUnitOfWork,
     private readonly approvals: IApprovalRepository,
     private readonly sessions: ISessionRepository,
     private readonly flowEdges: IFlowEdgeRepository,
@@ -80,9 +90,44 @@ export class DecideApproval {
         ? await this.snapshot(approval.sessionId)
         : approval.recordSnapshot;
 
-    // Conditional write: null means a concurrent decider already resolved this
-    // approval, so we must not run the decision side effects a second time.
-    const updated = await this.approvals.updateIfPending(approval.id, {
+    // The concurrency-gated approval update and the session advance/route commit
+    // together: a crash between them must never leave a decided approval sitting
+    // on a session that never moved. The best-effort projection, audit, chat
+    // message and notification run only after the commit succeeds, so a
+    // rolled-back decision leaves no trace of its side effects.
+    const effect = await this.unitOfWork.withTransaction((repositories) =>
+      this.decideWithin(repositories, approval, input, decidedAt, recordSnapshot),
+    );
+    if (effect.error) return effect;
+
+    const { output, routedBack } = effect.data;
+    const decided = output.approval;
+
+    await this.projectDecision(decided, decidedAt);
+    await this.auditLogger.log({
+      actorId: input.decidedByUserId,
+      action: "approval.decided",
+      resourceType: "approval",
+      resourceId: approval.id,
+      metadata: { decision: input.decision, comment: input.comment ?? null },
+    });
+    await this.recordDecisionMessage(decided, input.decision, routedBack);
+    this.notify(decided, input.decision, routedBack);
+
+    return ok(output);
+  }
+
+  // The atomic core: the pending-guard update and the session write share one
+  // transaction. A null from `updateIfPending` means a concurrent decider won
+  // the race, so the whole transaction fails and no side effects run.
+  private async decideWithin(
+    repositories: TransactionalRepositories,
+    approval: Approval,
+    input: DecideApprovalInput,
+    decidedAt: Date,
+    recordSnapshot: Record<string, unknown> | null,
+  ): Promise<Result<DecisionEffect>> {
+    const updated = await repositories.approvals.updateIfPending(approval.id, {
       status: input.decision,
       decidedByUserId: input.decidedByUserId,
       decidedAt,
@@ -95,23 +140,10 @@ export class DecideApproval {
     }
     const decided = updated.data;
 
-    await this.projectDecision(decided, decidedAt);
-
-    await this.auditLogger.log({
-      actorId: input.decidedByUserId,
-      action: "approval.decided",
-      resourceType: "approval",
-      resourceId: approval.id,
-      metadata: { decision: input.decision, comment: input.comment ?? null },
-    });
-
     if (input.decision === "approved") {
-      await this.recordDecisionMessage(decided, input.decision, false);
-      this.notify(decided, input.decision, false);
-      return this.advance(decided);
+      return this.advance(repositories, decided);
     }
-
-    return this.routeBackOrCancel(decided, input);
+    return this.routeBackOrCancel(repositories, decided, input);
   }
 
   // Approve/reject is gated to the assigned approver (or an admin). A user-id
@@ -177,9 +209,10 @@ export class DecideApproval {
   // only when the approver chose to, and a missing previous node forces a cancel
   // since there is nowhere to return to.
   private async routeBackOrCancel(
+    repositories: TransactionalRepositories,
     approval: Approval,
     input: DecideApprovalInput,
-  ): Promise<Result<DecideApprovalOutput>> {
+  ): Promise<Result<DecisionEffect>> {
     const sessionResult = await this.sessions.findById(approval.sessionId);
     if (sessionResult.error) return sessionResult;
     const session = sessionResult.data;
@@ -191,21 +224,23 @@ export class DecideApproval {
     const shouldRouteBack = input.decision === "changes_requested" || input.routeBack === true;
 
     if (shouldRouteBack && previousNodeId) {
-      const moved = await this.sessions.update(session.id, {
+      const moved = await repositories.sessions.update(session.id, {
         currentNodeId: previousNodeId,
         graphCheckpoint: { currentNodeId: previousNodeId, advancedFrom: null },
       });
       if (moved.error) return moved;
-      await this.recordDecisionMessage(approval, input.decision, true);
-      this.notify(approval, input.decision, true);
-      return ok({ approval, advanced: true, newNodeId: previousNodeId, sessionCompleted: false });
+      return ok({
+        output: { approval, advanced: true, newNodeId: previousNodeId, sessionCompleted: false },
+        routedBack: true,
+      });
     }
 
-    const cancelled = await this.sessions.update(session.id, { status: "cancelled" });
+    const cancelled = await repositories.sessions.update(session.id, { status: "cancelled" });
     if (cancelled.error) return cancelled;
-    await this.recordDecisionMessage(approval, input.decision, false);
-    this.notify(approval, input.decision, false);
-    return ok({ approval, advanced: false, newNodeId: null, sessionCompleted: true });
+    return ok({
+      output: { approval, advanced: false, newNodeId: null, sessionCompleted: true },
+      routedBack: false,
+    });
   }
 
   private previousNodeId(session: { graphCheckpoint: Record<string, unknown> | null }): string | null {
@@ -235,7 +270,10 @@ export class DecideApproval {
     });
   }
 
-  private async advance(approval: Approval): Promise<Result<DecideApprovalOutput>> {
+  private async advance(
+    repositories: TransactionalRepositories,
+    approval: Approval,
+  ): Promise<Result<DecisionEffect>> {
     const sessionResult = await this.sessions.findById(approval.sessionId);
     if (sessionResult.error) return sessionResult;
     const session = sessionResult.data;
@@ -248,23 +286,32 @@ export class DecideApproval {
     const outgoing = edgesResult.data.filter((edge) => edge.fromNodeId === approval.nodeId);
 
     if (outgoing.length === 0) {
-      const completed = await this.sessions.update(session.id, { status: "complete" });
+      const completed = await repositories.sessions.update(session.id, { status: "complete" });
       if (completed.error) return completed;
-      return ok({ approval, advanced: true, newNodeId: null, sessionCompleted: true });
+      return ok({
+        output: { approval, advanced: true, newNodeId: null, sessionCompleted: true },
+        routedBack: false,
+      });
     }
 
     // A fork after an approval cannot be auto-chosen; the session parks at the
     // node for the operator to pick a branch, mirroring the other advance paths.
     if (outgoing.length > 1) {
-      return ok({ approval, advanced: false, newNodeId: null, sessionCompleted: false });
+      return ok({
+        output: { approval, advanced: false, newNodeId: null, sessionCompleted: false },
+        routedBack: false,
+      });
     }
 
     const newNodeId = outgoing[0]!.toNodeId;
-    const moved = await this.sessions.update(session.id, {
+    const moved = await repositories.sessions.update(session.id, {
       currentNodeId: newNodeId,
       graphCheckpoint: { currentNodeId: newNodeId, advancedFrom: approval.nodeId },
     });
     if (moved.error) return moved;
-    return ok({ approval, advanced: true, newNodeId, sessionCompleted: false });
+    return ok({
+      output: { approval, advanced: true, newNodeId, sessionCompleted: false },
+      routedBack: false,
+    });
   }
 }

@@ -5,6 +5,7 @@ import type {
   FlowEdge,
   FlowNode,
   FlowVersion,
+  IApprovalRepository,
   IFlowEdgeRepository,
   IFlowNodeRepository,
   IFlowRepository,
@@ -309,6 +310,17 @@ class FakeUnitOfWork implements IUnitOfWork {
   }
 }
 
+// RunTurn never touches the approvals repo inside its transaction, so a stub
+// that throws if reached keeps the transactional-repositories contract honest
+// without a full in-memory implementation.
+const unusedApprovals = new Proxy({} as IApprovalRepository, {
+  get() {
+    return async () => {
+      throw new Error("approvals repository is not used in RunTurn tests");
+    };
+  },
+});
+
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
 const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
@@ -567,7 +579,7 @@ describe("RunTurn", () => {
     sessions = new FakeSessionRepository();
     sessionMessages = new FakeSessionMessageRepository();
     edges = new FakeFlowEdgeRepository();
-    unitOfWork = new FakeUnitOfWork({ sessions, sessionMessages });
+    unitOfWork = new FakeUnitOfWork({ sessions, sessionMessages, approvals: unusedApprovals });
     sessions.sessions.set("session-1", session);
     useCase = new RunTurn(sessionMessages, edges, unitOfWork);
   });
