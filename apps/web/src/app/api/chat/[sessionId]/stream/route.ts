@@ -21,7 +21,10 @@ import {
   buildGatheredContext,
   buildPromptSessionUploads,
   generateTitle,
+  persistCrossCheckPassNote,
+  persistHeldReply,
   streamGapFollowup,
+  writeCrossCheckPassNote,
 } from "./turn-helpers";
 
 // The most recent turns the model is given as context, mirrored from the
@@ -414,12 +417,14 @@ export async function POST(
       }
 
       // Gate failed: hold the step open and ask the user about the gaps. The
-      // cheap model's optimistic "ready to submit" reply is deliberately NOT
-      // persisted — the gate has overruled it, so showing it would contradict
-      // the follow-up. Only the corrective follow-up is streamed and stored, and
-      // the outstanding items are attached to it (which also records this hold so
-      // the gate can bound itself on the next turn).
+      // reply the gate overruled is persisted first — the user has already
+      // watched it stream, and dropping it made the chat appear to rewrite a
+      // message once the persisted view took over. The corrective follow-up is
+      // then streamed and stored as its own message, and the outstanding items
+      // are attached to it (which also records this hold so the gate can bound
+      // itself on the next turn).
       if (evaluation && !evaluation.passed) {
+        await persistHeldReply(container, session, aiPayload);
         const followup = await streamGapFollowup({
           container,
           writer: dataStream,
@@ -444,6 +449,13 @@ export async function POST(
         return;
       }
 
+      // Explicit pass feedback: streamed immediately (before the slow branch
+      // choice and document generation) so the user sees the cross-check
+      // outcome instead of an apparent stall.
+      if (evaluation?.passed) {
+        writeCrossCheckPassNote(dataStream);
+      }
+
       const branchChoice = await computeBranchChoice();
 
       const runResult = await container.useCases.runTurn.persistAssistantTurn({
@@ -464,6 +476,12 @@ export async function POST(
       if (runResult.error) {
         const cause = runResult.error.cause;
         throw cause instanceof Error ? cause : new Error(runResult.error.message);
+      }
+
+      // Persisted after the assistant turn so the stored order matches what
+      // streamed: reply first, then the pass note.
+      if (evaluation?.passed) {
+        await persistCrossCheckPassNote(container, session.id, session.currentNodeId);
       }
 
       if (runResult.data.advanced) {

@@ -7,10 +7,14 @@ import {
   buildAttachmentAnnotation,
   buildGatheredContext,
   buildPromptSessionUploads,
+  CROSS_CHECK_PASS_NOTE,
   generateDocument,
   generateInitialMessage,
   OUTSTANDING_CONTEXT_KEY,
+  persistCrossCheckPassNote,
+  persistHeldReply,
   streamGapFollowup,
+  writeCrossCheckPassNote,
 } from "./turn-helpers";
 import type { Session } from "@rbrasier/domain";
 
@@ -759,6 +763,10 @@ describe("streamGapFollowup", () => {
       userId: "user-1",
     });
 
+    // The follow-up must open a NEW bubble: a finish_step boundary precedes its
+    // text so the client never appends it onto the reply it corrects.
+    expect(written[0]).toMatch(/^e:/);
+    expect(written[0]).toContain('"isContinued":false');
     expect(written.join("")).toContain("Could you share the end date?");
     expect(create).toHaveBeenCalledTimes(1);
     const createArg = create.mock.calls[0]![0];
@@ -872,6 +880,92 @@ describe("streamGapFollowup", () => {
     const systemMessage = capturedPrompt.find((message) => message.role === "system");
     expect(systemMessage?.content).toContain("still need to be confirmed");
     expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("persistHeldReply", () => {
+  const heldPayload: AiTurnPayload = {
+    response: "All set — ready to submit.",
+    rationale: "r",
+    stepCompleteConfidence: 94.4,
+    contextGathered: [],
+  };
+
+  it("persists the overruled reply on the current node so the streamed bubble is never rewritten", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { id: "held-1" }, error: null });
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistHeldReply>[0];
+
+    await persistHeldReply(
+      container,
+      { id: "sess-1", currentNodeId: "node-1" } as unknown as Session,
+      heldPayload,
+    );
+
+    expect(create).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      role: "assistant",
+      content: "All set — ready to submit.",
+      confidence: 94,
+      stepNodeId: "node-1",
+      aiPayload: heldPayload,
+    });
+  });
+
+  it("swallows persistence failures so the corrective follow-up still streams", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("db down"));
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistHeldReply>[0];
+
+    await expect(
+      persistHeldReply(
+        container,
+        { id: "sess-1", currentNodeId: "node-1" } as unknown as Session,
+        heldPayload,
+      ),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("cross-check pass note", () => {
+  it("streams the note behind a message boundary so it renders as a new bubble", () => {
+    const written: string[] = [];
+
+    writeCrossCheckPassNote({ write: (part: string) => written.push(part) });
+
+    // finish_step ("e:") closes the current bubble; the note text ("0:") then
+    // opens a fresh one on the client.
+    expect(written[0]).toMatch(/^e:/);
+    expect(written[0]).toContain('"isContinued":false');
+    expect(written[1]).toMatch(/^0:/);
+    expect(written[1]).toContain("alignment");
+  });
+
+  it("persists the note as a system message on the completed node", async () => {
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistCrossCheckPassNote>[0];
+
+    await persistCrossCheckPassNote(container, "sess-1", "node-1");
+
+    expect(create).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      role: "system",
+      content: CROSS_CHECK_PASS_NOTE,
+      stepNodeId: "node-1",
+    });
+  });
+
+  it("swallows persistence failures so the advance still proceeds", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("db down"));
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistCrossCheckPassNote>[0];
+
+    await expect(persistCrossCheckPassNote(container, "sess-1", "node-1")).resolves.toBeUndefined();
   });
 });
 

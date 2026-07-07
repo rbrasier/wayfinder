@@ -1,4 +1,4 @@
-import { generateObject, generateText, type LanguageModel } from "ai";
+import { formatDataStreamPart, generateObject, generateText, type LanguageModel } from "ai";
 import { recordTokenUsage, resolveModel, type ProviderCredentials } from "@rbrasier/adapters";
 import {
   ok,
@@ -96,6 +96,63 @@ export async function appendShortcomingsToContext(
   await container.repos.sessionMessages.updateAiPayload(messageId, mergedPayload).catch(() => undefined);
 }
 
+// A writer that accepts any pre-formatted data-stream part (StreamTurnWriter is
+// nominally text-only; the boundary and note parts share the same wire format).
+interface DataStreamPartWriter {
+  write: (part: ReturnType<typeof formatDataStreamPart<"text">>) => void;
+}
+
+// Closes the current streamed bubble so the next text part opens a new one on
+// the client. Without this every text written into one response concatenates
+// into a single bubble, which the persisted view then appears to rewrite.
+const writeMessageBoundary = (writer: DataStreamPartWriter): void => {
+  writer.write(formatDataStreamPart("finish_step", { finishReason: "stop", isContinued: false }));
+};
+
+// The pre-generation gate overruled this reply, but the user has already
+// watched it stream. Persist it as a real message so the corrective follow-up
+// appends below it instead of appearing to rewrite the conversation.
+// Best-effort: a failure here must not block the follow-up.
+export async function persistHeldReply(
+  container: Container,
+  session: Session,
+  aiPayload: AiTurnPayload,
+): Promise<void> {
+  await container.repos.sessionMessages
+    .create({
+      sessionId: session.id,
+      role: "assistant",
+      content: aiPayload.response,
+      confidence: Math.round(aiPayload.stepCompleteConfidence),
+      stepNodeId: session.currentNodeId,
+      aiPayload,
+    })
+    .catch(() => undefined);
+}
+
+export const CROSS_CHECK_PASS_NOTE =
+  "Cross-check complete — everything is in alignment with the reference documents.";
+
+// Streamed the moment the cross-check passes, so the user gets explicit
+// feedback before the (slow) branch choice and document generation run.
+export function writeCrossCheckPassNote(writer: DataStreamPartWriter): void {
+  writeMessageBoundary(writer);
+  writer.write(formatDataStreamPart("text", CROSS_CHECK_PASS_NOTE));
+}
+
+// Persisted separately from the streamed note (and after the assistant turn)
+// so the stored order matches what streamed: reply first, then the note.
+// Best-effort: a failure here must not block the advance.
+export async function persistCrossCheckPassNote(
+  container: Container,
+  sessionId: string,
+  stepNodeId: string | null,
+): Promise<void> {
+  await container.repos.sessionMessages
+    .create({ sessionId, role: "system", content: CROSS_CHECK_PASS_NOTE, stepNodeId })
+    .catch(() => undefined);
+}
+
 export interface StreamGapFollowupInput {
   container: Container;
   writer: StreamTurnWriter;
@@ -129,6 +186,10 @@ export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<
     "[Cross-check correction] Your previous reply implied this step was complete, but a higher-quality review found outstanding information. Do not claim the step is complete or advance it. In your next reply, briefly tell the user what the review found is still missing or unclear, then ask them for it — in a single, friendly message. The still-required items are:",
     gaps,
   ].join("\n");
+
+  // The follow-up corrects the reply above it, so it must arrive as a NEW
+  // bubble — appended, never merged into the message it corrects.
+  writeMessageBoundary(input.writer);
 
   const streamResult = await streamTurn({
     model: input.model,
