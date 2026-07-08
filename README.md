@@ -9,6 +9,12 @@ follow it via a chat interface; the AI handles all prompting, branching, and doc
 
 ---
 
+
+https://github.com/user-attachments/assets/1386b56f-7b85-4c0c-90d5-df930b9b08d3
+
+
+---
+
 ## Features
 
 Full detail on every feature — including approvals, knowledge base curation, cost
