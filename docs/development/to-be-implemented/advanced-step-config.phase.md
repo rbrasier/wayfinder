@@ -111,7 +111,7 @@ the test file before each implementation file (CLAUDE.md rule).
 
 9. **Version + validate.** Bump `VERSION` and root `package.json#version` to
    `1.19.0`. Run `./validate.sh`; fix all failures. Move this phase doc to
-   `docs/development/implemented/v1.19/` with an implementation summary (per the
+   `docs/development/implemented/alpha-1/v1.19/` with an implementation summary (per the
    `to-be-implemented/` lifecycle).
 
 ## 7. Acceptance criteria

@@ -16,7 +16,7 @@
     everything requiring a new service (Redis cache promotion, cluster-wide
     LLM governor budget, distributed rate limiting) lives **there**, not here.
     This phase is deliberately code-only against the current stack.
-  - `implemented/v1.58.0/scaling-current-stack.phase.md` — the scaling-walls
+  - `implemented/alpha-1/v1.58.0/scaling-current-stack.phase.md` — the scaling-walls
     program this phase extends; several items below close gaps that program
     left open (bounded prompt context but unbounded DB reads).
   - ADR-001 (hexagonal architecture), ADR-026 (usage governance — decorator

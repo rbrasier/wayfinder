@@ -7,10 +7,14 @@ import {
   buildAttachmentAnnotation,
   buildGatheredContext,
   buildPromptSessionUploads,
+  CROSS_CHECK_PASS_NOTE,
   generateDocument,
   generateInitialMessage,
   OUTSTANDING_CONTEXT_KEY,
+  persistCrossCheckPassNote,
+  persistHeldReply,
   streamGapFollowup,
+  writeCrossCheckPassNote,
 } from "./turn-helpers";
 import type { Session } from "@rbrasier/domain";
 
@@ -325,45 +329,6 @@ describe("generateDocument wrapper", () => {
   });
 });
 
-describe("sequence: document generation is fire-and-forget", () => {
-  it("does not block initial message generation on document generation", async () => {
-    const sequence: string[] = [];
-    let resolveDocGen: (() => void) | null = null;
-    const docGenPromise = new Promise<void>((resolve) => {
-      resolveDocGen = resolve;
-    });
-
-    const generateDocFn = vi.fn().mockImplementation(async () => {
-      sequence.push("doc-start");
-      await docGenPromise;
-      sequence.push("doc-end");
-    });
-
-    const generateInitialFn = vi.fn().mockImplementation(async () => {
-      sequence.push("initial-start");
-      sequence.push("initial-end");
-    });
-
-    // Fire-and-forget: void the doc gen promise, do NOT await it
-    const runAdvance = async () => {
-      void generateDocFn();
-      await generateInitialFn();
-    };
-
-    await runAdvance();
-
-    // Initial message finished without waiting for doc gen
-    expect(sequence).toContain("initial-start");
-    expect(sequence).toContain("initial-end");
-    expect(sequence).toContain("doc-start");
-    expect(sequence).not.toContain("doc-end");
-
-    // Clean up the dangling promise
-    resolveDocGen!();
-    await docGenPromise;
-  });
-});
-
 describe("generateDocument return value", () => {
   it("returns false when the use case returns Result.error", async () => {
     const execute = vi.fn().mockResolvedValue({
@@ -603,6 +568,95 @@ describe("applyAdvanceSideEffects", () => {
     expect(retrieveExecute).toHaveBeenCalled();
     expect(create).toHaveBeenCalled();
   });
+
+  it("awaits document generation before opening the next step", async () => {
+    // Regression guard (bug 1): the next-step opener must not run until the
+    // document has finished generating. Generation is held open on a deferred
+    // promise; the opener's retrieval must not fire until it resolves.
+    let resolveDocGen: ((value: { data: { document: object }; error: null }) => void) | null = null;
+    const generateDocumentExecute = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDocGen = resolve;
+        }),
+    );
+    const retrieveExecute = vi.fn().mockResolvedValue({ data: [], error: null });
+    const listBySession = vi.fn().mockResolvedValue({
+      data: [makeAssistantMessage({ id: "milestone", stepNodeId: "node-1" })],
+      error: null,
+    });
+    const conversationalNode = makeNode({
+      id: "node-2",
+      config: { aiInstruction: "Help", doneWhen: "done", outputType: "conversation_only" } as unknown as FlowNode["config"],
+    });
+
+    const container = {
+      repos: {
+        sessionMessages: {
+          listBySession,
+          updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }),
+          create: vi.fn().mockResolvedValue({ data: {}, error: null }),
+        },
+        sessionUploads: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
+        usageRepo: {},
+      },
+      runtimeConfig: {
+        resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined),
+        getSessionUploadConfig: vi.fn().mockResolvedValue({ maxFileSizeBytes: 1, totalBudgetChars: 1000 }),
+      },
+      useCases: {
+        generateDocument: { execute: generateDocumentExecute },
+        retrieveDocumentChunks: { execute: retrieveExecute },
+        isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: false, error: null }) },
+      },
+      services: {
+        errorLogger: { log: vi.fn().mockResolvedValue({ error: null }) },
+        sessionAgent: { buildSystemPrompt: vi.fn().mockReturnValue({ data: "prompt", error: null }) },
+      },
+    };
+
+    const pending = applyAdvanceSideEffects(
+      baseInput({ container, nodes: [completedDocNode, conversationalNode], newNodeId: "node-2" }),
+    );
+
+    // Let the microtask queue drain up to the awaited generation (several awaits
+    // precede it: the message list, the pending-status write, the budget resolve).
+    for (let tick = 0; tick < 20; tick += 1) await Promise.resolve();
+    expect(generateDocumentExecute).toHaveBeenCalledTimes(1);
+    expect(retrieveExecute).not.toHaveBeenCalled();
+
+    resolveDocGen!({ data: { document: {} }, error: null });
+    await pending;
+
+    // Only once generation resolves does the opener run.
+    expect(retrieveExecute).toHaveBeenCalled();
+  });
+
+  it("signals document-generation start and end around the awaited generation", async () => {
+    const signals: boolean[] = [];
+    const generateDocumentExecute = vi.fn().mockResolvedValue({ data: { document: {} }, error: null });
+    const listBySession = vi.fn().mockResolvedValue({
+      data: [makeAssistantMessage({ id: "milestone", stepNodeId: "node-1" })],
+      error: null,
+    });
+
+    const container = {
+      repos: {
+        sessionMessages: { listBySession, updateDocumentStatus: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+        usageRepo: {},
+      },
+      runtimeConfig: { resolveDocumentGenerationBudget: vi.fn().mockResolvedValue(undefined) },
+      useCases: { generateDocument: { execute: generateDocumentExecute } },
+      services: { errorLogger: { log: vi.fn().mockResolvedValue({ error: null }) } },
+    };
+
+    await applyAdvanceSideEffects({
+      ...baseInput({ container, nodes: [completedDocNode], newNodeId: null }),
+      onDocumentGenerationChange: (active: boolean) => signals.push(active),
+    });
+
+    expect(signals).toEqual([true, false]);
+  });
 });
 
 describe("appendShortcomingsToContext", () => {
@@ -709,6 +763,10 @@ describe("streamGapFollowup", () => {
       userId: "user-1",
     });
 
+    // The follow-up must open a NEW bubble: a finish_step boundary precedes its
+    // text so the client never appends it onto the reply it corrects.
+    expect(written[0]).toMatch(/^e:/);
+    expect(written[0]).toContain('"isContinued":false');
     expect(written.join("")).toContain("Could you share the end date?");
     expect(create).toHaveBeenCalledTimes(1);
     const createArg = create.mock.calls[0]![0];
@@ -822,6 +880,92 @@ describe("streamGapFollowup", () => {
     const systemMessage = capturedPrompt.find((message) => message.role === "system");
     expect(systemMessage?.content).toContain("still need to be confirmed");
     expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("persistHeldReply", () => {
+  const heldPayload: AiTurnPayload = {
+    response: "All set — ready to submit.",
+    rationale: "r",
+    stepCompleteConfidence: 94.4,
+    contextGathered: [],
+  };
+
+  it("persists the overruled reply on the current node so the streamed bubble is never rewritten", async () => {
+    const create = vi.fn().mockResolvedValue({ data: { id: "held-1" }, error: null });
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistHeldReply>[0];
+
+    await persistHeldReply(
+      container,
+      { id: "sess-1", currentNodeId: "node-1" } as unknown as Session,
+      heldPayload,
+    );
+
+    expect(create).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      role: "assistant",
+      content: "All set — ready to submit.",
+      confidence: 94,
+      stepNodeId: "node-1",
+      aiPayload: heldPayload,
+    });
+  });
+
+  it("swallows persistence failures so the corrective follow-up still streams", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("db down"));
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistHeldReply>[0];
+
+    await expect(
+      persistHeldReply(
+        container,
+        { id: "sess-1", currentNodeId: "node-1" } as unknown as Session,
+        heldPayload,
+      ),
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("cross-check pass note", () => {
+  it("streams the note behind a message boundary so it renders as a new bubble", () => {
+    const written: string[] = [];
+
+    writeCrossCheckPassNote({ write: (part: string) => written.push(part) });
+
+    // finish_step ("e:") closes the current bubble; the note text ("0:") then
+    // opens a fresh one on the client.
+    expect(written[0]).toMatch(/^e:/);
+    expect(written[0]).toContain('"isContinued":false');
+    expect(written[1]).toMatch(/^0:/);
+    expect(written[1]).toContain("alignment");
+  });
+
+  it("persists the note as a system message on the completed node", async () => {
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistCrossCheckPassNote>[0];
+
+    await persistCrossCheckPassNote(container, "sess-1", "node-1");
+
+    expect(create).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      role: "system",
+      content: CROSS_CHECK_PASS_NOTE,
+      stepNodeId: "node-1",
+    });
+  });
+
+  it("swallows persistence failures so the advance still proceeds", async () => {
+    const create = vi.fn().mockRejectedValue(new Error("db down"));
+    const container = {
+      repos: { sessionMessages: { create } },
+    } as unknown as Parameters<typeof persistCrossCheckPassNote>[0];
+
+    await expect(persistCrossCheckPassNote(container, "sess-1", "node-1")).resolves.toBeUndefined();
   });
 });
 

@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 interface ConfirmStepCardProps {
   stepName: string;
   onProceed: () => void;
-  isPending?: boolean;
 }
 
 // Mirrors DocumentCard's visual language (bordered white card, same shadow) at a
 // smaller size. Pinned to the chat footer while the step awaits operator
 // confirmation; the composer stays enabled so the operator can keep chatting.
-export function ConfirmStepCard({ stepName, onProceed, isPending = false }: ConfirmStepCardProps) {
+// The card unmounts the instant Proceed is clicked (the caller swaps it for a
+// generating badge), so no in-flight disabled state is needed here.
+export function ConfirmStepCard({ stepName, onProceed }: ConfirmStepCardProps) {
   return (
     <div className="flex shrink-0 justify-center border-t border-[#dedad2] bg-[#f7f6f3] px-4 py-3">
       <div className="flex w-full max-w-sm items-center gap-3 rounded-[10px] border border-[#dedad2] bg-white p-[10px_12px] shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]">
@@ -25,8 +26,8 @@ export function ConfirmStepCard({ stepName, onProceed, isPending = false }: Conf
             {stepName} looks complete. Proceed when you&apos;re ready.
           </p>
         </div>
-        <Button size="sm" onClick={onProceed} disabled={isPending} className="shrink-0">
-          {isPending ? "Proceeding…" : "Proceed"}
+        <Button size="sm" onClick={onProceed} className="shrink-0">
+          Proceed
         </Button>
       </div>
     </div>

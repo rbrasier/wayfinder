@@ -619,6 +619,41 @@
       font-size: 11px; font-weight: 600;
       padding: 4px 10px;
     }
+
+    /* Milestone pill variants — mirrors apps/web/src/components/chat/milestone-pill.tsx.
+       Rendered centred in the message feed between assistant bubbles. */
+    .milestone-pill-wrap { display: flex; justify-content: center; margin: 12px 0; }
+    .milestone-pill-v {
+      display: inline-flex; align-items: center; gap: 6px;
+      border-radius: 99px;
+      font-size: 11px; font-weight: 600;
+      padding: 4px 12px;
+      border: 1px solid transparent;
+    }
+    .milestone-pill-v.complete  { background: #eaf6f0; color: #247c53; border-color: #c0e8d5; }
+    .milestone-pill-v.no-template { background: #efede8; color: #6d6a65; border-color: #dedad2; }
+    .milestone-pill-v.failed    { background: #fdf3e3; color: #9b6215; border-color: #e8b87c; }
+    .milestone-pill-v.generating,
+    .milestone-pill-v.cross-checking { background: #eef1fc; color: #3a5fd9; border-color: #c5d0f7; }
+    .milestone-pill-v.approver  { background: #fef3e2; color: #92400e; border-color: #e8d4b0; }
+    .milestone-pill-v.flow-complete {
+      background: #eaf6f0; color: #247c53; border-color: #c0e8d5;
+      font-size: 12px; padding: 6px 16px; gap: 8px;
+    }
+    .milestone-pill-v .pill-check { width: 12px; height: 12px; flex-shrink: 0; }
+    .milestone-pill-v.flow-complete .pill-check { width: 16px; height: 16px; }
+    .milestone-pill-v .pill-spinner {
+      width: 12px; height: 12px; flex-shrink: 0;
+      animation: pill-spin 1s linear infinite;
+    }
+    .milestone-pill-v .pill-retry {
+      margin-left: 4px;
+      text-decoration: underline;
+      background: none; border: none; padding: 0; cursor: pointer;
+      font: inherit; color: inherit;
+    }
+    .milestone-pill-v .pill-retry:hover { text-decoration: none; }
+    @keyframes pill-spin { to { transform: rotate(360deg); } }
     .chat-composer {
       background: var(--surface);
       border-top: 1px solid var(--border);
@@ -899,7 +934,7 @@
 <aside class="shell-sidebar" id="shell-sidebar">
   <header>
     <div class="wordmark">
-      <div class="logo">F</div>
+      <div class="logo">W</div>
       <h1>Wayfinder</h1>
     </div>
     <div class="sub">Component Storybook</div>
@@ -1646,6 +1681,131 @@
               <svg viewBox="0 0 24 24"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
             </button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <hr class="story-hr">
+    <p class="subsection-title">Milestone Pills — status states</p>
+    <p class="section-desc">Centred status pills rendered in the message feed by <code>MilestonePill</code>, <code>CrossCheckingBadge</code>, <code>GeneratingDocumentBadge</code>, and <code>FlowCompletePill</code>. They mark a step transition, a running background task, or an approval hand-off.</p>
+
+    <div class="story">
+      <div class="story-label">Step complete — default (green, with confidence)</div>
+      <div class="story-canvas white">
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v complete">
+            <svg class="pill-check" viewBox="0 0 12 12"><circle cx="6" cy="6" r="6" fill="currentColor"/><path d="M3.5 6l2 2 3-3" stroke="white" stroke-width="1.2" fill="none"/></svg>
+            Step complete — Market Research (94%)
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Step complete — no template configured (sand)</div>
+      <div class="story-canvas white">
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v no-template">
+            <span>📄</span>
+            Step complete — Market Research · No template configured
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Generating document — running (blue, spinner)</div>
+      <div class="story-canvas white">
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v generating">
+            <svg class="pill-spinner" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
+              <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            Generating document — Approach to Market
+          </span>
+        </div>
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v generating">
+            <svg class="pill-spinner" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
+              <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            Generating document…
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Document generation failed (amber, retry)</div>
+      <div class="story-canvas white">
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v failed">
+            <span>⚠️</span>
+            Document generation failed — Approach to Market
+            <button type="button" class="pill-retry">Retry</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Cross-checking — pre-generation gate (blue, spinner, cycles)</div>
+      <div class="story-canvas white">
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v cross-checking">
+            <svg class="pill-spinner" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
+              <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            Cross-checking Procurement Policy 2024…
+          </span>
+        </div>
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v cross-checking">
+            <svg class="pill-spinner" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"/>
+              <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            Cross-checking ICTPA Panel Terms…
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Select approver — awaiting approval (amber)</div>
+      <div class="story-canvas white">
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v approver">
+            <svg class="pill-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M4 2h6l3 3v9H4z"/>
+              <path d="M6.5 8l1.4 1.4L11 6.4"/>
+            </svg>
+            Awaiting approval — sent to Priya Nair
+          </span>
+        </div>
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v approver">
+            <svg class="pill-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M4 2h6l3 3v9H4z"/>
+              <path d="M6.5 8l1.4 1.4L11 6.4"/>
+            </svg>
+            Select approver — Approach to Market
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="story">
+      <div class="story-label">Flow complete — terminal (green, larger)</div>
+      <div class="story-canvas white">
+        <div class="milestone-pill-wrap">
+          <span class="milestone-pill-v flow-complete">
+            <svg class="pill-check" viewBox="0 0 16 16"><circle cx="8" cy="8" r="8" fill="currentColor"/><path d="M4.5 8l2.5 2.5 4.5-4.5" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Flow complete
+          </span>
         </div>
       </div>
     </div>

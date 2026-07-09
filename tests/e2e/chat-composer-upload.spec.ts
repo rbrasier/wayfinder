@@ -3,7 +3,7 @@
  *
  * Covers v1.20.0 — Session file upload (end-user mid-flow context).
  *
- * Visual spec (docs/development/implemented/v1.20.0/session-file-upload.phase.md
+ * Visual spec (docs/development/implemented/alpha-1/v1.20.0/session-file-upload.phase.md
  * + chat-composer.tsx):
  *   The chat composer carries a paperclip button labelled "Attach a file for
  *   context" backed by a hidden <input type="file"> that accepts

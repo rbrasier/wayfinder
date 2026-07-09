@@ -37,7 +37,7 @@ Ask all of these via `AskUserQuestion` before proceeding:
    - Cover the primary user-facing behaviour introduced or modified by this enhancement
    - The test must pass against the updated code before moving on
 5. On completion:
-   - Move phase doc to `implemented/v[version]/`
+   - Move phase doc to `implemented/alpha-<major>/v[version]/` (current release line — `alpha-2` for `2.x.x`; see `docs/guides/versioning.md`)
    - Write implementation summary (include which e2e test covers the change)
    - Apply the version bump
    - Run `./validate.sh`

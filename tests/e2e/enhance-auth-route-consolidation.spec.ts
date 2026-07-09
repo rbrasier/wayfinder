@@ -1,7 +1,7 @@
 /**
  * enhance-auth-route-consolidation.spec.ts
  *
- * Covers docs/development/implemented/v1.23.3/auth-route-consolidation.md:
+ * Covers docs/development/implemented/alpha-1/v1.23.3/auth-route-consolidation.md:
  * the login/register pages were renamed from /admin/login + /admin/register to
  * top-level /login + /register, and the old admin paths were removed.
  *

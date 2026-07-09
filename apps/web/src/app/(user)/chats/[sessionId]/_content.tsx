@@ -13,6 +13,7 @@ import { ChatComposer } from "@/components/chat/chat-composer";
 import { ApprovalGate } from "@/components/chat/approval-gate";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { ConfirmStepCard } from "@/components/chat/confirm-step-card";
+import { hasPendingDocumentGeneration } from "@/components/chat/document-poll-state";
 import { MessageFeed } from "@/components/chat/message-feed";
 import { StepProgressRail } from "@/components/chat/step-progress-rail";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
@@ -20,6 +21,19 @@ import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
 
 const NULL_BRANCH_THRESHOLD = 3;
+
+// The shape useChat expects for messages sourced from the persisted history —
+// used both at initialisation and to re-sync the streamed list between turns.
+const toUiMessages = (
+  messages: { id: string; role: string; content: string; confidence: number | null }[],
+) =>
+  messages.map((m) => ({
+    id: m.id,
+    role: m.role as "user" | "assistant" | "system",
+    content: m.content,
+    annotations:
+      m.confidence !== null ? [{ type: "confidence", score: m.confidence }] : undefined,
+  }));
 
 const statusVariant = (status: string) => {
   if (status === "active") return "blue";
@@ -96,9 +110,16 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     },
   });
 
+  // Optimistic Proceed: the confirm mutation generates the completed step's
+  // document and opens the next step before it resolves, so the card must hide
+  // (and the generating badge show) the moment the operator clicks — not when
+  // everything finishes. Cleared only after the refetched session reflects the
+  // advance, so the card cannot flash back in between.
+  const [isConfirmingStep, setIsConfirmingStep] = useState(false);
   const confirmStepMutation = trpc.session.confirmStep.useMutation({
-    onSuccess: (result) => {
-      void utils.session.get.invalidate({ sessionId });
+    onSuccess: async (result) => {
+      await utils.session.get.invalidate({ sessionId });
+      setIsConfirmingStep(false);
       // A forked step the AI could not route on its own falls back to the
       // existing manual branch-override picker rather than failing silently.
       if (result.needsManualBranch) {
@@ -108,9 +129,15 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       if (result.advanced) toast.success("Step confirmed");
     },
     onError: (error) => {
+      setIsConfirmingStep(false);
       toast.error(error.message);
     },
   });
+
+  const handleConfirmStep = () => {
+    setIsConfirmingStep(true);
+    confirmStepMutation.mutate({ sessionId });
+  };
 
   const dbMessages = sessionData?.messages ?? [];
   const rawNodes: FlowNode[] = sessionData?.nodes ?? [];
@@ -124,6 +151,10 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   const currentNode = rawNodes.find((node) => node.id === currentNodeId) ?? null;
   const isApprovalGate = currentNode?.type === "approval";
+  const currentNodeConfig = currentNode?.config as Record<string, unknown> | undefined;
+  const isDocumentTemplateStep =
+    currentNodeConfig?.["outputType"] === "generate_document" &&
+    Boolean(currentNodeConfig?.["documentTemplatePath"]);
   const awaitingConfirmationNodeId = sessionData?.session.awaitingConfirmationNodeId ?? null;
   const isAwaitingConfirmation =
     awaitingConfirmationNodeId !== null && awaitingConfirmationNodeId === currentNodeId;
@@ -180,16 +211,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       return { nodeId: e.toNodeId, nodeName: node?.name ?? e.toNodeId };
     });
 
-  const { messages, input, handleSubmit, isLoading, setInput, error, reload, append } = useChat({
+  const { messages, input, handleSubmit, isLoading, setInput, error, reload, append, setMessages } = useChat({
     api: `/api/chat/${sessionId}/stream`,
-    initialMessages: dbMessages.map((m) => ({
-      id: m.id,
-      role: m.role as "user" | "assistant" | "system",
-      content: m.content,
-      annotations: m.confidence !== null
-        ? [{ type: "confidence", score: m.confidence }]
-        : undefined,
-    })),
+    initialMessages: toUiMessages(dbMessages),
     experimental_prepareRequestBody: ({ messages: msgs }) => ({
       messages: msgs.slice(-20),
     }),
@@ -204,6 +228,23 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     void utils.session.get.invalidate({ sessionId });
   }, [sessionId, utils.session.get]);
+
+  // Between turns, re-sync the streamed list from the persisted history. The
+  // stream only ever carries the reply itself — gap follow-ups, cross-check
+  // notes and next-step openers are persisted server-side — so without this the
+  // next turn's streaming view renders an older history and messages appear to
+  // vanish mid-turn. Skipped while a turn is in flight, and while the refetch
+  // still lags the streamed list, so a finished turn is never clobbered by
+  // stale data.
+  useEffect(() => {
+    if (isLoading) return;
+    if (dbMessages.length < messages.length) return;
+    const inSync =
+      dbMessages.length === messages.length &&
+      dbMessages.every((m, index) => m.id === messages[index]?.id);
+    if (inSync) return;
+    setMessages(toUiMessages(dbMessages));
+  }, [isLoading, dbMessages, messages, setMessages]);
 
   // A freshly created session has no messages yet. Auto-send a generic kickoff
   // message as the user so the agent responds immediately, instead of leaving
@@ -230,22 +271,13 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     void append({ role: "user", content: kickoffMessage });
   }, [sessionData, isReadOnly, messages.length, isLoading, currentNode, append]);
 
-  // Poll while a document is being generated so the spinner resolves automatically.
-  // "pending" means generation is in flight; null treated as pending so legacy rows
-  // (created before document_status existed) still trigger polling until they
-  // resolve one way or the other.
-  const hasGeneratingDoc = useMemo(() => {
-    return dbMessages.some((msg) => {
-      if (msg.role !== "assistant" || (msg.confidence ?? 0) < 90) return false;
-      if (msg.stepNodeId === currentNodeId) return false;
-      const node = rawNodes.find((n) => n.id === msg.stepNodeId);
-      const config = node?.config as Record<string, unknown> | undefined;
-      if (config?.["outputType"] !== "generate_document") return false;
-      if (!config?.["documentTemplatePath"]) return false;
-      if (msg.documentStatus === "complete" || msg.documentStatus === "failed") return false;
-      return !msg.document;
-    });
-  }, [dbMessages, currentNodeId, rawNodes]);
+  // Poll while a document is being generated so the spinner resolves
+  // automatically. Only the last assistant message per step counts — see
+  // hasPendingDocumentGeneration.
+  const hasGeneratingDoc = useMemo(
+    () => hasPendingDocumentGeneration(dbMessages, currentNodeId, rawNodes),
+    [dbMessages, currentNodeId, rawNodes],
+  );
 
   const sessionStatus = sessionData?.session.status ?? null;
   const isSessionActive = sessionStatus === "active";
@@ -440,6 +472,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           (meQuery.data?.isAdmin ?? false) ||
           (meQuery.data?.permissions ?? []).includes("knowledge:submit_feedback")
         }
+        pendingDocumentGeneration={isConfirmingStep && isDocumentTemplateStep}
       />
 
       {showBranchOverride && (
@@ -460,12 +493,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         </div>
       )}
 
-      {isAwaitingConfirmation && currentNode && session.status === "active" && !isReadOnly && (
-        <ConfirmStepCard
-          stepName={currentNode.name}
-          onProceed={() => confirmStepMutation.mutate({ sessionId })}
-          isPending={confirmStepMutation.isPending}
-        />
+      {isAwaitingConfirmation && !isConfirmingStep && currentNode && session.status === "active" && !isReadOnly && (
+        <ConfirmStepCard stepName={currentNode.name} onProceed={handleConfirmStep} />
       )}
 
       {isApprovalGate && currentNode && session.status === "active" && !isReadOnly && (

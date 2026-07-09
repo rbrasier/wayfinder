@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 // instead of feeling sticky. Before the fix there was no loading.tsx boundary and
 // no navigation indicator, so the previous page stayed fully on screen with zero
 // feedback while the destination resolved its session + tRPC prefetch.
-// (docs/development/implemented/v1.48.4/fix-sticky-link-navigation.md)
+// (docs/development/implemented/alpha-1/v1.48.4/fix-sticky-link-navigation.md)
 //
 // Driven by the /e2e (Playwright MCP) skill against a running, signed-in stack.
 // Assumes a seeded user session lands on /chats.

@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 // E2E for the bug fix: a deliberately-attached session upload must reach the AI
 // even when the user's message is only loosely related to the document body.
-// (docs/development/implemented/v1.47.1/fix-session-upload-not-reaching-ai.md)
+// (docs/development/implemented/alpha-1/v1.47.1/fix-session-upload-not-reaching-ai.md)
 //
 // Driven by the /e2e (Playwright MCP) skill against a running stack — it is
 // excluded from the vitest unit run and requires real embeddings + an AI key,

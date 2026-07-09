@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // E2E for bug #1: a node whose advanceConfidenceThreshold was authored as a
 // fraction (0.7) instead of a percentage (70) must NOT auto-advance on its own
 // opening message before the user has answered anything.
-// (docs/development/implemented/v1.49.0/fix-flow-authored-data-trust.md)
+// (docs/development/implemented/alpha-1/v1.49.0/fix-flow-authored-data-trust.md)
 //
 // Driven by the /e2e (Playwright MCP) skill against a running stack with a real
 // AI key. On the unfixed code, `5 >= 0.7` was always true, so every step

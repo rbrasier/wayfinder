@@ -3,7 +3,7 @@
  *
  * Covers v1.9.3 — Chats card layout enhancement.
  *
- * Visual spec (docs/development/implemented/v1.9.3/phase-chats-card-layout.md):
+ * Visual spec (docs/development/implemented/alpha-1/v1.9.3/phase-chats-card-layout.md):
  *   /chats renders session cards as a single full-width column (not a
  *   multi-column grid). Each card has three sections — icon | content |
  *   progress — with a last-message preview and a step "N/M" progress
