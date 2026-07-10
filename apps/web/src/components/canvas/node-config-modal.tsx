@@ -666,7 +666,7 @@ export function NodeConfigModal({
               </div>
 
               <div className="space-y-1">
-                <Label>MCP tools</Label>
+                <FieldGroupLabel id="ncm-mcp-tools">MCP tools</FieldGroupLabel>
                 <p className="text-[12px] text-[#857f76]">
                   Let the AI call these tools mid-conversation. Register servers on
                   the MCP Servers page.
@@ -1275,7 +1275,7 @@ export function NodeConfigModal({
               />
               {requestParsed.fields.length > 0 && (
                 <div className="space-y-2">
-                  <Label>Field values</Label>
+                  <FieldGroupLabel id="ncm-mcp-field-values">Field values</FieldGroupLabel>
                   <FieldValueList
                     fields={requestParsed.fields}
                     values={values.requestFieldValues}
