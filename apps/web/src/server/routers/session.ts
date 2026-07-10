@@ -6,7 +6,7 @@ import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { orderStepIds } from "@/lib/step-order";
 import { buildCompletedStepData } from "@/lib/step-data";
-import { confirmStep } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
+import { confirmStep } from "@/lib/chat/confirm-step";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
 

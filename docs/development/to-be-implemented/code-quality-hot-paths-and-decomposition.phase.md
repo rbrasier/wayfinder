@@ -192,8 +192,14 @@ allowlist is empty.
 ### Group E — Boundary tightening (small, independent slices)
 
 > **Progress**: items 15, 17, 18 landed in **v2.2.2** (summary at
-> `implemented/v2.2.2/code-quality-hot-paths-group-e.md`). Items 14 and 16 remain
-> — both fall out of Group B's `ExecuteTurn` extraction.
+> `implemented/v2.2.2/code-quality-hot-paths-group-e.md`). **v2.3.4** landed
+> item 16 (moved `confirmStep` and its helper `recomputeBranchChoice` from the
+> stream route directory to `apps/web/src/lib/chat/confirm-step.ts`; the tRPC
+> session router now imports from `@/lib/chat/`) — summary at
+> `implemented/v2.3.4/code-quality-hot-paths-group-e-inverted-layering.md`.
+> Item 14 (narrow `container.repos.*` reach in the stream route) remains and
+> is best landed with Group B item 6 (`ExecuteTurn` extraction) since both
+> reshape the same call surface.
 
 14. **Narrow the container surface handed to routes**: expose use cases and
     a small set of named services; stop `container.repos.*` reach-through
