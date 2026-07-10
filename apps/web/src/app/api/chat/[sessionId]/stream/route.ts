@@ -235,8 +235,6 @@ export async function POST(
   ];
 
   const aiConfig = await container.runtimeConfig.getAiConfig();
-  const provider = aiConfig.provider;
-  const apiKey = aiConfig.apiKeys[provider];
   const chatModelName = aiConfig.models.chat;
   const branchingModelName = aiConfig.models.branching;
 
@@ -427,7 +425,7 @@ export async function POST(
         }
 
         if (dbMessages.filter((m) => m.role === "user").length === 0) {
-          void generateTitle(container, session.id, lastUserMessage, provider, chatModelName, apiKey, authSession.userId);
+          void generateTitle(container, session.id, lastUserMessage, chatModelName, authSession.userId);
         }
         return;
       }
@@ -504,7 +502,7 @@ export async function POST(
       }
 
       if (dbMessages.filter((m) => m.role === "user").length === 0) {
-        void generateTitle(container, session.id, lastUserMessage, provider, chatModelName, apiKey, authSession.userId);
+        void generateTitle(container, session.id, lastUserMessage, chatModelName, authSession.userId);
       }
       } finally {
         clearInterval(heartbeat);

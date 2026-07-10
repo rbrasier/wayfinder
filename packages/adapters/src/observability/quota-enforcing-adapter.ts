@@ -8,6 +8,7 @@ import {
   type Budget,
   type BudgetPeriod,
   type GenerateObjectInput,
+  type GenerateTextInput,
   type IAuditLogger,
   type IBudgetRepository,
   type ILanguageModel,
@@ -160,6 +161,14 @@ export class QuotaEnforcingLanguageModel implements ILanguageModel {
     const check = await this.enforcer.check(input.userId);
     if (check.error) return err(check.error);
     return this.inner.generateObject<T>(input);
+  }
+
+  async generateText(
+    input: GenerateTextInput,
+  ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+    const check = await this.enforcer.check(input.userId);
+    if (check.error) return err(check.error);
+    return this.inner.generateText(input);
   }
 
   async streamText(

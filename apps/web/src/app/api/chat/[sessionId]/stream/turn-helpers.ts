@@ -1,5 +1,4 @@
-import { formatDataStreamPart, generateText } from "ai";
-import { recordTokenUsage, resolveModel, type ProviderCredentials } from "@rbrasier/adapters";
+import { formatDataStreamPart } from "ai";
 import {
   type AiTurnPayload,
   type ConversationalNodeConfig,
@@ -302,47 +301,32 @@ export async function generateDocument(
   }
 }
 
+// Routed through the ILanguageModel port so usage recording, quota enforcement,
+// the concurrency governor, and Langfuse tracing all apply as decorators
+// (ADR-026) — no hand-rolled recordTokenUsage or direct SDK call here.
+// Best-effort: any failure (including a quota block) falls back to a truncated
+// slice of the first user message.
 export async function generateTitle(
   container: Container,
   sessionId: string,
   firstUserMessage: string,
-  provider: Parameters<typeof resolveModel>[0],
   modelName: string,
-  credentials: ProviderCredentials,
   userId: string,
 ): Promise<void> {
-  try {
-    const cheapModel = resolveModel(provider, modelName, credentials);
-    const result = await generateText({
-      model: cheapModel,
-      system: "Generate a concise title (max 80 characters) for a workflow session based on the user's first message. Return only the title, no quotes or punctuation.",
-      prompt: firstUserMessage,
-      maxTokens: 30,
-    });
-    recordTokenUsage(
-      container.repos.usageRepo,
-      {
-        purpose: "chat-title",
-        userId,
-        conversationId: sessionId,
-        model: modelName,
-        provider,
-      },
-      {
-        promptTokens: result.usage.promptTokens ?? 0,
-        completionTokens: result.usage.completionTokens ?? 0,
-        systemTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-    );
-    const title = result.text.trim().slice(0, 80);
-    if (title) {
-      await container.repos.sessions.update(sessionId, { title });
-    }
-  } catch {
-    const fallback = firstUserMessage.slice(0, 80);
-    await container.repos.sessions.update(sessionId, { title: fallback }).catch(() => undefined);
+  const result = await container.services.llm.generateText({
+    purpose: "chat-title",
+    userId,
+    sessionId,
+    model: modelName,
+    system:
+      "Generate a concise title (max 80 characters) for a workflow session based on the user's first message. Return only the title, no quotes or punctuation.",
+    prompt: firstUserMessage,
+    maxTokens: 30,
+  });
+  const generated = result.error ? "" : result.data.text.trim().slice(0, 80);
+  const title = generated || firstUserMessage.slice(0, 80);
+  if (title) {
+    await container.repos.sessions.update(sessionId, { title }).catch(() => undefined);
   }
 }
 

@@ -136,10 +136,15 @@ areas that only hurt under data growth and change velocity:
 > migrated the last two `generateObject` callers in `turn-helpers.ts`
 > (`generateInitialMessage`, `recomputeBranchChoice`) through the port; the
 > route's `resolveModel` for the branching model is gone (summary at
-> `implemented/v2.3.3/code-quality-hot-paths-group-b-slice-4.md`). Only
-> `generateTitle` (uses SDK `generateText`, which the port does not yet expose)
-> and item 6 (`ExecuteTurn` extraction, plus E14/E16 which fall out of it) still
-> remain in Group B's scope.
+> `implemented/v2.3.3/code-quality-hot-paths-group-b-slice-4.md`). **v2.4.5**
+> closed item 5: the port now exposes `generateText` (implemented in the base
+> adapter and covered by all three decorators), and `generateTitle` routes
+> through it — the last direct SDK model call in the stream path is gone, along
+> with its hand-rolled `recordTokenUsage`/`resolveModel` and the route's
+> `provider`/`apiKey` locals (summary at
+> `implemented/v2.4.5/code-quality-hot-paths-group-b-slice-5-generate-title-port.md`).
+> Only item 6 (`ExecuteTurn` extraction, plus E14/E16 which fall out of it) still
+> remains in Group B's scope.
 
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,

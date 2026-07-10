@@ -36,6 +36,19 @@ export interface GenerateObjectInput<TSchema = unknown> {
   readonly maxTokens?: number;
 }
 
+export interface GenerateTextInput {
+  readonly purpose: string;
+  readonly userId?: string | null;
+  readonly flowId?: string | null;
+  readonly sessionId?: string | null;
+  readonly model?: string;
+  readonly system?: string;
+  readonly prompt?: string;
+  readonly messages?: ChatMessage[];
+  readonly temperature?: number;
+  readonly maxTokens?: number;
+}
+
 export interface StreamTextInput {
   readonly purpose: string;
   readonly userId?: string | null;
@@ -79,6 +92,10 @@ export interface ILanguageModel {
   generateObject<T>(
     input: GenerateObjectInput,
   ): Promise<Result<{ object: T; usage: TokenUsage }>>;
+
+  generateText(
+    input: GenerateTextInput,
+  ): Promise<Result<{ text: string; usage: TokenUsage }>>;
 
   streamText(
     input: StreamTextInput,

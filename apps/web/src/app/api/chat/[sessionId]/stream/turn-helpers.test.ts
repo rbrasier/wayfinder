@@ -9,6 +9,7 @@ import {
   CROSS_CHECK_PASS_NOTE,
   generateDocument,
   generateInitialMessage,
+  generateTitle,
   OUTSTANDING_CONTEXT_KEY,
   persistCrossCheckPassNote,
   persistHeldReply,
@@ -1004,6 +1005,46 @@ describe("cross-check pass note", () => {
     } as unknown as Parameters<typeof persistCrossCheckPassNote>[0];
 
     await expect(persistCrossCheckPassNote(container, "sess-1", "node-1")).resolves.toBeUndefined();
+  });
+});
+
+describe("generateTitle", () => {
+  it("routes through the ILanguageModel port and persists the generated title", async () => {
+    const generateText = vi.fn().mockResolvedValue({
+      data: { text: "  Onboarding Alex  ", usage: {} },
+      error: null,
+    });
+    const update = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      services: { llm: { generateText } },
+      repos: { sessions: { update } },
+    } as unknown as Parameters<typeof generateTitle>[0];
+
+    await generateTitle(container, "sess-1", "Help me onboard Alex", "haiku", "user-1");
+
+    // The port call carries the purpose/session so usage records and quota apply.
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: "chat-title", sessionId: "sess-1", model: "haiku", userId: "user-1" }),
+    );
+    expect(update).toHaveBeenCalledWith("sess-1", { title: "Onboarding Alex" });
+  });
+
+  it("falls back to a truncated message when the port errors (e.g. quota block)", async () => {
+    const generateText = vi.fn().mockResolvedValue({
+      data: undefined,
+      error: { code: "QUOTA_EXCEEDED", message: "capped" },
+    });
+    const update = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      services: { llm: { generateText } },
+      repos: { sessions: { update } },
+    } as unknown as Parameters<typeof generateTitle>[0];
+
+    await generateTitle(container, "sess-1", "A long first message that should be truncated", "haiku", "user-1");
+
+    expect(update).toHaveBeenCalledWith("sess-1", {
+      title: "A long first message that should be truncated",
+    });
   });
 });
 

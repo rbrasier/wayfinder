@@ -1,5 +1,6 @@
 import type {
   GenerateObjectInput,
+  GenerateTextInput,
   ILanguageModel,
   ProviderName,
   Result,
@@ -47,6 +48,29 @@ export class LangfuseTracingAdapter implements ILanguageModel {
     });
     const start = Date.now();
     const result = await this.inner.generateObject<T>(input);
+    trace.update({
+      output: result.error
+        ? { error: result.error.code, message: result.error.message }
+        : { ok: true },
+      metadata: {
+        latencyMs: Date.now() - start,
+        provider: this.provider,
+        ...(!result.error && { usage: result.data.usage }),
+      },
+    });
+    return result;
+  }
+
+  async generateText(
+    input: GenerateTextInput,
+  ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+    const trace = this.client.trace({
+      name: "generateText",
+      input: { purpose: input.purpose, model: input.model, provider: this.provider },
+      userId: input.userId ?? undefined,
+    });
+    const start = Date.now();
+    const result = await this.inner.generateText(input);
     trace.update({
       output: result.error
         ? { error: result.error.code, message: result.error.message }
