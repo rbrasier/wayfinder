@@ -170,6 +170,9 @@ export async function POST(
       : { name: userResult.data.name, role: userResult.data.role, team: userResult.data.team };
   const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
+  const skillsResult = await container.useCases.resolveStepSkills.execute(nodeConfig);
+  const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
+
   // The lease is claimed; tell every open window whose turn it now is so they
   // disable Send and can attribute the hold ("Alex's turn is in progress").
   publishEvent({ type: "turn.claimed", userId: authSession.userId, userName: userProfile?.name ?? null });
@@ -184,6 +187,7 @@ export async function POST(
     globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
+    resolvedSkills,
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 
