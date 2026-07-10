@@ -29,6 +29,8 @@ import { ListSessions } from "./list-sessions";
 import { ListAllSessions } from "./list-all-sessions";
 import { GetSession } from "./get-session";
 import { GetSessionForTurn } from "./get-session-for-turn";
+import { ListSessionsPage } from "./list-sessions-page";
+import { ListAllSessionsPage } from "./list-all-sessions-page";
 import { RunTurn } from "./run-turn";
 
 // ── Fakes ──────────────────────────────────────────────────────────────────
@@ -174,6 +176,57 @@ class FakeSessionRepository implements ISessionRepository {
 
   async listAll(): Promise<Result<Session[]>> {
     return ok([...this.sessions.values()]);
+  }
+
+  private sortedNewestFirst(rows: Session[]): Session[] {
+    return [...rows].sort((a, b) => {
+      const t = b.updatedAt.getTime() - a.updatedAt.getTime();
+      if (t !== 0) return t;
+      return b.id.localeCompare(a.id);
+    });
+  }
+
+  private paginate(
+    rows: Session[],
+    options: import("@rbrasier/domain").SessionListPageOptions,
+  ): import("@rbrasier/domain").SessionListPage<Session> {
+    const sorted = this.sortedNewestFirst(rows);
+    let startIndex = 0;
+    if (options.cursor) {
+      const underscore = options.cursor.indexOf("_");
+      if (underscore > 0) {
+        const cursorTime = new Date(options.cursor.slice(0, underscore)).getTime();
+        const cursorId = options.cursor.slice(underscore + 1);
+        startIndex = sorted.findIndex((row) => {
+          const t = row.updatedAt.getTime();
+          return t < cursorTime || (t === cursorTime && row.id < cursorId);
+        });
+        if (startIndex === -1) startIndex = sorted.length;
+      }
+    }
+    const limit = Math.max(1, Math.floor(options.limit));
+    const slice = sorted.slice(startIndex, startIndex + limit);
+    const hasMore = startIndex + limit < sorted.length;
+    const lastReturned = slice[slice.length - 1];
+    const nextCursor =
+      hasMore && lastReturned
+        ? `${lastReturned.updatedAt.toISOString()}_${lastReturned.id}`
+        : null;
+    return { items: slice, nextCursor };
+  }
+
+  async listByUserPage(
+    userId: string,
+    options: import("@rbrasier/domain").SessionListPageOptions,
+  ): Promise<Result<import("@rbrasier/domain").SessionListPage<Session>>> {
+    const rows = [...this.sessions.values()].filter((s) => s.userId === userId);
+    return ok(this.paginate(rows, options));
+  }
+
+  async listAllPage(
+    options: import("@rbrasier/domain").SessionListPageOptions,
+  ): Promise<Result<import("@rbrasier/domain").SessionListPage<Session>>> {
+    return ok(this.paginate([...this.sessions.values()], options));
   }
 
   async update(id: string, patch: SessionUpdate): Promise<Result<Session>> {
@@ -564,6 +617,93 @@ describe("GetSession", () => {
     flows.flows.clear();
     const result = await useCase.execute("session-1");
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+// ── ListSessionsPage / ListAllSessionsPage ───────────────────────────────────
+
+describe("ListSessionsPage (keyset pagination)", () => {
+  let sessions: FakeSessionRepository;
+  let useCase: ListSessionsPage;
+
+  beforeEach(() => {
+    sessions = new FakeSessionRepository();
+    useCase = new ListSessionsPage(sessions);
+    // 5 sessions with distinct updatedAt; alice-1 is newest.
+    for (let i = 0; i < 5; i++) {
+      const id = `alice-${i}`;
+      sessions.sessions.set(id, {
+        ...(makeSession() as unknown as Session),
+        id,
+        userId: "alice",
+        // Older i → earlier updatedAt so alice-4 is newest.
+        updatedAt: new Date(`2026-07-0${i + 1}T00:00:00.000Z`),
+      } as Session);
+    }
+  });
+
+  it("returns the first page newest-first with a nextCursor when there is more", async () => {
+    const result = await useCase.execute("alice", { limit: 2 });
+
+    expect(result.data?.items.map((s) => s.id)).toEqual(["alice-4", "alice-3"]);
+    expect(result.data?.nextCursor).not.toBeNull();
+  });
+
+  it("threading the cursor returns the next page without overlap", async () => {
+    const first = await useCase.execute("alice", { limit: 2 });
+    const second = await useCase.execute("alice", {
+      limit: 2,
+      cursor: first.data!.nextCursor!,
+    });
+
+    expect(second.data?.items.map((s) => s.id)).toEqual(["alice-2", "alice-1"]);
+    expect(second.data?.nextCursor).not.toBeNull();
+  });
+
+  it("nextCursor is null when the final page fits", async () => {
+    const result = await useCase.execute("alice", { limit: 10 });
+
+    expect(result.data?.items).toHaveLength(5);
+    expect(result.data?.nextCursor).toBeNull();
+  });
+
+  it("only lists sessions owned by the caller", async () => {
+    sessions.sessions.set("bob-1", { ...(makeSession() as unknown as Session), id: "bob-1", userId: "bob" } as Session);
+    const result = await useCase.execute("alice", { limit: 10 });
+    expect(result.data?.items.every((s) => s.userId === "alice")).toBe(true);
+  });
+});
+
+describe("ListAllSessionsPage (admin keyset pagination)", () => {
+  it("returns items across all users, newest-first, with keyset threading", async () => {
+    const sessions = new FakeSessionRepository();
+    sessions.sessions.set("alice-1", {
+      ...(makeSession() as unknown as Session),
+      id: "alice-1",
+      userId: "alice",
+      updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+    } as Session);
+    sessions.sessions.set("bob-1", {
+      ...(makeSession() as unknown as Session),
+      id: "bob-1",
+      userId: "bob",
+      updatedAt: new Date("2026-07-02T00:00:00.000Z"),
+    } as Session);
+    sessions.sessions.set("carol-1", {
+      ...(makeSession() as unknown as Session),
+      id: "carol-1",
+      userId: "carol",
+      updatedAt: new Date("2026-07-03T00:00:00.000Z"),
+    } as Session);
+    const useCase = new ListAllSessionsPage(sessions);
+
+    const first = await useCase.execute({ limit: 2 });
+    expect(first.data?.items.map((s) => s.id)).toEqual(["carol-1", "bob-1"]);
+    expect(first.data?.nextCursor).not.toBeNull();
+
+    const second = await useCase.execute({ limit: 2, cursor: first.data!.nextCursor! });
+    expect(second.data?.items.map((s) => s.id)).toEqual(["alice-1"]);
+    expect(second.data?.nextCursor).toBeNull();
   });
 });
 

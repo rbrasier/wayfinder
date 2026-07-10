@@ -83,8 +83,14 @@ areas that only hurt under data growth and change velocity:
 > switched to it — the turn read is now bounded (last N messages tail) plus a
 > SQL-side aggregation of gathered context across the full history (summary at
 > `implemented/v2.4.0/code-quality-hot-paths-group-a-item-3-bounded-turn-read.md`).
-> Item 4 (cursor pagination contracts on message + session list endpoints)
-> remains.
+> **v2.4.1** landed item 4's server-side contract: new
+> `ISessionRepository.listByUserPage` / `listAllPage` port methods,
+> `SessionListPageOptions` / `SessionListPage<T>` types, and matching
+> `ListSessionsPage` / `ListAllSessionsPage` use cases (summary at
+> `implemented/v2.4.1/code-quality-hot-paths-group-a-item-4-pagination.md`).
+> Keyset on `(updated_at DESC, id DESC)`; the tRPC exposure and message-list
+> pagination endpoint are deliberately deferred as UI-facing follow-ups so the
+> server contract can be adopted incrementally.
 
 1. **`session.list` N+1** (`apps/web/src/server/routers/session.ts`): today
    it loads full flow graphs and the **entire message history of every

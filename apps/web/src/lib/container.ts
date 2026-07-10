@@ -39,6 +39,7 @@ import {
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
+  ListAllSessionsPage,
   ListErrors,
   ListFeatureFlags,
   ListFlows,
@@ -53,6 +54,7 @@ import {
   ListPendingApprovals,
   ListPendingApprovalsWithContext,
   ListSessions,
+  ListSessionsPage,
   ListUsers,
   ListUsersForRole,
   LogAuditEvent,
@@ -631,7 +633,11 @@ const build = () => {
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges, flowVersions),
       listSessions: new ListSessions(sessions),
+      // Keyset-paginated variants of the two list use cases (phase Group A
+      // item 4). Additive server support; tRPC exposure follows.
+      listSessionsPage: new ListSessionsPage(sessions),
       listAllSessions: new ListAllSessions(sessions),
+      listAllSessionsPage: new ListAllSessionsPage(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
       // Leaner turn-scoped variant of getSession: the tail of the transcript
       // plus a SQL-side aggregation of gathered context, so the streaming route
