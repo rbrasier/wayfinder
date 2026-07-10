@@ -106,11 +106,10 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
       newNodeId,
       newNode,
       flow,
-      model: branchingModel,
+      modelName: aiConfig.models.branching,
       organisationName: await this.resolveOrganisationName(),
       userProfile: await this.resolveUserProfile(session.userId),
       userId: session.userId,
-      provider,
       gatheredContext,
       globalInstructions: await this.resolveGlobalInstructions(),
     });

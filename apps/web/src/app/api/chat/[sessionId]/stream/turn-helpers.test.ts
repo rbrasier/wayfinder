@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { MockLanguageModelV1 } from "ai/test";
 import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@rbrasier/domain";
 import {
   appendShortcomingsToContext,
@@ -100,20 +99,28 @@ describe("generateInitialMessage", () => {
     const create = vi.fn().mockResolvedValue({ data: {}, error: null });
     const errorLog = vi.fn().mockResolvedValue({ data: undefined, error: null });
 
-    const model = new MockLanguageModelV1({
-      defaultObjectGenerationMode: "json",
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: "stop",
-        usage: { promptTokens: 1, completionTokens: 1 },
-        text: JSON.stringify({
-          response: "Hello",
-          rationale: "r",
-          stepCompleteConfidence: 0,
-          contextGathered: [],
-        }),
+    const llm = {
+      provider: "anthropic",
+      generateObject: vi.fn().mockResolvedValue({
+        data: {
+          object: {
+            response: "Hello",
+            rationale: "r",
+            stepCompleteConfidence: 0,
+            contextGathered: [],
+          },
+          usage: {
+            promptTokens: 1,
+            completionTokens: 1,
+            systemTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
+        },
       }),
-    });
+      streamText: vi.fn(),
+      streamObject: vi.fn(),
+    };
 
     const retrieveDocumentChunks = {
       execute: vi.fn().mockResolvedValue({ data: [], error: null }),
@@ -121,6 +128,7 @@ describe("generateInitialMessage", () => {
 
     const container = {
       services: {
+        llm,
         sessionAgent: { buildSystemPrompt },
         errorLogger: { log: errorLog },
       },
@@ -143,11 +151,10 @@ describe("generateInitialMessage", () => {
       newNodeId: "node-2",
       newNode: makeNode(),
       flow: makeFlow(),
-      model,
+      modelName: "claude-haiku-4-5-20251001",
       organisationName: "Acme",
       userProfile: { name: "Ada Lovelace", role: "Analyst", team: "Risk" },
       userId: "user-1",
-      provider: "anthropic",
       gatheredContext: "- Full Name: John Dutton\n- Department: Sales",
       globalInstructions: "Use Australian English spelling.",
     });
@@ -157,6 +164,12 @@ describe("generateInitialMessage", () => {
     expect(call.gatheredContext).toContain("John Dutton");
     expect(call.gatheredContext).toContain("Sales");
     expect(call.globalInstructions).toBe("Use Australian English spelling.");
+
+    expect(llm.generateObject).toHaveBeenCalledTimes(1);
+    const portCall = llm.generateObject.mock.calls[0]![0];
+    expect(portCall.purpose).toBe("chat-turn");
+    expect(portCall.model).toBe("claude-haiku-4-5-20251001");
+    expect(portCall.userId).toBe("user-1");
   });
 });
 
@@ -460,16 +473,6 @@ describe("applyAdvanceSideEffects", () => {
     } as unknown as FlowNode["config"],
   });
 
-  const model = new MockLanguageModelV1({
-    defaultObjectGenerationMode: "json",
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      text: JSON.stringify({ response: "Hi", rationale: "r", stepCompleteConfidence: 0, contextGathered: [] }),
-    }),
-  });
-
   const baseInput = (overrides: Record<string, unknown>) => ({
     container: overrides.container,
     session: makeSession(),
@@ -483,8 +486,7 @@ describe("applyAdvanceSideEffects", () => {
     userProfile: null,
     userId: "user-1",
     isAdmin: false,
-    model,
-    provider: "anthropic",
+    modelName: "claude-haiku-4-5-20251001",
   }) as unknown as Parameters<typeof applyAdvanceSideEffects>[0];
 
   it("generates a document for the completed doc-node when a template is present", async () => {
@@ -576,6 +578,18 @@ describe("applyAdvanceSideEffects", () => {
       config: { aiInstruction: "Help", doneWhen: "done", outputType: "conversation_only" } as unknown as FlowNode["config"],
     });
 
+    const llm = {
+      provider: "anthropic",
+      generateObject: vi.fn().mockResolvedValue({
+        data: {
+          object: { response: "Hi", rationale: "r", stepCompleteConfidence: 0, contextGathered: [] },
+          usage: { promptTokens: 1, completionTokens: 1, systemTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        },
+      }),
+      streamText: vi.fn(),
+      streamObject: vi.fn(),
+    };
+
     const container = {
       repos: {
         sessionMessages: { listBySession, updateDocumentStatus: vi.fn(), create },
@@ -591,6 +605,7 @@ describe("applyAdvanceSideEffects", () => {
         isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: false, error: null }) },
       },
       services: {
+        llm,
         errorLogger: { log: vi.fn() },
         sessionAgent: { buildSystemPrompt: vi.fn().mockReturnValue({ data: "prompt", error: null }) },
       },
@@ -602,6 +617,7 @@ describe("applyAdvanceSideEffects", () => {
 
     expect(retrieveExecute).toHaveBeenCalled();
     expect(create).toHaveBeenCalled();
+    expect(llm.generateObject).toHaveBeenCalled();
   });
 });
 

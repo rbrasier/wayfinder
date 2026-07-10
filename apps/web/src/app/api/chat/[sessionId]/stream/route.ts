@@ -1,5 +1,4 @@
 import { createDataStreamResponse, formatDataStreamPart } from "ai";
-import { resolveModel } from "@rbrasier/adapters";
 import type { EvaluateStepReadinessOutput } from "@rbrasier/application";
 import {
   normaliseAdvanceConfidenceThreshold,
@@ -227,9 +226,6 @@ export async function POST(
   const apiKey = aiConfig.apiKeys[provider];
   const chatModelName = aiConfig.models.chat;
   const branchingModelName = aiConfig.models.branching;
-  // Still resolved as an SDK model for applyAdvanceSideEffects (turn-helpers'
-  // opener/branch path, not yet ported — Group B slice 3).
-  const branchingModel = resolveModel(provider, branchingModelName, apiKey);
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
@@ -455,8 +451,7 @@ export async function POST(
           userProfile,
           userId: authSession.userId,
           isAdmin: authSession.isAdmin,
-          model: branchingModel,
-          provider,
+          modelName: branchingModelName,
           globalInstructions,
           // On a pass the gate already extracted the fields and graded them;
           // thread both onward so generation skips the second extraction.

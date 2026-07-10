@@ -1,4 +1,4 @@
-import { generateObject, generateText, type LanguageModel } from "ai";
+import { generateText } from "ai";
 import { recordTokenUsage, resolveModel, type ProviderCredentials } from "@rbrasier/adapters";
 import {
   ok,
@@ -460,11 +460,13 @@ export interface GenerateInitialMessageInput {
   newNodeId: string;
   newNode: FlowNode;
   flow: Flow;
-  model: LanguageModel;
+  // Model name string; the port resolves this to a concrete SDK model. Usage
+  // recording, quota enforcement, Langfuse tracing, and the concurrency
+  // governor all apply as decorators (ADR-026).
+  modelName: string;
   organisationName: string | null;
   userProfile: PromptUserProfile | null;
   userId: string;
-  provider: string;
   gatheredContext: string;
   globalInstructions?: string | null;
 }
@@ -476,11 +478,10 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     newNodeId,
     newNode,
     flow,
-    model,
+    modelName,
     organisationName,
     userProfile,
     userId,
-    provider,
     gatheredContext,
     globalInstructions,
   } = input;
@@ -517,46 +518,47 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     });
     if (systemPromptResult.error) return;
 
-    const result = await generateObject({
-      model,
+    const result = await container.services.llm.generateObject<{
+      response: string;
+      rationale: string;
+      stepCompleteConfidence: number;
+      contextGathered: { key: string; value: string }[];
+    }>({
+      purpose: "chat-turn",
+      userId,
+      flowId: flow.id,
+      sessionId,
+      model: modelName,
       schema: turnResponseSchema,
       system: systemPromptResult.data,
       messages: [{ role: "user", content: "Please begin." }],
     });
+    if (result.error) {
+      await container.services.errorLogger.log({
+        level: "error",
+        message: `Initial message generation failed: ${result.error.message}`,
+        stack: result.error.cause instanceof Error ? result.error.cause.stack ?? null : null,
+        page: `api/chat/${sessionId}/stream`,
+        metadata: { sessionId, newNodeId },
+      });
+      return;
+    }
 
     const aiPayload: AiTurnPayload = {
-      response: result.object.response,
-      rationale: result.object.rationale,
-      stepCompleteConfidence: result.object.stepCompleteConfidence,
-      contextGathered: result.object.contextGathered,
+      response: result.data.object.response,
+      rationale: result.data.object.rationale,
+      stepCompleteConfidence: result.data.object.stepCompleteConfidence,
+      contextGathered: result.data.object.contextGathered,
     };
 
     await container.repos.sessionMessages.create({
       sessionId,
       role: "assistant",
-      content: result.object.response,
-      confidence: Math.round(result.object.stepCompleteConfidence),
+      content: result.data.object.response,
+      confidence: Math.round(result.data.object.stepCompleteConfidence),
       stepNodeId: newNodeId,
       aiPayload,
     });
-
-    recordTokenUsage(
-      container.repos.usageRepo,
-      {
-        purpose: "chat-turn",
-        userId,
-        conversationId: sessionId,
-        model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
-        provider: provider as Parameters<typeof recordTokenUsage>[1]["provider"],
-      },
-      {
-        promptTokens: result.usage.promptTokens ?? 0,
-        completionTokens: result.usage.completionTokens ?? 0,
-        systemTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-    );
   } catch (cause) {
     await container.services.errorLogger.log({
       level: "error",
@@ -584,8 +586,10 @@ export interface ApplyAdvanceSideEffectsInput {
   userProfile: PromptUserProfile | null;
   userId: string;
   isAdmin: boolean;
-  model: LanguageModel;
-  provider: string;
+  // Model name string used for the opener (generateInitialMessage) — the port
+  // resolves this to a concrete SDK model. Was previously a resolved
+  // LanguageModel + provider pair; both are now decorator concerns.
+  modelName: string;
   globalInstructions?: string | null;
   // Threaded from the pre-generation evaluation gate on a pass: the values it
   // already extracted and the grade it produced, so document generation skips
@@ -611,8 +615,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
     userProfile,
     userId,
     isAdmin,
-    model,
-    provider,
+    modelName,
     globalInstructions,
     precomputedDocument,
   } = input;
@@ -682,11 +685,10 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
       newNodeId,
       newNode,
       flow,
-      model,
+      modelName,
       organisationName,
       userProfile,
       userId,
-      provider,
       gatheredContext: nextStepContext,
       globalInstructions,
     });
@@ -721,42 +723,30 @@ async function recomputeBranchChoice(
   if (branchPromptResult.error) return null;
 
   const aiConfig = await container.runtimeConfig.getAiConfig();
-  const provider = aiConfig.provider;
   const branchingModelName = aiConfig.models.branching;
-  const branchingModel = resolveModel(provider, branchingModelName, aiConfig.apiKeys[provider]);
 
   const coreMessages = messages.map((m) => ({
     role: m.role as "user" | "assistant" | "system",
     content: m.content,
   }));
 
-  const branchResult = await generateObject({
-    model: branchingModel,
+  // Through the ILanguageModel port: usage recording, quota enforcement,
+  // Langfuse tracing, and the concurrency governor all apply as decorators.
+  const branchResult = await container.services.llm.generateObject<{
+    branchChoice?: string;
+  }>({
+    purpose: "chat-branch-choice",
+    userId: session.userId,
+    flowId: session.flowId,
+    sessionId: session.id,
+    model: branchingModelName,
     schema: branchChoiceSchema,
     system: branchPromptResult.data,
     messages: coreMessages,
-  }).catch(() => null);
-  if (!branchResult) return null;
+  });
+  if (branchResult.error) return null;
 
-  recordTokenUsage(
-    container.repos.usageRepo,
-    {
-      purpose: "chat-branch-choice",
-      userId: session.userId,
-      conversationId: session.id,
-      model: branchingModelName,
-      provider,
-    },
-    {
-      promptTokens: branchResult.usage.promptTokens ?? 0,
-      completionTokens: branchResult.usage.completionTokens ?? 0,
-      systemTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    },
-  );
-
-  return branchResult.object.branchChoice ?? null;
+  return branchResult.data.object.branchChoice ?? null;
 }
 
 export interface ConfirmStepInput {
@@ -819,8 +809,6 @@ export async function confirmStep(input: ConfirmStepInput): Promise<Result<Confi
       : { name: userResult.data.name, role: userResult.data.role, team: userResult.data.team };
 
   const aiConfig = await container.runtimeConfig.getAiConfig();
-  const provider = aiConfig.provider;
-  const branchingModel = resolveModel(provider, aiConfig.models.branching, aiConfig.apiKeys[provider]);
 
   await applyAdvanceSideEffects({
     container,
@@ -835,8 +823,7 @@ export async function confirmStep(input: ConfirmStepInput): Promise<Result<Confi
     userProfile,
     userId: confirmedByUserId,
     isAdmin,
-    model: branchingModel,
-    provider,
+    modelName: aiConfig.models.branching,
     globalInstructions,
   });
 

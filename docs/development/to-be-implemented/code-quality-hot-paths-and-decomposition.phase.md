@@ -113,10 +113,14 @@ areas that only hurt under data growth and change velocity:
 > `implemented/v2.3.1/code-quality-hot-paths-group-b-slice-2.md`). **v2.3.2**
 > routed the streaming turn (`stream-turn.ts`) and the gap-followup through
 > the port and deleted the hand-rolled `recordTokenUsage` plumbing (summary at
-> `implemented/v2.3.2/code-quality-hot-paths-group-b-slice-3.md`). The
-> remaining `turn-helpers.ts` SDK calls (opener, recompute-branch, title) and
-> item 6 (`ExecuteTurn` extraction) still remain — best landed together with
-> E14/E16 which fall out of the extraction.
+> `implemented/v2.3.2/code-quality-hot-paths-group-b-slice-3.md`). **v2.3.3**
+> migrated the last two `generateObject` callers in `turn-helpers.ts`
+> (`generateInitialMessage`, `recomputeBranchChoice`) through the port; the
+> route's `resolveModel` for the branching model is gone (summary at
+> `implemented/v2.3.3/code-quality-hot-paths-group-b-slice-4.md`). Only
+> `generateTitle` (uses SDK `generateText`, which the port does not yet expose)
+> and item 6 (`ExecuteTurn` extraction, plus E14/E16 which fall out of it) still
+> remain in Group B's scope.
 
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,
