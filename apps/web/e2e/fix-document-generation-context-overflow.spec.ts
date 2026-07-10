@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // E2E for bug #3: producing a document for a flow whose reference documents are
 // very large must no longer overflow the model context window. The context-doc
 // section is budget-capped and generation runs in field batches.
-// (docs/development/implemented/v1.49.0/fix-flow-authored-data-trust.md)
+// (docs/development/implemented/alpha-1/v1.49.0/fix-flow-authored-data-trust.md)
 //
 // Driven by the /e2e (Playwright MCP) skill against a running stack with a real
 // AI key. On the unfixed code, document generation dumped the full extracted

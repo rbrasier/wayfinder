@@ -5,9 +5,16 @@ import type { Message as UIMessage } from "@ai-sdk/react";
 import type { FlowNode, SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
+import { resolveGeneratingDocumentState } from "./generating-document-state";
+import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
 import { MessageInfoModal } from "./message-info-modal";
-import { CrossCheckingBadge, FlowCompletePill, MilestonePill } from "./milestone-pill";
+import {
+  CrossCheckingBadge,
+  FlowCompletePill,
+  GeneratingDocumentBadge,
+  MilestonePill,
+} from "./milestone-pill";
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
 import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
@@ -51,6 +58,10 @@ interface MessageFeedProps {
   // assistant message exposes a "Fix this answer" affordance.
   sessionId?: string;
   canSubmitFeedback?: boolean;
+  // The operator Proceed path runs document generation inside a mutation, with
+  // no stream to carry the generating-document annotation — the caller raises
+  // this instead so the same badge shows while that mutation runs.
+  pendingDocumentGeneration?: boolean;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -91,12 +102,26 @@ export function MessageFeed({
   currentNodeId,
   sessionId,
   canSubmitFeedback,
+  pendingDocumentGeneration,
 }: MessageFeedProps) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isPinnedToBottomRef = useRef(true);
 
+  const handleScroll = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    isPinnedToBottomRef.current = distanceFromBottom < 80;
+  };
+
+  // Follow the feed while the viewer is at the bottom. Runs after every render
+  // (no dependency array) because the feed grows without a message-count
+  // change: streamed text, annotation badges, milestone pills, document cards
+  // and the streamed→persisted view swap all change its height.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [dbMessages.length, streamingMessages.length]);
+    if (!isPinnedToBottomRef.current) return;
+    containerRef.current?.scrollTo({ top: containerRef.current.scrollHeight });
+  });
 
   const nodeById = Object.fromEntries(nodes.map((n) => [n.id, n]));
   const showStreaming = isStreaming || streamingMessages.length > dbMessages.length;
@@ -104,7 +129,11 @@ export function MessageFeed({
   const userInitials = userFirstInitial ?? "U";
 
   return (
-    <div className="flex flex-1 flex-col gap-5 overflow-y-auto bg-[#f7f6f3] px-5 py-6">
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className="flex flex-1 flex-col gap-5 overflow-y-auto bg-[#f7f6f3] px-5 py-6"
+    >
       {!showStreaming &&
         dbMessages.map((msg, index) => {
           const prevMsg = dbMessages[index - 1];
@@ -136,6 +165,7 @@ export function MessageFeed({
             awaitingConfirmationNodeId,
             isDocNode,
             hasTemplate,
+            isSessionComplete: Boolean(isComplete),
           });
 
           return (
@@ -234,47 +264,61 @@ export function MessageFeed({
             const crossCheckingState = resolveCrossCheckingState(msg.annotations);
             const isCrossChecking =
               isStreaming && msg.role === "assistant" && crossCheckingState.active;
+            const generatingDocumentState = resolveGeneratingDocumentState(msg.annotations);
+            const isGeneratingDocument =
+              isStreaming && msg.role === "assistant" && generatingDocumentState.active;
             const latestPersistedNodeId = [...dbMessages].reverse().find((m) => m.role === "assistant")?.stepNodeId ?? null;
             const streamingNode = latestPersistedNodeId ? nodeById[latestPersistedNodeId] : null;
             const streamingConfig = streamingNode?.config as Record<string, unknown> | undefined;
             const streamingIsNeverDone = Boolean(streamingConfig?.["neverDone"]);
+            // One streamed response can carry several logical messages (the
+            // reply, then a cross-check follow-up or pass note) split by
+            // finish_step boundaries — each renders as its own bubble to match
+            // the rows the server persists.
+            const segments = messageTextSegments(msg);
 
             return (
-              <div key={msg.id}>
-              <div className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                {msg.role !== "user" && (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
-                    {botInitials}
-                  </div>
-                )}
+              <div key={msg.id} className="flex flex-col gap-5">
+              {segments.map((segment, segmentIndex) => (
                 <div
-                  className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
-                    msg.role === "user"
-                      ? "rounded-br-[4px] bg-[#3a5fd9]"
-                      : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
-                  }`}
+                  key={segmentIndex}
+                  className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  <p
-                    className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
-                      msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
+                  {msg.role !== "user" && (
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#3a5fd9] text-[10px] font-bold text-white">
+                      {botInitials}
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[68%] rounded-[14px] px-4 py-3 ${
+                      msg.role === "user"
+                        ? "rounded-br-[4px] bg-[#3a5fd9]"
+                        : "rounded-bl-[4px] border border-[#dedad2] bg-white shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
                     }`}
                   >
-                    {msg.content}
-                  </p>
-                  {msg.role === "assistant" && !streamingIsNeverDone && (
-                    <ConfidenceBar
-                      score={confidenceAnnotation?.score ?? null}
-                      evaluating={isStreaming && !confidenceAnnotation}
-                    />
+                    <p
+                      className={`whitespace-pre-wrap text-[13px] leading-[1.55] ${
+                        msg.role === "user" ? "text-white/90" : "text-[#1a1814]"
+                      }`}
+                    >
+                      {segment}
+                    </p>
+                    {msg.role === "assistant" && segmentIndex === 0 && !streamingIsNeverDone && (
+                      <ConfidenceBar
+                        score={confidenceAnnotation?.score ?? null}
+                        evaluating={isStreaming && !confidenceAnnotation}
+                      />
+                    )}
+                  </div>
+                  {msg.role === "user" && (
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
+                      {userInitials}
+                    </div>
                   )}
                 </div>
-                {msg.role === "user" && (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] bg-[#e6e3dc] text-[10px] font-bold text-[#1a1814]">
-                    {userInitials}
-                  </div>
-                )}
-              </div>
+              ))}
               {isCrossChecking && <CrossCheckingBadge documents={crossCheckingState.documents} />}
+              {isGeneratingDocument && <GeneratingDocumentBadge />}
               </div>
             );
           })}
@@ -290,6 +334,8 @@ export function MessageFeed({
           )}
         </>
       )}
+
+      {pendingDocumentGeneration && <GeneratingDocumentBadge />}
 
       {error && !isStreaming && (
         <div className="flex justify-start">
@@ -317,8 +363,6 @@ export function MessageFeed({
           <p>The conversation will begin once you send your first message.</p>
         </div>
       )}
-
-      <div ref={bottomRef} />
     </div>
   );
 }

@@ -23,6 +23,11 @@ export interface MilestoneStateInput {
   awaitingConfirmationNodeId: string | null | undefined;
   isDocNode: boolean;
   hasTemplate: boolean;
+  // Whether the session has completed. Advancing into a terminal node only flips
+  // the status to complete — it never changes currentNodeId — so the final step's
+  // message keeps stepNodeId === currentNodeId. Without this it would be mistaken
+  // for a gate-held current step and never render its milestone or document.
+  isSessionComplete: boolean;
 }
 
 export interface MilestoneState {
@@ -38,8 +43,10 @@ export function resolveMilestoneState(input: MilestoneStateInput): MilestoneStat
     input.nextStepNodeId !== input.stepNodeId &&
     // A step still held as the current node has not advanced — the pre-generation
     // gate can leave a high-confidence turn on the current step (fail path). Only
-    // a step the session has actually left is a completed milestone.
-    input.stepNodeId !== input.currentNodeId &&
+    // a step the session has actually left is a completed milestone. The terminal
+    // step is the exception: completing the flow leaves currentNodeId on the final
+    // node, so a completed session treats its current node as a finished milestone.
+    (input.isSessionComplete || input.stepNodeId !== input.currentNodeId) &&
     // A step awaiting operator confirmation has reached threshold but not
     // advanced; it gets the pinned ConfirmStepCard, not the auto-advance pill.
     input.stepNodeId !== input.awaitingConfirmationNodeId;

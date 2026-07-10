@@ -3,7 +3,7 @@
  *
  * Covers v1.13.0 — Flow visibility: private vs global.
  *
- * Visual spec (docs/development/implemented/v1.13.0/flow-visibility-private-vs-global.md
+ * Visual spec (docs/development/implemented/alpha-1/v1.13.0/flow-visibility-private-vs-global.md
  * + app /admin/flows/[id]):
  *   The flow header carries a status badge ("Draft" / "Published · Everyone" /
  *   "Published · Only you") and a "Publish" / "Manage publish" button whose

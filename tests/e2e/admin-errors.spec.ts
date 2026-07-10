@@ -3,7 +3,7 @@
  *
  * Covers v1.7.0 — "Delete all" errors button on /admin/errors.
  *
- * Visual spec (docs/development/implemented/v1.7.0/014-delete-all-errors.md):
+ * Visual spec (docs/development/implemented/alpha-1/v1.7.0/014-delete-all-errors.md):
  *   A destructive "Delete all" button in the top-right of /admin/errors opens
  *   a confirmation dialog ("Delete all errors?" + "This will permanently
  *   delete all error log entries. This cannot be undone.") with Cancel /

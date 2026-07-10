@@ -29,11 +29,20 @@ docs/development/
 ├── adr/                  Permanent home for ADRs (one per architectural decision)
 ├── to-be-implemented/    Phase docs awaiting implementation (planning/review)
 └── implemented/
-    ├── v0.1/             Each version has its own folder
-    │   └── *.md          Phase doc + implementation summary
-    ├── v0.2/
-    └── ...
+    ├── alpha-1/          One folder per release line (alpha-N = the N.x.x line)
+    │   ├── v0.1/         Each version has its own folder inside its release line
+    │   │   └── *.md      Phase doc + implementation summary
+    │   ├── v1.0.0/
+    │   └── ...
+    └── alpha-2/
+        ├── v2.1.0/
+        └── ...
 ```
+
+Every implemented phase doc lives under its release line: `implemented/alpha-<major>/v<version>/`.
+The `alpha-<major>` folder matches the MAJOR of the version (`alpha-1` for `1.x.x`,
+`alpha-2` for `2.x.x`). Historical `1.x` and pre-`1.0` docs were bucketed under
+`alpha-1/` when the alpha-2 line opened.
 
 ### Phase doc lifecycle (per feature)
 
@@ -42,8 +51,8 @@ docs/development/
 2. **Review**: Documentation Review skill checks consistency. Output is
    PASS / WARN / FAIL — code does not start until PASS.
 3. **Build**: Build skill implements the spec, moves the phase doc to
-   `implemented/v<version>/`, writes a same-folder implementation summary,
-   updates `VERSION` and `package.json`.
+   `implemented/alpha-<major>/v<version>/`, writes a same-folder implementation
+   summary, updates `VERSION` and `package.json`.
 4. **Validate**: `./validate.sh` runs. The doc lifecycle check fails if any
    file in `to-be-implemented/` is referenced by an implementation summary
    in `implemented/` (it should have been moved).

@@ -11,7 +11,7 @@
   - Connection pooler and read replica: infra only, no code bump (the
     `DATABASE_LISTEN_URL` caveat in item 1 is part of the event-bus slice)
 - **Depends on / relates to**:
-  - [`scaling-current-stack.phase.md`](../implemented/v1.58.0/scaling-current-stack.phase.md)
+  - [`scaling-current-stack.phase.md`](../implemented/alpha-1/v1.58.0/scaling-current-stack.phase.md)
     (implemented v1.58.0) — delivered most of the headroom to ~500
     concurrent users without infrastructure decisions; "companion phase
     doc" references below point there.
@@ -19,7 +19,7 @@
     the code-only companion from the 2026-07-05 review; its `IRateLimiter`
     (group F) and cache seams are what items 2 and 7 promote to shared
     services.
-  - `implemented/v1.49.0/scaling-p0-pool-and-auth-cache.md` — the env-driven
+  - `implemented/alpha-1/v1.49.0/scaling-p0-pool-and-auth-cache.md` — the env-driven
     pool and the in-process auth cache this phase promotes to shared services.
   - ADR-017 (embedding providers), ADR-019 (in-app scheduler, queue
     candidates), ADR-023 (email transport).
@@ -40,7 +40,7 @@ and the DB connection budget must be managed by a pooler rather than raw
 Postgres. Until then, single-instance deployments need nothing here.
 
 Each item below is implemented as its own sub-phase; when an item lands, its
-implementation summary goes to `implemented/v<version>/` and this doc stays
+implementation summary goes to `implemented/alpha-<major>/v<version>/` and this doc stays
 here until the last code slice lands (the former roadmap's convention).
 
 ---
