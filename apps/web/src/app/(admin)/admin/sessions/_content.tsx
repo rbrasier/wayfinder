@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { Flow, Session, User } from "@rbrasier/domain";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EmptyState } from "@/components/empty-state";
@@ -18,11 +19,14 @@ const statusVariant = (status: string) => {
 const formatDate = (date: Date) => new Date(date).toLocaleDateString();
 
 export function AdminSessionsContent() {
-  const sessionsQuery = trpc.session.listAll.useQuery();
+  const sessionsQuery = trpc.session.listAllPage.useInfiniteQuery(
+    {},
+    { getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined },
+  );
   const usersQuery = trpc.user.list.useQuery({});
   const flowsQuery = trpc.flow.list.useQuery();
 
-  const sessions: Session[] = sessionsQuery.data ?? [];
+  const sessions: Session[] = sessionsQuery.data?.pages.flatMap((page) => page.items) ?? [];
   const users: User[] = usersQuery.data ?? [];
   const flows: Flow[] = flowsQuery.data ?? [];
 
@@ -118,6 +122,17 @@ export function AdminSessionsContent() {
               })}
             </TableBody>
           </Table>
+        )}
+        {sessionsQuery.hasNextPage && (
+          <div className="mt-4 flex justify-center">
+            <Button
+              variant="outline"
+              onClick={() => void sessionsQuery.fetchNextPage()}
+              disabled={sessionsQuery.isFetchingNextPage}
+            >
+              {sessionsQuery.isFetchingNextPage ? "Loading…" : "Load more"}
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

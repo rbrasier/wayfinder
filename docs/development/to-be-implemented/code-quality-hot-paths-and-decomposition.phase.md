@@ -90,7 +90,20 @@ areas that only hurt under data growth and change velocity:
 > `implemented/v2.4.1/code-quality-hot-paths-group-a-item-4-pagination.md`).
 > Keyset on `(updated_at DESC, id DESC)`; the tRPC exposure and message-list
 > pagination endpoint are deliberately deferred as UI-facing follow-ups so the
-> server contract can be adopted incrementally. **v2.4.4** fixed a regression the
+> server contract can be adopted incrementally. **v2.4.6** landed the first half
+> of that UI follow-up: `session.listPage` (authenticated) and
+> `session.listAllPage` (admin) tRPC procedures wrap the v2.4.1 use cases, the
+> per-row enrichment that `session.list` computed inline is now a shared pure
+> `buildSessionListEntry` used by both the full-list and paginated procedures,
+> and the admin sessions table consumes `listAllPage` via `useInfiniteQuery`
+> (Load-more, verified 20→23 rows with no duplicates across the cursor boundary).
+> Still deferred: the message-list pagination endpoint (needs a new
+> `ISessionMessageRepository` keyset method, not just exposure) and the
+> chats/sidebar migration (blocked on a status-filter param — those views filter
+> Active/Completed client-side over the full set, which naive keyset paging would
+> regress) — summary at
+> `implemented/v2.4.6/code-quality-hot-paths-group-a-item-4-trpc-pagination.md`.
+> **v2.4.4** fixed a regression the
 > v2.4.0 bounded read introduced: the readiness gate's prior-hold count was being
 > taken over the 20-message tail, so a node with >20 messages between its first
 > hold and its next threshold crossing could be gated twice (partially

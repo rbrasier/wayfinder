@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { isFlowDiscoverableBy } from "@rbrasier/domain";
+import type { Session, SessionListSummary } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
@@ -9,6 +10,113 @@ import { buildCompletedStepData } from "@/lib/step-data";
 import { confirmStep } from "@/lib/chat/confirm-step";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
+
+// Keyset page request for the paginated list endpoints. `limit` is clamped to a
+// sane range here; the adapter clamps again to a hard maximum. `cursor` is the
+// opaque `nextCursor` from the previous page — null/absent means the first page.
+export const sessionListPageInputSchema = z.object({
+  limit: z.number().int().min(1).max(50).default(20),
+  cursor: z.string().nullish(),
+});
+
+export type SessionListEntry = Session & {
+  lastMessage: string | null;
+  stepInfo: {
+    currentIndex: number;
+    totalSteps: number;
+    completedSteps: number;
+    currentConfidence: number;
+  } | null;
+};
+
+// Pure list-row shaping shared by `list` and `listPage`: given a session, its
+// flow's ordered node ids, and the pre-aggregated message summary, derive the
+// step progress the card renders. Kept side-effect-free so both the full-list
+// and paginated procedures produce identical rows.
+export function buildSessionListEntry(
+  session: Session,
+  graph: { nodeIds: string[] } | undefined,
+  summary: SessionListSummary | undefined,
+): SessionListEntry {
+  if (!graph || graph.nodeIds.length === 0) {
+    return { ...session, lastMessage: null, stepInfo: null };
+  }
+
+  const totalSteps = graph.nodeIds.length;
+  const currentIndex = session.currentNodeId ? graph.nodeIds.indexOf(session.currentNodeId) : -1;
+
+  const lastMessage = summary?.lastAssistantContent ?? null;
+  const bestConfidenceByStep = summary?.bestConfidenceByStep ?? {};
+
+  let completedSteps = 0;
+  for (const [nodeId, confidence] of Object.entries(bestConfidenceByStep)) {
+    if (confidence >= COMPLETE_CONFIDENCE_THRESHOLD && nodeId !== session.currentNodeId) {
+      completedSteps++;
+    }
+  }
+  if (session.status === "complete") completedSteps = totalSteps;
+
+  const currentConfidence =
+    session.status === "complete"
+      ? 0
+      : session.currentNodeId
+        ? bestConfidenceByStep[session.currentNodeId] ?? 0
+        : 0;
+
+  return {
+    ...session,
+    lastMessage,
+    stepInfo: {
+      currentIndex: currentIndex >= 0 ? currentIndex + 1 : 0,
+      totalSteps,
+      completedSteps,
+      currentConfidence,
+    },
+  };
+}
+
+// Enriches a batch of sessions with per-flow step ordering and per-session
+// message summaries in a fixed number of queries, regardless of batch size
+// (scaling wall #1). Shared by the full-list and paginated procedures.
+async function enrichSessions(
+  container: Container,
+  sessions: Session[],
+): Promise<SessionListEntry[]> {
+  const flowIds = Array.from(new Set(sessions.map((session) => session.flowId)));
+
+  const flowGraphs = new Map<string, { nodeIds: string[] }>();
+  await Promise.all(
+    flowIds.map(async (flowId) => {
+      const [nodesResult, edgesResult] = await Promise.all([
+        container.repos.flowNodes.listByFlow(flowId),
+        container.repos.flowEdges.listByFlow(flowId),
+      ]);
+      if (nodesResult.error || edgesResult.error) {
+        flowGraphs.set(flowId, { nodeIds: [] });
+        return;
+      }
+      const nodes = nodesResult.data.map((node) => ({ id: node.id, positionX: node.positionX }));
+      const edges = edgesResult.data.map((edge) => ({
+        fromNodeId: edge.fromNodeId,
+        toNodeId: edge.toNodeId,
+      }));
+      flowGraphs.set(flowId, { nodeIds: orderStepIds(nodes, edges) });
+    }),
+  );
+
+  const summariesResult = await container.repos.sessionMessages.summariseForSessionList(
+    sessions.map((session) => session.id),
+  );
+  const summaryBySession = new Map(
+    (summariesResult.error ? [] : summariesResult.data).map(
+      (summary) => [summary.sessionId, summary] as const,
+    ),
+  );
+
+  return sessions.map((session) =>
+    buildSessionListEntry(session, flowGraphs.get(session.flowId), summaryBySession.get(session.id)),
+  );
+}
 
 // An approver who is not the session owner may still open the session read-only
 // to see what they are signing off on. Matches by user id and by email so an
@@ -33,87 +141,42 @@ export const sessionRouter = router({
   list: authenticatedProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listSessions.execute(ctx.userId);
     if (result.error) throw toTrpcError(result.error);
-
-    const sessions = result.data;
-    const flowIds = Array.from(new Set(sessions.map((s) => s.flowId)));
-
-    const flowGraphs = new Map<string, { nodeIds: string[] }>();
-    await Promise.all(
-      flowIds.map(async (flowId) => {
-        const [nodesResult, edgesResult] = await Promise.all([
-          ctx.container.repos.flowNodes.listByFlow(flowId),
-          ctx.container.repos.flowEdges.listByFlow(flowId),
-        ]);
-        if (nodesResult.error || edgesResult.error) {
-          flowGraphs.set(flowId, { nodeIds: [] });
-          return;
-        }
-        const nodes = nodesResult.data.map((n) => ({ id: n.id, positionX: n.positionX }));
-        const edges = edgesResult.data.map((e) => ({ fromNodeId: e.fromNodeId, toNodeId: e.toNodeId }));
-        flowGraphs.set(flowId, { nodeIds: orderStepIds(nodes, edges) });
-      }),
-    );
-
-    // One batch aggregation for every session's last-message and per-step best
-    // confidence, instead of loading each session's full history in turn
-    // (scaling wall #1). Missing sessions have no assistant messages yet.
-    const summariesResult = await ctx.container.repos.sessionMessages.summariseForSessionList(
-      sessions.map((session) => session.id),
-    );
-    const summaryBySession = new Map(
-      (summariesResult.error ? [] : summariesResult.data).map(
-        (summary) => [summary.sessionId, summary] as const,
-      ),
-    );
-
-    const enriched = sessions.map((session) => {
-      const graph = flowGraphs.get(session.flowId);
-      if (!graph || graph.nodeIds.length === 0) return { ...session, lastMessage: null, stepInfo: null };
-
-      const totalSteps = graph.nodeIds.length;
-      const currentIndex = session.currentNodeId
-        ? graph.nodeIds.indexOf(session.currentNodeId)
-        : -1;
-
-      const summary = summaryBySession.get(session.id);
-      const lastMessage = summary?.lastAssistantContent ?? null;
-      const bestConfidenceByStep = summary?.bestConfidenceByStep ?? {};
-
-      let completedSteps = 0;
-      for (const [nodeId, confidence] of Object.entries(bestConfidenceByStep)) {
-        if (confidence >= COMPLETE_CONFIDENCE_THRESHOLD && nodeId !== session.currentNodeId) {
-          completedSteps++;
-        }
-      }
-      if (session.status === "complete") completedSteps = totalSteps;
-
-      const currentConfidence =
-        session.status === "complete"
-          ? 0
-          : session.currentNodeId
-            ? bestConfidenceByStep[session.currentNodeId] ?? 0
-            : 0;
-
-      return {
-        ...session,
-        lastMessage,
-        stepInfo: {
-          currentIndex: currentIndex >= 0 ? currentIndex + 1 : 0,
-          totalSteps,
-          completedSteps,
-          currentConfidence,
-        },
-      };
-    });
-
-    return enriched;
+    return enrichSessions(ctx.container, result.data);
   }),
+
+  // Keyset-paginated counterpart of `list`. Same enriched rows, one page at a
+  // time; the client threads `nextCursor` back to fetch older sessions. Additive
+  // — `list` stays for callers that want the whole set.
+  listPage: authenticatedProcedure
+    .input(sessionListPageInputSchema)
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.listSessionsPage.execute(ctx.userId, {
+        limit: input.limit,
+        cursor: input.cursor ?? undefined,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      const items = await enrichSessions(ctx.container, result.data.items);
+      return { items, nextCursor: result.data.nextCursor };
+    }),
 
   listAll: adminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listAllSessions.execute();
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
+
+  // Keyset-paginated counterpart of `listAll` for the admin table. Returns bare
+  // sessions (the admin view joins users/flows client-side), one page at a time.
+  listAllPage: adminProcedure
+    .input(sessionListPageInputSchema)
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.listAllSessionsPage.execute({
+        limit: input.limit,
+        cursor: input.cursor ?? undefined,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { items: result.data.items, nextCursor: result.data.nextCursor };
+    }),
 
   get: authenticatedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))
