@@ -31,6 +31,10 @@ export interface SessionTurnDetail {
   edges: FlowEdge[];
   messagesTail: SessionMessage[];
   gatheredContext: GatheredContextItem[];
+  // Every step-anchored assistant message on the session's current node, full
+  // history. The readiness gate counts prior holds over these rather than the
+  // bounded tail, which can miss an older hold on a long-running node.
+  currentNodeAssistantMessages: SessionMessage[];
 }
 
 export interface GetSessionForTurnOptions {
@@ -64,17 +68,24 @@ export class GetSessionForTurn {
     if (!sessionResult.data) return ok(null);
     const session = sessionResult.data;
 
-    // Fanned out so a slow flow lookup does not serialise the two message
-    // queries: the bounded tail read and the SQL-side gathered-context
-    // aggregation both hit the (session_id, seq) index and are independent.
-    const [tailResult, gatheredResult, flowResult] = await Promise.all([
+    // Fanned out so a slow flow lookup does not serialise the message queries:
+    // the bounded tail read, the SQL-side gathered-context aggregation, and the
+    // current node's assistant messages all hit the (session_id, seq) index and
+    // are independent. The current-node read is a plain scan of one node's
+    // turns — cheap next to the whole transcript.
+    const currentNodeId = session.currentNodeId;
+    const [tailResult, gatheredResult, flowResult, currentNodeResult] = await Promise.all([
       this.sessionMessages.latestBySession(sessionId, options.messagesTailN),
       this.sessionMessages.aggregateGatheredContext(sessionId),
       this.flows.findById(session.flowId),
+      currentNodeId
+        ? this.sessionMessages.listStepAssistantMessages(sessionId, currentNodeId)
+        : Promise.resolve(ok<SessionMessage[]>([])),
     ]);
     if (tailResult.error) return tailResult;
     if (gatheredResult.error) return gatheredResult;
     if (flowResult.error) return flowResult;
+    if (currentNodeResult.error) return currentNodeResult;
     if (!flowResult.data) return err(domainError("NOT_FOUND", "Associated flow not found."));
 
     const definitionResult = await this.resolveDefinition(session);
@@ -87,6 +98,7 @@ export class GetSessionForTurn {
       edges: definitionResult.data.edges,
       messagesTail: tailResult.data,
       gatheredContext: gatheredResult.data,
+      currentNodeAssistantMessages: currentNodeResult.data,
     });
   }
 

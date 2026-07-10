@@ -74,6 +74,18 @@ export const buildAggregateGatheredContextStatement = (sessionId: string): SQL =
   ORDER BY ${app_session_messages.seq} ASC
 `;
 
+// One node's step-anchored assistant messages, chronological. No jsonb access —
+// the caller inspects `contextGathered` in TS — so this stays a plain indexed
+// scan over a single node's turns, backing the gate-hold count over full
+// history (which the bounded tail can miss on a long-running node).
+export const buildStepAssistantMessagesStatement = (sessionId: string, nodeId: string): SQL => sql`
+  SELECT * FROM ${app_session_messages}
+  WHERE ${app_session_messages.session_id} = ${sessionId}
+    AND ${app_session_messages.step_node_id} = ${nodeId}
+    AND ${app_session_messages.role} = 'assistant'
+  ORDER BY ${app_session_messages.seq} ASC
+`;
+
 // Highest confidence per (session, step) across the batch, aggregated SQL-side
 // so the per-step best the list view shows is one grouped query, not a
 // per-session in-memory reduction over full histories.
@@ -197,6 +209,17 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return ok(rows.map(toEntity).reverse());
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to load latest session messages.", cause));
+    }
+  }
+
+  async listStepAssistantMessages(sessionId: string, nodeId: string): Promise<Result<SessionMessage[]>> {
+    try {
+      const rows = (await this.db.execute(
+        buildStepAssistantMessagesStatement(sessionId, nodeId),
+      )) as unknown as (typeof app_session_messages.$inferSelect)[];
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to load step assistant messages.", cause));
     }
   }
 

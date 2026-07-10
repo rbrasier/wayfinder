@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
   buildAggregateGatheredContextStatement,
+  buildStepAssistantMessagesStatement,
   buildLatestBySessionStatement,
   buildListSinceStatement,
   buildListSinceSeqStatement,
@@ -54,6 +55,22 @@ describe("buildAggregateGatheredContextStatement", () => {
     const text = sql.toLowerCase();
     expect(text).toContain("jsonb_typeof");
     expect(text).toContain("'array'");
+  });
+});
+
+describe("buildStepAssistantMessagesStatement", () => {
+  it("scopes to one node's assistant messages and orders by seq without touching jsonb", () => {
+    const { sql, params } = render(buildStepAssistantMessagesStatement("session-1", "node-appr"));
+    const text = sql.toLowerCase();
+
+    expect(text).toContain("step_node_id");
+    expect(text).toContain("role");
+    expect(text).toContain("order by");
+    expect(text).toContain("asc");
+    // The key check happens in TS, so the query must stay a plain scan.
+    expect(text).not.toContain("contextgathered");
+    expect(params).toContain("session-1");
+    expect(params).toContain("node-appr");
   });
 });
 

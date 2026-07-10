@@ -127,3 +127,13 @@ None (no schema change).
   their own paths. Those are operator-Proceed and advance-branch code paths,
   much less frequent than a per-turn chat send; moving them to the bounded
   read is a follow-up rather than a scaling wall.
+
+## Correction (v2.4.4)
+
+The claim above that this slice was behaviour-neutral was **not** fully
+accurate. `dbMessages` also fed the readiness gate's prior-hold count
+(`countGateHoldsOnNode`), which this slice narrowed from the full transcript to
+the 20-message tail — so a node with >20 messages between its first gate-hold
+and its next threshold crossing could be gated a second time. Fixed in
+**v2.4.4** by counting over the current node's full history (see
+`implemented/v2.4.4/code-quality-hot-paths-group-a-item-3-gate-hold-count-fix.md`).

@@ -92,6 +92,7 @@ export async function POST(
     edges,
     messagesTail: dbMessages,
     gatheredContext: gatheredContextItems,
+    currentNodeAssistantMessages,
   } = sessionResult.data;
 
   if (session.status !== "active") {
@@ -358,8 +359,10 @@ export async function POST(
         stepCompleteConfidence: aiPayload.stepCompleteConfidence,
         advanceThreshold: realThreshold,
         // Bound the gate: once it has already surfaced this node's gaps, a later
-        // threshold turn advances rather than looping on a flaky grader.
-        priorGateHolds: countGateHoldsOnNode(dbMessages, session.currentNodeId),
+        // threshold turn advances rather than looping on a flaky grader. Counted
+        // over the current node's full history (not the bounded tail, which can
+        // miss an older hold on a long-running node).
+        priorGateHolds: countGateHoldsOnNode(currentNodeAssistantMessages, session.currentNodeId),
         maxGateHolds: MAX_GATE_HOLDS,
       });
 

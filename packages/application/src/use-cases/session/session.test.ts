@@ -303,6 +303,14 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
     return ok(items);
   }
 
+  async listStepAssistantMessages(sessionId: string, nodeId: string): Promise<Result<SessionMessage[]>> {
+    return ok(
+      this.chronological(sessionId).filter(
+        (m) => m.role === "assistant" && m.stepNodeId === nodeId,
+      ),
+    );
+  }
+
   private chronological(sessionId: string): SessionMessage[] {
     return [...this.messages.values()]
       .filter((m) => m.sessionId === sessionId)
@@ -780,6 +788,45 @@ describe("GetSessionForTurn", () => {
     expect(result.data?.gatheredContext).toHaveLength(25);
     expect(result.data?.gatheredContext[0]).toEqual({ key: "k0", value: "v0" });
     expect(result.data?.gatheredContext[24]).toEqual({ key: "k24", value: "v24" });
+  });
+
+  it("returns the current node's assistant messages over full history, not just the tail", async () => {
+    // The first turn holds the gate (carries an OUTSTANDING marker), then 24
+    // later turns push it out of a 20-message tail. The gate-hold source must
+    // still include that first hold so a long-running node is not re-gated.
+    await messages.create({
+      sessionId: "session-1",
+      role: "assistant",
+      content: "hold",
+      stepNodeId: "node-1",
+      aiPayload: {
+        response: "hold",
+        rationale: "r",
+        stepCompleteConfidence: 0,
+        contextGathered: [{ key: "OUTSTANDING — still required from the user", value: "start date" }],
+      },
+    });
+    for (let i = 0; i < 24; i++) {
+      await messages.create({
+        sessionId: "session-1",
+        role: "assistant",
+        content: `turn ${i}`,
+        stepNodeId: "node-1",
+        aiPayload: { response: `turn ${i}`, rationale: "r", stepCompleteConfidence: 0, contextGathered: [] },
+      });
+    }
+
+    const result = await useCase.execute("session-1", { messagesTailN: 20 });
+
+    const holdMarker = "OUTSTANDING — still required from the user";
+    const holds = (result.data?.currentNodeAssistantMessages ?? []).filter((m) =>
+      (m.aiPayload?.contextGathered ?? []).some((item) => item.key === holdMarker),
+    );
+    // The tail is bounded to 20 and would exclude the hold; the full-history
+    // node read still surfaces it.
+    expect(result.data?.messagesTail).toHaveLength(20);
+    expect(result.data?.currentNodeAssistantMessages).toHaveLength(25);
+    expect(holds).toHaveLength(1);
   });
 
   it("returns VALIDATION_FAILED when messagesTailN is not a positive integer", async () => {

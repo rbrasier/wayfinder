@@ -31,6 +31,11 @@ export interface ISessionMessageRepository {
   // aggregate in one round-trip, so the tail read stays O(N) rather than
   // pulling the whole transcript per turn.
   aggregateGatheredContext(sessionId: string): Promise<Result<GatheredContextItem[]>>;
+  // The step-anchored assistant messages for a single node, chronological.
+  // Backs the bounded turn read's gate-hold count: the last-N tail can miss an
+  // older hold on a long-running node, so the count must be taken over this
+  // node's full history — one node's turns, not the whole transcript.
+  listStepAssistantMessages(sessionId: string, nodeId: string): Promise<Result<SessionMessage[]>>;
   // The most recent `limit` messages in chronological order. Bounds the per-turn
   // read so a long-running session does not load its entire history on every
   // turn (scaling wall #1). `limit` must be a positive integer.

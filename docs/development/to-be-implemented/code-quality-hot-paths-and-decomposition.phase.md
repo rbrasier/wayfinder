@@ -90,7 +90,14 @@ areas that only hurt under data growth and change velocity:
 > `implemented/v2.4.1/code-quality-hot-paths-group-a-item-4-pagination.md`).
 > Keyset on `(updated_at DESC, id DESC)`; the tRPC exposure and message-list
 > pagination endpoint are deliberately deferred as UI-facing follow-ups so the
-> server contract can be adopted incrementally.
+> server contract can be adopted incrementally. **v2.4.4** fixed a regression the
+> v2.4.0 bounded read introduced: the readiness gate's prior-hold count was being
+> taken over the 20-message tail, so a node with >20 messages between its first
+> hold and its next threshold crossing could be gated twice (partially
+> re-opening the v1.58.5 livelock fix). The count now runs over the current
+> node's full history via a new `listStepAssistantMessages` port method folded
+> into `GetSessionForTurn` (summary at
+> `implemented/v2.4.4/code-quality-hot-paths-group-a-item-3-gate-hold-count-fix.md`).
 
 1. **`session.list` N+1** (`apps/web/src/server/routers/session.ts`): today
    it loads full flow graphs and the **entire message history of every
