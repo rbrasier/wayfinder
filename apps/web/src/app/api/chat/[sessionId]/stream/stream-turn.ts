@@ -1,10 +1,5 @@
-import { formatDataStreamPart } from "ai";
-import type { ChatMessage, ILanguageModel, TokenUsage } from "@rbrasier/domain";
+import type { ChatMessage, ILanguageModel, TokenUsage, TurnStreamWriter } from "@rbrasier/domain";
 import type { z } from "zod";
-
-export interface StreamTurnWriter {
-  write: (data: ReturnType<typeof formatDataStreamPart<"text">>) => void;
-}
 
 // Callers pass a fully-decorated ILanguageModel from the container. Usage
 // recording, quota enforcement, Langfuse tracing, and the concurrency governor
@@ -20,7 +15,7 @@ export interface StreamTurnInput<Schema extends z.ZodTypeAny> {
   schema: Schema;
   system: string;
   messages: ChatMessage[];
-  writer: StreamTurnWriter;
+  writer: TurnStreamWriter;
 }
 
 export async function streamTurn<Schema extends z.ZodTypeAny>(
@@ -67,7 +62,7 @@ export async function streamTurn<Schema extends z.ZodTypeAny>(
         : "";
     if (currentResponse.length > previousResponseLength) {
       const newChars = currentResponse.slice(previousResponseLength);
-      input.writer.write(formatDataStreamPart("text", newChars));
+      input.writer.writeText(newChars);
       previousResponseLength = currentResponse.length;
     }
   }

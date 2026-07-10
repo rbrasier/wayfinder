@@ -1,4 +1,3 @@
-import { formatDataStreamPart } from "ai";
 import {
   type AiTurnPayload,
   type ConversationalNodeConfig,
@@ -12,11 +11,12 @@ import {
   type Session,
   type SessionMessage,
   type SessionUpload,
+  type TurnStreamWriter,
 } from "@rbrasier/domain";
 import { turnResponseSchema } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
-import { streamTurn, type StreamTurnWriter } from "./stream-turn";
+import { streamTurn } from "./stream-turn";
 
 // Re-exported from its lightweight home so existing importers keep working while
 // the gate-hold counter can depend on the constant without pulling this module.
@@ -101,19 +101,6 @@ export async function appendShortcomingsToContext(
   await container.repos.sessionMessages.updateAiPayload(messageId, mergedPayload).catch(() => undefined);
 }
 
-// A writer that accepts any pre-formatted data-stream part (StreamTurnWriter is
-// nominally text-only; the boundary and note parts share the same wire format).
-interface DataStreamPartWriter {
-  write: (part: ReturnType<typeof formatDataStreamPart<"text">>) => void;
-}
-
-// Closes the current streamed bubble so the next text part opens a new one on
-// the client. Without this every text written into one response concatenates
-// into a single bubble, which the persisted view then appears to rewrite.
-const writeMessageBoundary = (writer: DataStreamPartWriter): void => {
-  writer.write(formatDataStreamPart("finish_step", { finishReason: "stop", isContinued: false }));
-};
-
 // The pre-generation gate overruled this reply, but the user has already
 // watched it stream. Persist it as a real message so the corrective follow-up
 // appends below it instead of appearing to rewrite the conversation.
@@ -139,10 +126,11 @@ export const CROSS_CHECK_PASS_NOTE =
   "Cross-check complete — everything is in alignment with the reference documents.";
 
 // Streamed the moment the cross-check passes, so the user gets explicit
-// feedback before the (slow) branch choice and document generation run.
-export function writeCrossCheckPassNote(writer: DataStreamPartWriter): void {
-  writeMessageBoundary(writer);
-  writer.write(formatDataStreamPart("text", CROSS_CHECK_PASS_NOTE));
+// feedback before the (slow) branch choice and document generation run. Opens a
+// new bubble first so the note never merges into the reply above it.
+export function writeCrossCheckPassNote(writer: TurnStreamWriter): void {
+  writer.endBubble();
+  writer.writeText(CROSS_CHECK_PASS_NOTE);
 }
 
 // Persisted separately from the streamed note (and after the assistant turn)
@@ -160,7 +148,7 @@ export async function persistCrossCheckPassNote(
 
 export interface StreamGapFollowupInput {
   container: Container;
-  writer: StreamTurnWriter;
+  writer: TurnStreamWriter;
   session: Session;
   flowId: string;
   system: string;
@@ -192,7 +180,7 @@ export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<
 
   // The follow-up corrects the reply above it, so it must arrive as a NEW
   // bubble — appended, never merged into the message it corrects.
-  writeMessageBoundary(input.writer);
+  input.writer.endBubble();
 
   // Through the ILanguageModel port: usage recording, quota enforcement,
   // Langfuse tracing, and the concurrency governor all apply as decorators

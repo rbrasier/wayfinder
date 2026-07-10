@@ -16,7 +16,33 @@ import {
   streamGapFollowup,
   writeCrossCheckPassNote,
 } from "./turn-helpers";
-import type { Session } from "@rbrasier/domain";
+import type { Session, TurnStreamWriter } from "@rbrasier/domain";
+
+// A TurnStreamWriter that records the ordered sequence of semantic operations
+// ("boundary" for endBubble, "text:<t>" for writeText) plus the text payloads,
+// so a test can assert both the bubble boundaries and the streamed content.
+const recordingWriter = (): TurnStreamWriter & { ops: string[]; texts: string[] } => {
+  const ops: string[] = [];
+  const texts: string[] = [];
+  return {
+    ops,
+    texts,
+    writeText: (text: string) => {
+      ops.push(`text:${text}`);
+      texts.push(text);
+    },
+    endBubble: () => {
+      ops.push("boundary");
+    },
+    writeAnnotation: () => {},
+  };
+};
+
+const noopWriter = (): TurnStreamWriter => ({
+  writeText: () => {},
+  endBubble: () => {},
+  writeAnnotation: () => {},
+});
 
 const makeAssistantMessage = (overrides: Partial<SessionMessage> = {}): SessionMessage => ({
   id: "msg-1",
@@ -776,7 +802,6 @@ describe("streamGapFollowup", () => {
 
   it("streams a follow-up asking for the gaps and persists it on the same node", async () => {
     const create = vi.fn().mockResolvedValue({ data: {}, error: null });
-    const written: string[] = [];
     const { llm } = fakeGapLlm("Could you share the end date?");
 
     const container = {
@@ -787,9 +812,10 @@ describe("streamGapFollowup", () => {
       },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
+    const writer = recordingWriter();
     await streamGapFollowup({
       container,
-      writer: { write: (s: string) => written.push(s) },
+      writer,
       session: session(),
       flowId: "flow-1",
       system: "base system prompt",
@@ -799,11 +825,10 @@ describe("streamGapFollowup", () => {
       userId: "user-1",
     });
 
-    // The follow-up must open a NEW bubble: a finish_step boundary precedes its
+    // The follow-up must open a NEW bubble: an endBubble boundary precedes its
     // text so the client never appends it onto the reply it corrects.
-    expect(written[0]).toMatch(/^e:/);
-    expect(written[0]).toContain('"isContinued":false');
-    expect(written.join("")).toContain("Could you share the end date?");
+    expect(writer.ops[0]).toBe("boundary");
+    expect(writer.texts.join("")).toContain("Could you share the end date?");
     expect(create).toHaveBeenCalledTimes(1);
     const createArg = create.mock.calls[0]![0];
     expect(createArg.role).toBe("assistant");
@@ -822,7 +847,7 @@ describe("streamGapFollowup", () => {
 
     const result = await streamGapFollowup({
       container,
-      writer: { write: () => undefined },
+      writer: noopWriter(),
       session: session(),
       flowId: "flow-1",
       system: "base system prompt",
@@ -846,7 +871,7 @@ describe("streamGapFollowup", () => {
 
     const result = await streamGapFollowup({
       container,
-      writer: { write: () => undefined },
+      writer: noopWriter(),
       session: session(),
       flowId: "flow-1",
       system: "base system prompt",
@@ -870,7 +895,7 @@ describe("streamGapFollowup", () => {
 
     await streamGapFollowup({
       container,
-      writer: { write: () => undefined },
+      writer: noopWriter(),
       session: session(),
       flowId: "flow-1",
       system: "base system prompt",
@@ -897,7 +922,7 @@ describe("streamGapFollowup", () => {
 
     await streamGapFollowup({
       container,
-      writer: { write: () => undefined },
+      writer: noopWriter(),
       session: session(),
       flowId: "flow-1",
       system: "s",
@@ -970,16 +995,14 @@ describe("persistHeldReply", () => {
 
 describe("cross-check pass note", () => {
   it("streams the note behind a message boundary so it renders as a new bubble", () => {
-    const written: string[] = [];
+    const writer = recordingWriter();
 
-    writeCrossCheckPassNote({ write: (part: string) => written.push(part) });
+    writeCrossCheckPassNote(writer);
 
-    // finish_step ("e:") closes the current bubble; the note text ("0:") then
-    // opens a fresh one on the client.
-    expect(written[0]).toMatch(/^e:/);
-    expect(written[0]).toContain('"isContinued":false');
-    expect(written[1]).toMatch(/^0:/);
-    expect(written[1]).toContain("alignment");
+    // endBubble closes the current bubble; the note text then opens a fresh one.
+    expect(writer.ops[0]).toBe("boundary");
+    expect(writer.ops[1]).toMatch(/^text:/);
+    expect(writer.texts[0]).toContain("alignment");
   });
 
   it("persists the note as a system message on the completed node", async () => {

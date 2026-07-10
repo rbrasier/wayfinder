@@ -1,4 +1,4 @@
-import { createDataStreamResponse, formatDataStreamPart } from "ai";
+import { createDataStreamResponse } from "ai";
 import type { EvaluateStepReadinessOutput } from "@rbrasier/application";
 import {
   normaliseAdvanceConfidenceThreshold,
@@ -15,6 +15,7 @@ import { shouldComputeBranchChoice } from "./branch-gate";
 import { countGateHoldsOnNode } from "./gate-holds";
 import { shouldEvaluateStepReadiness } from "./readiness-gate";
 import { streamTurn } from "./stream-turn";
+import { DataStreamTurnWriter } from "./turn-stream-writer";
 import {
   appendShortcomingsToContext,
   applyAdvanceSideEffects,
@@ -240,6 +241,10 @@ export async function POST(
 
   return createDataStreamResponse({
     execute: async (dataStream) => {
+      // Everything downstream writes through the framework-free TurnStreamWriter
+      // port; this adapter is the one place that maps those semantic calls onto
+      // the Vercel data-stream wire format.
+      const writer = new DataStreamTurnWriter(dataStream);
       // A doc-gen-heavy turn can outlive the lease window, so re-stamp it while
       // the stream is open; the release in `finally` frees it the instant the
       // turn ends (success or failure) rather than waiting for expiry.
@@ -269,7 +274,7 @@ export async function POST(
       // and the session stays active — raising/disabling the cap resumes it.
       const quotaCheck = await container.services.quotaEnforcer.check(authSession.userId);
       if (quotaCheck.error) {
-        dataStream.write(formatDataStreamPart("text", quotaCheck.error.message));
+        writer.writeText(quotaCheck.error.message);
         await container.repos.sessionMessages.create({
           sessionId: session.id,
           role: "system",
@@ -292,7 +297,7 @@ export async function POST(
         schema: turnResponseSchema,
         system: systemPromptResult.data,
         messages: messagesWithNew,
-        writer: dataStream,
+        writer,
       });
       const turnResult = streamResult.object;
 
@@ -303,7 +308,7 @@ export async function POST(
         contextGathered: turnResult.contextGathered,
       };
 
-      dataStream.writeMessageAnnotation({
+      writer.writeAnnotation({
         type: "confidence",
         score: aiPayload.stepCompleteConfidence,
       });
@@ -369,7 +374,7 @@ export async function POST(
 
       let evaluation: EvaluateStepReadinessOutput | null = null;
       if (shouldEvaluateReadiness) {
-        dataStream.writeMessageAnnotation({
+        writer.writeAnnotation({
           type: "cross-checking",
           active: true,
           documents: flow.contextDocs.map((doc) => documentLabel(doc.filename)),
@@ -395,7 +400,7 @@ export async function POST(
         } finally {
           // Explicit off-signal so the badge clears the moment the cross-check
           // finishes, rather than lingering through the fail-path follow-up.
-          dataStream.writeMessageAnnotation({ type: "cross-checking", active: false });
+          writer.writeAnnotation({ type: "cross-checking", active: false });
         }
       }
 
@@ -410,7 +415,7 @@ export async function POST(
         await persistHeldReply(container, session, aiPayload);
         const followup = await streamGapFollowup({
           container,
-          writer: dataStream,
+          writer,
           session,
           flowId: flow.id,
           system: systemPromptResult.data,
@@ -434,7 +439,7 @@ export async function POST(
       // choice and document generation) so the user sees the cross-check
       // outcome instead of an apparent stall.
       if (evaluation?.passed) {
-        writeCrossCheckPassNote(dataStream);
+        writeCrossCheckPassNote(writer);
       }
 
       const branchChoice = await computeBranchChoice();
@@ -484,7 +489,7 @@ export async function POST(
           // Live "Generating document…" feedback while generation is awaited
           // before the next step opens.
           onDocumentGenerationChange: (active) =>
-            dataStream.writeMessageAnnotation({ type: "generating-document", active }),
+            writer.writeAnnotation({ type: "generating-document", active }),
           // On a pass the gate already extracted the fields and graded them;
           // thread both onward so generation skips the second extraction.
           precomputedDocument: evaluation

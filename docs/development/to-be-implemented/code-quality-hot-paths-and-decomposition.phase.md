@@ -156,8 +156,21 @@ areas that only hurt under data growth and change velocity:
 > with its hand-rolled `recordTokenUsage`/`resolveModel` and the route's
 > `provider`/`apiKey` locals (summary at
 > `implemented/v2.4.5/code-quality-hot-paths-group-b-slice-5-generate-title-port.md`).
-> Only item 6 (`ExecuteTurn` extraction, plus E14/E16 which fall out of it) still
-> remains in Group B's scope.
+> **v2.4.7** landed item 6's first slice (6a): a framework-free
+> `TurnStreamWriter` domain port (`writeText`/`endBubble`/`writeAnnotation` +
+> a `TurnStreamAnnotation` union) and its `DataStreamTurnWriter` adapter, now the
+> only file in the stream path that touches `formatDataStreamPart`. The route,
+> `stream-turn`, and `turn-helpers` write through the port, so the turn
+> orchestration no longer depends on the Vercel AI SDK writer — the precondition
+> for moving it into the application layer. Behaviour-preserving (63 stream unit
+> tests green; the cross-check pass/hold bubble boundaries and the Anthropic
+> cache marker are unchanged). Note discovered en route: the e2e chat suite mocks
+> `/api/chat/[id]/stream` at the HTTP boundary, so the real net for this refactor
+> is the unit layer, not e2e (summary at
+> `implemented/v2.4.7/code-quality-hot-paths-group-b-slice-6a-turn-stream-writer-port.md`).
+> Still open under item 6: 6b (move the orchestration into an `ExecuteTurn` use
+> case that depends on `TurnStreamWriter` + existing ports) and 6c/E14 (narrow
+> the route's remaining direct `container.repos.*` reach).
 
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,

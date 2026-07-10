@@ -10,13 +10,17 @@ const schema = z.object({
   contextGathered: z.array(z.object({ key: z.string(), value: z.string() })),
 });
 
+// Captures the semantic writer calls streamTurn makes. Only writeText is
+// exercised here; endBubble/writeAnnotation are asserted in turn-helpers tests.
 const writerStub = () => {
-  const written: string[] = [];
+  const texts: string[] = [];
   return {
-    written,
-    write: (s: string) => {
-      written.push(s);
+    texts,
+    writeText: (text: string) => {
+      texts.push(text);
     },
+    endBubble: () => {},
+    writeAnnotation: () => {},
   };
 };
 
@@ -96,7 +100,7 @@ describe("streamTurn", () => {
     expect(turn.object.stepCompleteConfidence).toBe(50);
     expect(turn.usage.promptTokens).toBe(1);
     expect(turn.usage.completionTokens).toBe(5);
-    expect(writer.written.join("")).toBe('0:"Hello"\n0:" world"\n');
+    expect(writer.texts).toEqual(["Hello", " world"]);
   });
 
   it("attaches an Anthropic cache_control marker to the system prompt", async () => {
