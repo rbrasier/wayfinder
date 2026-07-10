@@ -104,9 +104,7 @@ export interface StreamGapFollowupInput {
   system: string;
   messages: { role: "user" | "assistant" | "system"; content: string }[];
   missingInformation: string[];
-  model: LanguageModel;
   modelName: string;
-  provider: Parameters<typeof recordTokenUsage>[1]["provider"];
   userId: string;
 }
 
@@ -130,34 +128,22 @@ export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<
     gaps,
   ].join("\n");
 
+  // Through the ILanguageModel port: usage recording, quota enforcement,
+  // Langfuse tracing, and the concurrency governor all apply as decorators
+  // (ADR-026). No hand-rolled recordTokenUsage here.
   const streamResult = await streamTurn({
-    model: input.model,
+    llm: input.container.services.llm,
+    purpose: "chat-gap-followup",
+    model: input.modelName,
+    userId: input.userId,
+    flowId: input.flowId,
+    sessionId: input.session.id,
     schema: turnResponseSchema,
     system: followupSystem,
     messages: input.messages,
     writer: input.writer,
   });
   const turnResult = streamResult.object;
-
-  recordTokenUsage(
-    input.container.repos.usageRepo,
-    {
-      purpose: "chat-gap-followup",
-      userId: input.userId,
-      conversationId: input.session.id,
-      flowId: input.flowId,
-      sessionId: input.session.id,
-      model: input.modelName,
-      provider: input.provider,
-    },
-    {
-      promptTokens: streamResult.usage.promptTokens,
-      completionTokens: streamResult.usage.completionTokens,
-      systemTokens: 0,
-      cacheReadTokens: streamResult.usage.cacheReadTokens,
-      cacheWriteTokens: streamResult.usage.cacheWriteTokens,
-    },
-  );
 
   const aiPayload: AiTurnPayload = {
     response: turnResult.response,

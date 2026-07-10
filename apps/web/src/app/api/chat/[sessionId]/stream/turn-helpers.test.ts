@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MockLanguageModelV1, simulateReadableStream } from "ai/test";
+import { MockLanguageModelV1 } from "ai/test";
 import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@rbrasier/domain";
 import {
   appendShortcomingsToContext,
@@ -660,26 +660,45 @@ describe("appendShortcomingsToContext", () => {
 });
 
 describe("streamGapFollowup", () => {
-  const gapModel = () =>
-    new MockLanguageModelV1({
-      defaultObjectGenerationMode: "tool",
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: [
-            {
-              type: "tool-call-delta",
-              toolCallType: "function",
-              toolCallId: "c1",
-              toolName: "json",
-              argsTextDelta:
-                '{"response":"Could you share the end date?","rationale":"gap","stepCompleteConfidence":20,"contextGathered":[]}',
-            },
-            { type: "finish", finishReason: "stop", usage: { promptTokens: 2, completionTokens: 4 } },
-          ],
-        }),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
+  const fakeGapLlm = (
+    finalResponse: string,
+  ): {
+    llm: Parameters<typeof streamGapFollowup>[0]["container"]["services"]["llm"];
+    streamObject: ReturnType<typeof vi.fn>;
+  } => {
+    const streamObject = vi.fn(async () => {
+      async function* stream() {
+        yield { response: finalResponse };
+      }
+      return {
+        data: {
+          partialObjectStream: stream(),
+          object: Promise.resolve({
+            response: finalResponse,
+            rationale: "gap",
+            stepCompleteConfidence: 20,
+            contextGathered: [],
+          }),
+          usage: Promise.resolve({
+            promptTokens: 2,
+            completionTokens: 4,
+            systemTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          }),
+        },
+      };
     });
+    return {
+      llm: {
+        provider: "anthropic",
+        generateObject: vi.fn(),
+        streamText: vi.fn(),
+        streamObject,
+      } as unknown as Parameters<typeof streamGapFollowup>[0]["container"]["services"]["llm"],
+      streamObject,
+    };
+  };
 
   const session = (): Session =>
     ({ id: "sess-1", currentNodeId: "node-1" } as unknown as Session);
@@ -687,11 +706,13 @@ describe("streamGapFollowup", () => {
   it("streams a follow-up asking for the gaps and persists it on the same node", async () => {
     const create = vi.fn().mockResolvedValue({ data: {}, error: null });
     const written: string[] = [];
+    const { llm } = fakeGapLlm("Could you share the end date?");
 
     const container = {
+      services: { llm },
       repos: {
         sessionMessages: { create },
-        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+        usageRepo: {},
       },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
@@ -703,9 +724,7 @@ describe("streamGapFollowup", () => {
       system: "base system prompt",
       messages: [{ role: "user", content: "All done" }],
       missingInformation: ["The end date is missing."],
-      model: gapModel(),
       modelName: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
       userId: "user-1",
     });
 
@@ -719,12 +738,11 @@ describe("streamGapFollowup", () => {
 
   it("returns the persisted follow-up message id so the caller can record the hold", async () => {
     const create = vi.fn().mockResolvedValue({ data: { id: "followup-1" }, error: null });
+    const { llm } = fakeGapLlm("gap prompt");
 
     const container = {
-      repos: {
-        sessionMessages: { create },
-        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
-      },
+      services: { llm },
+      repos: { sessionMessages: { create }, usageRepo: {} },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
     const result = await streamGapFollowup({
@@ -735,9 +753,7 @@ describe("streamGapFollowup", () => {
       system: "base system prompt",
       messages: [{ role: "user", content: "All done" }],
       missingInformation: ["The end date is missing."],
-      model: gapModel(),
       modelName: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
       userId: "user-1",
     });
 
@@ -746,12 +762,11 @@ describe("streamGapFollowup", () => {
 
   it("returns a null message id when persistence fails so no hold is recorded", async () => {
     const create = vi.fn().mockResolvedValue({ data: null, error: { code: "DB", message: "boom" } });
+    const { llm } = fakeGapLlm("gap prompt");
 
     const container = {
-      repos: {
-        sessionMessages: { create },
-        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
-      },
+      services: { llm },
+      repos: { sessionMessages: { create }, usageRepo: {} },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
     const result = await streamGapFollowup({
@@ -762,9 +777,7 @@ describe("streamGapFollowup", () => {
       system: "base system prompt",
       messages: [{ role: "user", content: "All done" }],
       missingInformation: ["The end date is missing."],
-      model: gapModel(),
       modelName: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
       userId: "user-1",
     });
 
@@ -773,36 +786,11 @@ describe("streamGapFollowup", () => {
 
   it("falls back to a generic gap description when the grading model reported no specific items", async () => {
     const create = vi.fn().mockResolvedValue({ data: {}, error: null });
-    let capturedPrompt: { role: string; content: unknown }[] = [];
-
-    const model = new MockLanguageModelV1({
-      defaultObjectGenerationMode: "tool",
-      doStream: async (options) => {
-        capturedPrompt = options.prompt as { role: string; content: unknown }[];
-        return {
-          stream: simulateReadableStream({
-            chunks: [
-              {
-                type: "tool-call-delta",
-                toolCallType: "function",
-                toolCallId: "c1",
-                toolName: "json",
-                argsTextDelta:
-                  '{"response":"Could you confirm a few more details?","rationale":"gap","stepCompleteConfidence":20,"contextGathered":[]}',
-              },
-              { type: "finish", finishReason: "stop", usage: { promptTokens: 2, completionTokens: 4 } },
-            ],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        };
-      },
-    });
+    const { llm, streamObject } = fakeGapLlm("Could you confirm a few more details?");
 
     const container = {
-      repos: {
-        sessionMessages: { create },
-        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
-      },
+      services: { llm },
+      repos: { sessionMessages: { create }, usageRepo: {} },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
     await streamGapFollowup({
@@ -813,15 +801,49 @@ describe("streamGapFollowup", () => {
       system: "base system prompt",
       messages: [{ role: "user", content: "All done" }],
       missingInformation: [],
-      model,
       modelName: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
       userId: "user-1",
     });
 
-    const systemMessage = capturedPrompt.find((message) => message.role === "system");
+    const passed = streamObject.mock.calls[0]![0] as { messages: { role: string; content: string }[] };
+    const systemMessage = passed.messages.find((m) => m.role === "system");
     expect(systemMessage?.content).toContain("still need to be confirmed");
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes through the ILanguageModel port with purpose=chat-gap-followup", async () => {
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const { llm, streamObject } = fakeGapLlm("Please confirm.");
+
+    const container = {
+      services: { llm },
+      repos: { sessionMessages: { create }, usageRepo: {} },
+    } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
+
+    await streamGapFollowup({
+      container,
+      writer: { write: () => undefined },
+      session: session(),
+      flowId: "flow-1",
+      system: "s",
+      messages: [{ role: "user", content: "hi" }],
+      missingInformation: ["x"],
+      modelName: "claude-haiku-4-5-20251001",
+      userId: "user-1",
+    });
+
+    const passed = streamObject.mock.calls[0]![0] as {
+      purpose: string;
+      userId: string;
+      flowId: string;
+      sessionId: string;
+      model: string;
+    };
+    expect(passed.purpose).toBe("chat-gap-followup");
+    expect(passed.userId).toBe("user-1");
+    expect(passed.flowId).toBe("flow-1");
+    expect(passed.sessionId).toBe("sess-1");
+    expect(passed.model).toBe("claude-haiku-4-5-20251001");
   });
 });
 

@@ -1,5 +1,5 @@
 import { createDataStreamResponse, formatDataStreamPart } from "ai";
-import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
+import { resolveModel } from "@rbrasier/adapters";
 import type { EvaluateStepReadinessOutput } from "@rbrasier/application";
 import {
   normaliseAdvanceConfidenceThreshold,
@@ -227,9 +227,8 @@ export async function POST(
   const apiKey = aiConfig.apiKeys[provider];
   const chatModelName = aiConfig.models.chat;
   const branchingModelName = aiConfig.models.branching;
-  const chatModel = resolveModel(provider, chatModelName, apiKey);
   // Still resolved as an SDK model for applyAdvanceSideEffects (turn-helpers'
-  // doc-gen/branch path, not yet ported — Group B streaming follow-up).
+  // opener/branch path, not yet ported — Group B slice 3).
   const branchingModel = resolveModel(provider, branchingModelName, apiKey);
 
   return createDataStreamResponse({
@@ -273,34 +272,22 @@ export async function POST(
         return;
       }
 
+      // Through the ILanguageModel port: the concurrency governor, usage
+      // recording, quota enforcement, and Langfuse tracing all apply as
+      // decorators (ADR-026). No hand-rolled recordTokenUsage here.
       const streamResult = await streamTurn({
-        model: chatModel,
+        llm: container.services.llm,
+        purpose: "chat-turn",
+        model: chatModelName,
+        userId: authSession.userId,
+        flowId: flow.id,
+        sessionId,
         schema: turnResponseSchema,
         system: systemPromptResult.data,
         messages: messagesWithNew,
         writer: dataStream,
       });
       const turnResult = streamResult.object;
-
-      recordTokenUsage(
-        container.repos.usageRepo,
-        {
-          purpose: "chat-turn",
-          userId: authSession.userId,
-          conversationId: sessionId,
-          flowId: flow.id,
-          sessionId,
-          model: chatModelName,
-          provider,
-        },
-        {
-          promptTokens: streamResult.usage.promptTokens,
-          completionTokens: streamResult.usage.completionTokens,
-          systemTokens: 0,
-          cacheReadTokens: streamResult.usage.cacheReadTokens,
-          cacheWriteTokens: streamResult.usage.cacheWriteTokens,
-        },
-      );
 
       const aiPayload: AiTurnPayload = {
         response: turnResult.response,
@@ -418,9 +405,7 @@ export async function POST(
           system: systemPromptResult.data,
           messages: messagesWithNew,
           missingInformation: evaluation.missingInformation,
-          model: chatModel,
           modelName: chatModelName,
-          provider,
           userId: authSession.userId,
         });
 

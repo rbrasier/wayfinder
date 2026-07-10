@@ -110,10 +110,13 @@ areas that only hurt under data growth and change velocity:
 > extended the port so it can carry Anthropic `cache_control` per-message and
 > capture streaming `onError`, and the adapter's `streamObject` now extracts
 > cache tokens from `providerMetadata` (summary at
-> `implemented/v2.3.1/code-quality-hot-paths-group-b-slice-2.md`). The streaming
-> turn (`stream-turn.ts`), the remaining `turn-helpers.ts` SDK calls, and item 6
-> (`ExecuteTurn` extraction) still remain — the port is now cache-safe, so the
-> route can move onto it without silently disabling prompt caching.
+> `implemented/v2.3.1/code-quality-hot-paths-group-b-slice-2.md`). **v2.3.2**
+> routed the streaming turn (`stream-turn.ts`) and the gap-followup through
+> the port and deleted the hand-rolled `recordTokenUsage` plumbing (summary at
+> `implemented/v2.3.2/code-quality-hot-paths-group-b-slice-3.md`). The
+> remaining `turn-helpers.ts` SDK calls (opener, recompute-branch, title) and
+> item 6 (`ExecuteTurn` extraction) still remain — best landed together with
+> E14/E16 which fall out of the extraction.
 
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,
