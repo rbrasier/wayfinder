@@ -168,9 +168,19 @@ areas that only hurt under data growth and change velocity:
 > `/api/chat/[id]/stream` at the HTTP boundary, so the real net for this refactor
 > is the unit layer, not e2e (summary at
 > `implemented/v2.4.7/code-quality-hot-paths-group-b-slice-6a-turn-stream-writer-port.md`).
-> Still open under item 6: 6b (move the orchestration into an `ExecuteTurn` use
-> case that depends on `TurnStreamWriter` + existing ports) and 6c/E14 (narrow
-> the route's remaining direct `container.repos.*` reach).
+> **v2.4.8** landed slice 6b (6b-lite): the ~250-line turn orchestration moved
+> out of the route's inline `execute` callback into a cohesive, testable
+> `executeTurn(input)` unit that writes only through the `TurnStreamWriter` port;
+> `route.ts` shrank 535 → 287 lines to a thin auth + lease + HTTP shell. A new
+> `execute-turn.test.ts` is the first deterministic test of the pass/hold/quota
+> control flow (67 stream unit tests green), and a live "New Hire" turn confirmed
+> the route→`executeTurn`→writer wiring end-to-end (summary at
+> `implemented/v2.4.8/code-quality-hot-paths-group-b-slice-6b-execute-turn-extraction.md`).
+> Still open under item 6: 6c/E14 (give `executeTurn` explicit port dependencies
+> instead of the whole container, narrowing the route's direct
+> `container.repos.*` reach) and 6b-full (relocate `executeTurn` and the
+> advance/auto/scheduled/doc subtree into `packages/application` as a true
+> `ExecuteTurn` use case).
 
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,
