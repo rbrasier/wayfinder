@@ -32,6 +32,7 @@ import {
   GetFlowVersion,
   GetOverviewDashboard,
   GetSession,
+  GetSessionForTurn,
   GetUsageSummary,
   GrantFlowOwner,
   ImportHrDataset,
@@ -632,6 +633,10 @@ const build = () => {
       listSessions: new ListSessions(sessions),
       listAllSessions: new ListAllSessions(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      // Leaner turn-scoped variant of getSession: the tail of the transcript
+      // plus a SQL-side aggregation of gathered context, so the streaming route
+      // stops loading the whole history on every turn (scaling wall #1).
+      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),

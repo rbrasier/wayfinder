@@ -12,10 +12,25 @@ export interface SessionListSummary {
   bestConfidenceByStep: Record<string, number>;
 }
 
+// A key/value item accumulated from assistant messages'
+// `aiPayload.contextGathered`. Callers render them into the "gathered
+// context" system-prompt block that carries prior-turn facts forward.
+export interface GatheredContextItem {
+  readonly key: string;
+  readonly value: string;
+}
+
 export interface ISessionMessageRepository {
   create(input: NewSessionMessage): Promise<Result<SessionMessage>>;
   findById(id: string): Promise<Result<SessionMessage | null>>;
   listBySession(sessionId: string): Promise<Result<SessionMessage[]>>;
+  // Flattens `aiPayload.contextGathered` from every step-anchored assistant
+  // message in the session, chronological. Backs the bounded turn read: the
+  // turn's prompt uses only the last N messages, but the gathered-context
+  // block must still reflect the full history — this query returns the
+  // aggregate in one round-trip, so the tail read stays O(N) rather than
+  // pulling the whole transcript per turn.
+  aggregateGatheredContext(sessionId: string): Promise<Result<GatheredContextItem[]>>;
   // The most recent `limit` messages in chronological order. Bounds the per-turn
   // read so a long-running session does not load its entire history on every
   // turn (scaling wall #1). `limit` must be a positive integer.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
+  buildAggregateGatheredContextStatement,
   buildLatestBySessionStatement,
   buildListSinceStatement,
   buildListSinceSeqStatement,
@@ -31,6 +32,28 @@ describe("buildLatestBySessionStatement", () => {
 
     expect(text).toContain("order by");
     expect(text).toContain("desc");
+  });
+});
+
+describe("buildAggregateGatheredContextStatement", () => {
+  it("reads only the contextGathered slice of ai_payload and orders by seq", () => {
+    const { sql, params } = render(buildAggregateGatheredContextStatement("session-agg"));
+    const text = sql.toLowerCase();
+
+    expect(text).toContain("ai_payload");
+    expect(text).toContain("'contextgathered'");
+    expect(text).toContain("order by");
+    expect(text).toContain("asc");
+    expect(text).toContain("role");
+    expect(text).toContain("step_node_id");
+    expect(params).toContain("session-agg");
+  });
+
+  it("filters out messages whose contextGathered is not a JSON array", () => {
+    const { sql } = render(buildAggregateGatheredContextStatement("session-agg"));
+    const text = sql.toLowerCase();
+    expect(text).toContain("jsonb_typeof");
+    expect(text).toContain("'array'");
   });
 });
 

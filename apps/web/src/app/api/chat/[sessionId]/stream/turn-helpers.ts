@@ -6,6 +6,7 @@ import {
   type DocumentGenerationConfidence,
   type Flow,
   type FlowNode,
+  type GatheredContextItem,
   type PromptSessionUpload,
   type PromptUserProfile,
   type ResolvedDocumentGenerationBudget,
@@ -68,6 +69,14 @@ export const buildGatheredContext = (messages: SessionMessage[]): string => {
   const items = messages
     .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
     .flatMap((m) => m.aiPayload!.contextGathered);
+  return renderGatheredContext(items);
+};
+
+// Same renderer, driven by the SQL-side aggregation returned by
+// `GetSessionForTurn`. Kept separate so the stream route (bounded turn read)
+// does not go through the message-scanning path above just to hand back a
+// string.
+export const renderGatheredContext = (items: GatheredContextItem[]): string => {
   if (items.length === 0) return "";
   return items.map((item) => `- ${item.key}: ${item.value}`).join("\n");
 };

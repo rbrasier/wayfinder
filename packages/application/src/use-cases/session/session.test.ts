@@ -28,6 +28,7 @@ import { StartSession } from "./start-session";
 import { ListSessions } from "./list-sessions";
 import { ListAllSessions } from "./list-all-sessions";
 import { GetSession } from "./get-session";
+import { GetSessionForTurn } from "./get-session-for-turn";
 import { RunTurn } from "./run-turn";
 
 // ── Fakes ──────────────────────────────────────────────────────────────────
@@ -238,6 +239,15 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
   async latestBySession(sessionId: string, limit: number): Promise<Result<SessionMessage[]>> {
     const chronological = this.chronological(sessionId);
     return ok(chronological.slice(-limit));
+  }
+
+  async aggregateGatheredContext(
+    sessionId: string,
+  ): Promise<Result<import("@rbrasier/domain").GatheredContextItem[]>> {
+    const items = this.chronological(sessionId)
+      .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
+      .flatMap((m) => m.aiPayload!.contextGathered);
+    return ok(items);
   }
 
   private chronological(sessionId: string): SessionMessage[] {
@@ -553,6 +563,98 @@ describe("GetSession", () => {
   it("returns NOT_FOUND when associated flow is missing", async () => {
     flows.flows.clear();
     const result = await useCase.execute("session-1");
+    expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+// ── GetSessionForTurn ────────────────────────────────────────────────────────
+
+describe("GetSessionForTurn", () => {
+  let sessions: FakeSessionRepository;
+  let messages: FakeSessionMessageRepository;
+  let flows: FakeFlowRepository;
+  let nodes: FakeFlowNodeRepository;
+  let edges: FakeFlowEdgeRepository;
+  let flowVersions: FakeFlowVersionRepository;
+  let useCase: GetSessionForTurn;
+
+  beforeEach(() => {
+    sessions = new FakeSessionRepository();
+    messages = new FakeSessionMessageRepository();
+    flows = new FakeFlowRepository();
+    nodes = new FakeFlowNodeRepository();
+    edges = new FakeFlowEdgeRepository();
+    flowVersions = new FakeFlowVersionRepository();
+
+    sessions.sessions.set("session-1", makeSession());
+    flows.flows.set("flow-1", makeFlow());
+    nodes.nodes.set("node-1", makeNode());
+
+    useCase = new GetSessionForTurn(sessions, messages, flows, nodes, edges, flowVersions);
+  });
+
+  it("returns only the last N messages instead of the whole transcript", async () => {
+    // 25 assistant turns; the bounded read should return only the last 20.
+    for (let i = 0; i < 25; i++) {
+      await messages.create({
+        sessionId: "session-1",
+        role: "assistant",
+        content: `turn ${i}`,
+        stepNodeId: "node-1",
+        aiPayload: {
+          response: `turn ${i}`,
+          rationale: "r",
+          stepCompleteConfidence: 0,
+          contextGathered: [{ key: `k${i}`, value: `v${i}` }],
+        },
+      });
+    }
+
+    const result = await useCase.execute("session-1", { messagesTailN: 20 });
+
+    expect(result.data?.messagesTail).toHaveLength(20);
+    expect(result.data?.messagesTail[0]?.content).toBe("turn 5");
+    expect(result.data?.messagesTail[19]?.content).toBe("turn 24");
+  });
+
+  it("returns the aggregated gathered context across the entire history, not just the tail", async () => {
+    // Add 25 assistant turns each contributing a unique key/value. The tail is
+    // bounded to 20, but the aggregated context must still include all 25.
+    for (let i = 0; i < 25; i++) {
+      await messages.create({
+        sessionId: "session-1",
+        role: "assistant",
+        content: `turn ${i}`,
+        stepNodeId: "node-1",
+        aiPayload: {
+          response: `turn ${i}`,
+          rationale: "r",
+          stepCompleteConfidence: 0,
+          contextGathered: [{ key: `k${i}`, value: `v${i}` }],
+        },
+      });
+    }
+
+    const result = await useCase.execute("session-1", { messagesTailN: 20 });
+
+    expect(result.data?.gatheredContext).toHaveLength(25);
+    expect(result.data?.gatheredContext[0]).toEqual({ key: "k0", value: "v0" });
+    expect(result.data?.gatheredContext[24]).toEqual({ key: "k24", value: "v24" });
+  });
+
+  it("returns VALIDATION_FAILED when messagesTailN is not a positive integer", async () => {
+    const result = await useCase.execute("session-1", { messagesTailN: 0 });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("returns null when session does not exist", async () => {
+    const result = await useCase.execute("missing", { messagesTailN: 20 });
+    expect(result.data).toBeNull();
+  });
+
+  it("returns NOT_FOUND when associated flow is missing", async () => {
+    flows.flows.clear();
+    const result = await useCase.execute("session-1", { messagesTailN: 20 });
     expect(result.error?.code).toBe("NOT_FOUND");
   });
 });

@@ -5,6 +5,7 @@ import {
   ok,
   type AiTurnPayload,
   type DocumentStatus,
+  type GatheredContextItem,
   type ISessionMessageRepository,
   type NewSessionMessage,
   type Result,
@@ -54,6 +55,23 @@ export const buildSessionListLastAssistantStatement = (sessionIds: readonly stri
   WHERE ${inArray(app_session_messages.session_id, [...sessionIds])}
     AND ${app_session_messages.role} = 'assistant'
   ORDER BY ${app_session_messages.session_id}, ${app_session_messages.seq} DESC
+`;
+
+// Flattens the aiPayload.contextGathered arrays from every step-anchored
+// assistant message in one session into a single chronological array. Reads
+// only the aiPayload column and uses the (session_id, seq) composite index, so
+// the query cost scales with rows-per-session, not row width — the bounded
+// turn read pairs with this so gatheredContext still reflects the full history
+// without loading the whole transcript row-wide.
+export const buildAggregateGatheredContextStatement = (sessionId: string): SQL => sql`
+  SELECT ${app_session_messages.ai_payload}->'contextGathered' AS items
+  FROM ${app_session_messages}
+  WHERE ${app_session_messages.session_id} = ${sessionId}
+    AND ${app_session_messages.role} = 'assistant'
+    AND ${app_session_messages.step_node_id} IS NOT NULL
+    AND ${app_session_messages.ai_payload} IS NOT NULL
+    AND jsonb_typeof(${app_session_messages.ai_payload}->'contextGathered') = 'array'
+  ORDER BY ${app_session_messages.seq} ASC
 `;
 
 // Highest confidence per (session, step) across the batch, aggregated SQL-side
@@ -135,6 +153,34 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list session messages.", cause));
+    }
+  }
+
+  async aggregateGatheredContext(sessionId: string): Promise<Result<GatheredContextItem[]>> {
+    try {
+      const rows = (await this.db.execute(
+        buildAggregateGatheredContextStatement(sessionId),
+      )) as unknown as { items: unknown }[];
+      const items: GatheredContextItem[] = [];
+      for (const row of rows) {
+        if (!Array.isArray(row.items)) continue;
+        for (const raw of row.items) {
+          if (
+            raw &&
+            typeof raw === "object" &&
+            typeof (raw as { key?: unknown }).key === "string" &&
+            typeof (raw as { value?: unknown }).value === "string"
+          ) {
+            items.push({
+              key: (raw as { key: string }).key,
+              value: (raw as { value: string }).value,
+            });
+          }
+        }
+      }
+      return ok(items);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to aggregate gathered context.", cause));
     }
   }
 

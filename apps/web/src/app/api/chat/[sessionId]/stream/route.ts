@@ -19,9 +19,9 @@ import {
   appendShortcomingsToContext,
   applyAdvanceSideEffects,
   buildAttachmentAnnotation,
-  buildGatheredContext,
   buildPromptSessionUploads,
   generateTitle,
+  renderGatheredContext,
   streamGapFollowup,
 } from "./turn-helpers";
 
@@ -76,11 +76,23 @@ export async function POST(
     return new Response("Message required", { status: 400 });
   }
 
-  const sessionResult = await container.useCases.getSession.execute(sessionId);
+  // Bounded turn read (scaling wall #1): the tail the prompt uses, plus a
+  // SQL-side aggregation of gathered context over the whole history. Replaces
+  // the previous `getSession` full-transcript load per turn.
+  const sessionResult = await container.useCases.getSessionForTurn.execute(sessionId, {
+    messagesTailN: CONTEXT_WINDOW_MESSAGES,
+  });
   if (sessionResult.error) return new Response("Server error", { status: 500 });
   if (!sessionResult.data) return new Response("Session not found", { status: 404 });
 
-  const { session, flow, nodes, edges, messages: dbMessages } = sessionResult.data;
+  const {
+    session,
+    flow,
+    nodes,
+    edges,
+    messagesTail: dbMessages,
+    gatheredContext: gatheredContextItems,
+  } = sessionResult.data;
 
   if (session.status !== "active") {
     return new Response("Session is not active", { status: 400 });
@@ -141,7 +153,7 @@ export async function POST(
   // rather than a 0-100 percentage, which would otherwise auto-advance every turn.
   const realThreshold = normaliseAdvanceConfidenceThreshold(nodeConfig.advanceConfidenceThreshold);
 
-  const gatheredContext = buildGatheredContext(dbMessages);
+  const gatheredContext = renderGatheredContext(gatheredContextItems);
 
   // These reads are mutually independent, so run them as one round-trip instead
   // of six serial awaits while a pool connection is held (scaling wall #4). The
@@ -203,15 +215,12 @@ export async function POST(
     });
 
   // Server-side context window: the model sees only the most recent turns, the
-  // same 20 the client already slices to (scaling wall #1). Bounding it here (not
-  // trusting a client-supplied transcript) keeps prompt size and read cost flat
-  // as a session's history grows unbounded.
-  const coreMessages = dbMessages
-    .slice(-CONTEXT_WINDOW_MESSAGES)
-    .map((m) => ({
-      role: m.role as "user" | "assistant" | "system",
-      content: m.content,
-    }));
+  // same 20 the client already slices to (scaling wall #1). `dbMessages` is
+  // already the bounded tail (see GetSessionForTurn), so no further slicing.
+  const coreMessages = dbMessages.map((m) => ({
+    role: m.role as "user" | "assistant" | "system",
+    content: m.content,
+  }));
 
   // The model sees the attachment marker; the persisted user message stays the
   // raw text the user typed (persistUserMessage uses lastUserMessage).

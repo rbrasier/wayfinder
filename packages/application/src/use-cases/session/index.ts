@@ -2,6 +2,7 @@ export * from "./start-session";
 export * from "./list-sessions";
 export * from "./list-all-sessions";
 export * from "./get-session";
+export * from "./get-session-for-turn";
 export * from "./resolve-session-access";
 export * from "./revoke-session-participant";
 export * from "./add-session-upload";
