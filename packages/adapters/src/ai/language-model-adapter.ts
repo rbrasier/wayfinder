@@ -147,13 +147,19 @@ export class LanguageModelAdapter implements ILanguageModel {
         messages: input.messages as never,
         temperature: input.temperature,
         maxTokens: input.maxTokens,
+        onError: input.onError,
       });
-      const usage = result.usage.then((u) => ({
+      // Await providerMetadata alongside usage so cache tokens survive the port
+      // hop: without this the Anthropic prompt-cache readings are lost and every
+      // cached turn reports zero cache tokens (double-counting spend caps).
+      const usage = Promise.all([
+        result.usage,
+        result.providerMetadata as Promise<Record<string, unknown> | undefined>,
+      ]).then(([u, meta]) => ({
         promptTokens: u.promptTokens,
         completionTokens: u.completionTokens,
         systemTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
+        ...extractMeta(meta),
       }));
       return ok({
         partialObjectStream: result.partialObjectStream as AsyncIterable<Partial<T>>,

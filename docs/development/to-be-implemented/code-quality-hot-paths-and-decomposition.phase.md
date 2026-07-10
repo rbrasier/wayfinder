@@ -106,10 +106,14 @@ areas that only hurt under data growth and change velocity:
 
 > **Progress**: a first slice of item 5 landed in **v2.2.1** — the route's
 > branch-choice `generateObject` now goes through the port (summary at
-> `implemented/v2.2.1/code-quality-hot-paths-group-b-slice-1.md`). The streaming
-> turn (`stream-turn.ts`, which uses Anthropic `cache_control` prompt caching not
-> yet exposed by the port), the remaining `turn-helpers.ts` SDK calls, and item 6
-> (`ExecuteTurn` extraction) remain — best landed behind the chat e2e.
+> `implemented/v2.2.1/code-quality-hot-paths-group-b-slice-1.md`). **v2.3.1**
+> extended the port so it can carry Anthropic `cache_control` per-message and
+> capture streaming `onError`, and the adapter's `streamObject` now extracts
+> cache tokens from `providerMetadata` (summary at
+> `implemented/v2.3.1/code-quality-hot-paths-group-b-slice-2.md`). The streaming
+> turn (`stream-turn.ts`), the remaining `turn-helpers.ts` SDK calls, and item 6
+> (`ExecuteTurn` extraction) still remain — the port is now cache-safe, so the
+> route can move onto it without silently disabling prompt caching.
 
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,

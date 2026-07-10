@@ -211,6 +211,74 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
   });
+
+  it("extracts anthropic cache tokens from providerMetadata", async () => {
+    async function* partials() { yield {}; }
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: partials(),
+      object: Promise.resolve({}),
+      usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+      providerMetadata: Promise.resolve({
+        anthropic: { cacheReadInputTokens: 30, cacheCreationInputTokens: 20 },
+      }),
+      experimental_providerMetadata: Promise.resolve({
+        anthropic: { cacheReadInputTokens: 30, cacheCreationInputTokens: 20 },
+      }),
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.streamObject({ purpose: "chat", schema });
+    const usage = await result.data!.usage;
+
+    expect(usage.cacheReadTokens).toBe(30);
+    expect(usage.cacheWriteTokens).toBe(20);
+  });
+
+  it("passes ChatMessage.providerOptions to the SDK", async () => {
+    async function* partials() { yield {}; }
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: partials(),
+      object: Promise.resolve({}),
+      usage: Promise.resolve({ promptTokens: 1, completionTokens: 1 }),
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    await adapter.streamObject({
+      purpose: "chat",
+      schema,
+      messages: [
+        {
+          role: "system",
+          content: "sys",
+          providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+        },
+        { role: "user", content: "u" },
+      ],
+    });
+
+    const call = vi.mocked(streamObject).mock.calls[0]![0] as {
+      messages: { providerOptions?: Record<string, unknown> }[];
+    };
+    expect(call.messages[0]!.providerOptions).toEqual({
+      anthropic: { cacheControl: { type: "ephemeral" } },
+    });
+  });
+
+  it("passes onError to the SDK", async () => {
+    async function* partials() { yield {}; }
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: partials(),
+      object: Promise.resolve({}),
+      usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+    const onError = vi.fn();
+
+    await adapter.streamObject({ purpose: "chat", schema, onError });
+
+    const call = vi.mocked(streamObject).mock.calls[0]![0] as { onError?: unknown };
+    expect(call.onError).toBe(onError);
+  });
 });
 
 describe("LanguageModelAdapter (openai) — provider/key resolution from runtime config", () => {
