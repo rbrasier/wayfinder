@@ -186,8 +186,17 @@ usage recording, and governor wrapping (ADR-026 decorators).
 > shrinking the parent from 1,135 to 675 lines (summary at
 > `implemented/v2.4.2/code-quality-hot-paths-group-d-item-10-node-config-modal.md`).
 > **Manual browser verification required** before shipping — the split invents
-> new prop boundaries the automated tests do not cover. Items 11–13 remain on
-> the allowlist.
+> new prop boundaries the automated tests do not cover. **v2.4.3** landed a
+> partial slice of item 11: the two `_content.tsx` files' identical top-of-file
+> React Flow adapter helpers moved to a shared `lib/canvas/rf-adapters.ts`,
+> shedding ~85 lines each (944 → 861 user; 934 → 850 admin) — safe verbatim
+> extraction, no invented prop boundaries. Both files stay in the WARN size
+> range; the deeper `CanvasInner` decomposition (canvas rendering block, node
+> change/connect handler cluster, shared toolbar) is deferred as the
+> file-size-ratchet's "opportunistic split" per the phase's Group D policy
+> (summary at
+> `implemented/v2.4.3/code-quality-hot-paths-group-d-item-11-content-shared-adapters.md`).
+> Items 12 and 13 remain on the allowlist.
 
 Works in tandem with the new `validate.sh` file-size ratchet (warn ≥ 700,
 fail ≥ 800, legacy allowlist below). Exit criterion for each slice: the file

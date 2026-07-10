@@ -26,14 +26,6 @@ import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
-import { ConversationalNode } from "@/components/canvas/conversational-node";
-import type { AutoNodeData } from "@/components/canvas/auto-node";
-import { AutoNode } from "@/components/canvas/auto-node";
-import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
-import { ScheduledNode } from "@/components/canvas/scheduled-node";
-import type { ApprovalNodeData } from "@/components/canvas/approval-node";
-import { ApprovalNode } from "@/components/canvas/approval-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
 import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
@@ -47,92 +39,16 @@ import {
   scheduledValuesFromConfig,
 } from "@/components/canvas/scheduled-node-config";
 import { trpc } from "@/trpc/client";
+import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import type { FieldValueSource, FlowContextDoc, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { computeStepNumbers } from "@/lib/flow-utils";
-
-const NODE_TYPES = {
-  conversationalNode: ConversationalNode,
-  autoNode: AutoNode,
-  scheduledNode: ScheduledNode,
-  approvalNode: ApprovalNode,
-};
-
-const DEBOUNCE_MS = 600;
-
-interface RawNode {
-  id: string;
-  name: string;
-  colour: string | null;
-  type?: "conversational" | "auto" | "scheduled" | "approval";
-  positionX: number;
-  positionY: number;
-  config: Record<string, unknown>;
-}
-
-const readFields = (value: unknown): TemplateField[] =>
-  Array.isArray(value) ? (value as TemplateField[]) : [];
-
-const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
-  if (node.type === "auto") {
-    const data: AutoNodeData = {
-      name: node.name,
-      colour: node.colour,
-      instruction: (node.config.instruction as string | null) ?? null,
-      requestFieldCount: readFields(node.config.requestFields).length,
-      responseFieldCount: readFields(node.config.responseFields).length,
-      stepNumber,
-      config: node.config,
-    };
-    return { id: node.id, type: "autoNode", position: { x: node.positionX, y: node.positionY }, data };
-  }
-
-  if (node.type === "scheduled") {
-    const data: ScheduledNodeData = {
-      name: node.name,
-      colour: node.colour,
-      kind: (node.config.kind as string | null) ?? null,
-      spec: (node.config.spec as string | null) ?? null,
-      recurring: Boolean(node.config.recurring),
-      stepNumber,
-      config: node.config,
-    };
-    return { id: node.id, type: "scheduledNode", position: { x: node.positionX, y: node.positionY }, data };
-  }
-
-  if (node.type === "approval") {
-    const data: ApprovalNodeData = {
-      name: node.name,
-      colour: node.colour,
-      approverSource: (node.config.approverSource as string | null) ?? null,
-      stepNumber,
-      config: node.config,
-    };
-    return { id: node.id, type: "approvalNode", position: { x: node.positionX, y: node.positionY }, data };
-  }
-
-  const data: ConversationalNodeData = {
-    name: node.name,
-    colour: node.colour,
-    aiInstruction: (node.config.aiInstruction as string | null) ?? null,
-    stepNumber,
-    doneWhen: (node.config.doneWhen as string | null) ?? null,
-    neverDone: Boolean(node.config.neverDone),
-    outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
-    documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
-    documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
-    documentTemplateContent: (node.config.documentTemplateContent as string | null) ?? null,
-    config: node.config,
-  };
-  return { id: node.id, type: "conversationalNode", position: { x: node.positionX, y: node.positionY }, data };
-};
-
-const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): Edge => ({
-  id: edge.id,
-  source: edge.fromNodeId,
-  target: edge.toNodeId,
-  type: "smoothstep",
-  markerEnd: { type: MarkerType.ArrowClosed },
-});
+import {
+  CANVAS_DEBOUNCE_MS as DEBOUNCE_MS,
+  NODE_TYPES,
+  readFields,
+  toRfEdge,
+  toRfNode,
+} from "@/lib/canvas/rf-adapters";
 
 function CanvasInner({ flowId }: { flowId: string }) {
   const { fitView } = useReactFlow();
