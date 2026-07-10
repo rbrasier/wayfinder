@@ -180,8 +180,14 @@ usage recording, and governor wrapping (ADR-026 decorators).
 > **Progress**: item 9 landed in **v2.2.3** — the 2,183-line settings page was
 > split into one file per section under `components/settings/` (plus a shared
 > `connectivity.tsx`), dropping the page to 75 lines and off the size allowlist
-> (summary at `implemented/v2.2.3/code-quality-hot-paths-group-d.md`). Items
-> 10–13 remain on the allowlist.
+> (summary at `implemented/v2.2.3/code-quality-hot-paths-group-d.md`). **v2.4.2**
+> landed item 10 — `node-config-modal.tsx` split into per-node-type section
+> files (`node-config-modal-{conversational,auto,scheduled,approval}.tsx`),
+> shrinking the parent from 1,135 to 675 lines (summary at
+> `implemented/v2.4.2/code-quality-hot-paths-group-d-item-10-node-config-modal.md`).
+> **Manual browser verification required** before shipping — the split invents
+> new prop boundaries the automated tests do not cover. Items 11–13 remain on
+> the allowlist.
 
 Works in tandem with the new `validate.sh` file-size ratchet (warn ≥ 700,
 fail ≥ 800, legacy allowlist below). Exit criterion for each slice: the file
