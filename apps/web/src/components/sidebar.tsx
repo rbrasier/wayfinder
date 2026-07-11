@@ -62,9 +62,15 @@ const adminNav: NavGroup[] = [
       { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Usage" },
       { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
       { href: "/admin/flows", icon: GitBranch, label: "Flows" },
+      { href: "/admin/settings", icon: Settings, label: "Configuration" },
+    ],
+  },
+  {
+    label: "Flow Settings",
+    items: [
       { href: "/admin/skills", icon: Sparkles, label: "Skills" },
       { href: "/admin/mcp-servers", icon: Plug, label: "MCP Servers" },
-      { href: "/admin/settings", icon: Settings, label: "Configuration" },
+      { href: "/knowledge", icon: BookOpen, label: "Knowledge" },
     ],
   },
   {

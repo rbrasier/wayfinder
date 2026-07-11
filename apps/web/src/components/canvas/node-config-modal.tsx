@@ -1,7 +1,7 @@
 "use client";
 
 import { type ChangeEvent, useEffect, useRef, useState } from "react";
-import { Check, Copy, Eye, HelpCircle, Pencil, X } from "lucide-react";
+import { Check, Copy, Eye, HelpCircle, Pencil, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -27,6 +27,7 @@ import {
   ReadOnlyFieldList,
 } from "./field-value-selector";
 import { ScheduleSentenceBuilder } from "./schedule-sentence-builder";
+import { SkillPickerModal } from "./skill-picker-modal";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
 import type {
   ScheduleModifier,
@@ -287,14 +288,17 @@ export function NodeConfigModal({
       : [...values.allowedMcpToolRefs, { serverId, toolName }];
     set("allowedMcpToolRefs", next);
   };
-  const skillsQuery = trpc.skill.list.useQuery(undefined, { enabled: open && isConversational });
-  const skills = skillsQuery.data ?? [];
-  const toggleSkill = (id: string) => {
-    const next = values.skillRefs.includes(id)
-      ? values.skillRefs.filter((existing) => existing !== id)
-      : [...values.skillRefs, id];
-    set("skillRefs", next);
-  };
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
+  // Selected skills are resolved to names for the chips beside the AI instructions.
+  const skillsQuery = trpc.skill.list.useQuery(undefined, {
+    enabled: open && isConversational && skillsEnabled,
+  });
+  const skillsById = new Map((skillsQuery.data ?? []).map((skill) => [skill.id, skill]));
+  const removeSkill = (id: string) =>
+    set(
+      "skillRefs",
+      values.skillRefs.filter((existing) => existing !== id),
+    );
 
   const workflowsQuery = trpc.n8n.listWorkflows.useQuery(undefined, { enabled: open && usesN8n });
   const workflows = workflowsQuery.data ?? [];
@@ -627,8 +631,45 @@ export function NodeConfigModal({
 
               {isConversational && (
               <>
-              <div className="space-y-1">
-                <Label htmlFor="ai-instruction">Instructions for the AI</Label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="ai-instruction">Instructions for the AI</Label>
+                  {skillsEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => setSkillPickerOpen(true)}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+                      aria-label="Add skills"
+                    >
+                      <Sparkles size={13} />
+                      {values.skillRefs.length > 0 ? `Skills · ${values.skillRefs.length}` : "Add skills"}
+                    </button>
+                  )}
+                </div>
+                {skillsEnabled && values.skillRefs.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {values.skillRefs.map((id) => {
+                      const skill = skillsById.get(id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-2 py-0.5 text-[11px] text-[#3a5fd9]"
+                        >
+                          <Sparkles size={10} />
+                          {skill?.name ?? "Skill"}
+                          <button
+                            type="button"
+                            aria-label={`Remove ${skill?.name ?? "skill"}`}
+                            className="text-[#3a5fd9] hover:text-[#25439c]"
+                            onClick={() => removeSkill(id)}
+                          >
+                            <X size={11} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 <Textarea
                   id="ai-instruction"
                   required
@@ -638,42 +679,6 @@ export function NodeConfigModal({
                   placeholder="Describe what the AI should do in this step…"
                 />
               </div>
-
-              {skillsEnabled && (
-              <div className="space-y-1">
-                <FieldGroupLabel id="ncm-skills">Skills</FieldGroupLabel>
-                <p className="text-[12px] text-[#857f76]">
-                  Attach reusable skills to steer the AI. Upload skills on the
-                  Skills page.
-                </p>
-                {skills.length === 0 ? (
-                  <p className="text-[13px] text-[#857f76]">No skills available yet.</p>
-                ) : (
-                  <div className="space-y-1.5 rounded-[9px] border border-[#dedad2] p-2.5">
-                    {skills.map((skill) => (
-                      <label
-                        key={skill.id}
-                        className="flex cursor-pointer items-start gap-2 text-[13px]"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={values.skillRefs.includes(skill.id)}
-                          onChange={() => toggleSkill(skill.id)}
-                        />
-                        <span>
-                          <span className="font-medium">{skill.name}</span>
-                          {skill.description ? (
-                            <span className="text-[#857f76]"> — {skill.description}</span>
-                          ) : null}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              )}
 
               {mcpEnabled && (
               <div className="space-y-1">
@@ -1364,6 +1369,12 @@ export function NodeConfigModal({
         open={infoOpen}
         variant={infoVariant}
         onClose={() => setInfoOpen(false)}
+      />
+      <SkillPickerModal
+        open={skillPickerOpen}
+        selectedIds={values.skillRefs}
+        onChange={(ids) => set("skillRefs", ids)}
+        onClose={() => setSkillPickerOpen(false)}
       />
     </Dialog>
   );
