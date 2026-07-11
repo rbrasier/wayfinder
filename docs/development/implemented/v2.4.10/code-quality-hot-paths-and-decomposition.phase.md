@@ -1,6 +1,20 @@
 # Phase — Code Quality: Hot Paths, Boundaries, and Decomposition
 
-- **Status**: Awaiting review (`/doc-review`)
+> **✅ Phase complete (v2.4.10).** Every hot-path read is bounded, all model
+> calls traverse the decorated `ILanguageModel` port, multi-write turns are
+> transactional, the turn orchestration is extracted and deterministically
+> tested, the auth + chat endpoints are rate-limited, and the file-size
+> ratchet's legacy allowlist is **empty**. Three items are consciously carried
+> forward as their own future slices rather than treated as blockers — 6b-full
+> (`ExecuteTurn` application-layer lift), the message-list keyset endpoint, and
+> the chats/sidebar list migration — each because it needs a fresh contract
+> extension or a large relocation that buys no new guarantee (see the Group A/B
+> progress notes). Items 12–13 stay in the WARN band as opportunistic splits.
+> **Browser verification of the v2.4.10 canvas split is still owed** before this
+> ships (the header extraction invents new prop boundaries the unit tests do not
+> cover).
+
+- **Status**: Complete (v2.4.10)
 - **Date**: 2026-07-05
 - **Target version**: staged; each group ships as its own sub-phase and bumps
   independently —
@@ -12,7 +26,8 @@
   - Group E (boundary tightening): **PATCH**
   - Group F (in-process rate limiting): **MINOR**
 - **Depends on / relates to**:
-  - [`scaling-new-infrastructure.phase.md`](./scaling-new-infrastructure.phase.md) —
+  - the **scaling-new-infrastructure** phase
+    (`to-be-implemented/scaling-new-infrastructure`) —
     everything requiring a new service (Redis cache promotion, cluster-wide
     LLM governor budget, distributed rate limiting) lives **there**, not here.
     This phase is deliberately code-only against the current stack.
@@ -64,7 +79,7 @@ areas that only hurt under data growth and change velocity:
 
 - Anything needing a new service: Redis-backed caches, a distributed
   governor budget, a job queue, shared rate-limit state — see
-  `scaling-new-infrastructure.phase.md`.
+  `scaling-new-infrastructure phase doc`.
 - New product features or UI redesign; Group D is a mechanical decomposition
   with byte-for-byte behaviour.
 - Renumbering published ADRs (Group E annotates the duplicates instead —
@@ -111,6 +126,15 @@ areas that only hurt under data growth and change velocity:
 > node's full history via a new `listStepAssistantMessages` port method folded
 > into `GetSessionForTurn` (summary at
 > `implemented/v2.4.4/code-quality-hot-paths-group-a-item-3-gate-hold-count-fix.md`).
+> **Descoped at phase close (v2.4.10)**: the two remaining item-4 tails — the
+> message-list keyset endpoint and the chats/sidebar migration — are **not**
+> mere exposure of the shipped v2.4.1 contract; each needs a fresh contract
+> extension (a seq-based `ISessionMessageRepository` keyset method, and a
+> status-filter parameter so the client-side Active/Completed/All tabs are not
+> regressed). The per-turn hot path they were meant to bound is already fixed by
+> the v2.4.0 bounded read, and the unbounded **admin** list — the real scaling
+> risk — is paginated (v2.4.6). Both tails are carried forward as their own
+> vertical slices rather than blocking this phase.
 
 1. **`session.list` N+1** (`apps/web/src/server/routers/session.ts`): today
    it loads full flow graphs and the **entire message history of every
@@ -186,11 +210,18 @@ areas that only hurt under data growth and change velocity:
 > The route's remaining direct `container.repos.*` reach is just the per-turn
 > context build (`sessionUploads.listBySession`, profile `users.findById`) and
 > the teardown seq reconciliation (`sessionMessages.latestBySession`).
-> Still open under item 6: 6b-full (relocate `executeTurn` and the
+> **Descoped at phase close (v2.4.10)**: 6b-full (relocate `executeTurn` and the
 > advance/auto/scheduled/doc subtree into `packages/application` as a true
-> `ExecuteTurn` use case — the subtree still takes the app container, which
-> blocks the lift), and optionally a `buildTurnContext` use case for the route's
-> remaining setup reads.
+> `ExecuteTurn` use case) is carried forward as future work, **not** a phase
+> blocker. Item 6's concrete goals are already banked at 6b-lite: the
+> orchestration is a named, deterministically-tested unit that writes only
+> through the `TurnStreamWriter` port and depends on ports, the route is a thin
+> auth + lease + HTTP shell, and E14's repo-reach narrowing landed (v2.4.9). The
+> remaining lift is layer-purity on the most-exercised path — its blocker is the
+> advance/auto/scheduled/doc subtree still taking the app container — and buys no
+> new testability or behaviour guarantee, so it belongs in its own slice behind a
+> live turn. The optional `buildTurnContext` use case for the route's remaining
+> setup reads is likewise deferred.
 
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,
@@ -254,7 +285,22 @@ usage recording, and governor wrapping (ADR-026 decorators).
 > file-size-ratchet's "opportunistic split" per the phase's Group D policy
 > (summary at
 > `implemented/v2.4.3/code-quality-hot-paths-group-d-item-11-content-shared-adapters.md`).
-> Items 12 and 13 remain on the allowlist.
+> **v2.4.10** completed item 11's deeper `CanvasInner` decomposition: each
+> `_content.tsx` file's header/actions-menu extracted to a co-located
+> `_flow-config-header.tsx`, and the shared React Flow pane + stale-reference
+> banner extracted to `components/canvas/flow-canvas-viewport.tsx`. Both files
+> drop under 700 (861 → 693 user; 850 → 640 admin) and **leave the allowlist**;
+> with `node-config-modal.tsx` (675, v2.4.2) and `turn-helpers.ts` (749) already
+> below the 800 fail line, the `SIZE_LEGACY_ALLOWLIST` is now **empty** — the
+> ratchet enforces the 800-line limit with no grandfathered exceptions.
+> **Manual browser verification required** — the header split invents new prop
+> boundaries the automated tests do not cover (summary at
+> `implemented/v2.4.10/code-quality-hot-paths-group-d-item-11-canvas-inner.md`).
+> Items 12 (`turn-helpers.ts`, 749) and 13 (`field-report-section.tsx`, 732)
+> stay in the WARN band and are **descoped to opportunistic splits** per the
+> Group D policy below: neither is on the allowlist, both are under the fail
+> line, and item 12 is expected to dissolve further whenever Group B item 6's
+> `ExecuteTurn` application-layer lift is picked up.
 
 Works in tandem with the new `validate.sh` file-size ratchet (warn ≥ 700,
 fail ≥ 800, legacy allowlist below). Exit criterion for each slice: the file
@@ -329,16 +375,23 @@ dependencies on each other; B is easier after C exists (the extracted
 
 ## 6. Acceptance criteria
 
-- No turn or list request reads an unbounded number of message rows;
+Status at phase close (v2.4.10) marked inline.
+
+- ✅ No turn or list request reads an unbounded number of message rows;
   `session.list` issues O(1) queries regardless of session count/age
-  (verified by the load scenarios in `load/scenarios/`).
-- Grepping the stream route for `generateObject`/`streamObject` SDK calls
-  finds none — all model calls traverse the decorated port.
-- Killing the process between the assistant-message write and the session
-  advance can no longer leave a half-applied turn (transaction covers both).
-- `validate.sh` file-size check passes with an **empty** legacy allowlist.
-- Auth + chat endpoints return 429 under the configured burst.
-- `./validate.sh` passes at every slice; versioning rules honoured per
+  (verified by the load scenarios in `load/scenarios/`). Met via the v2.4.0
+  bounded turn read and the v2.4.1/v2.4.6 keyset session pagination.
+- ✅ Grepping the stream route for `generateObject`/`streamObject` SDK calls
+  finds none — all model calls traverse the decorated port (closed by Group B
+  through v2.4.5; the write-side goes through the `TurnStreamWriter` port).
+- ✅ Killing the process between the assistant-message write and the session
+  advance can no longer leave a half-applied turn (transaction covers both) —
+  Group C, `withTransaction` around `persistAssistantTurn` and DecideApproval.
+- ✅ `validate.sh` file-size check passes with an **empty** legacy allowlist
+  (v2.4.10 — the last two `_content.tsx` offenders decomposed below 700).
+- ✅ Auth + chat endpoints return 429 under the configured burst (Group F,
+  v2.2.0).
+- ✅ `./validate.sh` passes at every slice; versioning rules honoured per
   implementing sub-phase.
 
 ---
@@ -361,4 +414,4 @@ dependencies on each other; B is easier after C exists (the extracted
 
 Code-quality and architecture review, 2026-07-05 (session: code-quality
 / architecture review). Companion service-dependent items were folded into
-`scaling-new-infrastructure.phase.md` in the same change.
+`scaling-new-infrastructure phase doc` in the same change.

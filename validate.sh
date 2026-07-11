@@ -259,12 +259,10 @@ fi
 section "16. source file size (warn ≥ 700, fail ≥ 800 lines)"
 SIZE_WARN_LINES=700
 SIZE_FAIL_LINES=800
-SIZE_LEGACY_ALLOWLIST=(
-  "apps/web/src/components/canvas/node-config-modal.tsx"
-  "apps/web/src/app/(user)/flows/[id]/config/_content.tsx"
-  "apps/web/src/app/(admin)/admin/flows/[id]/_content.tsx"
-  "apps/web/src/app/api/chat/[sessionId]/stream/turn-helpers.ts"
-)
+# Empty: the Code-Quality Hot-Paths phase decomposed every legacy offender below
+# the 800-line fail line, so the ratchet now enforces the limit with no
+# grandfathered exceptions. Do not add entries — split the file instead.
+SIZE_LEGACY_ALLOWLIST=()
 SIZE_FAILURES=""
 SIZE_WARNINGS=""
 while IFS= read -r source_file; do
