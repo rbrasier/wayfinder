@@ -71,11 +71,11 @@ owner can already load `/admin/flows/{id}`.
    - Replace `orderStepIds` (from `lib/step-order.ts`) with `computeStepNumbers`
      (from `lib/flow-utils.ts`). Node labels become the fork-aware string labels
      used by the chat rail.
-   - Prior-step field derivation compares the **numeric depth prefix** of the
-     label (`Number.parseInt(label, 10)`) rather than doing a raw string
-     compare. This is correct for ≥10 steps (a `"10" >= "2"` string compare is
-     wrong) — an improvement over the admin copy's latent bug, and it keeps
-     parallel fork branches from offering each other's fields.
+   - Prior-step field derivation orders labels by `(depth, branch letter)` via
+     a new exported `compareStepLabels` helper, rather than a raw string
+     compare. This preserves the prior editor's reading order — disconnected
+     left-to-right steps and fork siblings still count as earlier — while
+     fixing the ≥10-step ordering (`"10" >= "2"` as strings is wrong).
    - Port the **drag-out node-type picker**: `onConnectEnd` stores a
      `pendingConnect { fromNodeId, position }` and opens the type picker;
      `handleSelectNodeType` consumes `pendingConnect` (creating + wiring the new
@@ -101,9 +101,9 @@ owner can already load `/admin/flows/{id}`.
 
 ## 5. Testing
 
-- **Unit**: `lib/flow-utils.test.ts` already covers `computeStepNumbers`; add a
-  focused test asserting the prior-step numeric-depth comparison behaves
-  correctly for a ≥10-step linear chain (the string-compare regression guard).
+- **Unit**: `lib/flow-utils.test.ts` already covers `computeStepNumbers`; add
+  tests for the new `compareStepLabels` (depth-then-letter ordering, fork
+  siblings, and the ten-before-two string-compare regression guard).
 - **SSR structure**: `page-ssr-structure.test.ts` is unaffected — it references
   the surviving list page and the canonical editor page only.
 - **E2E**: `apps/web/e2e/enhance-flow-editor-dedup.spec.ts` — a flow owner opens

@@ -13,9 +13,10 @@ identical and drifted apart. Collapsed to a single canonical editor.
     same fork-aware `2a/2b` labels the runtime chat step-rail uses — replacing
     the linear `orderStepIds`. The editor and running flow now number steps
     identically.
-  - Prior-step field eligibility compares the **numeric depth prefix** of the
-    label (`Number.parseInt`), fixing the raw string-compare ordering bug at ten
-    or more steps that the admin copy carried.
+  - Prior-step field eligibility orders labels by `(depth, branch letter)` via
+    the new `compareStepLabels` helper — matching the prior editor's reading
+    order (including disconnected, left-to-right steps and fork siblings) while
+    fixing the raw string-compare ordering bug at ten or more steps.
   - Ported the drag-out node-type picker: dragging a connector into blank space
     now opens the type picker (via `pendingConnect`) instead of silently forcing
     a conversational node.
@@ -41,9 +42,9 @@ route split provided no security value.
 
 ## Tests
 
-- **Unit** — `apps/web/src/lib/flow-utils.test.ts`: added a case asserting the
-  numeric-depth prefix stays ordered past ten steps in a linear chain (guards
-  the prior-step comparison against the string-compare regression).
+- **Unit** — `apps/web/src/lib/flow-utils.test.ts`: covers `compareStepLabels`
+  (depth-then-letter ordering, fork siblings, and the ten-before-two
+  string-compare regression) plus a linear chain numbered past ten steps.
 - **E2E** — `apps/web/e2e/enhance-flow-editor-dedup.spec.ts`: the admin list's
   "Configure Flow" opens the canonical `/flows/[id]/config` editor, the retired
   `/admin/flows/[id]` path redirects there, and "Add step" opens the shared

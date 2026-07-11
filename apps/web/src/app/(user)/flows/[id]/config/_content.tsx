@@ -45,7 +45,7 @@ import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/f
 import { trpc } from "@/trpc/client";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import type { FieldValueSource, FlowContextDoc, PermissionKey, PriorStepField, TemplateField } from "@rbrasier/domain";
-import { computeStepNumbers } from "@/lib/flow-utils";
+import { compareStepLabels, computeStepNumbers } from "@/lib/flow-utils";
 import {
   CANVAS_DEBOUNCE_MS as DEBOUNCE_MS,
   readFields,
@@ -429,16 +429,14 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (!editingNodeId) return [];
     const currentLabel = stepNumbers.get(editingNodeId);
     if (currentLabel == null) return [];
-    // Compare the numeric depth prefix, not the raw label: a plain string
-    // compare mis-orders once a flow reaches ten steps ("10" < "2"). Parallel
-    // fork branches share a depth, so they never offer each other's fields.
-    const currentDepth = Number.parseInt(currentLabel, 10);
     const result: PriorStepField[] = [];
     for (const node of rfNodes) {
       const label = stepNumbers.get(node.id);
       if (label == null) continue;
-      const depth = Number.parseInt(label, 10);
-      if (depth >= currentDepth) continue;
+      // Offer only steps that read as strictly earlier on the canvas. Ordering
+      // by (depth, branch letter) keeps this correct past ten steps, where a
+      // raw string compare would rank "10" before "2".
+      if (compareStepLabels(label, currentLabel) >= 0) continue;
       const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<
         string,
         unknown
@@ -458,7 +456,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         result.push({
           nodeId: node.id,
           stepLabel,
-          stepNumber: Number.isNaN(depth) ? 0 : depth,
+          stepNumber: Number.parseInt(label, 10) || 0,
           stepName,
           field: { key: field.key, label: field.label, type: field.type },
         });

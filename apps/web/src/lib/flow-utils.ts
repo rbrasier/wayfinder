@@ -146,6 +146,25 @@ export function computeStepNumbers(nodes: NodeLike[], edges: EdgeLike[]): Map<st
   return numbers;
 }
 
+/**
+ * Orders two {@link computeStepNumbers} labels the way an author reads the
+ * canvas: by numeric depth first, then by fork-branch letter ("2" < "2a" <
+ * "2b" < "3"). Splitting the numeric prefix off is what a plain string compare
+ * gets wrong once a flow reaches ten steps — "10" would sort before "2".
+ * Returns <0 when `a` comes before `b`, >0 when after, 0 when equal.
+ */
+export function compareStepLabels(a: string, b: string): number {
+  const depthOf = (label: string): number => Number.parseInt(label, 10) || 0;
+  const suffixOf = (label: string): string => label.slice(String(depthOf(label)).length);
+  const depthDelta = depthOf(a) - depthOf(b);
+  if (depthDelta !== 0) return depthDelta;
+  const suffixA = suffixOf(a);
+  const suffixB = suffixOf(b);
+  if (suffixA < suffixB) return -1;
+  if (suffixA > suffixB) return 1;
+  return 0;
+}
+
 const DYNAMIC_STEP_TITLE = "Dynamic Step";
 
 /**
