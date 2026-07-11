@@ -181,4 +181,25 @@ describe("computeStepNumbers", () => {
     expect(numbers.get("aExtra")).toBe("4");
     expect(numbers.get("merge")).toBe("5");
   });
+
+  // The flow-config editor derives "prior step" eligibility by comparing the
+  // numeric depth prefix of these labels. Past nine steps a raw string compare
+  // mis-orders ("10" < "2"), so the editor parses the prefix — this guards the
+  // property that parse holds on to: depth order matches label order.
+  it("keeps the numeric prefix ordered past ten steps in a linear chain", () => {
+    const nodes = Array.from({ length: 11 }, (_, index) => ({ id: `n${index + 1}` }));
+    const edges = Array.from({ length: 10 }, (_, index) => ({
+      fromNodeId: `n${index + 1}`,
+      toNodeId: `n${index + 2}`,
+    }));
+
+    const numbers = computeStepNumbers(nodes, edges);
+
+    const depths = nodes.map((node) => Number.parseInt(numbers.get(node.id)!, 10));
+    expect(depths).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(numbers.get("n10")).toBe("10");
+    // Raw string compare would wrongly rank step 10 before step 2; parsed depth does not.
+    expect("10" < "2").toBe(true);
+    expect(Number.parseInt("10", 10) < Number.parseInt("2", 10)).toBe(false);
+  });
 });

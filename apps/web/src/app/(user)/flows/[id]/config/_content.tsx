@@ -45,7 +45,7 @@ import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/f
 import { trpc } from "@/trpc/client";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import type { FieldValueSource, FlowContextDoc, PermissionKey, PriorStepField, TemplateField } from "@rbrasier/domain";
-import { orderStepIds } from "@/lib/step-order";
+import { computeStepNumbers } from "@/lib/flow-utils";
 import {
   CANVAS_DEBOUNCE_MS as DEBOUNCE_MS,
   readFields,
@@ -87,6 +87,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
   // document uploads work without an explicit first save).
   const [createdNodeId, setCreatedNodeId] = useState<string | null>(null);
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+  // A connector dragged into blank space: the new node's source and drop point.
+  // The type picker resolves the type first, mirroring the Add step button.
+  const [pendingConnect, setPendingConnect] = useState<{
+    fromNodeId: string;
+    position: { x: number; y: number };
+  } | null>(null);
   const [flowMenuOpen, setFlowMenuOpen] = useState(false);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -223,12 +229,14 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (!paneEl) return;
     const paneRect = paneEl.getBoundingClientRect();
 
-    void createAndEditNode(
-      "conversational",
-      { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
+    // Choose the node type first (same as the Add step button); the type picker
+    // creates and wires the node once a type is chosen.
+    setPendingConnect({
       fromNodeId,
-    );
-  }, [createAndEditNode]);
+      position: { x: target.clientX - paneRect.left - 112, y: target.clientY - paneRect.top - 40 },
+    });
+    setTypePickerOpen(true);
+  }, []);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setEditingNodeId(node.id);
@@ -362,9 +370,15 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
   const handleSelectNodeType = useCallback((type: NodeConfigType) => {
     setTypePickerOpen(false);
+    if (pendingConnect) {
+      const { fromNodeId, position } = pendingConnect;
+      setPendingConnect(null);
+      void createAndEditNode(type, position, fromNodeId);
+      return;
+    }
     const xOffset = rfNodes.length > 0 ? (rfNodes[rfNodes.length - 1]?.position.x ?? 0) + 280 : 200;
     void createAndEditNode(type, { x: xOffset, y: 200 });
-  }, [rfNodes, createAndEditNode]);
+  }, [pendingConnect, rfNodes, createAndEditNode]);
 
   const handleConfigClose = useCallback(() => {
     // The author backed out of a step they just created; remove it so the
@@ -392,20 +406,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
     toast.success("Step deleted");
   }, [editingNodeId, deleteNodeMutation, flowId, markEdited]);
 
-  const stepOrder = useMemo(() => {
-    const orderable = rfNodes.map((n) => ({ id: n.id, positionX: n.position.x }));
-    const edgeData = rfEdges.map((e) => ({ fromNodeId: e.source, toNodeId: e.target }));
-    const ids = orderStepIds(orderable, edgeData);
-    return new Map(ids.map((id, index) => [id, index + 1]));
+  // Fork-aware labels ("2a", "2b") shared with the runtime chat step-rail, so
+  // the editor and the running flow number steps identically.
+  const stepNumbers = useMemo(() => {
+    const adaptedEdges = rfEdges.map((e) => ({ fromNodeId: e.source, toNodeId: e.target }));
+    return computeStepNumbers(rfNodes, adaptedEdges);
   }, [rfNodes, rfEdges]);
 
   const displayNodes = useMemo(
     () =>
       rfNodes.map((n) => ({
         ...n,
-        data: { ...(n.data as ConversationalNodeData), stepNumber: stepOrder.get(n.id) ?? null },
+        data: { ...(n.data as ConversationalNodeData), stepNumber: stepNumbers.get(n.id) ?? null },
       })),
-    [rfNodes, stepOrder],
+    [rfNodes, stepNumbers],
   );
 
   // Fields declared by steps before the one being edited — auto-node response
@@ -413,12 +427,18 @@ function CanvasInner({ flowId }: { flowId: string }) {
   // sources for the current node's request fields / scheduled timestamp.
   const priorStepFields = useMemo<PriorStepField[]>(() => {
     if (!editingNodeId) return [];
-    const currentStep = stepOrder.get(editingNodeId);
-    if (currentStep == null) return [];
+    const currentLabel = stepNumbers.get(editingNodeId);
+    if (currentLabel == null) return [];
+    // Compare the numeric depth prefix, not the raw label: a plain string
+    // compare mis-orders once a flow reaches ten steps ("10" < "2"). Parallel
+    // fork branches share a depth, so they never offer each other's fields.
+    const currentDepth = Number.parseInt(currentLabel, 10);
     const result: PriorStepField[] = [];
     for (const node of rfNodes) {
-      const step = stepOrder.get(node.id);
-      if (step == null || step >= currentStep) continue;
+      const label = stepNumbers.get(node.id);
+      if (label == null) continue;
+      const depth = Number.parseInt(label, 10);
+      if (depth >= currentDepth) continue;
       const config = ((node.data as { config?: Record<string, unknown> }).config ?? {}) as Record<
         string,
         unknown
@@ -433,19 +453,19 @@ function CanvasInner({ flowId }: { flowId: string }) {
               : [];
       if (fields.length === 0) continue;
       const stepName = (node.data as { name?: string }).name ?? "Step";
-      const stepLabel = `${step}. ${stepName}`;
+      const stepLabel = `${label}. ${stepName}`;
       for (const field of fields) {
         result.push({
           nodeId: node.id,
           stepLabel,
-          stepNumber: step,
+          stepNumber: Number.isNaN(depth) ? 0 : depth,
           stepName,
           field: { key: field.key, label: field.label, type: field.type },
         });
       }
     }
     return result;
-  }, [editingNodeId, rfNodes, stepOrder]);
+  }, [editingNodeId, rfNodes, stepNumbers]);
 
   // A reference is stale when a step binds a value (a request field or a
   // schedule anchor) to a prior-step field that no longer exists in the graph —
@@ -590,7 +610,10 @@ function CanvasInner({ flowId }: { flowId: string }) {
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
         onSelect={handleSelectNodeType}
-        onClose={() => setTypePickerOpen(false)}
+        onClose={() => {
+          setTypePickerOpen(false);
+          setPendingConnect(null);
+        }}
       />
 
       <NodeConfigModal

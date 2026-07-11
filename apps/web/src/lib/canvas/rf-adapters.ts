@@ -9,11 +9,9 @@ import { ConversationalNode } from "@/components/canvas/conversational-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
 
-// Shared React Flow adapters and constants for the two flow-config canvas
-// pages (user side: `(user)/flows/[id]/config`; admin side:
-// `(admin)/admin/flows/[id]`). Extracted so the two pages stop carrying the
-// identical helpers side-by-side (Group D item 11: the pages "overlap
-// heavily").
+// Shared React Flow adapters and constants for the canonical flow-config canvas
+// page (`(user)/flows/[id]/config`). The former admin duplicate
+// (`(admin)/admin/flows/[id]`) now redirects here.
 
 export const NODE_TYPES = {
   conversationalNode: ConversationalNode,

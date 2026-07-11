@@ -22,6 +22,12 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     redirect("/login?expired=true");
   }
 
+  // The admin section is admin-only. Non-admins (including flow owners who
+  // followed a stale /admin link) are sent to their own workspace.
+  if (!session.isAdmin) {
+    redirect("/");
+  }
+
   const { trpc, HydrateClient } = await createServerHelpers();
 
   void trpc.user.me.prefetch();
