@@ -36,6 +36,16 @@ export const defaultConfigForType = (type: NodeConfigType): Record<string, unkno
       notifyOnComplete: true,
     };
   }
+  if (type === "mcp") {
+    return {
+      instruction: "",
+      serverId: "",
+      toolName: "",
+      requestFields: [],
+      requestFieldValues: {},
+      responseFields: [],
+    };
+  }
   return {
     aiInstruction: "",
     doneWhen: "",

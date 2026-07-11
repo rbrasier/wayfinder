@@ -16,9 +16,11 @@ import {
   Menu,
   MessageSquare,
   PieChart,
+  Plug,
   Settings,
   ShieldOff,
   ShieldCheck,
+  Sparkles,
   Stamp,
   Users,
   X,
@@ -61,6 +63,14 @@ const adminNav: NavGroup[] = [
       { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
       { href: "/admin/flows", icon: GitBranch, label: "Flows" },
       { href: "/admin/settings", icon: Settings, label: "Configuration" },
+    ],
+  },
+  {
+    label: "Flow Settings",
+    items: [
+      { href: "/admin/skills", icon: Sparkles, label: "Skills" },
+      { href: "/admin/mcp-servers", icon: Plug, label: "MCP Servers" },
+      { href: "/knowledge", icon: BookOpen, label: "Knowledge" },
     ],
   },
   {

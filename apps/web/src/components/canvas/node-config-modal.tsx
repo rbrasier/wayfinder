@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { deriveFieldKey } from "@rbrasier/domain";
-import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, McpToolRef, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
@@ -21,6 +21,7 @@ import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 import { parseFieldLines } from "./template-field-editor";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
+import { SkillPickerModal } from "./skill-picker-modal";
 import type {
   ScheduleModifier,
   ScheduleUnit,
@@ -30,6 +31,7 @@ import { NodeConfigModalConversational } from "./node-config-modal-conversationa
 import { NodeConfigModalAuto } from "./node-config-modal-auto";
 import { NodeConfigModalScheduled } from "./node-config-modal-scheduled";
 import { NodeConfigModalApproval } from "./node-config-modal-approval";
+import { NodeConfigModalMcp } from "./node-config-modal-mcp";
 
 const COLOURS = [
   { hex: "#3a5fd9", label: "Indigo" },
@@ -52,7 +54,7 @@ function isAdvancedField(key: string): boolean {
   return [...ADVANCED_REQUEST_FIELD_KEYS].some((prefix) => key.startsWith(`${prefix}.`));
 }
 
-export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval";
+export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
 
 export type ApproverSourceMode =
   | "first_level_supervisor"
@@ -80,10 +82,16 @@ export interface NodeConfigValues {
   documentTemplateContent?: string | null;
   allowManualEdit: boolean;
   requireConfirmation: boolean;
+  // Ids of library skills (app_skills) attached to this conversational step.
+  skillRefs: string[];
+  // MCP tools this conversational step may call mid-conversation (ADR-032).
+  allowedMcpToolRefs: McpToolRef[];
   instruction: string;
   executor: "n8n" | "mock";
   workflowId: string | null;
   webhookUrl: string;
+  mcpServerId: string;
+  mcpToolName: string;
   requestFields: TemplateField[];
   requestFieldValues: Record<string, FieldValueSource>;
   responseFields: TemplateField[];
@@ -111,6 +119,11 @@ interface NodeConfigModalProps {
   isSaving?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
   priorStepFields?: PriorStepField[];
+  // Power-user feature flags (ADR-022). When off, the conversational Skills and
+  // MCP-tools sections are hidden — a step never offers a capability the author's
+  // organisation has not enabled.
+  skillsEnabled?: boolean;
+  mcpEnabled?: boolean;
   onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
 }
 
@@ -127,10 +140,14 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplateContent: null,
   allowManualEdit: true,
   requireConfirmation: false,
+  skillRefs: [],
+  allowedMcpToolRefs: [],
   instruction: "",
   executor: "n8n",
   workflowId: null,
   webhookUrl: "",
+  mcpServerId: "",
+  mcpToolName: "",
   requestFields: [],
   requestFieldValues: {},
   responseFields: [],
@@ -188,6 +205,8 @@ export function NodeConfigModal({
   onClose,
   isSaving = false,
   priorStepFields = [],
+  skillsEnabled = false,
+  mcpEnabled = false,
   onUploadTemplate,
 }: NodeConfigModalProps) {
   const utils = trpc.useUtils();
@@ -216,6 +235,7 @@ export function NodeConfigModal({
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [infoVariant, setInfoVariant] = useState<"inputs" | "outputs">("inputs");
   const [infoOpen, setInfoOpen] = useState(false);
+  const [skillPickerOpen, setSkillPickerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
@@ -242,10 +262,41 @@ export function NodeConfigModal({
   const isScheduled = values.type === "scheduled";
   const isApproval = values.type === "approval";
   const isConversational = values.type === "conversational";
+  const isMcp = values.type === "mcp";
   const requestParsed = parseFieldLines(requestLines);
   const responseParsed = parseFieldLines(responseLines);
 
   const usesN8n = isAuto && values.executor === "n8n";
+
+  // Servers + discovered tools feed both the MCP node and the conversational
+  // MCP-tools picker, so fetch once whenever either surface is visible.
+  const mcpServersQuery = trpc.mcpServer.listWithTools.useQuery(undefined, {
+    enabled: open && (isMcp || isConversational),
+  });
+  const mcpServers = mcpServersQuery.data ?? [];
+  const selectedMcpServer = mcpServers.find((entry) => entry.server.id === values.mcpServerId) ?? null;
+  const isToolAllowed = (serverId: string, toolName: string) =>
+    values.allowedMcpToolRefs.some((ref) => ref.serverId === serverId && ref.toolName === toolName);
+  const toggleAllowedTool = (serverId: string, toolName: string) => {
+    const next = isToolAllowed(serverId, toolName)
+      ? values.allowedMcpToolRefs.filter(
+          (ref) => !(ref.serverId === serverId && ref.toolName === toolName),
+        )
+      : [...values.allowedMcpToolRefs, { serverId, toolName }];
+    set("allowedMcpToolRefs", next);
+  };
+
+  // Selected skills are resolved to names for the chips beside the AI instructions.
+  const skillsQuery = trpc.skill.list.useQuery(undefined, {
+    enabled: open && isConversational && skillsEnabled,
+  });
+  const skillsById = new Map((skillsQuery.data ?? []).map((skill) => [skill.id, skill]));
+  const removeSkill = (id: string) =>
+    set(
+      "skillRefs",
+      values.skillRefs.filter((existing) => existing !== id),
+    );
+
   const workflowsQuery = trpc.n8n.listWorkflows.useQuery(undefined, { enabled: open && usesN8n });
   const workflows = workflowsQuery.data ?? [];
   const selectedWorkflow = workflows.find((workflow) => workflow.id === values.workflowId) ?? null;
@@ -337,13 +388,18 @@ export function NodeConfigModal({
 
   const approvalValid = Boolean(values.name.trim()) && Boolean(values.approverSource);
 
+  const mcpValid =
+    Boolean(values.name.trim()) && Boolean(values.mcpServerId) && Boolean(values.mcpToolName);
+
   const canSave = isAuto
     ? autoValid
     : isScheduled
       ? scheduledValid
       : isApproval
         ? approvalValid
-        : conversationalValid;
+        : isMcp
+          ? mcpValid
+          : conversationalValid;
 
   const saveN8nAuto = (): NodeConfigValues => {
     const customTemplateFields: TemplateField[] = customFields
@@ -388,10 +444,27 @@ export function NodeConfigModal({
     };
   };
 
+  const saveMcp = (): NodeConfigValues => {
+    const keys = new Set(requestParsed.fields.map((field) => field.key));
+    const prunedValues = Object.fromEntries(
+      Object.entries(values.requestFieldValues).filter(([key]) => keys.has(key)),
+    );
+    return {
+      ...values,
+      requestFields: requestParsed.fields,
+      requestFieldValues: prunedValues,
+      responseFields: responseParsed.fields,
+    };
+  };
+
   const handleSave = () => {
     if (!canSave) return;
     if (isAuto) {
       onSave(usesN8n ? saveN8nAuto() : saveMockAuto());
+      return;
+    }
+    if (isMcp) {
+      onSave(saveMcp());
       return;
     }
     onSave(values);
@@ -567,6 +640,14 @@ export function NodeConfigModal({
                       uploadError={uploadError}
                       setUploadError={setUploadError}
                       onOpenHelpDialog={() => setHelpDialogOpen(true)}
+                      skillsEnabled={skillsEnabled}
+                      mcpEnabled={mcpEnabled}
+                      skillsById={skillsById}
+                      onOpenSkillPicker={() => setSkillPickerOpen(true)}
+                      removeSkill={removeSkill}
+                      mcpServers={mcpServers}
+                      isToolAllowed={isToolAllowed}
+                      toggleAllowedTool={toggleAllowedTool}
                     />
                   )}
 
@@ -610,6 +691,23 @@ export function NodeConfigModal({
                   )}
 
                   {isApproval && <NodeConfigModalApproval values={values} set={set} />}
+
+                  {isMcp && (
+                    <NodeConfigModalMcp
+                      values={values}
+                      set={set}
+                      priorStepFields={priorStepFields}
+                      mcpServers={mcpServers}
+                      selectedMcpServer={selectedMcpServer}
+                      mcpServersLoading={mcpServersQuery.isLoading}
+                      requestLines={requestLines}
+                      setRequestLines={setRequestLines}
+                      responseLines={responseLines}
+                      setResponseLines={setResponseLines}
+                      requestFields={requestParsed.fields}
+                      setFieldValue={setFieldValue}
+                    />
+                  )}
 
                   <div className="flex items-start justify-between gap-3 border-t border-[#ece9e3] pt-3">
                     <div className="space-y-0.5">
@@ -669,6 +767,12 @@ export function NodeConfigModal({
         open={infoOpen}
         variant={infoVariant}
         onClose={() => setInfoOpen(false)}
+      />
+      <SkillPickerModal
+        open={skillPickerOpen}
+        selectedIds={values.skillRefs}
+        onChange={(ids) => set("skillRefs", ids)}
+        onClose={() => setSkillPickerOpen(false)}
       />
     </Dialog>
   );

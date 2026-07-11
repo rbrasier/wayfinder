@@ -1,8 +1,10 @@
 import type { FieldValueSource } from "./field-value-source";
+import type { McpToolRef } from "./mcp-server";
 import type { ScheduleAnchor, ScheduleKind } from "./session-schedule";
+import type { ParsedSkill } from "./skill";
 import type { TemplateField } from "./template-field";
 
-export type FlowNodeType = "conversational" | "auto" | "scheduled" | "approval";
+export type FlowNodeType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
 
 export type ApproverSourceMode =
   | "first_level_supervisor"
@@ -34,6 +36,17 @@ export interface ConversationalNodeConfig {
   // the operator clicks Proceed, instead of auto-advancing. Absent/false keeps
   // today's auto-advance behaviour.
   requireConfirmation?: boolean;
+  // Ids of library skills (app_skills) applied to this step, in author order
+  // (ADR-031). Resolved to their current version at prompt-build time.
+  skillRefs?: string[];
+  // A one-off skill uploaded directly onto this step, not stored in the library.
+  // Injected after any referenced skills.
+  inlineSkill?: ParsedSkill | null;
+  // MCP tools this conversational step may call mid-conversation (ADR-032).
+  // Deny-by-default: a tool not listed here is never offered to the model. The
+  // editor pre-fills this from applied skills' allowedTools, but this list — not
+  // the skill — is the enforcement boundary.
+  allowedMcpToolRefs?: McpToolRef[];
 }
 
 export type NodeExecutorKind = "n8n" | "mock";
@@ -54,6 +67,20 @@ export interface AutoNodeConfig {
   // Keys of author-added (custom) request fields. These are removable in the
   // editor; workflow-derived fields are not. Missing means no custom fields.
   customRequestFieldKeys?: string[];
+}
+
+// A deterministic single-tool MCP call (ADR-032), mirroring AutoNodeConfig. The
+// request fields are mapped to tool arguments via `requestFieldValues`; the
+// response fields are persisted to session_step_outputs (the ADR-020 path).
+export interface McpNodeConfig {
+  instruction: string;
+  serverId: string;
+  toolName: string;
+  requestFields?: TemplateField[];
+  // Value source per request field, keyed by TemplateField.key. A missing entry
+  // means `ai` (matching AutoNodeConfig's default).
+  requestFieldValues?: Record<string, FieldValueSource>;
+  responseFields?: TemplateField[];
 }
 
 export interface ScheduledNodeConfig {

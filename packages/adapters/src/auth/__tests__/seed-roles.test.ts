@@ -95,8 +95,12 @@ describe("seedRoles", () => {
 
     const autoNodeRoles = await flagRoles.listRoleIdsForFlag("auto_node");
     const scheduledNodeRoles = await flagRoles.listRoleIdsForFlag("scheduled_node");
+    const mcpRoles = await flagRoles.listRoleIdsForFlag("mcp");
+    const skillsRoles = await flagRoles.listRoleIdsForFlag("skills");
     expect(autoNodeRoles.data).toEqual([powerUsers.data!.id]);
     expect(scheduledNodeRoles.data).toEqual([powerUsers.data!.id]);
+    expect(mcpRoles.data).toEqual([powerUsers.data!.id]);
+    expect(skillsRoles.data).toEqual([powerUsers.data!.id]);
   });
 
   it("is a no-op on the second run — no duplicate roles", async () => {

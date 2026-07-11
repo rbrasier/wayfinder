@@ -1,7 +1,8 @@
 "use client";
 
 import { type ChangeEvent, type RefObject } from "react";
-import { HelpCircle } from "lucide-react";
+import { HelpCircle, Sparkles, X } from "lucide-react";
+import type { McpServerWithTools } from "@rbrasier/domain";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,6 +11,11 @@ import type { NodeConfigValues } from "./node-config-modal";
 const EXAMPLE_TAG = "{{First name}}";
 
 type DoneWhenMode = "never" | "template" | "condition";
+
+// Only the fields this view reads off a resolved library skill.
+interface SkillSummary {
+  name: string;
+}
 
 // The conversational-step section of NodeConfigModal. Extracted verbatim from
 // the original monolithic modal (Group D item 10 split): the parent still owns
@@ -26,6 +32,15 @@ export interface NodeConfigModalConversationalProps {
   uploadError: string | null;
   setUploadError: (value: string | null) => void;
   onOpenHelpDialog: () => void;
+  // Power-user surfaces (ADR-022). When the flag is off the section is hidden.
+  skillsEnabled: boolean;
+  mcpEnabled: boolean;
+  skillsById: Map<string, SkillSummary>;
+  onOpenSkillPicker: () => void;
+  removeSkill: (id: string) => void;
+  mcpServers: McpServerWithTools[];
+  isToolAllowed: (serverId: string, toolName: string) => boolean;
+  toggleAllowedTool: (serverId: string, toolName: string) => void;
 }
 
 export function NodeConfigModalConversational({
@@ -40,11 +55,56 @@ export function NodeConfigModalConversational({
   uploadError,
   setUploadError,
   onOpenHelpDialog,
+  skillsEnabled,
+  mcpEnabled,
+  skillsById,
+  onOpenSkillPicker,
+  removeSkill,
+  mcpServers,
+  isToolAllowed,
+  toggleAllowedTool,
 }: NodeConfigModalConversationalProps) {
   return (
     <>
-      <div className="space-y-1">
-        <Label htmlFor="ai-instruction">Instructions for the AI</Label>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="ai-instruction">Instructions for the AI</Label>
+          {skillsEnabled && (
+            <button
+              type="button"
+              onClick={onOpenSkillPicker}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+              aria-label="Add skills"
+            >
+              <Sparkles size={13} />
+              {values.skillRefs.length > 0 ? `Skills · ${values.skillRefs.length}` : "Add skills"}
+            </button>
+          )}
+        </div>
+        {skillsEnabled && values.skillRefs.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {values.skillRefs.map((id) => {
+              const skill = skillsById.get(id);
+              return (
+                <span
+                  key={id}
+                  className="inline-flex items-center gap-1 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-2 py-0.5 text-[11px] text-[#3a5fd9]"
+                >
+                  <Sparkles size={10} />
+                  {skill?.name ?? "Skill"}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${skill?.name ?? "skill"}`}
+                    className="text-[#3a5fd9] hover:text-[#25439c]"
+                    onClick={() => removeSkill(id)}
+                  >
+                    <X size={11} />
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
         <Textarea
           id="ai-instruction"
           required
@@ -54,6 +114,49 @@ export function NodeConfigModalConversational({
           placeholder="Describe what the AI should do in this step…"
         />
       </div>
+
+      {mcpEnabled && (
+        <div className="space-y-1">
+          <FieldGroupLabel id="ncm-mcp-tools">MCP tools</FieldGroupLabel>
+          <p className="text-[12px] text-[#857f76]">
+            Let the AI call these tools mid-conversation. Register servers on the MCP Servers page.
+          </p>
+          {mcpServers.length === 0 ? (
+            <p className="text-[13px] text-[#857f76]">No MCP servers available.</p>
+          ) : (
+            <div className="space-y-2 rounded-[9px] border border-[#dedad2] p-2.5">
+              {mcpServers.map((entry) => (
+                <div key={entry.server.id} className="space-y-1">
+                  <p className="text-[12px] font-medium text-[#5a5650]">{entry.server.label}</p>
+                  {entry.tools.length === 0 ? (
+                    <p className="text-[12px] text-[#857f76]">No tools discovered.</p>
+                  ) : (
+                    entry.tools.map((tool) => (
+                      <label
+                        key={tool.name}
+                        className="flex cursor-pointer items-start gap-2 text-[13px]"
+                      >
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={isToolAllowed(entry.server.id, tool.name)}
+                          onChange={() => toggleAllowedTool(entry.server.id, tool.name)}
+                        />
+                        <span>
+                          <span className="font-medium">{tool.name}</span>
+                          {tool.description ? (
+                            <span className="text-[#857f76]"> — {tool.description}</span>
+                          ) : null}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="space-y-1">
         <FieldGroupLabel id="ncm-output-type">Output type</FieldGroupLabel>

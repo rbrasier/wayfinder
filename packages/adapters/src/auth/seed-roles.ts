@@ -46,7 +46,7 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
 ];
 
 // Flags scoped to Power Users on first migrate (ADR-022); admins still pass via wildcard.
-const POWER_USER_SCOPED_FLAGS = ["auto_node", "scheduled_node"];
+const POWER_USER_SCOPED_FLAGS = ["auto_node", "scheduled_node", "mcp", "skills"];
 
 /**
  * Idempotent seed of the three system roles, their default permission grants, and
