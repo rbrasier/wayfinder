@@ -14,13 +14,12 @@
  */
 
 import { test, expect } from './helpers/base';
+import { openFlowCanvas } from './helpers/seed';
 
 test.describe('Skill picker modal', () => {
   test('the AI-instructions box exposes an "Add skills" button that opens the picker', async ({ page }) => {
-    await page.goto('/admin/flows');
-    await page.getByRole('link', { name: 'Configure Flow' }).first().click();
-    // The admin editor was consolidated into the single canonical route.
-    await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
+    // Opens the seeded flow on the canonical /flows/[id]/config route.
+    expect(await openFlowCanvas(page)).toBe(true);
 
     // Open a conversational step's config.
     await page.locator('.react-flow__node').first().dblclick();

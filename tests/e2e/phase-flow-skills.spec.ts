@@ -24,6 +24,17 @@ description: Flags unusual contract clauses
 
 Read the contract and flag unusual indemnity clauses.`;
 
+// A distinct skill for the archive test so it owns its row and never collides
+// with the upload test's skill (which would make the row locator ambiguous).
+const ARCHIVE_SKILL_MD = `---
+name: E2E Archivable Skill
+description: Uploaded then archived in one test
+---
+
+# Archivable
+
+A skill uploaded so the archive flow has a row it owns.`;
+
 test.describe('Flow skills', () => {
   test('an admin can upload a SKILL.md and see it in the library', async ({ page }) => {
     await page.goto('/admin/skills');
@@ -48,7 +59,12 @@ test.describe('Flow skills', () => {
   test('an uploaded skill can be archived from the library', async ({ page }) => {
     await page.goto('/admin/skills');
 
-    const row = page.getByRole('row', { name: /E2E Contract Reviewer/i }).first();
+    // Upload in-test so the archive action never depends on another test's row.
+    await page.getByLabel('SKILL.md').fill(ARCHIVE_SKILL_MD);
+    await page.getByRole('button', { name: /upload skill/i }).click();
+
+    const row = page.getByRole('row', { name: /E2E Archivable Skill/i }).first();
+    await expect(row).toBeVisible();
     await row.getByRole('button', { name: /archive/i }).click();
 
     await expect(row.getByRole('button', { name: /restore/i })).toBeVisible();
