@@ -4,18 +4,9 @@ import {
   CONTEXT_DOCS_MAX_FILE_SIZE_BYTES,
 } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
+import { getSessionTokenFromRequest } from "@/lib/session-token";
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(CONTEXT_DOCS_ALLOWED_MIME_TYPES);
-
-const getSessionToken = (req: NextRequest): string | null => {
-  const cookie = req.headers.get("cookie");
-  if (!cookie) return null;
-  const pair = cookie
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith("better-auth.session_token="));
-  return pair ? pair.slice("better-auth.session_token=".length) : null;
-};
 
 export async function POST(
   req: NextRequest,
@@ -24,7 +15,7 @@ export async function POST(
   const { id: flowId } = await params;
   const container = getContainer();
 
-  const token = getSessionToken(req);
+  const token = getSessionTokenFromRequest(req);
   if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const session = await container.resolveSession(token);

@@ -2,18 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { DocxGenerator } from "@rbrasier/adapters";
 import { TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
+import { getSessionTokenFromRequest } from "@/lib/session-token";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-const getSessionToken = (req: NextRequest): string | null => {
-  const cookie = req.headers.get("cookie");
-  if (!cookie) return null;
-  const pair = cookie
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith("better-auth.session_token="));
-  return pair ? pair.slice("better-auth.session_token=".length) : null;
-};
 
 const docxGenerator = new DocxGenerator();
 
@@ -24,7 +15,7 @@ export async function POST(
   const { id: flowId, nodeId } = await params;
   const container = getContainer();
 
-  const token = getSessionToken(req);
+  const token = getSessionTokenFromRequest(req);
   if (!token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -206,7 +197,7 @@ export async function DELETE(
   const { id: flowId, nodeId } = await params;
   const container = getContainer();
 
-  const token = getSessionToken(req);
+  const token = getSessionTokenFromRequest(req);
   if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const session = await container.resolveSession(token);

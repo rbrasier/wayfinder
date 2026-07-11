@@ -9,3 +9,4 @@ export * from "./document-generation";
 export * from "./templates";
 export * from "./embeddings";
 export * from "./approvals";
+export * from "./chat";

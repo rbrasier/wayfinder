@@ -5,6 +5,7 @@ import type { RuntimeConfigStore } from "../config/runtime-config-store";
 
 vi.mock("ai", () => ({
   generateObject: vi.fn(),
+  generateText: vi.fn(),
   streamText: vi.fn(),
   streamObject: vi.fn(),
 }));
@@ -13,7 +14,7 @@ vi.mock("./providers", () => ({
   resolveModel: vi.fn(() => ({ __mockedModel: true })),
 }));
 
-import { generateObject, streamObject, streamText } from "ai";
+import { generateObject, generateText, streamObject, streamText } from "ai";
 import { resolveModel } from "./providers";
 
 const openaiConfig: AiConfig = {
@@ -121,6 +122,73 @@ describe("LanguageModelAdapter (openai) — generateObject", () => {
   });
 });
 
+describe("LanguageModelAdapter (openai) — generateText", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns ok with text + normalized usage when the SDK succeeds", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "A concise title",
+      usage: { promptTokens: 12, completionTokens: 4 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateText({ purpose: "chat-title", prompt: "hello" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.text).toBe("A concise title");
+    expect(result.data?.usage).toEqual({
+      promptTokens: 12,
+      completionTokens: 4,
+      systemTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+  });
+
+  it("carries Anthropic cache tokens through from provider metadata", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "cached",
+      usage: { promptTokens: 100, completionTokens: 2 },
+      experimental_providerMetadata: {
+        anthropic: { cacheReadInputTokens: 80, cacheCreationInputTokens: 5 },
+      },
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateText({ purpose: "chat-title", prompt: "hi" });
+
+    expect(result.data?.usage.cacheReadTokens).toBe(80);
+    expect(result.data?.usage.cacheWriteTokens).toBe(5);
+  });
+
+  it("input.model overrides the runtime config default", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "t",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    await adapter.generateText({ purpose: "chat-title", model: "gpt-4o", prompt: "hi" });
+
+    expect(resolveModel).toHaveBeenCalledWith("openai", "gpt-4o", "sk-openai-test");
+  });
+
+  it("returns err(AI_PROVIDER_FAILED) when the SDK rejects", async () => {
+    vi.mocked(generateText).mockRejectedValue(new Error("rate limited"));
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateText({ purpose: "chat-title", prompt: "hi" });
+
+    expect(result.data).toBeUndefined();
+    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+    expect(result.error?.cause).toBeInstanceOf(Error);
+  });
+});
+
 describe("LanguageModelAdapter (openai) — streamText", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -210,6 +278,74 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
 
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+
+  it("extracts anthropic cache tokens from providerMetadata", async () => {
+    async function* partials() { yield {}; }
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: partials(),
+      object: Promise.resolve({}),
+      usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+      providerMetadata: Promise.resolve({
+        anthropic: { cacheReadInputTokens: 30, cacheCreationInputTokens: 20 },
+      }),
+      experimental_providerMetadata: Promise.resolve({
+        anthropic: { cacheReadInputTokens: 30, cacheCreationInputTokens: 20 },
+      }),
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.streamObject({ purpose: "chat", schema });
+    const usage = await result.data!.usage;
+
+    expect(usage.cacheReadTokens).toBe(30);
+    expect(usage.cacheWriteTokens).toBe(20);
+  });
+
+  it("passes ChatMessage.providerOptions to the SDK", async () => {
+    async function* partials() { yield {}; }
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: partials(),
+      object: Promise.resolve({}),
+      usage: Promise.resolve({ promptTokens: 1, completionTokens: 1 }),
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    await adapter.streamObject({
+      purpose: "chat",
+      schema,
+      messages: [
+        {
+          role: "system",
+          content: "sys",
+          providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+        },
+        { role: "user", content: "u" },
+      ],
+    });
+
+    const call = vi.mocked(streamObject).mock.calls[0]![0] as {
+      messages: { providerOptions?: Record<string, unknown> }[];
+    };
+    expect(call.messages[0]!.providerOptions).toEqual({
+      anthropic: { cacheControl: { type: "ephemeral" } },
+    });
+  });
+
+  it("passes onError to the SDK", async () => {
+    async function* partials() { yield {}; }
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: partials(),
+      object: Promise.resolve({}),
+      usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+    const onError = vi.fn();
+
+    await adapter.streamObject({ purpose: "chat", schema, onError });
+
+    const call = vi.mocked(streamObject).mock.calls[0]![0] as { onError?: unknown };
+    expect(call.onError).toBe(onError);
   });
 });
 

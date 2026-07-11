@@ -22,4 +22,5 @@ export * from "./scheduling/index";
 export * from "./retention/index";
 export * from "./directory/index";
 export * from "./hr/index";
+export * from "./rate-limit/index";
 export * from "./factory";

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
+  buildAggregateGatheredContextStatement,
+  buildStepAssistantMessagesStatement,
   buildLatestBySessionStatement,
   buildListSinceStatement,
   buildListSinceSeqStatement,
+  buildSessionListLastAssistantStatement,
+  buildSessionListBestConfidenceStatement,
 } from "./drizzle-session-message-repository";
 
 // The pagination queries are what keep a long session's per-turn read bounded
@@ -32,6 +36,44 @@ describe("buildLatestBySessionStatement", () => {
   });
 });
 
+describe("buildAggregateGatheredContextStatement", () => {
+  it("reads only the contextGathered slice of ai_payload and orders by seq", () => {
+    const { sql, params } = render(buildAggregateGatheredContextStatement("session-agg"));
+    const text = sql.toLowerCase();
+
+    expect(text).toContain("ai_payload");
+    expect(text).toContain("'contextgathered'");
+    expect(text).toContain("order by");
+    expect(text).toContain("asc");
+    expect(text).toContain("role");
+    expect(text).toContain("step_node_id");
+    expect(params).toContain("session-agg");
+  });
+
+  it("filters out messages whose contextGathered is not a JSON array", () => {
+    const { sql } = render(buildAggregateGatheredContextStatement("session-agg"));
+    const text = sql.toLowerCase();
+    expect(text).toContain("jsonb_typeof");
+    expect(text).toContain("'array'");
+  });
+});
+
+describe("buildStepAssistantMessagesStatement", () => {
+  it("scopes to one node's assistant messages and orders by seq without touching jsonb", () => {
+    const { sql, params } = render(buildStepAssistantMessagesStatement("session-1", "node-appr"));
+    const text = sql.toLowerCase();
+
+    expect(text).toContain("step_node_id");
+    expect(text).toContain("role");
+    expect(text).toContain("order by");
+    expect(text).toContain("asc");
+    // The key check happens in TS, so the query must stay a plain scan.
+    expect(text).not.toContain("contextgathered");
+    expect(params).toContain("session-1");
+    expect(params).toContain("node-appr");
+  });
+});
+
 describe("buildListSinceStatement", () => {
   it("returns only rows created after the cursor, in chronological order", () => {
     const after = new Date("2026-07-03T00:00:00.000Z");
@@ -43,6 +85,40 @@ describe("buildListSinceStatement", () => {
     expect(text).toContain("asc");
     expect(params).toContain("session-2");
     expect(params).toContain(after);
+  });
+});
+
+describe("buildSessionListLastAssistantStatement", () => {
+  it("takes one newest assistant row per session across the whole batch", () => {
+    const { sql, params } = render(
+      buildSessionListLastAssistantStatement(["session-1", "session-2"]),
+    );
+    const text = sql.toLowerCase();
+
+    // DISTINCT ON + seq DESC is what keeps this the latest assistant message per
+    // session rather than a full-history scan (scaling wall #1).
+    expect(text).toContain("distinct on");
+    expect(text).toContain("order by");
+    expect(text).toContain("desc");
+    expect(text).toContain("'assistant'");
+    expect(params).toContain("session-1");
+    expect(params).toContain("session-2");
+  });
+});
+
+describe("buildSessionListBestConfidenceStatement", () => {
+  it("aggregates the highest confidence per session and step in one grouped query", () => {
+    const { sql, params } = render(
+      buildSessionListBestConfidenceStatement(["session-1", "session-2"]),
+    );
+    const text = sql.toLowerCase();
+
+    expect(text).toContain("max(");
+    expect(text).toContain("group by");
+    expect(text).toContain("'assistant'");
+    expect(text).toContain("is not null");
+    expect(params).toContain("session-1");
+    expect(params).toContain("session-2");
   });
 });
 

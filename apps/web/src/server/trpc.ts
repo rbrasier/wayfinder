@@ -3,6 +3,7 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 import { getContainer, type Container } from "@/lib/container";
+import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { causeToMetadata } from "./error-metadata";
 
 export interface TrpcContext {
@@ -12,13 +13,6 @@ export interface TrpcContext {
   readonly permissions: Set<PermissionKey>;
   readonly headers: Headers;
 }
-
-const getSessionToken = (req: Request): string | null => {
-  const cookie = req.headers.get("cookie");
-  if (!cookie) return null;
-  const pair = cookie.split(";").map((c) => c.trim()).find((c) => c.startsWith("better-auth.session_token="));
-  return pair ? pair.slice("better-auth.session_token=".length) : null;
-};
 
 export const resolvePermissions = async (
   container: Container,
@@ -36,7 +30,7 @@ export const createTrpcContext = async (req: Request): Promise<TrpcContext> => {
   let userId: string | null = null;
   let isAdmin = false;
 
-  const token = getSessionToken(req);
+  const token = getSessionTokenFromRequest(req);
   if (token) {
     const session = await container.resolveSession(token);
     if (session) {

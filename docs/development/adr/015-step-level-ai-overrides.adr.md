@@ -1,5 +1,10 @@
 # ADR-015 — Step-Level AI Overrides: Configurable Prompt & Model
 
+> **Numbering note**: two ADRs share the number 015. This one — *Step-Level AI
+> Overrides* — shares the number with *Flow Versioning via Immutable Snapshots*,
+> which is the ADR-015 the code comments cite. Deliberately not renumbered — code
+> comments cite these numbers.
+
 - **Status**: Proposed
 - **Date**: 2026-05-31
 - **Builds on**: ADR-002 (multi-provider AI), ADR-004 (LangGraph adapter

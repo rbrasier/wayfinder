@@ -1,14 +1,16 @@
-import { asc, eq, sql, type SQL } from "drizzle-orm";
+import { asc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import {
   domainError,
   err,
   ok,
   type AiTurnPayload,
   type DocumentStatus,
+  type GatheredContextItem,
   type ISessionMessageRepository,
   type NewSessionMessage,
   type Result,
   type SessionDocument,
+  type SessionListSummary,
   type SessionMessage,
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
@@ -40,6 +42,64 @@ export const buildListSinceSeqStatement = (sessionId: string, afterSeq: number):
   WHERE ${app_session_messages.session_id} = ${sessionId}
     AND ${app_session_messages.seq} > ${afterSeq}
   ORDER BY ${app_session_messages.seq} ASC
+`;
+
+// Newest assistant message per session for the whole batch in one round-trip.
+// DISTINCT ON keeps the first row per session under the seq-DESC ordering — the
+// latest assistant message — so the list view never scans a session's history.
+export const buildSessionListLastAssistantStatement = (sessionIds: readonly string[]): SQL => sql`
+  SELECT DISTINCT ON (${app_session_messages.session_id})
+    ${app_session_messages.session_id} AS session_id,
+    ${app_session_messages.content} AS content
+  FROM ${app_session_messages}
+  WHERE ${inArray(app_session_messages.session_id, [...sessionIds])}
+    AND ${app_session_messages.role} = 'assistant'
+  ORDER BY ${app_session_messages.session_id}, ${app_session_messages.seq} DESC
+`;
+
+// Flattens the aiPayload.contextGathered arrays from every step-anchored
+// assistant message in one session into a single chronological array. Reads
+// only the aiPayload column and uses the (session_id, seq) composite index, so
+// the query cost scales with rows-per-session, not row width — the bounded
+// turn read pairs with this so gatheredContext still reflects the full history
+// without loading the whole transcript row-wide.
+export const buildAggregateGatheredContextStatement = (sessionId: string): SQL => sql`
+  SELECT ${app_session_messages.ai_payload}->'contextGathered' AS items
+  FROM ${app_session_messages}
+  WHERE ${app_session_messages.session_id} = ${sessionId}
+    AND ${app_session_messages.role} = 'assistant'
+    AND ${app_session_messages.step_node_id} IS NOT NULL
+    AND ${app_session_messages.ai_payload} IS NOT NULL
+    AND jsonb_typeof(${app_session_messages.ai_payload}->'contextGathered') = 'array'
+  ORDER BY ${app_session_messages.seq} ASC
+`;
+
+// One node's step-anchored assistant messages, chronological. No jsonb access —
+// the caller inspects `contextGathered` in TS — so this stays a plain indexed
+// scan over a single node's turns, backing the gate-hold count over full
+// history (which the bounded tail can miss on a long-running node).
+export const buildStepAssistantMessagesStatement = (sessionId: string, nodeId: string): SQL => sql`
+  SELECT * FROM ${app_session_messages}
+  WHERE ${app_session_messages.session_id} = ${sessionId}
+    AND ${app_session_messages.step_node_id} = ${nodeId}
+    AND ${app_session_messages.role} = 'assistant'
+  ORDER BY ${app_session_messages.seq} ASC
+`;
+
+// Highest confidence per (session, step) across the batch, aggregated SQL-side
+// so the per-step best the list view shows is one grouped query, not a
+// per-session in-memory reduction over full histories.
+export const buildSessionListBestConfidenceStatement = (sessionIds: readonly string[]): SQL => sql`
+  SELECT
+    ${app_session_messages.session_id} AS session_id,
+    ${app_session_messages.step_node_id} AS step_node_id,
+    MAX(${app_session_messages.confidence}) AS best_confidence
+  FROM ${app_session_messages}
+  WHERE ${inArray(app_session_messages.session_id, [...sessionIds])}
+    AND ${app_session_messages.role} = 'assistant'
+    AND ${app_session_messages.step_node_id} IS NOT NULL
+    AND ${app_session_messages.confidence} IS NOT NULL
+  GROUP BY ${app_session_messages.session_id}, ${app_session_messages.step_node_id}
 `;
 
 const toEntity = (row: typeof app_session_messages.$inferSelect): SessionMessage => ({
@@ -108,6 +168,34 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
     }
   }
 
+  async aggregateGatheredContext(sessionId: string): Promise<Result<GatheredContextItem[]>> {
+    try {
+      const rows = (await this.db.execute(
+        buildAggregateGatheredContextStatement(sessionId),
+      )) as unknown as { items: unknown }[];
+      const items: GatheredContextItem[] = [];
+      for (const row of rows) {
+        if (!Array.isArray(row.items)) continue;
+        for (const raw of row.items) {
+          if (
+            raw &&
+            typeof raw === "object" &&
+            typeof (raw as { key?: unknown }).key === "string" &&
+            typeof (raw as { value?: unknown }).value === "string"
+          ) {
+            items.push({
+              key: (raw as { key: string }).key,
+              value: (raw as { value: string }).value,
+            });
+          }
+        }
+      }
+      return ok(items);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to aggregate gathered context.", cause));
+    }
+  }
+
   async latestBySession(sessionId: string, limit: number): Promise<Result<SessionMessage[]>> {
     if (!Number.isInteger(limit) || limit <= 0) {
       return err(domainError("VALIDATION_FAILED", "latestBySession limit must be a positive integer."));
@@ -121,6 +209,17 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return ok(rows.map(toEntity).reverse());
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to load latest session messages.", cause));
+    }
+  }
+
+  async listStepAssistantMessages(sessionId: string, nodeId: string): Promise<Result<SessionMessage[]>> {
+    try {
+      const rows = (await this.db.execute(
+        buildStepAssistantMessagesStatement(sessionId, nodeId),
+      )) as unknown as (typeof app_session_messages.$inferSelect)[];
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to load step assistant messages.", cause));
     }
   }
 
@@ -146,6 +245,46 @@ export class DrizzleSessionMessageRepository implements ISessionMessageRepositor
       return ok(rows.map(toEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to load session messages since seq.", cause));
+    }
+  }
+
+  async summariseForSessionList(
+    sessionIds: readonly string[],
+  ): Promise<Result<SessionListSummary[]>> {
+    if (sessionIds.length === 0) return ok([]);
+    try {
+      const [lastRows, confidenceRows] = await Promise.all([
+        this.db.execute(buildSessionListLastAssistantStatement(sessionIds)) as unknown as Promise<
+          { session_id: string; content: string | null }[]
+        >,
+        this.db.execute(buildSessionListBestConfidenceStatement(sessionIds)) as unknown as Promise<
+          { session_id: string; step_node_id: string; best_confidence: number }[]
+        >,
+      ]);
+
+      const summaries = new Map<string, SessionListSummary>();
+      const summaryFor = (sessionId: string): SessionListSummary => {
+        const existing = summaries.get(sessionId);
+        if (existing) return existing;
+        const created: SessionListSummary = {
+          sessionId,
+          lastAssistantContent: null,
+          bestConfidenceByStep: {},
+        };
+        summaries.set(sessionId, created);
+        return created;
+      };
+
+      for (const row of lastRows) {
+        summaryFor(row.session_id).lastAssistantContent = row.content ?? null;
+      }
+      for (const row of confidenceRows) {
+        summaryFor(row.session_id).bestConfidenceByStep[row.step_node_id] = Number(row.best_confidence);
+      }
+
+      return ok([...summaries.values()]);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to summarise sessions for list.", cause));
     }
   }
 

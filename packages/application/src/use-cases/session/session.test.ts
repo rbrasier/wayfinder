@@ -5,12 +5,14 @@ import type {
   FlowEdge,
   FlowNode,
   FlowVersion,
+  IApprovalRepository,
   IFlowEdgeRepository,
   IFlowNodeRepository,
   IFlowRepository,
   IFlowVersionRepository,
   ISessionMessageRepository,
   ISessionRepository,
+  IUnitOfWork,
   NewFlowEdge,
   NewFlowNode,
   NewSession,
@@ -19,12 +21,16 @@ import type {
   Session,
   SessionMessage,
   SessionUpdate,
+  TransactionalRepositories,
 } from "@rbrasier/domain";
 import { buildFlowSnapshot } from "@rbrasier/domain";
 import { StartSession } from "./start-session";
 import { ListSessions } from "./list-sessions";
 import { ListAllSessions } from "./list-all-sessions";
 import { GetSession } from "./get-session";
+import { GetSessionForTurn } from "./get-session-for-turn";
+import { ListSessionsPage } from "./list-sessions-page";
+import { ListAllSessionsPage } from "./list-all-sessions-page";
 import { RunTurn } from "./run-turn";
 
 // ── Fakes ──────────────────────────────────────────────────────────────────
@@ -172,6 +178,57 @@ class FakeSessionRepository implements ISessionRepository {
     return ok([...this.sessions.values()]);
   }
 
+  private sortedNewestFirst(rows: Session[]): Session[] {
+    return [...rows].sort((a, b) => {
+      const t = b.updatedAt.getTime() - a.updatedAt.getTime();
+      if (t !== 0) return t;
+      return b.id.localeCompare(a.id);
+    });
+  }
+
+  private paginate(
+    rows: Session[],
+    options: import("@rbrasier/domain").SessionListPageOptions,
+  ): import("@rbrasier/domain").SessionListPage<Session> {
+    const sorted = this.sortedNewestFirst(rows);
+    let startIndex = 0;
+    if (options.cursor) {
+      const underscore = options.cursor.indexOf("_");
+      if (underscore > 0) {
+        const cursorTime = new Date(options.cursor.slice(0, underscore)).getTime();
+        const cursorId = options.cursor.slice(underscore + 1);
+        startIndex = sorted.findIndex((row) => {
+          const t = row.updatedAt.getTime();
+          return t < cursorTime || (t === cursorTime && row.id < cursorId);
+        });
+        if (startIndex === -1) startIndex = sorted.length;
+      }
+    }
+    const limit = Math.max(1, Math.floor(options.limit));
+    const slice = sorted.slice(startIndex, startIndex + limit);
+    const hasMore = startIndex + limit < sorted.length;
+    const lastReturned = slice[slice.length - 1];
+    const nextCursor =
+      hasMore && lastReturned
+        ? `${lastReturned.updatedAt.toISOString()}_${lastReturned.id}`
+        : null;
+    return { items: slice, nextCursor };
+  }
+
+  async listByUserPage(
+    userId: string,
+    options: import("@rbrasier/domain").SessionListPageOptions,
+  ): Promise<Result<import("@rbrasier/domain").SessionListPage<Session>>> {
+    const rows = [...this.sessions.values()].filter((s) => s.userId === userId);
+    return ok(this.paginate(rows, options));
+  }
+
+  async listAllPage(
+    options: import("@rbrasier/domain").SessionListPageOptions,
+  ): Promise<Result<import("@rbrasier/domain").SessionListPage<Session>>> {
+    return ok(this.paginate([...this.sessions.values()], options));
+  }
+
   async update(id: string, patch: SessionUpdate): Promise<Result<Session>> {
     const session = this.sessions.get(id);
     if (!session) return err(domainError("NOT_FOUND", `Session ${id} not found.`));
@@ -229,11 +286,58 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
   }
 
   async listBySession(sessionId: string): Promise<Result<SessionMessage[]>> {
+    return ok(this.chronological(sessionId));
+  }
+
+  async latestBySession(sessionId: string, limit: number): Promise<Result<SessionMessage[]>> {
+    const chronological = this.chronological(sessionId);
+    return ok(chronological.slice(-limit));
+  }
+
+  async aggregateGatheredContext(
+    sessionId: string,
+  ): Promise<Result<import("@rbrasier/domain").GatheredContextItem[]>> {
+    const items = this.chronological(sessionId)
+      .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
+      .flatMap((m) => m.aiPayload!.contextGathered);
+    return ok(items);
+  }
+
+  async listStepAssistantMessages(sessionId: string, nodeId: string): Promise<Result<SessionMessage[]>> {
     return ok(
-      [...this.messages.values()]
-        .filter((m) => m.sessionId === sessionId)
-        .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+      this.chronological(sessionId).filter(
+        (m) => m.role === "assistant" && m.stepNodeId === nodeId,
+      ),
     );
+  }
+
+  private chronological(sessionId: string): SessionMessage[] {
+    return [...this.messages.values()]
+      .filter((m) => m.sessionId === sessionId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
+  async summariseForSessionList(
+    sessionIds: readonly string[],
+  ): Promise<Result<import("@rbrasier/domain").SessionListSummary[]>> {
+    const summaries = sessionIds.flatMap((sessionId) => {
+      const assistantMessages = this.chronological(sessionId).filter((m) => m.role === "assistant");
+      if (assistantMessages.length === 0) return [];
+      const bestConfidenceByStep: Record<string, number> = {};
+      for (const message of assistantMessages) {
+        if (!message.stepNodeId || message.confidence === null) continue;
+        const previous = bestConfidenceByStep[message.stepNodeId] ?? -1;
+        if (message.confidence > previous) bestConfidenceByStep[message.stepNodeId] = message.confidence;
+      }
+      return [
+        {
+          sessionId,
+          lastAssistantContent: assistantMessages.at(-1)?.content ?? null,
+          bestConfidenceByStep,
+        },
+      ];
+    });
+    return ok(summaries);
   }
 
   async updateDocument(id: string, document: SessionMessage["document"]): Promise<Result<SessionMessage>> {
@@ -260,6 +364,33 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
     return ok(updated);
   }
 }
+
+// Runs the work against the same in-memory repositories the test inspects, and
+// counts invocations so a test can assert the writes went through a transaction.
+// Rollback semantics are covered by the adapter's own test.
+class FakeUnitOfWork implements IUnitOfWork {
+  transactionCount = 0;
+
+  constructor(private readonly repositories: TransactionalRepositories) {}
+
+  async withTransaction<T>(
+    work: (repositories: TransactionalRepositories) => Promise<Result<T>>,
+  ): Promise<Result<T>> {
+    this.transactionCount++;
+    return work(this.repositories);
+  }
+}
+
+// RunTurn never touches the approvals repo inside its transaction, so a stub
+// that throws if reached keeps the transactional-repositories contract honest
+// without a full in-memory implementation.
+const unusedApprovals = new Proxy({} as IApprovalRepository, {
+  get() {
+    return async () => {
+      throw new Error("approvals repository is not used in RunTurn tests");
+    };
+  },
+});
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -497,6 +628,224 @@ describe("GetSession", () => {
   });
 });
 
+// ── ListSessionsPage / ListAllSessionsPage ───────────────────────────────────
+
+describe("ListSessionsPage (keyset pagination)", () => {
+  let sessions: FakeSessionRepository;
+  let useCase: ListSessionsPage;
+
+  beforeEach(() => {
+    sessions = new FakeSessionRepository();
+    useCase = new ListSessionsPage(sessions);
+    // 5 sessions with distinct updatedAt; alice-1 is newest.
+    for (let i = 0; i < 5; i++) {
+      const id = `alice-${i}`;
+      sessions.sessions.set(id, {
+        ...(makeSession() as unknown as Session),
+        id,
+        userId: "alice",
+        // Older i → earlier updatedAt so alice-4 is newest.
+        updatedAt: new Date(`2026-07-0${i + 1}T00:00:00.000Z`),
+      } as Session);
+    }
+  });
+
+  it("returns the first page newest-first with a nextCursor when there is more", async () => {
+    const result = await useCase.execute("alice", { limit: 2 });
+
+    expect(result.data?.items.map((s) => s.id)).toEqual(["alice-4", "alice-3"]);
+    expect(result.data?.nextCursor).not.toBeNull();
+  });
+
+  it("threading the cursor returns the next page without overlap", async () => {
+    const first = await useCase.execute("alice", { limit: 2 });
+    const second = await useCase.execute("alice", {
+      limit: 2,
+      cursor: first.data!.nextCursor!,
+    });
+
+    expect(second.data?.items.map((s) => s.id)).toEqual(["alice-2", "alice-1"]);
+    expect(second.data?.nextCursor).not.toBeNull();
+  });
+
+  it("nextCursor is null when the final page fits", async () => {
+    const result = await useCase.execute("alice", { limit: 10 });
+
+    expect(result.data?.items).toHaveLength(5);
+    expect(result.data?.nextCursor).toBeNull();
+  });
+
+  it("only lists sessions owned by the caller", async () => {
+    sessions.sessions.set("bob-1", { ...(makeSession() as unknown as Session), id: "bob-1", userId: "bob" } as Session);
+    const result = await useCase.execute("alice", { limit: 10 });
+    expect(result.data?.items.every((s) => s.userId === "alice")).toBe(true);
+  });
+});
+
+describe("ListAllSessionsPage (admin keyset pagination)", () => {
+  it("returns items across all users, newest-first, with keyset threading", async () => {
+    const sessions = new FakeSessionRepository();
+    sessions.sessions.set("alice-1", {
+      ...(makeSession() as unknown as Session),
+      id: "alice-1",
+      userId: "alice",
+      updatedAt: new Date("2026-07-01T00:00:00.000Z"),
+    } as Session);
+    sessions.sessions.set("bob-1", {
+      ...(makeSession() as unknown as Session),
+      id: "bob-1",
+      userId: "bob",
+      updatedAt: new Date("2026-07-02T00:00:00.000Z"),
+    } as Session);
+    sessions.sessions.set("carol-1", {
+      ...(makeSession() as unknown as Session),
+      id: "carol-1",
+      userId: "carol",
+      updatedAt: new Date("2026-07-03T00:00:00.000Z"),
+    } as Session);
+    const useCase = new ListAllSessionsPage(sessions);
+
+    const first = await useCase.execute({ limit: 2 });
+    expect(first.data?.items.map((s) => s.id)).toEqual(["carol-1", "bob-1"]);
+    expect(first.data?.nextCursor).not.toBeNull();
+
+    const second = await useCase.execute({ limit: 2, cursor: first.data!.nextCursor! });
+    expect(second.data?.items.map((s) => s.id)).toEqual(["alice-1"]);
+    expect(second.data?.nextCursor).toBeNull();
+  });
+});
+
+// ── GetSessionForTurn ────────────────────────────────────────────────────────
+
+describe("GetSessionForTurn", () => {
+  let sessions: FakeSessionRepository;
+  let messages: FakeSessionMessageRepository;
+  let flows: FakeFlowRepository;
+  let nodes: FakeFlowNodeRepository;
+  let edges: FakeFlowEdgeRepository;
+  let flowVersions: FakeFlowVersionRepository;
+  let useCase: GetSessionForTurn;
+
+  beforeEach(() => {
+    sessions = new FakeSessionRepository();
+    messages = new FakeSessionMessageRepository();
+    flows = new FakeFlowRepository();
+    nodes = new FakeFlowNodeRepository();
+    edges = new FakeFlowEdgeRepository();
+    flowVersions = new FakeFlowVersionRepository();
+
+    sessions.sessions.set("session-1", makeSession());
+    flows.flows.set("flow-1", makeFlow());
+    nodes.nodes.set("node-1", makeNode());
+
+    useCase = new GetSessionForTurn(sessions, messages, flows, nodes, edges, flowVersions);
+  });
+
+  it("returns only the last N messages instead of the whole transcript", async () => {
+    // 25 assistant turns; the bounded read should return only the last 20.
+    for (let i = 0; i < 25; i++) {
+      await messages.create({
+        sessionId: "session-1",
+        role: "assistant",
+        content: `turn ${i}`,
+        stepNodeId: "node-1",
+        aiPayload: {
+          response: `turn ${i}`,
+          rationale: "r",
+          stepCompleteConfidence: 0,
+          contextGathered: [{ key: `k${i}`, value: `v${i}` }],
+        },
+      });
+    }
+
+    const result = await useCase.execute("session-1", { messagesTailN: 20 });
+
+    expect(result.data?.messagesTail).toHaveLength(20);
+    expect(result.data?.messagesTail[0]?.content).toBe("turn 5");
+    expect(result.data?.messagesTail[19]?.content).toBe("turn 24");
+  });
+
+  it("returns the aggregated gathered context across the entire history, not just the tail", async () => {
+    // Add 25 assistant turns each contributing a unique key/value. The tail is
+    // bounded to 20, but the aggregated context must still include all 25.
+    for (let i = 0; i < 25; i++) {
+      await messages.create({
+        sessionId: "session-1",
+        role: "assistant",
+        content: `turn ${i}`,
+        stepNodeId: "node-1",
+        aiPayload: {
+          response: `turn ${i}`,
+          rationale: "r",
+          stepCompleteConfidence: 0,
+          contextGathered: [{ key: `k${i}`, value: `v${i}` }],
+        },
+      });
+    }
+
+    const result = await useCase.execute("session-1", { messagesTailN: 20 });
+
+    expect(result.data?.gatheredContext).toHaveLength(25);
+    expect(result.data?.gatheredContext[0]).toEqual({ key: "k0", value: "v0" });
+    expect(result.data?.gatheredContext[24]).toEqual({ key: "k24", value: "v24" });
+  });
+
+  it("returns the current node's assistant messages over full history, not just the tail", async () => {
+    // The first turn holds the gate (carries an OUTSTANDING marker), then 24
+    // later turns push it out of a 20-message tail. The gate-hold source must
+    // still include that first hold so a long-running node is not re-gated.
+    await messages.create({
+      sessionId: "session-1",
+      role: "assistant",
+      content: "hold",
+      stepNodeId: "node-1",
+      aiPayload: {
+        response: "hold",
+        rationale: "r",
+        stepCompleteConfidence: 0,
+        contextGathered: [{ key: "OUTSTANDING — still required from the user", value: "start date" }],
+      },
+    });
+    for (let i = 0; i < 24; i++) {
+      await messages.create({
+        sessionId: "session-1",
+        role: "assistant",
+        content: `turn ${i}`,
+        stepNodeId: "node-1",
+        aiPayload: { response: `turn ${i}`, rationale: "r", stepCompleteConfidence: 0, contextGathered: [] },
+      });
+    }
+
+    const result = await useCase.execute("session-1", { messagesTailN: 20 });
+
+    const holdMarker = "OUTSTANDING — still required from the user";
+    const holds = (result.data?.currentNodeAssistantMessages ?? []).filter((m) =>
+      (m.aiPayload?.contextGathered ?? []).some((item) => item.key === holdMarker),
+    );
+    // The tail is bounded to 20 and would exclude the hold; the full-history
+    // node read still surfaces it.
+    expect(result.data?.messagesTail).toHaveLength(20);
+    expect(result.data?.currentNodeAssistantMessages).toHaveLength(25);
+    expect(holds).toHaveLength(1);
+  });
+
+  it("returns VALIDATION_FAILED when messagesTailN is not a positive integer", async () => {
+    const result = await useCase.execute("session-1", { messagesTailN: 0 });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("returns null when session does not exist", async () => {
+    const result = await useCase.execute("missing", { messagesTailN: 20 });
+    expect(result.data).toBeNull();
+  });
+
+  it("returns NOT_FOUND when associated flow is missing", async () => {
+    flows.flows.clear();
+    const result = await useCase.execute("session-1", { messagesTailN: 20 });
+    expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
 // ── RunTurn ──────────────────────────────────────────────────────────────────
 
 const makeAiPayload = (stepCompleteConfidence: number) => ({
@@ -510,6 +859,7 @@ describe("RunTurn", () => {
   let sessions: FakeSessionRepository;
   let sessionMessages: FakeSessionMessageRepository;
   let edges: FakeFlowEdgeRepository;
+  let unitOfWork: FakeUnitOfWork;
   let useCase: RunTurn;
 
   const session = makeSession();
@@ -518,8 +868,9 @@ describe("RunTurn", () => {
     sessions = new FakeSessionRepository();
     sessionMessages = new FakeSessionMessageRepository();
     edges = new FakeFlowEdgeRepository();
+    unitOfWork = new FakeUnitOfWork({ sessions, sessionMessages, approvals: unusedApprovals });
     sessions.sessions.set("session-1", session);
-    useCase = new RunTurn(sessions, sessionMessages, edges);
+    useCase = new RunTurn(sessionMessages, edges, unitOfWork);
   });
 
   it("persists user and assistant messages with aiPayload", async () => {
@@ -664,7 +1015,7 @@ describe("RunTurn", () => {
         return ok(null);
       },
     };
-    const notifyingUseCase = new RunTurn(sessions, sessionMessages, edges, notifier);
+    const notifyingUseCase = new RunTurn(sessionMessages, edges, unitOfWork, notifier);
 
     await notifyingUseCase.execute({
       session,
@@ -695,7 +1046,7 @@ describe("RunTurn", () => {
         return ok(null);
       },
     };
-    const notifyingUseCase = new RunTurn(sessions, sessionMessages, edges, notifier);
+    const notifyingUseCase = new RunTurn(sessionMessages, edges, unitOfWork, notifier);
 
     await notifyingUseCase.execute({
       session,
@@ -720,6 +1071,20 @@ describe("RunTurn", () => {
     expect(messages).toHaveLength(1);
     expect(messages[0]!.role).toBe("user");
     expect(messages[0]!.content).toBe("Hello");
+  });
+
+  it("persistUserMessage reads only the tail, never the full history", async () => {
+    // A long-running session must not load its whole transcript to check the last
+    // message (scaling wall #1). Making listBySession explode proves the bounded
+    // read is the one in use.
+    sessionMessages.listBySession = async () => {
+      throw new Error("persistUserMessage must not scan the full history");
+    };
+
+    const result = await useCase.persistUserMessage({ session, userMessage: "Hello" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.content).toBe("Hello");
   });
 
   it("persistUserMessage is idempotent when last message matches (retry)", async () => {
@@ -774,6 +1139,31 @@ describe("RunTurn", () => {
     const messages = [...sessionMessages.messages.values()];
     expect(messages).toHaveLength(1);
     expect(messages[0]!.role).toBe("assistant");
+  });
+
+  it("commits the assistant message and the session advance in one transaction", async () => {
+    edges.edges.set("edge-1", {
+      id: "edge-1",
+      flowId: "flow-1",
+      fromNodeId: "node-1",
+      toNodeId: "node-2",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await useCase.persistAssistantTurn({
+      session,
+      flowId: "flow-1",
+      assistantMessage: "Advancing",
+      aiPayload: makeAiPayload(95),
+      branchChoice: null,
+    });
+
+    // Both writes (message create + session advance) go through a single
+    // transaction so a crash between them cannot leave a half-applied turn.
+    expect(unitOfWork.transactionCount).toBe(1);
+    expect([...sessionMessages.messages.values()]).toHaveLength(1);
+    expect(sessions.sessions.get("session-1")?.currentNodeId).toBe("node-2");
   });
 
   // ── requireConfirmation: hold the completed step open ──────────────────────

@@ -8,10 +8,50 @@ import {
   type NewSession,
   type Result,
   type Session,
+  type SessionListPage,
+  type SessionListPageOptions,
   type SessionUpdate,
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { app_sessions } from "../db/schema/wayfinder";
+
+// Hard ceiling on the paginated page size regardless of what the caller
+// requests: keeps one huge query from starving the pool if a client sends
+// `limit: 1000000`. The default the caller picks stays well below this.
+const MAX_PAGE_LIMIT = 500;
+
+// Cursor encoding: "{updated_at ISO}_{id}". Opaque to callers — they only
+// hand it back. Kept in one place so the encode/decode never drift.
+const encodeCursor = (row: { updated_at: Date; id: string }): string =>
+  `${row.updated_at.toISOString()}_${row.id}`;
+
+const decodeCursor = (
+  cursor: string | undefined,
+): { updatedAt: Date; id: string } | null => {
+  if (!cursor) return null;
+  const underscore = cursor.indexOf("_");
+  if (underscore < 0) return null;
+  const iso = cursor.slice(0, underscore);
+  const id = cursor.slice(underscore + 1);
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime()) || id.length === 0) return null;
+  return { updatedAt: date, id };
+};
+
+const clampLimit = (limit: number): number => {
+  if (!Number.isFinite(limit) || limit <= 0) return 1;
+  return Math.min(Math.floor(limit), MAX_PAGE_LIMIT);
+};
+
+// Keyset predicate — "strictly after" the cursor in the (updated_at DESC, id
+// DESC) sort. Newer rows come first; the tiebreak on id keeps the sort
+// total and ensures no row is repeated or skipped across page boundaries.
+const cursorPredicate = (
+  cursor: { updatedAt: Date; id: string } | null,
+): SQL | undefined =>
+  cursor
+    ? sql`(${app_sessions.updated_at}, ${app_sessions.id}) < (${cursor.updatedAt.toISOString()}, ${cursor.id})`
+    : undefined;
 
 // Take the lease only if it is free (no active turn) or the current stamp is
 // older than the lease window — the crash-recovery takeover. The window is a
@@ -126,6 +166,59 @@ export class DrizzleSessionRepository implements ISessionRepository {
         .from(app_sessions)
         .orderBy(desc(app_sessions.updated_at));
       return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list all sessions.", cause));
+    }
+  }
+
+  async listByUserPage(
+    userId: string,
+    options: SessionListPageOptions,
+  ): Promise<Result<SessionListPage<Session>>> {
+    try {
+      const limit = clampLimit(options.limit);
+      const decoded = decodeCursor(options.cursor);
+      // Fetch one more row than requested so a full page yields a nextCursor
+      // pointing at the first row of the next page; drop that sentinel from
+      // the returned items.
+      const whereClauses: SQL[] = [eq(app_sessions.user_id, userId)];
+      const cursorClause = cursorPredicate(decoded);
+      if (cursorClause) whereClauses.push(cursorClause);
+      const rows = await this.db
+        .select()
+        .from(app_sessions)
+        .where(and(...whereClauses))
+        .orderBy(desc(app_sessions.updated_at), desc(app_sessions.id))
+        .limit(limit + 1);
+      const hasMore = rows.length > limit;
+      const trimmed = rows.slice(0, limit);
+      // Cursor encodes the LAST returned row's key; the next call filters
+      // strictly after it under the same DESC sort. Not the (limit+1)th row:
+      // the predicate is `<`, so encoding that would silently drop it.
+      const nextCursor = hasMore ? encodeCursor(trimmed[trimmed.length - 1]!) : null;
+      return ok({ items: trimmed.map(toEntity), nextCursor });
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list sessions for user.", cause));
+    }
+  }
+
+  async listAllPage(
+    options: SessionListPageOptions,
+  ): Promise<Result<SessionListPage<Session>>> {
+    try {
+      const limit = clampLimit(options.limit);
+      const decoded = decodeCursor(options.cursor);
+      const cursorClause = cursorPredicate(decoded);
+      const query = this.db
+        .select()
+        .from(app_sessions)
+        .orderBy(desc(app_sessions.updated_at), desc(app_sessions.id))
+        .limit(limit + 1);
+      const rows = await (cursorClause ? query.where(cursorClause) : query);
+      const hasMore = rows.length > limit;
+      const trimmed = rows.slice(0, limit);
+      const nextCursor = hasMore ? encodeCursor(trimmed[trimmed.length - 1]!) : null;
+      return ok({ items: trimmed.map(toEntity), nextCursor });
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list all sessions.", cause));
     }

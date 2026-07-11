@@ -6,10 +6,11 @@ import {
   type IFlowEdgeRepository,
   type IFlowVersionRepository,
   type ISessionMessageRepository,
-  type ISessionRepository,
+  type IUnitOfWork,
   type Result,
   type Session,
   type SessionMessage,
+  type TransactionalRepositories,
 } from "@rbrasier/domain";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";
@@ -50,11 +51,20 @@ export interface PersistAssistantTurnInput {
   confirmationThreshold?: number;
 }
 
+// Outcome of the transactional write, carrying what to notify once it commits.
+// Notifications must fire only after commit, so the transaction returns them
+// rather than sending them itself.
+interface AssistantTurnCommit {
+  output: RunTurnOutput;
+  completedStepNodeId: string | null;
+  sessionCompleted: boolean;
+}
+
 export class RunTurn {
   constructor(
-    private readonly sessions: ISessionRepository,
     private readonly sessionMessages: ISessionMessageRepository,
     private readonly flowEdges: IFlowEdgeRepository,
+    private readonly unitOfWork: IUnitOfWork,
     private readonly sessionCompleteNotifier?: ISessionCompleteNotifier,
     private readonly sessionStepCompleteNotifier?: ISessionStepCompleteNotifier,
     private readonly flowVersions?: IFlowVersionRepository,
@@ -84,11 +94,13 @@ export class RunTurn {
   async persistUserMessage(
     input: PersistUserMessageInput,
   ): Promise<Result<SessionMessage>> {
-    const existing = await this.sessionMessages.listBySession(input.session.id);
-    if (existing.error) return existing;
+    // Only the most recent row decides idempotency, so read just that row rather
+    // than the whole history (scaling wall #1).
+    const latest = await this.sessionMessages.latestBySession(input.session.id, 1);
+    if (latest.error) return latest;
 
     const senderUserId = input.senderUserId ?? null;
-    const last = existing.data.at(-1);
+    const last = latest.data.at(-1);
     if (
       last &&
       last.role === "user" &&
@@ -112,8 +124,40 @@ export class RunTurn {
   ): Promise<Result<RunTurnOutput>> {
     const { session, flowId, aiPayload } = input;
     const threshold = input.advanceThreshold ?? 90;
+    const shouldAdvance = aiPayload.stepCompleteConfidence >= threshold;
 
-    const assistantResult = await this.sessionMessages.create({
+    // Read the advancement edges before opening the transaction so the
+    // transaction contains only the writes.
+    let resolvedEdges: FlowEdge[] = [];
+    if (shouldAdvance) {
+      const edgesResult = await this.resolveEdges(session, flowId);
+      if (edgesResult.error) return edgesResult;
+      resolvedEdges = edgesResult.data;
+    }
+
+    // The assistant message and the session advance/complete/await commit or
+    // roll back together — killing the process between them can no longer leave
+    // a half-applied turn.
+    const committed = await this.unitOfWork.withTransaction((repos) =>
+      this.commitAssistantTurn(repos, input, shouldAdvance, resolvedEdges),
+    );
+    if (committed.error) return committed;
+
+    const { output, completedStepNodeId, sessionCompleted } = committed.data;
+    this.notifyStepComplete(output.session, completedStepNodeId);
+    if (sessionCompleted) this.notifyComplete(output.session);
+    return ok(output);
+  }
+
+  private async commitAssistantTurn(
+    repos: TransactionalRepositories,
+    input: PersistAssistantTurnInput,
+    shouldAdvance: boolean,
+    resolvedEdges: FlowEdge[],
+  ): Promise<Result<AssistantTurnCommit>> {
+    const { session, aiPayload } = input;
+
+    const assistantResult = await repos.sessionMessages.create({
       sessionId: session.id,
       role: "assistant",
       content: input.assistantMessage,
@@ -123,38 +167,40 @@ export class RunTurn {
     });
     if (assistantResult.error) return assistantResult;
 
-    const shouldAdvance = aiPayload.stepCompleteConfidence >= threshold;
     if (!shouldAdvance) {
-      return this.maybeMarkAwaiting(input);
+      return this.commitAwaiting(repos, input);
     }
 
-    const edgesResult = await this.resolveEdges(session, flowId);
-    if (edgesResult.error) return edgesResult;
-
-    const outgoing = edgesResult.data.filter((e) => e.fromNodeId === session.currentNodeId);
+    const outgoing = resolvedEdges.filter((edge) => edge.fromNodeId === session.currentNodeId);
     const completedNodeId = session.currentNodeId;
 
     if (outgoing.length === 0) {
-      const updated = await this.sessions.update(session.id, { status: "complete" });
+      const updated = await repos.sessions.update(session.id, { status: "complete" });
       if (updated.error) return updated;
-      this.notifyStepComplete(updated.data, completedNodeId);
-      this.notifyComplete(updated.data);
-      return ok({ session: updated.data, advanced: true, newNodeId: null });
+      return ok({
+        output: { session: updated.data, advanced: true, newNodeId: null },
+        completedStepNodeId: completedNodeId,
+        sessionCompleted: true,
+      });
     }
 
     let newNodeId: string | null = null;
     if (outgoing.length === 1) {
       newNodeId = outgoing[0]!.toNodeId;
     } else if (input.branchChoice) {
-      const edge = outgoing.find((e) => e.toNodeId === input.branchChoice);
+      const edge = outgoing.find((candidate) => candidate.toNodeId === input.branchChoice);
       newNodeId = edge?.toNodeId ?? null;
     }
 
     if (!newNodeId) {
-      return ok({ session, advanced: false, newNodeId: null });
+      return ok({
+        output: { session, advanced: false, newNodeId: null },
+        completedStepNodeId: null,
+        sessionCompleted: false,
+      });
     }
 
-    const updated = await this.sessions.update(session.id, {
+    const updated = await repos.sessions.update(session.id, {
       currentNodeId: newNodeId,
       graphCheckpoint: {
         currentNodeId: newNodeId,
@@ -164,35 +210,44 @@ export class RunTurn {
     });
     if (updated.error) return updated;
 
-    this.notifyStepComplete(updated.data, completedNodeId);
-    return ok({ session: updated.data, advanced: true, newNodeId });
+    return ok({
+      output: { session: updated.data, advanced: true, newNodeId },
+      completedStepNodeId: completedNodeId,
+      sessionCompleted: false,
+    });
   }
 
   // When the step requires operator confirmation and the AI is confident enough,
   // hold the step open by marking the session as awaiting confirmation on the
   // current node. Idempotent: a repeat turn while already awaiting is a no-op.
-  private async maybeMarkAwaiting(
+  private async commitAwaiting(
+    repos: TransactionalRepositories,
     input: PersistAssistantTurnInput,
-  ): Promise<Result<RunTurnOutput>> {
+  ): Promise<Result<AssistantTurnCommit>> {
     const { session, aiPayload } = input;
     const confirmationThreshold = input.confirmationThreshold ?? 90;
     const shouldAwait =
       input.requireConfirmation === true &&
       aiPayload.stepCompleteConfidence >= confirmationThreshold;
 
-    if (!shouldAwait) {
-      return ok({ session, advanced: false, newNodeId: null });
-    }
+    const unchanged: AssistantTurnCommit = {
+      output: { session, advanced: false, newNodeId: null },
+      completedStepNodeId: null,
+      sessionCompleted: false,
+    };
 
-    if (session.awaitingConfirmationNodeId === session.currentNodeId) {
-      return ok({ session, advanced: false, newNodeId: null });
-    }
+    if (!shouldAwait) return ok(unchanged);
+    if (session.awaitingConfirmationNodeId === session.currentNodeId) return ok(unchanged);
 
-    const updated = await this.sessions.update(session.id, {
+    const updated = await repos.sessions.update(session.id, {
       awaitingConfirmationNodeId: session.currentNodeId,
     });
     if (updated.error) return updated;
-    return ok({ session: updated.data, advanced: false, newNodeId: null });
+    return ok({
+      output: { session: updated.data, advanced: false, newNodeId: null },
+      completedStepNodeId: null,
+      sessionCompleted: false,
+    });
   }
 
   // Fire-and-forget so a slow SMTP server can never stall the turn; the

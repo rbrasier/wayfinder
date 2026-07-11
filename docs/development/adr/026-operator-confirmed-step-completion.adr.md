@@ -1,5 +1,12 @@
 # ADR-026 — Operator-Confirmed Step Completion & Deferred Advancement
 
+> **Numbering note**: two ADRs share the number 026. This one —
+> *Operator-Confirmed Step Completion* — is the ADR-026 the code cites around
+> step confirmation and deferred advancement (e.g.
+> `use-cases/session/confirm-step-advance.ts`, `entities/session.ts`
+> awaiting-confirmation). The other is *Usage Governance Enforcement*.
+> Deliberately not renumbered — code comments cite these numbers.
+
 - **Status**: Proposed (scoped by `step-confirmation-toggle.prd.md`)
 - **Date**: 2026-06-14
 

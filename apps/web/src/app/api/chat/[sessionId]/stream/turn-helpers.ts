@@ -1,25 +1,22 @@
-import { formatDataStreamPart, generateObject, generateText, type LanguageModel } from "ai";
-import { recordTokenUsage, resolveModel, type ProviderCredentials } from "@rbrasier/adapters";
 import {
-  ok,
   type AiTurnPayload,
   type ConversationalNodeConfig,
   type DocumentGenerationConfidence,
   type Flow,
-  type FlowEdge,
   type FlowNode,
+  type GatheredContextItem,
   type PromptSessionUpload,
   type PromptUserProfile,
   type ResolvedDocumentGenerationBudget,
-  type Result,
   type Session,
   type SessionMessage,
   type SessionUpload,
+  type TurnStreamWriter,
 } from "@rbrasier/domain";
-import { branchChoiceSchema, turnResponseSchema } from "@rbrasier/shared";
+import { turnResponseSchema } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
-import { streamTurn, type StreamTurnWriter } from "./stream-turn";
+import { streamTurn } from "./stream-turn";
 
 // Re-exported from its lightweight home so existing importers keep working while
 // the gate-hold counter can depend on the constant without pulling this module.
@@ -71,6 +68,14 @@ export const buildGatheredContext = (messages: SessionMessage[]): string => {
   const items = messages
     .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
     .flatMap((m) => m.aiPayload!.contextGathered);
+  return renderGatheredContext(items);
+};
+
+// Same renderer, driven by the SQL-side aggregation returned by
+// `GetSessionForTurn`. Kept separate so the stream route (bounded turn read)
+// does not go through the message-scanning path above just to hand back a
+// string.
+export const renderGatheredContext = (items: GatheredContextItem[]): string => {
   if (items.length === 0) return "";
   return items.map((item) => `- ${item.key}: ${item.value}`).join("\n");
 };
@@ -95,19 +100,6 @@ export async function appendShortcomingsToContext(
 
   await container.repos.sessionMessages.updateAiPayload(messageId, mergedPayload).catch(() => undefined);
 }
-
-// A writer that accepts any pre-formatted data-stream part (StreamTurnWriter is
-// nominally text-only; the boundary and note parts share the same wire format).
-interface DataStreamPartWriter {
-  write: (part: ReturnType<typeof formatDataStreamPart<"text">>) => void;
-}
-
-// Closes the current streamed bubble so the next text part opens a new one on
-// the client. Without this every text written into one response concatenates
-// into a single bubble, which the persisted view then appears to rewrite.
-const writeMessageBoundary = (writer: DataStreamPartWriter): void => {
-  writer.write(formatDataStreamPart("finish_step", { finishReason: "stop", isContinued: false }));
-};
 
 // The pre-generation gate overruled this reply, but the user has already
 // watched it stream. Persist it as a real message so the corrective follow-up
@@ -134,10 +126,11 @@ export const CROSS_CHECK_PASS_NOTE =
   "Cross-check complete — everything is in alignment with the reference documents.";
 
 // Streamed the moment the cross-check passes, so the user gets explicit
-// feedback before the (slow) branch choice and document generation run.
-export function writeCrossCheckPassNote(writer: DataStreamPartWriter): void {
-  writeMessageBoundary(writer);
-  writer.write(formatDataStreamPart("text", CROSS_CHECK_PASS_NOTE));
+// feedback before the (slow) branch choice and document generation run. Opens a
+// new bubble first so the note never merges into the reply above it.
+export function writeCrossCheckPassNote(writer: TurnStreamWriter): void {
+  writer.endBubble();
+  writer.writeText(CROSS_CHECK_PASS_NOTE);
 }
 
 // Persisted separately from the streamed note (and after the assistant turn)
@@ -155,15 +148,13 @@ export async function persistCrossCheckPassNote(
 
 export interface StreamGapFollowupInput {
   container: Container;
-  writer: StreamTurnWriter;
+  writer: TurnStreamWriter;
   session: Session;
   flowId: string;
   system: string;
   messages: { role: "user" | "assistant" | "system"; content: string }[];
   missingInformation: string[];
-  model: LanguageModel;
   modelName: string;
-  provider: Parameters<typeof recordTokenUsage>[1]["provider"];
   userId: string;
 }
 
@@ -189,36 +180,24 @@ export async function streamGapFollowup(input: StreamGapFollowupInput): Promise<
 
   // The follow-up corrects the reply above it, so it must arrive as a NEW
   // bubble — appended, never merged into the message it corrects.
-  writeMessageBoundary(input.writer);
+  input.writer.endBubble();
 
+  // Through the ILanguageModel port: usage recording, quota enforcement,
+  // Langfuse tracing, and the concurrency governor all apply as decorators
+  // (ADR-026). No hand-rolled recordTokenUsage here.
   const streamResult = await streamTurn({
-    model: input.model,
+    llm: input.container.services.llm,
+    purpose: "chat-gap-followup",
+    model: input.modelName,
+    userId: input.userId,
+    flowId: input.flowId,
+    sessionId: input.session.id,
     schema: turnResponseSchema,
     system: followupSystem,
     messages: input.messages,
     writer: input.writer,
   });
   const turnResult = streamResult.object;
-
-  recordTokenUsage(
-    input.container.repos.usageRepo,
-    {
-      purpose: "chat-gap-followup",
-      userId: input.userId,
-      conversationId: input.session.id,
-      flowId: input.flowId,
-      sessionId: input.session.id,
-      model: input.modelName,
-      provider: input.provider,
-    },
-    {
-      promptTokens: streamResult.usage.promptTokens,
-      completionTokens: streamResult.usage.completionTokens,
-      systemTokens: 0,
-      cacheReadTokens: streamResult.usage.cacheReadTokens,
-      cacheWriteTokens: streamResult.usage.cacheWriteTokens,
-    },
-  );
 
   const aiPayload: AiTurnPayload = {
     response: turnResult.response,
@@ -310,47 +289,32 @@ export async function generateDocument(
   }
 }
 
+// Routed through the ILanguageModel port so usage recording, quota enforcement,
+// the concurrency governor, and Langfuse tracing all apply as decorators
+// (ADR-026) — no hand-rolled recordTokenUsage or direct SDK call here.
+// Best-effort: any failure (including a quota block) falls back to a truncated
+// slice of the first user message.
 export async function generateTitle(
   container: Container,
   sessionId: string,
   firstUserMessage: string,
-  provider: Parameters<typeof resolveModel>[0],
   modelName: string,
-  credentials: ProviderCredentials,
   userId: string,
 ): Promise<void> {
-  try {
-    const cheapModel = resolveModel(provider, modelName, credentials);
-    const result = await generateText({
-      model: cheapModel,
-      system: "Generate a concise title (max 80 characters) for a workflow session based on the user's first message. Return only the title, no quotes or punctuation.",
-      prompt: firstUserMessage,
-      maxTokens: 30,
-    });
-    recordTokenUsage(
-      container.repos.usageRepo,
-      {
-        purpose: "chat-title",
-        userId,
-        conversationId: sessionId,
-        model: modelName,
-        provider,
-      },
-      {
-        promptTokens: result.usage.promptTokens ?? 0,
-        completionTokens: result.usage.completionTokens ?? 0,
-        systemTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-    );
-    const title = result.text.trim().slice(0, 80);
-    if (title) {
-      await container.repos.sessions.update(sessionId, { title });
-    }
-  } catch {
-    const fallback = firstUserMessage.slice(0, 80);
-    await container.repos.sessions.update(sessionId, { title: fallback }).catch(() => undefined);
+  const result = await container.services.llm.generateText({
+    purpose: "chat-title",
+    userId,
+    sessionId,
+    model: modelName,
+    system:
+      "Generate a concise title (max 80 characters) for a workflow session based on the user's first message. Return only the title, no quotes or punctuation.",
+    prompt: firstUserMessage,
+    maxTokens: 30,
+  });
+  const generated = result.error ? "" : result.data.text.trim().slice(0, 80);
+  const title = generated || firstUserMessage.slice(0, 80);
+  if (title) {
+    await container.repos.sessions.update(sessionId, { title }).catch(() => undefined);
   }
 }
 
@@ -535,11 +499,13 @@ export interface GenerateInitialMessageInput {
   newNodeId: string;
   newNode: FlowNode;
   flow: Flow;
-  model: LanguageModel;
+  // Model name string; the port resolves this to a concrete SDK model. Usage
+  // recording, quota enforcement, Langfuse tracing, and the concurrency
+  // governor all apply as decorators (ADR-026).
+  modelName: string;
   organisationName: string | null;
   userProfile: PromptUserProfile | null;
   userId: string;
-  provider: string;
   gatheredContext: string;
   globalInstructions?: string | null;
 }
@@ -551,11 +517,10 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     newNodeId,
     newNode,
     flow,
-    model,
+    modelName,
     organisationName,
     userProfile,
     userId,
-    provider,
     gatheredContext,
     globalInstructions,
   } = input;
@@ -592,46 +557,47 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     });
     if (systemPromptResult.error) return;
 
-    const result = await generateObject({
-      model,
+    const result = await container.services.llm.generateObject<{
+      response: string;
+      rationale: string;
+      stepCompleteConfidence: number;
+      contextGathered: { key: string; value: string }[];
+    }>({
+      purpose: "chat-turn",
+      userId,
+      flowId: flow.id,
+      sessionId,
+      model: modelName,
       schema: turnResponseSchema,
       system: systemPromptResult.data,
       messages: [{ role: "user", content: "Please begin." }],
     });
+    if (result.error) {
+      await container.services.errorLogger.log({
+        level: "error",
+        message: `Initial message generation failed: ${result.error.message}`,
+        stack: result.error.cause instanceof Error ? result.error.cause.stack ?? null : null,
+        page: `api/chat/${sessionId}/stream`,
+        metadata: { sessionId, newNodeId },
+      });
+      return;
+    }
 
     const aiPayload: AiTurnPayload = {
-      response: result.object.response,
-      rationale: result.object.rationale,
-      stepCompleteConfidence: result.object.stepCompleteConfidence,
-      contextGathered: result.object.contextGathered,
+      response: result.data.object.response,
+      rationale: result.data.object.rationale,
+      stepCompleteConfidence: result.data.object.stepCompleteConfidence,
+      contextGathered: result.data.object.contextGathered,
     };
 
     await container.repos.sessionMessages.create({
       sessionId,
       role: "assistant",
-      content: result.object.response,
-      confidence: Math.round(result.object.stepCompleteConfidence),
+      content: result.data.object.response,
+      confidence: Math.round(result.data.object.stepCompleteConfidence),
       stepNodeId: newNodeId,
       aiPayload,
     });
-
-    recordTokenUsage(
-      container.repos.usageRepo,
-      {
-        purpose: "chat-turn",
-        userId,
-        conversationId: sessionId,
-        model: provider === "anthropic" ? "claude-haiku-4-5-20251001" : undefined,
-        provider: provider as Parameters<typeof recordTokenUsage>[1]["provider"],
-      },
-      {
-        promptTokens: result.usage.promptTokens ?? 0,
-        completionTokens: result.usage.completionTokens ?? 0,
-        systemTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
-      },
-    );
   } catch (cause) {
     await container.services.errorLogger.log({
       level: "error",
@@ -659,8 +625,10 @@ export interface ApplyAdvanceSideEffectsInput {
   userProfile: PromptUserProfile | null;
   userId: string;
   isAdmin: boolean;
-  model: LanguageModel;
-  provider: string;
+  // Model name string used for the opener (generateInitialMessage) — the port
+  // resolves this to a concrete SDK model. Was previously a resolved
+  // LanguageModel + provider pair; both are now decorator concerns.
+  modelName: string;
   globalInstructions?: string | null;
   // Threaded from the pre-generation evaluation gate on a pass: the values it
   // already extracted and the grade it produced, so document generation skips
@@ -690,8 +658,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
     userProfile,
     userId,
     isAdmin,
-    model,
-    provider,
+    modelName,
     globalInstructions,
     precomputedDocument,
     onDocumentGenerationChange,
@@ -770,163 +737,13 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
       newNodeId,
       newNode,
       flow,
-      model,
+      modelName,
       organisationName,
       userProfile,
       userId,
-      provider,
       gatheredContext: nextStepContext,
       globalInstructions,
     });
   }
 }
 
-// Recomputes the branch choice for a forked confirmation step at Proceed time,
-// because the operator may have chatted further since the threshold was reached
-// (ADR-026). Returns null for a single edge or when the model cannot decide.
-async function recomputeBranchChoice(
-  container: Container,
-  session: Session,
-  nodes: FlowNode[],
-  edges: FlowEdge[],
-  messages: SessionMessage[],
-): Promise<string | null> {
-  const outgoingEdges = edges.filter((e) => e.fromNodeId === session.currentNodeId);
-  if (outgoingEdges.length <= 1) return null;
-
-  const branchNodeIds = outgoingEdges.map((e) => e.toNodeId);
-  const branchNodes = nodes
-    .filter((node) => branchNodeIds.includes(node.id))
-    .map((node) => {
-      const config = node.config as { doneWhen?: string; aiInstruction?: string; instruction?: string };
-      const doneWhenPurpose =
-        config.doneWhen && config.doneWhen !== "__TEMPLATE_COMPLETE__" ? config.doneWhen : undefined;
-      const purpose = doneWhenPurpose ?? config.aiInstruction ?? config.instruction;
-      return { id: node.id, name: node.name, purpose };
-    });
-
-  const branchPromptResult = container.services.sessionAgent.buildBranchChoicePrompt({ branchNodes });
-  if (branchPromptResult.error) return null;
-
-  const aiConfig = await container.runtimeConfig.getAiConfig();
-  const provider = aiConfig.provider;
-  const branchingModelName = aiConfig.models.branching;
-  const branchingModel = resolveModel(provider, branchingModelName, aiConfig.apiKeys[provider]);
-
-  const coreMessages = messages.map((m) => ({
-    role: m.role as "user" | "assistant" | "system",
-    content: m.content,
-  }));
-
-  const branchResult = await generateObject({
-    model: branchingModel,
-    schema: branchChoiceSchema,
-    system: branchPromptResult.data,
-    messages: coreMessages,
-  }).catch(() => null);
-  if (!branchResult) return null;
-
-  recordTokenUsage(
-    container.repos.usageRepo,
-    {
-      purpose: "chat-branch-choice",
-      userId: session.userId,
-      conversationId: session.id,
-      model: branchingModelName,
-      provider,
-    },
-    {
-      promptTokens: branchResult.usage.promptTokens ?? 0,
-      completionTokens: branchResult.usage.completionTokens ?? 0,
-      systemTokens: 0,
-      cacheReadTokens: 0,
-      cacheWriteTokens: 0,
-    },
-  );
-
-  return branchResult.object.branchChoice ?? null;
-}
-
-export interface ConfirmStepInput {
-  container: Container;
-  session: Session;
-  flow: Flow;
-  nodes: FlowNode[];
-  edges: FlowEdge[];
-  messages: SessionMessage[];
-  confirmedByUserId: string;
-  isAdmin: boolean;
-}
-
-export interface ConfirmStepResult {
-  advanced: boolean;
-  // A forked step whose branch could not be resolved — the UI opens the manual
-  // branch-override path instead of silently failing.
-  needsManualBranch: boolean;
-  newNodeId: string | null;
-}
-
-// Orchestrates an operator Proceed: recompute the branch for a fork, run the
-// ConfirmStepAdvance use-case, then fire the shared advance side effects so the
-// outcome matches auto-advance (ADR-026).
-export async function confirmStep(input: ConfirmStepInput): Promise<Result<ConfirmStepResult>> {
-  const { container, session, flow, nodes, edges, messages, confirmedByUserId, isAdmin } = input;
-
-  const completedNode = nodes.find((node) => node.id === session.currentNodeId);
-  if (!session.currentNodeId || !completedNode) {
-    return ok({ advanced: false, needsManualBranch: false, newNodeId: null });
-  }
-
-  const branchChoice = await recomputeBranchChoice(container, session, nodes, edges, messages);
-
-  const advanceResult = await container.useCases.confirmStepAdvance.execute({
-    sessionId: session.id,
-    nodeId: session.currentNodeId,
-    branchChoice,
-    confirmedByUserId,
-  });
-  if (advanceResult.error) return advanceResult;
-
-  const { advanced, newNodeId, needsManualBranch } = advanceResult.data;
-  if (!advanced) {
-    return ok({ advanced, needsManualBranch, newNodeId });
-  }
-
-  const orgSettingResult = await container.repos.systemSettings.get("organisation_name");
-  const organisationName = orgSettingResult.error ? null : (orgSettingResult.data?.value ?? null);
-
-  const globalInstructionsResult = await container.repos.systemSettings.get("global_prompt");
-  const globalInstructions = globalInstructionsResult.error
-    ? null
-    : (globalInstructionsResult.data?.value ?? null);
-
-  const userResult = await container.repos.users.findById(confirmedByUserId);
-  const userProfile =
-    userResult.error || !userResult.data
-      ? null
-      : { name: userResult.data.name, role: userResult.data.role, team: userResult.data.team };
-
-  const aiConfig = await container.runtimeConfig.getAiConfig();
-  const provider = aiConfig.provider;
-  const branchingModel = resolveModel(provider, aiConfig.models.branching, aiConfig.apiKeys[provider]);
-
-  await applyAdvanceSideEffects({
-    container,
-    session: advanceResult.data.session,
-    flow,
-    nodes,
-    completedNode,
-    newNodeId,
-    fallbackMessages: messages,
-    gatheredContext: buildGatheredContext(messages),
-    organisationName,
-    userProfile,
-    userId: confirmedByUserId,
-    isAdmin,
-    model: branchingModel,
-    provider,
-    globalInstructions,
-  });
-
-  return ok({ advanced, needsManualBranch, newNodeId });
-}

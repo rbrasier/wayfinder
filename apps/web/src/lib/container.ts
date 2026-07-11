@@ -32,12 +32,14 @@ import {
   GetFlowVersion,
   GetOverviewDashboard,
   GetSession,
+  GetSessionForTurn,
   GetUsageSummary,
   GrantFlowOwner,
   ImportHrDataset,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
+  ListAllSessionsPage,
   ListErrors,
   ListFeatureFlags,
   ListFlows,
@@ -52,6 +54,7 @@ import {
   ListPendingApprovals,
   ListPendingApprovalsWithContext,
   ListSessions,
+  ListSessionsPage,
   ListUsers,
   ListUsersForRole,
   LogAuditEvent,
@@ -88,6 +91,7 @@ import {
   ApplyAutoNodeResult,
   RunAutoNode,
   RunTurn,
+  TurnLease,
   ScheduleNodeEvent,
   SearchPeople,
   SendMessage,
@@ -142,6 +146,8 @@ import {
   DrizzleBudgetRepository,
   DrizzleSessionRepository,
   DrizzleSystemSettingsRepository,
+  DrizzleUnitOfWork,
+  InMemoryRateLimiter,
   DrizzleUsageRepository,
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
@@ -231,6 +237,7 @@ const build = () => {
     new TtlCache<FlowVersion>({ ttlMs: env.FLOW_VERSION_CACHE_TTL_MS, maxEntries: 256 }),
   );
   const sessions = new DrizzleSessionRepository(db);
+  const unitOfWork = new DrizzleUnitOfWork(db);
   const sessionParticipants = new DrizzleSessionParticipantRepository(db);
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
@@ -242,6 +249,19 @@ const build = () => {
   const schedules = new DrizzleScheduleRepository(db);
   const scheduleRuns = new DrizzleScheduleRunRepository(db);
   const clock = new SystemClock();
+  // Per-instance rate limiters (group F): auth POST keyed by IP, chat stream POST
+  // keyed by user id. Same in-process pattern as the auth cache — promoted to a
+  // shared store when instance count > 1 (scaling-new-infrastructure phase doc).
+  const authRateLimiter = new InMemoryRateLimiter(
+    { capacity: env.AUTH_RATE_LIMIT_BURST, refillPerSecond: env.AUTH_RATE_LIMIT_REFILL_PER_SEC },
+    env.RATE_LIMIT_MAX_KEYS,
+    clock,
+  );
+  const chatRateLimiter = new InMemoryRateLimiter(
+    { capacity: env.CHAT_RATE_LIMIT_BURST, refillPerSecond: env.CHAT_RATE_LIMIT_REFILL_PER_SEC },
+    env.RATE_LIMIT_MAX_KEYS,
+    clock,
+  );
   const analyticsRepo = new DrizzleAnalyticsRepository(db);
   const systemSettings = new DrizzleSystemSettingsRepository(db);
 
@@ -535,7 +555,7 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
@@ -614,11 +634,23 @@ const build = () => {
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges, flowVersions),
       listSessions: new ListSessions(sessions),
+      // Keyset-paginated variants of the two list use cases (phase Group A
+      // item 4). Additive server support; tRPC exposure follows.
+      listSessionsPage: new ListSessionsPage(sessions),
       listAllSessions: new ListAllSessions(sessions),
+      listAllSessionsPage: new ListAllSessionsPage(sessions),
       getSession: new GetSession(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      // Leaner turn-scoped variant of getSession: the tail of the transcript
+      // plus a SQL-side aggregation of gathered context, so the streaming route
+      // stops loading the whole history on every turn (scaling wall #1).
+      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
-      runTurn: new RunTurn(sessions, sessionMessages, flowEdges, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
+      runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
+      // The turn lease (scaling wall #3) as one unit: claim (with holder-name
+      // resolution), heartbeat, release — so the stream route stops reaching
+      // into the session/user repos directly for the lease.
+      turnLease: new TurnLease(sessions, users),
       publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),
@@ -654,6 +686,7 @@ const build = () => {
       ),
       confirmAndSend: new ConfirmAndSend(approvals, auditLogger, notifyOnApprovalRequested),
       decideApproval: new DecideApproval(
+        unitOfWork,
         approvals,
         sessions,
         flowEdges,

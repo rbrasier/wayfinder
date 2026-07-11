@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { MockLanguageModelV1, simulateReadableStream } from "ai/test";
 import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@rbrasier/domain";
 import {
   appendShortcomingsToContext,
@@ -10,13 +9,40 @@ import {
   CROSS_CHECK_PASS_NOTE,
   generateDocument,
   generateInitialMessage,
+  generateTitle,
   OUTSTANDING_CONTEXT_KEY,
   persistCrossCheckPassNote,
   persistHeldReply,
   streamGapFollowup,
   writeCrossCheckPassNote,
 } from "./turn-helpers";
-import type { Session } from "@rbrasier/domain";
+import type { Session, TurnStreamWriter } from "@rbrasier/domain";
+
+// A TurnStreamWriter that records the ordered sequence of semantic operations
+// ("boundary" for endBubble, "text:<t>" for writeText) plus the text payloads,
+// so a test can assert both the bubble boundaries and the streamed content.
+const recordingWriter = (): TurnStreamWriter & { ops: string[]; texts: string[] } => {
+  const ops: string[] = [];
+  const texts: string[] = [];
+  return {
+    ops,
+    texts,
+    writeText: (text: string) => {
+      ops.push(`text:${text}`);
+      texts.push(text);
+    },
+    endBubble: () => {
+      ops.push("boundary");
+    },
+    writeAnnotation: () => {},
+  };
+};
+
+const noopWriter = (): TurnStreamWriter => ({
+  writeText: () => {},
+  endBubble: () => {},
+  writeAnnotation: () => {},
+});
 
 const makeAssistantMessage = (overrides: Partial<SessionMessage> = {}): SessionMessage => ({
   id: "msg-1",
@@ -104,20 +130,28 @@ describe("generateInitialMessage", () => {
     const create = vi.fn().mockResolvedValue({ data: {}, error: null });
     const errorLog = vi.fn().mockResolvedValue({ data: undefined, error: null });
 
-    const model = new MockLanguageModelV1({
-      defaultObjectGenerationMode: "json",
-      doGenerate: async () => ({
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        finishReason: "stop",
-        usage: { promptTokens: 1, completionTokens: 1 },
-        text: JSON.stringify({
-          response: "Hello",
-          rationale: "r",
-          stepCompleteConfidence: 0,
-          contextGathered: [],
-        }),
+    const llm = {
+      provider: "anthropic",
+      generateObject: vi.fn().mockResolvedValue({
+        data: {
+          object: {
+            response: "Hello",
+            rationale: "r",
+            stepCompleteConfidence: 0,
+            contextGathered: [],
+          },
+          usage: {
+            promptTokens: 1,
+            completionTokens: 1,
+            systemTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          },
+        },
       }),
-    });
+      streamText: vi.fn(),
+      streamObject: vi.fn(),
+    };
 
     const retrieveDocumentChunks = {
       execute: vi.fn().mockResolvedValue({ data: [], error: null }),
@@ -125,6 +159,7 @@ describe("generateInitialMessage", () => {
 
     const container = {
       services: {
+        llm,
         sessionAgent: { buildSystemPrompt },
         errorLogger: { log: errorLog },
       },
@@ -147,11 +182,10 @@ describe("generateInitialMessage", () => {
       newNodeId: "node-2",
       newNode: makeNode(),
       flow: makeFlow(),
-      model,
+      modelName: "claude-haiku-4-5-20251001",
       organisationName: "Acme",
       userProfile: { name: "Ada Lovelace", role: "Analyst", team: "Risk" },
       userId: "user-1",
-      provider: "anthropic",
       gatheredContext: "- Full Name: John Dutton\n- Department: Sales",
       globalInstructions: "Use Australian English spelling.",
     });
@@ -161,6 +195,12 @@ describe("generateInitialMessage", () => {
     expect(call.gatheredContext).toContain("John Dutton");
     expect(call.gatheredContext).toContain("Sales");
     expect(call.globalInstructions).toBe("Use Australian English spelling.");
+
+    expect(llm.generateObject).toHaveBeenCalledTimes(1);
+    const portCall = llm.generateObject.mock.calls[0]![0];
+    expect(portCall.purpose).toBe("chat-turn");
+    expect(portCall.model).toBe("claude-haiku-4-5-20251001");
+    expect(portCall.userId).toBe("user-1");
   });
 });
 
@@ -425,16 +465,6 @@ describe("applyAdvanceSideEffects", () => {
     } as unknown as FlowNode["config"],
   });
 
-  const model = new MockLanguageModelV1({
-    defaultObjectGenerationMode: "json",
-    doGenerate: async () => ({
-      rawCall: { rawPrompt: null, rawSettings: {} },
-      finishReason: "stop",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      text: JSON.stringify({ response: "Hi", rationale: "r", stepCompleteConfidence: 0, contextGathered: [] }),
-    }),
-  });
-
   const baseInput = (overrides: Record<string, unknown>) => ({
     container: overrides.container,
     session: makeSession(),
@@ -448,8 +478,7 @@ describe("applyAdvanceSideEffects", () => {
     userProfile: null,
     userId: "user-1",
     isAdmin: false,
-    model,
-    provider: "anthropic",
+    modelName: "claude-haiku-4-5-20251001",
   }) as unknown as Parameters<typeof applyAdvanceSideEffects>[0];
 
   it("generates a document for the completed doc-node when a template is present", async () => {
@@ -541,6 +570,18 @@ describe("applyAdvanceSideEffects", () => {
       config: { aiInstruction: "Help", doneWhen: "done", outputType: "conversation_only" } as unknown as FlowNode["config"],
     });
 
+    const llm = {
+      provider: "anthropic",
+      generateObject: vi.fn().mockResolvedValue({
+        data: {
+          object: { response: "Hi", rationale: "r", stepCompleteConfidence: 0, contextGathered: [] },
+          usage: { promptTokens: 1, completionTokens: 1, systemTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        },
+      }),
+      streamText: vi.fn(),
+      streamObject: vi.fn(),
+    };
+
     const container = {
       repos: {
         sessionMessages: { listBySession, updateDocumentStatus: vi.fn(), create },
@@ -556,6 +597,7 @@ describe("applyAdvanceSideEffects", () => {
         isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: false, error: null }) },
       },
       services: {
+        llm,
         errorLogger: { log: vi.fn() },
         sessionAgent: { buildSystemPrompt: vi.fn().mockReturnValue({ data: "prompt", error: null }) },
       },
@@ -567,6 +609,7 @@ describe("applyAdvanceSideEffects", () => {
 
     expect(retrieveExecute).toHaveBeenCalled();
     expect(create).toHaveBeenCalled();
+    expect(llm.generateObject).toHaveBeenCalled();
   });
 
   it("awaits document generation before opening the next step", async () => {
@@ -714,60 +757,78 @@ describe("appendShortcomingsToContext", () => {
 });
 
 describe("streamGapFollowup", () => {
-  const gapModel = () =>
-    new MockLanguageModelV1({
-      defaultObjectGenerationMode: "tool",
-      doStream: async () => ({
-        stream: simulateReadableStream({
-          chunks: [
-            {
-              type: "tool-call-delta",
-              toolCallType: "function",
-              toolCallId: "c1",
-              toolName: "json",
-              argsTextDelta:
-                '{"response":"Could you share the end date?","rationale":"gap","stepCompleteConfidence":20,"contextGathered":[]}',
-            },
-            { type: "finish", finishReason: "stop", usage: { promptTokens: 2, completionTokens: 4 } },
-          ],
-        }),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      }),
+  const fakeGapLlm = (
+    finalResponse: string,
+  ): {
+    llm: Parameters<typeof streamGapFollowup>[0]["container"]["services"]["llm"];
+    streamObject: ReturnType<typeof vi.fn>;
+  } => {
+    const streamObject = vi.fn(async () => {
+      async function* stream() {
+        yield { response: finalResponse };
+      }
+      return {
+        data: {
+          partialObjectStream: stream(),
+          object: Promise.resolve({
+            response: finalResponse,
+            rationale: "gap",
+            stepCompleteConfidence: 20,
+            contextGathered: [],
+          }),
+          usage: Promise.resolve({
+            promptTokens: 2,
+            completionTokens: 4,
+            systemTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+          }),
+        },
+      };
     });
+    return {
+      llm: {
+        provider: "anthropic",
+        generateObject: vi.fn(),
+        streamText: vi.fn(),
+        streamObject,
+      } as unknown as Parameters<typeof streamGapFollowup>[0]["container"]["services"]["llm"],
+      streamObject,
+    };
+  };
 
   const session = (): Session =>
     ({ id: "sess-1", currentNodeId: "node-1" } as unknown as Session);
 
   it("streams a follow-up asking for the gaps and persists it on the same node", async () => {
     const create = vi.fn().mockResolvedValue({ data: {}, error: null });
-    const written: string[] = [];
+    const { llm } = fakeGapLlm("Could you share the end date?");
 
     const container = {
+      services: { llm },
       repos: {
         sessionMessages: { create },
-        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
+        usageRepo: {},
       },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
+    const writer = recordingWriter();
     await streamGapFollowup({
       container,
-      writer: { write: (s: string) => written.push(s) },
+      writer,
       session: session(),
       flowId: "flow-1",
       system: "base system prompt",
       messages: [{ role: "user", content: "All done" }],
       missingInformation: ["The end date is missing."],
-      model: gapModel(),
       modelName: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
       userId: "user-1",
     });
 
-    // The follow-up must open a NEW bubble: a finish_step boundary precedes its
+    // The follow-up must open a NEW bubble: an endBubble boundary precedes its
     // text so the client never appends it onto the reply it corrects.
-    expect(written[0]).toMatch(/^e:/);
-    expect(written[0]).toContain('"isContinued":false');
-    expect(written.join("")).toContain("Could you share the end date?");
+    expect(writer.ops[0]).toBe("boundary");
+    expect(writer.texts.join("")).toContain("Could you share the end date?");
     expect(create).toHaveBeenCalledTimes(1);
     const createArg = create.mock.calls[0]![0];
     expect(createArg.role).toBe("assistant");
@@ -777,25 +838,22 @@ describe("streamGapFollowup", () => {
 
   it("returns the persisted follow-up message id so the caller can record the hold", async () => {
     const create = vi.fn().mockResolvedValue({ data: { id: "followup-1" }, error: null });
+    const { llm } = fakeGapLlm("gap prompt");
 
     const container = {
-      repos: {
-        sessionMessages: { create },
-        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
-      },
+      services: { llm },
+      repos: { sessionMessages: { create }, usageRepo: {} },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
     const result = await streamGapFollowup({
       container,
-      writer: { write: () => undefined },
+      writer: noopWriter(),
       session: session(),
       flowId: "flow-1",
       system: "base system prompt",
       messages: [{ role: "user", content: "All done" }],
       missingInformation: ["The end date is missing."],
-      model: gapModel(),
       modelName: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
       userId: "user-1",
     });
 
@@ -804,25 +862,22 @@ describe("streamGapFollowup", () => {
 
   it("returns a null message id when persistence fails so no hold is recorded", async () => {
     const create = vi.fn().mockResolvedValue({ data: null, error: { code: "DB", message: "boom" } });
+    const { llm } = fakeGapLlm("gap prompt");
 
     const container = {
-      repos: {
-        sessionMessages: { create },
-        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
-      },
+      services: { llm },
+      repos: { sessionMessages: { create }, usageRepo: {} },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
     const result = await streamGapFollowup({
       container,
-      writer: { write: () => undefined },
+      writer: noopWriter(),
       session: session(),
       flowId: "flow-1",
       system: "base system prompt",
       messages: [{ role: "user", content: "All done" }],
       missingInformation: ["The end date is missing."],
-      model: gapModel(),
       modelName: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
       userId: "user-1",
     });
 
@@ -831,55 +886,64 @@ describe("streamGapFollowup", () => {
 
   it("falls back to a generic gap description when the grading model reported no specific items", async () => {
     const create = vi.fn().mockResolvedValue({ data: {}, error: null });
-    let capturedPrompt: { role: string; content: unknown }[] = [];
-
-    const model = new MockLanguageModelV1({
-      defaultObjectGenerationMode: "tool",
-      doStream: async (options) => {
-        capturedPrompt = options.prompt as { role: string; content: unknown }[];
-        return {
-          stream: simulateReadableStream({
-            chunks: [
-              {
-                type: "tool-call-delta",
-                toolCallType: "function",
-                toolCallId: "c1",
-                toolName: "json",
-                argsTextDelta:
-                  '{"response":"Could you confirm a few more details?","rationale":"gap","stepCompleteConfidence":20,"contextGathered":[]}',
-              },
-              { type: "finish", finishReason: "stop", usage: { promptTokens: 2, completionTokens: 4 } },
-            ],
-          }),
-          rawCall: { rawPrompt: null, rawSettings: {} },
-        };
-      },
-    });
+    const { llm, streamObject } = fakeGapLlm("Could you confirm a few more details?");
 
     const container = {
-      repos: {
-        sessionMessages: { create },
-        usageRepo: { create: vi.fn().mockResolvedValue({ data: {}, error: null }) },
-      },
+      services: { llm },
+      repos: { sessionMessages: { create }, usageRepo: {} },
     } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
 
     await streamGapFollowup({
       container,
-      writer: { write: () => undefined },
+      writer: noopWriter(),
       session: session(),
       flowId: "flow-1",
       system: "base system prompt",
       messages: [{ role: "user", content: "All done" }],
       missingInformation: [],
-      model,
       modelName: "claude-haiku-4-5-20251001",
-      provider: "anthropic",
       userId: "user-1",
     });
 
-    const systemMessage = capturedPrompt.find((message) => message.role === "system");
+    const passed = streamObject.mock.calls[0]![0] as { messages: { role: string; content: string }[] };
+    const systemMessage = passed.messages.find((m) => m.role === "system");
     expect(systemMessage?.content).toContain("still need to be confirmed");
     expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes through the ILanguageModel port with purpose=chat-gap-followup", async () => {
+    const create = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const { llm, streamObject } = fakeGapLlm("Please confirm.");
+
+    const container = {
+      services: { llm },
+      repos: { sessionMessages: { create }, usageRepo: {} },
+    } as unknown as Parameters<typeof streamGapFollowup>[0]["container"];
+
+    await streamGapFollowup({
+      container,
+      writer: noopWriter(),
+      session: session(),
+      flowId: "flow-1",
+      system: "s",
+      messages: [{ role: "user", content: "hi" }],
+      missingInformation: ["x"],
+      modelName: "claude-haiku-4-5-20251001",
+      userId: "user-1",
+    });
+
+    const passed = streamObject.mock.calls[0]![0] as {
+      purpose: string;
+      userId: string;
+      flowId: string;
+      sessionId: string;
+      model: string;
+    };
+    expect(passed.purpose).toBe("chat-gap-followup");
+    expect(passed.userId).toBe("user-1");
+    expect(passed.flowId).toBe("flow-1");
+    expect(passed.sessionId).toBe("sess-1");
+    expect(passed.model).toBe("claude-haiku-4-5-20251001");
   });
 });
 
@@ -931,16 +995,14 @@ describe("persistHeldReply", () => {
 
 describe("cross-check pass note", () => {
   it("streams the note behind a message boundary so it renders as a new bubble", () => {
-    const written: string[] = [];
+    const writer = recordingWriter();
 
-    writeCrossCheckPassNote({ write: (part: string) => written.push(part) });
+    writeCrossCheckPassNote(writer);
 
-    // finish_step ("e:") closes the current bubble; the note text ("0:") then
-    // opens a fresh one on the client.
-    expect(written[0]).toMatch(/^e:/);
-    expect(written[0]).toContain('"isContinued":false');
-    expect(written[1]).toMatch(/^0:/);
-    expect(written[1]).toContain("alignment");
+    // endBubble closes the current bubble; the note text then opens a fresh one.
+    expect(writer.ops[0]).toBe("boundary");
+    expect(writer.ops[1]).toMatch(/^text:/);
+    expect(writer.texts[0]).toContain("alignment");
   });
 
   it("persists the note as a system message on the completed node", async () => {
@@ -966,6 +1028,46 @@ describe("cross-check pass note", () => {
     } as unknown as Parameters<typeof persistCrossCheckPassNote>[0];
 
     await expect(persistCrossCheckPassNote(container, "sess-1", "node-1")).resolves.toBeUndefined();
+  });
+});
+
+describe("generateTitle", () => {
+  it("routes through the ILanguageModel port and persists the generated title", async () => {
+    const generateText = vi.fn().mockResolvedValue({
+      data: { text: "  Onboarding Alex  ", usage: {} },
+      error: null,
+    });
+    const update = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      services: { llm: { generateText } },
+      repos: { sessions: { update } },
+    } as unknown as Parameters<typeof generateTitle>[0];
+
+    await generateTitle(container, "sess-1", "Help me onboard Alex", "haiku", "user-1");
+
+    // The port call carries the purpose/session so usage records and quota apply.
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: "chat-title", sessionId: "sess-1", model: "haiku", userId: "user-1" }),
+    );
+    expect(update).toHaveBeenCalledWith("sess-1", { title: "Onboarding Alex" });
+  });
+
+  it("falls back to a truncated message when the port errors (e.g. quota block)", async () => {
+    const generateText = vi.fn().mockResolvedValue({
+      data: undefined,
+      error: { code: "QUOTA_EXCEEDED", message: "capped" },
+    });
+    const update = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      services: { llm: { generateText } },
+      repos: { sessions: { update } },
+    } as unknown as Parameters<typeof generateTitle>[0];
+
+    await generateTitle(container, "sess-1", "A long first message that should be truncated", "haiku", "user-1");
+
+    expect(update).toHaveBeenCalledWith("sess-1", {
+      title: "A long first message that should be truncated",
+    });
   });
 });
 

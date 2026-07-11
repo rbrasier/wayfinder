@@ -1,0 +1,417 @@
+# Phase — Code Quality: Hot Paths, Boundaries, and Decomposition
+
+> **✅ Phase complete (v2.4.10).** Every hot-path read is bounded, all model
+> calls traverse the decorated `ILanguageModel` port, multi-write turns are
+> transactional, the turn orchestration is extracted and deterministically
+> tested, the auth + chat endpoints are rate-limited, and the file-size
+> ratchet's legacy allowlist is **empty**. Three items are consciously carried
+> forward as their own future slices rather than treated as blockers — 6b-full
+> (`ExecuteTurn` application-layer lift), the message-list keyset endpoint, and
+> the chats/sidebar list migration — each because it needs a fresh contract
+> extension or a large relocation that buys no new guarantee (see the Group A/B
+> progress notes). Items 12–13 stay in the WARN band as opportunistic splits.
+> **Browser verification of the v2.4.10 canvas split is still owed** before this
+> ships (the header extraction invents new prop boundaries the unit tests do not
+> cover).
+
+- **Status**: Complete (v2.4.10)
+- **Date**: 2026-07-05
+- **Target version**: staged; each group ships as its own sub-phase and bumps
+  independently —
+  - Group A (hot-path data access): **PATCH** per slice (no schema change if
+    query-side; **MINOR** if the denormalised `last_message` column is chosen)
+  - Group B (streaming inside the `ILanguageModel` port): **MINOR**
+  - Group C (unit-of-work port): **MINOR**
+  - Group D (frontend decomposition): **PATCH** per slice
+  - Group E (boundary tightening): **PATCH**
+  - Group F (in-process rate limiting): **MINOR**
+- **Depends on / relates to**:
+  - the **scaling-new-infrastructure** phase
+    (`to-be-implemented/scaling-new-infrastructure`) —
+    everything requiring a new service (Redis cache promotion, cluster-wide
+    LLM governor budget, distributed rate limiting) lives **there**, not here.
+    This phase is deliberately code-only against the current stack.
+  - `implemented/alpha-1/v1.58.0/scaling-current-stack.phase.md` — the scaling-walls
+    program this phase extends; several items below close gaps that program
+    left open (bounded prompt context but unbounded DB reads).
+  - ADR-001 (hexagonal architecture), ADR-026 (usage governance — decorator
+    order), ADR-021 (RBAC).
+
+---
+
+## 1. Problem
+
+A code-quality and architecture review (2026-07-05) found the codebase in
+strong shape structurally, with the remaining gaps concentrated in five
+areas that only hurt under data growth and change velocity:
+
+1. **Unbounded reads and N+1 on hot paths.** The prompt window is bounded
+   (scaling wall #1) but the underlying DB reads are not: several paths load
+   a session's **entire** message history when only the tail is used, and
+   `session.list` does it once per session, per request.
+2. **The chat stream route bypasses the `ILanguageModel` port.** Quota,
+   usage tracking, and governor wrapping — delivered as port decorators
+   (ADR-026) — are re-plumbed by hand in the route, and ~1,400 lines of turn
+   policy live in the HTTP layer.
+3. **Multi-write use cases are not atomic.** The application layer has no
+   transaction seam, so e.g. `persistAssistantTurn` writes the assistant
+   message and the session advance as separate statements.
+4. **A handful of very large files** concentrate change risk (a 2,183-line
+   client component is the worst).
+5. **Small boundary erosions**: routes reaching into `container.repos.*`,
+   a router importing from a route directory, duplicated cookie parsing,
+   an unvalidated request body on the stream route.
+
+## 2. Goals
+
+- Hot-path DB reads are bounded regardless of session age; list endpoints
+  have pagination contracts before UIs assume full lists.
+- Streaming model calls go through the `ILanguageModel` port so every
+  decorator (quota, usage, Langfuse, governor) applies uniformly.
+- Multi-write use cases run atomically behind a domain `UnitOfWork` port.
+- No non-test source file at or above 800 lines (enforced by `validate.sh`;
+  the legacy allowlist shrinks to empty as Group D lands).
+- Routes consume use cases, not repositories.
+- Auth and chat endpoints are rate-limited (per-instance; the shared-store
+  promotion is the infrastructure phase's job).
+
+## 3. Non-goals
+
+- Anything needing a new service: Redis-backed caches, a distributed
+  governor budget, a job queue, shared rate-limit state — see
+  `scaling-new-infrastructure phase doc`.
+- New product features or UI redesign; Group D is a mechanical decomposition
+  with byte-for-byte behaviour.
+- Renumbering published ADRs (Group E annotates the duplicates instead —
+  code comments reference ADR numbers, so renaming is riskier than the smell).
+
+---
+
+## 4. The enhancements
+
+### Group A — Hot-path data access (do first)
+
+> **Progress**: items 1 and 2 landed in **v2.0.2** (query-side fix; summary at
+> `implemented/v2.0.2/code-quality-hot-paths-group-a-slice-1.md`). **v2.4.0**
+> landed item 3: new `ISessionMessageRepository.aggregateGatheredContext` port
+> method + `GetSessionForTurn` application use case, and the chat stream route
+> switched to it — the turn read is now bounded (last N messages tail) plus a
+> SQL-side aggregation of gathered context across the full history (summary at
+> `implemented/v2.4.0/code-quality-hot-paths-group-a-item-3-bounded-turn-read.md`).
+> **v2.4.1** landed item 4's server-side contract: new
+> `ISessionRepository.listByUserPage` / `listAllPage` port methods,
+> `SessionListPageOptions` / `SessionListPage<T>` types, and matching
+> `ListSessionsPage` / `ListAllSessionsPage` use cases (summary at
+> `implemented/v2.4.1/code-quality-hot-paths-group-a-item-4-pagination.md`).
+> Keyset on `(updated_at DESC, id DESC)`; the tRPC exposure and message-list
+> pagination endpoint are deliberately deferred as UI-facing follow-ups so the
+> server contract can be adopted incrementally. **v2.4.6** landed the first half
+> of that UI follow-up: `session.listPage` (authenticated) and
+> `session.listAllPage` (admin) tRPC procedures wrap the v2.4.1 use cases, the
+> per-row enrichment that `session.list` computed inline is now a shared pure
+> `buildSessionListEntry` used by both the full-list and paginated procedures,
+> and the admin sessions table consumes `listAllPage` via `useInfiniteQuery`
+> (Load-more, verified 20→23 rows with no duplicates across the cursor boundary).
+> Still deferred: the message-list pagination endpoint (needs a new
+> `ISessionMessageRepository` keyset method, not just exposure) and the
+> chats/sidebar migration (blocked on a status-filter param — those views filter
+> Active/Completed client-side over the full set, which naive keyset paging would
+> regress) — summary at
+> `implemented/v2.4.6/code-quality-hot-paths-group-a-item-4-trpc-pagination.md`.
+> **v2.4.4** fixed a regression the
+> v2.4.0 bounded read introduced: the readiness gate's prior-hold count was being
+> taken over the 20-message tail, so a node with >20 messages between its first
+> hold and its next threshold crossing could be gated twice (partially
+> re-opening the v1.58.5 livelock fix). The count now runs over the current
+> node's full history via a new `listStepAssistantMessages` port method folded
+> into `GetSessionForTurn` (summary at
+> `implemented/v2.4.4/code-quality-hot-paths-group-a-item-3-gate-hold-count-fix.md`).
+> **Descoped at phase close (v2.4.10)**: the two remaining item-4 tails — the
+> message-list keyset endpoint and the chats/sidebar migration — are **not**
+> mere exposure of the shipped v2.4.1 contract; each needs a fresh contract
+> extension (a seq-based `ISessionMessageRepository` keyset method, and a
+> status-filter parameter so the client-side Active/Completed/All tabs are not
+> regressed). The per-turn hot path they were meant to bound is already fixed by
+> the v2.4.0 bounded read, and the unbounded **admin** list — the real scaling
+> risk — is paginated (v2.4.6). Both tails are carried forward as their own
+> vertical slices rather than blocking this phase.
+
+1. **`session.list` N+1** (`apps/web/src/server/routers/session.ts`): today
+   it loads full flow graphs and the **entire message history of every
+   session** to derive `lastMessage` and per-step best confidence. Replace
+   with SQL-side aggregation: one query returning, per session, the latest
+   assistant message and `max(confidence) group by step_node_id` (lateral
+   join or window function) behind a new `ISessionMessageRepository` (or
+   analytics-repository) method. Alternative if measurement favours it:
+   denormalise `last_message_seq` onto `app_sessions` (MINOR, additive
+   column). Decide at build time; default to the query-side fix.
+2. **`RunTurn.persistUserMessage`** calls `listBySession` (all rows) to
+   inspect only the last message — switch to the existing
+   `latestBySession(sessionId, 1)`.
+3. **Turn read path**: `getSession` loads the whole transcript each turn
+   while the route uses only the last `CONTEXT_WINDOW_MESSAGES` (20). Give
+   `GetSession` (or a leaner turn-scoped variant) a bounded read via
+   `latestBySession`, keeping the full read only where the UI genuinely
+   needs the whole transcript (and see item 4 for that case too).
+4. **Cursor pagination contracts** on message and session list endpoints
+   (tRPC `session.list`, message fetches, admin `listAllSessions`).
+   Keyset pagination on `(created_at, id)` / `seq`; the chat UI already
+   works off a tail slice so this is contract work, not redesign.
+
+### Group B — Streaming inside the `ILanguageModel` port
+
+> **Progress**: a first slice of item 5 landed in **v2.2.1** — the route's
+> branch-choice `generateObject` now goes through the port (summary at
+> `implemented/v2.2.1/code-quality-hot-paths-group-b-slice-1.md`). **v2.3.1**
+> extended the port so it can carry Anthropic `cache_control` per-message and
+> capture streaming `onError`, and the adapter's `streamObject` now extracts
+> cache tokens from `providerMetadata` (summary at
+> `implemented/v2.3.1/code-quality-hot-paths-group-b-slice-2.md`). **v2.3.2**
+> routed the streaming turn (`stream-turn.ts`) and the gap-followup through
+> the port and deleted the hand-rolled `recordTokenUsage` plumbing (summary at
+> `implemented/v2.3.2/code-quality-hot-paths-group-b-slice-3.md`). **v2.3.3**
+> migrated the last two `generateObject` callers in `turn-helpers.ts`
+> (`generateInitialMessage`, `recomputeBranchChoice`) through the port; the
+> route's `resolveModel` for the branching model is gone (summary at
+> `implemented/v2.3.3/code-quality-hot-paths-group-b-slice-4.md`). **v2.4.5**
+> closed item 5: the port now exposes `generateText` (implemented in the base
+> adapter and covered by all three decorators), and `generateTitle` routes
+> through it — the last direct SDK model call in the stream path is gone, along
+> with its hand-rolled `recordTokenUsage`/`resolveModel` and the route's
+> `provider`/`apiKey` locals (summary at
+> `implemented/v2.4.5/code-quality-hot-paths-group-b-slice-5-generate-title-port.md`).
+> **v2.4.7** landed item 6's first slice (6a): a framework-free
+> `TurnStreamWriter` domain port (`writeText`/`endBubble`/`writeAnnotation` +
+> a `TurnStreamAnnotation` union) and its `DataStreamTurnWriter` adapter, now the
+> only file in the stream path that touches `formatDataStreamPart`. The route,
+> `stream-turn`, and `turn-helpers` write through the port, so the turn
+> orchestration no longer depends on the Vercel AI SDK writer — the precondition
+> for moving it into the application layer. Behaviour-preserving (63 stream unit
+> tests green; the cross-check pass/hold bubble boundaries and the Anthropic
+> cache marker are unchanged). Note discovered en route: the e2e chat suite mocks
+> `/api/chat/[id]/stream` at the HTTP boundary, so the real net for this refactor
+> is the unit layer, not e2e (summary at
+> `implemented/v2.4.7/code-quality-hot-paths-group-b-slice-6a-turn-stream-writer-port.md`).
+> **v2.4.8** landed slice 6b (6b-lite): the ~250-line turn orchestration moved
+> out of the route's inline `execute` callback into a cohesive, testable
+> `executeTurn(input)` unit that writes only through the `TurnStreamWriter` port;
+> `route.ts` shrank 535 → 287 lines to a thin auth + lease + HTTP shell. A new
+> `execute-turn.test.ts` is the first deterministic test of the pass/hold/quota
+> control flow (67 stream unit tests green), and a live "New Hire" turn confirmed
+> the route→`executeTurn`→writer wiring end-to-end (summary at
+> `implemented/v2.4.8/code-quality-hot-paths-group-b-slice-6b-execute-turn-extraction.md`).
+> **v2.4.9** landed slice 6c / the E14 narrowing: a `TurnLease` application use
+> case (`claim` with holder-name resolution + `heartbeat` + `release`) now owns
+> the turn lease (scaling wall #3), so the route no longer reaches into the
+> session/user repos for it — the claim block collapsed to a single
+> `turnLease.claim(...)` and the heartbeat/release go through the use case
+> (7 new unit tests; summary at
+> `implemented/v2.4.9/code-quality-hot-paths-group-b-slice-6c-turn-lease.md`).
+> The route's remaining direct `container.repos.*` reach is just the per-turn
+> context build (`sessionUploads.listBySession`, profile `users.findById`) and
+> the teardown seq reconciliation (`sessionMessages.latestBySession`).
+> **Descoped at phase close (v2.4.10)**: 6b-full (relocate `executeTurn` and the
+> advance/auto/scheduled/doc subtree into `packages/application` as a true
+> `ExecuteTurn` use case) is carried forward as future work, **not** a phase
+> blocker. Item 6's concrete goals are already banked at 6b-lite: the
+> orchestration is a named, deterministically-tested unit that writes only
+> through the `TurnStreamWriter` port and depends on ports, the route is a thin
+> auth + lease + HTTP shell, and E14's repo-reach narrowing landed (v2.4.9). The
+> remaining lift is layer-purity on the most-exercised path — its blocker is the
+> advance/auto/scheduled/doc subtree still taking the app container — and buys no
+> new testability or behaviour guarantee, so it belongs in its own slice behind a
+> live turn. The optional `buildTurnContext` use case for the route's remaining
+> setup reads is likewise deferred.
+
+The stream route acknowledges in comments that it "calls the SDK directly,
+outside the ILanguageModel port", which forced manual re-plumbing of quota,
+usage recording, and governor wrapping (ADR-026 decorators).
+
+5. Extend `ILanguageModel` with a streaming method (`streamObject` /
+   `streamText` shape mirroring the existing non-streaming ports), implement
+   it in `LanguageModelAdapter`, and make `withUsageTracking`,
+   `withQuotaEnforcement`, and `withOptionalLangfuse` cover it. Delete the
+   route's hand-rolled equivalents.
+6. Pull turn orchestration (gate holds, readiness evaluation, branch choice,
+   advance side effects) out of
+   `apps/web/src/app/api/chat/[sessionId]/stream/{route.ts,turn-helpers.ts}`
+   into an application-layer use case (e.g. `ExecuteTurn`) that takes ports
+   plus a stream-writer abstraction. The route shrinks to: auth, lease
+   claim/release, HTTP ↔ use case translation. The already-extracted pure
+   gate modules (`branch-gate`, `readiness-gate`, `gate-holds`) move with it.
+
+### Group C — Unit-of-work port
+
+> **Progress**: item 7 (the port + adapter) and item 8's first target
+> (`persistAssistantTurn`) landed in **v2.1.0** (summary at
+> `implemented/v2.1.0/code-quality-hot-paths-group-c-unit-of-work.md`).
+> `DecideApproval` landed in **v2.3.0** — the concurrency-gated approval
+> update and the session advance/route now commit in one transaction
+> (`TransactionalRepositories` grew an `approvals` repo; summary at
+> `implemented/v2.3.0/code-quality-hot-paths-group-c-decide-approval.md`).
+> `ApplyAutoNodeResult` was assessed and left unwrapped: it has a single
+> authoritative write (the optimistically-versioned session commit); its
+> step-output persist is deliberately best-effort and must not roll the
+> advance back, so a transaction would couple writes that should stay
+> independent. Item 8 is therefore complete.
+
+7. Add a `UnitOfWork` (transaction) port to `packages/domain` — e.g.
+   `withTransaction<T>(work: (repos: TransactionalRepos) => Promise<Result<T>>): Promise<Result<T>>`
+   — implemented in adapters over `db.transaction`, exposing transactional
+   variants of the repositories a use case needs. Keeps the "application
+   sees no ORM" rule intact.
+8. Wrap the multi-write use cases: `persistAssistantTurn` (assistant message
+   + session advance/complete) first, then `DecideApproval`,
+   `ApplyAutoNodeResult`, and any other use case doing more than one write.
+
+### Group D — Frontend and file decomposition
+
+> **Progress**: item 9 landed in **v2.2.3** — the 2,183-line settings page was
+> split into one file per section under `components/settings/` (plus a shared
+> `connectivity.tsx`), dropping the page to 75 lines and off the size allowlist
+> (summary at `implemented/v2.2.3/code-quality-hot-paths-group-d.md`). **v2.4.2**
+> landed item 10 — `node-config-modal.tsx` split into per-node-type section
+> files (`node-config-modal-{conversational,auto,scheduled,approval}.tsx`),
+> shrinking the parent from 1,135 to 675 lines (summary at
+> `implemented/v2.4.2/code-quality-hot-paths-group-d-item-10-node-config-modal.md`).
+> **Manual browser verification required** before shipping — the split invents
+> new prop boundaries the automated tests do not cover. **v2.4.3** landed a
+> partial slice of item 11: the two `_content.tsx` files' identical top-of-file
+> React Flow adapter helpers moved to a shared `lib/canvas/rf-adapters.ts`,
+> shedding ~85 lines each (944 → 861 user; 934 → 850 admin) — safe verbatim
+> extraction, no invented prop boundaries. Both files stay in the WARN size
+> range; the deeper `CanvasInner` decomposition (canvas rendering block, node
+> change/connect handler cluster, shared toolbar) is deferred as the
+> file-size-ratchet's "opportunistic split" per the phase's Group D policy
+> (summary at
+> `implemented/v2.4.3/code-quality-hot-paths-group-d-item-11-content-shared-adapters.md`).
+> **v2.4.10** completed item 11's deeper `CanvasInner` decomposition: each
+> `_content.tsx` file's header/actions-menu extracted to a co-located
+> `_flow-config-header.tsx`, and the shared React Flow pane + stale-reference
+> banner extracted to `components/canvas/flow-canvas-viewport.tsx`. Both files
+> drop under 700 (861 → 693 user; 850 → 640 admin) and **leave the allowlist**;
+> with `node-config-modal.tsx` (675, v2.4.2) and `turn-helpers.ts` (749) already
+> below the 800 fail line, the `SIZE_LEGACY_ALLOWLIST` is now **empty** — the
+> ratchet enforces the 800-line limit with no grandfathered exceptions.
+> **Manual browser verification required** — the header split invents new prop
+> boundaries the automated tests do not cover (summary at
+> `implemented/v2.4.10/code-quality-hot-paths-group-d-item-11-canvas-inner.md`).
+> Items 12 (`turn-helpers.ts`, 749) and 13 (`field-report-section.tsx`, 732)
+> stay in the WARN band and are **descoped to opportunistic splits** per the
+> Group D policy below: neither is on the allowlist, both are under the fail
+> line, and item 12 is expected to dissolve further whenever Group B item 6's
+> `ExecuteTurn` application-layer lift is picked up.
+
+Works in tandem with the new `validate.sh` file-size ratchet (warn ≥ 700,
+fail ≥ 800, legacy allowlist below). Exit criterion for each slice: the file
+drops under 700 lines and leaves the allowlist; the phase is done when the
+allowlist is empty.
+
+9. `apps/web/src/app/(admin)/admin/settings/page.tsx` (2,183) — split per
+   settings section (each already owns its own tRPC calls); extract shared
+   hooks/components under `components/settings/`.
+10. `apps/web/src/components/canvas/node-config-modal.tsx` (1,135) — split
+    per node type / tab.
+11. `apps/web/src/app/(user)/flows/[id]/config/_content.tsx` (944) and
+    `apps/web/src/app/(admin)/admin/flows/[id]/_content.tsx` (934) — extract
+    shared flow-config sections; these two overlap heavily.
+12. `apps/web/src/app/api/chat/[sessionId]/stream/turn-helpers.ts` (858) —
+    largely dissolved by Group B item 6; whatever remains splits by concern.
+13. `apps/web/src/components/admin/field-report-section.tsx` (732) —
+    warn-level only; split opportunistically when next touched.
+
+### Group E — Boundary tightening (small, independent slices)
+
+> **Progress**: items 15, 17, 18 landed in **v2.2.2** (summary at
+> `implemented/v2.2.2/code-quality-hot-paths-group-e.md`). **v2.3.4** landed
+> item 16 (moved `confirmStep` and its helper `recomputeBranchChoice` from the
+> stream route directory to `apps/web/src/lib/chat/confirm-step.ts`; the tRPC
+> session router now imports from `@/lib/chat/`) — summary at
+> `implemented/v2.3.4/code-quality-hot-paths-group-e-inverted-layering.md`.
+> Item 14 (narrow `container.repos.*` reach in the stream route) remains and
+> is best landed with Group B item 6 (`ExecuteTurn` extraction) since both
+> reshape the same call surface.
+
+14. **Narrow the container surface handed to routes**: expose use cases and
+    a small set of named services; stop `container.repos.*` reach-through
+    (the stream route reads `repos.sessionUploads`, `repos.users`,
+    `repos.sessionMessages` directly). Migrate existing reach-throughs
+    behind use cases as Group B touches them.
+15. **Dedupe `getSessionToken`** (identical cookie parsing in
+    `apps/web/src/server/trpc.ts` and the stream route) into one helper.
+16. **Fix inverted layering**: `server/routers/session.ts` imports
+    `confirmStep` from the `app/api/.../stream/` route directory — move it
+    to the application layer (naturally falls out of Group B) or a shared
+    server lib.
+17. **Zod-validate the stream route body** (`body.messages` is currently a
+    type cast) using a schema from `@rbrasier/shared`.
+18. **ADR numbering duplicates** (two 015s, two 026s): annotate each
+    duplicate pair with a disambiguating note at the top of the file (e.g.
+    "also numbered 026; cited in code as ADR-026 §6 = usage-governance").
+    Do not renumber — code comments cite these numbers.
+
+### Group F — In-process rate limiting
+
+> **Progress**: item 19 landed in **v2.2.0** (summary at
+> `implemented/v2.2.0/code-quality-hot-paths-group-f-rate-limiting.md`). Group F
+> is complete.
+
+19. Rate-limit the auth endpoints and the chat stream POST with a
+    per-instance token bucket behind a small `IRateLimiter` port (keyed by
+    user id / IP). No new service: in-memory, same pattern as `TtlCache`.
+    The port is the seam the infrastructure phase promotes to a shared
+    store when instance count > 1.
+
+---
+
+## 5. Suggested sequencing
+
+A (1–4) → C (7–8) → B (5–6) → E (14–18, some fall out of B) → F (19), with
+D (9–13) interleaved as independent slices any time. A, C, D, E, F have no
+dependencies on each other; B is easier after C exists (the extracted
+`ExecuteTurn` use case can be transactional from day one).
+
+---
+
+## 6. Acceptance criteria
+
+Status at phase close (v2.4.10) marked inline.
+
+- ✅ No turn or list request reads an unbounded number of message rows;
+  `session.list` issues O(1) queries regardless of session count/age
+  (verified by the load scenarios in `load/scenarios/`). Met via the v2.4.0
+  bounded turn read and the v2.4.1/v2.4.6 keyset session pagination.
+- ✅ Grepping the stream route for `generateObject`/`streamObject` SDK calls
+  finds none — all model calls traverse the decorated port (closed by Group B
+  through v2.4.5; the write-side goes through the `TurnStreamWriter` port).
+- ✅ Killing the process between the assistant-message write and the session
+  advance can no longer leave a half-applied turn (transaction covers both) —
+  Group C, `withTransaction` around `persistAssistantTurn` and DecideApproval.
+- ✅ `validate.sh` file-size check passes with an **empty** legacy allowlist
+  (v2.4.10 — the last two `_content.tsx` offenders decomposed below 700).
+- ✅ Auth + chat endpoints return 429 under the configured burst (Group F,
+  v2.2.0).
+- ✅ `./validate.sh` passes at every slice; versioning rules honoured per
+  implementing sub-phase.
+
+---
+
+## 7. Risks and open questions
+
+- **Group B is the riskiest change** — it rewrites the most-exercised path.
+  Mitigate by landing it behind the existing e2e chat suite plus a dedicated
+  `enhance-stream-port.spec.ts`, and by moving the pure gate modules
+  verbatim (they carry their own tests).
+- **Group A item 1**: query-side vs denormalised column — decide with
+  `EXPLAIN ANALYZE` on a seeded dataset (see `load/`), not taste.
+- **Pagination contracts** (item 4) touch client code; ship server support
+  first with a default page size large enough to be behaviour-neutral, then
+  tighten.
+
+---
+
+## Provenance
+
+Code-quality and architecture review, 2026-07-05 (session: code-quality
+/ architecture review). Companion service-dependent items were folded into
+`scaling-new-infrastructure phase doc` in the same change.

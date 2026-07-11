@@ -1,5 +1,12 @@
 # ADR-026 — Usage Governance Enforcement (per-user cap decorator on `ILanguageModel`)
 
+> **Numbering note**: two ADRs share the number 026. This one —
+> *Usage Governance Enforcement* — is the ADR-026 the code cites around budgets,
+> quota enforcement, and usage tracking (e.g. `entities/budget.ts` "ADR-026 §3",
+> `observability/quota-enforcing-adapter.ts` "ADR-026 §3/§6"). The other is
+> *Operator-Confirmed Step Completion & Deferred Advancement*. Deliberately not
+> renumbered — code comments cite these numbers.
+
 - **Status**: Accepted (scoped by `cost-usage-governance.prd.md`, target v1.48.0)
 - **Date**: 2026-06-14 (revised 2026-06-17: scope reduced to **per-user caps**
   over daily / weekly / monthly periods; the org-tier "team" model, the

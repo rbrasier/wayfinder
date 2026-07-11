@@ -5,6 +5,7 @@ import {
   type AiConfig,
   type AiPurpose,
   type GenerateObjectInput,
+  type GenerateTextInput,
   type ILanguageModel,
   type ProviderName,
   type Result,
@@ -12,7 +13,7 @@ import {
   type StreamTextInput,
   type TokenUsage,
 } from "@rbrasier/domain";
-import { generateObject, streamObject, streamText } from "ai";
+import { generateObject, generateText, streamObject, streamText } from "ai";
 import { resolveModel, type ProviderCredentials } from "./providers";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
 import { LlmCallGovernor } from "./llm-concurrency";
@@ -100,6 +101,39 @@ export class LanguageModelAdapter implements ILanguageModel {
     }
   }
 
+  async generateText(
+    input: GenerateTextInput,
+  ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+    try {
+      const config = await this.runtimeConfig.getAiConfig();
+      const { provider, model, credentials } = resolveForCall(config, input.model, input.purpose);
+      const result = await this.runGoverned(() =>
+        generateText({
+          model: resolveModel(provider, model, credentials),
+          system: input.system,
+          prompt: input.prompt,
+          messages: input.messages as never,
+          temperature: input.temperature,
+          maxTokens: input.maxTokens,
+        }),
+      );
+      const meta = extractMeta(
+        result.experimental_providerMetadata as Record<string, unknown> | undefined,
+      );
+      return ok({
+        text: result.text,
+        usage: {
+          promptTokens: result.usage.promptTokens,
+          completionTokens: result.usage.completionTokens,
+          systemTokens: 0,
+          ...meta,
+        },
+      });
+    } catch (cause) {
+      return err(domainError("AI_PROVIDER_FAILED", "generateText failed.", cause));
+    }
+  }
+
   async streamText(
     input: StreamTextInput,
   ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>> {
@@ -147,13 +181,19 @@ export class LanguageModelAdapter implements ILanguageModel {
         messages: input.messages as never,
         temperature: input.temperature,
         maxTokens: input.maxTokens,
+        onError: input.onError,
       });
-      const usage = result.usage.then((u) => ({
+      // Await providerMetadata alongside usage so cache tokens survive the port
+      // hop: without this the Anthropic prompt-cache readings are lost and every
+      // cached turn reports zero cache tokens (double-counting spend caps).
+      const usage = Promise.all([
+        result.usage,
+        result.providerMetadata as Promise<Record<string, unknown> | undefined>,
+      ]).then(([u, meta]) => ({
         promptTokens: u.promptTokens,
         completionTokens: u.completionTokens,
         systemTokens: 0,
-        cacheReadTokens: 0,
-        cacheWriteTokens: 0,
+        ...extractMeta(meta),
       }));
       return ok({
         partialObjectStream: result.partialObjectStream as AsyncIterable<Partial<T>>,

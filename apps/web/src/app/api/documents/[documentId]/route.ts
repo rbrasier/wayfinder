@@ -1,16 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import type { ConversationalNodeConfig } from "@rbrasier/domain";
 import { getContainer } from "@/lib/container";
-
-const getSessionToken = (req: NextRequest): string | null => {
-  const cookie = req.headers.get("cookie");
-  if (!cookie) return null;
-  const pair = cookie
-    .split(";")
-    .map((c) => c.trim())
-    .find((c) => c.startsWith("better-auth.session_token="));
-  return pair ? pair.slice("better-auth.session_token=".length) : null;
-};
+import { getSessionTokenFromRequest } from "@/lib/session-token";
 
 export async function GET(
   req: NextRequest,
@@ -19,7 +10,7 @@ export async function GET(
   const { documentId } = await params;
   const container = getContainer();
 
-  const token = getSessionToken(req);
+  const token = getSessionTokenFromRequest(req);
   if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const authSession = await container.resolveSession(token);
@@ -66,7 +57,7 @@ export async function POST(
   const { documentId } = await params;
   const container = getContainer();
 
-  const token = getSessionToken(req);
+  const token = getSessionTokenFromRequest(req);
   if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const authSession = await container.resolveSession(token);

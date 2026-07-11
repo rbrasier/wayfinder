@@ -1,12 +1,7 @@
 "use client";
 
 import {
-  Background,
-  BackgroundVariant,
-  Controls,
   MarkerType,
-  MiniMap,
-  ReactFlow,
   ReactFlowProvider,
   addEdge,
   applyEdgeChanges,
@@ -23,9 +18,7 @@ import "@xyflow/react/dist/style.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,20 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
-import { ConversationalNode } from "@/components/canvas/conversational-node";
-import type { AutoNodeData } from "@/components/canvas/auto-node";
-import { AutoNode } from "@/components/canvas/auto-node";
-import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
-import { ScheduledNode } from "@/components/canvas/scheduled-node";
-import type { ApprovalNodeData } from "@/components/canvas/approval-node";
-import { ApprovalNode } from "@/components/canvas/approval-node";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
+import { FlowCanvasViewport } from "@/components/canvas/flow-canvas-viewport";
 import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal";
 import { VersionHistoryDialog } from "@/components/canvas/version-history-dialog";
-import { FlowVersionIndicator } from "@/components/canvas/flow-version-indicator";
 import { STEP_TYPE_ACCENT } from "@/components/canvas/node-styles";
 import { defaultConfigForType } from "@/components/canvas/node-defaults";
 import {
@@ -58,91 +43,16 @@ import {
 } from "@/components/canvas/scheduled-node-config";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
+import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import type { FieldValueSource, FlowContextDoc, PermissionKey, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { orderStepIds } from "@/lib/step-order";
-
-const NODE_TYPES = {
-  conversationalNode: ConversationalNode,
-  autoNode: AutoNode,
-  scheduledNode: ScheduledNode,
-  approvalNode: ApprovalNode,
-};
-const DEBOUNCE_MS = 600;
-
-interface RawNode {
-  id: string;
-  name: string;
-  colour: string | null;
-  type?: "conversational" | "auto" | "scheduled" | "approval";
-  positionX: number;
-  positionY: number;
-  config: Record<string, unknown>;
-}
-
-const readFields = (value: unknown): TemplateField[] =>
-  Array.isArray(value) ? (value as TemplateField[]) : [];
-
-const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
-  if (node.type === "auto") {
-    const data: AutoNodeData = {
-      name: node.name,
-      colour: node.colour,
-      instruction: (node.config.instruction as string | null) ?? null,
-      requestFieldCount: readFields(node.config.requestFields).length,
-      responseFieldCount: readFields(node.config.responseFields).length,
-      stepNumber,
-      config: node.config,
-    };
-    return { id: node.id, type: "autoNode", position: { x: node.positionX, y: node.positionY }, data };
-  }
-
-  if (node.type === "scheduled") {
-    const data: ScheduledNodeData = {
-      name: node.name,
-      colour: node.colour,
-      kind: (node.config.kind as string | null) ?? null,
-      spec: (node.config.spec as string | null) ?? null,
-      recurring: Boolean(node.config.recurring),
-      stepNumber,
-      config: node.config,
-    };
-    return { id: node.id, type: "scheduledNode", position: { x: node.positionX, y: node.positionY }, data };
-  }
-
-  if (node.type === "approval") {
-    const data: ApprovalNodeData = {
-      name: node.name,
-      colour: node.colour,
-      approverSource: (node.config.approverSource as string | null) ?? null,
-      stepNumber,
-      config: node.config,
-    };
-    return { id: node.id, type: "approvalNode", position: { x: node.positionX, y: node.positionY }, data };
-  }
-
-  const data: ConversationalNodeData = {
-    name: node.name,
-    colour: node.colour,
-    aiInstruction: (node.config.aiInstruction as string | null) ?? null,
-    stepNumber,
-    doneWhen: (node.config.doneWhen as string | null) ?? null,
-    neverDone: Boolean(node.config.neverDone),
-    outputType: (node.config.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
-    documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
-    documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
-    documentTemplateContent: (node.config.documentTemplateContent as string | null) ?? null,
-    config: node.config,
-  };
-  return { id: node.id, type: "conversationalNode", position: { x: node.positionX, y: node.positionY }, data };
-};
-
-const toRfEdge = (edge: { id: string; fromNodeId: string; toNodeId: string }): Edge => ({
-  id: edge.id,
-  source: edge.fromNodeId,
-  target: edge.toNodeId,
-  type: "smoothstep",
-  markerEnd: { type: MarkerType.ArrowClosed },
-});
+import {
+  CANVAS_DEBOUNCE_MS as DEBOUNCE_MS,
+  readFields,
+  toRfEdge,
+  toRfNode,
+} from "@/lib/canvas/rf-adapters";
+import { FlowConfigHeader } from "./_flow-config-header";
 
 function CanvasInner({ flowId }: { flowId: string }) {
   const router = useRouter();
@@ -639,200 +549,39 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-3 border-b bg-white px-4 py-3 pr-14 shrink-0">
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">← Home</Link>
-        <div className="h-4 w-px bg-border" />
-        <span className="text-sm font-semibold">{flowName}</span>
-        <FlowVersionIndicator
-          hasUnpublishedChanges={hasUnpublishedChanges}
-          latestPublishedNumber={versionStatusQuery.data?.latestPublishedNumber ?? null}
-        />
-        <Badge variant={flowStatus === "published" ? "default" : "secondary"}>
-          {flowStatus === "published"
-            ? `Published · ${flowVisibility === "global" ? "Everyone" : "Only you"}`
-            : "Draft"}
-        </Badge>
-        <div className="ml-auto flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={handleAddStep}>
-            + Add step
-          </Button>
-          <div className="relative" ref={flowMenuRef}>
-            <Button
-              size="sm"
-              variant="outline"
-              aria-label="Flow actions"
-              onClick={() => setFlowMenuOpen((prev) => !prev)}
-              className="px-2"
-            >
-              <MoreHorizontal size={16} />
-            </Button>
-            {flowMenuOpen && (
-              <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-[9px] border border-[#dedad2] bg-white py-1 shadow-md">
-                {flowStatus === "published" ? (
-                  <>
-                    {hasUnpublishedChanges && (
-                      <button
-                        type="button"
-                        className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                        onClick={() => {
-                          setFlowMenuOpen(false);
-                          setHasUnpublishedChanges(false);
-                          void updateFlowMutation
-                            .mutateAsync({ flowId, status: "published" })
-                            .then(() => {
-                              toast.success("New version published");
-                              void versionStatusQuery.refetch();
-                            });
-                        }}
-                      >
-                        Publish new version
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                      onClick={() => {
-                        setFlowMenuOpen(false);
-                        setFlowStatus("draft");
-                        void updateFlowMutation.mutateAsync({ flowId, status: "draft" }).then(() => {
-                          toast.success("Flow unpublished");
-                        });
-                      }}
-                    >
-                      Unpublish
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                    onClick={() => {
-                      setFlowMenuOpen(false);
-                      setFlowStatus("published");
-                      setFlowVisibility("private");
-                      void updateFlowMutation
-                        .mutateAsync({
-                          flowId,
-                          status: "published",
-                          visibility: { kind: "private" },
-                        })
-                        .then(() => toast.success("Flow published privately"));
-                    }}
-                  >
-                    Publish privately (only you)
-                  </button>
-                )}
-                {flowStatus !== "published" && canPublishToEveryone && (
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                    onClick={() => {
-                      setFlowMenuOpen(false);
-                      setFlowStatus("published");
-                      setFlowVisibility("global");
-                      void updateFlowMutation
-                        .mutateAsync({
-                          flowId,
-                          status: "published",
-                          visibility: { kind: "global" },
-                        })
-                        .then(() => toast.success("Flow published globally"));
-                    }}
-                  >
-                    Publish globally (everyone)
-                  </button>
-                )}
-                {flowStatus === "published" && canPublishToEveryone && flowVisibility === "private" && (
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                    onClick={() => {
-                      setFlowMenuOpen(false);
-                      setFlowVisibility("global");
-                      void updateFlowMutation
-                        .mutateAsync({ flowId, visibility: { kind: "global" } })
-                        .then(() => toast.success("Flow is now visible to everyone"));
-                    }}
-                  >
-                    Make global (everyone)
-                  </button>
-                )}
-                {flowStatus === "published" && canPublishToEveryone && flowVisibility === "global" && (
-                  <button
-                    type="button"
-                    className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                    onClick={() => {
-                      setFlowMenuOpen(false);
-                      setFlowVisibility("private");
-                      void updateFlowMutation
-                        .mutateAsync({ flowId, visibility: { kind: "private" } })
-                        .then(() => toast.success("Flow is now private"));
-                    }}
-                  >
-                    Make private (only you)
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                  onClick={() => {
-                    setFlowMenuOpen(false);
-                    setEditingMetadata(true);
-                  }}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
-                  onClick={() => {
-                    setFlowMenuOpen(false);
-                    setVersionHistoryOpen(true);
-                  }}
-                >
-                  Version history
-                </button>
-                <div className="my-1 border-t border-[#dedad2]" />
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#c2385a] hover:bg-[#fdf3f5]"
-                  onClick={() => {
-                    setFlowMenuOpen(false);
-                    setDeleteConfirmOpen(true);
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <FlowConfigHeader
+        flowId={flowId}
+        flowName={flowName}
+        flowStatus={flowStatus}
+        setFlowStatus={setFlowStatus}
+        flowVisibility={flowVisibility}
+        setFlowVisibility={setFlowVisibility}
+        hasUnpublishedChanges={hasUnpublishedChanges}
+        setHasUnpublishedChanges={setHasUnpublishedChanges}
+        latestPublishedNumber={versionStatusQuery.data?.latestPublishedNumber ?? null}
+        canPublishToEveryone={canPublishToEveryone}
+        flowMenuOpen={flowMenuOpen}
+        setFlowMenuOpen={setFlowMenuOpen}
+        flowMenuRef={flowMenuRef}
+        onAddStep={handleAddStep}
+        updateFlowMutation={updateFlowMutation}
+        refetchVersionStatus={() => void versionStatusQuery.refetch()}
+        setEditingMetadata={setEditingMetadata}
+        setVersionHistoryOpen={setVersionHistoryOpen}
+        setDeleteConfirmOpen={setDeleteConfirmOpen}
+      />
 
-      <div className="flex-1 relative">
-        <ReactFlow
-          nodes={displayNodes}
-          edges={rfEdges}
-          nodeTypes={NODE_TYPES}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onConnectEnd={onConnectEnd}
-          onNodeClick={onNodeClick}
-          onNodeDragStop={onNodeDragStop}
-          fitView
-          deleteKeyCode="Backspace"
-        >
-          <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-          <Controls />
-          <MiniMap zoomable pannable />
-        </ReactFlow>
-        {staleReferences.length > 0 && (
-          <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2 text-center text-[12px] text-[#886b00] shadow-md">
-            ⚠ Some steps reference data that no longer exists: {staleReferences.join(", ")}. Re-open them to fix.
-          </div>
-        )}
-      </div>
+      <FlowCanvasViewport
+        nodes={displayNodes}
+        edges={rfEdges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onConnectEnd={onConnectEnd}
+        onNodeClick={onNodeClick}
+        onNodeDragStop={onNodeDragStop}
+        staleReferences={staleReferences}
+      />
 
       <ContextDocsStrip flowId={flowId} docs={contextDocs} onDocsChange={setContextDocs} />
 

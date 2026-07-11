@@ -1,5 +1,6 @@
 import type {
   GenerateObjectInput,
+  GenerateTextInput,
   ILanguageModel,
   IUsageRepository,
   ProviderName,
@@ -126,6 +127,16 @@ export class UsageTrackingAdapter implements ILanguageModel {
     input: GenerateObjectInput,
   ): Promise<Result<{ object: T; usage: TokenUsage }>> {
     const result = await this.inner.generateObject<T>(input);
+    if (!result.error) {
+      recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, result.data.usage);
+    }
+    return result;
+  }
+
+  async generateText(
+    input: GenerateTextInput,
+  ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+    const result = await this.inner.generateText(input);
     if (!result.error) {
       recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, result.data.usage);
     }
