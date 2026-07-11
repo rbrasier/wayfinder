@@ -42,8 +42,8 @@ async function createFlowAndResolveId(page: Page, name: string): Promise<string 
   if (!(await editLink.isVisible({ timeout: 5_000 }).catch(() => false))) return null;
   await editLink.click();
 
-  await page.waitForURL(/\/admin\/flows\/[^/]+$/, { timeout: 10_000 }).catch(() => undefined);
-  const match = page.url().match(/\/admin\/flows\/([^/?]+)/);
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 10_000 }).catch(() => undefined);
+  const match = page.url().match(/\/flows\/([^/?]+)\/config/);
   return match?.[1] ?? null;
 }
 

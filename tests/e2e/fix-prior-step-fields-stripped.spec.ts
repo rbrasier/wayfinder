@@ -69,7 +69,7 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
   const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
   await expect(editLink).toBeVisible({ timeout: 5_000 });
   await editLink.click();
-  await page.waitForURL(/\/admin\/flows\/[^/]+$/, { timeout: 30_000 });
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1_200);
 }

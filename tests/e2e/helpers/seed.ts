@@ -41,7 +41,7 @@ export function loadSeedFixtures(): SeedFixtures | null {
 export async function openFlowCanvas(page: Page): Promise<boolean> {
   const flowId = loadSeedFixtures()?.flowId;
   if (flowId) {
-    await page.goto(`/admin/flows/${flowId}`);
+    await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');
     return true;
   }

@@ -26,8 +26,8 @@ test.describe('Admin: Flow Canvas Editor', () => {
 
     await page.screenshot({ path: 'screenshots/flow-lifecycle-canvas.png', fullPage: true });
 
-    // Verify we reached the canvas URL
-    expect(page.url()).toMatch(/\/admin\/flows\/[^/]+$/);
+    // Verify we reached the canonical canvas URL
+    expect(page.url()).toMatch(/\/flows\/[^/]+\/config$/);
 
     const errors = consoleLogs.filter(l => l.type === 'error');
     expect(errors, `Errors on canvas:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
@@ -145,8 +145,9 @@ test.describe('Admin: Create Flow', () => {
     await expect(editLink).toBeVisible({ timeout: 5_000 });
     await editLink.click();
 
-    // Wait for navigation rather than asserting the URL after a fixed delay
-    await page.waitForURL(/\/admin\/flows\/[^/]+$/, { timeout: 10_000 });
+    // Wait for navigation rather than asserting the URL after a fixed delay.
+    // "Configure Flow" links to the single canonical editor at /flows/[id]/config.
+    await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 10_000 });
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1200); // allow ReactFlow canvas to mount
 

@@ -39,16 +39,16 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
 
   // The canvas route is heavy (ReactFlow). In dev mode the first navigation
   // also triggers on-demand compilation, so allow the full navigation timeout.
-  await page.waitForURL(/\/admin\/flows\/[^/]+$/, { timeout: 30_000 });
+  // "Configure Flow" links to the single canonical editor at /flows/[id]/config.
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 30_000 });
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1_200);
 }
 
-// Publishing moved off the toolbar into the "⋯" Flow actions menu:
-// Flow actions → Update published state → Publish globally (everyone).
+// Publishing lives in the "⋯" Flow actions menu as a flat item:
+// Flow actions → Publish globally (everyone).
 async function publishGlobally(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Flow actions' }).click();
-  await page.getByRole('button', { name: /update published state/i }).click();
   await page.getByRole('button', { name: /publish globally/i }).click();
   await page.waitForTimeout(1_000);
 }
