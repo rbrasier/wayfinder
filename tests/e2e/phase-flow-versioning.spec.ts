@@ -39,9 +39,9 @@ async function createFlow(page: import('@playwright/test').Page, label: string):
   const editLink = page.getByRole('link', { name: 'Configure Flow' }).first();
   await expect(editLink).toBeVisible({ timeout: 5_000 });
   await editLink.click();
-  await page.waitForURL(/\/admin\/flows\/[^/]+$/, { timeout: 10_000 });
+  await page.waitForURL(/\/flows\/[^/]+\/config$/, { timeout: 10_000 });
 
-  const match = page.url().match(/\/admin\/flows\/([^/?#]+)/);
+  const match = page.url().match(/\/flows\/([^/?#]+)\/config/);
   return match?.[1] ?? null;
 }
 
