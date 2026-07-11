@@ -176,11 +176,21 @@ areas that only hurt under data growth and change velocity:
 > control flow (67 stream unit tests green), and a live "New Hire" turn confirmed
 > the route→`executeTurn`→writer wiring end-to-end (summary at
 > `implemented/v2.4.8/code-quality-hot-paths-group-b-slice-6b-execute-turn-extraction.md`).
-> Still open under item 6: 6c/E14 (give `executeTurn` explicit port dependencies
-> instead of the whole container, narrowing the route's direct
-> `container.repos.*` reach) and 6b-full (relocate `executeTurn` and the
+> **v2.4.9** landed slice 6c / the E14 narrowing: a `TurnLease` application use
+> case (`claim` with holder-name resolution + `heartbeat` + `release`) now owns
+> the turn lease (scaling wall #3), so the route no longer reaches into the
+> session/user repos for it — the claim block collapsed to a single
+> `turnLease.claim(...)` and the heartbeat/release go through the use case
+> (7 new unit tests; summary at
+> `implemented/v2.4.9/code-quality-hot-paths-group-b-slice-6c-turn-lease.md`).
+> The route's remaining direct `container.repos.*` reach is just the per-turn
+> context build (`sessionUploads.listBySession`, profile `users.findById`) and
+> the teardown seq reconciliation (`sessionMessages.latestBySession`).
+> Still open under item 6: 6b-full (relocate `executeTurn` and the
 > advance/auto/scheduled/doc subtree into `packages/application` as a true
-> `ExecuteTurn` use case).
+> `ExecuteTurn` use case — the subtree still takes the app container, which
+> blocks the lift), and optionally a `buildTurnContext` use case for the route's
+> remaining setup reads.
 
 The stream route acknowledges in comments that it "calls the SDK directly,
 outside the ILanguageModel port", which forced manual re-plumbing of quota,

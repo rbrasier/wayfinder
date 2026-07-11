@@ -91,6 +91,7 @@ import {
   ApplyAutoNodeResult,
   RunAutoNode,
   RunTurn,
+  TurnLease,
   ScheduleNodeEvent,
   SearchPeople,
   SendMessage,
@@ -646,6 +647,10 @@ const build = () => {
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
+      // The turn lease (scaling wall #3) as one unit: claim (with holder-name
+      // resolution), heartbeat, release — so the stream route stops reaching
+      // into the session/user repos directly for the lease.
+      turnLease: new TurnLease(sessions, users),
       publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),

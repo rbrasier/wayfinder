@@ -108,18 +108,15 @@ export async function POST(
   // the holder's name, instead of both turns running (double message, double
   // spend, double advance). A crashed turn's lease is taken over after the window.
   const turnId = crypto.randomUUID();
-  const claimResult = await container.repos.sessions.claimTurn(
-    session.id,
+  const claimResult = await container.useCases.turnLease.claim({
+    sessionId: session.id,
     turnId,
-    authSession.userId,
-    container.env.TURN_LEASE_SECONDS,
-  );
+    userId: authSession.userId,
+    leaseSeconds: container.env.TURN_LEASE_SECONDS,
+  });
   if (claimResult.error) return new Response("Server error", { status: 500 });
   if (!claimResult.data.claimed) {
-    const holderId = claimResult.data.heldBy;
-    const holderResult = holderId ? await container.repos.users.findById(holderId) : null;
-    const holderName =
-      holderResult && !holderResult.error && holderResult.data ? holderResult.data.name : null;
+    const holderName = claimResult.data.heldByName;
     const message = holderName
       ? `${holderName}'s turn is in progress. Please wait for it to finish.`
       : "A turn is already in progress on this session. Please wait for it to finish.";
@@ -226,7 +223,7 @@ export async function POST(
       // the stream is open; the release in `finally` frees it the instant the
       // turn ends (success or failure) rather than waiting for expiry.
       const heartbeat = setInterval(() => {
-        void container.repos.sessions.heartbeatTurn(session.id, turnId);
+        void container.useCases.turnLease.heartbeat(session.id, turnId);
       }, container.env.TURN_HEARTBEAT_MS);
       try {
         await executeTurn({
@@ -269,7 +266,7 @@ export async function POST(
         publishEvent({ type: "session.updated" });
         // Release in the same lifecycle that persisted the turn (or on the error
         // path); guarded on turnId so a stale release never clears a newer claim.
-        await container.repos.sessions.releaseTurn(session.id, turnId);
+        await container.useCases.turnLease.release(session.id, turnId);
         publishEvent({ type: "turn.released" });
       }
     },
