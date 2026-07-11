@@ -1,13 +1,9 @@
-import { createServerHelpers } from "@/trpc/server";
-import { AdminFlowContent } from "./_content";
+import { redirect } from "next/navigation";
 
-export default async function AdminFlowPage({ params }: { params: Promise<{ id: string }> }) {
+// The flow canvas editor now lives at a single canonical route. This admin path
+// is kept only so existing links and bookmarks resolve; it forwards to the one
+// editor, which self-adapts to the viewer's permissions.
+export default async function AdminFlowRedirectPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { trpc, HydrateClient } = await createServerHelpers();
-  void trpc.flow.getCanvas.prefetch({ flowId: id });
-  return (
-    <HydrateClient>
-      <AdminFlowContent flowId={id} />
-    </HydrateClient>
-  );
+  redirect(`/flows/${id}/config`);
 }

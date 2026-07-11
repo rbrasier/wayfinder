@@ -195,7 +195,7 @@ export function AdminFlowsContent() {
                           </Button>
                         )}
                         <Button size="sm" asChild>
-                          <Link href={`/admin/flows/${flow.id}`}>Configure Flow</Link>
+                          <Link href={`/flows/${flow.id}/config`}>Configure Flow</Link>
                         </Button>
                       </TableCell>
                     </TableRow>
