@@ -598,6 +598,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onConnectEnd={onConnectEnd}
         onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
+        onAddStep={handleAddStep}
         staleReferences={staleReferences}
       />
 

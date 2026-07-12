@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+// A 32-byte key as 64 hex chars or a base64-encoded 32-byte value. Required so a
+// deployment can never silently fall back to storing integration credentials in
+// plaintext; generate with `openssl rand -hex 32`.
+const settingsEncryptionKeySchema = z
+  .string()
+  .refine(
+    (value) => {
+      const trimmed = value.trim();
+      if (/^[0-9a-fA-F]{64}$/.test(trimmed)) return true;
+      return Buffer.from(trimmed, "base64").length === 32;
+    },
+    {
+      message:
+        "SETTINGS_ENCRYPTION_KEY must be 64 hex chars or a base64-encoded 32-byte value (e.g. `openssl rand -hex 32`).",
+    },
+  );
+
 const serverEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   DATABASE_URL: z.string().url(),
@@ -60,6 +77,7 @@ const serverEnvSchema = z.object({
   // under a flood of distinct IPs/users (oldest bucket evicted first).
   RATE_LIMIT_MAX_KEYS: z.coerce.number().int().positive().default(10_000),
   BETTER_AUTH_SECRET: z.string().min(16),
+  SETTINGS_ENCRYPTION_KEY: settingsEncryptionKeySchema,
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
   ADMIN_SEED_EMAIL: z.string().email().optional(),
   N8N_WEBHOOK_SECRET: z.string().optional(),

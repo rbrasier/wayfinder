@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 
 export async function DELETE(
   req: NextRequest,
@@ -14,6 +15,14 @@ export async function DELETE(
 
   const authSession = await container.resolveSession(token);
   if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const access = await authorizeSessionAccess(container, sessionId, authSession.userId, authSession.isAdmin, {
+    requireSend: true,
+    allowApprover: false,
+  });
+  if (!access.authorized) {
+    return NextResponse.json({ error: accessError(access.status) }, { status: access.status });
+  }
 
   const listResult = await container.repos.sessionUploads.listBySession(sessionId);
   if (listResult.error) return NextResponse.json({ error: "Server error" }, { status: 500 });
