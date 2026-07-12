@@ -1,5 +1,22 @@
 import { z } from "zod";
 
+// A 32-byte key as 64 hex chars or a base64-encoded 32-byte value. Required so a
+// deployment can never silently fall back to storing integration credentials in
+// plaintext; generate with `openssl rand -hex 32`.
+const settingsEncryptionKeySchema = z
+  .string()
+  .refine(
+    (value) => {
+      const trimmed = value.trim();
+      if (/^[0-9a-fA-F]{64}$/.test(trimmed)) return true;
+      return Buffer.from(trimmed, "base64").length === 32;
+    },
+    {
+      message:
+        "SETTINGS_ENCRYPTION_KEY must be 64 hex chars or a base64-encoded 32-byte value (e.g. `openssl rand -hex 32`).",
+    },
+  );
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   API_PORT: z.coerce.number().int().default(3001),
@@ -9,6 +26,7 @@ const envSchema = z.object({
   // web app. See the scaling-current-stack phase doc.
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
   N8N_WEBHOOK_SECRET: z.string().optional(),
+  SETTINGS_ENCRYPTION_KEY: settingsEncryptionKeySchema,
   AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral", "bedrock"]).default("anthropic"),
   ANTHROPIC_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),

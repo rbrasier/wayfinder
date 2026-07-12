@@ -13,6 +13,7 @@ import {
   type NodeChange,
   type OnConnectEnd,
 } from "@xyflow/react";
+import { Button } from "@/components/ui/button";
 import { NODE_TYPES } from "@/lib/canvas/rf-adapters";
 
 // The shared canvas surface for both the user and admin flow-config screens:
@@ -28,6 +29,7 @@ export function FlowCanvasViewport({
   onConnectEnd,
   onNodeClick,
   onNodeDragStop,
+  onAddStep,
   staleReferences,
 }: {
   nodes: Node[];
@@ -38,6 +40,7 @@ export function FlowCanvasViewport({
   onConnectEnd: OnConnectEnd;
   onNodeClick: (event: React.MouseEvent, node: Node) => void;
   onNodeDragStop: (event: React.MouseEvent, node: Node) => void;
+  onAddStep: () => void;
   staleReferences: string[];
 }) {
   return (
@@ -59,6 +62,13 @@ export function FlowCanvasViewport({
         <Controls />
         <MiniMap zoomable pannable />
       </ReactFlow>
+      {nodes.length === 0 && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <Button size="lg" onClick={onAddStep} className="pointer-events-auto px-10 py-4 text-[15px] shadow-lg">
+            + Add step
+          </Button>
+        </div>
+      )}
       {staleReferences.length > 0 && (
         <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2 text-center text-[12px] text-[#886b00] shadow-md">
           ⚠ Some steps reference data that no longer exists: {staleReferences.join(", ")}. Re-open them to fix.

@@ -51,7 +51,7 @@ test.describe('RAG node config & chat UI improvements', () => {
     await expect(page.getByText(/chars \//)).toHaveCount(0);
 
     // "+ Add step" opens the type picker first — not the config modal.
-    await page.getByRole('button', { name: '+ Add step' }).click();
+    await page.getByRole('button', { name: '+ Add step' }).first().click();
     await expect(page.getByRole('heading', { name: 'Add a step' })).toBeVisible({ timeout: 5_000 });
     await expect(page.locator('#node-name')).toHaveCount(0);
 
@@ -78,7 +78,7 @@ test.describe('RAG node config & chat UI improvements', () => {
     await page.goto(`/flows/${flowId}/config`);
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1_000);
-    await page.getByRole('button', { name: '+ Add step' }).click();
+    await page.getByRole('button', { name: '+ Add step' }).first().click();
     await page.getByRole('button', { name: 'Conversational' }).click();
     await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
     await page.locator('#node-name').fill('Gather details');

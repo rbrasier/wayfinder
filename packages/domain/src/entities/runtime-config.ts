@@ -169,3 +169,18 @@ export const N8N_CONFIG_SETTING_KEY = "n8n_config";
 export const NOTIFICATION_PREFS_SETTING_KEY = "notification_prefs";
 export const AUTH_CONFIG_SETTING_KEY = "auth_config";
 export const USAGE_LIMITS_CONFIG_SETTING_KEY = "usage_limits_config";
+
+// System-setting keys whose stored value carries integration credentials (API
+// keys, secret access keys, OAuth client secrets, SMTP passwords). Their value
+// is encrypted at rest by the settings repository; other keys (feature flags,
+// budgets, prefs) stay plaintext so they remain queryable on public/hot paths.
+export const SENSITIVE_SETTING_KEYS: ReadonlySet<string> = new Set([
+  AI_CONFIG_SETTING_KEY,
+  STORAGE_CONFIG_SETTING_KEY,
+  N8N_CONFIG_SETTING_KEY,
+  AUTH_CONFIG_SETTING_KEY,
+  EMAIL_CONFIG_SETTING_KEY,
+]);
+
+export const isSensitiveSettingKey = (key: string): boolean =>
+  SENSITIVE_SETTING_KEYS.has(key);
