@@ -28,6 +28,7 @@ import {
 } from "./field-value-selector";
 import { ScheduleSentenceBuilder } from "./schedule-sentence-builder";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
+import { TEMPLATE_COMPLETE_SENTINEL, doneWhenForOutputType } from "./output-type";
 import type {
   ScheduleModifier,
   ScheduleUnit,
@@ -204,15 +205,20 @@ export function NodeConfigModal({
   const [requestLines, setRequestLines] = useState<string[]>([]);
   const [responseLines, setResponseLines] = useState<string[]>([]);
   const [customFields, setCustomFields] = useState<CustomRequestField[]>([]);
-  // Reset form state when the modal opens for a different node.
+  const wasOpenRef = useRef(false);
+  // Seed form state only on the open transition. `initialValues` is derived from
+  // the canvas nodes and gets a fresh identity on every render — re-seeding on
+  // its change would wipe the author's in-progress edits (e.g. output type) when
+  // a template upload writes back to the nodes while the modal is still open.
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpenRef.current) {
       const next = { ...DEFAULT_VALUES, ...initialValues };
       setValues(next);
       setRequestLines((next.requestFields ?? []).map((field) => field.raw));
       setResponseLines((next.responseFields ?? []).map((field) => field.raw));
       setCustomFields(buildCustomFields(next));
     }
+    wasOpenRef.current = open;
   }, [open, initialValues]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -229,22 +235,29 @@ export function NodeConfigModal({
   const set = <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
-  const isTemplateComplete = values.doneWhen === "__TEMPLATE_COMPLETE__";
+  const isTemplateComplete = values.doneWhen === TEMPLATE_COMPLETE_SENTINEL;
   const doneWhenMode = values.neverDone ? "never" : isTemplateComplete ? "template" : "condition";
 
   const handleDoneWhenModeChange = (mode: string) => {
     if (mode === "never") {
       setValues((prev) => ({ ...prev, neverDone: true, doneWhen: "" }));
     } else if (mode === "template") {
-      setValues((prev) => ({ ...prev, neverDone: false, doneWhen: "__TEMPLATE_COMPLETE__" }));
+      setValues((prev) => ({ ...prev, neverDone: false, doneWhen: TEMPLATE_COMPLETE_SENTINEL }));
     } else {
       setValues((prev) => ({
         ...prev,
         neverDone: false,
-        doneWhen: prev.doneWhen === "__TEMPLATE_COMPLETE__" ? "" : prev.doneWhen,
+        doneWhen: prev.doneWhen === TEMPLATE_COMPLETE_SENTINEL ? "" : prev.doneWhen,
       }));
     }
   };
+
+  const handleOutputTypeChange = (outputType: NodeConfigValues["outputType"]) =>
+    setValues((prev) => ({
+      ...prev,
+      outputType,
+      doneWhen: doneWhenForOutputType(outputType, prev),
+    }));
 
   const isAuto = values.type === "auto";
   const isScheduled = values.type === "scheduled";
@@ -593,7 +606,7 @@ export function NodeConfigModal({
                         className="sr-only"
                         value={type}
                         checked={values.outputType === type}
-                        onChange={() => set("outputType", type)}
+                        onChange={() => handleOutputTypeChange(type)}
                       />
                       {type === "conversation_only" ? "Conversation only" : "Generate document"}
                     </label>

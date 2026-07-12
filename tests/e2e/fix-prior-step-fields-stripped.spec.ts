@@ -76,7 +76,7 @@ async function createFlowAndOpenCanvas(page: Page, name: string): Promise<void> 
 
 /** Add a conversational step named `name` with "Generate document" output. */
 async function addConversationalDocStep(page: Page, name: string): Promise<void> {
-  await page.getByRole('button', { name: '+ Add step' }).click();
+  await page.getByRole('button', { name: '+ Add step' }).first().click();
   await page.getByRole('button', { name: 'Conversational' }).click();
   await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
 
@@ -155,7 +155,7 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
 
 /** Add an auto-step with the Mock executor and one request field. */
 async function addMockAutoStep(page: Page, name: string): Promise<void> {
-  await page.getByRole('button', { name: '+ Add step' }).click();
+  await page.getByRole('button', { name: '+ Add step' }).first().click();
   await page.getByRole('button', { name: /Automated \(n8n\)/ }).click();
   await expect(page.locator('#node-name')).toBeVisible({ timeout: 5_000 });
 

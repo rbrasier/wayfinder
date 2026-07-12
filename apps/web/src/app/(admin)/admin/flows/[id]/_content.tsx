@@ -874,6 +874,13 @@ function CanvasInner({ flowId }: { flowId: string }) {
           <Controls />
           <MiniMap zoomable pannable />
         </ReactFlow>
+        {rfNodes.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+            <Button size="lg" onClick={handleAddStep} className="pointer-events-auto px-10 py-4 text-[15px] shadow-lg">
+              + Add step
+            </Button>
+          </div>
+        )}
         {staleReferences.length > 0 && (
           <div className="pointer-events-none absolute bottom-3 left-1/2 z-10 max-w-[90%] -translate-x-1/2 rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2 text-center text-[12px] text-[#886b00] shadow-md">
             ⚠ Some steps reference data that no longer exists: {staleReferences.join(", ")}. Re-open them to fix.
