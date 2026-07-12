@@ -1,0 +1,12 @@
+{
+  "name": "@wayfinder-mocks/root",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local mock services for wayfinder dev + E2E. One HTTP server, one route per mock.",
+  "type": "module",
+  "main": "server.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.23.8"
+  }
+}
