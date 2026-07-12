@@ -405,16 +405,6 @@ const seedApprovalRequest = async (
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
 
-  // The flow-editor Skills and MCP sections are gated behind power-user flags
-  // that default off (only scheduled_node is on by default). Enable them here so
-  // the specs exercising those surfaces see the real UI instead of a hidden one.
-  for (const key of ["mcp", "skills"] as const) {
-    unwrap(
-      await container.useCases.upsertFeatureFlag.execute({ key, enabled: true }),
-      `enable ${key} feature flag`,
-    );
-  }
-
   // Seed a library skill so the flow-editor skill picker is populated — its
   // search box only renders once the library is non-empty.
   unwrap(

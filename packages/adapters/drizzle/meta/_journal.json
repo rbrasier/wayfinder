@@ -225,6 +225,13 @@
       "when": 1783746303509,
       "tag": "0031_lyrical_rockslide",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784848620000,
+      "tag": "0032_seed_mcp_skills_flags",
+      "breakpoints": true
     }
   ]
 }
