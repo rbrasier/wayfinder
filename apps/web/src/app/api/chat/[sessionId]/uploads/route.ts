@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { sumSessionUploadChars } from "@rbrasier/domain";
 import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
+import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(SESSION_UPLOADS_ALLOWED_MIME_TYPES);
 
@@ -27,6 +28,14 @@ export async function GET(
 
   const authSession = await container.resolveSession(token);
   if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const access = await authorizeSessionAccess(container, sessionId, authSession.userId, authSession.isAdmin, {
+    requireSend: false,
+    allowApprover: true,
+  });
+  if (!access.authorized) {
+    return NextResponse.json({ error: accessError(access.status) }, { status: access.status });
+  }
 
   const result = await container.repos.sessionUploads.listBySession(sessionId);
   if (result.error) return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -58,7 +67,20 @@ export async function POST(
   if (sessionResult.error) return NextResponse.json({ error: "Server error" }, { status: 500 });
   if (!sessionResult.data) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-  const { session } = sessionResult.data;
+  const { session, flow } = sessionResult.data;
+
+  const accessResult = await container.useCases.resolveSessionAccess.execute({
+    session,
+    flow,
+    userId: authSession.userId,
+    isAdmin: authSession.isAdmin,
+    isApprover: false,
+    allowAutoEnrol: true,
+  });
+  if (accessResult.error || !accessResult.data.canSend) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   if (session.status !== "active") {
     return NextResponse.json({ error: "Session is not active" }, { status: 400 });
   }

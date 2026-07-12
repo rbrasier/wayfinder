@@ -43,6 +43,9 @@ import {
   DrizzleSessionRepository,
   DrizzleSessionStepOutputRepository,
   DrizzleSystemSettingsRepository,
+  EncryptedSystemSettingsRepository,
+  SettingsEncryptionService,
+  createSettingsEncryptionKey,
   DrizzleUsageRepository,
   DrizzleUserRepository,
   LanguageModelAdapter,
@@ -72,7 +75,10 @@ export const buildContainer = (env: Env) => {
   const featureFlags = new DrizzleFeatureFlagRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
-  const systemSettings = new DrizzleSystemSettingsRepository(db);
+  const systemSettings = new EncryptedSystemSettingsRepository(
+    new DrizzleSystemSettingsRepository(db),
+    new SettingsEncryptionService(createSettingsEncryptionKey(env.SETTINGS_ENCRYPTION_KEY)),
+  );
   const sessions = new DrizzleSessionRepository(db);
   const flows = new DrizzleFlowRepository(db);
   const flowNodes = new DrizzleFlowNodeRepository(db);
