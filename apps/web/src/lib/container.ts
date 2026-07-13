@@ -171,6 +171,9 @@ import {
   DrizzleSystemSettingsRepository,
   DrizzleUnitOfWork,
   InMemoryRateLimiter,
+  EncryptedSystemSettingsRepository,
+  SettingsEncryptionService,
+  createSettingsEncryptionKey,
   DrizzleUsageRepository,
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
@@ -286,7 +289,13 @@ const build = () => {
     clock,
   );
   const analyticsRepo = new DrizzleAnalyticsRepository(db);
-  const systemSettings = new DrizzleSystemSettingsRepository(db);
+  const settingsEncryption = new SettingsEncryptionService(
+    createSettingsEncryptionKey(env.SETTINGS_ENCRYPTION_KEY),
+  );
+  const systemSettings = new EncryptedSystemSettingsRepository(
+    new DrizzleSystemSettingsRepository(db),
+    settingsEncryption,
+  );
 
   const bedrockEnvCredentials =
     env.AWS_BEDROCK_REGION && env.AWS_BEDROCK_ACCESS_KEY_ID && env.AWS_BEDROCK_SECRET_ACCESS_KEY

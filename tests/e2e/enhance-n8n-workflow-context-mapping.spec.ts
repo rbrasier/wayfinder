@@ -110,7 +110,7 @@ test.describe('n8n workflow directory + step-context field values', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(1_000);
 
-    await page.getByRole('button', { name: '+ Add step' }).click();
+    await page.getByRole('button', { name: '+ Add step' }).first().click();
     await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5_000 });
 
     const autoOption = page.getByRole('button', { name: /Automated \(n8n\)/ });

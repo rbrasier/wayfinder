@@ -3,6 +3,7 @@ import { loadEnv } from "./env.js";
 
 const REQUIRED = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/testdb",
+  SETTINGS_ENCRYPTION_KEY: "0".repeat(64),
 };
 
 function withEnv(overrides: Record<string, string | undefined>, fn: () => void) {
@@ -60,6 +61,24 @@ describe("loadEnv", () => {
   it("throws when OTEL_EXPORTER_OTLP_ENDPOINT is a non-URL string", () => {
     withEnv({ ...REQUIRED, OTEL_EXPORTER_OTLP_ENDPOINT: "not-a-url" }, () => {
       expect(() => loadEnv()).toThrow();
+    });
+  });
+
+  it("requires SETTINGS_ENCRYPTION_KEY", () => {
+    withEnv({ ...REQUIRED, SETTINGS_ENCRYPTION_KEY: undefined }, () => {
+      expect(() => loadEnv()).toThrow();
+    });
+  });
+
+  it("rejects a SETTINGS_ENCRYPTION_KEY that is not a 32-byte key", () => {
+    withEnv({ ...REQUIRED, SETTINGS_ENCRYPTION_KEY: "too-short" }, () => {
+      expect(() => loadEnv()).toThrow();
+    });
+  });
+
+  it("accepts a base64-encoded 32-byte SETTINGS_ENCRYPTION_KEY", () => {
+    withEnv({ ...REQUIRED, SETTINGS_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString("base64") }, () => {
+      expect(() => loadEnv()).not.toThrow();
     });
   });
 });

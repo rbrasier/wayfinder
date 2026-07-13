@@ -53,6 +53,9 @@ jobs:
       E2E_OBJECT_STORAGE: "1"
       BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET || 'e2e-test-secret-must-be-at-least-32-chars-long' }}
       BETTER_AUTH_URL: http://localhost:3000
+      # Non-secret throwaway key (64 hex chars) so env validation passes when the
+      # app boots; the app requires SETTINGS_ENCRYPTION_KEY at startup.
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
       AI_DEFAULT_PROVIDER: anthropic
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ADMIN_SEED_EMAIL: admin@example.com

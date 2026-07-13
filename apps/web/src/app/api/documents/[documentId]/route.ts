@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { ConversationalNodeConfig } from "@rbrasier/domain";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 
 export async function GET(
   req: NextRequest,
@@ -27,9 +28,17 @@ export async function GET(
   const message = messageResult.data;
   const documentMeta = message.document!;
 
-  // Collaborative sessions: any authenticated participant may download a
-  // document generated in the session. The message id is the capability,
-  // matching the session share model (no owner-only restriction).
+  // Collaborative sessions: any participant of the document's session may
+  // download it. Authorise against participant membership (scaling wall #11) —
+  // knowing the message UUID is not itself authorisation.
+  const access = await authorizeSessionAccess(container, message.sessionId, authSession.userId, authSession.isAdmin, {
+    requireSend: false,
+    allowApprover: true,
+  });
+  if (!access.authorized) {
+    return NextResponse.json({ error: accessError(access.status) }, { status: access.status });
+  }
+
   const { storagePath, filename } = documentMeta;
 
   const getResult = await container.objectStorage.get(storagePath);
@@ -76,15 +85,27 @@ export async function POST(
 
   const session = sessionResult.data;
 
-  // Collaborative sessions: any authenticated participant may regenerate a
-  // document in the session, mirroring the relaxed write access on the stream
-  // route. The message id is the capability.
+  // Collaborative sessions: any participant with send access may regenerate a
+  // document, mirroring the write access on the stream route. Authorise against
+  // participant membership, not knowledge of the message UUID.
   const detailResult = await container.useCases.getSession.execute(session.id);
   if (detailResult.error || !detailResult.data) {
     return NextResponse.json({ error: "Failed to load session" }, { status: 500 });
   }
 
   const { flow, nodes, messages } = detailResult.data;
+
+  const accessResult = await container.useCases.resolveSessionAccess.execute({
+    session: detailResult.data.session,
+    flow,
+    userId: authSession.userId,
+    isAdmin: authSession.isAdmin,
+    isApprover: false,
+    allowAutoEnrol: true,
+  });
+  if (accessResult.error || !accessResult.data.canSend) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const node = nodes.find((n) => n.id === message.stepNodeId);
   if (!node) {
     return NextResponse.json({ error: "Node not found" }, { status: 404 });

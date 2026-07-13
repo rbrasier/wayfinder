@@ -24,6 +24,7 @@ export interface NodeConfigModalConversationalProps {
   set: <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) => void;
   doneWhenMode: DoneWhenMode;
   handleDoneWhenModeChange: (mode: string) => void;
+  handleOutputTypeChange: (outputType: NodeConfigValues["outputType"]) => void;
   onUploadTemplate?: unknown;
   fileInputRef: RefObject<HTMLInputElement | null>;
   handleFileChange: (e: ChangeEvent<HTMLInputElement>) => void | Promise<void>;
@@ -46,6 +47,7 @@ export function NodeConfigModalConversational({
   set,
   doneWhenMode,
   handleDoneWhenModeChange,
+  handleOutputTypeChange,
   onUploadTemplate,
   fileInputRef,
   handleFileChange,
@@ -165,7 +167,7 @@ export function NodeConfigModalConversational({
                 className="sr-only"
                 value={type}
                 checked={values.outputType === type}
-                onChange={() => set("outputType", type)}
+                onChange={() => handleOutputTypeChange(type)}
               />
               {type === "conversation_only" ? "Conversation only" : "Generate document"}
             </label>

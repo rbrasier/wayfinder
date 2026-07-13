@@ -22,6 +22,7 @@ export * from "./drizzle-session-upload-repository";
 export * from "./drizzle-session-step-output-repository";
 export * from "./drizzle-analytics-repository";
 export * from "./drizzle-system-settings-repository";
+export * from "./encrypted-system-settings-repository";
 export * from "./drizzle-schedule-repository";
 export * from "./drizzle-schedule-run-repository";
 export * from "./drizzle-role-repository";

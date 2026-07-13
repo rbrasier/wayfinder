@@ -54,6 +54,26 @@ done
 echo "→ installing dependencies"
 pnpm install
 
+# ── ensure the settings-at-rest encryption key exists ─────────────────────────
+# Secret-bearing system settings (AI/storage/n8n/auth/email configs) are
+# encrypted at rest with this key, and both apps require it at startup. Generate
+# one into .env on first run so the app never falls back to plaintext.
+if [ -f .env ]; then
+  if ! grep -q '^SETTINGS_ENCRYPTION_KEY=.\+' .env; then
+    GENERATED_KEY=$(openssl rand -hex 32 2>/dev/null || node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
+    if grep -q '^SETTINGS_ENCRYPTION_KEY=' .env; then
+      # Replace an existing blank assignment in place (portable across GNU/BSD sed).
+      tmp_env=$(mktemp)
+      grep -v '^SETTINGS_ENCRYPTION_KEY=' .env > "$tmp_env"
+      printf 'SETTINGS_ENCRYPTION_KEY=%s\n' "$GENERATED_KEY" >> "$tmp_env"
+      mv "$tmp_env" .env
+    else
+      printf 'SETTINGS_ENCRYPTION_KEY=%s\n' "$GENERATED_KEY" >> .env
+    fi
+    echo "  generated SETTINGS_ENCRYPTION_KEY into .env"
+  fi
+fi
+
 # ── start infrastructure ──────────────────────────────────────────────────────
 # Read the DB setup mode written by create-ai-app-template, or fall back to
 # docker if docker-compose.yml exists (handles manually-created projects).

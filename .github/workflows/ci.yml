@@ -39,6 +39,9 @@ jobs:
       MINIO_USE_SSL: "false"
       BETTER_AUTH_SECRET: ci-test-secret-must-be-at-least-16-chars
       BETTER_AUTH_URL: http://localhost:3000
+      # Non-secret throwaway key (64 hex chars) so env validation passes in CI;
+      # the app requires SETTINGS_ENCRYPTION_KEY at startup.
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
       AI_DEFAULT_PROVIDER: anthropic
 
     steps:
