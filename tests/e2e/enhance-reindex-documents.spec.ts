@@ -39,7 +39,9 @@ test.describe('Admin: Re-index all documents', () => {
     // (with no documents) completes almost immediately. Either way the
     // "Completed" badge is the terminal state we assert on.
     const completed = page.getByTestId('reindex-complete');
-    await expect(completed).toBeVisible({ timeout: 30_000 });
+    // Generous budget: the first real embed can pay ONNX-runtime init even with
+    // the model warm on disk, and the runner is under load by this point.
+    await expect(completed).toBeVisible({ timeout: 60_000 });
     await expect(completed).toHaveText(/completed — re-indexed \d+ of \d+ documents/i);
     await page.screenshot({ path: 'screenshots/reindex-complete.png', fullPage: true });
 

@@ -71,6 +71,9 @@ test.describe('Phase: RAG with pgvector', () => {
     expect(bigText.length).toBeGreaterThan(65_536);
 
     const response = await page.request.post(`/api/flows/${flowId}/context-docs`, {
+      // The handler chunks and embeds an 80 KB document synchronously; allow well
+      // beyond Playwright's 15s default so a warm-but-busy runner still returns 201.
+      timeout: 45_000,
       multipart: {
         file: {
           name: 'large-policy.txt',
