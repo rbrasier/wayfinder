@@ -192,8 +192,18 @@ fi
 
 # ── 11. dependency security audit ────────────────────────────────────────────
 section "11. pnpm audit (high + critical vulnerabilities)"
-if pnpm audit --audit-level=high 2>&1; then
+AUDIT_OUTPUT=$(pnpm audit --audit-level=high 2>&1)
+AUDIT_STATUS=$?
+echo "$AUDIT_OUTPUT"
+if [ "$AUDIT_STATUS" -eq 0 ]; then
   pass "no high/critical vulnerabilities"
+elif echo "$AUDIT_OUTPUT" | grep -qiE 'ERR_PNPM_AUDIT_BAD_RESPONSE|being retired|audit endpoint|410|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN'; then
+  # npm retired the legacy audit API that `pnpm audit` calls, so the endpoint
+  # now answers 410 for everyone. A registry-side outage is not a code failure,
+  # so skip rather than block the build (as the DB checks above do when the
+  # database is unreachable). A real advisory still prints its table and fails
+  # through the branch below.
+  skip "pnpm audit endpoint unavailable (npm retired the legacy audit API) — dependency audit not run"
 else
   fail "high or critical vulnerabilities found — run 'pnpm audit' for details"
 fi
