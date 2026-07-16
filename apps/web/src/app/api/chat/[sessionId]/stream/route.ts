@@ -184,6 +184,7 @@ export async function POST(
     globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
+    now: new Date(),
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 
@@ -372,7 +373,6 @@ export async function POST(
       // model to grade against.
       const shouldEvaluateReadiness = shouldEvaluateStepReadiness({
         isNeverDone,
-        requireConfirmation,
         outputType: nodeConfig.outputType,
         hasTemplate: Boolean(nodeConfig.documentTemplatePath),
         hasContextDocs: flow.contextDocs.length > 0,

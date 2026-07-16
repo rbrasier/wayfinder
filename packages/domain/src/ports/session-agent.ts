@@ -33,6 +33,10 @@ export interface BuildSystemPromptInput {
   expertRole: string | null;
   userProfile?: PromptUserProfile | null;
   templateFields?: TemplateField[];
+  // The moment the turn is being built, so the prompt can state "now" and the
+  // model can resolve relative/short dates ("next Tuesday", "the 3rd") the user
+  // mentions. Omitted only by callers with no wall-clock context to supply.
+  now?: Date;
 }
 
 export interface BuildBranchChoicePromptInput {

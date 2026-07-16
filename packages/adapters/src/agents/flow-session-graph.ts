@@ -45,6 +45,11 @@ export class FlowSessionGraph implements ISessionAgent {
       ? buildReferenceDocumentsBlock(retrievedChunks)
       : "";
 
+    // The current date/time changes every turn, so — like the retrieved chunks —
+    // it is appended after the stable structural prompt to preserve prompt-cache
+    // hits on everything above.
+    const currentContextBlock = input.now ? buildCurrentContextBlock(input.now) : "";
+
     const templateContent =
       nodeConfig.documentTemplateStructuredContent ?? nodeConfig.documentTemplateContent;
     const templateBlock =
@@ -94,7 +99,7 @@ export class FlowSessionGraph implements ISessionAgent {
       { "key": "descriptive label", "value": "what the user provided" }
     ]
   }
-</output>${attachedDocumentsBlock}${referenceBlock}`;
+</output>${attachedDocumentsBlock}${referenceBlock}${currentContextBlock}`;
 
     return ok(prompt);
   }
@@ -139,6 +144,14 @@ const buildAttachedDocumentsBlock = (uploads: PromptSessionUpload[]): string => 
     .join("\n");
 
   return `\n\n<attached_documents>\n  The user has attached the following document(s) to this conversation. Treat their full contents below as provided by the user for this step — do not ask them to paste what is already here.\n${manifest}\n${documents}\n</attached_documents>`;
+};
+
+const buildCurrentContextBlock = (now: Date): string => {
+  // toUTCString renders an unambiguous, locale-independent form
+  // ("Mon, 27 Jul 2026 09:30:00 GMT") so the model never mistakes the day and
+  // month order the way a numeric date could.
+  const formatted = now.toUTCString();
+  return `\n\n<current_context>\n  The current date and time is ${formatted}. When the user gives a date relatively or in short form (e.g. "next Tuesday", "the 3rd", "tomorrow", "in two weeks"), interpret it relative to this current date and time.\n</current_context>`;
 };
 
 const buildReferenceDocumentsBlock = (chunks: RetrievedChunk[]): string => {

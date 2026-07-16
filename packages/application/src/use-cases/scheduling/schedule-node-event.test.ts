@@ -311,6 +311,36 @@ describe("ScheduleNodeEvent", () => {
     expect(result.data?.nextFireAt.toISOString()).toBe("2027-03-08T00:00:00.000Z");
   });
 
+  it("resolves a `step_field` anchor from a prior step's DD-MM-YYYY date value", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+    const priorOutput: SessionStepOutput = {
+      id: "out-1",
+      sessionId: "sess-1",
+      flowId: "flow-1",
+      nodeId: "node-0",
+      messageId: null,
+      // Date fields are collected and rendered day-first (DD-MM-YYYY), not ISO.
+      fields: [{ key: "onboard_date", label: "Onboard date", type: "date", value: "27-07-2026" }],
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+
+    const result = await useCase.execute({
+      session: makeSession(),
+      node: makeNode({
+        kind: "at",
+        spec: "",
+        anchor: "step_field",
+        anchorSource: { kind: "step_field", nodeId: "node-0", fieldKey: "onboard_date" },
+      }),
+      priorStepOutputs: [priorOutput],
+    });
+
+    expect(result.data?.status).toBe("active");
+    expect(result.data?.nextFireAt.toISOString()).toBe("2026-07-27T00:00:00.000Z");
+  });
+
   it("marks the schedule failed when a `step_field` anchor cannot be resolved", async () => {
     const repo = makeRepo();
     const useCase = new ScheduleNodeEvent(repo, fixedClock);

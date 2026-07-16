@@ -79,6 +79,21 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).not.toMatch(/experience at \w/);
   });
 
+  it("omits the current-context block when no `now` is supplied", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.data).not.toContain("<current_context>");
+  });
+
+  it("states the current date/time and how to read relative dates when `now` is supplied", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      now: new Date("2026-07-27T09:30:00.000Z"),
+    });
+    expect(result.data).toContain("<current_context>");
+    expect(result.data).toContain("Mon, 27 Jul 2026 09:30:00 GMT");
+    expect(result.data).toContain("next Tuesday");
+  });
+
   it("omits <field_formats> for a conversation-only step", () => {
     const result = agent.buildSystemPrompt(baseInput);
     expect(result.data).not.toContain("<field_formats>");

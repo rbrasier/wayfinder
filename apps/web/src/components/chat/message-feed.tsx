@@ -10,6 +10,7 @@ import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
 import { MessageInfoModal } from "./message-info-modal";
 import {
+  AdvancingBadge,
   CrossCheckingBadge,
   FlowCompletePill,
   GeneratingDocumentBadge,
@@ -62,6 +63,10 @@ interface MessageFeedProps {
   // no stream to carry the generating-document annotation — the caller raises
   // this instead so the same badge shows while that mutation runs.
   pendingDocumentGeneration?: boolean;
+  // The same Proceed path for a step that produces no document (e.g. a fork that
+  // recomputes its branch): shows a generic "Advancing…" badge so the operator
+  // sees the step is progressing rather than a frozen screen.
+  pendingStepAdvance?: boolean;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -103,6 +108,7 @@ export function MessageFeed({
   sessionId,
   canSubmitFeedback,
   pendingDocumentGeneration,
+  pendingStepAdvance,
 }: MessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
@@ -336,6 +342,8 @@ export function MessageFeed({
       )}
 
       {pendingDocumentGeneration && <GeneratingDocumentBadge />}
+
+      {pendingStepAdvance && <AdvancingBadge />}
 
       {error && !isStreaming && (
         <div className="flex justify-start">

@@ -2,6 +2,7 @@ import {
   domainError,
   err,
   ok,
+  parseFlexibleDate,
   parseRecurrenceRule,
   type RecurrenceRule,
   type Result,
@@ -151,8 +152,8 @@ export const computeNextFireAt = (input: ComputeNextFireInput): Result<Date> => 
 
   if (input.kind === "at") {
     if (input.spec.trim() === "") return ok(new Date(input.anchor.getTime()));
-    const parsed = new Date(input.spec);
-    if (Number.isNaN(parsed.getTime())) {
+    const parsed = parseFlexibleDate(input.spec);
+    if (!parsed) {
       return err(domainError("VALIDATION_FAILED", `Unparseable timestamp: "${input.spec}".`));
     }
     return ok(parsed);

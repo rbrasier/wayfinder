@@ -7,6 +7,7 @@ import {
   type IClock,
   type ILanguageModel,
   type IScheduleRepository,
+  parseFlexibleDate,
   type Result,
   type ScheduledNodeConfig,
   type Session,
@@ -59,8 +60,8 @@ const resolveAnchor = (
     if (raw.trim() === "") {
       return err(domainError("VALIDATION_FAILED", "step_field anchor resolved to no value."));
     }
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) {
+    const parsed = parseFlexibleDate(raw);
+    if (!parsed) {
       return err(domainError("VALIDATION_FAILED", `step_field anchor "${raw}" is not a date.`));
     }
     return ok(parsed);
@@ -76,9 +77,9 @@ const resolveAnchor = (
     return err(domainError("VALIDATION_FAILED", `Metadata key "${key}" is missing.`));
   }
 
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return err(domainError("VALIDATION_FAILED", `Metadata key "${key}" is not an ISO timestamp.`));
+  const parsed = parseFlexibleDate(raw);
+  if (!parsed) {
+    return err(domainError("VALIDATION_FAILED", `Metadata key "${key}" is not a date.`));
   }
   return ok(parsed);
 };

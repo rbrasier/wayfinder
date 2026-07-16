@@ -13,6 +13,9 @@ interface ApprovalGateProps {
   flowName: string;
   nodeId: string;
   instructions: string | null;
+  // The policy-named approver role authored on the node, shown to the operator
+  // so they know who the request is meant for before confirming.
+  roleHint: string | null;
 }
 
 interface ChosenApprover {
@@ -24,7 +27,7 @@ interface ChosenApprover {
 // Operator-facing gate shown when a session is parked on an approval node. It
 // raises (or loads) the pending request, shows the suggested approver, and lets
 // the operator confirm or pick "Someone else" before the request is sent.
-export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions }: ApprovalGateProps) {
+export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions, roleHint }: ApprovalGateProps) {
   const utils = trpc.useUtils();
   const [approvalId, setApprovalId] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -190,6 +193,12 @@ export function ApprovalGate({ sessionId, flowId, flowName, nodeId, instructions
           <p className="text-[14px] font-semibold text-[#1a1814]">Confirm the approver</p>
         </div>
         {instructions && <p className="text-[13px] text-[#5a5650]">{instructions}</p>}
+
+        {roleHint && (
+          <p className="text-[13px] text-[#5a5650]">
+            Suggested role: <span className="font-medium text-[#1a1814]">{roleHint}</span>
+          </p>
+        )}
 
         <div className="rounded-[10px] border border-[#e8d4b0] bg-white px-3 py-2">
           {chosen ? (

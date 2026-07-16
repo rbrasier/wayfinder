@@ -130,6 +130,21 @@ export function GeneratingDocumentBadge() {
   );
 }
 
+// Transient indicator shown while a confirmed step advances but produces no
+// document — a fork/branch step recomputes its route with an LLM call, which
+// takes long enough that the operator needs a sign something is happening.
+// Mirrors the document/cross-check badge styling.
+export function AdvancingBadge() {
+  return (
+    <div className="my-3 flex justify-center">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c5d0f7] bg-[#eef1fc] px-3 py-1 text-[11px] font-semibold text-[#3a5fd9]">
+        <Spinner />
+        <span>Advancing…</span>
+      </div>
+    </div>
+  );
+}
+
 export function FlowCompletePill() {
   return (
     <div className="my-4 flex justify-center">

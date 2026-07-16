@@ -473,6 +473,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           (meQuery.data?.permissions ?? []).includes("knowledge:submit_feedback")
         }
         pendingDocumentGeneration={isConfirmingStep && isDocumentTemplateStep}
+        pendingStepAdvance={isConfirmingStep && !isDocumentTemplateStep}
       />
 
       {showBranchOverride && (
@@ -504,6 +505,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           flowName={flow.name}
           nodeId={currentNode.id}
           instructions={(currentNode.config as { instructions?: string }).instructions ?? null}
+          roleHint={(currentNode.config as { roleHint?: string }).roleHint ?? null}
         />
       )}
 

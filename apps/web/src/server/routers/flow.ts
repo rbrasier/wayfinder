@@ -72,6 +72,7 @@ const nodeRouter = router({
         organisationName,
         globalInstructions,
         expertRole: flow.expertRole,
+        now: new Date(),
       });
 
       if (promptResult.error) {
