@@ -156,9 +156,10 @@ Mirror PRD §10. In particular:
 
 ## 8. Risks / open questions
 
-- Inline threshold for "small" sets is 30 — confirm / make configurable.
-- Conversation preview cap is 3 — confirm the "ask to see all N" affordance
-  wording and the trigger phrase(s) that expand to the full list.
+- Inline threshold (30) and conversation preview cap (3) are hard-coded constants
+  for this version — not configurable.
+- Preview affordance: confirm the "ask to see all N" wording and the trigger
+  phrase(s) that expand to the full list.
 - `Field.key` as render-time accessor vs parsed companion field (leaning
   render-time) — confirm in step 2.
 - Cache TTL default and whether **Test** bumps the snapshot version each run or

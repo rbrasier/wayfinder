@@ -165,10 +165,10 @@ though the picker offers only valid options:
 
 ## Open questions — to resolve at build
 
-- **Inline threshold** for "small" sets is **30** — confirm whether it is a
-  fixed constant or a per-deployment/per-source override.
-- **Conversation preview cap** is **3** — confirm the "ask to see all N"
-  affordance wording and the trigger phrase(s) that expand to the full list.
+- **Inline threshold (30)** and **conversation preview cap (3)** are **hard-coded
+  constants** for this version — not per-deployment or per-source configurable.
+- **Preview affordance** — confirm the "ask to see all N" wording and the trigger
+  phrase(s) that expand to the full list.
 - **`Field.key` mechanics** — confirm render-time accessor vs a synthetic parsed
   companion field; the ADR proposes render-time.
 - **Cache TTL default** and whether **Test** forces a version bump on every run

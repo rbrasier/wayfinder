@@ -168,11 +168,11 @@ snake_case.
 
 ## 12. Risks / open questions
 
-- **Inline threshold** — the cut-off for "small enough to inline into the
-  prompt" is **30**. Confirm whether it should be per-deployment configurable.
-- **Conversation preview cap** — **3** options are previewed when the question is
-  asked conversationally; the affordance wording ("ask to see all N") and how the
-  operator triggers the full list are a UX detail to pin at build.
+- **Inline threshold (30)** and **conversation preview cap (3)** are **hard-coded
+  constants** for this version — not configurable. Revisit if a deployment needs
+  to tune them.
+- **Preview affordance** — the wording ("ask to see all N") and the operator
+  phrase(s) that expand to the full list are a UX detail to pin at build.
 - **`Field.key` companion** — whether it is a first-class parsed field or a
   render-time accessor resolved from the parent field's stored key. Leaning
   render-time to avoid a second required field. Pin down in the ADR/build.
