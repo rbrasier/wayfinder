@@ -91,11 +91,21 @@ non-external field, renders empty and is flagged at upload.
 A field bound to a source may have tens or thousands of values, so behaviour
 adapts to set size (a per-source count from the cache):
 
-- **Small** (≤ inline threshold, proposed 50): entries are inlined into the AI
-  extraction prompt (as today's `describeType` does) and rendered as a dropdown.
-- **Large**: values are **not** inlined. The model proposes a value from context;
-  the picker is a server-side **type-ahead** (`search`). Correctness is
+- **Small** (≤ **30**): entries are inlined into the AI extraction prompt (as
+  today's `describeType` does) and rendered as a dropdown.
+- **Large** (> 30): values are **not** inlined. The model proposes a value from
+  context; the picker is a server-side **type-ahead** (`search`). Correctness is
   guaranteed by the step-end resolve (§6), not by constraining the prompt.
+
+**Conversation preview is separate from inlining.** What the model *knows* (the
+inlined set) and what the operator is *shown* when asked the question are two
+different things. When a step surfaces the question conversationally, the
+assistant previews **at most 3** options — e.g. "Finance, HR, Legal… — ask to see
+the full list" — even for a small, fully-inlined set. The operator sees the
+complete set only when they ask for it (the type-ahead search still backs the
+full list). This keeps the conversational turn readable and avoids dumping 30
+options into chat, while the model retains the full set for extraction and the
+step-end resolve remains authoritative.
 
 ### 5. Cache + snapshot; fail degraded
 
@@ -155,8 +165,10 @@ though the picker offers only valid options:
 
 ## Open questions — to resolve at build
 
-- **Inline threshold** for "small" sets (proposed 50) — confirm and make it a
-  per-deployment constant or per-source override.
+- **Inline threshold** for "small" sets is **30** — confirm whether it is a
+  fixed constant or a per-deployment/per-source override.
+- **Conversation preview cap** is **3** — confirm the "ask to see all N"
+  affordance wording and the trigger phrase(s) that expand to the full list.
 - **`Field.key` mechanics** — confirm render-time accessor vs a synthetic parsed
   companion field; the ADR proposes render-time.
 - **Cache TTL default** and whether **Test** forces a version bump on every run

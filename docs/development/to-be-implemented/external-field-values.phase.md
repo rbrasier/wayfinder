@@ -23,8 +23,10 @@ automatic reporting. See the PRD for full detail.
 - `(options-source: NAME)` binds a field's valid set to a registered source;
   mutually exclusive with inline `(options: …)`.
 - `{{ Field.key }}` renders the stored key of the chosen value.
-- Size-adaptive: small sets inline into the AI prompt + dropdown; large sets use
-  type-ahead + step-end verify.
+- Size-adaptive: small sets (≤ 30) inline into the AI prompt + dropdown; large
+  sets use type-ahead + step-end verify.
+- Conversational questions preview at most **3** options (with an "ask to see the
+  full list" affordance), independent of inlining.
 - Cache + snapshot; fail degraded on outage.
 - Hybrid validation: live type-ahead + authoritative step-end batch resolve.
 
@@ -82,10 +84,14 @@ degraded to last-known-good, never a throw.
    field with and without an inlined small set; (d) `Field.key` accessor tag
    parses/validates (render-time accessor, empty when no key). Then implement.
 
-3. **Application — inline small sets.** Extend `resolve-field-values` /
-   `structured-fields` so an `ai` external field with a small set has its options
-   inlined via `IValueSetProvider.list`, and a large set does not. Tests: small →
-   options in prompt; large → omitted; provider error → degrade, no throw.
+3. **Application — inline small sets + conversation preview.** Extend
+   `resolve-field-values` / `structured-fields` so an `ai` external field with a
+   small set (≤ 30) has its options inlined via `IValueSetProvider.list`, and a
+   large set does not. Add a preview helper that caps the conversationally-shown
+   options at **3** with an "ask to see all N" affordance, independent of
+   inlining. Tests: small → options in prompt; large → omitted; conversational
+   surface shows ≤ 3 with the affordance; "show all" expands to the full set;
+   provider error → degrade, no throw.
 
 4. **Application — step-end batch validate.** Write
    `validate-external-fields.test.ts` first: (a) all valid → canonicalised
@@ -134,8 +140,11 @@ Mirror PRD §10. In particular:
 - [ ] `(options-source: NAME)` parses to `optionsSource`; combining with inline
       options is `VALIDATION_FAILED`; unknown `NAME` fails at upload.
 - [ ] `{{ Field.key }}` renders the stored key; empty when no key/non-external.
-- [ ] Small sets inline into the AI prompt + dropdown; large sets use type-ahead
-      and are verified at step end.
+- [ ] Small sets (≤ 30) inline into the AI prompt + dropdown; large sets use
+      type-ahead and are verified at step end.
+- [ ] A conversational question previews at most 3 options with an "ask to see
+      all" affordance; requesting the full list expands it; the cap is
+      independent of inlining.
 - [ ] Step-end batch resolves all external fields: valid canonicalise (display +
       key + snapshot), invalid block completion until corrected.
 - [ ] Each stored value snapshots `{ name, version, fetchedAt }`.
@@ -147,7 +156,9 @@ Mirror PRD §10. In particular:
 
 ## 8. Risks / open questions
 
-- Inline threshold for "small" sets (proposed 50) — confirm / make configurable.
+- Inline threshold for "small" sets is 30 — confirm / make configurable.
+- Conversation preview cap is 3 — confirm the "ask to see all N" affordance
+  wording and the trigger phrase(s) that expand to the full list.
 - `Field.key` as render-time accessor vs parsed companion field (leaning
   render-time) — confirm in step 2.
 - Cache TTL default and whether **Test** bumps the snapshot version each run or

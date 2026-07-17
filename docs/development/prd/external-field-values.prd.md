@@ -38,8 +38,13 @@ a downstream system needs.
   registered source; it is mutually exclusive with inline `(options: …)`.
 - A companion accessor `Field.key` (e.g. `{{ Department.key }}`) renders the
   stored key of the value chosen for `Department`.
-- The value set is **size-adaptive**: small sets inline into the AI prompt and a
-  dropdown; large sets switch to server-side type-ahead + propose-then-verify.
+- The value set is **size-adaptive**: small sets (≤ 30) inline into the AI prompt
+  and a dropdown; large sets switch to server-side type-ahead +
+  propose-then-verify.
+- In a **conversation** prompt, the assistant previews at most **3** options when
+  asking the question (with an "ask to see the full list" affordance), regardless
+  of how many are inlined into the model's context — the operator sees the full
+  set only on request.
 - Sets are **cached**; each output **snapshots** the source name + version that
   validated it; an outage degrades to last-known-good with a flag (never a hard
   stop).
@@ -136,8 +141,11 @@ snake_case.
       `NAME` fails at upload with a clear message.
 - [ ] When a key exists, the resolved output stores both display and key;
       `{{ Field.key }}` renders the key in the generated document.
-- [ ] Small sets (≤ threshold) inline into the AI prompt and render a dropdown;
-      large sets omit inline values and render a type-ahead search.
+- [ ] Small sets (≤ 30) inline into the AI prompt and render a dropdown; large
+      sets omit inline values and render a type-ahead search.
+- [ ] A conversational question previews at most 3 options; the operator can ask
+      for the full list, which is then shown; the preview cap is independent of
+      whether the set is inlined into the model's context.
 - [ ] Operator type-ahead returns live results via `IValueSetProvider.search`.
 - [ ] At step end, every external-sourced field is batch-resolved: valid values
       canonicalise (display + key attached), invalid ones are flagged and block
@@ -160,8 +168,11 @@ snake_case.
 
 ## 12. Risks / open questions
 
-- **Inline threshold** — the exact cut-off for "small enough to inline into the
-  prompt" (proposed 50). Confirm at build.
+- **Inline threshold** — the cut-off for "small enough to inline into the
+  prompt" is **30**. Confirm whether it should be per-deployment configurable.
+- **Conversation preview cap** — **3** options are previewed when the question is
+  asked conversationally; the affordance wording ("ask to see all N") and how the
+  operator triggers the full list are a UX detail to pin at build.
 - **`Field.key` companion** — whether it is a first-class parsed field or a
   render-time accessor resolved from the parent field's stored key. Leaning
   render-time to avoid a second required field. Pin down in the ADR/build.
