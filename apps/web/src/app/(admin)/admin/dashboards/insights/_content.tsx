@@ -29,6 +29,8 @@ export function AdminFlowInsights() {
   }
 
   const activeFlowId = selectedFlowId ?? data.selectedFlowId ?? undefined;
+  const activeFlowName =
+    data.flows.find((flow) => flow.flowId === activeFlowId)?.flowName ?? "flow";
 
   return (
     <div className="h-full overflow-auto">
@@ -46,6 +48,7 @@ export function AdminFlowInsights() {
           <FieldReportSection
             report={data.fieldReport}
             flowId={activeFlowId ?? ""}
+            flowName={activeFlowName}
             sessionSummary={data.sessionSummary}
           />
         </Suspense>

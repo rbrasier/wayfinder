@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { parseNumeric } from "@rbrasier/domain";
-import type { FieldReport, FieldReportColumn, FieldReportSessionRow } from "@rbrasier/domain";
+import { coalesceValue, parseNumeric } from "@rbrasier/domain";
+import type { FieldReport, FieldReportSessionRow } from "@rbrasier/domain";
 import type { SessionSummary } from "@rbrasier/application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,105 +23,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { trpc } from "@/trpc/client";
+import { exportInsightsXlsx } from "@/components/admin/field-report-export";
+import { FieldReportPivotDrawer } from "@/components/admin/field-report-pivot-drawer";
+import { buildDisplayColumns, type NodeGroup } from "@/components/admin/field-report-columns";
 
 type DatePreset = "all" | "this_year" | "last_90" | "last_30";
 type FilterOperator = "gte" | "lte";
 type StatusFilter = "all" | "complete" | "active" | "abandoned";
 
-// A column as rendered: either a single raw column or several collapsed into
-// one. `memberKeys` lists the raw `columnKey`s whose values it coalesces.
-interface DisplayColumn {
-  columnKey: string;
-  nodeId: string;
-  nodeName: string;
-  fieldKey: string;
-  label: string;
-  type: FieldReportColumn["type"];
-  options?: string[];
-  memberKeys: string[];
-  stepNames: string[];
-}
-
-interface NodeGroup {
-  nodeId: string;
-  nodeName: string;
-  columns: DisplayColumn[];
-}
-
 const STORAGE_PREFIX = "wayfinder:field-report";
-
-// First non-empty member value for a collapsed column. Exclusive routing means
-// at most one member is populated per session, so order rarely matters; when a
-// defensive double-capture occurs we take the first in column order.
-const coalesceValue = (values: Record<string, string>, memberKeys: string[]): string => {
-  for (const key of memberKeys) {
-    const value = values[key];
-    if (value !== undefined && value !== "") return value;
-  }
-  return "";
-};
-
-// Union-find over raw columns: two columns merge when they share an *active*
-// collapse group (fork-siblings and/or cross-version). Produces one
-// DisplayColumn per resulting set, preserving first-seen column order.
-const buildDisplayColumns = (
-  columns: FieldReportColumn[],
-  combineForks: boolean,
-  combineVersions: boolean,
-): DisplayColumn[] => {
-  const parent = new Map<string, string>();
-  const find = (key: string): string => {
-    let root = key;
-    while (parent.get(root) !== root && parent.get(root) !== undefined) root = parent.get(root)!;
-    return root;
-  };
-  const union = (first: string, second: string): void => {
-    parent.set(find(first), find(second));
-  };
-
-  for (const column of columns) parent.set(column.columnKey, column.columnKey);
-
-  const firstByGroup = new Map<string, string>();
-  for (const column of columns) {
-    const groupId =
-      (combineForks ? column.collapseGroupId : undefined) ??
-      (combineVersions ? column.versionGroupId : undefined);
-    if (!groupId) continue;
-    const seen = firstByGroup.get(groupId);
-    if (seen) union(seen, column.columnKey);
-    else firstByGroup.set(groupId, column.columnKey);
-  }
-
-  const order: string[] = [];
-  const byRoot = new Map<string, FieldReportColumn[]>();
-  for (const column of columns) {
-    const root = find(column.columnKey);
-    const list = byRoot.get(root);
-    if (list) {
-      list.push(column);
-    } else {
-      byRoot.set(root, [column]);
-      order.push(root);
-    }
-  }
-
-  return order.map((root) => {
-    const members = byRoot.get(root)!;
-    const lead = members[0]!;
-    const stepNames = [...new Set(members.map((member) => member.nodeName))];
-    return {
-      columnKey: members.length === 1 ? lead.columnKey : root,
-      nodeId: lead.nodeId,
-      nodeName: lead.nodeName,
-      fieldKey: lead.fieldKey,
-      label: lead.label,
-      type: lead.type,
-      options: lead.options,
-      memberKeys: members.map((member) => member.columnKey),
-      stepNames,
-    };
-  });
-};
 
 const selectStyle =
   "h-9 rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] px-3 text-[13px] text-[#1a1814] outline-none focus:border-[#3a5fd9] focus:bg-white";
@@ -166,10 +77,12 @@ const timeAgo = (date: Date): string => {
 export function FieldReportSection({
   report,
   flowId,
+  flowName,
   sessionSummary,
 }: {
   report: FieldReport;
   flowId: string;
+  flowName: string;
   sessionSummary: SessionSummary;
 }) {
   const router = useRouter();
@@ -180,8 +93,12 @@ export function FieldReportSection({
   const [restoredAt, setRestoredAt] = useState<Date | null>(null);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[] | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [summariseOpen, setSummariseOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [combineForks, setCombineForks] = useState(true);
   const [combineVersions, setCombineVersions] = useState(true);
+
+  const logInsightsExport = trpc.analytics.logInsightsExport.useMutation();
 
   const datePreset = (searchParams.get("field_date") ?? "all") as DatePreset;
   const filterColumnKey = searchParams.get("field_col") ?? null;
@@ -412,6 +329,49 @@ export function FieldReportSection({
     [displayColumns],
   );
 
+  const handleExport = useCallback(async () => {
+    setIsExporting(true);
+    try {
+      const exportColumns = displayedColumns.map((col) => ({
+        label: col.label,
+        type: col.type,
+        memberKeys: col.memberKeys,
+      }));
+      await exportInsightsXlsx(flowName, exportColumns, filteredRows);
+      if (flowId) {
+        logInsightsExport.mutate({
+          flowId,
+          rowCount: filteredRows.length,
+          columnCount: displayedColumns.length,
+          filters: {
+            datePreset,
+            statusFilter,
+            filterColumnKey,
+            filterThreshold,
+            filterOperator,
+            combineForks,
+            combineVersions,
+          },
+        });
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  }, [
+    displayedColumns,
+    filteredRows,
+    flowName,
+    flowId,
+    datePreset,
+    statusFilter,
+    filterColumnKey,
+    filterThreshold,
+    filterOperator,
+    combineForks,
+    combineVersions,
+    logInsightsExport,
+  ]);
+
   if (report.columns.length === 0) {
     return (
       <Card>
@@ -477,6 +437,22 @@ export function FieldReportSection({
             </button>
             <Button variant="outline" size="sm" onClick={() => setColumnsOpen(true)}>
               Columns
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSummariseOpen(true)}
+              disabled={filteredRows.length === 0}
+            >
+              Summarise
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              disabled={isExporting || filteredRows.length === 0}
+            >
+              {isExporting ? "Exporting…" : "Export"}
             </Button>
           </div>
         </div>
@@ -597,6 +573,7 @@ export function FieldReportSection({
           <div>
             <span className={labelStyle}>Status</span>
             <select
+              aria-label="Status"
               className={selectStyle}
               value={statusFilter}
               onChange={(event) => applyFilters({ statusFilter: event.target.value as StatusFilter })}
@@ -727,6 +704,13 @@ export function FieldReportSection({
           </DialogBody>
         </DialogContent>
       </Dialog>
+
+      <FieldReportPivotDrawer
+        open={summariseOpen}
+        onOpenChange={setSummariseOpen}
+        columns={displayColumns}
+        rows={filteredRows}
+      />
     </Card>
   );
 }

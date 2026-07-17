@@ -42,6 +42,7 @@
     "sonner": "^2.0.7",
     "superjson": "^2.2.1",
     "tailwind-merge": "^2.5.4",
+    "write-excel-file": "^4.1.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {

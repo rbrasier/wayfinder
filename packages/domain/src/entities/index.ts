@@ -35,6 +35,8 @@ export * from "./answer-feedback";
 export * from "./reindexable-document";
 export * from "./session-step-output";
 export * from "./analytics";
+export * from "./field-report-view";
+export * from "./field-report-pivot";
 export * from "./system-setting";
 export * from "./runtime-config";
 export * from "./notification-log";
