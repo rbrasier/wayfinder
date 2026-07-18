@@ -1,104 +1,172 @@
-# ADR-037 — Multi-Tenancy Isolation Model (Decision Doc)
+# ADR-037 — Multi-Tenancy: Runtime-Toggleable Pooled Isolation
 
-- **Status**: Proposed — **decision required** (no build authorised until accepted)
+- **Status**: Accepted (scoped by `multi-tenancy.prd.md`)
 - **Date**: 2026-07-18
-
-> This ADR exists to make the multi-tenancy decision *before* any code. It frames
-> the options and gives a recommendation; it does **not** authorise
-> implementation. Product/eng sign-off converts it to Accepted and spawns a PRD
-> + phase.
+- **Supersedes**: the "decision required" draft of this ADR (single-tenant vs.
+  pooled vs. schema-per-tenant). The product decision has been made — see below.
 
 ## Context
 
-Wayfinder is **single-tenant today**: one deployment serves one organisation. The
-`tenantId` values in the codebase refer to the **Entra/Azure AD tenant** for SSO
-(`graph-client.ts`, `auth-methods-card.tsx`), *not* to application-level tenancy.
-Every table is one shared dataset; there is no organisation/workspace column and
-no per-tenant isolation in queries.
+Wayfinder is single-tenant today: one deployment serves one organisation, and the
+`tenantId` in the code is the Entra/Azure tenant for SSO, not app tenancy. The
+product decision is now explicit:
 
-Group-scoped authorization (ADR-036) adds a *sharing/delegation* boundary but
-explicitly **not** a data-isolation boundary — two customers must never be
-separated only by groups.
+1. A deployment can **turn multi-tenancy on and off from administration** — no
+   redeploy, no reprovisioning.
+2. When on, the deployment assumes **exactly one sign-on method** for all tenants.
+3. A user's **organisation** is resolved by one of three admin-selectable
+   strategies: (a) an **SSO claim/attribute** carries the org, (b) the org is
+   **derived from the user's email domain**, or (c) the user **nominates** their
+   organisation on first sign-in.
 
-The question this ADR forces: **do we stay single-tenant (one deployment per
-customer) or introduce true multi-tenancy (many customers in one deployment,
-hard-isolated)?** This is architectural and cross-cutting — it touches every
-table, query, background job, storage prefix, and the auth model — so it must be
-decided deliberately, not drifted into.
+Requirement (1) is the decisive architectural constraint. An **admin toggle**
+only works if isolation is a data-layer concern that can be switched on, not a
+provisioning concern. That rules out schema-per-tenant (which needs a schema
+provisioned per org before an admin could "turn it on") and selects **pooled,
+shared-schema tenancy**: every tenant-scoped row carries an `organisation_id`,
+and isolation is enforced in the data layer.
 
-## Options
+The accepted trade: pooled tenancy gives the runtime toggle and SaaS operability
+at the cost of the strongest isolation — its failure mode is a cross-tenant leak
+from a single missed filter, so enforcement must be defence-in-depth, not a
+convention.
 
-### Option A — Stay single-tenant / dedicated deployment per customer
+Constraints:
 
-Each customer gets their own deployment (DB, object storage, config). Isolation
-is physical. No app changes.
-
-- **Pros:** strongest isolation (a query bug can't cross customers); simplest data
-  model; data residency is per-deployment; no migration; aligns with regulated
-  on-prem/VPC buyers who *want* dedicated infra.
-- **Cons:** per-customer operational cost and deploy/upgrade fan-out; slower
-  onboarding (provision a stack per customer); no shared-SaaS economics; central
-  cross-customer admin/analytics is out of band.
-
-### Option B — Pooled multi-tenancy (shared schema, `tenant_id` on every row)
-
-One deployment, one schema; a `tenant_id` column scopes every table, enforced by
-Postgres Row-Level Security (RLS) and a tenant-aware repository layer.
-
-- **Pros:** SaaS economics and instant onboarding; one codebase/stack to operate;
-  central administration.
-- **Cons:** the largest and riskiest change — every query, job, storage path, and
-  the auth/session model must become tenant-aware; a single missed filter is a
-  cross-tenant data leak; RLS + connection-role discipline is mandatory; data
-  residency becomes a per-row concern, not per-deployment; retention, audit
-  immutability (ADR-033), and the runtime-config store all need a tenant axis.
-
-### Option C — Bridge / silo hybrid (schema- or database-per-tenant, one app)
-
-One application process, but each tenant gets its own Postgres schema (or
-database), selected per request.
-
-- **Pros:** strong isolation (schema/DB boundary) with shared app operations;
-  easier residency and per-tenant backup/restore than Option B; less "every query
-  needs a filter" risk than pooled.
-- **Cons:** connection/schema-routing complexity; migrations fan out across
-  schemas; object storage still needs per-tenant prefixing; heavier than A,
-  lighter-isolation-risk than B.
-
-## Recommendation
-
-**Default to Option A (dedicated per customer) and do not build B/C until a
-concrete SaaS go-to-market requires it.** Rationale:
-
-- Wayfinder's target buyers (procurement, HR, regulated ops) frequently *prefer*
-  dedicated/VPC deployments; single-tenant is a feature, not only a limitation.
-- ADR-036 already delivers the departmental boundary most single-org customers
-  ask for, without isolation risk.
-- Pooled multi-tenancy (B) is the highest-blast-radius change in this whole
-  enterprise-readiness set; committing to it speculatively risks a cross-tenant
-  leak class of bug for economics we may not need yet.
-
-**If** a multi-tenant SaaS offering is committed to, prefer **Option C
-(schema-per-tenant)** over B: it buys SaaS operability while keeping a hard
-isolation boundary, which is the right risk posture for document-heavy,
-regulated workloads.
+1. **Toggle, not redeploy (ADR-025 pattern).** Tenancy is runtime config in
+   `admin_system_settings`, resolved by `RuntimeConfigStore`.
+2. **Single auth method in MT mode.** Multi-provider SSO (ADR-034) is a
+   single-tenant feature; enabling tenancy constrains the deployment to one method.
+3. **Hexagonal (ADR-001).** Domain entities gain an explicit `organisationId`;
+   the tenant context is passed explicitly, never via an ambient global inside the
+   domain. RLS lives in adapters as defence-in-depth behind the repository filter.
+4. **Organisation = isolation boundary; group = sharing boundary.** ADR-036 groups
+   live *within* an organisation; they do not cross it.
+5. **Off = today.** With tenancy disabled, all data belongs to one default
+   organisation and behaviour is identical to the current single-tenant app.
 
 ## Decision
 
-**Open.** Awaiting product/eng sign-off. On acceptance of a specific option,
-create `multi-tenancy.prd.md` + a phase doc; until then Wayfinder remains
-single-tenant and other enterprise phases (audit, SSO, session, groups) are
-designed **single-tenant-first** and must not bake in assumptions that block a
-later `tenant_id`/schema axis (e.g. avoid globally-unique assumptions that a
-tenant column would break).
+### 1. Pooled shared-schema with an `organisation_id` axis
+
+Add `core_organisations` (`id`, `name`, `slug`, timestamps). Every tenant-scoped
+table gains `organisation_id uuid not null` referencing it. A user belongs to
+**exactly one** organisation (`core_users.organisation_id`), because the org is
+derived from that user's identity, email, or nomination. Deployment-global tables
+(the `admin_system_settings` config incl. tenancy + auth, the developer-owned
+permission registry, `core_organisations` itself) are **not** scoped.
+
+Tenant-scoped (non-exhaustive): flows and flow versions, sessions, messages,
+uploads, generated documents, knowledge base + chunks, usage events, budgets,
+notifications, schedules, audit log, and role *assignments*. The permission
+*registry* stays global; who holds which role is per-org.
+
+### 2. Enforcement is defence-in-depth: tenant-aware repositories + RLS
+
+Every request establishes a **tenant context** (the caller's `organisation_id`)
+in the unit-of-work. Repositories filter by it; on top of that, Postgres **RLS**
+policies keyed on a session-local `app.current_organisation_id` GUC (set per
+connection by the unit-of-work) reject any row that escapes the filter. The
+domain receives `organisationId` explicitly on entities and commands — no
+ambient magic — so the isolation rule is testable without a database, and RLS is
+the backstop for a missed filter. The deployment super-admin can execute
+cross-org reads through an explicit, audited elevation, not by default.
+
+### 3. Tenancy is runtime config with three resolution strategies
+
+`TenancyConfig` (domain type, persisted in `admin_system_settings`, resolved via
+`RuntimeConfigStore.getTenancyConfig()` / `invalidateTenancy()`):
+
+```
+TenancyConfig {
+  enabled: boolean
+  resolutionStrategy: "sso_claim" | "email_domain" | "self_nomination"
+  ssoClaim?:      { claimName: string }
+  emailDomain?:   { domainToOrg: Array<{ domain; organisationId }>; onUnmatched: "reject" | "nominate" }
+  selfNomination?:{ mode: "create_or_join" | "join_existing"; allowlist?: string[] }
+}
+```
+
+Resolution runs in the sign-in / provisioning path (adapter):
+
+- **`sso_claim`** — read `claimName` from the IdP profile; map to an org, creating
+  one if the value is unseen and policy allows.
+- **`email_domain`** — look up the user's **verified** email domain in the
+  admin-maintained `domainToOrg` map (not naïve `@`-splitting, to handle multiple
+  domains per org and shared/personal domains); `onUnmatched` decides reject vs.
+  fall through to nomination.
+- **`self_nomination`** — on first sign-in, prompt to create a new org (when
+  `mode = create_or_join`) or pick an existing one; `allowlist` bounds creation.
+
+The pure mapping (profile/email/nomination → organisation decision) lives in the
+domain and is unit-tested; the IO (reading the claim, the domain map, the prompt)
+is in adapters/app.
+
+### 4. Single sign-on method in multi-tenant mode
+
+When `tenancy.enabled`, the deployment resolves to exactly one auth method.
+Enabling tenancy while multiple SSO providers (ADR-034) are configured is
+rejected until one method is chosen; the multi-provider SSO card is available
+only in single-tenant mode. This keeps ADR-034 and ADR-037 consistent: federation
+breadth is a single-tenant concern, tenant *resolution* is the multi-tenant one.
+
+### 5. Two-tier administration
+
+The existing admin (ADR-021 wildcard) becomes the **deployment super-admin**: it
+configures tenancy, the resolution strategy, the auth method, and can act across
+organisations through an explicit elevation. **Per-organisation admins** are
+org-scoped and reuse ADR-036's delegated-admin machinery — but at the
+*organisation* grain (the isolation boundary), whereas ADR-036 groups delegate
+*within* one organisation.
+
+### 6. Toggle transitions are guarded
+
+- **Enabling:** a system **default organisation** is created (if absent) and all
+  existing rows are backfilled to it in the enabling migration/action. New
+  sign-ins then resolve per strategy.
+- **Disabling:** **blocked while more than one organisation holds data.** Isolated
+  tenants are never silently merged; the admin must consolidate first. With a
+  single populated org, disabling collapses cleanly back to single-tenant view.
+
+## Alternatives considered
+
+- **Schema-per-tenant (prior Option C).** Stronger isolation, but incompatible
+  with an admin on/off toggle — it needs schema provisioning per org, which is a
+  deploy-time act, not an admin switch. Rejected against requirement (1).
+- **Per-tenant auth/IdP.** Rejected by product requirement (2); one method per
+  deployment massively reduces the auth surface and matches how these customers
+  actually sign in.
+- **Users belonging to many organisations.** Rejected — org is derived from the
+  user's own identity/email/nomination, so one user maps to one org; multi-org
+  users would break that resolution and complicate RLS for no stated need.
+- **Application-filter-only isolation (no RLS).** Rejected — a single missed
+  `where organisation_id = ?` becomes a cross-tenant breach. RLS is the required
+  backstop for pooled tenancy.
+- **Silent merge on disable.** Rejected — merging isolated tenants' data on a
+  toggle flip is a data-governance footgun; block instead.
 
 ## Consequences
 
-- **If A is accepted:** no code change; document the deployment-per-customer model
-  and provisioning runbook (ties into the deferred DR/ops posture, gap #12).
-- **If B/C is later accepted:** a dedicated, large phase with its own ADR revision;
-  every prior enterprise phase is revisited for a tenant axis; RLS or
-  schema-routing becomes a first-class, heavily-tested concern.
-- **Either way:** keeping this decision explicit prevents accidental drift into a
-  half-tenanted state (the worst outcome — partial isolation that looks safe but
-  leaks).
+**Positive**
+
+- Multi-tenancy is an admin switch, off by default, with today's behaviour
+  preserved when off. Reuses the ADR-025 runtime-config machinery.
+- Three resolution strategies cover the realistic ways an org is known (SSO claim,
+  email domain, self-nomination) and are admin-selectable.
+- Clean conceptual split: organisation = isolation (ADR-037), group = sharing
+  (ADR-036); deployment super-admin vs. org admin.
+
+**Negative**
+
+- **Largest, highest-blast-radius change in the enterprise set.** Every
+  tenant-scoped query, background job (retention, scheduler), storage path, and
+  the audit hash chain (ADR-033, now per-org) gains a tenant axis; a missed filter
+  is a leak. RLS + tenant-aware unit-of-work are mandatory and must be tested
+  exhaustively, including the super-admin elevation path.
+- Breaking domain change (entities gain `organisationId`) → **MAJOR / next alpha
+  line**; it lands on `main`, not a release branch.
+- The disable-guard and enable-backfill are stateful, one-way-ish operations that
+  need careful migration handling and operator documentation.
+- ADR-033 (audit), ADR-035 (sessions), and ADR-036 (groups) each acquire a tenant
+  dimension; they should be built single-tenant-first and revisited under this ADR
+  rather than retrofitted blindly.

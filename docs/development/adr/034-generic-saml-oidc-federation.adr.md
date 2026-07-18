@@ -97,6 +97,16 @@ preserve masked secrets on blank submit, and `invalidateAuth()`.
   (authentication) and provisioning (lifecycle) are separable; SSO delivers value
   without SCIM.
 
+## Interaction with multi-tenancy (ADR-037)
+
+Multi-provider SSO is a **single-tenant** feature. When multi-tenancy is enabled
+(ADR-037), the deployment assumes exactly one sign-on method, so this ADR's
+multiple-provider configuration applies only while tenancy is off. Enabling
+tenancy with more than one provider configured is rejected until one method is
+chosen. Federation *breadth* is the single-tenant concern here; tenant
+*resolution* (including the "SSO claim carries the organisation" strategy) belongs
+to ADR-037, not this ADR.
+
 ## Consequences
 
 **Positive**

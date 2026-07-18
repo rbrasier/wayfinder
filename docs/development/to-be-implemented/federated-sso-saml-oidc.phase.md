@@ -7,6 +7,8 @@
 - **ADR**: `docs/development/adr/034-generic-saml-oidc-federation.adr.md`
 - **Depends on**: ADR-025 (runtime auth config, lazy auth instance,
   JIT-non-admin), ADR-001, `RuntimeConfigStore`, public `enabledAuthMethods`.
+- **Interacts with**: ADR-037 (multi-tenancy) — multi-provider SSO is a
+  single-tenant feature; enabling tenancy constrains the deployment to one method.
 
 ## 1. Goal
 
