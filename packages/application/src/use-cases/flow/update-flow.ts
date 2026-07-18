@@ -10,6 +10,9 @@ import {
 
 export interface UpdateFlowCaller {
   canPublishToEveryone: boolean;
+  // Groups the caller belongs to; lets a non-global publisher share a flow with
+  // their own groups (ADR-036 §12). Absent means the caller is in no groups.
+  callerGroupIds?: string[];
 }
 
 export class UpdateFlow {

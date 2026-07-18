@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { isFlowDiscoverableBy } from "@rbrasier/domain";
+import { groupIdsForMemberships, isFlowDiscoverableBy } from "@rbrasier/domain";
 import type { Session, SessionListSummary } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
@@ -302,12 +302,23 @@ export const sessionRouter = router({
   listPublishedFlows: authenticatedProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFlows.execute();
     if (result.error) throw toTrpcError(result.error);
+    // Resolve the viewer's groups per request so a group-visible flow appears the
+    // moment they join and disappears the moment they are removed (ADR-036).
+    const groupContext = await ctx.container.useCases.resolveGroupAuthorization.execute(
+      ctx.userId,
+      ctx.isAdmin,
+    );
+    const viewerGroupIds = groupContext.error
+      ? []
+      : groupIdsForMemberships(groupContext.data.memberships);
     return result.data.filter(
       (f) =>
         f.status === "published" &&
         isFlowDiscoverableBy(f.visibility, {
           ownerUserId: f.ownerUserId,
           viewerUserId: ctx.userId,
+          viewerGroupIds,
+          viewerIsAdmin: ctx.isAdmin,
         }),
     );
   }),

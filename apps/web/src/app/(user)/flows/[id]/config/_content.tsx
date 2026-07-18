@@ -66,7 +66,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [flowDescription, setFlowDescription] = useState<string>("");
   const [flowIcon, setFlowIcon] = useState<string>("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
-  const [flowVisibility, setFlowVisibility] = useState<"private" | "global">("private");
+  const [flowVisibility, setFlowVisibility] = useState<"private" | "global" | "group">("private");
+  const [flowGroupIds, setFlowGroupIds] = useState<string[]>([]);
   const [expertRole, setExpertRole] = useState<string>("");
   const meQuery = trpc.user.me.useQuery();
   const isAdmin = meQuery.data?.isAdmin ?? false;
@@ -141,6 +142,9 @@ function CanvasInner({ flowId }: { flowId: string }) {
     setFlowIcon(data.flow.icon ?? "");
     setFlowStatus(data.flow.status);
     setFlowVisibility(data.flow.visibility.kind);
+    setFlowGroupIds(
+      data.flow.visibility.kind === "group" ? data.flow.visibility.groupIds : [],
+    );
     setExpertRole(data.flow.expertRole ?? "");
     if (data.nodes.length > 3) {
       setTimeout(() => { fitView({ padding: 0.2 }); }, 100);
@@ -574,6 +578,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setFlowStatus={setFlowStatus}
         flowVisibility={flowVisibility}
         setFlowVisibility={setFlowVisibility}
+        flowGroupIds={flowGroupIds}
+        setFlowGroupIds={setFlowGroupIds}
         hasUnpublishedChanges={hasUnpublishedChanges}
         setHasUnpublishedChanges={setHasUnpublishedChanges}
         latestPublishedNumber={versionStatusQuery.data?.latestPublishedNumber ?? null}

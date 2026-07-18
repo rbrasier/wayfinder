@@ -8,6 +8,7 @@ import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
 import { flowVersionRouter } from "./routers/flow-version";
 import { governanceRouter } from "./routers/governance";
+import { groupRouter } from "./routers/group";
 import { hrRouter } from "./routers/hr";
 import { knowledgeRouter } from "./routers/knowledge";
 import { legalHoldRouter } from "./routers/legal-hold";
@@ -31,6 +32,7 @@ export const appRouter = router({
   flow: flowRouter,
   flowVersion: flowVersionRouter,
   role: roleRouter,
+  group: groupRouter,
   session: sessionRouter,
   schedule: scheduleRouter,
   settings: settingsRouter,

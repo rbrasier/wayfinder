@@ -4,7 +4,8 @@ export type ExtractionStatus = "pending" | "complete" | "failed" | "unsupported"
 
 export type FlowVisibility =
   | { kind: "private" }
-  | { kind: "global" };
+  | { kind: "global" }
+  | { kind: "group"; groupIds: string[] };
 
 export type FlowVisibilityKind = FlowVisibility["kind"];
 

@@ -225,6 +225,13 @@
       "when": 1784374214125,
       "tag": "0031_audit_append_only_enforcement",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1784400376853,
+      "tag": "0032_material_molecule_man",
+      "breakpoints": true
     }
   ]
 }

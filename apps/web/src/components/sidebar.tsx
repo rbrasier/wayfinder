@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   Stamp,
   Users,
+  UsersRound,
   X,
 } from "lucide-react";
 import { useSidebar } from "@/components/sidebar-context";
@@ -69,6 +70,7 @@ const adminNav: NavGroup[] = [
     items: [
       { href: "/admin/users", icon: Users, label: "Users" },
       { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
+      { href: "/admin/groups", icon: UsersRound, label: "Groups" },
     ],
   },
   {

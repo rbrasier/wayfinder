@@ -6,7 +6,8 @@ export type PermissionKey =
   | "workflow:publish_to_everyone"
   | "flow:advanced_config"
   | "knowledge:submit_feedback"
-  | "knowledge:curate";
+  | "knowledge:curate"
+  | "group:manage_own";
 
 export interface PermissionDefinition {
   readonly key: PermissionKey;
@@ -46,6 +47,12 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
     key: "knowledge:curate",
     label: "Curate the knowledge base",
     description: "Edit, archive, tag, revert, and search knowledge content.",
+  },
+  {
+    key: "group:manage_own",
+    label: "Manage own groups",
+    description:
+      "Manage members and group-visible flows for groups the user delegate-admins. Scope is enforced per group; the key alone grants nothing global.",
   },
 ];
 

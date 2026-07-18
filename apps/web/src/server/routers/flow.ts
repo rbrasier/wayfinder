@@ -1,3 +1,4 @@
+import { groupIdsForMemberships } from "@rbrasier/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
@@ -20,6 +21,18 @@ export const canEditFlow = async (
     flow.ownerUserId === userId ||
     flow.permissions.some((p) => p.userId === userId && p.role === "owner")
   );
+};
+
+// Every group id the caller belongs to, used to authorise a group-scoped publish
+// (a caller may share a flow only with their own groups, ADR-036 §12).
+const resolveCallerGroupIds = async (
+  container: Container,
+  userId: string,
+  isAdmin: boolean,
+): Promise<string[]> => {
+  const context = await container.useCases.resolveGroupAuthorization.execute(userId, isAdmin);
+  if (context.error) return [];
+  return groupIdsForMemberships(context.data.memberships);
 };
 
 // Opens/refreshes the published flow's single draft after an edit. Best-effort:
@@ -271,6 +284,7 @@ export const flowRouter = router({
           .discriminatedUnion("kind", [
             z.object({ kind: z.literal("private") }),
             z.object({ kind: z.literal("global") }),
+            z.object({ kind: z.literal("group"), groupIds: z.array(z.string().uuid()).min(1) }),
           ])
           .optional(),
       }),
@@ -280,9 +294,16 @@ export const flowRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const { flowId, changeSummary, ...patch } = input;
+      // A group publish is authorised against the caller's own groups, so resolve
+      // them only on that path — every other update skips the extra query.
+      const callerGroupIds =
+        patch.visibility?.kind === "group"
+          ? await resolveCallerGroupIds(ctx.container, ctx.userId, ctx.isAdmin)
+          : [];
       const result = await ctx.container.useCases.updateFlow.execute(flowId, patch, {
         canPublishToEveryone:
           ctx.isAdmin || ctx.permissions.has("workflow:publish_to_everyone"),
+        callerGroupIds,
       });
       if (result.error) throw toTrpcError(result.error);
 
