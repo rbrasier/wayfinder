@@ -435,4 +435,136 @@ describe("UpdateDocumentFields", () => {
 
     expect(result.error?.code).toBe("NOT_FOUND");
   });
+
+  it("preserves a group's items on a scalar-field edit instead of blanking it", async () => {
+    const groupFields = [
+      { key: "supplier_name", label: "Supplier Name", type: "text", optional: false, raw: "Supplier Name" },
+      {
+        key: "suppliers",
+        label: "Suppliers",
+        type: "group",
+        optional: true,
+        raw: "#Suppliers (repeat)",
+        itemFields: [{ key: "name", label: "Name", type: "text", optional: false, raw: "Name" }],
+      },
+    ] as const;
+    const suppliersItems = [{ name: "Acme" }, { name: "Globex" }];
+
+    const documentGenerator = makeDocumentGenerator();
+    (documentGenerator.extractFields as ReturnType<typeof vi.fn>).mockReturnValue(
+      ok({ fields: groupFields }),
+    );
+    const flowNodes = makeFlowNodes(makeNode({ documentTemplateFields: groupFields }));
+    const sessionStepOutputs = makeStepOutputs();
+    (sessionStepOutputs.findByMessageId as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({
+        ...existingStepOutput(),
+        fields: [
+          { key: "supplier_name", label: "Supplier Name", type: "text", value: "Acme Ltd" },
+          { key: "suppliers", label: "Suppliers", type: "group", value: "", items: suppliersItems },
+        ],
+      }),
+    );
+
+    const { useCase, deps } = build({ documentGenerator, flowNodes, sessionStepOutputs });
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: { supplier_name: "New Name", suppliers: "" },
+    });
+
+    expect(result.error).toBeUndefined();
+    // The regenerated document binds the preserved array, not a blank.
+    const generateCall = (deps.documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(generateCall.data.suppliers).toEqual(suppliersItems);
+    // The persisted step output keeps the items and a blank scalar value.
+    expect(deps.sessionStepOutputs.updateFields).toHaveBeenCalledWith(
+      "step-1",
+      expect.arrayContaining([
+        expect.objectContaining({ key: "suppliers", value: "", items: suppliersItems }),
+      ]),
+    );
+  });
+
+  const groupSetup = () => {
+    const groupFields = [
+      { key: "supplier_name", label: "Supplier Name", type: "text", optional: false, raw: "Supplier Name" },
+      {
+        key: "suppliers",
+        label: "Suppliers",
+        type: "group",
+        optional: true,
+        raw: "#Suppliers (repeat)",
+        itemFields: [
+          { key: "name", label: "Name", type: "text", optional: false, raw: "Name" },
+          { key: "email", label: "Email", type: "email", optional: true, raw: "Email (email) (optional)" },
+        ],
+      },
+    ] as const;
+    const documentGenerator = makeDocumentGenerator();
+    (documentGenerator.extractFields as ReturnType<typeof vi.fn>).mockReturnValue(ok({ fields: groupFields }));
+    const flowNodes = makeFlowNodes(makeNode({ documentTemplateFields: groupFields }));
+    const sessionStepOutputs = makeStepOutputs();
+    (sessionStepOutputs.findByMessageId as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok({
+        ...existingStepOutput(),
+        fields: [
+          { key: "supplier_name", label: "Supplier Name", type: "text", value: "Acme Ltd" },
+          { key: "suppliers", label: "Suppliers", type: "group", value: "", items: [{ name: "Acme", email: "" }] },
+        ],
+      }),
+    );
+    return { documentGenerator, flowNodes, sessionStepOutputs };
+  };
+
+  it("replaces group items with the submitted edit and records a group change", async () => {
+    const { documentGenerator, flowNodes, sessionStepOutputs } = groupSetup();
+    const { useCase, deps } = build({ documentGenerator, flowNodes, sessionStepOutputs });
+
+    const newItems = [
+      { name: "Acme", email: "hello@acme.com" },
+      { name: "Globex", email: "" },
+    ];
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: { supplier_name: "Acme Ltd", suppliers: "" },
+      groupItems: { suppliers: newItems },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.fieldErrors).toBeUndefined();
+    const generateCall = (deps.documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(generateCall.data.suppliers).toEqual(newItems);
+    expect(deps.sessionStepOutputs.updateFields).toHaveBeenCalledWith(
+      "step-1",
+      expect.arrayContaining([
+        expect.objectContaining({ key: "suppliers", value: "", items: newItems }),
+      ]),
+    );
+    const edit = result.data?.document?.editHistory?.[0];
+    expect(edit?.changes).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "suppliers" })]),
+    );
+  });
+
+  it("returns a field error and persists nothing when a submitted group item is invalid", async () => {
+    const { documentGenerator, flowNodes, sessionStepOutputs } = groupSetup();
+    const { useCase, deps } = build({ documentGenerator, flowNodes, sessionStepOutputs });
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: { supplier_name: "Acme Ltd", suppliers: "" },
+      groupItems: { suppliers: [{ name: "", email: "bad-email" }] },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.fieldErrors).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: "suppliers" })]),
+    );
+    expect(deps.objectStorage.put).not.toHaveBeenCalled();
+    expect(deps.sessionStepOutputs.updateFields).not.toHaveBeenCalled();
+  });
 });

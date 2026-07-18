@@ -569,6 +569,19 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
       fields: [
         { key: "name", label: "Name", type: "text", value: "Jane Smith" },
         { key: "organisation", label: "Organisation", type: "text", value: "Acme Ltd" },
+        // A repeating group so the "Show data" modal has a group to render as a
+        // table (drives the enhance-repeating-group-editing e2e spec). Only the
+        // item records are stored; the modal derives its columns from their keys.
+        {
+          key: "recommendations",
+          label: "Recommendations",
+          type: "group",
+          value: "",
+          items: [
+            { owner: "IT", action: "Provision laptop" },
+            { owner: "HR", action: "Schedule induction" },
+          ],
+        },
       ],
     }),
     "create step output",

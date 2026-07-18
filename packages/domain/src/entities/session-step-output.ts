@@ -6,6 +6,10 @@ export interface StepOutputField {
   type: TemplateFieldType;
   options?: string[];
   value: string;
+  // Present only for a "group" field: the extracted repeating items. Additive —
+  // `value` stays blank for a group, so existing rows and readers are unchanged
+  // and no data migration is needed (ADR-032 §4).
+  items?: Array<Record<string, string>>;
 }
 
 export interface SessionStepOutput {

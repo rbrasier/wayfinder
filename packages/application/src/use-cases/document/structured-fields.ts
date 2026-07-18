@@ -1,5 +1,6 @@
 import {
   buildFieldConstraintsText,
+  DEFAULT_ITEM_CAP,
   domainError,
   err,
   type FlowContextDoc,
@@ -9,7 +10,7 @@ import {
   type StepOutputField,
   type TemplateField,
 } from "@rbrasier/domain";
-import { documentDataSchema } from "@rbrasier/shared";
+import { documentDataSchema, type DocumentData, type GroupItems } from "@rbrasier/shared";
 
 // Rough char-per-token ratio for English prose, used only to keep prompts under
 // the model context window — it does not need to be exact, only conservative.
@@ -104,6 +105,11 @@ const buildGenerationGuidance = (fields: TemplateField[]): string => {
       `\nSome fields decide whether to include a section — answer exactly "Yes" to include the section or "No" to omit it, based on whether the session warrants it.`,
     );
   }
+  if (fields.some((field) => field.type === "group")) {
+    lines.push(
+      `\nSome fields are lists — return a JSON array of objects for them, one object per item, each object having exactly the item keys named in its constraints. Never exceed the stated maximum number of items. Return an empty array [] when the context contains none.`,
+    );
+  }
   return lines.join("\n");
 };
 
@@ -113,7 +119,7 @@ const buildGenerationGuidance = (fields: TemplateField[]): string => {
 export const extractStructuredFields = async (
   languageModel: ILanguageModel,
   input: ExtractStructuredFieldsInput,
-): Promise<Result<Record<string, string>>> => {
+): Promise<Result<DocumentData>> => {
   const keys = input.fields.map((field) => field.key);
   const contextDocsSection = buildContextDocsSection(
     input.contextDocs,
@@ -150,7 +156,7 @@ export const extractStructuredFields = async (
     );
   }
 
-  const result = await languageModel.generateObject<Record<string, string>>({
+  const result = await languageModel.generateObject<DocumentData>({
     purpose: input.purpose,
     userId: input.userId,
     flowId: input.flowId,
@@ -162,7 +168,52 @@ export const extractStructuredFields = async (
   });
   if (result.error) return result;
 
-  return { data: result.data.object };
+  const object = result.data.object;
+  const groupFields = input.fields.filter((field) => field.type === "group");
+  // Scalar values are trusted as-returned (unchanged from v1.49.0); only group
+  // arrays are best-effort coerced — capped, invalid items dropped, sub-fields
+  // blanked — so a malformed array can never fail the turn (ADR-032 §3).
+  if (groupFields.length === 0) return { data: object };
+
+  const coerced: DocumentData = { ...object };
+  for (const field of groupFields) {
+    coerced[field.key] = coerceGroupItems(field, object[field.key]);
+  }
+  return { data: coerced };
+};
+
+// Drops the group (array) entries from a DocumentData, leaving only scalar
+// string values. Used at call sites that only consume scalars (grading, the
+// n8n/service resolver) so their Record<string, string> typing is preserved.
+export const scalarValues = (data: DocumentData): Record<string, string> => {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (typeof value === "string") result[key] = value;
+  }
+  return result;
+};
+
+// Best-effort coercion of a model-returned value for a group field into an
+// array of clean item records: non-arrays become [], items past the cap are
+// dropped, non-object and all-blank items are dropped, and each sub-field is
+// coerced (blanked when missing/invalid). Never throws.
+export const coerceGroupItems = (field: TemplateField, raw: unknown): GroupItems => {
+  if (!Array.isArray(raw)) return [];
+  const cap = field.itemCap ?? DEFAULT_ITEM_CAP;
+  const subFields = field.itemFields ?? [];
+  const items: GroupItems = [];
+
+  for (const rawItem of raw) {
+    if (items.length >= cap) break;
+    if (typeof rawItem !== "object" || rawItem === null || Array.isArray(rawItem)) continue;
+    const record = rawItem as Record<string, unknown>;
+    const item: Record<string, string> = {};
+    for (const subField of subFields) {
+      item[subField.key] = coerceValue(subField, record[subField.key]);
+    }
+    if (Object.values(item).some((value) => value !== "")) items.push(item);
+  }
+  return items;
 };
 
 const coerceValue = (field: TemplateField, raw: unknown): string => {

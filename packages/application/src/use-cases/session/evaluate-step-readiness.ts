@@ -1,4 +1,5 @@
 import {
+  computeGroupCompletenessNotes,
   domainError,
   err,
   normaliseAdvanceConfidenceThreshold,
@@ -14,13 +15,14 @@ import {
   type SessionMessage,
   type TemplateField,
 } from "@rbrasier/domain";
+import type { DocumentData } from "@rbrasier/shared";
 import {
   batchTemplateFields,
   buildDocumentTranscript,
   resolveTemplateFields,
 } from "../document/field-resolution";
 import { gradeDocumentFields } from "../document/grade-document";
-import { extractStructuredFields } from "../document/structured-fields";
+import { extractStructuredFields, scalarValues } from "../document/structured-fields";
 
 export interface EvaluateStepReadinessInput {
   // Only role/content are read, so the caller may pass lightweight turn objects
@@ -41,8 +43,9 @@ export interface EvaluateStepReadinessOutput {
   criteriaAlignmentRationale: string;
   missingInformation: string[];
   // The values extracted during the evaluation, threaded into generation on a
-  // pass so the document renders without a second extraction.
-  fieldValues: Record<string, string>;
+  // pass so the document renders without a second extraction. Includes group
+  // arrays alongside scalar strings.
+  fieldValues: DocumentData;
 }
 
 // Runs the pre-generation evaluation gate: extract the template's field values
@@ -71,7 +74,7 @@ export class EvaluateStepReadiness {
     const fields = fieldsResult.data;
 
     const transcript = buildDocumentTranscript(input.messages);
-    const fieldValues: Record<string, string> = {};
+    const fieldValues: DocumentData = {};
     for (const batch of batchTemplateFields(fields, input.budget?.fieldBatchSize)) {
       const batchResult = await extractStructuredFields(this.languageModel, {
         fields: batch,
@@ -86,8 +89,18 @@ export class EvaluateStepReadiness {
       Object.assign(fieldValues, batchResult.data);
     }
 
+    // Groups are graded on their intake completeness, not the scalar grader: a
+    // required item missing a sub-field (or an empty list) is surfaced as a soft
+    // note in the same missingInformation channel the fail path already streams.
+    const groupNotes = fields
+      .filter((field) => field.type === "group")
+      .flatMap((field) => {
+        const value = fieldValues[field.key];
+        return computeGroupCompletenessNotes(field, Array.isArray(value) ? value : []);
+      });
+
     const gradeResult = await gradeDocumentFields(this.languageModel, {
-      fieldValues,
+      fieldValues: scalarValues(fieldValues),
       contextDocs: input.flow.contextDocs,
       stepCriteria: config.doneWhen,
     });
@@ -95,14 +108,16 @@ export class EvaluateStepReadiness {
 
     const threshold = normaliseAdvanceConfidenceThreshold(config.advanceConfidenceThreshold);
     const grade = gradeResult.data;
+    const missingInformation = [...grade.missingInformation, ...groupNotes];
     const meetsThreshold =
       grade.guidanceAlignmentConfidence >= threshold &&
       grade.criteriaAlignmentConfidence >= threshold;
     // The gate exists to catch actionable gaps. A confidence dip with nothing
     // concrete to fix must not hold the step: the fail path would then stream a
     // "nothing to ask" follow-up that duplicates the previous turn and leaves the
-    // step stuck. Only hold when the grader names something still missing.
-    const passed = meetsThreshold || grade.missingInformation.length === 0;
+    // step stuck. Only hold when the grader (or a group completeness note) names
+    // something still missing.
+    const passed = meetsThreshold || missingInformation.length === 0;
 
     return ok({
       passed,
@@ -110,7 +125,7 @@ export class EvaluateStepReadiness {
       criteriaAlignmentConfidence: grade.criteriaAlignmentConfidence,
       guidanceAlignmentRationale: grade.guidanceAlignmentRationale,
       criteriaAlignmentRationale: grade.criteriaAlignmentRationale,
-      missingInformation: grade.missingInformation,
+      missingInformation,
       fieldValues,
     });
   }

@@ -13,7 +13,7 @@ import {
   type SessionUpload,
   type TurnStreamWriter,
 } from "@rbrasier/domain";
-import { turnResponseSchema } from "@rbrasier/shared";
+import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
 import { streamTurn } from "./stream-turn";
@@ -230,7 +230,7 @@ export async function generateDocument(
   node: FlowNode,
   // Threaded by the pre-generation evaluation gate on a pass so generation
   // reuses the already-extracted values and grade rather than recomputing them.
-  precomputed?: { fieldValues?: Record<string, string>; grade?: DocumentGenerationConfidence },
+  precomputed?: { fieldValues?: DocumentData; grade?: DocumentGenerationConfidence },
 ): Promise<boolean> {
   try {
     // Resolve the admin-configured budget at the edge (ADR-027). A failure here
@@ -633,7 +633,7 @@ export interface ApplyAdvanceSideEffectsInput {
   // Threaded from the pre-generation evaluation gate on a pass: the values it
   // already extracted and the grade it produced, so document generation skips
   // the redundant second extraction and grading.
-  precomputedDocument?: { fieldValues: Record<string, string>; grade: DocumentGenerationConfidence };
+  precomputedDocument?: { fieldValues: DocumentData; grade: DocumentGenerationConfidence };
   // Called with true while the completed step's document is generated and false
   // once it finishes. The streaming route uses it to write the transient
   // "Generating document…" badge annotation; the Proceed path omits it.

@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError, parseTemplateFields } from "@rbrasier/domain";
 import type { FlowContextDoc, ILanguageModel, TemplateField } from "@rbrasier/domain";
 import {
   CONTEXT_DOCS_CHAR_BUDGET,
   buildContextDocsSection,
+  coerceGroupItems,
   coerceStructuredFields,
   estimateTokens,
   extractStructuredFields,
+  scalarValues,
 } from "./structured-fields";
 
 const usage = {
@@ -311,5 +313,102 @@ describe("coerceStructuredFields", () => {
     const fields = [field({ key: "vendor", label: "Vendor" })];
 
     expect(() => coerceStructuredFields(fields, { vendor: { nested: true } as unknown as string })).not.toThrow();
+  });
+});
+
+const suppliersGroup = (overrides: Partial<TemplateField> = {}): TemplateField => {
+  const parsed = parseTemplateFields([
+    "#Suppliers (repeat)",
+    "Name",
+    "Price (currency)",
+    "/Suppliers",
+  ]).data![0]!;
+  return { ...parsed, ...overrides };
+};
+
+const makeObjectModel = (object: Record<string, unknown>): ILanguageModel => ({
+  provider: "anthropic",
+  generateObject: vi.fn().mockResolvedValue(ok({ object, usage })),
+  streamText: vi.fn(),
+  streamObject: vi.fn(),
+});
+
+describe("scalarValues", () => {
+  it("keeps only string-valued entries", () => {
+    expect(scalarValues({ a: "x", b: [{ k: "v" }], c: "y" })).toEqual({ a: "x", c: "y" });
+  });
+});
+
+describe("coerceGroupItems", () => {
+  it("keeps valid items, coerces sub-fields, and drops empty items", () => {
+    const group = suppliersGroup();
+    const items = coerceGroupItems(group, [
+      { name: "Acme", price: "$100.00" },
+      { name: "Globex", price: "not a number" },
+      { name: "", price: "" },
+    ]);
+    expect(items).toEqual([
+      { name: "Acme", price: "$100.00" },
+      { name: "Globex", price: "" },
+    ]);
+  });
+
+  it("enforces the item cap", () => {
+    const group = suppliersGroup({ itemCap: 1 });
+    const items = coerceGroupItems(group, [
+      { name: "Acme", price: "$1.00" },
+      { name: "Globex", price: "$2.00" },
+    ]);
+    expect(items).toHaveLength(1);
+  });
+
+  it("returns an empty array for a non-array value", () => {
+    expect(coerceGroupItems(suppliersGroup(), "oops")).toEqual([]);
+    expect(coerceGroupItems(suppliersGroup(), undefined)).toEqual([]);
+  });
+});
+
+describe("extractStructuredFields with groups", () => {
+  it("coerces a returned group array against the cap and item schema", async () => {
+    const group = suppliersGroup({ itemCap: 2 });
+    const languageModel = makeObjectModel({
+      suppliers: [
+        { name: "Acme", price: "$100.00" },
+        { name: "Globex", price: "$200.00" },
+        { name: "Initech", price: "$300.00" },
+      ],
+    });
+
+    const result = await extractStructuredFields(languageModel, {
+      fields: [group],
+      transcript: "User: three suppliers",
+      contextDocs: [],
+      instruction: "Extract the suppliers.",
+      purpose: "documentGeneration",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data!.suppliers).toEqual([
+      { name: "Acme", price: "$100.00" },
+      { name: "Globex", price: "$200.00" },
+    ]);
+    const call = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.prompt).toContain("list of up to 2 items");
+  });
+
+  it("coerces a malformed group value to an empty array rather than failing", async () => {
+    const group = suppliersGroup();
+    const languageModel = makeObjectModel({ suppliers: "not an array" });
+
+    const result = await extractStructuredFields(languageModel, {
+      fields: [group],
+      transcript: "User: hi",
+      contextDocs: [],
+      instruction: "Extract the suppliers.",
+      purpose: "documentGeneration",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data!.suppliers).toEqual([]);
   });
 });

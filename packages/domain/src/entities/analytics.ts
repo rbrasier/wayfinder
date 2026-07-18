@@ -425,7 +425,11 @@ export const computeFieldReport = (
     for (const output of sorted) {
       for (const field of output.fields) {
         if (field.type === "narrative") continue;
-        values[`${output.nodeId}:${field.key}`] = field.value;
+        // A group is unbounded structured content; only its item count is a
+        // comparable, reportable signal (ADR-032 §4). The rendered items live in
+        // the document, never in a report column.
+        values[`${output.nodeId}:${field.key}`] =
+          field.type === "group" ? String(field.items?.length ?? 0) : field.value;
       }
     }
 

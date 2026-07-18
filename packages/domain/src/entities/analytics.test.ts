@@ -198,6 +198,53 @@ describe("computeFieldReport", () => {
     expect(report.rows[0]?.values["n1:risk_section"]).toBe("Yes");
   });
 
+  it("reports a group field as its item count, never per-item columns", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date("2026-05-20T01:00:00Z"),
+          fields: [
+            {
+              key: "suppliers",
+              label: "Suppliers",
+              type: "group",
+              value: "",
+              items: [
+                { name: "Acme", pricing: "£100" },
+                { name: "Globex", pricing: "£200" },
+              ],
+            },
+          ],
+        },
+      ],
+      [nodeIntake],
+      [sessionS1],
+    );
+
+    const suppliersColumn = report.columns.find((column) => column.columnKey === "n1:suppliers");
+    expect(suppliersColumn?.type).toBe("group");
+    expect(report.columns).toHaveLength(1);
+    expect(report.rows[0]?.values["n1:suppliers"]).toBe("2");
+  });
+
+  it("reports an empty group as a count of zero", () => {
+    const report = computeFieldReport(
+      [
+        {
+          sessionId: "s1",
+          nodeId: "n1",
+          createdAt: new Date("2026-05-20T01:00:00Z"),
+          fields: [{ key: "suppliers", label: "Suppliers", type: "group", value: "" }],
+        },
+      ],
+      [nodeIntake],
+      [sessionS1],
+    );
+    expect(report.rows[0]?.values["n1:suppliers"]).toBe("0");
+  });
+
   it("produces one column per distinct nodeId+fieldKey combination when two nodes share a key", () => {
     const report = computeFieldReport(
       [

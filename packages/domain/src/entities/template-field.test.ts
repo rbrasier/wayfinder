@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   buildFieldConstraintsText,
+  DEFAULT_ITEM_CAP,
   deriveFieldKey,
   describeTemplateFieldFormat,
   parseTemplateField,
@@ -353,5 +354,121 @@ describe("section gate fields", () => {
     expect(description).toContain("Risk Section");
     expect(description.toLowerCase()).toContain("include");
     expect(description).not.toContain("may be left blank");
+  });
+});
+
+describe("repeating group fields", () => {
+  it("parses a {{#name (repeat)}} block into a group with itemFields", () => {
+    const result = parseTemplateFields([
+      "#Recommendations (repeat)",
+      "Number (number)",
+      "Owner",
+      "/Recommendations",
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(1);
+    const group = result.data![0]!;
+    expect(group).toMatchObject({ key: "recommendations", label: "Recommendations", type: "group" });
+    expect(group.itemFields?.map((field) => field.key)).toEqual(["number", "owner"]);
+    expect(group.itemFields?.[0]?.type).toBe("number");
+  });
+
+  it("keeps a plain {{#section}} with an inner tag as a gate plus a top-level field", () => {
+    // Regression guard: v1.19.0 narrative-in-section must NOT reclassify as a group.
+    const result = parseTemplateFields(["#Risk Section", "Mitigation (text)", "/Risk Section"]);
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(2);
+    expect(result.data?.[0]).toMatchObject({ key: "risk_section", type: "section" });
+    expect(result.data?.[1]).toMatchObject({ key: "mitigation", type: "text" });
+  });
+
+  it("defaults the item cap to DEFAULT_ITEM_CAP", () => {
+    const group = parseTemplateField("#Suppliers (repeat)").data!;
+    expect(group.type).toBe("group");
+    expect(group.itemCap).toBeUndefined();
+    expect(describeTemplateFieldFormat({ ...group, itemFields: [] })).toContain(
+      `up to ${DEFAULT_ITEM_CAP}`,
+    );
+  });
+
+  it("reads a per-group item cap from (max: N)", () => {
+    const group = parseTemplateField("#Suppliers (repeat) (max: 50)").data!;
+    expect(group.type).toBe("group");
+    expect(group.itemCap).toBe(50);
+  });
+
+  it("rejects a non-positive (max: N) on a group", () => {
+    expect(parseTemplateField("#Suppliers (repeat) (max: 0)").error?.code).toBe("VALIDATION_FAILED");
+    expect(parseTemplateField("#Suppliers (repeat) (max: two)").error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("describes a group as a capped list of its item fields", () => {
+    const result = parseTemplateFields([
+      "#Suppliers (repeat) (max: 5)",
+      "Name",
+      "Price (currency)",
+      "/Suppliers",
+    ]);
+    const description = describeTemplateFieldFormat(result.data![0]!);
+    expect(description).toContain("up to 5 items");
+    expect(description).toContain("Name");
+    expect(description).toContain("Price");
+    expect(description.toLowerCase()).toContain("currency");
+  });
+
+  it("rejects an empty repeating group", () => {
+    const result = parseTemplateFields(["#Empty (repeat)", "/Empty"]);
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message.toLowerCase()).toContain("no fields");
+  });
+
+  it("rejects a group nested inside a section", () => {
+    const result = parseTemplateFields([
+      "#Risk Section",
+      "#Findings (repeat)",
+      "Detail",
+      "/Findings",
+      "/Risk Section",
+    ]);
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message.toLowerCase()).toContain("section");
+  });
+
+  it("rejects a section nested inside a group", () => {
+    const result = parseTemplateFields([
+      "#Findings (repeat)",
+      "#Inner Section",
+      "/Inner Section",
+      "/Findings",
+    ]);
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects a group nested inside another group", () => {
+    const result = parseTemplateFields([
+      "#Outer (repeat)",
+      "#Inner (repeat)",
+      "Detail",
+      "/Inner",
+      "/Outer",
+    ]);
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("allows a top-level field, a group, and a section together", () => {
+    const result = parseTemplateFields([
+      "Client Name",
+      "#Recommendations (repeat)",
+      "Text",
+      "/Recommendations",
+      "#Risk Section",
+      "/Risk Section",
+    ]);
+    expect(result.error).toBeUndefined();
+    expect(result.data?.map((field) => [field.key, field.type])).toEqual([
+      ["client_name", "text"],
+      ["recommendations", "group"],
+      ["risk_section", "section"],
+    ]);
   });
 });

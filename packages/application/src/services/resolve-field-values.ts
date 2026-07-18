@@ -82,7 +82,11 @@ export const resolveFieldValues = async (
   if (extracted.error) return extracted;
 
   for (const field of aiFields) {
-    resolved[field.key] = extracted.data[field.key] ?? "";
+    // This resolver serves scalar request fields (literal/step_field/ai). Group
+    // arrays are out of scope here (deferred external-classification path) — a
+    // non-string value coerces to blank rather than leaking an array.
+    const value = extracted.data[field.key];
+    resolved[field.key] = typeof value === "string" ? value : "";
   }
 
   return { data: resolved };

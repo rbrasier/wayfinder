@@ -130,6 +130,43 @@ describe("document.getFields", () => {
     expect(result.reason).toBeTruthy();
   });
 
+  it("attaches a group field's current items so the editor can seed them", async () => {
+    const groupNode = {
+      id: "node-1",
+      config: {
+        outputType: "generate_document",
+        documentTemplateFields: [
+          {
+            key: "suppliers",
+            label: "Suppliers",
+            type: "group",
+            optional: true,
+            raw: "#Suppliers (repeat)",
+            itemFields: [{ key: "name", label: "Name", type: "text", optional: false, raw: "Name" }],
+          },
+        ],
+      },
+    };
+    const groupStepOutput = {
+      id: "step-1",
+      fields: [
+        { key: "suppliers", label: "Suppliers", type: "group", value: "", items: [{ name: "Acme" }] },
+      ],
+    };
+    const container = makeContainer();
+    (container.repos.flowNodes.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(groupNode));
+    (container.repos.sessionStepOutputs.findByMessageId as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(groupStepOutput),
+    );
+    const caller = createCaller(contextWith(container));
+
+    const result = await caller.document.getFields({ messageId: "11111111-1111-1111-1111-111111111111" });
+
+    expect(result.fields).toEqual([
+      expect.objectContaining({ key: "suppliers", type: "group", items: [{ name: "Acme" }] }),
+    ]);
+  });
+
   it("throws NOT_FOUND when the message has no document", async () => {
     const container = makeContainer();
     (container.repos.sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
@@ -180,6 +217,22 @@ describe("document.updateFields", () => {
 
     expect(container.useCases.updateDocumentFields.execute).toHaveBeenCalledWith(
       expect.objectContaining({ editedByUserId: "user-1", messageId: "11111111-1111-1111-1111-111111111111" }),
+    );
+  });
+
+  it("forwards edited group items to the use case", async () => {
+    const container = makeContainer();
+    const caller = createCaller(contextWith(container));
+
+    const groupItems = { suppliers: [{ name: "Acme" }, { name: "Globex" }] };
+    await caller.document.updateFields({
+      messageId: "11111111-1111-1111-1111-111111111111",
+      values: { supplier_name: "X" },
+      groupItems,
+    });
+
+    expect(container.useCases.updateDocumentFields.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ groupItems }),
     );
   });
 });

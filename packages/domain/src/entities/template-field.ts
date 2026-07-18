@@ -10,7 +10,8 @@ export type TemplateFieldType =
   | "email"
   | "yesno"
   | "narrative"
-  | "section";
+  | "section"
+  | "group";
 
 export interface TemplateField {
   key: string;
@@ -24,8 +25,19 @@ export interface TemplateField {
   min?: number;
   // Generation brief for a narrative field — what prose the AI should compose.
   instruction?: string;
+  // One repeating-group item's sub-fields (group only). Parsed from the tags
+  // between the group's {{#name (repeat)}} open and {{/name}} close.
+  itemFields?: TemplateField[];
+  // Hard maximum number of items the AI may emit for a group (group only).
+  // Defaults to DEFAULT_ITEM_CAP when the open tag carries no (max: N).
+  itemCap?: number;
   raw: string;
 }
+
+// Default hard cap on repeating-group item count — the primary guard against
+// unbounded or degenerate array extraction. Overridable per group via
+// {{#name (repeat) (max: N)}}.
+export const DEFAULT_ITEM_CAP = 20;
 
 const SCALAR_TYPES: TemplateFieldType[] = ["text", "date", "currency", "number", "email", "yesno"];
 
@@ -239,7 +251,14 @@ const applyAnnotation = (
 // tag dedupes against its open by key in parseTemplateFields.
 const SECTION_SIGIL = /^([#/^])\s*([\s\S]*)$/;
 
-const parseSectionTag = (remainder: string, rawTag: string): Result<TemplateField> => {
+// A {{#name (repeat)}} open tag declares a repeating group; without (repeat) the
+// same block stays a v1.19.0 boolean section gate (inner tags leak to top level).
+// (repeat) is only meaningful on a "#" open tag — never on "^" (inverted) or "/".
+const parseSectionTag = (
+  sigil: string,
+  remainder: string,
+  rawTag: string,
+): Result<TemplateField> => {
   const label = stripAnnotations(remainder);
   if (!label) {
     return err(
@@ -249,19 +268,41 @@ const parseSectionTag = (remainder: string, rawTag: string): Result<TemplateFiel
       ),
     );
   }
-  return ok({
+
+  const annotations = extractAnnotationGroups(rawTag);
+  const isRepeat = sigil === "#" && annotations.some((group) => group.toLowerCase() === "repeat");
+  if (!isRepeat) {
+    return ok({ key: deriveFieldKey(label), label, type: "section", optional: true, raw: rawTag });
+  }
+
+  const group: TemplateField = {
     key: deriveFieldKey(label),
     label,
-    type: "section",
+    type: "group",
     optional: true,
     raw: rawTag,
-  });
+  };
+
+  const maxAnnotation = annotations.find((annotation) => /^max\s*:/i.test(annotation));
+  if (!maxAnnotation) return ok(group);
+
+  const cap = Number(maxAnnotation.slice(maxAnnotation.indexOf(":") + 1).trim());
+  if (!Number.isInteger(cap) || cap <= 0) {
+    return err(
+      domainError(
+        "VALIDATION_FAILED",
+        `Repeating group "{{${rawTag}}}" has an invalid (max: …) — the item cap must be a positive whole number.`,
+      ),
+    );
+  }
+  return ok({ ...group, itemCap: cap });
 };
 
 export const parseTemplateField = (rawTag: string): Result<TemplateField> => {
-  const sectionMatch = rawTag.trim().match(SECTION_SIGIL);
+  const trimmed = rawTag.trim();
+  const sectionMatch = trimmed.match(SECTION_SIGIL);
   if (sectionMatch) {
-    return parseSectionTag(sectionMatch[2] ?? "", rawTag.trim());
+    return parseSectionTag(sectionMatch[1] ?? "", sectionMatch[2] ?? "", trimmed);
   }
 
   const label = stripAnnotations(rawTag);
@@ -304,6 +345,14 @@ const describeType = (field: TemplateField): string => {
   if (field.type === "section") {
     return `decide whether to include the "${field.label}" section — answer exactly "Yes" to include it or "No" to omit it`;
   }
+  if (field.type === "group") {
+    const cap = field.itemCap ?? DEFAULT_ITEM_CAP;
+    const itemFields = field.itemFields ?? [];
+    const itemDescription = itemFields
+      .map((item) => `"${item.label}" (key: ${item.key}) — ${describeTemplateFieldFormat(item)}`)
+      .join("; ");
+    return `a list of up to ${cap} items; return a JSON array where each item is an object with these fields: ${itemDescription}`;
+  }
   if (field.type === "narrative") {
     const instruction = field.instruction?.trim();
     return instruction
@@ -331,9 +380,10 @@ const describeType = (field: TemplateField): string => {
 };
 
 export const describeTemplateFieldFormat = (field: TemplateField): string => {
-  // A section gate is a pure include/omit decision — numeric and optionality
-  // notes would only confuse the model, so describe it on its own.
-  if (field.type === "section") return describeType(field);
+  // A section gate is a pure include/omit decision and a group is a list of
+  // items — numeric and optionality notes on the outer field would only confuse
+  // the model, so describe each on its own.
+  if (field.type === "section" || field.type === "group") return describeType(field);
 
   const parts = [describeType(field)];
   if (field.maxLength !== undefined) parts.push(`max length ${field.maxLength} characters`);
@@ -448,16 +498,99 @@ export const validateTemplateFieldValue = (
   }
 };
 
+interface OpenGroup {
+  field: TemplateField;
+  inner: TemplateField[];
+  innerKeys: Set<string>;
+}
+
+// Walks the ordered raw tags, folding {{#name (repeat)}} … {{/name}} blocks into
+// a single `group` field whose `itemFields` are the inner tags (kept out of the
+// top level). A {{#name}} without (repeat) stays a v1.19.0 boolean gate with its
+// inner tags at the top level. Nesting a group inside a section or another group
+// (or a section inside a group) is a validation error — v1 is single-level only.
 export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> => {
   const fields: TemplateField[] = [];
   const seenKeys = new Set<string>();
+  let openGroup: OpenGroup | null = null;
+  const openSections: string[] = [];
+
+  const addTopLevel = (field: TemplateField): void => {
+    if (seenKeys.has(field.key)) return;
+    seenKeys.add(field.key);
+    fields.push(field);
+  };
 
   for (const rawTag of rawTags) {
-    const parsed = parseTemplateField(rawTag);
+    const trimmed = rawTag.trim();
+    const sigil = /^[#/^]/.test(trimmed) ? trimmed[0] : null;
+    const parsed = parseTemplateField(trimmed);
     if (parsed.error) return parsed;
-    if (seenKeys.has(parsed.data.key)) continue;
-    seenKeys.add(parsed.data.key);
-    fields.push(parsed.data);
+    const field = parsed.data;
+
+    if (sigil === "#" || sigil === "^") {
+      if (field.type === "group") {
+        if (openGroup) {
+          return err(
+            domainError(
+              "VALIDATION_FAILED",
+              `Repeating group "{{${trimmed}}}" is nested inside another group. Nested groups are not supported — keep groups at the top level.`,
+            ),
+          );
+        }
+        if (openSections.length > 0) {
+          return err(
+            domainError(
+              "VALIDATION_FAILED",
+              `Repeating group "{{${trimmed}}}" is nested inside an optional section. A group cannot sit inside a section — move it out.`,
+            ),
+          );
+        }
+        openGroup = { field, inner: [], innerKeys: new Set<string>() };
+        addTopLevel(field);
+        continue;
+      }
+      if (openGroup) {
+        return err(
+          domainError(
+            "VALIDATION_FAILED",
+            `Section "{{${trimmed}}}" is nested inside a repeating group. Sections inside groups are not supported.`,
+          ),
+        );
+      }
+      openSections.push(field.key);
+      addTopLevel(field);
+      continue;
+    }
+
+    if (sigil === "/") {
+      if (openGroup && openGroup.field.key === field.key) {
+        if (openGroup.inner.length === 0) {
+          return err(
+            domainError(
+              "VALIDATION_FAILED",
+              `Repeating group "{{#${field.label}}}" has no fields inside it. Add at least one {{ Field }} between the open and close tags.`,
+            ),
+          );
+        }
+        openGroup.field.itemFields = openGroup.inner;
+        openGroup = null;
+        continue;
+      }
+      const sectionIndex = openSections.lastIndexOf(field.key);
+      if (sectionIndex >= 0) openSections.splice(sectionIndex, 1);
+      // Close tags never emit a field — they dedupe against their open by key.
+      continue;
+    }
+
+    if (openGroup) {
+      if (!openGroup.innerKeys.has(field.key)) {
+        openGroup.innerKeys.add(field.key);
+        openGroup.inner.push(field);
+      }
+      continue;
+    }
+    addTopLevel(field);
   }
 
   return ok(fields);

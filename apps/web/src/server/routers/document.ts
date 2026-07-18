@@ -11,6 +11,9 @@ import { toTrpcError } from "../trpc-errors";
 
 export interface DocumentFieldWithValue extends TemplateField {
   value: string;
+  // Present only for a "group" field: the current repeating items, so the edit
+  // dialog can seed its per-item editor.
+  items?: Array<Record<string, string>>;
 }
 
 // Pure gate for whether a generated document may be manually edited. The server
@@ -88,8 +91,15 @@ export const documentRouter = router({
       const stepFields =
         stepOutputResult.error || !stepOutputResult.data ? [] : stepOutputResult.data.fields;
       const valueByKey = new Map(stepFields.map((field) => [field.key, field.value]));
+      const itemsByKey = new Map(
+        stepFields.filter((field) => field.items).map((field) => [field.key, field.items!]),
+      );
       const fields: DocumentFieldWithValue[] = resolveDisplayFields(config, stepFields).map(
-        (field) => ({ ...field, value: valueByKey.get(field.key) ?? "" }),
+        (field) => ({
+          ...field,
+          value: valueByKey.get(field.key) ?? "",
+          ...(field.type === "group" ? { items: itemsByKey.get(field.key) ?? [] } : {}),
+        }),
       );
 
       const { editable, reason } = documentEditability({
@@ -113,6 +123,7 @@ export const documentRouter = router({
       z.object({
         messageId: z.string().uuid(),
         values: z.record(z.string()),
+        groupItems: z.record(z.array(z.record(z.string()))).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -120,6 +131,7 @@ export const documentRouter = router({
         messageId: input.messageId,
         editedByUserId: ctx.userId,
         values: input.values,
+        groupItems: input.groupItems,
       });
       if (result.error) throw toTrpcError(result.error);
 

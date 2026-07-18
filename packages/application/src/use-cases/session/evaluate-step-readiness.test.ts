@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError, parseTemplateFields } from "@rbrasier/domain";
 import type {
   Flow,
   FlowNode,
@@ -242,5 +242,34 @@ describe("EvaluateStepReadiness", () => {
     });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("surfaces a group completeness note and threads the extracted array", async () => {
+    const suppliers = parseTemplateFields([
+      "#Suppliers (repeat)",
+      "Name",
+      "/Suppliers",
+    ]).data![0]!;
+    const documentGenerator = makeDocumentGenerator();
+    (documentGenerator.extractFields as ReturnType<typeof vi.fn>).mockReturnValue(
+      ok({ fields: [suppliers] }),
+    );
+    // Extraction returns one supplier missing its required Name; grading is
+    // confident, so the note rides the missingInformation channel for visibility.
+    const languageModel = makeLanguageModel({
+      extraction: { suppliers: [{ name: "" }] } as unknown as Record<string, string>,
+    });
+
+    const useCase = new EvaluateStepReadiness(
+      languageModel,
+      documentGenerator,
+      makeObjectStorage(),
+    );
+
+    const result = await useCase.execute({ messages, flow: makeFlow(), node: makeNode() });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.missingInformation.some((note) => note.includes("Suppliers"))).toBe(true);
+    expect(result.data?.fieldValues.suppliers).toEqual([]);
   });
 });

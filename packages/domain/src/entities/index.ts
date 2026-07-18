@@ -41,6 +41,7 @@ export * from "./chunk-version";
 export * from "./answer-feedback";
 export * from "./reindexable-document";
 export * from "./session-step-output";
+export * from "./group-fields";
 export * from "./analytics";
 export * from "./field-report-view";
 export * from "./field-report-pivot";

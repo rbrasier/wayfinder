@@ -444,6 +444,44 @@ describe("DocxGenerator", () => {
       expect(result.data!.fields.filter((field) => field.key === "risk_section")).toHaveLength(1);
     });
 
+    it("renders a repeating group once per array item with template-controlled layout", () => {
+      const groupXml = simpleDocXml(
+        "Recs: {{#Recommendations (repeat)}}[{{ Owner }}: {{ Text }}] {{/Recommendations}}End",
+      );
+
+      const result = generator.generate({
+        templateBytes: buildTemplateBuffer(groupXml),
+        data: {
+          recommendations: [
+            { owner: "Finance", text: "Cut cost" },
+            { owner: "Ops", text: "Add staff" },
+          ],
+        },
+      });
+      expect(result.error).toBeUndefined();
+      const text = new Docxtemplater(new PizZip(result.data!.docxBytes), {
+        paragraphLoop: true,
+        linebreaks: true,
+        delimiters: { start: "{{", end: "}}" },
+      }).getFullText();
+      expect(text).toContain("[Finance: Cut cost]");
+      expect(text).toContain("[Ops: Add staff]");
+      expect(text).toContain("End");
+    });
+
+    it("extracts a (repeat) block as a group field whose inner tags do not leak top-level", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{{#Recommendations (repeat)}}{{ Owner }} {{ Text }}{{/Recommendations}}"),
+      );
+
+      const result = generator.extractFields({ templateBytes });
+      expect(result.error).toBeUndefined();
+      const group = result.data!.fields.find((field) => field.key === "recommendations");
+      expect(group?.type).toBe("group");
+      expect(group?.itemFields?.map((item) => item.key)).toEqual(["owner", "text"]);
+      expect(result.data!.fields.some((field) => field.key === "owner")).toBe(false);
+    });
+
     it("returns an error when given a malformed template buffer", () => {
       const result = generator.generate({
         templateBytes: Buffer.from("invalid"),

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import type { TemplateField } from "@rbrasier/domain";
+import { DEFAULT_ITEM_CAP, type TemplateField } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,26 +36,39 @@ export function DocumentEditDialog({ open, messageId, onClose, onSaved }: Docume
   const updateMutation = trpc.document.updateFields.useMutation();
 
   const [values, setValues] = useState<Record<string, string>>({});
+  const [groupItems, setGroupItems] = useState<Record<string, Array<Record<string, string>>>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Re-seed the form whenever fresh field values arrive for an opened dialog.
   useEffect(() => {
     if (!open || !fieldsQuery.data) return;
     const seeded: Record<string, string> = {};
-    for (const field of fieldsQuery.data.fields) seeded[field.key] = field.value;
+    const seededGroups: Record<string, Array<Record<string, string>>> = {};
+    for (const field of fieldsQuery.data.fields) {
+      seeded[field.key] = field.value;
+      if (field.type === "group") seededGroups[field.key] = field.items ?? [];
+    }
     setValues(seeded);
+    setGroupItems(seededGroups);
     setFieldErrors({});
   }, [open, fieldsQuery.data]);
 
   const setValue = (key: string, value: string) =>
     setValues((prev) => ({ ...prev, [key]: value }));
 
+  const setItems = (key: string, items: Array<Record<string, string>>) =>
+    setGroupItems((prev) => ({ ...prev, [key]: items }));
+
   const handleSave = async () => {
     setFieldErrors({});
-    const result = await updateMutation.mutateAsync({ messageId, values });
+    const result = await updateMutation.mutateAsync({ messageId, values, groupItems });
     if (!result.ok) {
+      // A group can raise several errors (one per bad item), all keyed to the
+      // group field — accumulate them so none is lost.
       const next: Record<string, string> = {};
-      for (const error of result.fieldErrors ?? []) next[error.key] = error.message;
+      for (const error of result.fieldErrors ?? []) {
+        next[error.key] = next[error.key] ? `${next[error.key]} · ${error.message}` : error.message;
+      }
       setFieldErrors(next);
       toast.error("Some fields need fixing.");
       return;
@@ -90,15 +103,29 @@ export function DocumentEditDialog({ open, messageId, onClose, onSaved }: Docume
               {data.reason ?? "This document can no longer be edited."}
             </p>
           ) : (
-            data.fields.map((field) => (
-              <FieldInput
-                key={field.key}
-                field={field}
-                value={values[field.key] ?? ""}
-                error={fieldErrors[field.key]}
-                onChange={(value) => setValue(field.key, value)}
-              />
-            ))
+            data.fields.map((field) =>
+              field.type === "group" ? (
+                <div key={field.key} className="space-y-1.5">
+                  <Label>{field.label}</Label>
+                  <GroupFieldEditor
+                    field={field}
+                    items={groupItems[field.key] ?? []}
+                    onChange={(items) => setItems(field.key, items)}
+                  />
+                  {fieldErrors[field.key] && (
+                    <p className="text-[12px] text-[#c2385a]">{fieldErrors[field.key]}</p>
+                  )}
+                </div>
+              ) : (
+                <FieldInput
+                  key={field.key}
+                  field={field}
+                  value={values[field.key] ?? ""}
+                  error={fieldErrors[field.key]}
+                  onChange={(value) => setValue(field.key, value)}
+                />
+              ),
+            )
           )}
         </DialogBody>
 
@@ -137,6 +164,69 @@ function FieldInput({ field, value, error, onChange }: FieldInputProps) {
       </Label>
       <FieldControl field={field} value={value} onChange={onChange} />
       {error && <p className="text-[12px] text-[#c2385a]">{error}</p>}
+    </div>
+  );
+}
+
+interface GroupFieldEditorProps {
+  field: TemplateField;
+  items: Array<Record<string, string>>;
+  onChange: (items: Array<Record<string, string>>) => void;
+}
+
+function GroupFieldEditor({ field, items, onChange }: GroupFieldEditorProps) {
+  const subFields = field.itemFields ?? [];
+  const cap = field.itemCap ?? DEFAULT_ITEM_CAP;
+  const atCap = items.length >= cap;
+
+  const updateItem = (index: number, key: string, value: string) =>
+    onChange(items.map((item, position) => (position === index ? { ...item, [key]: value } : item)));
+
+  const removeItem = (index: number) =>
+    onChange(items.filter((_item, position) => position !== index));
+
+  const addItem = () => {
+    if (atCap) return;
+    const blank: Record<string, string> = {};
+    for (const subField of subFields) blank[subField.key] = "";
+    onChange([...items, blank]);
+  };
+
+  return (
+    <div className="space-y-2">
+      {items.length === 0 && (
+        <p className="text-[12px] text-[#6d6a65]">No items yet — add one below.</p>
+      )}
+      {items.map((item, index) => (
+        <div
+          key={index}
+          className="space-y-2 rounded-[9px] border border-[#dedad2] bg-[#faf9f7] p-3"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-[#6d6a65]">
+              Item {index + 1}
+            </span>
+            <button
+              type="button"
+              onClick={() => removeItem(index)}
+              className="text-[12px] text-[#c2385a] hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+          {subFields.map((subField) => (
+            <FieldInput
+              key={subField.key}
+              field={{ ...subField, key: `${field.key}-${index}-${subField.key}` }}
+              value={item[subField.key] ?? ""}
+              onChange={(value) => updateItem(index, subField.key, value)}
+            />
+          ))}
+        </div>
+      ))}
+      <Button type="button" variant="ghost" onClick={addItem} disabled={atCap}>
+        {atCap ? `Maximum ${cap} items reached` : "+ Add item"}
+      </Button>
     </div>
   );
 }

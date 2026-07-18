@@ -19,9 +19,11 @@ export interface ExtractFieldsOutput {
 
 export interface GenerateDocxInput {
   templateBytes: Buffer;
-  // Boolean values gate optional {{#section}} … {{/section}} blocks; string
-  // values fill {{placeholder}} tags.
-  data: Record<string, string | boolean>;
+  // String values fill {{placeholder}} tags; boolean values gate optional
+  // {{#section}} … {{/section}} blocks; an array of records feeds a repeating
+  // {{#group (repeat)}} … {{/group}} block (docxtemplater's paragraphLoop
+  // renders the inner tags once per item).
+  data: Record<string, string | boolean | Array<Record<string, string>>>;
 }
 
 export interface GenerateDocxOutput {

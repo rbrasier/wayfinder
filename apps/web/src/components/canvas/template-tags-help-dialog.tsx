@@ -49,6 +49,17 @@ const SECTION_ROWS: AnnotationRow[] = [
   },
 ];
 
+const GROUP_ROWS: AnnotationRow[] = [
+  {
+    annotation: "{{#Name (repeat)}} … {{/Name}}",
+    meaning: "Wraps a repeating group. The AI returns a list of records and the block renders once per item, filling the {{fields}} inside from each item. Add (repeat) to the open tag — without it the block is an optional section, not a list. Only the item count is reportable.",
+  },
+  {
+    annotation: "{{#Name (repeat) (max: 50)}}",
+    meaning: "Caps the number of items the AI may return (default 20). Groups cannot be nested inside sections or other groups.",
+  },
+];
+
 const OPTION_ROWS: AnnotationRow[] = [
   { annotation: "(options: A, B, C)", meaning: "AI must return exactly one of the listed values" },
   { annotation: "(multi-options: A, B, C)", meaning: "Shorthand — AI may return one or more of the listed values (comma-separated)" },
@@ -71,6 +82,7 @@ const COMBINED_EXAMPLES = [
   "{{ Notes (text) (maxlen: 200) (optional) }}",
   '{{ Background (narrative: "Summarise the rationale in 2–3 paragraphs") }}',
   "{{#Risk Section}} … {{ Risk Narrative (narrative) }} … {{/Risk Section}}",
+  "{{#Recommendations (repeat)}} {{ Owner }}: {{ Action }} {{/Recommendations}}",
 ];
 
 function AnnotationTable({ rows }: { rows: AnnotationRow[] }) {
@@ -161,6 +173,18 @@ Fee: {{ Contract Value (currency) (optional) }}`}
               fields inside it.
             </p>
             <AnnotationTable rows={SECTION_ROWS} />
+          </div>
+
+          <div className="space-y-2">
+            <SectionHeading>Repeating groups</SectionHeading>
+            <p className="text-[12px] leading-[1.55] text-[#5a5650]">
+              Use a repeating group for a list where every item has the same fields — a
+              recommendations table, an options appraisal, a set of suppliers. Mark the open tag
+              with <code className="font-mono">(repeat)</code>; the AI extracts a list and the block
+              renders once per item. Groups are kept flat (no nesting) and only their item count is
+              reported.
+            </p>
+            <AnnotationTable rows={GROUP_ROWS} />
           </div>
 
           <div className="space-y-2">
