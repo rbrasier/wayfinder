@@ -21,7 +21,10 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
       isSystem: true,
       isDefault: true,
     },
-    defaultPermissions: ["chat:create", "workflow:create_own"],
+    // group:manage_own is granted to Everyone so a delegated admin can self-serve
+    // out of the box; the guard still scopes it to the groups they delegate-admin
+    // (ADR-036 §4). Turning it off here disables delegated-admin self-service.
+    defaultPermissions: ["chat:create", "workflow:create_own", "group:manage_own"],
   },
   {
     definition: {

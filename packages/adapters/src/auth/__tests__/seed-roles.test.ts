@@ -82,7 +82,7 @@ describe("seedRoles", () => {
 
     const everyoneGrants = await roles.listPermissions(everyone.data!.id);
     expect([...everyoneGrants.data!].sort()).toEqual(
-      ["chat:create", "workflow:create_own"].sort(),
+      ["chat:create", "group:manage_own", "workflow:create_own"].sort(),
     );
 
     const powerGrants = await roles.listPermissions(powerUsers.data!.id);

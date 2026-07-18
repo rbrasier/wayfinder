@@ -1,8 +1,9 @@
 # Phase — Group-Scoped Authorization & Delegated Admin
 
-- **Status**: Draft (run `/doc-review` before building)
-- **Target version**: 2.9.0 — **MINOR** (new `admin_groups` / `admin_group_members`
-  tables; additive `FlowVisibility` kind). Tentative sequencing.
+- **Status**: Implemented in v2.7.0
+- **Target version**: 2.7.0 — **MINOR** (new `admin_groups` / `admin_group_members`
+  tables; additive `FlowVisibility` kind). Sequenced onto `main` at 2.6.0 → 2.7.0
+  (the draft's 2.9.0 was tentative; `/doc-review` flagged confirming at Build).
 - **PRD**: `docs/development/prd/group-scoped-authorization.prd.md`
 - **ADR**: `docs/development/adr/036-group-scoped-authorization-and-delegated-admin.adr.md`
 - **Depends on**: ADR-021 (RBAC, `computeEffectivePermissions`), flow-visibility

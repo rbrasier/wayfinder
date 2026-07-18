@@ -8,6 +8,16 @@ import {
   CreateFlowEdge,
   CreateFlowNode,
   ConfirmAndSend,
+  CreateGroup,
+  UpdateGroup,
+  DeleteGroup,
+  ListGroups,
+  ListManageableGroups,
+  ListGroupMembers,
+  AddGroupMember,
+  SetGroupMemberRole,
+  RemoveGroupMember,
+  ResolveGroupAuthorization,
   CreateUser,
   DecideApproval,
   DeleteFlow,
@@ -139,6 +149,7 @@ import {
   DrizzleNotificationLogRepository,
   DrizzleReindexSourceRepository,
   DrizzleRoleRepository,
+  DrizzleGroupRepository,
   DrizzleSessionMessageRepository,
   DrizzleSessionParticipantRepository,
   DrizzleSessionUploadRepository,
@@ -235,6 +246,7 @@ const build = () => {
   const featureFlagRoles = new DrizzleFeatureFlagRoleRepository(db);
   const roles = new DrizzleRoleRepository(db);
   const userRoles = new DrizzleUserRoleRepository(db);
+  const groups = new DrizzleGroupRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const budgets = new DrizzleBudgetRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
@@ -573,7 +585,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
@@ -614,6 +626,16 @@ const build = () => {
       removeUserRole: new RemoveUserRole(roles, userRoles),
       getEffectivePermissions,
       listUsersForRole: new ListUsersForRole(roles, userRoles),
+      createGroup: new CreateGroup(groups),
+      updateGroup: new UpdateGroup(groups),
+      deleteGroup: new DeleteGroup(groups),
+      listGroups: new ListGroups(groups),
+      listManageableGroups: new ListManageableGroups(groups),
+      listGroupMembers: new ListGroupMembers(groups),
+      addGroupMember: new AddGroupMember(groups),
+      setGroupMemberRole: new SetGroupMemberRole(groups),
+      removeGroupMember: new RemoveGroupMember(groups),
+      resolveGroupAuthorization: new ResolveGroupAuthorization(groups),
       trackUsage: new TrackUsage(usageRepo),
       getUsageSummary: new GetUsageSummary(usageRepo),
       registerJob: new RegisterJob(jobRepo),

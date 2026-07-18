@@ -32,6 +32,54 @@ describe("isFlowDiscoverableBy", () => {
     });
     expect(discoverable).toBe(false);
   });
+
+  it("returns true for group flows when the viewer belongs to one of the groups", () => {
+    const visibility: FlowVisibility = { kind: "group", groupIds: ["hr", "legal"] };
+    const discoverable = isFlowDiscoverableBy(visibility, {
+      ownerUserId: "owner-1",
+      viewerUserId: "someone-else",
+      viewerGroupIds: ["finance", "hr"],
+    });
+    expect(discoverable).toBe(true);
+  });
+
+  it("returns false for group flows when the viewer belongs to none of the groups", () => {
+    const visibility: FlowVisibility = { kind: "group", groupIds: ["hr"] };
+    const discoverable = isFlowDiscoverableBy(visibility, {
+      ownerUserId: "owner-1",
+      viewerUserId: "someone-else",
+      viewerGroupIds: ["finance"],
+    });
+    expect(discoverable).toBe(false);
+  });
+
+  it("returns false for group flows when the viewer has no group memberships", () => {
+    const visibility: FlowVisibility = { kind: "group", groupIds: ["hr"] };
+    const discoverable = isFlowDiscoverableBy(visibility, {
+      ownerUserId: "owner-1",
+      viewerUserId: "someone-else",
+    });
+    expect(discoverable).toBe(false);
+  });
+
+  it("returns true for group flows when the viewer is the owner even without membership", () => {
+    const visibility: FlowVisibility = { kind: "group", groupIds: ["hr"] };
+    const discoverable = isFlowDiscoverableBy(visibility, {
+      ownerUserId: "owner-1",
+      viewerUserId: "owner-1",
+    });
+    expect(discoverable).toBe(true);
+  });
+
+  it("returns true for group flows when the viewer is a global admin", () => {
+    const visibility: FlowVisibility = { kind: "group", groupIds: ["hr"] };
+    const discoverable = isFlowDiscoverableBy(visibility, {
+      ownerUserId: "owner-1",
+      viewerUserId: "someone-else",
+      viewerIsAdmin: true,
+    });
+    expect(discoverable).toBe(true);
+  });
 });
 
 describe("canPublishWithVisibility", () => {
@@ -53,5 +101,37 @@ describe("canPublishWithVisibility", () => {
   it("allows any user to publish a private flow regardless of permission", () => {
     const allowed = canPublishWithVisibility({ kind: "private" }, { canPublishToEveryone: true });
     expect(allowed).toBe(true);
+  });
+
+  it("allows publishing to groups the caller belongs to", () => {
+    const allowed = canPublishWithVisibility(
+      { kind: "group", groupIds: ["hr"] },
+      { canPublishToEveryone: false, callerGroupIds: ["hr", "finance"] },
+    );
+    expect(allowed).toBe(true);
+  });
+
+  it("rejects publishing to a group the caller does not belong to", () => {
+    const allowed = canPublishWithVisibility(
+      { kind: "group", groupIds: ["hr", "finance"] },
+      { canPublishToEveryone: false, callerGroupIds: ["hr"] },
+    );
+    expect(allowed).toBe(false);
+  });
+
+  it("lets a global publisher publish to any group without membership", () => {
+    const allowed = canPublishWithVisibility(
+      { kind: "group", groupIds: ["hr", "finance"] },
+      { canPublishToEveryone: true },
+    );
+    expect(allowed).toBe(true);
+  });
+
+  it("rejects publishing to an empty group list", () => {
+    const allowed = canPublishWithVisibility(
+      { kind: "group", groupIds: [] },
+      { canPublishToEveryone: true },
+    );
+    expect(allowed).toBe(false);
   });
 });

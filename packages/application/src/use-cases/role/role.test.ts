@@ -166,6 +166,7 @@ describe("ListRoles", () => {
       [
         "chat:create",
         "flow:advanced_config",
+        "group:manage_own",
         "knowledge:curate",
         "knowledge:submit_feedback",
         "workflow:create_own",

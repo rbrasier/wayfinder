@@ -62,6 +62,42 @@ export const admin_user_roles = pgTable(
   }),
 );
 
+// Flat groups (ADR-036): a sharing/delegation boundary, not tenant isolation.
+// Members see the group's flows; delegated admins additionally manage membership
+// and publish flows to the group — all scoped, never a global tier.
+export const admin_groups = pgTable("admin_groups", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const admin_group_members = pgTable(
+  "admin_group_members",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    group_id: uuid("group_id")
+      .notNull()
+      .references(() => admin_groups.id, { onDelete: "cascade" }),
+    user_id: uuid("user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "cascade" }),
+    role_in_group: text("role_in_group", { enum: ["member", "delegated_admin"] })
+      .notNull()
+      .default("member"),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    group_member_unique: unique("admin_group_members_group_id_user_id_unique").on(
+      t.group_id,
+      t.user_id,
+    ),
+    by_user: index("admin_group_members_user_id_idx").on(t.user_id),
+  }),
+);
+
 // Uploaded HR spreadsheet metadata. Rows are stored in admin_hr_rows in the
 // structure they arrived in; `column_mapping` records which header carries which
 // canonical field for resolution (ADR-018).
