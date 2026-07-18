@@ -8,9 +8,12 @@
 - **Status**: Draft
 - **Date**: 2026-07-18
 - **Author**: richy.brasier@gmail.com
-- **Target version**: 3.0.0 (bump: **MAJOR** — cross-cutting `organisationId` axis
-  in the domain; per `CLAUDE.md`, breaking domain changes land on `main` as the
-  next alpha line. Release owner confirms cutting alpha-3.)
+- **Target version**: 2.10.0 (bump: **MINOR** — stays on the 2.x line. The
+  `organisationId` axis is added **additively**: every scoped row defaults to a
+  system default organisation and tenancy-off preserves current behaviour, so no
+  domain contract is removed or changed — a large "schema change + new feature"
+  MINOR, not a breaking MAJOR. Staying MINOR is a design constraint, not just a
+  label: the axis must never break an existing contract.)
 
 ## 1. Problem
 
@@ -129,7 +132,10 @@ the migration/super-admin path under a controlled elevation.
 - **Audit hash chain (ADR-033)** becomes per-organisation — confirm the chaining
   scope during Build.
 - **Super-admin elevation** must be explicit and audited, never the default path.
-- **MAJOR/alpha-line** impact — release owner decides the alpha-3 cut.
+- **Additive-or-breaking** — the phase must stay additive (defaulted
+  `organisationId`, tenancy-off unchanged) to remain a 2.x MINOR; any change that
+  breaks an existing domain/API contract would force a MAJOR and must be avoided
+  or redesigned.
 - **Email-domain edge cases** — shared domains (gmail.com), multiple domains per
   org, unverified emails; the admin-maintained map + verified-email requirement
   are the guardrails.

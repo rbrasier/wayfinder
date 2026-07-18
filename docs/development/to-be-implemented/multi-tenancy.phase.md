@@ -1,8 +1,10 @@
 # Phase — Multi-Tenancy (Runtime-Toggleable Organisations)
 
 - **Status**: Draft (run `/doc-review` before building)
-- **Target version**: 3.0.0 — **MAJOR** (cross-cutting `organisationId` domain
-  axis; lands on `main` as the next alpha line; release owner confirms alpha-3).
+- **Target version**: 2.10.0 — **MINOR** (stays on the 2.x line). The
+  `organisationId` axis is added **additively**: scoped rows default to a system
+  default organisation and tenancy-off preserves current behaviour, so nothing is
+  breaking. Staying MINOR is a build constraint — never break an existing contract.
 - **PRD**: `docs/development/prd/multi-tenancy.prd.md`
 - **ADR**: `docs/development/adr/037-multi-tenancy-isolation-model.adr.md`
 - **Depends on**: ADR-025 (runtime config), ADR-001 (hexagonal). **Interacts with**
@@ -17,9 +19,10 @@ off by default, identical to today when off.
 
 ## 2. Sequencing note
 
-This is the **largest** phase in the enterprise set and the only MAJOR. Build it
-**after** the 2.x enterprise phases (audit, SSO, session, groups) have stabilised,
-so the tenant axis is applied to settled subsystems rather than moving targets.
+This is the **largest** phase in the enterprise set. Build it **after** the other
+2.x enterprise phases (audit, SSO, session, groups) have stabilised, so the tenant
+axis is applied to settled subsystems rather than moving targets. It stays on the
+2.x line by being strictly additive (see Target version).
 
 ## 3. What is built
 
@@ -67,5 +70,5 @@ ADR-037 (Accepted). Revisits ADR-033/034/035/036 for the tenant dimension.
 
 Carried from PRD §12: cross-tenant leak (RLS backstop + per-table leak tests is
 non-negotiable), enable-backfill / disable-guard correctness, per-org audit chain
-scope, audited super-admin elevation, MAJOR/alpha-line cut, and email-domain edge
+scope, audited super-admin elevation, keeping the axis additive (2.x MINOR), and email-domain edge
 cases (shared/unverified domains, multi-domain orgs).

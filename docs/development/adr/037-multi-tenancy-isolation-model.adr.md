@@ -163,8 +163,10 @@ org-scoped and reuse ADR-036's delegated-admin machinery — but at the
   the audit hash chain (ADR-033, now per-org) gains a tenant axis; a missed filter
   is a leak. RLS + tenant-aware unit-of-work are mandatory and must be tested
   exhaustively, including the super-admin elevation path.
-- Breaking domain change (entities gain `organisationId`) → **MAJOR / next alpha
-  line**; it lands on `main`, not a release branch.
+- Entities gain `organisationId`, but the axis is added **additively** (defaulted
+  to a system default org; tenancy-off unchanged), so it stays a **2.x MINOR**
+  rather than a breaking MAJOR. This is a design constraint: the implementation
+  must not remove or change an existing domain/API contract, only add to it.
 - The disable-guard and enable-backfill are stateful, one-way-ish operations that
   need careful migration handling and operator documentation.
 - ADR-033 (audit), ADR-035 (sessions), and ADR-036 (groups) each acquire a tenant
