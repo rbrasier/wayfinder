@@ -18,6 +18,7 @@ import { OrganisationNameCard } from "@/components/settings/organisation-name-ca
 import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
+import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
 import { StorageCard } from "@/components/settings/storage-card";
 
 export default function AppSettingsPage() {
@@ -67,6 +68,7 @@ export default function AppSettingsPage() {
             <NotificationSettingsCard />
             <HrDataCard />
             <EntraDirectoryCard connectivity={connectivity} />
+            <SiemStreamingCard />
           </div>
         </div>
       </div>
