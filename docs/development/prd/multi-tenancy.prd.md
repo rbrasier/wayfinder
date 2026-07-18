@@ -40,7 +40,9 @@ deployment**; that is out of scope here (see ADR-038).
 ## 3. Goals
 
 - An admin can create, rename, and delete organisations from `/admin/organisations`.
-- An admin can assign a user to an organisation (or leave them unaffiliated).
+- An admin can assign a user to an organisation (or leave them unaffiliated), and
+  can instead choose an automatic sign-in resolution strategy: `sso_claim`,
+  `email_domain`, or `self_nomination`.
 - A flow author can set a flow's visibility to `organisation`; it becomes visible
   to every user in the **owner's** organisation.
 - With no organisations created and all users unaffiliated, behaviour is
@@ -52,8 +54,6 @@ deployment**; that is out of scope here (see ADR-038).
 
 - **Data isolation between organisations** — explicitly out of scope; use separate
   deployments (ADR-038). No `organisation_id` on scoped tables, no RLS.
-- **Sign-in org resolution** (SSO claim / email domain / self-nomination) —
-  dropped; membership is admin-assigned. Auto-assignment is possible future work.
 - **Two-tier administration / super-admin elevation** — a single admin tier
   manages organisations; there is nothing isolated to elevate across.
 - **Users in multiple organisations** — a user belongs to at most one.
@@ -64,6 +64,7 @@ deployment**; that is out of scope here (see ADR-038).
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
 | `Organisation` | `packages/domain/src/entities/organisation.ts` | new | An internal audience; a sharing scope, not an isolation boundary. |
+| `OrganisationResolution` | `packages/domain/src/entities/organisation-resolution.ts` | new | Pure mapping: profile / email / nomination → organisation decision. |
 | `core_users.organisationId` | domain user entity | existing (add field) | Nullable; the user's organisation. |
 | `FlowVisibility` | `packages/domain/src/entities/flow.ts` | existing (add variant) | Gains `{ kind: "organisation" }`. |
 
@@ -74,12 +75,20 @@ deployment**; that is out of scope here (see ADR-038).
 3. As an end user, my flow list shows my private flows, my groups' flows, my organisation's flows, and global flows together.
 4. As an admin, I rename an organisation; existing memberships and org-published flows follow the rename with no data migration.
 5. As an admin, I delete an empty organisation; deleting one with members is guarded (members must be reassigned or cleared first).
+6. As an admin, I choose "email domain" resolution and map `procurement.acme.com` → Procurement; matching users are placed automatically on sign-in.
+7. As an admin, I choose "SSO claim" and name the attribute carrying the organisation; unseen values create a new organisation (policy permitting).
+8. As an admin, I choose "self-nomination"; a first-time user creates or joins an organisation, bounded by an allowlist.
 
 ## 7. Pages / surfaces affected
 
 - `/admin/organisations` — **new**: create / rename / delete organisations.
+- `/admin/settings` — **new** resolution card: pick the membership strategy
+  (`admin` / `sso_claim` / `email_domain` / `self_nomination`) and its config
+  (claim name / domain→org map / nomination mode + allowlist).
 - User-admin surface — **extended**: an organisation selector per user, beside
-  the existing role/team fields.
+  the existing role/team fields (used under the `admin` strategy).
+- First-sign-in flow — **extended**: a nomination prompt when strategy is
+  `self_nomination`.
 - Flow visibility control — **extended**: an "Organisation" option beside
   Private / Group / Everyone.
 - Flow-listing queries — **extended**: include flows whose owner shares the
@@ -94,8 +103,11 @@ uploads, audit, or any background job.
 | ----- | ------ | ------------- |
 | `core_organisations` | NEW — `id`, `name`, `slug`, `created_at`, `updated_at` | yes (`core_`) |
 | `core_users` | add `organisation_id uuid` nullable, FK → `core_organisations(id)` `on delete set null` | n/a |
+| `admin_system_settings` | `OrganisationResolution` JSON (runtime config, no DDL) | n/a |
 
-No other table is altered. No `organisation_id` on scoped tables; no RLS.
+No other table is altered. No `organisation_id` on scoped tables; no RLS. The
+`email_domain` map and `self_nomination` allowlist live inside the config JSON and
+reference organisation ids inline — no new tables.
 
 ## 9. Architectural decisions
 
@@ -109,16 +121,17 @@ No other table is altered. No `organisation_id` on scoped tables; no RLS.
 
 - [ ] With no organisations and all users unaffiliated, all existing tests pass and behaviour is unchanged.
 - [ ] An admin can create, rename, and delete an organisation; deleting one with members is rejected until they are reassigned.
-- [ ] An admin can assign a user to an organisation and clear it back to unaffiliated.
+- [ ] An admin can assign a user to an organisation and clear it back to unaffiliated (under the `admin` strategy).
+- [ ] Each resolution strategy places a first-time user in the correct organisation: `sso_claim` (claim → org, unseen creates per policy), `email_domain` (mapped verified domain, `onUnmatched` honoured), `self_nomination` (create-or-join within allowlist).
 - [ ] A flow set to `organisation` visibility is listed for users sharing the owner's organisation and not for others (unless separately global/grouped).
 - [ ] A user with a null organisation sees no `organisation`-scoped flows and their own flows behave as today.
 - [ ] No scoped table gains an `organisation_id` column; no RLS policy is introduced.
 
 ## 11. Out of scope / future work
 
-- Data isolation between organisations (separate deployments instead); sign-in
-  auto-resolution of organisation; multi-org users; per-org admins; per-org
-  billing; denormalising `organisation_id` onto `app_flows` as a list optimisation.
+- Data isolation between organisations (separate deployments instead); multi-org
+  users; per-org admins; per-org billing; denormalising `organisation_id` onto
+  `app_flows` as a list optimisation.
 
 ## 12. Risks / open questions
 
@@ -133,3 +146,6 @@ No other table is altered. No `organisation_id` on scoped tables; no RLS.
 - **Not isolation** — the one thing to communicate clearly in docs/UI: publishing
   to an organisation controls *who can find the flow*, not who can see any data
   produced by running it.
+- **Email-domain edge cases** — shared domains (gmail.com), multiple domains per
+  organisation, unverified emails; the admin-maintained map + a verified-email
+  requirement are the guardrails, exactly as they would be for isolation.

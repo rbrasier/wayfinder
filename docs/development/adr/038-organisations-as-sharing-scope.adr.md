@@ -59,7 +59,11 @@ is a coarser, identity-assigned audience above it.
   single-org-implicit app. No other table gains a column.
 
 No `organisation_id` is added to any tenant-scoped table. No RLS policies, no
-tenant context, no unit-of-work GUC, no super-admin elevation path.
+tenant context, no unit-of-work GUC, no super-admin elevation path. The
+`OrganisationResolution` config (§4) lives as a JSON row in
+`admin_system_settings` — runtime config, no DDL — and the `email_domain` map /
+`self_nomination` allowlist reference organisation ids inline rather than in new
+tables.
 
 ### 3. `organisation` visibility resolves through ownership, not a stored column
 
@@ -80,15 +84,41 @@ comparing against the viewer's organisation — so no `organisation_id` is
 denormalised onto `app_flows`. Per-user `permissions` (owner/viewer) continue to
 work orthogonally, as they do for every other visibility kind.
 
-### 4. Membership is admin-assigned, not sign-in-resolved
+### 4. Membership resolution: admin assignment or one of three sign-in strategies
 
-A user's organisation is set by an administrator in the existing user-admin
-surface, exactly as `role` and `team` are set today. The three sign-in
-resolution strategies from ADR-037 (`sso_claim`, `email_domain`,
-`self_nomination`) are **dropped**: they solved "which external tenant does this
-stranger belong to," which is out of scope. Auto-assignment (e.g. by verified
-email domain) may return later as a small convenience enhancement, but is not
-part of this decision.
+A user's organisation is populated one of four admin-selectable ways. The choice
+is runtime config (ADR-025) in `admin_system_settings`, resolved via
+`RuntimeConfigStore` — no DDL beyond the config row:
+
+```
+OrganisationResolution {
+  strategy: "admin" | "sso_claim" | "email_domain" | "self_nomination"
+  ssoClaim?:       { claimName: string }
+  emailDomain?:    { domainToOrg: Array<{ domain; organisationId }>; onUnmatched: "unaffiliated" | "nominate" }
+  selfNomination?: { mode: "create_or_join" | "join_existing"; allowlist?: string[] }
+}
+```
+
+- **`admin`** (default) — an administrator sets each user's organisation in the
+  user-admin surface, exactly as `role` and `team` are set today. No sign-in
+  logic runs.
+- **`sso_claim`** — read `claimName` from the IdP profile and map its value to an
+  organisation, creating one if the value is unseen and policy allows.
+- **`email_domain`** — look up the user's **verified** email domain in the
+  admin-maintained `domainToOrg` map (not naïve `@`-splitting, so multiple domains
+  per org and shared/personal domains are handled); `onUnmatched` decides whether
+  the user is left unaffiliated or falls through to nomination.
+- **`self_nomination`** — on first sign-in, prompt the user to create a new
+  organisation (`mode = create_or_join`) or pick an existing one; `allowlist`
+  bounds creation.
+
+The **pure mapping** (profile / email / nomination → organisation decision) lives
+in the domain (`entities/organisation-resolution.ts`) and is unit-tested without
+a database; the IO — reading the claim, the domain map, showing the prompt — is
+in the adapter / app sign-in path. Because organisation carries no isolation,
+resolution does **not** constrain the deployment's auth method (ADR-037's
+single-sign-on-method guard is not needed); `sso_claim` simply requires an SSO
+provider to be configured to have a claim to read.
 
 ### 5. Administration is a single tier
 
@@ -113,8 +143,11 @@ just data an admin creates and assigns when they want the extra sharing rung.
 - **Schema-per-tenant / separate databases.** Rejected in 037 and still rejected;
   operators needing true isolation take a separate deployment instead, which is
   simpler than either in-app option.
-- **Three sign-in resolution strategies.** Rejected — admin assignment mirrors
-  the existing `team` field and needs no IdP-claim or domain-map machinery.
+- **Admin-only membership (no sign-in resolution).** Considered as the smallest
+  possible surface; rejected as the *sole* option because operators want users
+  placed automatically. Retained as the **default** strategy (`admin`), with the
+  three sign-in strategies available when auto-assignment is wanted. These
+  populate `organisation_id` only — they carry none of ADR-037's isolation weight.
 - **Denormalising `organisation_id` onto `app_flows`.** Considered as a
   list-query optimisation; deferred. The owner-join is correct and avoids a
   column that would need maintaining if a flow owner changes organisation.
