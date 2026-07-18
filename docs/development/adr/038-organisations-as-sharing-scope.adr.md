@@ -1,6 +1,6 @@
 # ADR-038 — Organisations as an Internal Sharing Scope
 
-- **Status**: Accepted (scoped by `multi-tenancy.prd.md`)
+- **Status**: Accepted (scoped by `multi-organisation-support.prd.md`)
 - **Date**: 2026-07-18
 - **Supersedes**: **ADR-037** (runtime-toggleable pooled RLS isolation). The
   product decision that motivated 037 — *isolate several external tenants' data

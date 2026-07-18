@@ -1,4 +1,4 @@
-# PRD — Organisations (Internal Flow-Sharing Scope)
+# PRD — Multi-Organisation Support (Internal Flow-Sharing Scope)
 
 > A deployment can group its users into **organisations** — an internal audience
 > one rung coarser than a group. A flow can be published to the owner's

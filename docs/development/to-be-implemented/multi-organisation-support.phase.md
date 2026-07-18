@@ -1,11 +1,11 @@
-# Phase — Organisations (Internal Flow-Sharing Scope)
+# Phase — Multi-Organisation Support (Internal Flow-Sharing Scope)
 
 - **Status**: Draft (run `/doc-review` before building)
 - **Target version**: MINOR (stays on the 2.x line). Adds one table, one nullable
   column, and one `FlowVisibility` variant — strictly additive. With no
   organisations created and every `organisation_id` null, behaviour is identical
   to today.
-- **PRD**: `docs/development/prd/multi-tenancy.prd.md`
+- **PRD**: `docs/development/prd/multi-organisation-support.prd.md`
 - **ADR**: `docs/development/adr/038-organisations-as-sharing-scope.adr.md`
   (supersedes ADR-037 — do **not** build from 037's pooled-RLS model).
 - **Depends on**: ADR-036 (groups / visibility ladder), ADR-021 (admin).
