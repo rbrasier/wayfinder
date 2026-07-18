@@ -1,0 +1,1 @@
+ALTER TABLE "core_audit_log" DROP COLUMN "updated_at";

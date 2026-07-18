@@ -6,6 +6,7 @@ export * from "./drizzle-answer-feedback-repository";
 export * from "./drizzle-hybrid-retriever";
 export * from "./drizzle-reindex-source-repository";
 export * from "./drizzle-error-log-repository";
+export * from "./drizzle-legal-hold-repository";
 export * from "./drizzle-conversation-repository";
 export * from "./drizzle-feature-flag-repository";
 export * from "./drizzle-usage-repository";

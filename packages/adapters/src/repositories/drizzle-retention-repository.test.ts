@@ -3,6 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { RetentionTargetKey } from "@rbrasier/domain";
 import {
   RETENTION_TARGET_TABLE_NAMES,
+  buildAuditRetentionDeleteStatement,
   buildDeleteExpiredStatement,
 } from "./drizzle-retention-repository";
 
@@ -44,5 +45,37 @@ describe("buildDeleteExpiredStatement", () => {
       const { sql } = render(key as RetentionTargetKey, cutoff, 100);
       expect(sql.toLowerCase()).toContain(tableName);
     }
+  });
+
+  it("excludes held sessions from a session-scoped target (ADR-033)", () => {
+    const { sql, params } = new PgDialect().sqlToQuery(
+      buildDeleteExpiredStatement("app_session_messages", cutoff, 100, ["s-1", "s-2"]),
+    );
+    const text = sql.toLowerCase();
+    expect(text).toContain("not (");
+    expect(text).toContain("= any(array[");
+    expect(params).toContain("s-1");
+    expect(params).toContain("s-2");
+  });
+
+  it("adds no session exclusion when nothing is held", () => {
+    const { sql } = new PgDialect().sqlToQuery(
+      buildDeleteExpiredStatement("app_session_messages", cutoff, 100, []),
+    );
+    expect(sql.toLowerCase()).not.toContain("any(");
+  });
+});
+
+describe("buildAuditRetentionDeleteStatement", () => {
+  it("routes audit deletion through the append-only-safe function, not a raw DELETE", () => {
+    const { sql, params } = new PgDialect().sqlToQuery(
+      buildAuditRetentionDeleteStatement(cutoff, 500, ["s-1"]),
+    );
+    const text = sql.toLowerCase();
+    expect(text).toContain("core_audit_log_retention_delete");
+    expect(text).not.toContain("delete from");
+    expect(params).toContain(cutoff);
+    expect(params).toContain(500);
+    expect(params).toContain("s-1");
   });
 });

@@ -1,5 +1,16 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, jsonb, pgTable, real, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  bigserial,
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  real,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 export const core_users = pgTable("core_users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -56,6 +67,10 @@ export const core_verification_tokens = pgTable("core_verification_tokens", {
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Append-only and tamper-evident (ADR-033). This is the one table that omits
+// `updated_at`: a row is written once and never updated, enforced by a reject
+// trigger installed in the same migration. `sequence`/`prev_hash`/`hash` form a
+// hash chain a verifier can recompute to detect any altered or missing row.
 export const core_audit_log = pgTable("core_audit_log", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   actor_id: uuid("actor_id"),
@@ -63,11 +78,16 @@ export const core_audit_log = pgTable("core_audit_log", {
   resource_type: text("resource_type").notNull(),
   resource_id: text("resource_id"),
   metadata: jsonb("metadata").$type<Record<string, unknown> | null>(),
+  sequence: bigserial("sequence", { mode: "number" }).notNull(),
+  prev_hash: text("prev_hash"),
+  hash: text("hash").notNull(),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   // Backs the retention sweep's oldest-first range scan (scaling wall #9).
   by_created: index("core_audit_log_created_at_idx").on(t.created_at),
+  // The chain is linked by sequence; the writer reads the max-sequence row's
+  // hash, and the verifier walks rows in sequence order.
+  by_sequence: uniqueIndex("core_audit_log_sequence_idx").on(t.sequence),
 }));
 
 export const core_feature_flag = pgTable("core_feature_flag", {

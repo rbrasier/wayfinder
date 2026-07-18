@@ -19,6 +19,7 @@ import { DbHealthChecker } from "./health/db-health-checker";
 import { withOptionalLangfuse } from "./observability/langfuse-tracing-adapter";
 import { withUsageTracking } from "./observability/usage-tracking-adapter";
 import { DrizzleAuditLogger } from "./audit/drizzle-audit-logger";
+import { HttpSiemForwarder } from "./audit/http-siem-forwarder";
 import { LanguageModelAdapter } from "./ai/language-model-adapter";
 import { LangGraphAgentRunner } from "./agents/langgraph-agent-runner";
 import { DrizzleConversationRepository } from "./repositories/drizzle-conversation-repository";
@@ -103,7 +104,6 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
   const featureFlags = overrides.featureFlagRepo ?? new DrizzleFeatureFlagRepository(db);
   const usageRepo = overrides.usageRepo ?? new DrizzleUsageRepository(db);
   const jobRepo = overrides.jobRepo ?? new DrizzleJobRepository(db);
-  const auditLogger = overrides.auditLogger ?? new DrizzleAuditLogger(db);
   const errorLogger = new DrizzleErrorLogger(errorLogs);
 
   const systemSettings = overrides.systemSettingsRepo ?? new DrizzleSystemSettingsRepository(db);
@@ -125,6 +125,9 @@ export function createAdapters(db: Database, config: AdaptersConfig): Adapters {
     },
     embeddingsProvider: EMBEDDINGS_DEFAULT_PROVIDER,
   });
+  const siemForwarder = new HttpSiemForwarder(() => runtimeConfig.getSiemConfig(), logger);
+  const auditLogger =
+    overrides.auditLogger ?? new DrizzleAuditLogger(db, siemForwarder, logger);
   let llm: ILanguageModel =
     overrides.llm ?? new LanguageModelAdapter(aiProvider, runtimeConfig);
   llm = withUsageTracking(llm, usageRepo);

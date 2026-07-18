@@ -116,6 +116,9 @@ import {
   DocumentIndexingService,
   DrizzleApprovalRepository,
   DrizzleAuditLogger,
+  DrizzleAuditQueryRepository,
+  DrizzleLegalHoldRepository,
+  HttpSiemForwarder,
   DrizzleContextDocContentRepository,
   DrizzleConversationRepository,
   DrizzleDocumentChunksRepository,
@@ -222,7 +225,12 @@ const build = () => {
   const conversations = new DrizzleConversationRepository(db);
   const errorLogs = new DrizzleErrorLogRepository(db);
   const errorLogger = new DrizzleErrorLogger(errorLogs);
-  const auditLogger = new DrizzleAuditLogger(db);
+  // The SIEM config thunk resolves lazily against runtimeConfig (defined below);
+  // forward() only runs after the container is fully wired.
+  const siemForwarder = new HttpSiemForwarder(() => runtimeConfig.getSiemConfig(), logger);
+  const auditLogger = new DrizzleAuditLogger(db, siemForwarder, logger);
+  const auditQuery = new DrizzleAuditQueryRepository(db);
+  const legalHolds = new DrizzleLegalHoldRepository(db);
   const featureFlags = new DrizzleFeatureFlagRepository(db);
   const featureFlagRoles = new DrizzleFeatureFlagRoleRepository(db);
   const roles = new DrizzleRoleRepository(db);
@@ -565,7 +573,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),

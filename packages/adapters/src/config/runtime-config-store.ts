@@ -1,7 +1,10 @@
 import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
+  DEFAULT_SIEM_CONFIG,
   DEFAULT_USAGE_LIMITS_CONFIG,
+  SIEM_CONFIG_SETTING_KEY,
+  parseSiemConfig,
   DOCUMENT_GENERATION_CONFIG_SETTING_KEY,
   USAGE_LIMITS_CONFIG_SETTING_KEY,
   parseUsageLimitsConfig,
@@ -24,6 +27,7 @@ import {
   type ProviderName,
   type ResolvedDocumentGenerationBudget,
   type SessionUploadConfig,
+  type SiemConfig,
   type StorageConfig,
   type UsageLimitsConfig,
 } from "@rbrasier/domain";
@@ -366,6 +370,8 @@ export class RuntimeConfigStore {
   private authVersion = 0;
   private usageLimitsCache: UsageLimitsConfig | null = null;
   private usageLimitsPending: Promise<UsageLimitsConfig> | null = null;
+  private siemCache: SiemConfig | null = null;
+  private siemPending: Promise<SiemConfig> | null = null;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -516,6 +522,30 @@ export class RuntimeConfigStore {
     return this.usageLimitsPending;
   }
 
+  // SIEM streaming config (ADR-033). Read on the audit write path's post-commit
+  // fan-out, so it is cached like the other configs; a missing/malformed row
+  // falls back to "off" (DEFAULT_SIEM_CONFIG), which no-ops the forwarder.
+  async getSiemConfig(): Promise<SiemConfig> {
+    if (this.siemCache) return this.siemCache;
+    if (this.siemPending) return this.siemPending;
+    this.siemPending = (async () => {
+      const result = await this.settingsRepo.get(SIEM_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseSiemConfig(result.data.value, DEFAULT_SIEM_CONFIG)
+          : DEFAULT_SIEM_CONFIG;
+      this.siemCache = config;
+      this.siemPending = null;
+      return config;
+    })();
+    return this.siemPending;
+  }
+
+  invalidateSiem(): void {
+    this.siemCache = null;
+    this.siemPending = null;
+  }
+
   getStorageVersion(): number {
     return this.storageVersion;
   }
@@ -590,6 +620,20 @@ export class RuntimeConfigStore {
 
   static redactStorage(config: StorageConfig): StorageConfig {
     return { ...config, secretKey: config.secretKey ? "••••••" : "" };
+  }
+
+  static redactSiem(config: SiemConfig): {
+    enabled: boolean;
+    endpoint: string;
+    format: SiemConfig["format"];
+    token: "set" | "unset";
+  } {
+    return {
+      enabled: config.enabled,
+      endpoint: config.endpoint,
+      format: config.format,
+      token: config.token ? "set" : "unset",
+    };
   }
 
   static redactN8n(config: N8nConfig): { baseUrl: string; apiKey: "set" | "unset" } {
