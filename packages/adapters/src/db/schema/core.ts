@@ -12,12 +12,30 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
+// An internal sharing/visibility scope (ADR-038), one rung coarser than a group.
+// It carries no data-isolation semantics: no other table gains an
+// `organisation_id`, and there is no RLS. A flow published with `organisation`
+// visibility is discoverable by users who share its owner's organisation.
+export const core_organisations = pgTable("core_organisations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const core_users = pgTable("core_users", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
   name: text("name"),
   role: text("role"),
   team: text("team"),
+  // Nullable: null means unaffiliated, behaving identically to the
+  // pre-organisation app (ADR-038). `on delete set null` returns members to
+  // unaffiliated if their organisation is removed.
+  organisation_id: uuid("organisation_id").references(() => core_organisations.id, {
+    onDelete: "set null",
+  }),
   is_admin: boolean("is_admin").notNull().default(false),
   email_verified: boolean("email_verified").notNull().default(false),
   image: text("image"),
