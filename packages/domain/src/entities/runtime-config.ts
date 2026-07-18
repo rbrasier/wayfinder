@@ -158,7 +158,56 @@ export const parseUsageLimitsConfig = (raw: string): UsageLimitsConfig => {
   }
 };
 
+// SIEM streaming (ADR-033 §4). Audit events are forwarded to an external sink
+// (Splunk HEC, Microsoft Sentinel, syslog-over-HTTP) after the primary write
+// commits. Stored as one JSON row; the token is a secret (see sensitive keys).
+export type SiemFormat = "json" | "cef";
+
+export interface SiemConfig {
+  enabled: boolean;
+  endpoint: string;
+  format: SiemFormat;
+  token: string;
+}
+
+export const DEFAULT_SIEM_CONFIG: SiemConfig = {
+  enabled: false,
+  endpoint: "",
+  format: "json",
+  token: "",
+};
+
+// A SIEM is live only when explicitly enabled with an endpoint to post to.
+export const isSiemConfigured = (config: SiemConfig): boolean =>
+  config.enabled && config.endpoint.length > 0;
+
+const isSiemFormat = (value: unknown): value is SiemFormat =>
+  value === "json" || value === "cef";
+
+// Tolerant parse: a malformed row falls back to "off" rather than throwing on
+// the audit write path.
+export const parseSiemConfig = (raw: string, fallback: SiemConfig = DEFAULT_SIEM_CONFIG): SiemConfig => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return fallback;
+    const source = parsed as Record<string, unknown>;
+    return {
+      enabled: typeof source.enabled === "boolean" ? source.enabled : fallback.enabled,
+      endpoint:
+        typeof source.endpoint === "string" && source.endpoint.length > 0
+          ? source.endpoint
+          : fallback.endpoint,
+      format: isSiemFormat(source.format) ? source.format : fallback.format,
+      token:
+        typeof source.token === "string" && source.token.length > 0 ? source.token : fallback.token,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 export const AI_CONFIG_SETTING_KEY = "ai_config";
+export const SIEM_CONFIG_SETTING_KEY = "siem_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
 export const REGISTRATION_ENABLED_SETTING_KEY = "registration_enabled";
 export const SESSION_UPLOAD_CONFIG_SETTING_KEY = "session_upload_config";
@@ -180,6 +229,7 @@ export const SENSITIVE_SETTING_KEYS: ReadonlySet<string> = new Set([
   N8N_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
+  SIEM_CONFIG_SETTING_KEY,
 ]);
 
 export const isSensitiveSettingKey = (key: string): boolean =>
