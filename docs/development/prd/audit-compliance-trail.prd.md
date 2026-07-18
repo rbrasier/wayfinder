@@ -79,14 +79,16 @@ audit trail that nobody can read, export, or trust as immutable is not evidence.
 
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
-| `core_audit_log` | add `hash text not null`, `prev_hash text` (chain), `sequence bigserial` | n/a (existing) |
+| `core_audit_log` | add `hash text not null`, `prev_hash text` (chain), `sequence bigserial`; drop `updated_at` | n/a (existing) |
 | `app_legal_holds` | NEW — `id`, `name`, `reason`, `created_by`, `released_at`, scope columns, `created_at`, `updated_at` | yes (`app_`) |
 
 DB-level tamper resistance: revoke `UPDATE`/`DELETE` on `core_audit_log` from the
 application role, or install a trigger that rejects them, so append-only is
-enforced by Postgres, not only by convention. `updated_at` is retained (it equals
-`created_at` and can never change once `UPDATE` is revoked), so the table keeps
-the standard `id`/`created_at`/`updated_at` shape.
+enforced by Postgres, not only by convention. `updated_at` is **dropped**: an
+append-only row is written once and never updated, so the column would only ever
+equal `created_at` and would falsely imply the row is mutable. `core_audit_log`
+is therefore the one sanctioned exception to the `id`/`created_at`/`updated_at`
+table convention (recorded in `CLAUDE.md`).
 
 ## 9. Architectural decisions
 
