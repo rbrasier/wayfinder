@@ -13,6 +13,9 @@ export interface UpdateFlowCaller {
   // Groups the caller belongs to; lets a non-global publisher share a flow with
   // their own groups (ADR-036 §12). Absent means the caller is in no groups.
   callerGroupIds?: string[];
+  // Whether the caller belongs to an organisation; gates publishing with
+  // `organisation` visibility (ADR-038). Absent means unaffiliated.
+  callerHasOrganisation?: boolean;
 }
 
 export class UpdateFlow {

@@ -35,6 +35,17 @@ const resolveCallerGroupIds = async (
   return groupIdsForMemberships(context.data.memberships);
 };
 
+// Whether the caller belongs to an organisation, gating a publish with
+// `organisation` visibility (ADR-038).
+const resolveCallerHasOrganisation = async (
+  container: Container,
+  userId: string,
+): Promise<boolean> => {
+  const result = await container.repos.users.findById(userId);
+  if (result.error) return false;
+  return Boolean(result.data?.organisationId);
+};
+
 // Opens/refreshes the published flow's single draft after an edit. Best-effort:
 // a versioning hiccup must never break the edit itself, and it no-ops for flows
 // that have never been published (nothing to diverge from yet).
@@ -285,6 +296,7 @@ export const flowRouter = router({
             z.object({ kind: z.literal("private") }),
             z.object({ kind: z.literal("global") }),
             z.object({ kind: z.literal("group"), groupIds: z.array(z.string().uuid()).min(1) }),
+            z.object({ kind: z.literal("organisation") }),
           ])
           .optional(),
       }),
@@ -300,10 +312,18 @@ export const flowRouter = router({
         patch.visibility?.kind === "group"
           ? await resolveCallerGroupIds(ctx.container, ctx.userId, ctx.isAdmin)
           : [];
+      // An organisation publish resolves to the owner's own organisation, so it
+      // is allowed only when the caller belongs to one — resolved on that path
+      // alone.
+      const callerHasOrganisation =
+        patch.visibility?.kind === "organisation"
+          ? await resolveCallerHasOrganisation(ctx.container, ctx.userId)
+          : false;
       const result = await ctx.container.useCases.updateFlow.execute(flowId, patch, {
         canPublishToEveryone:
           ctx.isAdmin || ctx.permissions.has("workflow:publish_to_everyone"),
         callerGroupIds,
+        callerHasOrganisation,
       });
       if (result.error) throw toTrpcError(result.error);
 

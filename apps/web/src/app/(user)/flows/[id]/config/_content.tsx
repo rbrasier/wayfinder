@@ -66,7 +66,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [flowDescription, setFlowDescription] = useState<string>("");
   const [flowIcon, setFlowIcon] = useState<string>("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
-  const [flowVisibility, setFlowVisibility] = useState<"private" | "global" | "group">("private");
+  const [flowVisibility, setFlowVisibility] = useState<"private" | "global" | "group" | "organisation">("private");
   const [flowGroupIds, setFlowGroupIds] = useState<string[]>([]);
   const [expertRole, setExpertRole] = useState<string>("");
   const meQuery = trpc.user.me.useQuery();

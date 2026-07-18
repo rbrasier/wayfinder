@@ -17,11 +17,12 @@ import { FlowVersionIndicator } from "@/components/canvas/flow-version-indicator
 import { trpc } from "@/trpc/client";
 
 type UpdateFlowMutation = ReturnType<typeof trpc.flow.update.useMutation>;
-type FlowVisibilityKind = "private" | "global" | "group";
+type FlowVisibilityKind = "private" | "global" | "group" | "organisation";
 
 const visibilityLabel = (visibility: FlowVisibilityKind): string => {
   if (visibility === "global") return "Everyone";
   if (visibility === "group") return "Groups";
+  if (visibility === "organisation") return "Organisation";
   return "Only you";
 };
 
@@ -78,6 +79,24 @@ export function FlowConfigHeader({
   const publishTargetsQuery = trpc.group.publishTargets.useQuery();
   const publishTargets = publishTargetsQuery.data ?? [];
   const canPublishToGroup = publishTargets.length > 0;
+  const myOrganisationQuery = trpc.organisation.mine.useQuery();
+  const myOrganisation = myOrganisationQuery.data ?? null;
+  // Publishing to `organisation` resolves to the owner's own organisation, so
+  // it is offered only when the caller belongs to one (ADR-038).
+  const canPublishToOrganisation = myOrganisation !== null;
+
+  const publishToOrganisation = () => {
+    setFlowMenuOpen(false);
+    setFlowStatus("published");
+    setFlowVisibility("organisation");
+    setFlowGroupIds([]);
+    void updateFlowMutation
+      .mutateAsync({ flowId, status: "published", visibility: { kind: "organisation" } })
+      .then(() => {
+        toast.success(`Flow published to ${myOrganisation?.name ?? "your organisation"}`);
+        refetchVersionStatus();
+      });
+  };
 
   const publishToGroups = (groupIds: string[]) => {
     setFlowMenuOpen(false);
@@ -205,6 +224,15 @@ export function FlowConfigHeader({
                   }}
                 >
                   {flowVisibility === "group" ? "Edit group visibility…" : "Publish to groups…"}
+                </button>
+              )}
+              {canPublishToOrganisation && flowVisibility !== "organisation" && (
+                <button
+                  type="button"
+                  className="w-full px-3 py-2 text-left text-[13px] text-[#1a1814] hover:bg-[#efede8]"
+                  onClick={publishToOrganisation}
+                >
+                  Publish to {myOrganisation?.name ?? "my organisation"}
                 </button>
               )}
               {flowStatus === "published" && canPublishToEveryone && flowVisibility === "private" && (

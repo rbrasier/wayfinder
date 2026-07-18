@@ -18,6 +18,14 @@ import {
   SetGroupMemberRole,
   RemoveGroupMember,
   ResolveGroupAuthorization,
+  ListOrganisations,
+  CreateOrganisation,
+  UpdateOrganisation,
+  DeleteOrganisation,
+  AssignUserOrganisation,
+  GetOrganisationResolution,
+  SetOrganisationResolution,
+  SubmitOrganisationNomination,
   CreateUser,
   DecideApproval,
   DeleteFlow,
@@ -150,6 +158,7 @@ import {
   DrizzleReindexSourceRepository,
   DrizzleRoleRepository,
   DrizzleGroupRepository,
+  DrizzleOrganisationRepository,
   DrizzleSessionMessageRepository,
   DrizzleSessionParticipantRepository,
   DrizzleSessionUploadRepository,
@@ -247,6 +256,7 @@ const build = () => {
   const roles = new DrizzleRoleRepository(db);
   const userRoles = new DrizzleUserRoleRepository(db);
   const groups = new DrizzleGroupRepository(db);
+  const organisations = new DrizzleOrganisationRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const budgets = new DrizzleBudgetRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
@@ -585,7 +595,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds },
     useCases: {
       generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
       evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
@@ -636,6 +646,14 @@ const build = () => {
       setGroupMemberRole: new SetGroupMemberRole(groups),
       removeGroupMember: new RemoveGroupMember(groups),
       resolveGroupAuthorization: new ResolveGroupAuthorization(groups),
+      listOrganisations: new ListOrganisations(organisations),
+      createOrganisation: new CreateOrganisation(organisations),
+      updateOrganisation: new UpdateOrganisation(organisations),
+      deleteOrganisation: new DeleteOrganisation(organisations),
+      assignUserOrganisation: new AssignUserOrganisation(users, organisations),
+      getOrganisationResolution: new GetOrganisationResolution(systemSettings),
+      setOrganisationResolution: new SetOrganisationResolution(systemSettings),
+      submitOrganisationNomination: new SubmitOrganisationNomination(users, organisations, systemSettings),
       trackUsage: new TrackUsage(usageRepo),
       getUsageSummary: new GetUsageSummary(usageRepo),
       registerJob: new RegisterJob(jobRepo),
