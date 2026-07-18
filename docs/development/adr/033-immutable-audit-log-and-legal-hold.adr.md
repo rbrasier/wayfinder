@@ -38,10 +38,11 @@ role. Because the app cannot rewrite history, the audit table is append-only at
 the engine level. The retention sweep is the sole exception and runs as a
 distinct, narrowly-scoped `DELETE` path (see §3) — either under a role permitted
 to delete, or via a `SECURITY DEFINER` function that refuses to touch held rows.
-`updated_at` is **kept** (it equals `created_at` and, because `UPDATE` is revoked,
-can never change) so the table keeps honouring the `id`/`created_at`/`updated_at`
-convention rather than becoming a special case; an audit event is simply never
-updated.
+`updated_at` is **dropped**: an audit event is written once and never updated, so
+the column would be permanently equal to `created_at` and would falsely imply the
+row is mutable — the very assumption this ADR removes. `core_audit_log` is the one
+documented exception to the `id`/`created_at`/`updated_at` table convention (noted
+in `CLAUDE.md`); the `AuditLog` entity loses its `updatedAt` field to match.
 
 ### 2. Tamper-evidence via a hash chain
 

@@ -1,7 +1,7 @@
 # Phase — Audit & Compliance Trail
 
 - **Status**: Draft (run `/doc-review` before building)
-- **Target version**: 2.6.0 — **MINOR** (additive schema on `core_audit_log`,
+- **Target version**: 2.6.0 — **MINOR** (schema change on `core_audit_log`,
   new `app_legal_holds` table, new read/admin surface). Tentative sequencing.
 - **PRD**: `docs/development/prd/audit-compliance-trail.prd.md`
 - **ADR**: `docs/development/adr/033-immutable-audit-log-and-legal-hold.adr.md`
@@ -19,7 +19,7 @@ retention, and optionally streamed to a SIEM.
 | Layer | File(s) | Change |
 | ----- | ------- | ------ |
 | domain | `entities/audit-hash.ts`, `entities/legal-hold.ts`, `entities/audit-query.ts` | Pure hash/canonicalisation, hold predicate, filter value object (tests first). |
-| domain | `entities/audit-log.ts` | Add `sequence`, `prevHash`, `hash`; keep `updatedAt` (frozen = `createdAt`). |
+| domain | `entities/audit-log.ts` | Add `sequence`, `prevHash`, `hash`; drop `updatedAt` (append-only, never updated). |
 | domain | `ports/siem-forwarder.ts`, `ports/legal-hold-repository.ts`, `ports/audit-query-repository.ts` | New ports. |
 | adapters | `db/schema/core.ts` | `core_audit_log`: add `hash`, `prev_hash`, `sequence`; drop `updated_at`. |
 | adapters | `db/schema/app.ts` | New `app_legal_holds`. |
@@ -35,7 +35,7 @@ retention, and optionally streamed to a SIEM.
 
 ## 3. Database changes
 
-- `core_audit_log`: `+ hash text not null`, `+ prev_hash text`, `+ sequence bigserial` (keep `updated_at`).
+- `core_audit_log`: `+ hash text not null`, `+ prev_hash text`, `+ sequence bigserial`; drop `updated_at` (append-only; the one sanctioned exception to the `updated_at` convention).
 - `app_legal_holds`: `id uuid`, `name text`, `reason text`, `created_by uuid`,
   `scope jsonb`, `released_at timestamptz`, `created_at`, `updated_at`.
 - Grant change: app role loses `UPDATE`/`DELETE` on `core_audit_log`.

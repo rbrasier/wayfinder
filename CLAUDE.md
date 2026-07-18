@@ -49,7 +49,7 @@ Enforced by `validate.sh` and ESLint — skills that write code must respect the
 - Apps (`apps/*`) import from `@rbrasier/application` and `@rbrasier/adapters` only. Wiring lives in `lib/container.ts`.
 - All port interfaces use the **Result pattern**: `{ data: T } | { error: DomainError }`. Never throw across boundaries.
 - Domain entities are plain TypeScript — no decorators, no ORM annotations.
-- DB table names use group prefixes: `core_`, `ai_`, `kb_`, `admin_`, `app_`, `job_`. Columns are snake_case. Every table has `id` (uuid), `created_at`, `updated_at`.
+- DB table names use group prefixes: `core_`, `ai_`, `kb_`, `admin_`, `app_`, `job_`. Columns are snake_case. Every table has `id` (uuid), `created_at`, `updated_at`. **Sole exception:** `core_audit_log` is append-only and omits `updated_at` — a row is written once and never updated (see ADR-033).
 
 ---
 

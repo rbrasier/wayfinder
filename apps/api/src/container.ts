@@ -33,6 +33,8 @@ import {
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
   DrizzleFeatureFlagRepository,
+  DrizzleLegalHoldRepository,
+  HttpSiemForwarder,
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
   DrizzleFlowRepository,
@@ -71,7 +73,11 @@ export const buildContainer = (env: Env) => {
   const conversations = new DrizzleConversationRepository(db);
   const errorLogs = new DrizzleErrorLogRepository(db);
   const errorLogger = new DrizzleErrorLogger(errorLogs);
-  const auditLogger = new DrizzleAuditLogger(db);
+  // The SIEM config thunk resolves lazily against runtimeConfig (defined below);
+  // forward() is only ever called long after the container is fully wired.
+  const siemForwarder = new HttpSiemForwarder(() => runtimeConfig.getSiemConfig(), logger);
+  const auditLogger = new DrizzleAuditLogger(db, siemForwarder, logger);
+  const legalHolds = new DrizzleLegalHoldRepository(db);
   const featureFlags = new DrizzleFeatureFlagRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
@@ -201,6 +207,7 @@ export const buildContainer = (env: Env) => {
     retentionRepository,
     retentionPolicies,
     new SystemClock(),
+    legalHolds,
     {
       batchSize: env.RETENTION_BATCH_SIZE,
       maxBatchesPerTarget: env.RETENTION_MAX_BATCHES_PER_TARGET,

@@ -1,8 +1,12 @@
 import {
+  err,
+  hasGlobalHold,
+  heldSessionIds,
   isRetentionEnabled,
   ok,
   retentionCutoff,
   type IClock,
+  type ILegalHoldRepository,
   type IRetentionRepository,
   type RetentionPolicy,
   type RetentionTargetKey,
@@ -15,6 +19,8 @@ export interface RetentionSweepResult {
   readonly batches: number;
   // A disabled target (retentionDays <= 0) is left untouched.
   readonly skipped?: boolean;
+  // The whole sweep was frozen by an active global legal hold (ADR-033).
+  readonly heldByGlobal?: boolean;
   // The per-target batch cap was reached with rows still eligible; the next tick
   // continues where this one stopped.
   readonly cappedByBatchLimit?: boolean;
@@ -49,6 +55,7 @@ export class ApplyRetentionPolicies {
     private readonly repository: IRetentionRepository,
     private readonly policies: RetentionPolicy[],
     private readonly clock: IClock,
+    private readonly legalHolds: ILegalHoldRepository,
     options: RetentionOptions = {},
   ) {
     this.batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
@@ -56,6 +63,14 @@ export class ApplyRetentionPolicies {
   }
 
   async execute(): Promise<Result<RetentionRunSummary>> {
+    // Legal hold is authoritative: a read failure here must abort the sweep
+    // rather than risk deleting rows that might be held (ADR-033).
+    const holds = await this.legalHolds.listActive();
+    if (holds.error) return err(holds.error);
+
+    const globalHold = hasGlobalHold(holds.data);
+    const excludedSessionIds = heldSessionIds(holds.data);
+
     const now = this.clock.now();
     const targets: RetentionSweepResult[] = [];
 
@@ -64,20 +79,33 @@ export class ApplyRetentionPolicies {
         targets.push({ key: policy.key, deleted: 0, batches: 0, skipped: true });
         continue;
       }
-      targets.push(await this.sweepTarget(policy, now));
+      if (globalHold) {
+        targets.push({ key: policy.key, deleted: 0, batches: 0, skipped: true, heldByGlobal: true });
+        continue;
+      }
+      targets.push(await this.sweepTarget(policy, now, excludedSessionIds));
     }
 
     const totalDeleted = targets.reduce((sum, target) => sum + target.deleted, 0);
     return ok({ targets, totalDeleted });
   }
 
-  private async sweepTarget(policy: RetentionPolicy, now: Date): Promise<RetentionSweepResult> {
+  private async sweepTarget(
+    policy: RetentionPolicy,
+    now: Date,
+    excludedSessionIds: string[],
+  ): Promise<RetentionSweepResult> {
     const cutoff = retentionCutoff(policy, now);
     let deleted = 0;
     let batches = 0;
 
     for (let batch = 0; batch < this.maxBatchesPerTarget; batch += 1) {
-      const result = await this.repository.deleteExpired(policy.key, cutoff, this.batchSize);
+      const result = await this.repository.deleteExpired(
+        policy.key,
+        cutoff,
+        this.batchSize,
+        excludedSessionIds,
+      );
       if (result.error) {
         return { key: policy.key, deleted, batches, error: result.error.message };
       }

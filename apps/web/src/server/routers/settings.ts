@@ -11,7 +11,9 @@ import {
   NOTIFICATION_PREFS_SETTING_KEY,
   REGISTRATION_ENABLED_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
+  SIEM_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
+  type SiemConfig,
   isAtLeastOneMethodEnabled,
   isEntraConfigured,
   type AiConfig,
@@ -549,4 +551,42 @@ export const settingsRouter = router({
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
+
+  getSiemConfig: adminProcedure.query(async ({ ctx }) => {
+    const config = await ctx.container.runtimeConfig.getSiemConfig();
+    return RuntimeConfigStore.redactSiem(config);
+  }),
+
+  setSiemConfig: adminProcedure
+    .input(
+      z.object({
+        enabled: z.boolean(),
+        endpoint: z.string(),
+        format: z.enum(["json", "cef"]),
+        // Empty/omitted token keeps the stored one — admins can't read it back.
+        token: z.string().nullish(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (input.enabled && input.endpoint.trim().length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "A SIEM endpoint is required to enable streaming.",
+        });
+      }
+      const current = await ctx.container.runtimeConfig.getSiemConfig();
+      const merged: SiemConfig = {
+        enabled: input.enabled,
+        endpoint: input.endpoint.trim(),
+        format: input.format,
+        token: input.token && input.token.length > 0 ? input.token : current.token,
+      };
+      const result = await ctx.container.repos.systemSettings.set(
+        SIEM_CONFIG_SETTING_KEY,
+        JSON.stringify(merged),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      ctx.container.runtimeConfig.invalidateSiem();
+      return { ok: true };
+    }),
 });

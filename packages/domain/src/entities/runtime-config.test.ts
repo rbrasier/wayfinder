@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_SIEM_CONFIG,
   createDefaultAuthConfig,
   isAtLeastOneMethodEnabled,
   isEntraConfigured,
+  isSiemConfigured,
+  parseSiemConfig,
   type AuthConfig,
 } from "./runtime-config";
 
@@ -54,5 +57,36 @@ describe("isAtLeastOneMethodEnabled", () => {
     const config: AuthConfig = { emailPasswordEnabled: false, entraEnabled: false, entra: blankEntra };
 
     expect(isAtLeastOneMethodEnabled(config)).toBe(false);
+  });
+});
+
+describe("parseSiemConfig", () => {
+  it("falls back to disabled defaults on malformed JSON", () => {
+    expect(parseSiemConfig("not json")).toEqual(DEFAULT_SIEM_CONFIG);
+  });
+
+  it("reads a well-formed config", () => {
+    const config = parseSiemConfig(
+      JSON.stringify({ enabled: true, endpoint: "https://siem.example/hec", format: "cef", token: "secret" }),
+    );
+    expect(config).toEqual({
+      enabled: true,
+      endpoint: "https://siem.example/hec",
+      format: "cef",
+      token: "secret",
+    });
+  });
+
+  it("ignores an unknown format and keeps the fallback", () => {
+    const config = parseSiemConfig(JSON.stringify({ format: "syslog" }));
+    expect(config.format).toBe("json");
+  });
+});
+
+describe("isSiemConfigured", () => {
+  it("is true only when enabled with an endpoint", () => {
+    expect(isSiemConfigured({ enabled: true, endpoint: "https://x", format: "json", token: "" })).toBe(true);
+    expect(isSiemConfigured({ enabled: false, endpoint: "https://x", format: "json", token: "" })).toBe(false);
+    expect(isSiemConfigured({ enabled: true, endpoint: "", format: "json", token: "" })).toBe(false);
   });
 });
