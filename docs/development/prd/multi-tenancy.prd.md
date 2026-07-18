@@ -1,141 +1,135 @@
-# PRD — Multi-Tenancy (Runtime-Toggleable Organisations)
+# PRD — Organisations (Internal Flow-Sharing Scope)
 
-> A deployment can turn multi-tenancy on/off from administration. When on, data is
-> isolated per organisation; the deployment uses a single sign-on method; and a
-> user's organisation is resolved by an admin-selected strategy (SSO claim, email
-> domain, or self-nomination).
+> A deployment can group its users into **organisations** — an internal audience
+> one rung coarser than a group. A flow can be published to the owner's
+> organisation, and an admin manages organisations and assigns users to them.
+> Organisations are a *sharing* boundary, not a data-isolation boundary.
 
 - **Status**: Draft
 - **Date**: 2026-07-18
 - **Author**: richy.brasier@gmail.com
-- **Target version**: 2.10.0 (bump: **MINOR** — stays on the 2.x line. The
-  `organisationId` axis is added **additively**: every scoped row defaults to a
-  system default organisation and tenancy-off preserves current behaviour, so no
-  domain contract is removed or changed — a large "schema change + new feature"
-  MINOR, not a breaking MAJOR. Staying MINOR is a design constraint, not just a
-  label: the axis must never break an existing contract.)
+- **Supersedes design**: the earlier pooled-RLS multi-tenancy PRD (ADR-037). See
+  ADR-038 for why the isolation model was withdrawn in favour of a sharing scope.
+- **Target version**: MINOR (stays on the 2.x line). Adds one table
+  (`core_organisations`), one nullable column (`core_users.organisation_id`), and
+  one `FlowVisibility` variant. Everything is additive: with no organisations
+  created and every user's `organisation_id` null, behaviour is identical to
+  today, so no domain or API contract is removed or changed.
 
 ## 1. Problem
 
-Wayfinder is single-tenant: one deployment = one organisation, one shared dataset.
-Operators who want to serve several organisations from one deployment have no way
-to isolate their data, and no way to decide which organisation a signing-in user
-belongs to. There must be an administrator switch that turns organisation-level
-isolation on, without a redeploy, and a governed way to resolve each user's org.
+Wayfinder can publish a flow to yourself, to a group (ADR-036), or to everyone.
+There is no middle rung between "a group" and "everyone" that matches how a
+single operator is actually structured — by department, business unit, or client
+team. Operators want to publish a flow to *their whole organisation* without
+enumerating groups, and to place each user into the organisation they belong to.
+
+This is a **sharing** need, not an isolation need. Operators who require isolated
+data (one org must never see another's sessions or documents) run a **separate
+deployment**; that is out of scope here (see ADR-038).
 
 ## 2. Users / Personas
 
-- **Deployment operator / super-admin** — decides whether the deployment is
-  multi-tenant, picks the resolution strategy and the single sign-on method, and
-  can act across organisations when necessary.
-- **Organisation administrator** — manages their own organisation's users, flows,
-  and settings; cannot see or touch other organisations.
-- **End user** — signs in and is placed into exactly one organisation; sees only
-  that organisation's data.
+- **Administrator** — creates and renames organisations and assigns each user to
+  one, in the existing admin surface (alongside role and team).
+- **Flow author** — publishes a flow to their organisation, the same way they
+  publish to a group or globally today.
+- **End user** — sees flows published to their organisation, in addition to their
+  private, group, and global flows.
 
 ## 3. Goals
 
-- An admin can enable/disable multi-tenancy from `/admin/settings` with no redeploy.
-- With tenancy **off**, behaviour is identical to today (one implicit default org).
-- With tenancy **on**, every tenant-scoped read/write is isolated to the caller's
-  organisation, enforced by tenant-aware repositories **and** Postgres RLS.
-- The org-resolution strategy is admin-selectable: `sso_claim`, `email_domain`
-  (admin-maintained domain→org map), or `self_nomination` (create-or-join).
-- In multi-tenant mode the deployment uses exactly one sign-on method.
-- Enabling backfills existing data to a default organisation; disabling is blocked
-  while more than one organisation holds data.
+- An admin can create, rename, and delete organisations from `/admin/organisations`.
+- An admin can assign a user to an organisation (or leave them unaffiliated).
+- A flow author can set a flow's visibility to `organisation`; it becomes visible
+  to every user in the **owner's** organisation.
+- With no organisations created and all users unaffiliated, behaviour is
+  identical to today.
+- Organisation carries **no** data-isolation semantics: sessions, uploads,
+  documents, and audit rows are scoped exactly as they are today.
 
 ## 4. Non-goals
 
-- **Schema-per-tenant / per-tenant databases** — rejected in ADR-037 (incompatible
-  with a runtime toggle).
-- **Per-tenant IdP / multiple sign-on methods in MT mode** — one method per
-  deployment; multi-provider SSO (ADR-034) is single-tenant only.
-- **Users in multiple organisations** — one user ↔ one organisation.
-- **Cross-tenant analytics/administration UX** beyond an explicit, audited
-  super-admin elevation.
-- Billing/metering per tenant (future).
+- **Data isolation between organisations** — explicitly out of scope; use separate
+  deployments (ADR-038). No `organisation_id` on scoped tables, no RLS.
+- **Sign-in org resolution** (SSO claim / email domain / self-nomination) —
+  dropped; membership is admin-assigned. Auto-assignment is possible future work.
+- **Two-tier administration / super-admin elevation** — a single admin tier
+  manages organisations; there is nothing isolated to elevate across.
+- **Users in multiple organisations** — a user belongs to at most one.
+- **Per-organisation billing / metering** (future).
 
 ## 5. Key entities
 
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
-| `Organisation` | `packages/domain/src/entities/organisation.ts` | new | The isolation boundary. |
-| `TenancyConfig` | `packages/domain/src/entities/runtime-config.ts` | existing | `enabled`, `resolutionStrategy`, strategy config. |
-| `OrganisationResolution` | `packages/domain/src/entities/organisation-resolution.ts` | new | Pure mapping: profile/email/nomination → org decision. |
-| `TenantContext` | `packages/domain/src/entities/tenant-context.ts` | new | Explicit per-request org context passed to repos/use-cases. |
-| tenant-scoped entities | domain | existing | Gain `organisationId`. |
+| `Organisation` | `packages/domain/src/entities/organisation.ts` | new | An internal audience; a sharing scope, not an isolation boundary. |
+| `core_users.organisationId` | domain user entity | existing (add field) | Nullable; the user's organisation. |
+| `FlowVisibility` | `packages/domain/src/entities/flow.ts` | existing (add variant) | Gains `{ kind: "organisation" }`. |
 
 ## 6. User stories
 
-1. As a deployment operator, I switch multi-tenancy on; my existing data lands in a default organisation and I can then create more organisations.
-2. As an operator, I choose "email domain" resolution and map `acme.com` → Acme, `beta.io` → Beta; users are placed automatically on sign-in.
-3. As an operator, I choose "SSO claim" and name the attribute that carries the organisation; unseen values create a new org (policy permitting).
-4. As an operator, I choose "self-nomination, create-or-join"; a first-time user creates or joins their organisation, bounded by an allowlist.
-5. As an org admin, I manage only my organisation; another org's flows and users are invisible to me.
-6. As an operator, I cannot disable multi-tenancy while two organisations both hold data — I'm told to consolidate first.
+1. As an admin, I create organisations "Procurement" and "HR" and assign each user to one.
+2. As a flow author in "HR", I publish an onboarding flow to my organisation; every HR user sees it, nobody in Procurement does (unless it is also global).
+3. As an end user, my flow list shows my private flows, my groups' flows, my organisation's flows, and global flows together.
+4. As an admin, I rename an organisation; existing memberships and org-published flows follow the rename with no data migration.
+5. As an admin, I delete an empty organisation; deleting one with members is guarded (members must be reassigned or cleared first).
 
 ## 7. Pages / surfaces affected
 
-- `/admin/settings` — **new** Tenancy card: enable/disable, resolution strategy +
-  its config (claim name / domain→org map / nomination mode + allowlist), and the
-  single sign-on method selector (guards against enabling with multiple SSO providers).
-- `/admin/organisations` — **new**: create/rename organisations; assign org admins.
-- First-sign-in flow — nomination prompt when strategy is `self_nomination`.
-- Every tenant-scoped tRPC procedure and repository — tenant-context-aware.
-- `packages/adapters/src/db` unit-of-work — sets `app.current_organisation_id`.
-- ADR-033 audit, ADR-035 sessions, ADR-036 groups — gain the org dimension.
+- `/admin/organisations` — **new**: create / rename / delete organisations.
+- User-admin surface — **extended**: an organisation selector per user, beside
+  the existing role/team fields.
+- Flow visibility control — **extended**: an "Organisation" option beside
+  Private / Group / Everyone.
+- Flow-listing queries — **extended**: include flows whose owner shares the
+  viewer's organisation and whose visibility is `organisation`.
+
+No changes to the unit-of-work, repositories' isolation behaviour, sessions,
+uploads, audit, or any background job.
 
 ## 8. Database changes
 
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
 | `core_organisations` | NEW — `id`, `name`, `slug`, `created_at`, `updated_at` | yes (`core_`) |
-| `core_users` | add `organisation_id uuid` (default org until MT enabled) | n/a |
-| all tenant-scoped tables | add `organisation_id uuid not null` + index; RLS policy on `app.current_organisation_id` | n/a |
-| `admin_system_settings` | `TenancyConfig` JSON (runtime config, no DDL) | n/a |
+| `core_users` | add `organisation_id uuid` nullable, FK → `core_organisations(id)` `on delete set null` | n/a |
 
-RLS policies are added per tenant-scoped table; the app DB role runs under RLS,
-the migration/super-admin path under a controlled elevation.
+No other table is altered. No `organisation_id` on scoped tables; no RLS.
 
 ## 9. Architectural decisions
 
-- **ADR-037** (Accepted) — runtime-toggleable pooled tenancy; RLS + tenant-aware
-  repos; three resolution strategies; single auth method in MT mode; two-tier
-  admin; org = isolation vs. group = sharing.
-- Assumes ADR-025 (runtime config), ADR-001 (hexagonal), and interacts with
-  ADR-033 / ADR-034 / ADR-035 / ADR-036 (each gains a tenant axis).
+- **ADR-038** (Accepted) — organisation is an internal sharing/visibility scope
+  extending ADR-036; one table + one nullable column + one `FlowVisibility`
+  variant; membership admin-assigned; no isolation, no RLS, no elevation.
+- **ADR-037** (Superseded) — pooled RLS isolation; retained for history only.
+- Assumes ADR-036 (groups / visibility ladder) and ADR-021 (admin).
 
 ## 10. Acceptance criteria
 
-- [ ] With tenancy off, all existing tests pass and behaviour is unchanged (one default org).
-- [ ] Enabling tenancy creates/uses a default org and backfills every tenant-scoped row to it.
-- [ ] With tenancy on, a user in org A cannot read or write any org B row — verified at the repository layer **and** proven by RLS when the filter is deliberately omitted in a test.
-- [ ] Each resolution strategy places a first-time user in the correct org: `sso_claim` (claim → org, unseen creates per policy), `email_domain` (mapped domain, `onUnmatched` honoured), `self_nomination` (create-or-join within allowlist).
-- [ ] Enabling multi-tenancy is rejected while multiple SSO providers are configured until one method is chosen.
-- [ ] A per-org admin's actions are confined to their org; a super-admin cross-org action requires explicit elevation and is audited.
-- [ ] Disabling multi-tenancy is rejected while more than one org holds data; permitted (collapses to single-tenant) when only one org is populated.
-- [ ] Audit rows, sessions, and groups carry the correct `organisation_id`.
+- [ ] With no organisations and all users unaffiliated, all existing tests pass and behaviour is unchanged.
+- [ ] An admin can create, rename, and delete an organisation; deleting one with members is rejected until they are reassigned.
+- [ ] An admin can assign a user to an organisation and clear it back to unaffiliated.
+- [ ] A flow set to `organisation` visibility is listed for users sharing the owner's organisation and not for others (unless separately global/grouped).
+- [ ] A user with a null organisation sees no `organisation`-scoped flows and their own flows behave as today.
+- [ ] No scoped table gains an `organisation_id` column; no RLS policy is introduced.
 
 ## 11. Out of scope / future work
 
-- Schema-per-tenant option; per-tenant IdPs; multi-org users; per-tenant billing;
-  self-service tenant signup portal; cross-tenant admin dashboards beyond elevation.
+- Data isolation between organisations (separate deployments instead); sign-in
+  auto-resolution of organisation; multi-org users; per-org admins; per-org
+  billing; denormalising `organisation_id` onto `app_flows` as a list optimisation.
 
 ## 12. Risks / open questions
 
-- **Cross-tenant leak** is the defining risk of pooled tenancy — a single missed
-  filter. Mitigation: mandatory RLS backstop + a test that omits the filter and
-  asserts RLS blocks it, for every scoped table.
-- **Backfill correctness** on enable and the **disable-guard** are stateful,
-  hard-to-reverse operations needing careful migration + operator docs.
-- **Audit hash chain (ADR-033)** becomes per-organisation — confirm the chaining
-  scope during Build.
-- **Super-admin elevation** must be explicit and audited, never the default path.
-- **Additive-or-breaking** — the phase must stay additive (defaulted
-  `organisationId`, tenancy-off unchanged) to remain a 2.x MINOR; any change that
-  breaks an existing domain/API contract would force a MAJOR and must be avoided
-  or redesigned.
-- **Email-domain edge cases** — shared domains (gmail.com), multiple domains per
-  org, unverified emails; the admin-maintained map + verified-email requirement
-  are the guardrails.
+- **Over-sharing a flow** — a missed visibility check could list an
+  organisation-scoped flow to the wrong viewer. Blast radius is a workflow
+  *definition* becoming discoverable, not a session/document data leak (those stay
+  owner-scoped). Mitigation: the org rung reuses the same tested visibility
+  resolution as `group`/`global`, with unit tests per rung.
+- **Delete semantics** — deleting an organisation must not orphan users
+  confusingly; `on delete set null` returns members to unaffiliated, and the UI
+  guards deletion of a non-empty organisation.
+- **Not isolation** — the one thing to communicate clearly in docs/UI: publishing
+  to an organisation controls *who can find the flow*, not who can see any data
+  produced by running it.
