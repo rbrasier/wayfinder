@@ -106,8 +106,10 @@ environment when it could live in the database.
 
 - **New** unauthenticated first-run screen (e.g. `app/setup/page.tsx` or a
   redirect target): shown only when **no admin user exists**; creates the admin
-  account. Guarded server-side so the create-admin procedure refuses once any
-  admin exists (self-disabling bootstrap).
+  account. Guarded server-side (transactional singleton + one-time setup token;
+  see §12 and ADR-041) so the create-admin procedure refuses once any admin
+  exists and a public URL alone cannot seize the install. Presents a setup-token
+  field alongside email + password.
 - **New** `apps/web` client component: a stepped setup modal (e.g.
   `components/onboarding/setup-wizard.tsx`) shown to the signed-in admin when
   `onboarding_state.completed` is false.
@@ -151,6 +153,14 @@ environment when it could live in the database.
       screen; submitting it creates an admin (email + password) and signs them in.
 - [ ] `createAdmin` refuses (server-side) once any admin exists; the screen is not
       reachable thereafter.
+- [ ] On first boot with no admin, a setup token is generated and written to the
+      server logs; `createAdmin` rejects a missing/wrong token. The token can also
+      be supplied via env for automated installs and is void once an admin exists.
+- [ ] Two concurrent `createAdmin` calls cannot both succeed (transactional
+      singleton guard / advisory lock or partial unique index).
+- [ ] When `ADMIN_SEED_EMAIL` is set, `createAdmin` accepts only that email.
+- [ ] A successful bootstrap is written to the audit log; the endpoint is
+      rate-limited.
 - [ ] If `ADMIN_SEED_EMAIL` is set it pre-fills the email field as a fallback; if
       blank, the installer types the email. Email is the username (no separate
       username field).
@@ -186,9 +196,11 @@ environment when it could live in the database.
 
 ## 12. Risks / open questions
 
-- **Unauthenticated bootstrap endpoint** — `createAdmin` runs before any auth, so
-  it MUST hard-refuse once an admin exists (checked inside the transaction, not
-  just in the UI) or it becomes an account-takeover vector. Primary security risk.
+- **Unauthenticated bootstrap endpoint** — `createAdmin` runs before any auth.
+  Mitigated in layers (ADR-041 §0): a one-time **setup token** printed to server
+  logs (primary), a **transactional singleton guard** against races, **seed-email
+  binding**, and **rate-limit + audit**. Baseline is token + singleton guard; the
+  guard must live in the data layer, never only in the UI. Primary security risk.
 - **Encryption-key ordering** — secrets can only be stored once
   `SETTINGS_ENCRYPTION_KEY` exists. Mitigation: pre-flight check + blocked write.
 - **Env detection semantics** — "complete" must mean *configured and tested*, not

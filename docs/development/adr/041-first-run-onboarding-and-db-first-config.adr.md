@@ -31,10 +31,7 @@ automation-related feature flags.
 
 On the very first run — **before any sign-in** — the app serves a public
 bootstrap screen that creates the admin account (email as username + password)
-directly, via the existing auth adapter, and marks the new user admin. The
-backing `createAdmin` procedure is guarded to **refuse once any admin exists**,
-checked inside the write transaction (not merely hidden in the UI), so the
-endpoint is a one-time bootstrap and never an account-takeover vector. A public
+directly, via the existing auth adapter, and marks the new user admin. A public
 `adminExists` read drives whether the screen is shown.
 
 `ADMIN_SEED_EMAIL` becomes an **optional fallback**: if set, it pre-fills the
@@ -42,6 +39,32 @@ email field; if blank, the installer types it. The old "self-register then get
 promoted on sign-in" path (`seedAdmin`) remains as a fallback for seeded installs
 but is no longer the primary route. There is no separate username — email is the
 identifier, matching the existing email-password auth.
+
+#### Securing the unauthenticated bootstrap endpoint
+
+`createAdmin` runs before any authentication exists, so it is defended in layers
+rather than by a single UI check. The exposure window is only ever "first boot →
+first admin" and closes permanently once an admin exists.
+
+1. **One-time setup token (primary).** On first boot with no admin, the app
+   generates a random setup token and writes it to the **server logs/console**;
+   `createAdmin` requires it. This binds the right to bootstrap to server/log
+   access, so reaching the `/setup` URL first is not sufficient. The token is
+   auto-generated (zero config, on by default) and may also be supplied via env
+   for automated installs — the same bootstrap-secret pattern `restart.sh`
+   already uses for `SETTINGS_ENCRYPTION_KEY`. It is void once an admin exists.
+2. **Transactional singleton guard (correctness backstop).** The "no admin
+   exists" check runs **inside** the insert transaction under an advisory lock (or
+   a partial unique index enforcing at most one admin), so concurrent calls cannot
+   race to create two admins. Enforced in the data layer, never only in the UI.
+3. **Seed-email binding.** When `ADMIN_SEED_EMAIL` is set, `createAdmin` accepts
+   only that address, so an attacker cannot bootstrap an admin under an email they
+   control.
+4. **Rate-limit + audit.** The endpoint is throttled, and a successful bootstrap
+   is written to the immutable audit log (ADR-033) for detection.
+
+Baseline is (1) + (2); (3) and (4) are belt-and-braces. Together they make a
+public URL alone insufficient to seize the installation.
 
 ### 1. First-run onboarding is gated by one settings row, not a new table
 

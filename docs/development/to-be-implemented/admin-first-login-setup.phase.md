@@ -28,8 +28,9 @@ and `mcp` feature flags default off.
 | adapters | `auth/seed-admin.ts` | Keep `seedAdmin` (promotion via `ADMIN_SEED_EMAIL`) as a fallback; no behavioural change required. |
 | application | `use-cases/get-feature-flag.ts` | Add `skills` + `mcp` to the default flag list, **off**; confirm `auto_node` is absent from `DEFAULT_ENABLED_FLAGS` (stays off). |
 | adapters | `auth/seed-roles.ts` | Keep `auto_node` role-scoping intent; extend `POWER_USER_SCOPED_FLAGS` only if Skills/MCP should be power-user scoped (confirm at Build — default: leave unscoped). |
-| apps/web | `server/routers/bootstrap.ts` (new) | `adminExists` (publicProcedure read) + `createAdmin` (publicProcedure; **refuses when an admin exists**, enforced server-side, rate-limited). Signs the new admin in on success. |
-| apps/web | `app/setup/page.tsx` (new) | Public first-run screen: email (pre-filled from `ADMIN_SEED_EMAIL` if set) + password + confirm. Only reachable while `adminExists` is false; redirects to sign-in/app otherwise. |
+| apps/web | `server/routers/bootstrap.ts` (new) | `adminExists` (publicProcedure read) + `createAdmin` (publicProcedure). Defence in layers: requires the one-time **setup token**, **transactional singleton guard** (advisory lock or partial unique index) so it **refuses/loses the race when an admin exists**, seed-email binding when `ADMIN_SEED_EMAIL` is set, rate-limited, and audit-logged. Signs the new admin in on success. |
+| apps/web | setup-token bootstrap | On first boot with no admin, generate a random setup token, log it prominently; accept an env override for automation. Void once an admin exists. Mirror the `restart.sh` `SETTINGS_ENCRYPTION_KEY` auto-generation pattern. |
+| apps/web | `app/setup/page.tsx` (new) | Public first-run screen: setup token + email (pre-filled from `ADMIN_SEED_EMAIL` if set) + password + confirm. Only reachable while `adminExists` is false; redirects to sign-in/app otherwise. |
 | apps/web | middleware / entry redirect | On an install with no admin, route unauthenticated first load to `/setup`. |
 | apps/web | `server/routers/settings.ts` | Add `getOnboardingState` (adminProcedure), `completeOnboarding`, `get/setDeploymentConfig`, and `getSetupStatus` (per-step configured/tested). Reuse existing `set*Config`, `testConnectivity`, `testAllConnectivity`, `sendTestEmail`. |
 | apps/web | `components/onboarding/setup-wizard.tsx` (new) | Stepped modal: Step 1 deployment, Step 2 setup (required, warn-not-block), Step 3 site options (skippable). Per-item explainer + Test button; steps pre-filled and marked complete from `getSetupStatus`. |
@@ -50,9 +51,13 @@ and `mcp` feature flags default off.
 1. Domain: `OnboardingState` + `DeploymentConfig` types, keys, tolerant parsers
    — unit tests for malformed rows falling back to safe defaults.
 2. `CreateFirstAdmin` + `AdminExists` use-cases — tests: creates on empty install,
-   **refuses when an admin already exists** (the security-critical guard).
-3. `bootstrap` router (`adminExists`, `createAdmin`) + `/setup` screen + the
-   no-admin redirect. Test the guard end-to-end (second call is rejected).
+   **refuses when an admin already exists**, **rejects a missing/wrong setup
+   token**, honours seed-email binding, and cannot be raced into two admins
+   (the security-critical guards).
+3. Setup-token generation on first boot (log output + env override) + `bootstrap`
+   router (`adminExists`, `createAdmin`, rate-limited, audit-logged) + `/setup`
+   screen + the no-admin redirect. Test the full guard end-to-end (second call and
+   token-less call both rejected).
 4. Feature-flag defaults: add `skills` + `mcp` (off); test `auto_node`, `skills`,
    `mcp` report disabled by default and `scheduled_node` stays enabled.
 5. Onboarding use-cases: `GetOnboardingState` / `CompleteOnboarding` /
@@ -85,9 +90,10 @@ ADR-041 (above). Assumes ADR-025, ADR-038, ADR-022.
 ## 7. Risks / open questions
 
 Carried from PRD §12:
-- **Unauthenticated `createAdmin` guard** — the no-admin-exists check must be
-  enforced transactionally (not just in the UI) and the route rate-limited;
-  otherwise it is an account-takeover vector. Primary security risk.
+- **Unauthenticated `createAdmin` guard** — defended in layers (ADR-041 §0):
+  one-time setup token (logged), transactional singleton guard, seed-email
+  binding, rate-limit + audit. The guard must live in the data layer, not just the
+  UI. Baseline is token + singleton guard. Primary security risk.
 - **Encryption-key ordering** — secret writes blocked until
   `SETTINGS_ENCRYPTION_KEY` is present (pre-flight guard).
 - **"Complete" semantics** — a step is complete only when configured *and* its
