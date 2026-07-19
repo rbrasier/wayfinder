@@ -109,7 +109,11 @@ environment when it could live in the database.
   account. Guarded server-side (transactional singleton + one-time setup token;
   see §12 and ADR-041) so the create-admin procedure refuses once any admin
   exists and a public URL alone cannot seize the install. Presents a setup-token
-  field alongside email + password.
+  field alongside email + password, pre-filled from a `?token=` query param.
+- **`restart.sh`** — on **first setup only** (no admin exists after migrations),
+  generate the setup token into `.env` and print a clickable
+  `${BETTER_AUTH_URL}/setup?token=<token>` link to the console. Prints nothing
+  once an admin exists.
 - **New** `apps/web` client component: a stepped setup modal (e.g.
   `components/onboarding/setup-wizard.tsx`) shown to the signed-in admin when
   `onboarding_state.completed` is false.
@@ -153,9 +157,12 @@ environment when it could live in the database.
       screen; submitting it creates an admin (email + password) and signs them in.
 - [ ] `createAdmin` refuses (server-side) once any admin exists; the screen is not
       reachable thereafter.
-- [ ] On first boot with no admin, a setup token is generated and written to the
-      server logs; `createAdmin` rejects a missing/wrong token. The token can also
-      be supplied via env for automated installs and is void once an admin exists.
+- [ ] On first boot with no admin, a setup token is generated; `createAdmin`
+      rejects a missing/wrong token. The token can also be supplied via env for
+      automated installs and is void once an admin exists.
+- [ ] On **first setup only**, `restart.sh` prints a clickable
+      `${BETTER_AUTH_URL}/setup?token=<token>` link; once an admin exists it prints
+      no link. The `/setup` screen pre-fills the token from the `?token=` param.
 - [ ] Two concurrent `createAdmin` calls cannot both succeed (transactional
       singleton guard / advisory lock or partial unique index).
 - [ ] When `ADMIN_SEED_EMAIL` is set, `createAdmin` accepts only that email.

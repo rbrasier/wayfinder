@@ -46,13 +46,20 @@ identifier, matching the existing email-password auth.
 rather than by a single UI check. The exposure window is only ever "first boot →
 first admin" and closes permanently once an admin exists.
 
-1. **One-time setup token (primary).** On first boot with no admin, the app
-   generates a random setup token and writes it to the **server logs/console**;
-   `createAdmin` requires it. This binds the right to bootstrap to server/log
-   access, so reaching the `/setup` URL first is not sufficient. The token is
-   auto-generated (zero config, on by default) and may also be supplied via env
-   for automated installs — the same bootstrap-secret pattern `restart.sh`
-   already uses for `SETTINGS_ENCRYPTION_KEY`. It is void once an admin exists.
+1. **One-time setup token (primary).** On first boot with no admin, a random
+   setup token is generated and `createAdmin` requires it. This binds the right to
+   bootstrap to host access, so reaching the `/setup` URL first is not sufficient.
+   The token is auto-generated (zero config, on by default) and may also be
+   supplied via env for automated installs — the same bootstrap-secret pattern
+   `restart.sh` already uses for `SETTINGS_ENCRYPTION_KEY`. It is void once an
+   admin exists. **`restart.sh` surfaces it as a ready-to-use setup link**: after
+   migrations it checks whether an admin exists and, **only on first setup**,
+   generates the token (into `.env`, mirroring the encryption-key step) and prints
+   a clickable `${BETTER_AUTH_URL}/setup?token=<token>` URL to the console. The
+   `/setup` screen reads the token from the query string to pre-fill the field, so
+   the operator can click straight through; the token still comes from the local
+   console (which requires host access) and is single-use. Once an admin exists,
+   `restart.sh` prints no link and the endpoint refuses.
 2. **Transactional singleton guard (correctness backstop).** The "no admin
    exists" check runs **inside** the insert transaction under an advisory lock (or
    a partial unique index enforcing at most one admin), so concurrent calls cannot

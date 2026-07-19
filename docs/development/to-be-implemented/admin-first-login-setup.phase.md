@@ -29,8 +29,9 @@ and `mcp` feature flags default off.
 | application | `use-cases/get-feature-flag.ts` | Add `skills` + `mcp` to the default flag list, **off**; confirm `auto_node` is absent from `DEFAULT_ENABLED_FLAGS` (stays off). |
 | adapters | `auth/seed-roles.ts` | Keep `auto_node` role-scoping intent; extend `POWER_USER_SCOPED_FLAGS` only if Skills/MCP should be power-user scoped (confirm at Build — default: leave unscoped). |
 | apps/web | `server/routers/bootstrap.ts` (new) | `adminExists` (publicProcedure read) + `createAdmin` (publicProcedure). Defence in layers: requires the one-time **setup token**, **transactional singleton guard** (advisory lock or partial unique index) so it **refuses/loses the race when an admin exists**, seed-email binding when `ADMIN_SEED_EMAIL` is set, rate-limited, and audit-logged. Signs the new admin in on success. |
-| apps/web | setup-token bootstrap | On first boot with no admin, generate a random setup token, log it prominently; accept an env override for automation. Void once an admin exists. Mirror the `restart.sh` `SETTINGS_ENCRYPTION_KEY` auto-generation pattern. |
-| apps/web | `app/setup/page.tsx` (new) | Public first-run screen: setup token + email (pre-filled from `ADMIN_SEED_EMAIL` if set) + password + confirm. Only reachable while `adminExists` is false; redirects to sign-in/app otherwise. |
+| apps/web | setup-token bootstrap | On first boot with no admin, generate a random setup token; accept an env override for automation. Void once an admin exists. Mirror the `restart.sh` `SETTINGS_ENCRYPTION_KEY` auto-generation pattern. |
+| root | `restart.sh` | After migrations, query whether an admin exists (reuse the existing `psql`/`DATABASE_URL` helpers already in the script). **Only if none exists**: ensure `SETUP_TOKEN` is in `.env` (same generate-if-blank block as `SETTINGS_ENCRYPTION_KEY`) and `echo` a clickable `${BETTER_AUTH_URL:-http://localhost:$WEB_PORT}/setup?token=<token>` link before `exec pnpm turbo dev`. If an admin exists, print nothing. |
+| apps/web | `app/setup/page.tsx` (new) | Public first-run screen: setup token (pre-filled from the `?token=` query param) + email (pre-filled from `ADMIN_SEED_EMAIL` if set) + password + confirm. Only reachable while `adminExists` is false; redirects to sign-in/app otherwise. |
 | apps/web | middleware / entry redirect | On an install with no admin, route unauthenticated first load to `/setup`. |
 | apps/web | `server/routers/settings.ts` | Add `getOnboardingState` (adminProcedure), `completeOnboarding`, `get/setDeploymentConfig`, and `getSetupStatus` (per-step configured/tested). Reuse existing `set*Config`, `testConnectivity`, `testAllConnectivity`, `sendTestEmail`. |
 | apps/web | `components/onboarding/setup-wizard.tsx` (new) | Stepped modal: Step 1 deployment, Step 2 setup (required, warn-not-block), Step 3 site options (skippable). Per-item explainer + Test button; steps pre-filled and marked complete from `getSetupStatus`. |
@@ -54,25 +55,28 @@ and `mcp` feature flags default off.
    **refuses when an admin already exists**, **rejects a missing/wrong setup
    token**, honours seed-email binding, and cannot be raced into two admins
    (the security-critical guards).
-3. Setup-token generation on first boot (log output + env override) + `bootstrap`
-   router (`adminExists`, `createAdmin`, rate-limited, audit-logged) + `/setup`
-   screen + the no-admin redirect. Test the full guard end-to-end (second call and
-   token-less call both rejected).
-4. Feature-flag defaults: add `skills` + `mcp` (off); test `auto_node`, `skills`,
+3. Setup-token generation on first boot (env override) + `bootstrap` router
+   (`adminExists`, `createAdmin`, rate-limited, audit-logged) + `/setup` screen
+   (reads `?token=`) + the no-admin redirect. Test the full guard end-to-end
+   (second call and token-less call both rejected).
+4. `restart.sh`: admin-exists check → first-setup-only `SETUP_TOKEN` generation +
+   clickable `/setup?token=…` link; no link once an admin exists. (Manually
+   verified — shell, not unit-tested.)
+5. Feature-flag defaults: add `skills` + `mcp` (off); test `auto_node`, `skills`,
    `mcp` report disabled by default and `scheduled_node` stays enabled.
-5. Onboarding use-cases: `GetOnboardingState` / `CompleteOnboarding` /
+6. Onboarding use-cases: `GetOnboardingState` / `CompleteOnboarding` /
    `Get/SetDeploymentConfig` / `GetSetupStatus` — tests for read-default,
    complete-on-finish, complete-on-skip, and env-vs-DB configured/tested status.
-6. tRPC procedures wired into the container; admin-only guards on non-bootstrap.
-7. Wizard Step 1 (org name → `organisation.create`; multi-org checkbox →
+7. tRPC procedures wired into the container; admin-only guards on non-bootstrap.
+8. Wizard Step 1 (org name → `organisation.create`; multi-org checkbox →
    `organisation_resolution`) + explainers.
-8. Wizard Step 2 (storage / AI / auth) with save + Test (existing probes),
+9. Wizard Step 2 (storage / AI / auth) with save + Test (existing probes),
    pre-fill/complete from `getSetupStatus`, warn-not-block, and the
    `SETTINGS_ENCRYPTION_KEY` pre-flight guard.
-9. Wizard Step 3 (mail config+test; n8n toggle→modal→save+test; Skills toggle;
+10. Wizard Step 3 (mail config+test; n8n toggle→modal→save+test; Skills toggle;
    MCP toggle) + **Skip** action; both Finish and Skip call `completeOnboarding`.
-10. Layout gating + admin Settings "Re-run setup" entry point.
-11. `./validate.sh`; fix all failures.
+11. Layout gating + admin Settings "Re-run setup" entry point.
+12. `./validate.sh`; fix all failures.
 
 ## 5. ADR required
 
