@@ -10,51 +10,64 @@
 
 ## 1. Goal
 
-A gated, three-step setup modal shown on the seed admin's first authenticated
-session that configures — and tests — everything the app needs to run, writing to
-the database. Finishing or skipping the optional step marks setup complete; the
-wizard is re-openable from admin Settings. `auto_node`, `skills`, and `mcp`
-feature flags default off.
+A first-run experience that (a) on the very first load, **before any sign-in**,
+lets the installer create the admin account on a self-disabling bootstrap screen,
+then (b) walks that admin through a gated three-step setup modal that configures —
+and tests — everything the app needs, writing to the database. Env-provided values
+are detected and shown pre-filled/complete. Finishing or skipping marks setup
+complete; the wizard is re-openable from admin Settings. `auto_node`, `skills`,
+and `mcp` feature flags default off.
 
 ## 2. What is built
 
 | Layer | File(s) | Change |
 | ----- | ------- | ------ |
 | domain | `entities/runtime-config.ts` | Add `OnboardingState` + `DeploymentConfig` types, their `*_SETTING_KEY` consts, and tolerant `parse*` helpers (mirror `parseSiemConfig`). Keys are **not** sensitive. Tests first. |
-| application | `use-cases/onboarding/*.ts` | `GetOnboardingState`, `CompleteOnboarding`, `Get/SetDeploymentConfig` use-cases over `ISystemSettingsRepository`. Tests first. |
+| application | `use-cases/onboarding/create-admin.ts` | `CreateFirstAdmin` use-case: creates the admin via the user repo + auth adapter **only when no admin exists** (guard inside the operation). Tests: creates on empty install, refuses when an admin already exists. |
+| application | `use-cases/onboarding/*.ts` | `AdminExists`, `GetOnboardingState`, `CompleteOnboarding`, `Get/SetDeploymentConfig`, and a `GetSetupStatus` that reports per-step configured/tested state (env or DB). Tests first. |
+| adapters | `auth/seed-admin.ts` | Keep `seedAdmin` (promotion via `ADMIN_SEED_EMAIL`) as a fallback; no behavioural change required. |
 | application | `use-cases/get-feature-flag.ts` | Add `skills` + `mcp` to the default flag list, **off**; confirm `auto_node` is absent from `DEFAULT_ENABLED_FLAGS` (stays off). |
 | adapters | `auth/seed-roles.ts` | Keep `auto_node` role-scoping intent; extend `POWER_USER_SCOPED_FLAGS` only if Skills/MCP should be power-user scoped (confirm at Build — default: leave unscoped). |
-| apps/web | `server/routers/settings.ts` | Add `getOnboardingState` (adminProcedure), `completeOnboarding`, `get/setDeploymentConfig`. Reuse existing `set*Config`, `testConnectivity`, `testAllConnectivity`, `sendTestEmail`. |
-| apps/web | `components/onboarding/setup-wizard.tsx` (new) | Stepped modal: Step 1 deployment, Step 2 setup (required, warn-not-block), Step 3 site options (skippable). Per-item explainer + Test button. |
+| apps/web | `server/routers/bootstrap.ts` (new) | `adminExists` (publicProcedure read) + `createAdmin` (publicProcedure; **refuses when an admin exists**, enforced server-side, rate-limited). Signs the new admin in on success. |
+| apps/web | `app/setup/page.tsx` (new) | Public first-run screen: email (pre-filled from `ADMIN_SEED_EMAIL` if set) + password + confirm. Only reachable while `adminExists` is false; redirects to sign-in/app otherwise. |
+| apps/web | middleware / entry redirect | On an install with no admin, route unauthenticated first load to `/setup`. |
+| apps/web | `server/routers/settings.ts` | Add `getOnboardingState` (adminProcedure), `completeOnboarding`, `get/setDeploymentConfig`, and `getSetupStatus` (per-step configured/tested). Reuse existing `set*Config`, `testConnectivity`, `testAllConnectivity`, `sendTestEmail`. |
+| apps/web | `components/onboarding/setup-wizard.tsx` (new) | Stepped modal: Step 1 deployment, Step 2 setup (required, warn-not-block), Step 3 site options (skippable). Per-item explainer + Test button; steps pre-filled and marked complete from `getSetupStatus`. |
 | apps/web | `app/(admin)/admin/layout.tsx` | Mount the wizard; open when `onboarding_state.completed` is false. |
 | apps/web | `app/(admin)/admin/settings` | "Re-run setup" control that opens the wizard without clearing the flag. |
 | root | `VERSION`, `package.json` | Bump to `2.9.0`. |
 
 ## 3. Database changes
 
-- **None (no DDL).** New `admin_system_settings` rows only: `onboarding_state`,
-  `deployment_config`. Org name → existing `organisation.create`
-  (`core_organisations`). Multi-org → existing `organisation_resolution`.
-  `skills` / `mcp` → existing `core_feature_flag` (rows on first toggle).
+- **None (no DDL).** Admin → new `core_users` row via existing auth adapter. New
+  `admin_system_settings` rows only: `onboarding_state`, `deployment_config`. Org
+  name → existing `organisation.create` (`core_organisations`). Multi-org →
+  existing `organisation_resolution`. `skills` / `mcp` → existing
+  `core_feature_flag` (rows on first toggle).
 
 ## 4. Implementation order (tests first)
 
 1. Domain: `OnboardingState` + `DeploymentConfig` types, keys, tolerant parsers
    — unit tests for malformed rows falling back to safe defaults.
-2. Feature-flag defaults: add `skills` + `mcp` (off); test `auto_node`, `skills`,
+2. `CreateFirstAdmin` + `AdminExists` use-cases — tests: creates on empty install,
+   **refuses when an admin already exists** (the security-critical guard).
+3. `bootstrap` router (`adminExists`, `createAdmin`) + `/setup` screen + the
+   no-admin redirect. Test the guard end-to-end (second call is rejected).
+4. Feature-flag defaults: add `skills` + `mcp` (off); test `auto_node`, `skills`,
    `mcp` report disabled by default and `scheduled_node` stays enabled.
-3. Application use-cases: `GetOnboardingState` / `CompleteOnboarding` /
-   `Get/SetDeploymentConfig` — tests for read-default, complete-on-finish,
-   complete-on-skip.
-4. tRPC procedures wired into the container; admin-only guards.
-5. Wizard Step 1 (org name → `organisation.create`; multi-org checkbox →
+5. Onboarding use-cases: `GetOnboardingState` / `CompleteOnboarding` /
+   `Get/SetDeploymentConfig` / `GetSetupStatus` — tests for read-default,
+   complete-on-finish, complete-on-skip, and env-vs-DB configured/tested status.
+6. tRPC procedures wired into the container; admin-only guards on non-bootstrap.
+7. Wizard Step 1 (org name → `organisation.create`; multi-org checkbox →
    `organisation_resolution`) + explainers.
-6. Wizard Step 2 (storage / AI / auth) with save + Test (existing probes),
-   warn-not-block, and the `SETTINGS_ENCRYPTION_KEY` pre-flight guard.
-7. Wizard Step 3 (mail config+test; n8n toggle→modal→save+test; Skills toggle;
+8. Wizard Step 2 (storage / AI / auth) with save + Test (existing probes),
+   pre-fill/complete from `getSetupStatus`, warn-not-block, and the
+   `SETTINGS_ENCRYPTION_KEY` pre-flight guard.
+9. Wizard Step 3 (mail config+test; n8n toggle→modal→save+test; Skills toggle;
    MCP toggle) + **Skip** action; both Finish and Skip call `completeOnboarding`.
-8. Layout gating + admin Settings "Re-run setup" entry point.
-9. `./validate.sh`; fix all failures.
+10. Layout gating + admin Settings "Re-run setup" entry point.
+11. `./validate.sh`; fix all failures.
 
 ## 5. ADR required
 
@@ -72,10 +85,15 @@ ADR-041 (above). Assumes ADR-025, ADR-038, ADR-022.
 ## 7. Risks / open questions
 
 Carried from PRD §12:
+- **Unauthenticated `createAdmin` guard** — the no-admin-exists check must be
+  enforced transactionally (not just in the UI) and the route rate-limited;
+  otherwise it is an account-takeover vector. Primary security risk.
 - **Encryption-key ordering** — secret writes blocked until
-  `SETTINGS_ENCRYPTION_KEY` is present (pre-flight guard). Primary risk.
-- **First-login trigger** — installation-wide gate; confirm "first admin to sign
-  in" is intended, not per-admin.
+  `SETTINGS_ENCRYPTION_KEY` is present (pre-flight guard).
+- **"Complete" semantics** — a step is complete only when configured *and* its
+  Test passes; an env value present but failing its probe must not read green.
+- **First-run trigger** — bootstrap gates on "no admin exists"; the wizard gates
+  on `onboarding_state`. Confirm the two gates compose (seeded-but-untested case).
 - **Skills/MCP scope** — flags + toggles only this phase; no real config/test.
   Wizard copy must not imply a working integration.
 - **Mail in skippable Step 3** — password-reset / notifications stay degraded if
