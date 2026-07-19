@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
 import { HelpMenu } from "@/components/help-menu";
+import { OrganisationSignInGate } from "@/components/organisation/organisation-sign-in-gate";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { createServerHelpers } from "@/trpc/server";
 import { getContainer } from "@/lib/container";
@@ -28,6 +29,7 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
   void trpc.session.list.prefetch();
   void trpc.session.listPublishedFlows.prefetch();
   void trpc.usage.myUsage.prefetch();
+  void trpc.organisation.signInState.prefetch();
 
   return (
     <SidebarProvider>
@@ -38,6 +40,7 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
             {children}
           </div>
           <HelpMenu />
+          <OrganisationSignInGate />
         </div>
       </HydrateClient>
     </SidebarProvider>

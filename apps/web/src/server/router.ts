@@ -14,6 +14,7 @@ import { knowledgeRouter } from "./routers/knowledge";
 import { legalHoldRouter } from "./routers/legal-hold";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
+import { organisationRouter } from "./routers/organisation";
 import { peopleRouter } from "./routers/people";
 import { roleRouter } from "./routers/role";
 import { scheduleRouter } from "./routers/schedule";
@@ -33,6 +34,7 @@ export const appRouter = router({
   flowVersion: flowVersionRouter,
   role: roleRouter,
   group: groupRouter,
+  organisation: organisationRouter,
   session: sessionRouter,
   schedule: scheduleRouter,
   settings: settingsRouter,

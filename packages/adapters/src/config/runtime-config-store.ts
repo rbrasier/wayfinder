@@ -10,10 +10,13 @@ import {
   parseUsageLimitsConfig,
   EMBEDDINGS_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
+  ORGANISATION_RESOLUTION_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
+  DEFAULT_ORGANISATION_RESOLUTION,
   createDefaultAuthConfig,
   isEntraConfigured,
+  parseOrganisationResolution,
   type AiConfig,
   type AiPurpose,
   type AuthConfig,
@@ -24,6 +27,7 @@ import {
   type EntraCredentials,
   type ISystemSettingsRepository,
   type N8nConfig,
+  type OrganisationResolution,
   type ProviderName,
   type ResolvedDocumentGenerationBudget,
   type SessionUploadConfig,
@@ -372,6 +376,8 @@ export class RuntimeConfigStore {
   private usageLimitsPending: Promise<UsageLimitsConfig> | null = null;
   private siemCache: SiemConfig | null = null;
   private siemPending: Promise<SiemConfig> | null = null;
+  private organisationResolutionCache: OrganisationResolution | null = null;
+  private organisationResolutionPending: Promise<OrganisationResolution> | null = null;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -544,6 +550,31 @@ export class RuntimeConfigStore {
   invalidateSiem(): void {
     this.siemCache = null;
     this.siemPending = null;
+  }
+
+  // How a user's organisation is resolved on sign-in (ADR-038 §4). Read on the
+  // provisioning path; a missing/malformed row falls back to the admin strategy,
+  // which runs no sign-in logic, so a read blip never auto-assigns a user
+  // somewhere surprising.
+  async getOrganisationResolution(): Promise<OrganisationResolution> {
+    if (this.organisationResolutionCache) return this.organisationResolutionCache;
+    if (this.organisationResolutionPending) return this.organisationResolutionPending;
+    this.organisationResolutionPending = (async () => {
+      const result = await this.settingsRepo.get(ORGANISATION_RESOLUTION_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseOrganisationResolution(result.data.value)
+          : DEFAULT_ORGANISATION_RESOLUTION;
+      this.organisationResolutionCache = config;
+      this.organisationResolutionPending = null;
+      return config;
+    })();
+    return this.organisationResolutionPending;
+  }
+
+  invalidateOrganisationResolution(): void {
+    this.organisationResolutionCache = null;
+    this.organisationResolutionPending = null;
   }
 
   getStorageVersion(): number {

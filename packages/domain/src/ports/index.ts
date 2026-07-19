@@ -13,6 +13,7 @@ export * from "./siem-forwarder";
 export * from "./feature-flag-repository";
 export * from "./role-repository";
 export * from "./group-repository";
+export * from "./organisation-repository";
 export * from "./usage-repository";
 export * from "./budget-repository";
 export * from "./job-repository";

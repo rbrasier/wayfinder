@@ -11,6 +11,8 @@ export * from "./role";
 export * from "./permission";
 export * from "./group";
 export * from "./group-membership";
+export * from "./organisation";
+export * from "./organisation-resolution";
 export * from "./group-authorization";
 export * from "./usage-event";
 export * from "./budget";

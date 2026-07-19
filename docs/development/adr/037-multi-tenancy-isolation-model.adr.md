@@ -1,6 +1,11 @@
 # ADR-037 — Multi-Tenancy: Runtime-Toggleable Pooled Isolation
 
-- **Status**: Accepted (scoped by `multi-tenancy.prd.md`)
+- **Status**: **Superseded by [ADR-038](038-organisations-as-sharing-scope.adr.md)**
+  (2026-07-18). The product requirement for isolating *external* tenants within
+  one deployment was withdrawn: organisations are now an *internal sharing scope*,
+  and true isolation is handled by running separate deployments. The pooled-RLS
+  model below is retained for historical context and in case external-tenant
+  isolation is ever revived. Do not build from this ADR.
 - **Date**: 2026-07-18
 - **Supersedes**: the "decision required" draft of this ADR (single-tenant vs.
   pooled vs. schema-per-tenant). The product decision has been made — see below.

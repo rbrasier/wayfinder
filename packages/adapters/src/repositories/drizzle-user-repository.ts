@@ -25,6 +25,8 @@ const toEntity = (row: typeof core_users.$inferSelect): User => ({
   name: row.name,
   role: row.role,
   team: row.team,
+  organisationId: row.organisation_id,
+  emailVerified: row.email_verified,
   isAdmin: row.is_admin,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -42,6 +44,7 @@ export class DrizzleUserRepository implements IUserRepository {
           name: input.name ?? null,
           role: input.role ?? null,
           team: input.team ?? null,
+          organisation_id: input.organisationId ?? null,
           is_admin: input.isAdmin ?? false,
         })
         .returning();
@@ -104,6 +107,7 @@ export class DrizzleUserRepository implements IUserRepository {
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.role !== undefined ? { role: patch.role } : {}),
           ...(patch.team !== undefined ? { team: patch.team } : {}),
+          ...(patch.organisationId !== undefined ? { organisation_id: patch.organisationId } : {}),
           ...(patch.isAdmin !== undefined ? { is_admin: patch.isAdmin } : {}),
           updated_at: new Date(),
         })
