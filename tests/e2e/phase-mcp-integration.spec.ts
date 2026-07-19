@@ -22,7 +22,7 @@ test.describe('MCP servers', () => {
 
     await page.getByLabel('Label').fill('E2E GitHub');
     await page.getByLabel('URL', { exact: true }).fill('https://mcp.example.com/sse');
-    await page.getByLabel(/credential ref/i).fill('MCP_E2E_TOKEN');
+    await page.getByLabel(/credential ref/i).fill('MCP_CRED_E2E_TOKEN');
     await page.getByRole('button', { name: /register server/i }).click();
 
     const row = page.getByRole('row', { name: /E2E GitHub/i }).first();
