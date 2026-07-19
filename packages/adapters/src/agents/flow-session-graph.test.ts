@@ -136,6 +136,32 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("currency");
   });
 
+  it("injects <field_formats> from structuredFields for a structured step, without a document template", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "structured" as const,
+        structuredFields: [
+          { key: "decision", label: "Decision", type: "text", options: ["Approve", "Reject"], optional: false, raw: "Decision (options: Approve, Reject)" },
+        ],
+      },
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("<field_formats>");
+    expect(result.data).toContain('"Decision" (key: decision)');
+    expect(result.data).toContain("exactly one of: Approve, Reject");
+    expect(result.data).not.toContain("<document_template>");
+  });
+
+  it("maps a legacy conversation_only step to no field formats", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: { ...baseInput.nodeConfig, outputType: "conversation_only" as const },
+    });
+    expect(result.data).not.toContain("<field_formats>");
+  });
+
   it("includes <instructions> with aiInstruction", () => {
     const result = agent.buildSystemPrompt(baseInput);
     expect(result.data).toContain("<instructions>");

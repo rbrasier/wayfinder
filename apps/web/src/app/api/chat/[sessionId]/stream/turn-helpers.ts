@@ -1,4 +1,5 @@
 import {
+  normaliseOutputType,
   type AiTurnPayload,
   type ConversationalNodeConfig,
   type DocumentGenerationConfidence,
@@ -17,6 +18,7 @@ import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
 import { dispatchMcpNode } from "./mcp-turn-helpers";
+import { captureStructuredRecord } from "./structured-capture";
 import { streamTurn } from "./stream-turn";
 
 // Re-exported from its lightweight home so existing importers keep working while
@@ -716,6 +718,21 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
       } finally {
         onDocumentGenerationChange?.(false);
       }
+    }
+
+    // A structured step captures its fields as a SessionStepOutput (the record
+    // card reads it) and generates no document (ADR-038 §3). Reuses the values
+    // the pre-generation gate already extracted when they were threaded through.
+    if (milestone && normaliseOutputType(completedNodeConfig.outputType) === "structured") {
+      await captureStructuredRecord({
+        container,
+        milestoneId: milestone.id,
+        session,
+        flow,
+        messages: assistantMessages.data,
+        node: completedNode,
+        precomputedFieldValues: precomputedDocument?.fieldValues,
+      });
     }
   }
 

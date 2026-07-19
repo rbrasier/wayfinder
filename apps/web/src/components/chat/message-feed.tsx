@@ -8,6 +8,7 @@ import { resolveCrossCheckingState } from "./cross-checking-state";
 import { resolveGeneratingDocumentState } from "./generating-document-state";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
+import { RecordCard } from "./record-card";
 import { MessageInfoModal } from "./message-info-modal";
 import {
   AdvancingBadge,
@@ -157,6 +158,7 @@ export function MessageFeed({
 
           const config = node?.config as Record<string, unknown> | undefined;
           const isDocNode = config?.["outputType"] === "generate_document";
+          const isStructuredNode = config?.["outputType"] === "structured";
           const hasTemplate = Boolean(config?.["documentTemplatePath"]);
           const isNeverDone = Boolean(config?.["neverDone"]);
 
@@ -254,6 +256,13 @@ export function MessageFeed({
                       onRegenerate={
                         onRegenerateDocument ? () => onRegenerateDocument(msg.id) : undefined
                       }
+                    />
+                  )}
+                  {isStructuredNode && (
+                    <RecordCard
+                      messageId={msg.id}
+                      canEdit={Boolean(canEditDocuments) && config?.["allowManualEdit"] !== false}
+                      onEdited={onDocumentEdited}
                     />
                   )}
                 </>

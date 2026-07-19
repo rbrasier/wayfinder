@@ -43,7 +43,6 @@ import {
   GetUsageLimitsEnabled,
   SetUsageLimitsEnabled,
   FailJob,
-  GenerateDocument,
   GetEffectivePermissions,
   GetFeatureFlag,
   GetFlowCanvas,
@@ -118,9 +117,7 @@ import {
   SetFeatureFlagRoles,
   StartSession,
   SuggestApprover,
-  SummariseTemplate,
   TrackUsage,
-  UpdateDocumentFields,
   UpdateErrorStatus,
   UpdateFlow,
   UpdateFlowNode,
@@ -129,6 +126,7 @@ import {
   UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
+import { buildDocumentUseCases } from "./container-document-use-cases";
 import {
   DocxGenerator,
   DocumentExtractorService,
@@ -607,20 +605,18 @@ const build = () => {
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, ...skillsAndMcp.repos },
     useCases: {
-      generateDocument: new GenerateDocument(docxGenerator, objectStorage, llm, sessionMessages, sessionStepOutputs),
-      evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
-      updateDocumentFields: new UpdateDocumentFields(
-        docxGenerator,
+      ...buildDocumentUseCases({
+        documentGenerator: docxGenerator,
         objectStorage,
-        llm,
+        languageModel: llm,
         sessionMessages,
         sessionStepOutputs,
         sessions,
         flowNodes,
         approvals,
         auditLogger,
-      ),
-      summariseTemplate: new SummariseTemplate(llm),
+      }),
+      evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),

@@ -17,10 +17,9 @@ import {
   type Result,
   type SessionDocument,
   type SessionMessage,
-  type StepOutputField,
   type TemplateField,
 } from "@rbrasier/domain";
-import { documentSummarySchema, type DocumentData, type GroupItems } from "@rbrasier/shared";
+import { documentSummarySchema, type DocumentData } from "@rbrasier/shared";
 import {
   batchTemplateFields,
   buildDocumentTranscript,
@@ -28,6 +27,7 @@ import {
 } from "./field-resolution";
 import { gradeDocumentFields } from "./grade-document";
 import { buildRenderData } from "./render-data";
+import { buildStepOutputFields } from "./step-output-fields";
 import { extractStructuredFields, scalarValues } from "./structured-fields";
 
 export interface GenerateDocumentInput {
@@ -191,28 +191,12 @@ export class GenerateDocument {
     fields: TemplateField[];
     values: DocumentData;
   }): Promise<void> {
-    const fields: StepOutputField[] = input.fields.map((field) => {
-      if (field.type === "group") {
-        const value = input.values[field.key];
-        const items: GroupItems = Array.isArray(value) ? value : [];
-        return { key: field.key, label: field.label, type: field.type, options: field.options, value: "", items };
-      }
-      const value = input.values[field.key];
-      return {
-        key: field.key,
-        label: field.label,
-        type: field.type,
-        options: field.options,
-        value: typeof value === "string" ? value : "",
-      };
-    });
-
     await this.sessionStepOutputs.create({
       sessionId: input.sessionId,
       flowId: input.flowId,
       nodeId: input.nodeId,
       messageId: input.messageId,
-      fields,
+      fields: buildStepOutputFields(input.fields, input.values),
     });
   }
 

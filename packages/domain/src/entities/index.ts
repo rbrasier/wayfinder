@@ -25,6 +25,7 @@ export * from "./flow-visibility";
 export * from "./flow-version";
 export * from "./confidence-threshold";
 export * from "./flow-node";
+export * from "./node-output";
 export * from "./field-value-source";
 export * from "./n8n-workflow";
 export * from "./session-schedule";

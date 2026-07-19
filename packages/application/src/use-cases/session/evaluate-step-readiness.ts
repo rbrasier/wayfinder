@@ -2,7 +2,9 @@ import {
   computeGroupCompletenessNotes,
   domainError,
   err,
+  nodeFieldSet,
   normaliseAdvanceConfidenceThreshold,
+  normaliseOutputType,
   ok,
   type ConversationalNodeConfig,
   type Flow,
@@ -65,10 +67,6 @@ export class EvaluateStepReadiness {
   ): Promise<Result<EvaluateStepReadinessOutput>> {
     const config = input.node.config as unknown as ConversationalNodeConfig;
 
-    if (!config.documentTemplatePath) {
-      return err(domainError("VALIDATION_FAILED", "No template configured for this node."));
-    }
-
     const fieldsResult = await this.resolveFields(config);
     if (fieldsResult.error) return fieldsResult;
     const fields = fieldsResult.data;
@@ -130,15 +128,22 @@ export class EvaluateStepReadiness {
     });
   }
 
-  // Inline fields need no template bytes; only the extract-from-template path
-  // fetches the template, mirroring GenerateDocument's field resolution.
+  // A structured step reads its author-declared fields directly (no template);
+  // a template step prefers its parsed fields and otherwise extracts them from
+  // the template bytes, mirroring GenerateDocument's field resolution.
   private async resolveFields(
     config: ConversationalNodeConfig,
   ): Promise<Result<TemplateField[]>> {
+    if (normaliseOutputType(config.outputType) === "structured") {
+      return ok(nodeFieldSet(config));
+    }
     if (config.documentTemplateFields && config.documentTemplateFields.length > 0) {
       return ok(config.documentTemplateFields);
     }
-    const templateResult = await this.objectStorage.get(config.documentTemplatePath!);
+    if (!config.documentTemplatePath) {
+      return err(domainError("VALIDATION_FAILED", "No template configured for this node."));
+    }
+    const templateResult = await this.objectStorage.get(config.documentTemplatePath);
     if (templateResult.error) return templateResult;
     return resolveTemplateFields(this.documentGenerator, config, templateResult.data);
   }

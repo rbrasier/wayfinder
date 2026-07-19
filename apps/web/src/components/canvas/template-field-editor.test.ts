@@ -23,4 +23,21 @@ describe("parseFieldLines", () => {
     expect(result.valid).toBe(true);
     expect(result.fields).toHaveLength(0);
   });
+
+  it("allows a section line by default", () => {
+    const result = parseFieldLines(["#Optional Clause"]);
+
+    expect(result.valid).toBe(true);
+    expect(result.fields[0]!.type).toBe("section");
+  });
+
+  it("rejects a section line and excludes it when disallowSection is set", () => {
+    const result = parseFieldLines(["Decision (text)", "#Optional Clause"], {
+      disallowSection: true,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.fields).toHaveLength(1);
+    expect(result.fields[0]!.key).toBe("decision");
+  });
 });

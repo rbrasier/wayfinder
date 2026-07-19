@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { domainError } from "@rbrasier/domain";
+import { domainError, nodeFieldSet, normaliseOutputType } from "@rbrasier/domain";
 import type {
   ConversationalNodeConfig,
   SessionStatus,
@@ -36,16 +36,19 @@ export const documentEditability = (input: {
   return { editable: true, reason: null };
 };
 
-// The step-output row records the exact key/label/type/options used at
-// generation; richer constraints (optional, maxLength, min/max) live on the
-// node's configured fields. Prefer the config defs, falling back to the
-// step-output shape for templates whose fields were extracted lazily.
+// The step-output row records the exact key/label/type/options used at capture;
+// richer constraints (optional, maxLength, min/max) live on the node's
+// configured field set. Prefer the declared fields — the template fields for a
+// document step, the author-declared fields for a structured step — via the
+// single nodeFieldSet accessor, falling back to the step-output shape for
+// templates whose fields were extracted lazily.
 const resolveDisplayFields = (
   config: ConversationalNodeConfig,
   stepFields: StepOutputField[],
 ): TemplateField[] => {
-  if (config.documentTemplateFields && config.documentTemplateFields.length > 0) {
-    return config.documentTemplateFields;
+  const declared = nodeFieldSet(config);
+  if (declared.length > 0) {
+    return declared;
   }
   return stepFields.map((field) => ({
     key: field.key,
@@ -64,9 +67,7 @@ export const documentRouter = router({
       const messageResult = await ctx.container.repos.sessionMessages.findById(input.messageId);
       if (messageResult.error) throw toTrpcError(messageResult.error);
       const message = messageResult.data;
-      if (!message || !message.document) {
-        throw toTrpcError(domainError("NOT_FOUND", "Document not found."));
-      }
+      if (!message) throw toTrpcError(domainError("NOT_FOUND", "Record not found."));
 
       const [sessionResult, nodeResult, stepOutputResult] = await Promise.all([
         ctx.container.repos.sessions.findById(message.sessionId),
@@ -82,6 +83,14 @@ export const documentRouter = router({
 
       const node = "error" in nodeResult ? null : nodeResult.data;
       const config = (node?.config ?? {}) as unknown as ConversationalNodeConfig;
+      const isStructured = normaliseOutputType(config.outputType) === "structured";
+
+      // A document step surfaces its fields off the generated document; a
+      // structured step has no document, so its record is the step output alone
+      // (ADR-038 §4). Anything else with neither is genuinely not found.
+      if (!message.document && !isStructured) {
+        throw toTrpcError(domainError("NOT_FOUND", "Document not found."));
+      }
 
       const snapshotResult = await ctx.container.repos.approvals.hasRecordedSnapshot(
         message.sessionId,
@@ -109,11 +118,11 @@ export const documentRouter = router({
       });
 
       return {
-        filename: message.document.filename,
+        filename: message.document?.filename ?? null,
         editable,
         reason,
-        editedAt: message.document.editedAt ?? null,
-        editedByUserId: message.document.editedByUserId ?? null,
+        editedAt: message.document?.editedAt ?? null,
+        editedByUserId: message.document?.editedByUserId ?? null,
         fields,
       };
     }),
@@ -127,6 +136,33 @@ export const documentRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const messageResult = await ctx.container.repos.sessionMessages.findById(input.messageId);
+      if (messageResult.error) throw toTrpcError(messageResult.error);
+      const message = messageResult.data;
+      if (!message) throw toTrpcError(domainError("NOT_FOUND", "Record not found."));
+
+      const nodeResult = message.stepNodeId
+        ? await ctx.container.repos.flowNodes.findById(message.stepNodeId)
+        : { data: null };
+      const node = "error" in nodeResult ? null : nodeResult.data;
+      const config = (node?.config ?? {}) as unknown as ConversationalNodeConfig;
+
+      // A structured step has no document to regenerate — its record is the
+      // step output, updated in place (ADR-038 §4).
+      if (normaliseOutputType(config.outputType) === "structured") {
+        const structuredResult = await ctx.container.useCases.updateStructuredStepOutput.execute({
+          messageId: input.messageId,
+          editedByUserId: ctx.userId,
+          values: input.values,
+          groupItems: input.groupItems,
+        });
+        if (structuredResult.error) throw toTrpcError(structuredResult.error);
+        if (!structuredResult.data.ok) {
+          return { ok: false as const, fieldErrors: structuredResult.data.fieldErrors };
+        }
+        return { ok: true as const };
+      }
+
       const result = await ctx.container.useCases.updateDocumentFields.execute({
         messageId: input.messageId,
         editedByUserId: ctx.userId,

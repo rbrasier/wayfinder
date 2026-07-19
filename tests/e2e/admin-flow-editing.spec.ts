@@ -59,7 +59,7 @@ async function addAndConfigureStep(
     name: string;
     instruction: string;
     doneWhen: string;
-    outputType?: 'conversation_only' | 'generate_document';
+    outputType?: 'unstructured' | 'generate_document';
   },
 ): Promise<void> {
   await page.getByRole('button', { name: '+ Add step' }).first().click();

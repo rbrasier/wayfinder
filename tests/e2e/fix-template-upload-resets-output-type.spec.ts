@@ -103,7 +103,7 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
     // 3. The core regression: output type stays "Generate document" and the
     //    pre-filled fields are preserved after the upload.
     await expect(page.locator('input[type="radio"][value="generate_document"]')).toBeChecked();
-    await expect(page.locator('input[type="radio"][value="conversation_only"]')).not.toBeChecked();
+    await expect(page.locator('input[type="radio"][value="unstructured"]')).not.toBeChecked();
     await expect(page.locator('#node-name')).toHaveValue('Requirements Doc');
     await expect(page.locator('#ai-instruction')).toHaveValue('Gather the required document information.');
     await expect(page.locator('#done-when-mode')).toHaveValue('template');

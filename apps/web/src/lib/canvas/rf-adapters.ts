@@ -1,4 +1,5 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
+import { normaliseOutputType } from "@rbrasier/domain";
 import type { TemplateField } from "@rbrasier/domain";
 import type { AutoNodeData } from "@/components/canvas/auto-node";
 import { AutoNode } from "@/components/canvas/auto-node";
@@ -99,9 +100,7 @@ export const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
     stepNumber,
     doneWhen: (node.config.doneWhen as string | null) ?? null,
     neverDone: Boolean(node.config.neverDone),
-    outputType:
-      (node.config.outputType as "conversation_only" | "generate_document" | null) ??
-      "conversation_only",
+    outputType: normaliseOutputType(node.config.outputType as string | null | undefined),
     documentTemplatePath: (node.config.documentTemplatePath as string | null) ?? null,
     documentTemplateFilename: (node.config.documentTemplateFilename as string | null) ?? null,
     documentTemplateContent: (node.config.documentTemplateContent as string | null) ?? null,

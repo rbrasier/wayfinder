@@ -1,4 +1,5 @@
-import { groupIdsForMemberships } from "@rbrasier/domain";
+import { groupIdsForMemberships, normaliseOutputType, validateStructuredFieldSet } from "@rbrasier/domain";
+import type { TemplateField } from "@rbrasier/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
@@ -6,6 +7,20 @@ import { adminProcedure, authenticatedProcedure, permissionProcedure, router } f
 import { toTrpcError } from "../trpc-errors";
 
 const flowIdInput = z.object({ flowId: z.string().uuid() });
+
+// A structured step must not carry a `section` field — it is a document-only
+// concept (ADR-038 §5). The client already blocks it; this re-enforces the same
+// rule server-side so a crafted request cannot persist an invalid field set.
+const assertValidStructuredConfig = (config: Record<string, unknown> | undefined): void => {
+  if (!config || normaliseOutputType(config.outputType as string | null | undefined) !== "structured") {
+    return;
+  }
+  const fields = Array.isArray(config.structuredFields)
+    ? (config.structuredFields as TemplateField[])
+    : [];
+  const validation = validateStructuredFieldSet(fields);
+  if (validation.error) throw toTrpcError(validation.error);
+};
 
 export const canEditFlow = async (
   container: Container,
@@ -125,6 +140,7 @@ const nodeRouter = router({
       if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
+      assertValidStructuredConfig(input.config);
       const result = await ctx.container.useCases.createFlowNode.execute({
         flowId: input.flowId,
         type: input.type ?? "conversational",
@@ -155,6 +171,7 @@ const nodeRouter = router({
       if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
+      assertValidStructuredConfig(input.config);
       const result = await ctx.container.useCases.updateFlowNode.execute(input.nodeId, {
         name: input.name,
         colour: input.colour,

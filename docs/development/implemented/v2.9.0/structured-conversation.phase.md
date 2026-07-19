@@ -1,6 +1,6 @@
 # Phase — Structured Conversation (Fields Without a Document)
 
-- **Status**: Awaiting review
+- **Status**: Implemented (v2.9.0)
 - **Target version**: 2.9.0  (bump: MINOR — new feature, additive `app_flow_nodes.config` jsonb; no migration)
 - **PRD**: `docs/development/prd/structured-conversation.prd.md`
 - **ADRs**: ADR-038 (three-value output type, neutral field-set accessor, gate-without-generation, record card, `section` hidden)

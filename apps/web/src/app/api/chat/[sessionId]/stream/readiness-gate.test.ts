@@ -5,6 +5,7 @@ const base: ReadinessGateInput = {
   isNeverDone: false,
   outputType: "generate_document",
   hasTemplate: true,
+  hasFields: false,
   hasContextDocs: true,
   stepCompleteConfidence: 95,
   advanceThreshold: 90,
@@ -29,8 +30,34 @@ describe("shouldEvaluateStepReadiness", () => {
     expect(shouldEvaluateStepReadiness({ ...base, outputType: "conversation_only" })).toBe(false);
   });
 
+  it("skips an unstructured conversation step", () => {
+    expect(shouldEvaluateStepReadiness({ ...base, outputType: "unstructured" })).toBe(false);
+  });
+
   it("skips a doc step with no template", () => {
     expect(shouldEvaluateStepReadiness({ ...base, hasTemplate: false })).toBe(false);
+  });
+
+  it("runs for a structured step with fields over threshold and context docs", () => {
+    expect(
+      shouldEvaluateStepReadiness({
+        ...base,
+        outputType: "structured",
+        hasTemplate: false,
+        hasFields: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("skips a structured step that declares no fields", () => {
+    expect(
+      shouldEvaluateStepReadiness({
+        ...base,
+        outputType: "structured",
+        hasTemplate: false,
+        hasFields: false,
+      }),
+    ).toBe(false);
   });
 
   it("skips never-done steps", () => {

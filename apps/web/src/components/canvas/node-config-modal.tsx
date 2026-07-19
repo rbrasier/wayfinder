@@ -23,7 +23,7 @@ import { parseFieldLines } from "./template-field-editor";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
 import { SkillPickerModal } from "./skill-picker-modal";
 import { McpPickerModal } from "./mcp-picker-modal";
-import { TEMPLATE_COMPLETE_SENTINEL, doneWhenForOutputType } from "./output-type";
+import { TEMPLATE_COMPLETE_SENTINEL, doneWhenForOutputType, type OutputType } from "./output-type";
 import type {
   ScheduleModifier,
   ScheduleUnit,
@@ -56,7 +56,9 @@ export interface NodeConfigValues {
   aiInstruction: string;
   doneWhen: string;
   neverDone: boolean;
-  outputType: "conversation_only" | "generate_document";
+  outputType: OutputType;
+  // Author-declared fields for a structured conversation (ADR-038).
+  structuredFields: TemplateField[];
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
   documentTemplateContent?: string | null;
@@ -114,7 +116,8 @@ const DEFAULT_VALUES: NodeConfigValues = {
   aiInstruction: "",
   doneWhen: "",
   neverDone: false,
-  outputType: "conversation_only",
+  outputType: "unstructured",
+  structuredFields: [],
   documentTemplatePath: null,
   documentTemplateFilename: null,
   documentTemplateContent: null,
@@ -162,6 +165,8 @@ export function NodeConfigModal({
   // Raw `Label (annotations)` lines edited in the field editors (mock executor).
   const [requestLines, setRequestLines] = useState<string[]>([]);
   const [responseLines, setResponseLines] = useState<string[]>([]);
+  // Raw `Label (annotations)` lines for a structured conversation's field set.
+  const [structuredLines, setStructuredLines] = useState<string[]>([]);
   const [customFields, setCustomFields] = useState<CustomRequestField[]>([]);
   const wasOpenRef = useRef(false);
   // Seed form state only on the open transition. `initialValues` is derived from
@@ -174,6 +179,7 @@ export function NodeConfigModal({
       setValues(next);
       setRequestLines((next.requestFields ?? []).map((field) => field.raw));
       setResponseLines((next.responseFields ?? []).map((field) => field.raw));
+      setStructuredLines((next.structuredFields ?? []).map((field) => field.raw));
       setCustomFields(buildCustomFields(next));
     }
     wasOpenRef.current = open;
@@ -226,6 +232,8 @@ export function NodeConfigModal({
   const isMcp = values.type === "mcp";
   const requestParsed = parseFieldLines(requestLines);
   const responseParsed = parseFieldLines(responseLines);
+  // A structured conversation's field set — the `section` type is rejected.
+  const structuredParsed = parseFieldLines(structuredLines, { disallowSection: true });
 
   const usesN8n = isAuto && values.executor === "n8n";
 
@@ -332,7 +340,8 @@ export function NodeConfigModal({
   const conversationalValid =
     Boolean(values.name.trim()) &&
     Boolean(values.aiInstruction.trim()) &&
-    (values.neverDone || isTemplateComplete || Boolean(values.doneWhen.trim()));
+    (values.neverDone || isTemplateComplete || Boolean(values.doneWhen.trim())) &&
+    (values.outputType !== "structured" || structuredParsed.valid);
 
   const autoValid =
     Boolean(values.name.trim()) &&
@@ -405,6 +414,13 @@ export function NodeConfigModal({
     };
   };
 
+  // A structured conversation persists its parsed field set; any other output
+  // type carries none, so switching away clears it (no data movement, ADR-038).
+  const saveConversational = (): NodeConfigValues => ({
+    ...values,
+    structuredFields: values.outputType === "structured" ? structuredParsed.fields : [],
+  });
+
   const saveMcp = (): NodeConfigValues => {
     const keys = new Set(requestParsed.fields.map((field) => field.key));
     const prunedValues = Object.fromEntries(
@@ -426,6 +442,10 @@ export function NodeConfigModal({
     }
     if (isMcp) {
       onSave(saveMcp());
+      return;
+    }
+    if (isConversational) {
+      onSave(saveConversational());
       return;
     }
     onSave(values);
@@ -595,6 +615,8 @@ export function NodeConfigModal({
                       doneWhenMode={doneWhenMode}
                       handleDoneWhenModeChange={handleDoneWhenModeChange}
                       handleOutputTypeChange={handleOutputTypeChange}
+                      structuredLines={structuredLines}
+                      onStructuredLinesChange={setStructuredLines}
                       onUploadTemplate={onUploadTemplate}
                       fileInputRef={fileInputRef}
                       handleFileChange={handleFileChange}

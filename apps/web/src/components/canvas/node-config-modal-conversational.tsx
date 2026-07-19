@@ -6,10 +6,21 @@ import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { NodeConfigValues } from "./node-config-modal";
+import type { OutputType } from "./output-type";
+import { TemplateFieldEditor } from "./template-field-editor";
 
 const EXAMPLE_TAG = "{{First name}}";
 
 type DoneWhenMode = "never" | "template" | "condition";
+
+// The three output types with their author-facing labels (ADR-038). The
+// document type keeps "Generate document" in its label so existing selectors
+// resolve it unchanged.
+const OUTPUT_TYPE_OPTIONS: { value: OutputType; label: string }[] = [
+  { value: "generate_document", label: "Generate document (from template)" },
+  { value: "structured", label: "Structured conversation" },
+  { value: "unstructured", label: "Unstructured conversation" },
+];
 
 // Only the fields this view reads off a resolved library skill.
 interface SkillSummary {
@@ -25,6 +36,9 @@ export interface NodeConfigModalConversationalProps {
   doneWhenMode: DoneWhenMode;
   handleDoneWhenModeChange: (mode: string) => void;
   handleOutputTypeChange: (outputType: NodeConfigValues["outputType"]) => void;
+  // Raw `Label (annotations)` lines for a structured conversation's field set.
+  structuredLines: string[];
+  onStructuredLinesChange: (lines: string[]) => void;
   onUploadTemplate?: unknown;
   fileInputRef: RefObject<HTMLInputElement | null>;
   handleFileChange: (e: ChangeEvent<HTMLInputElement>) => void | Promise<void>;
@@ -48,6 +62,8 @@ export function NodeConfigModalConversational({
   doneWhenMode,
   handleDoneWhenModeChange,
   handleOutputTypeChange,
+  structuredLines,
+  onStructuredLinesChange,
   onUploadTemplate,
   fileInputRef,
   handleFileChange,
@@ -153,11 +169,11 @@ export function NodeConfigModalConversational({
       <div className="space-y-1">
         <FieldGroupLabel id="ncm-output-type">Output type</FieldGroupLabel>
         <div className="flex gap-3" role="radiogroup" aria-labelledby="ncm-output-type">
-          {(["conversation_only", "generate_document"] as const).map((type) => (
+          {OUTPUT_TYPE_OPTIONS.map((option) => (
             <label
-              key={type}
-              className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-[13px] transition-colors ${
-                values.outputType === type
+              key={option.value}
+              className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-center text-[13px] transition-colors ${
+                values.outputType === option.value
                   ? "border-[#3a5fd9] bg-[#eef1fc] font-medium text-[#3a5fd9]"
                   : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
               }`}
@@ -165,11 +181,11 @@ export function NodeConfigModalConversational({
               <input
                 type="radio"
                 className="sr-only"
-                value={type}
-                checked={values.outputType === type}
-                onChange={() => handleOutputTypeChange(type)}
+                value={option.value}
+                checked={values.outputType === option.value}
+                onChange={() => handleOutputTypeChange(option.value)}
               />
-              {type === "conversation_only" ? "Conversation only" : "Generate document"}
+              {option.label}
             </label>
           ))}
         </div>
@@ -244,12 +260,24 @@ export function NodeConfigModalConversational({
         </div>
       )}
 
-      {values.outputType === "generate_document" && (
+      {values.outputType === "structured" && (
+        <TemplateFieldEditor
+          label="Fields to capture"
+          helpText="One field per line as Label (type) — e.g. Preferred Vendor (text), Approved (yesno), Budget (currency). Use the same tags as a document template; the section type is not available here."
+          lines={structuredLines}
+          onChange={onStructuredLinesChange}
+          disallowSection
+        />
+      )}
+
+      {(values.outputType === "generate_document" || values.outputType === "structured") && (
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-0.5">
             <Label htmlFor="allow-manual-edit">Allow manual field editing</Label>
             <p className="text-[12px] text-[#6d6a65]">
-              Operators can correct the generated document&apos;s field values before approval.
+              {values.outputType === "structured"
+                ? "Operators can correct the captured field values on the record after this step completes."
+                : "Operators can correct the generated document’s field values before approval."}
             </p>
           </div>
           <button
@@ -280,8 +308,8 @@ export function NodeConfigModalConversational({
           onChange={(e) => handleDoneWhenModeChange(e.target.value)}
         >
           <option value="condition">Specific condition</option>
-          {values.outputType === "generate_document" && (
-            <option value="template">Template complete — when all template fields are gathered</option>
+          {(values.outputType === "generate_document" || values.outputType === "structured") && (
+            <option value="template">All fields captured — when every field is gathered</option>
           )}
           <option value="never">Never done — user can continue to interact indefinitely</option>
         </select>
@@ -297,7 +325,7 @@ export function NodeConfigModalConversational({
         )}
         {doneWhenMode === "template" && (
           <p className="rounded-[9px] border border-[#c5d0f7] bg-[#eef1fc] px-3 py-2 text-[12px] text-[#3a5fd9]">
-            This step is complete when all required fields in the document template have been gathered from the user.
+            This step is complete when all required fields have been gathered from the user.
           </p>
         )}
       </div>

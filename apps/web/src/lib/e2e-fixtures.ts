@@ -2,6 +2,7 @@ import type { Result } from "@rbrasier/domain";
 import { schema } from "@rbrasier/adapters";
 import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
+import { seedStructuredSession } from "./e2e-fixtures-structured";
 
 // Deterministic fixture data seeded before the E2E suite so that specs gated on
 // "a session/flow must exist" run their real assertions instead of skipping.
@@ -16,7 +17,7 @@ const SEED_CONFIRM_SESSION_TITLE = "E2E SEED Confirmation Session";
 const SEED_APPROVAL_FLOW_NAME = "E2E SEED Approval Flow";
 const SEED_APPROVAL_SESSION_TITLE = "E2E SEED Approval Session";
 
-const unwrap = <T>(result: Result<T>, context: string): T => {
+export const unwrap = <T>(result: Result<T>, context: string): T => {
   if (result.error) {
     throw new Error(`${context}: ${result.error.message}`);
   }
@@ -43,6 +44,7 @@ export interface SeedResult {
   forkFlowId: string;
   confirmationSessionId: string;
   approvalSessionId: string;
+  structuredSessionId: string;
 }
 
 // A fork flow whose two mutually-exclusive branches capture the same `amount`
@@ -600,6 +602,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const forkFlowId = await seedForkFlow(container, ownerUserId);
   const confirmationSessionId = await seedConfirmationSession(container, ownerUserId);
   const approvalSessionId = await seedApprovalRequest(container, ownerUserId);
+  const structuredSessionId = await seedStructuredSession(container, ownerUserId);
 
   return {
     flowId: flow.id,
@@ -607,6 +610,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     forkFlowId,
     confirmationSessionId,
     approvalSessionId,
+    structuredSessionId,
   };
 };
 

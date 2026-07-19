@@ -21,6 +21,9 @@ import { trpc } from "@/trpc/client";
 interface DocumentEditDialogProps {
   open: boolean;
   messageId: string;
+  // Heading shown in the dialog. Defaults to the document wording; a structured
+  // record passes "Edit record" (ADR-038 §4).
+  title?: string;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -31,7 +34,13 @@ const splitMulti = (value: string): string[] =>
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
 
-export function DocumentEditDialog({ open, messageId, onClose, onSaved }: DocumentEditDialogProps) {
+export function DocumentEditDialog({
+  open,
+  messageId,
+  title = "Edit document fields",
+  onClose,
+  onSaved,
+}: DocumentEditDialogProps) {
   const fieldsQuery = trpc.document.getFields.useQuery({ messageId }, { enabled: open });
   const updateMutation = trpc.document.updateFields.useMutation();
 
@@ -89,7 +98,7 @@ export function DocumentEditDialog({ open, messageId, onClose, onSaved }: Docume
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Edit document fields</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogCloseButton />
         </DialogHeader>
 

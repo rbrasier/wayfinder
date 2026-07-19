@@ -1,5 +1,6 @@
 import type { FieldValueSource } from "./field-value-source";
 import type { McpToolRef } from "./mcp-server";
+import type { StoredOutputType } from "./node-output";
 import type { ScheduleAnchor, ScheduleKind } from "./session-schedule";
 import type { ParsedSkill } from "./skill";
 import type { TemplateField } from "./template-field";
@@ -22,12 +23,18 @@ export interface ApprovalNodeConfig {
 export interface ConversationalNodeConfig {
   aiInstruction: string;
   doneWhen: string;
-  outputType: "conversation_only" | "generate_document";
+  // Legacy `conversation_only` is still accepted where a stored value is read;
+  // normaliseOutputType maps it to `unstructured` (ADR-038).
+  outputType: StoredOutputType;
   documentTemplateContent?: string | null;
   documentTemplateStructuredContent?: string | null;
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
   documentTemplateFields?: TemplateField[] | null;
+  // Author-declared fields for a `structured` output type (ADR-038). Kept
+  // distinct from documentTemplateFields so a document-named slot never carries
+  // non-document data; read only through nodeFieldSet.
+  structuredFields?: TemplateField[] | null;
   advanceConfidenceThreshold?: number;
   // Whether the operator may manually correct generated document field values.
   // Absent means allowed — editing is on by default.

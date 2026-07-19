@@ -44,6 +44,7 @@ import {
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { trpc } from "@/trpc/client";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
+import { normaliseOutputType } from "@rbrasier/domain";
 import type { FieldValueSource, FlowContextDoc, PermissionKey, PriorStepField, TemplateField } from "@rbrasier/domain";
 import { compareStepLabels, computeStepNumbers } from "@/lib/flow-utils";
 import {
@@ -349,6 +350,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         doneWhen: values.neverDone ? "" : values.doneWhen,
         neverDone: values.neverDone,
         outputType: values.outputType,
+        structuredFields: values.outputType === "structured" ? values.structuredFields : null,
         documentTemplatePath: values.documentTemplatePath ?? null,
         documentTemplateFilename: values.documentTemplateFilename ?? null,
         documentTemplateContent: values.documentTemplateContent ?? null,
@@ -562,7 +564,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         aiInstruction: (editingConfig.aiInstruction as string | null) ?? editingData.aiInstruction ?? "",
         doneWhen: (editingConfig.doneWhen as string | null) ?? "",
         neverDone: Boolean(editingConfig.neverDone),
-        outputType: (editingConfig.outputType as "conversation_only" | "generate_document" | null) ?? "conversation_only",
+        outputType: normaliseOutputType(editingConfig.outputType as string | null | undefined),
+        structuredFields: readFields(editingConfig.structuredFields),
         documentTemplatePath: (editingConfig.documentTemplatePath as string | null) ?? null,
         documentTemplateFilename: (editingConfig.documentTemplateFilename as string | null) ?? null,
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,

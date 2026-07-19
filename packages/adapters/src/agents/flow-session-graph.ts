@@ -1,5 +1,7 @@
 import {
   buildFieldConstraintsText,
+  nodeFieldSet,
+  normaliseOutputType,
   ok,
   type BuildBranchChoicePromptInput,
   type BuildSystemPromptInput,
@@ -51,6 +53,8 @@ export class FlowSessionGraph implements ISessionAgent {
       ? buildReferenceDocumentsBlock(retrievedChunks)
       : "";
 
+    const outputType = normaliseOutputType(nodeConfig.outputType);
+
     // The current date/time changes every turn, so — like the retrieved chunks —
     // it is appended after the stable structural prompt to preserve prompt-cache
     // hits on everything above.
@@ -59,19 +63,26 @@ export class FlowSessionGraph implements ISessionAgent {
     const templateContent =
       nodeConfig.documentTemplateStructuredContent ?? nodeConfig.documentTemplateContent;
     const templateBlock =
-      nodeConfig.outputType === "generate_document" && templateContent
+      outputType === "generate_document" && templateContent
         ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${templateContent}\n  </document_template>`
         : "";
 
+    // The "all fields captured" sentinel is shared by template and structured
+    // steps (ADR-038 §3), so its expansion stays neutral — it must read
+    // naturally whether or not a document is produced.
     const effectiveDoneWhen =
       nodeConfig.doneWhen === "__TEMPLATE_COMPLETE__"
-        ? "All required fields in the document template have been gathered from the user and can be fully populated."
+        ? "All required fields for this step have been gathered from the user and can be fully populated."
         : nodeConfig.doneWhen;
 
-    const templateFields = input.templateFields ?? nodeConfig.documentTemplateFields ?? [];
+    // A structured step gathers its author-declared fields; a template step
+    // gathers its parsed template fields. Both read one set through nodeFieldSet
+    // and both get the field-format guidance so the model reformats input.
+    const gatheredFields = input.templateFields ?? nodeFieldSet(nodeConfig);
     const fieldFormatsBlock =
-      nodeConfig.outputType === "generate_document" && templateFields.length > 0
-        ? buildFieldFormatsBlock(templateFields)
+      (outputType === "generate_document" || outputType === "structured") &&
+      gatheredFields.length > 0
+        ? buildFieldFormatsBlock(gatheredFields)
         : "";
 
     const prompt = `${roleBlock}${globalInstructionsBlock}${skillsBlock}
@@ -137,7 +148,7 @@ const buildFieldFormatsBlock = (templateFields: TemplateField[]): string => {
     .map((line) => `    ${line}`)
     .join("\n");
   return `\n\n<field_formats>
-  The document produced at this step has fields with required formats. When the user gives you information for a field, silently reformat it into the required format yourself whenever you reasonably can — for example, turn "next Tuesday" or "3rd of June" into DD-MM-YYYY, or "twelve hundred dollars" into $1,200.00. Only ask the user to clarify when you genuinely cannot determine or format a value. For (options) fields, map what the user says to the closest listed value; if none clearly fits, ask them to choose.
+  This step captures fields with required formats. When the user gives you information for a field, silently reformat it into the required format yourself whenever you reasonably can — for example, turn "next Tuesday" or "3rd of June" into DD-MM-YYYY, or "twelve hundred dollars" into $1,200.00. Only ask the user to clarify when you genuinely cannot determine or format a value. For (options) fields, map what the user says to the closest listed value; if none clearly fits, ask them to choose.
 
 ${indented}
 </field_formats>`;
