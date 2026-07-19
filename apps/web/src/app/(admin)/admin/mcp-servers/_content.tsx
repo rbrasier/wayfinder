@@ -124,8 +124,11 @@ export function AdminMcpServersContent() {
                   id="mcp-cred"
                   value={credentialRef}
                   onChange={(event) => setCredentialRef(event.target.value)}
-                  placeholder="MCP_GITHUB_TOKEN"
+                  placeholder="MCP_CRED_GITHUB_TOKEN"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Must name an environment variable in the <code>MCP_CRED_</code> namespace.
+                </p>
               </div>
             </div>
             <div className="space-y-1">

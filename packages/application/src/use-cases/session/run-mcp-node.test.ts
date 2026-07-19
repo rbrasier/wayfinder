@@ -221,4 +221,35 @@ describe("RunMcpNode", () => {
 
     expect(result.error?.code).toBe("INFRA_FAILURE");
   });
+
+  it("clears the pending execution when the tool call fails", async () => {
+    // A stateful sessions repo so the cleanup's re-read sees the recorded entry.
+    let current = makeSession();
+    const sessions = {
+      create: vi.fn(),
+      findById: vi.fn().mockImplementation(async () => ok(current)),
+      listByUser: vi.fn(),
+      listAll: vi.fn(),
+      update: vi.fn().mockImplementation(async (_id, patch) => {
+        current = { ...current, ...patch };
+        return ok(current);
+      }),
+    } as unknown as ISessionRepository;
+    const client = makeClient({
+      callTool: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "unreachable"))),
+    });
+
+    const result = await new RunMcpNode(
+      sessions,
+      makeLanguageModel(),
+      makeServers(activeServer),
+      client,
+      makeStepOutputs(),
+      clock,
+    ).execute({ session: current, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+    // The recorded pending entry must not survive the failed call.
+    expect(current.pendingExecutions).toEqual({});
+  });
 });

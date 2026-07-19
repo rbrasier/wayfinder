@@ -116,12 +116,29 @@ export class RunMcpNode {
     if (recorded.error) return err(recorded.error);
 
     const called = await this.mcpClient.callTool(serverResult.data, config.toolName, fieldsResult.data);
-    if (called.error) return err(called.error);
+    // The call is synchronous, so a failure leaves nothing for a callback to
+    // clear — ApplyAutoNodeResult only runs on the success path. Drop the pending
+    // entry here or it accumulates on the session forever.
+    if (called.error) {
+      await this.clearPending(input.session.id, correlationId);
+      return err(called.error);
+    }
 
     return ok({
       correlationId,
       status: "completed",
       data: { output: called.data.output },
     });
+  }
+
+  // Best-effort removal of a single pending execution. Re-reads so it modifies the
+  // latest blob rather than the possibly-stale snapshot on the input session, and
+  // never surfaces its own error — the caller returns the original tool failure.
+  private async clearPending(sessionId: string, correlationId: string): Promise<void> {
+    const current = await this.sessions.findById(sessionId);
+    if (current.error || !current.data) return;
+    const remaining = { ...current.data.pendingExecutions };
+    delete remaining[correlationId];
+    await this.sessions.update(sessionId, { pendingExecutions: remaining });
   }
 }

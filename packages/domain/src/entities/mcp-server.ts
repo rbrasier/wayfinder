@@ -61,3 +61,26 @@ export interface McpServerWithTools {
   readonly server: McpServer;
   readonly tools: McpTool[];
 }
+
+// One tool call made during the conversational tool-loop pre-pass (ADR-032),
+// captured for the audit trail. Persisted adjacent to the turn's gathered
+// context so a reviewer can reconstruct what an internal tool told the AI —
+// document review is the governance boundary, and this is what backs it.
+export interface McpToolCallRecord {
+  readonly serverLabel: string;
+  readonly toolName: string;
+  // JSON-serialised call arguments. Truncated by the recorder so a large
+  // payload can never bloat the persisted turn.
+  readonly arguments: string;
+  // Flattened tool output, truncated to the same audit budget.
+  readonly result: string;
+  readonly calledAt: string;
+}
+
+// Env-var prefix every MCP credential reference must carry. Confining lookups to
+// this namespace stops an admin from pointing `credentialRef` at an arbitrary
+// process secret (e.g. DATABASE_URL) and exfiltrating it as a bearer token.
+export const MCP_CREDENTIAL_ENV_PREFIX = "MCP_CRED_";
+
+export const isValidMcpCredentialRef = (value: string): boolean =>
+  value.startsWith(MCP_CREDENTIAL_ENV_PREFIX) && value.length > MCP_CREDENTIAL_ENV_PREFIX.length;

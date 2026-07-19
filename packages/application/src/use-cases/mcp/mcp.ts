@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, isValidMcpCredentialRef, MCP_CREDENTIAL_ENV_PREFIX, ok } from "@rbrasier/domain";
 import type {
   IMcpClient,
   IMcpServerDirectory,
@@ -11,6 +11,11 @@ import type {
   McpTransport,
   Result,
 } from "@rbrasier/domain";
+
+const credentialRefError = domainError(
+  "VALIDATION_FAILED",
+  `Credential reference must name an environment variable in the ${MCP_CREDENTIAL_ENV_PREFIX} namespace.`,
+);
 
 export class RegisterMcpServer {
   constructor(private readonly servers: IMcpServerRepository) {}
@@ -31,12 +36,16 @@ export class RegisterMcpServer {
     if (!isHttpUrl(url)) {
       return err(domainError("VALIDATION_FAILED", "Server URL must be a valid http(s) URL."));
     }
+    const credentialRef = input.credentialRef?.trim() ? input.credentialRef.trim() : null;
+    if (credentialRef !== null && !isValidMcpCredentialRef(credentialRef)) {
+      return err(credentialRefError);
+    }
     return this.servers.create({
       label,
       url,
       transport: input.transport,
       communicatesExternally: input.communicatesExternally,
-      credentialRef: input.credentialRef?.trim() ? input.credentialRef.trim() : null,
+      credentialRef,
       createdByUserId: input.createdByUserId ?? null,
     });
   }
@@ -55,16 +64,20 @@ export class UpdateMcpServer {
     if (input.url !== undefined && !isHttpUrl(input.url.trim())) {
       return err(domainError("VALIDATION_FAILED", "Server URL must be a valid http(s) URL."));
     }
+    const credentialRef =
+      input.credentialRef === undefined
+        ? undefined
+        : input.credentialRef?.trim()
+          ? input.credentialRef.trim()
+          : null;
+    if (credentialRef && !isValidMcpCredentialRef(credentialRef)) {
+      return err(credentialRefError);
+    }
     return this.servers.update(input.id, {
       label: input.label?.trim(),
       url: input.url?.trim(),
       communicatesExternally: input.communicatesExternally,
-      credentialRef:
-        input.credentialRef === undefined
-          ? undefined
-          : input.credentialRef?.trim()
-            ? input.credentialRef.trim()
-            : null,
+      credentialRef,
     });
   }
 }

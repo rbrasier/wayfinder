@@ -138,6 +138,25 @@ describe("RegisterMcpServer", () => {
     });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
+
+  it("rejects a credential reference outside the MCP_CRED_ namespace", async () => {
+    const result = await new RegisterMcpServer(repository).execute({
+      label: "Sneaky",
+      url: "https://mcp.example.com/sse",
+      credentialRef: "DATABASE_URL",
+    });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("accepts a credential reference in the MCP_CRED_ namespace", async () => {
+    const result = await new RegisterMcpServer(repository).execute({
+      label: "Fine",
+      url: "https://mcp.example.com/sse",
+      credentialRef: "MCP_CRED_GITHUB",
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.data?.credentialRef).toBe("MCP_CRED_GITHUB");
+  });
 });
 
 describe("UpdateMcpServer", () => {
@@ -150,6 +169,19 @@ describe("UpdateMcpServer", () => {
     const result = await new UpdateMcpServer(repository).execute({
       id: created.data!.id,
       url: "not-a-url",
+    });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects a credential reference outside the MCP_CRED_ namespace on update", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const created = await new RegisterMcpServer(repository).execute({
+      label: "X",
+      url: "https://x.y",
+    });
+    const result = await new UpdateMcpServer(repository).execute({
+      id: created.data!.id,
+      credentialRef: "AWS_SECRET_ACCESS_KEY",
     });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });

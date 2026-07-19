@@ -176,8 +176,10 @@ export async function POST(
     lastUserMessage,
     gatheredContext,
     userId: authSession.userId,
+    isAdmin: authSession.isAdmin,
     flowId: flow.id,
     sessionId,
+    nodeId: session.currentNodeId,
   });
 
   // The lease is claimed; tell every open window whose turn it now is so they

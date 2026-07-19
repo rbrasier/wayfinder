@@ -18,11 +18,11 @@ const serverWith = (overrides: Partial<McpServer>): McpServer => ({
 });
 
 describe("buildMcpTransport", () => {
-  const original = process.env.MCP_TEST_TOKEN;
+  const original = process.env.MCP_CRED_TEST_TOKEN;
 
   afterEach(() => {
-    if (original === undefined) delete process.env.MCP_TEST_TOKEN;
-    else process.env.MCP_TEST_TOKEN = original;
+    if (original === undefined) delete process.env.MCP_CRED_TEST_TOKEN;
+    else process.env.MCP_CRED_TEST_TOKEN = original;
   });
 
   it("returns the AI SDK SSE shorthand for an sse server", () => {
@@ -38,14 +38,23 @@ describe("buildMcpTransport", () => {
   });
 
   it("passes the resolved bearer token as an Authorization header on the sse shorthand", () => {
-    process.env.MCP_TEST_TOKEN = "secret-token";
+    process.env.MCP_CRED_TEST_TOKEN = "secret-token";
     const transport = buildMcpTransport(
-      serverWith({ transport: "sse", credentialRef: "MCP_TEST_TOKEN" }),
+      serverWith({ transport: "sse", credentialRef: "MCP_CRED_TEST_TOKEN" }),
     );
     expect(transport).toEqual({
       type: "sse",
       url: "https://mcp.example.com/sse",
       headers: { Authorization: "Bearer secret-token" },
     });
+  });
+
+  it("ignores a credential reference outside the MCP_CRED_ namespace", () => {
+    // The reference is rejected before any env lookup, so a name like DATABASE_URL
+    // can never be read and shipped as a bearer token.
+    const transport = buildMcpTransport(
+      serverWith({ transport: "sse", credentialRef: "DATABASE_URL" }),
+    );
+    expect(transport).toEqual({ type: "sse", url: "https://mcp.example.com/sse", headers: {} });
   });
 });

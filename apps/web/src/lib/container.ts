@@ -468,7 +468,7 @@ const build = () => {
   const mcpServers = new DrizzleMcpServerRepository(db);
   const mcpClient = new AiSdkMcpClient();
   const mcpServerDirectory = new McpServerDirectory(mcpServers, mcpClient);
-  const mcpToolPrepass = new McpToolPrepass();
+  const mcpToolPrepass = new McpToolPrepass(usageRepo, quotaEnforcer);
   const spreadsheetParser = new SpreadsheetParser();
   // Reuses the Email-Notifications M365 app registration (ADR-018), degrading to
   // HR/manual resolution when the added Graph scopes are not yet consented.
