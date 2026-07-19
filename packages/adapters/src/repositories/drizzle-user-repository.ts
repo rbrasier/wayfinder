@@ -26,6 +26,7 @@ const toEntity = (row: typeof core_users.$inferSelect): User => ({
   role: row.role,
   team: row.team,
   organisationId: row.organisation_id,
+  emailVerified: row.email_verified,
   isAdmin: row.is_admin,
   createdAt: row.created_at,
   updatedAt: row.updated_at,

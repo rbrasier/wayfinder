@@ -101,6 +101,31 @@ export const organisationRouter = router({
       return result.data;
     }),
 
+  // Runs membership resolution for the caller on sign-in (ADR-038 §4). Called by
+  // the first-login gate: `email_domain` auto-assigns here; strategies that need
+  // a prompt return status "nominate" plus the joinable organisations and mode
+  // the nomination dialog renders.
+  signInState: authenticatedProcedure.query(async ({ ctx }) => {
+    const outcome = await ctx.container.useCases.resolveOrganisationOnSignIn.execute(ctx.userId);
+    if (outcome.error) throw toTrpcError(outcome.error);
+    if (outcome.data.status !== "nominate") return { status: outcome.data.status };
+
+    const configResult = await ctx.container.useCases.getOrganisationResolution.execute();
+    if (configResult.error) throw toTrpcError(configResult.error);
+    const config = configResult.data;
+    const mode =
+      config.strategy === "self_nomination" ? config.selfNomination?.mode ?? "create_or_join" : "create_or_join";
+
+    const organisationsResult = await ctx.container.useCases.listOrganisations.execute();
+    if (organisationsResult.error) throw toTrpcError(organisationsResult.error);
+    const joinable = organisationsResult.data.map((organisation) => ({
+      id: organisation.id,
+      name: organisation.name,
+    }));
+
+    return { status: "nominate" as const, mode, joinable };
+  }),
+
   // First-sign-in nomination (ADR-038 §4, self_nomination): the user creates or
   // joins an organisation, bounded by the configured mode/allowlist.
   submitNomination: authenticatedProcedure

@@ -10,9 +10,23 @@ import {
   type ISystemSettingsRepository,
   type IUserRepository,
   type Organisation,
+  type OrganisationResolution,
   type Result,
 } from "@rbrasier/domain";
 import { CreateOrganisation } from "./create-organisation";
+
+// Which self-nomination rules apply when a user submits a nomination. A user is
+// prompted to nominate under two configs (ADR-038 §4): `self_nomination`
+// directly, or `email_domain` whose `onUnmatched` falls through to nomination.
+// The latter is unbounded create-or-join. Any other strategy means nomination is
+// not enabled.
+const effectiveSelfNomination = (config: OrganisationResolution): OrganisationResolution => {
+  if (config.strategy === "self_nomination" && config.selfNomination) return config;
+  if (config.strategy === "email_domain" && config.emailDomain?.onUnmatched === "nominate") {
+    return { strategy: "self_nomination", selfNomination: { mode: "create_or_join" } };
+  }
+  return { strategy: "admin" };
+};
 
 export interface NominationInput {
   userId: string;
@@ -38,10 +52,13 @@ export class SubmitOrganisationNomination {
       ? parseOrganisationResolution(configResult.data.value)
       : DEFAULT_ORGANISATION_RESOLUTION;
 
-    const decision = resolveOrganisation(config, {
+    const decision = resolveOrganisation(effectiveSelfNomination(config), {
       nomination: { joinOrganisationId: input.joinOrganisationId, createName: input.createName },
     });
 
+    if (decision.kind === "noop") {
+      return err(domainError("VALIDATION_FAILED", "Self-nomination is not enabled."));
+    }
     if (decision.kind === "rejected") {
       return err(domainError("VALIDATION_FAILED", decision.reason));
     }

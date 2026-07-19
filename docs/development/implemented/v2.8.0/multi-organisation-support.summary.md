@@ -112,13 +112,18 @@ resolution-strategy round-trip. It follows the repo's Playwright-MCP convention
   stack (Postgres/Redis/MinIO via Docker) and the harness-provided
   `@playwright/test`; Docker was unavailable here, so the spec was authored to the
   built DOM but not run. It should be executed via `/e2e` against a live stack.
-- **Automatic sign-in resolution is wired at the application/config layer, not
-  the Better Auth provisioning hook.** The pure decision, config storage, admin
-  card, and the nomination endpoint all exist and are tested; connecting
-  `sso_claim`/`email_domain` to fire automatically inside the sign-in/provisioning
-  path (reading the live IdP claim / verified email at login) remains the one
-  integration point to complete. `admin` and `self_nomination` (via the
-  nomination endpoint) are fully functional.
+- **First-login resolution is implemented for the in-app strategies.** A gate on
+  the authenticated layout (`OrganisationSignInGate` → `organisation.signInState`
+  → `ResolveOrganisationOnSignIn`) runs once per session for an unaffiliated user:
+  `email_domain` **auto-associates** from the user's verified email, and
+  `self_nomination` (plus an `email_domain` miss set to `nominate`) **prompts** the
+  user to create or join. `admin` remains manual by design.
+  - **`sso_claim` is the one strategy not yet firing automatically.** It needs the
+    named claim read from the live IdP token at the OAuth callback (Entra
+    app-registration/claims-configuration dependent), then captured for resolution
+    — a focused Better Auth `mapProfileToUser`/provisioning hook. The pure
+    `resolveByClaim` decision and config are in place; only the claim *capture* at
+    sign-in remains.
 - **Resolution card lives on `/admin/organisations`**, not `/admin/settings` as the
   phase doc suggested — kept self-contained on the new screen to avoid touching the
   large settings surface. Functionally identical.

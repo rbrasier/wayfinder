@@ -93,6 +93,7 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   role: null,
   team: null,
   organisationId: null,
+  emailVerified: true,
   isAdmin: false,
   createdAt: new Date(),
   updatedAt: new Date(),
