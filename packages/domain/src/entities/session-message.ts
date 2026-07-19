@@ -1,4 +1,5 @@
 import type { MessageRole } from "./conversation";
+import type { McpToolCallRecord } from "./mcp-server";
 
 export type { MessageRole };
 
@@ -43,6 +44,9 @@ export interface AiTurnPayload {
   stepCompleteConfidence: number;
   contextGathered: { key: string; value: string }[];
   documentGenerationConfidence?: DocumentGenerationConfidence | null;
+  // Audit trail for the conversational tool-loop pre-pass (ADR-032): the tool
+  // calls whose results shaped this step. Absent on turns that called no tools.
+  toolCalls?: McpToolCallRecord[];
 }
 
 export type DocumentStatus = "pending" | "complete" | "failed";

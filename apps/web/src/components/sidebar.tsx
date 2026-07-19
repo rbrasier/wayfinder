@@ -16,10 +16,12 @@ import {
   Menu,
   MessageSquare,
   PieChart,
+  Plug,
   ScrollText,
   Settings,
   ShieldOff,
   ShieldCheck,
+  Sparkles,
   Stamp,
   Users,
   UsersRound,
@@ -55,39 +57,62 @@ const userNav: NavGroup[] = [
   },
 ];
 
-const adminNav: NavGroup[] = [
-  {
-    items: [
-      { href: "/admin/dashboards/overview", icon: Activity, label: "Overview" },
-      { href: "/admin/dashboards/insights", icon: PieChart, label: "Flow Insights" },
-      { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Usage" },
-      { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
-      { href: "/admin/flows", icon: GitBranch, label: "Flows" },
-      { href: "/admin/settings", icon: Settings, label: "Configuration" },
-    ],
-  },
-  {
-    label: "User Admin",
-    items: [
-      { href: "/admin/users", icon: Users, label: "Users" },
-      { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
-      { href: "/admin/groups", icon: UsersRound, label: "Groups" },
-      { href: "/admin/organisations", icon: Building2, label: "Organisations" },
-    ],
-  },
-  {
-    label: "Advanced",
-    collapsible: true,
-    defaultCollapsed: true,
-    items: [
-      { href: "/admin/usage", icon: BarChart2, label: "Usage" },
-      { href: "/admin/flags", icon: Flag, label: "Flags" },
-      { href: "/admin/errors", icon: AlertCircle, label: "Errors" },
-      { href: "/admin/audit", icon: ScrollText, label: "Audit" },
-      { href: "/admin/schedules", icon: Clock, label: "Schedules" },
-    ],
-  },
-];
+interface AdminNavContext {
+  readonly skillsEnabled: boolean;
+  readonly mcpEnabled: boolean;
+  readonly canCurate: boolean;
+}
+
+const buildAdminNav = ({ skillsEnabled, mcpEnabled, canCurate }: AdminNavContext): NavGroup[] => {
+  // Skills + MCP Servers are hidden when their feature flag is disabled — an
+  // admin who turned the flag off should not see the surface it controls.
+  // Admins can still re-enable via /admin/flags in the Advanced group.
+  const flowSettingsItems: NavItem[] = [];
+  if (skillsEnabled) flowSettingsItems.push({ href: "/admin/skills", icon: Sparkles, label: "Skills" });
+  if (mcpEnabled) flowSettingsItems.push({ href: "/admin/mcp-servers", icon: Plug, label: "MCP Servers" });
+  // Knowledge lives only in Flow Settings; the page still enforces
+  // knowledge:curate regardless (ADR-021).
+  if (canCurate) flowSettingsItems.push({ href: "/knowledge", icon: BookOpen, label: "Knowledge" });
+
+  const groups: NavGroup[] = [
+    {
+      items: [
+        { href: "/admin/dashboards/overview", icon: Activity, label: "Overview" },
+        { href: "/admin/dashboards/insights", icon: PieChart, label: "Flow Insights" },
+        { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Usage" },
+        { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
+        { href: "/admin/flows", icon: GitBranch, label: "Flows" },
+        { href: "/admin/settings", icon: Settings, label: "Configuration" },
+      ],
+    },
+    {
+      label: "Flow Settings",
+      items: flowSettingsItems,
+    },
+    {
+      label: "User Admin",
+      items: [
+        { href: "/admin/users", icon: Users, label: "Users" },
+        { href: "/admin/roles", icon: ShieldCheck, label: "Roles" },
+        { href: "/admin/groups", icon: UsersRound, label: "Groups" },
+        { href: "/admin/organisations", icon: Building2, label: "Organisations" },
+      ],
+    },
+    {
+      label: "Advanced",
+      collapsible: true,
+      defaultCollapsed: true,
+      items: [
+        { href: "/admin/usage", icon: BarChart2, label: "Usage" },
+        { href: "/admin/flags", icon: Flag, label: "Flags" },
+        { href: "/admin/errors", icon: AlertCircle, label: "Errors" },
+        { href: "/admin/audit", icon: ScrollText, label: "Audit" },
+        { href: "/admin/schedules", icon: Clock, label: "Schedules" },
+      ],
+    },
+  ];
+  return groups;
+};
 
 interface AppSidebarProps {
   isAdmin?: boolean;
@@ -192,20 +217,20 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const canCurate =
     (userQuery.data?.isAdmin ?? false) ||
     (userQuery.data?.permissions ?? []).includes("knowledge:curate");
-  const baseNav = isAdmin ? adminNav : userNav;
-  const nav: NavGroup[] =
-    isAdmin && canCurate
-      ? [
-          {
-            ...baseNav[0]!,
-            items: [
-              ...baseNav[0]!.items,
-              { href: "/knowledge", icon: BookOpen, label: "Knowledge" },
-            ],
-          },
-          ...baseNav.slice(1),
-        ]
-      : baseNav;
+  const skillsFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery(
+    { key: "skills" },
+    { enabled: isAdmin },
+  );
+  const mcpFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery(
+    { key: "mcp" },
+    { enabled: isAdmin },
+  );
+  const adminNav = buildAdminNav({
+    skillsEnabled: skillsFlagQuery.data ?? false,
+    mcpEnabled: mcpFlagQuery.data ?? false,
+    canCurate,
+  });
+  const nav: NavGroup[] = isAdmin ? adminNav : userNav;
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin

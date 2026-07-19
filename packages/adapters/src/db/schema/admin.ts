@@ -156,3 +156,46 @@ export const admin_feature_flag_roles = pgTable(
     ),
   }),
 );
+
+// Admin-registered remote MCP servers (ADR-032 §1: remote HTTP/SSE). `sse` is
+// the legacy default; `streamable-http` targets the newer MCP streamable-HTTP
+// endpoint. `credential_ref` points at the secret store; the secret itself is
+// never stored here and never returned to a client.
+export const admin_mcp_servers = pgTable("admin_mcp_servers", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  label: text("label").notNull(),
+  transport: text("transport", { enum: ["sse", "streamable-http"] }).notNull().default("sse"),
+  url: text("url").notNull(),
+  credential_ref: text("credential_ref"),
+  // Admin classification: does this server communicate outside Wayfinder? Existing
+  // rows default to the safe internal classification (ADR-032).
+  communicates_externally: boolean("communicates_externally").notNull().default(false),
+  status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
+  created_by_user_id: uuid("created_by_user_id").references(() => core_users.id, {
+    onDelete: "set null",
+  }),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Cache of tools discovered on a server, refreshed on demand. The flow editor
+// reads this and falls back to a live listTools when stale/empty.
+export const admin_mcp_tools = pgTable(
+  "admin_mcp_tools",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    server_id: uuid("server_id")
+      .notNull()
+      .references(() => admin_mcp_servers.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    input_schema: jsonb("input_schema").$type<Record<string, unknown> | null>(),
+    last_synced_at: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    server_tool_unique: unique("admin_mcp_tools_server_id_name_unique").on(t.server_id, t.name),
+    by_server: index("admin_mcp_tools_server_id_idx").on(t.server_id),
+  }),
+);

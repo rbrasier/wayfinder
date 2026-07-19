@@ -56,6 +56,10 @@ jobs:
       # Non-secret throwaway key (64 hex chars) so env validation passes when the
       # app boots; the app requires SETTINGS_ENCRYPTION_KEY at startup.
       SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      # On-disk cache for the local embedding model. Populated once by the
+      # warm-up step below (and restored from the Actions cache), so the app
+      # embeds against a warm model instead of downloading it inside a request.
+      EMBEDDINGS_CACHE_DIR: ${{ github.workspace }}/.hf-cache
       AI_DEFAULT_PROVIDER: anthropic
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ADMIN_SEED_EMAIL: admin@example.com
@@ -79,6 +83,20 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # Restore the embedding model across runs; the warm-up step below only
+      # pays the download on a cache miss. Key is bumped when the model id changes.
+      - name: Cache embedding model
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.hf-cache
+          key: hf-embeddings-onnx-all-MiniLM-L6-v2-v1
+
+      # Download the local embedding model into EMBEDDINGS_CACHE_DIR ahead of the
+      # app so the RAG specs (reindex, large context-doc upload) embed against a
+      # warm on-disk model rather than blocking on a cold ~90 MB fetch mid-request.
+      - name: Warm up embedding model
+        run: node packages/adapters/scripts/warm-embeddings.mjs
 
       - name: Run database migrations
         run: pnpm db:migrate

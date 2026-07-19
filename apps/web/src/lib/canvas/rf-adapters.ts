@@ -8,6 +8,8 @@ import type { ConversationalNodeData } from "@/components/canvas/conversational-
 import { ConversationalNode } from "@/components/canvas/conversational-node";
 import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
+import type { McpNodeData } from "@/components/canvas/mcp-node";
+import { McpNode } from "@/components/canvas/mcp-node";
 
 // Shared React Flow adapters and constants for the canonical flow-config canvas
 // page (`(user)/flows/[id]/config`). The former admin duplicate
@@ -18,6 +20,7 @@ export const NODE_TYPES = {
   autoNode: AutoNode,
   scheduledNode: ScheduledNode,
   approvalNode: ApprovalNode,
+  mcpNode: McpNode,
 };
 
 // Delay between an in-flight change and its persist. Long enough to
@@ -28,7 +31,7 @@ export interface RawNode {
   id: string;
   name: string;
   colour: string | null;
-  type?: "conversational" | "auto" | "scheduled" | "approval";
+  type?: "conversational" | "auto" | "scheduled" | "approval" | "mcp";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;
@@ -76,6 +79,17 @@ export const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
       config: node.config,
     };
     return { id: node.id, type: "approvalNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  if (node.type === "mcp") {
+    const data: McpNodeData = {
+      name: node.name,
+      colour: node.colour,
+      toolName: (node.config.toolName as string | null) ?? null,
+      stepNumber,
+      config: node.config,
+    };
+    return { id: node.id, type: "mcpNode", position: { x: node.positionX, y: node.positionY }, data };
   }
 
   const data: ConversationalNodeData = {

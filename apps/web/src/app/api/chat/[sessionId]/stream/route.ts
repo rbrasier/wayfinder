@@ -15,6 +15,7 @@ import {
   buildPromptSessionUploads,
   renderGatheredContext,
 } from "./turn-helpers";
+import { runMcpToolPrepass } from "./mcp-turn-helpers";
 
 // The most recent turns the model is given as context, mirrored from the
 // client's own slice so the two agree (scaling wall #1).
@@ -162,6 +163,25 @@ export async function POST(
       : { name: userResult.data.name, role: userResult.data.role, team: userResult.data.team };
   const retrievedChunks = retrievalResult.error ? [] : retrievalResult.data;
 
+  const skillsResult = await container.useCases.resolveStepSkills.execute(nodeConfig);
+  const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
+
+  // Conversational tool-loop (ADR-032): when a step allows MCP tools, let the model
+  // call them in a non-streaming pre-pass and fold the gathered results into the
+  // step context, leaving the structured streaming turn below untouched.
+  const gatheredContextWithTools = await runMcpToolPrepass({
+    container,
+    nodeConfig,
+    dbMessages,
+    lastUserMessage,
+    gatheredContext,
+    userId: authSession.userId,
+    isAdmin: authSession.isAdmin,
+    flowId: flow.id,
+    sessionId,
+    nodeId: session.currentNodeId,
+  });
+
   // The lease is claimed; tell every open window whose turn it now is so they
   // disable Send and can attribute the hold ("Alex's turn is in progress").
   publishEvent({ type: "turn.claimed", userId: authSession.userId, userName: userProfile?.name ?? null });
@@ -170,13 +190,14 @@ export async function POST(
     nodeConfig,
     retrievedChunks,
     sessionUploads,
-    gatheredContext,
+    gatheredContext: gatheredContextWithTools,
     workflowName: flow.name,
     organisationName,
     globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
     now: new Date(),
+    resolvedSkills,
   });
   if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
 

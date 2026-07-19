@@ -16,6 +16,7 @@ import {
 import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
+import { dispatchMcpNode } from "./mcp-turn-helpers";
 import { streamTurn } from "./stream-turn";
 
 // Re-exported from its lightweight home so existing importers keep working while
@@ -410,6 +411,19 @@ export async function isScheduledNodeEnabled(
   return !flag.error && flag.data === true;
 }
 
+// The `mcp` flag is the kill switch for MCP execution, not just an authoring
+// toggle: with it off, an already-authored flow must not fire MCP calls. It is
+// power-user-scoped and defaults closed (no default-enabled entry), so a lookup
+// failure or a missing flag row both deny.
+export async function isMcpNodeEnabled(
+  container: Container,
+  userId: string,
+  isAdmin: boolean,
+): Promise<boolean> {
+  const flag = await container.useCases.isFeatureEnabledForUser.execute(userId, "mcp", isAdmin);
+  return !flag.error && flag.data === true;
+}
+
 // Flatten the context gathered across the conversation into a key/value map so a
 // scheduled node can anchor its fire time to an earlier step's metadata.
 const buildSessionMetadata = (messages: SessionMessage[]): Record<string, string> => {
@@ -544,6 +558,9 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
       ? []
       : buildPromptSessionUploads(uploadsResult.data, uploadConfig.totalBudgetChars);
 
+    const skillsResult = await container.useCases.resolveStepSkills.execute(newNodeConfig);
+    const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
+
     const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
       nodeConfig: newNodeConfig,
       retrievedChunks,
@@ -555,6 +572,7 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
       expertRole: flow.expertRole,
       userProfile,
       now: new Date(),
+      resolvedSkills,
     });
     if (systemPromptResult.error) return;
 
@@ -725,6 +743,11 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
       userId,
       userRole: isAdmin ? "admin" : "user",
     });
+    return;
+  }
+
+  if (newNode.type === "mcp" && (await isMcpNodeEnabled(container, userId, isAdmin))) {
+    await dispatchMcpNode({ container, session, flow, node: newNode, messages, userId });
     return;
   }
 

@@ -405,6 +405,16 @@ const seedApprovalRequest = async (
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
 
+  // Seed a library skill so the flow-editor skill picker is populated — its
+  // search box only renders once the library is non-empty.
+  unwrap(
+    await container.useCases.createSkill.execute({
+      raw: "---\nname: E2E Seed Skill\ndescription: Seeded so the skill picker is populated\n---\n\n# Seed skill\n\nSteer the AI using this seeded skill.",
+      createdByUserId: ownerUserId,
+    }),
+    "create seed skill",
+  );
+
   // ── Rich flow: a conversational step plus a document-generation step ──────
   const flow = unwrap(
     await container.useCases.createFlow.execute({

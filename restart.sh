@@ -1,5 +1,13 @@
 #!/usr/bin/env bash
 # restart.sh — install deps, start infrastructure, run migrations, start all services.
+#
+# Flags:
+#   --with-mocks, --mocks   Start the shared mocks HTTP server (mocks/server.mjs)
+#                           on MOCKS_PORT (default 4001). All local mocks share
+#                           this one port; each mock owns a URL path — e.g. the
+#                           MCP tools mock is at :4001/mcp. To add a new mock,
+#                           follow the instructions at the top of
+#                           mocks/server.mjs and pick a new path (not a new port).
 
 set -euo pipefail
 
@@ -10,9 +18,32 @@ cd "$ROOT"
 
 WEB_PORT=${WEB_PORT:-3000}
 API_PORT=${API_PORT:-3001}
+MOCKS_PORT=${MOCKS_PORT:-4001}
 
-echo "→ killing anything on ports $WEB_PORT and $API_PORT"
-for port in "$WEB_PORT" "$API_PORT"; do
+WITH_MOCKS=0
+for arg in "$@"; do
+  case "$arg" in
+    --with-mocks|--mocks)
+      WITH_MOCKS=1
+      ;;
+    -h|--help)
+      sed -n '2,10p' "$0"
+      exit 0
+      ;;
+    *)
+      echo "unknown flag: $arg" >&2
+      exit 1
+      ;;
+  esac
+done
+
+PORTS_TO_KILL=("$WEB_PORT" "$API_PORT")
+if [ "$WITH_MOCKS" -eq 1 ]; then
+  PORTS_TO_KILL+=("$MOCKS_PORT")
+fi
+
+echo "→ killing anything on ports ${PORTS_TO_KILL[*]}"
+for port in "${PORTS_TO_KILL[@]}"; do
   pids=$(lsof -ti:"$port" 2>/dev/null || true)
   if [ -n "$pids" ]; then
     echo "  stopping $pids on :$port"
@@ -193,6 +224,14 @@ else
     echo "  migration failed — check DATABASE_URL in .env and that pnpm install completed"
     exit 1
   }
+fi
+
+if [ "$WITH_MOCKS" -eq 1 ]; then
+  echo "→ starting mocks on :$MOCKS_PORT"
+  mkdir -p "$ROOT/.mocks-logs"
+  log="$ROOT/.mocks-logs/server.log"
+  (cd "$ROOT/mocks" && MOCKS_PORT="$MOCKS_PORT" node server.mjs) >"$log" 2>&1 &
+  echo "  mocks server pid $! (logs: .mocks-logs/server.log)"
 fi
 
 echo "→ starting dev servers (Ctrl-C to stop)"

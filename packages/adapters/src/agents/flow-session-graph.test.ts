@@ -267,6 +267,32 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("Australian English spelling");
   });
 
+  it("omits <skills> when no skills are resolved", () => {
+    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<skills>");
+    expect(
+      agent.buildSystemPrompt({ ...baseInput, resolvedSkills: [] }).data,
+    ).not.toContain("<skills>");
+  });
+
+  it("renders each resolved skill in a <skills> block, above reference documents", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      resolvedSkills: [
+        { name: "Contract Reviewer", body: "Flag unusual indemnity clauses." },
+        { name: "Tone", body: "Be concise." },
+      ],
+    });
+    expect(result.data).toContain("<skills>");
+    expect(result.data).toContain('<skill name="Contract Reviewer">');
+    expect(result.data).toContain("Flag unusual indemnity clauses.");
+    expect(result.data).toContain('<skill name="Tone">');
+    // Skills sit in the stable region, before the per-turn instructions block.
+    const skillsIndex = result.data?.indexOf("<skills>") ?? -1;
+    const instructionsIndex = result.data?.indexOf("<instructions>") ?? -1;
+    expect(skillsIndex).toBeGreaterThanOrEqual(0);
+    expect(skillsIndex).toBeLessThan(instructionsIndex);
+  });
+
   it("omits <attached_documents> when there are no session uploads", () => {
     expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<attached_documents>");
     expect(
