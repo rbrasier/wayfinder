@@ -142,12 +142,18 @@ job — bring up infra, migrate, start the app — and inherits the link for fre
 its sole addition is auto-generating `BETTER_AUTH_SECRET` alongside
 `SETTINGS_ENCRYPTION_KEY` so **no secret has to be edited by hand**.
 
-**Env to *start* the app is optional.** Only `DATABASE_URL` and
-`BETTER_AUTH_SECRET` lack safe defaults today; docker-compose supplies Postgres,
-`restart.sh` generates both bootstrap secrets, and every integration
-(storage/AI/auth/mail/n8n) already has a default or is configured in-app via the
-wizard. The **documented default path is therefore zero-env**: start the app →
-click the printed link → complete the wizard. All product documentation
+**Env to *start* the app is optional for the operator.** Three vars are
+structurally required (no default, enforced in both `apps/web` and `apps/api`):
+`DATABASE_URL`, `BETTER_AUTH_SECRET`, and `SETTINGS_ENCRYPTION_KEY`. None of the
+three needs a human, though: `restart.sh` auto-generates the two secrets
+(`SETTINGS_ENCRYPTION_KEY` already, `BETTER_AUTH_SECRET` added here), and
+`DATABASE_URL` comes from the shipped `.env.example` default and the
+docker-compose Postgres. Every integration (storage/AI/auth/mail/n8n/embeddings)
+already has a default or is configured in-app via the wizard. The **documented
+default path is therefore zero-env**: start the app → click the printed link →
+complete the wizard. (Build must reconcile one detail so this is literally true:
+the `.env.example` `DATABASE_URL` port and the docker-compose host port must
+match — today they are `5432` vs `5433`.) All product documentation
 (`README.md` quick-start, `.env.example`, getting-started guides) is refocused on
 this simplest path, with env-based configuration demoted to a clearly-labelled
 "advanced / optional overrides" section — env stays a supported override (per

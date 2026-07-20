@@ -180,9 +180,12 @@ environment when it could live in the database.
       `${BETTER_AUTH_URL}/setup?token=<token>` link — verified under `pnpm dev`,
       `pnpm start`, and a container start; once an admin exists it logs no link.
       The `/setup` screen pre-fills the token from the `?token=` param.
-- [ ] A fresh clone starts with **no hand-edited env**: `restart.sh` auto-generates
-      `BETTER_AUTH_SECRET` and `SETTINGS_ENCRYPTION_KEY`; the app boots against the
-      docker-compose Postgres and defaults.
+- [ ] A fresh clone starts with **no hand-edited env**. The three structurally
+      required vars are filled without a human: `restart.sh` auto-generates
+      `BETTER_AUTH_SECRET` and `SETTINGS_ENCRYPTION_KEY`, and `DATABASE_URL` comes
+      from the shipped default + docker-compose Postgres.
+- [ ] The `.env.example` `DATABASE_URL` port matches the docker-compose host port
+      (reconcile the current `5432` vs `5433`) so the default path connects.
 - [ ] `README.md` quick-start, `.env.example`, and getting-started guide(s) lead
       with the zero-env path; env config is a demoted "advanced / optional" section.
 - [ ] Two concurrent `createAdmin` calls cannot both succeed (transactional

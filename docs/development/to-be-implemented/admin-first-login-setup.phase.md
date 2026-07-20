@@ -129,6 +129,11 @@ Carried from PRD §12:
   Wizard copy must not imply a working integration.
 - **Mail in skippable Step 3** — password-reset / notifications stay degraded if
   skipped; reflect in explainer copy.
+- **Zero-env DB connection** — only three vars are structurally required
+  (`DATABASE_URL`, `BETTER_AUTH_SECRET`, `SETTINGS_ENCRYPTION_KEY`); `restart.sh`
+  generates the two secrets and `DATABASE_URL` ships a default. Reconcile the
+  `.env.example` port (`5432`) with the docker-compose host port (`5433`) so the
+  default path actually connects — otherwise the "zero-env" claim is false.
 
 ## 8. Out of scope (this phase)
 
