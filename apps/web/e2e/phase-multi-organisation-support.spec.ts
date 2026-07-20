@@ -21,14 +21,25 @@ const ORGANISATIONS_PATH = process.env.E2E_ORGANISATIONS_PATH ?? "/admin/organis
 const uniqueName = () => `E2E Org ${Date.now()}`;
 
 test.describe("multi-organisation admin", () => {
+  // Creates an organisation through the modal (the create form is no longer an
+  // inline header field).
+  const createOrganisation = async (
+    page: import("@playwright/test").Page,
+    name: string,
+  ): Promise<void> => {
+    await page.getByRole("button", { name: /new organisation/i }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel(/^name$/i).fill(name);
+    await dialog.getByRole("button", { name: /create organisation/i }).click();
+  };
+
   test("an admin can create an organisation and see it listed", async ({ page }) => {
     await page.goto(ORGANISATIONS_PATH);
 
     await expect(page.getByRole("heading", { name: /organisations/i })).toBeVisible();
 
     const name = uniqueName();
-    await page.getByLabel(/new organisation name/i).fill(name);
-    await page.getByRole("button", { name: /add organisation/i }).click();
+    await createOrganisation(page, name);
 
     // The created organisation surfaces as an editable row (its rename field).
     await expect(page.getByLabel(new RegExp(`rename ${name}`, "i"))).toBeVisible();
@@ -39,8 +50,7 @@ test.describe("multi-organisation admin", () => {
 
     // Create a fresh organisation to assign a member to.
     const name = uniqueName();
-    await page.getByLabel(/new organisation name/i).fill(name);
-    await page.getByRole("button", { name: /add organisation/i }).click();
+    await createOrganisation(page, name);
     const renameField = page.getByLabel(new RegExp(`rename ${name}`, "i"));
     await expect(renameField).toBeVisible();
 

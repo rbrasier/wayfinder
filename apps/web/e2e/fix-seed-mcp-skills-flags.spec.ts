@@ -15,8 +15,10 @@ test.describe("seeded mcp + skills feature flags surface admin nav", () => {
   test("Skills and MCP Servers nav entries appear for a seeded admin", async ({ page }) => {
     await page.goto(ADMIN_HOME_PATH);
 
-    // Both nav entries live under the "Flow Settings" group. Before the fix
-    // the flags defaulted to false so neither link was rendered.
+    // Both nav entries live under the "Advanced Flow Settings" group, which is
+    // collapsed by default — expand it first. Before the seed fix the flags
+    // defaulted to false so neither link was rendered even when expanded.
+    await page.getByRole("button", { name: /Advanced Flow Settings/i }).click();
     await expect(page.getByRole("link", { name: "Skills", exact: true }).first()).toBeVisible();
     await expect(page.getByRole("link", { name: "MCP Servers", exact: true }).first()).toBeVisible();
   });

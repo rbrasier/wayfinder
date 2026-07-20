@@ -86,7 +86,6 @@ export default function AppSettingsPage() {
             <CollapsibleSection
               title="Directory & security"
               description="HR data, directory sync and audit streaming."
-              defaultOpen={false}
             >
               <HrDataCard />
               <EntraDirectoryCard connectivity={connectivity} />

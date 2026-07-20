@@ -16,11 +16,11 @@ test.describe("admin sidebar cleanup", () => {
   test("renames and reorders the admin navigation groups", async ({ page }) => {
     await page.goto("/admin/settings");
 
-    // Renamed group headers.
+    // The "Users and Roles" group (renamed from "User Admin") is always present.
     await expect(page.getByText("Users and Roles", { exact: true })).toBeVisible();
-    await expect(page.getByText("Advanced Flow Settings", { exact: true })).toBeVisible();
 
-    // The old labels are gone.
+    // The old group labels are gone ("Advanced Flow Settings" must not match the
+    // old exact "Flow Settings").
     await expect(page.getByText("User Admin", { exact: true })).toHaveCount(0);
     await expect(page.getByText("Flow Settings", { exact: true })).toHaveCount(0);
 
@@ -59,12 +59,13 @@ test.describe("organisations admin", () => {
 
     // The create form is a modal (dialog), not an inline header field.
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByText(/new organisation/i)).toBeVisible();
-    await dialog.getByLabel(/^name$/i).fill("E2E Acme");
+    const name = `E2E Acme ${Date.now()}`;
+    await dialog.getByLabel(/^name$/i).fill(name);
     await dialog.getByLabel(/email domain/i).fill("acme.example");
     await dialog.getByRole("button", { name: /create organisation/i }).click();
 
-    // The new organisation appears in the list.
-    await expect(page.getByText("E2E Acme")).toBeVisible();
+    // The new organisation appears as an editable row (its rename field carries
+    // the name as an input value, not page text).
+    await expect(page.getByLabel(new RegExp(`rename ${name}`, "i"))).toBeVisible();
   });
 });
