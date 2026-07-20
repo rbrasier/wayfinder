@@ -227,7 +227,9 @@ jobs:
           script: |
             const url = '${{ steps.netlify.outputs.url }}';
             const marker = '<!-- playwright-report -->';
-            const body = `${marker}\n## 📊 Playwright E2E Report\n\n[View full report with screenshots and traces](${url})\n\nRun [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})`;
+            const sha = '${{ github.event.pull_request.head.sha }}'.slice(0, 7);
+            const updated = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
+            const body = `${marker}\n## 📊 Playwright E2E Report\n\n[View full report with screenshots and traces](${url})\n\nRun [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) on commit [${sha}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }})\nLast updated: ${updated}`;
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
