@@ -35,4 +35,8 @@ export class EncryptedSystemSettingsRepository implements ISystemSettingsReposit
     // they wrote.
     return { data: { ...result.data, value } };
   }
+
+  delete(key: string): Promise<Result<void>> {
+    return this.inner.delete(key);
+  }
 }

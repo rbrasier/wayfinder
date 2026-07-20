@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { SetupWizard } from "@/components/onboarding/setup-wizard";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
 import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
 import {
@@ -23,6 +25,7 @@ import { StorageCard } from "@/components/settings/storage-card";
 
 export default function AppSettingsPage() {
   const connectivity = useConnectivity();
+  const [rerunSetup, setRerunSetup] = useState(false);
 
   return (
     <div className="h-full overflow-auto">
@@ -35,15 +38,26 @@ export default function AppSettingsPage() {
                 Configure global behaviour for this application.
               </p>
             </div>
-            <Button
-              variant="outline"
-              data-testid="test-all-connectivity"
-              onClick={() => void connectivity.runAll(ALL_CONNECTIVITY_TARGETS)}
-              disabled={connectivity.isBusy}
-            >
-              {connectivity.isBusy ? "Testing…" : "Test all"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                data-testid="rerun-setup"
+                onClick={() => setRerunSetup(true)}
+              >
+                Re-run setup
+              </Button>
+              <Button
+                variant="outline"
+                data-testid="test-all-connectivity"
+                onClick={() => void connectivity.runAll(ALL_CONNECTIVITY_TARGETS)}
+                disabled={connectivity.isBusy}
+              >
+                {connectivity.isBusy ? "Testing…" : "Test all"}
+              </Button>
+            </div>
           </div>
+
+          {rerunSetup && <SetupWizard forceOpen onClose={() => setRerunSetup(false)} />}
 
           <div className="space-y-4">
             <OrganisationNameCard />

@@ -23,6 +23,9 @@ class FakeSystemSettingsRepository implements ISystemSettingsRepository {
   async set(): Promise<Result<SystemSetting>> {
     return err(domainError("INFRA_FAILURE", "not used"));
   }
+  async delete(): Promise<Result<void>> {
+    return ok(undefined);
+  }
 }
 
 const makeEnvConfig = (overrides: Partial<SmtpEnvConfig> = {}): SmtpEnvConfig => ({

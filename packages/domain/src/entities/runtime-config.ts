@@ -28,6 +28,38 @@ export interface StorageConfig {
   bucket: string;
 }
 
+// Whether object storage has enough to attempt a connection. Drives the setup
+// wizard's per-step "configured" state (ADR-041 §2); "complete" additionally
+// requires the live Test to pass.
+export const isStorageConfigured = (config: StorageConfig): boolean =>
+  config.endpoint.length > 0 &&
+  config.accessKey.length > 0 &&
+  config.secretKey.length > 0 &&
+  config.bucket.length > 0;
+
+// Whether the selected AI provider has the credential it needs.
+export const isAiConfigured = (config: AiConfig): boolean => {
+  switch (config.provider) {
+    case "bedrock": {
+      const bedrock = config.apiKeys.bedrock;
+      return (
+        bedrock !== null &&
+        bedrock.region.length > 0 &&
+        bedrock.accessKeyId.length > 0 &&
+        bedrock.secretAccessKey.length > 0
+      );
+    }
+    case "anthropic":
+      return (config.apiKeys.anthropic ?? "").length > 0;
+    case "openai":
+      return (config.apiKeys.openai ?? "").length > 0;
+    case "mistral":
+      return (config.apiKeys.mistral ?? "").length > 0;
+    default:
+      return false;
+  }
+};
+
 export interface SessionUploadConfig {
   maxFileSizeBytes: number;
   totalBudgetChars: number;
@@ -94,6 +126,24 @@ export interface N8nConfig {
   baseUrl: string;
   apiKey: string;
 }
+
+// n8n is only reachable with both a base URL and an API key.
+export const isN8nConfigured = (config: N8nConfig): boolean =>
+  config.baseUrl.length > 0 && config.apiKey.length > 0;
+
+// Whether outbound mail has enough to send: SMTP needs a host + sender; the
+// Microsoft 365 transport needs its app registration + sender.
+export const isEmailConfigured = (config: EmailConfig): boolean => {
+  if (config.fromAddress.length === 0) return false;
+  if (config.provider === "m365") {
+    return (
+      config.m365TenantId.length > 0 &&
+      config.m365ClientId.length > 0 &&
+      config.m365ClientSecret.length > 0
+    );
+  }
+  return config.host.length > 0;
+};
 
 export interface EmbeddingsConfig {
   // "local" | "openai" — kept as a plain string here so the domain entity stays
@@ -206,6 +256,72 @@ export const parseSiemConfig = (raw: string, fallback: SiemConfig = DEFAULT_SIEM
   }
 };
 
+// First-run onboarding state (ADR-041 §1). One non-sensitive JSON row in
+// admin_system_settings gates the setup wizard: it opens for an authenticated
+// admin while `completed` is false and never auto-reappears once true. A fresh
+// install has no row, which reads as not-completed.
+export interface OnboardingState {
+  completed: boolean;
+  completedAt: string | null;
+}
+
+export const DEFAULT_ONBOARDING_STATE: OnboardingState = {
+  completed: false,
+  completedAt: null,
+};
+
+// Deployment-wide Step 1 choice (ADR-041 §3). `multiOrganisation` records the
+// intent behind the "multiple organisations" checkbox; the org-resolution
+// strategy is driven separately from it. Non-sensitive.
+export interface DeploymentConfig {
+  multiOrganisation: boolean;
+}
+
+export const DEFAULT_DEPLOYMENT_CONFIG: DeploymentConfig = {
+  multiOrganisation: false,
+};
+
+// Tolerant parse: a missing or malformed row reads as an unconfigured install
+// (not completed) rather than throwing on the layout gate path.
+export const parseOnboardingState = (
+  raw: string,
+  fallback: OnboardingState = DEFAULT_ONBOARDING_STATE,
+): OnboardingState => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return fallback;
+    const source = parsed as Record<string, unknown>;
+    return {
+      completed: typeof source.completed === "boolean" ? source.completed : fallback.completed,
+      completedAt:
+        typeof source.completedAt === "string" ? source.completedAt : fallback.completedAt,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+// Tolerant parse: a malformed row falls back to single-organisation so a bad
+// value never silently switches an install into multi-org resolution.
+export const parseDeploymentConfig = (
+  raw: string,
+  fallback: DeploymentConfig = DEFAULT_DEPLOYMENT_CONFIG,
+): DeploymentConfig => {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return fallback;
+    const source = parsed as Record<string, unknown>;
+    return {
+      multiOrganisation:
+        typeof source.multiOrganisation === "boolean"
+          ? source.multiOrganisation
+          : fallback.multiOrganisation,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
 export const AI_CONFIG_SETTING_KEY = "ai_config";
 export const SIEM_CONFIG_SETTING_KEY = "siem_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
@@ -218,6 +334,13 @@ export const N8N_CONFIG_SETTING_KEY = "n8n_config";
 export const NOTIFICATION_PREFS_SETTING_KEY = "notification_prefs";
 export const AUTH_CONFIG_SETTING_KEY = "auth_config";
 export const USAGE_LIMITS_CONFIG_SETTING_KEY = "usage_limits_config";
+export const ONBOARDING_STATE_SETTING_KEY = "onboarding_state";
+export const DEPLOYMENT_CONFIG_SETTING_KEY = "deployment_config";
+// The one-time bootstrap token (ADR-041 §0). Persisted (not in .env) so it
+// survives restarts and is identical across launch methods; created only while
+// no admin exists and deleted by createAdmin on success. Non-sensitive: it is
+// printed to server logs by design and guards nothing once an admin exists.
+export const SETUP_TOKEN_SETTING_KEY = "setup_token";
 
 // System-setting keys whose stored value carries integration credentials (API
 // keys, secret access keys, OAuth client secrets, SMTP passwords). Their value

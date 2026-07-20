@@ -9,7 +9,7 @@ import {
   type Result,
   type Role,
 } from "@rbrasier/domain";
-import { IsFeatureEnabledForUser, SetFeatureFlagRoles } from "./get-feature-flag";
+import { IsFeatureEnabled, IsFeatureEnabledForUser, ListFeatureFlags, SetFeatureFlagRoles } from "./get-feature-flag";
 
 class FakeFeatureFlagRepository implements IFeatureFlagRepository {
   flags = new Map<string, FeatureFlag>();
@@ -146,6 +146,46 @@ describe("IsFeatureEnabledForUser", () => {
     const denied = await useCase.execute("ordinary-user", "auto_node", false);
     expect(permitted.data).toBe(true);
     expect(denied.data).toBe(false);
+  });
+});
+
+describe("automation flags default off (ADR-041 §4)", () => {
+  it("reports auto_node, skills and mcp disabled when there is no flag row", async () => {
+    const useCase = new IsFeatureEnabled(new FakeFeatureFlagRepository());
+
+    expect((await useCase.execute("auto_node")).data).toBe(false);
+    expect((await useCase.execute("skills")).data).toBe(false);
+    expect((await useCase.execute("mcp")).data).toBe(false);
+  });
+
+  it("keeps scheduled_node enabled by default", async () => {
+    const useCase = new IsFeatureEnabled(new FakeFeatureFlagRepository());
+
+    expect((await useCase.execute("scheduled_node")).data).toBe(true);
+  });
+});
+
+describe("ListFeatureFlags", () => {
+  it("surfaces skills and mcp as disabled defaults so their admin UI appears without a row", async () => {
+    const useCase = new ListFeatureFlags(new FakeFeatureFlagRepository());
+
+    const result = await useCase.execute();
+
+    const skills = result.data?.find((flag) => flag.key === "skills");
+    const mcp = result.data?.find((flag) => flag.key === "mcp");
+    expect(skills?.enabled).toBe(false);
+    expect(mcp?.enabled).toBe(false);
+  });
+
+  it("prefers a persisted row over the default when one exists", async () => {
+    const flags = new FakeFeatureFlagRepository();
+    flags.seed(flag("skills", true));
+    const useCase = new ListFeatureFlags(flags);
+
+    const result = await useCase.execute();
+
+    expect(result.data?.filter((entry) => entry.key === "skills")).toHaveLength(1);
+    expect(result.data?.find((entry) => entry.key === "skills")?.enabled).toBe(true);
   });
 });
 

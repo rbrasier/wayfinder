@@ -48,4 +48,13 @@ export class DrizzleSystemSettingsRepository implements ISystemSettingsRepositor
       return err(domainError("INFRA_FAILURE", "Failed to set system setting.", cause));
     }
   }
+
+  async delete(key: string): Promise<Result<void>> {
+    try {
+      await this.db.delete(admin_system_settings).where(eq(admin_system_settings.key, key));
+      return ok(undefined);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to delete system setting.", cause));
+    }
+  }
 }

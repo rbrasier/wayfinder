@@ -54,25 +54,37 @@ done
 echo "→ installing dependencies"
 pnpm install
 
-# ── ensure the settings-at-rest encryption key exists ─────────────────────────
-# Secret-bearing system settings (AI/storage/n8n/auth/email configs) are
-# encrypted at rest with this key, and both apps require it at startup. Generate
-# one into .env on first run so the app never falls back to plaintext.
-if [ -f .env ]; then
-  if ! grep -q '^SETTINGS_ENCRYPTION_KEY=.\+' .env; then
-    GENERATED_KEY=$(openssl rand -hex 32 2>/dev/null || node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
-    if grep -q '^SETTINGS_ENCRYPTION_KEY=' .env; then
-      # Replace an existing blank assignment in place (portable across GNU/BSD sed).
-      tmp_env=$(mktemp)
-      grep -v '^SETTINGS_ENCRYPTION_KEY=' .env > "$tmp_env"
-      printf 'SETTINGS_ENCRYPTION_KEY=%s\n' "$GENERATED_KEY" >> "$tmp_env"
-      mv "$tmp_env" .env
-    else
-      printf 'SETTINGS_ENCRYPTION_KEY=%s\n' "$GENERATED_KEY" >> .env
-    fi
-    echo "  generated SETTINGS_ENCRYPTION_KEY into .env"
-  fi
+# ── ensure the bootstrap secrets exist ────────────────────────────────────────
+# The zero-env quick-start needs no hand-edited .env: seed it from .env.example
+# and auto-generate the two secrets the app structurally requires. Everything
+# else is configured in-app via the first-run setup wizard (ADR-041).
+if [ ! -f .env ] && [ -f .env.example ]; then
+  cp .env.example .env
+  echo "  created .env from .env.example"
 fi
+
+# ensure_secret VAR — generate a 32-byte hex value for VAR if it is missing or
+# blank in .env. Secret-bearing system settings are encrypted at rest with
+# SETTINGS_ENCRYPTION_KEY, and Better Auth signs sessions with BETTER_AUTH_SECRET;
+# both apps require these at startup.
+ensure_secret() {
+  var="$1"
+  if [ ! -f .env ]; then return; fi
+  if grep -q "^${var}=.\+" .env; then return; fi
+  generated=$(openssl rand -hex 32 2>/dev/null || node -e "process.stdout.write(require('crypto').randomBytes(32).toString('hex'))")
+  if grep -q "^${var}=" .env; then
+    tmp_env=$(mktemp)
+    grep -v "^${var}=" .env > "$tmp_env"
+    printf '%s=%s\n' "$var" "$generated" >> "$tmp_env"
+    mv "$tmp_env" .env
+  else
+    printf '%s=%s\n' "$var" "$generated" >> .env
+  fi
+  echo "  generated ${var} into .env"
+}
+
+ensure_secret SETTINGS_ENCRYPTION_KEY
+ensure_secret BETTER_AUTH_SECRET
 
 # ── start infrastructure ──────────────────────────────────────────────────────
 # Read the DB setup mode written by create-ai-app-template, or fall back to

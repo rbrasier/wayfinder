@@ -1,4 +1,5 @@
 export * from "./user-repository";
+export * from "./admin-bootstrap";
 export * from "./error-log-repository";
 export * from "./conversation-repository";
 export * from "./language-model";

@@ -30,6 +30,11 @@ class InMemorySettingsRepo implements ISystemSettingsRepository {
     this.store.set(key, value);
     return ok<SystemSetting>({ key, value, createdAt: new Date(), updatedAt: new Date() });
   }
+
+  async delete(key: string) {
+    this.store.delete(key);
+    return ok<void>(undefined);
+  }
 }
 
 describe("EncryptedSystemSettingsRepository", () => {

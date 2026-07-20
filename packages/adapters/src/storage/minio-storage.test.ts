@@ -31,6 +31,9 @@ const stubSettingsRepo: ISystemSettingsRepository = {
   async set(key: string, value: string): Promise<Result<SystemSetting>> {
     return ok({ key, value, createdAt: new Date(), updatedAt: new Date() });
   },
+  async delete(): Promise<Result<void>> {
+    return ok(undefined);
+  },
 };
 
 const makeAdapter = () => {

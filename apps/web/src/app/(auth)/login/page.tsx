@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState, type FormEvent } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,18 @@ import { trpc } from "@/trpc/client";
 const isDev = process.env.NODE_ENV === "development";
 
 function LoginForm() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const isExpired = searchParams.get("expired") === "true";
+
+  // First-run: an install with no admin has nothing to sign in to yet, so route
+  // the very first visitor to the bootstrap screen instead (ADR-041 §0).
+  const adminExistsQuery = trpc.bootstrap.adminExists.useQuery();
+  useEffect(() => {
+    if (adminExistsQuery.data && !adminExistsQuery.data.adminExists) {
+      router.replace("/setup");
+    }
+  }, [adminExistsQuery.data, router]);
 
   const methodsQuery = trpc.settings.enabledAuthMethods.useQuery();
   const emailPasswordEnabled = methodsQuery.data?.emailPassword ?? true;
