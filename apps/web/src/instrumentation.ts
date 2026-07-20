@@ -29,10 +29,16 @@ export async function register() {
   // every launch method (pnpm dev, pnpm start, node, containers). Ensures a
   // setup token while no admin exists and logs a clickable link; once an admin
   // exists the use-case returns null and nothing is logged.
-  try {
-    const container = getContainer();
-    const result = await container.useCases.ensureSetupToken.execute();
-    if (!result.error && result.data) {
+  //
+  // Detached on purpose: Next.js awaits register() before binding the HTTP
+  // server, so this must NOT block readiness. It builds the container and does a
+  // DB round-trip — running it in the background lets the server come up
+  // immediately and never hangs boot if the DB is slow to accept connections.
+  void (async () => {
+    try {
+      const container = getContainer();
+      const result = await container.useCases.ensureSetupToken.execute();
+      if (result.error || !result.data) return;
       const link = `${container.env.BETTER_AUTH_URL}/setup?token=${result.data}`;
       console.log(
         `\n────────────────────────────────────────────────────────────\n` +
@@ -40,9 +46,9 @@ export async function register() {
           `  ${link}\n` +
           `────────────────────────────────────────────────────────────\n`,
       );
+    } catch {
+      // The DB may not be migrated yet on the very first boot; the link is
+      // emitted on the next start. Never block or crash startup on it.
     }
-  } catch {
-    // The DB may not be migrated yet on the very first boot; the link is emitted
-    // on the next start. Never block startup on it.
-  }
+  })();
 }

@@ -407,6 +407,18 @@ const seedApprovalRequest = async (
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
 
+  // Skills and MCP default OFF for a fresh install (ADR-041 §4). The e2e suite
+  // exercises both features, so enable their flags for the test environment;
+  // production installs stay off until an admin opts in via the setup wizard.
+  unwrap(
+    await container.useCases.upsertFeatureFlag.execute({ key: "skills", enabled: true }),
+    "enable skills flag",
+  );
+  unwrap(
+    await container.useCases.upsertFeatureFlag.execute({ key: "mcp", enabled: true }),
+    "enable mcp flag",
+  );
+
   // Seed a library skill so the flow-editor skill picker is populated — its
   // search box only renders once the library is non-empty.
   unwrap(
