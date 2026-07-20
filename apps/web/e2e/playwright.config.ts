@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * Wayfinder E2E Test Configuration
  *
- * Lives at: tests/e2e/playwright.config.ts (inside the wayfinder repo)
+ * Lives at: apps/web/e2e/playwright.config.ts (inside the wayfinder repo)
  *
  * AI MOCK MODE (default — used on every push):
  *   AI calls to Anthropic/OpenAI/Mistral are intercepted and return
@@ -14,10 +14,10 @@ import { defineConfig, devices } from '@playwright/test';
  *   AI calls go through to the real provider. Used for integration smoke tests.
  *
  * Run locally:
- *   npx playwright test --config tests/e2e/playwright.config.ts
+ *   npx playwright test --config apps/web/e2e/playwright.config.ts
  *
  * View report:
- *   npx playwright show-report tests/e2e/playwright-report
+ *   npx playwright show-report apps/web/e2e/playwright-report
  */
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';

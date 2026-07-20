@@ -1,6 +1,6 @@
 # Wayfinder E2E Tests
 
-End-to-end tests using Playwright. Lives **inside the Wayfinder repo** at `tests/e2e/`.
+End-to-end tests using Playwright. Lives **inside the Wayfinder repo** at `apps/web/e2e/`.
 
 ---
 
@@ -75,17 +75,17 @@ Restart the app after adding these.
 ### 2. Add to `.gitignore`
 
 ```gitignore
-tests/e2e/playwright-report/
-tests/e2e/test-results/
-tests/e2e/screenshots/
-tests/e2e/playwright/.auth/
-tests/e2e/node_modules/
+apps/web/e2e/playwright-report/
+apps/web/e2e/test-results/
+apps/web/e2e/screenshots/
+apps/web/e2e/playwright/.auth/
+apps/web/e2e/node_modules/
 ```
 
 ### 3. Install Playwright
 
 ```bash
-cd tests/e2e
+cd apps/web/e2e
 npm install
 npx playwright install --with-deps chromium
 ```
@@ -97,7 +97,7 @@ npx playwright install --with-deps chromium
 Start Wayfinder first (`docker compose up` or your local dev setup), then:
 
 ```bash
-cd tests/e2e
+cd apps/web/e2e
 
 npm test                    # all tests, mocked AI
 npm run test:smoke          # just smoke checks

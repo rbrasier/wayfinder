@@ -93,7 +93,7 @@ export AI_DEFAULT_PROVIDER=anthropic
 export ADMIN_SEED_EMAIL=admin@example.com
 export TEST_AUTH_BYPASS=true
 export TEST_ADMIN_EMAIL=admin@example.com
-export USE_REAL_AI=false              # specs mock AI via tests/e2e/helpers/base.ts
+export USE_REAL_AI=false              # specs mock AI via apps/web/e2e/helpers/base.ts
 export BASE_URL=http://localhost:3000
 
 # Point object storage at the local s3rver (step 2). Endpoint/port/bucket match
@@ -130,7 +130,7 @@ Point Playwright at it with a throwaway config that extends the repo one
 (do **not** commit this file):
 
 ```ts
-// tests/e2e/playwright.local.config.ts
+// apps/web/e2e/playwright.local.config.ts
 import base from './playwright.config';
 const config: any = { ...base };
 config.projects = (base as any).projects.map((p: any) => ({
@@ -151,7 +151,7 @@ export default config;
 ## 5. Run
 
 ```bash
-cd tests/e2e && npm install                       # e2e has its own package.json
+cd apps/web/e2e && npm install                     # e2e has its own package.json
 npx playwright test --config playwright.local.config.ts --project=setup   # auth
 npx playwright test --config playwright.local.config.ts --project=chromium \
   phase-scheduling.spec.ts admin-flow-editing.spec.ts --reporter=list

@@ -53,7 +53,7 @@ Run `./validate.sh` and fix all failures.
 ### Step 5 — Playwright e2e test
 
 Write at least one Playwright e2e test that exercises the fixed behaviour through the UI or API surface:
-- Place tests under `tests/e2e/` in a file named after the bug (e.g. `fix-<slug>.spec.ts`)
+- Place tests under `apps/web/e2e/` in a file named after the bug (e.g. `fix-<slug>.spec.ts`)
 - The test must fail on the unfixed code and pass after the fix — confirm this before moving on
 - Cover the exact reproduction steps from the bug report, plus any related edge cases the fix touches
 

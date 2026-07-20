@@ -2,7 +2,7 @@
   "name": "wayfinder-e2e",
   "version": "1.0.0",
   "private": true,
-  "description": "Playwright E2E tests for Wayfinder (lives inside the wayfinder repo at tests/e2e/)",
+  "description": "Playwright E2E tests for Wayfinder (lives inside the wayfinder repo at apps/web/e2e/)",
   "scripts": {
     "test": "playwright test --config playwright.config.ts",
     "test:smoke": "playwright test --config playwright.config.ts smoke.spec.ts",

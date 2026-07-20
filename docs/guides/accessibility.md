@@ -57,12 +57,12 @@ relevant success criteria:
 ## Runtime checks (Playwright + axe-core)
 
 The criteria below only exist once the page is rendered, so they are verified at
-runtime by `tests/e2e/accessibility.spec.ts` rather than by the linter. The spec
+runtime by `apps/web/e2e/accessibility.spec.ts` rather than by the linter. The spec
 runs in the E2E workflow (`.github/workflows/e2e.yml`) against the seeded admin
 session, and can be run on its own:
 
 ```bash
-cd tests/e2e
+cd apps/web/e2e
 npm run test:a11y      # needs the app running on http://localhost:3000
 ```
 
