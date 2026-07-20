@@ -10,17 +10,19 @@ export function CollapsibleSection({
   title,
   description,
   defaultOpen = true,
+  testId,
   children,
 }: {
   title: string;
   description?: string;
   defaultOpen?: boolean;
+  testId?: string;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="rounded-[12px] border border-[#e4e1db] bg-white/40">
+    <section data-testid={testId} className="rounded-[12px] border border-[#e4e1db] bg-white/40">
       <button
         type="button"
         aria-expanded={open}

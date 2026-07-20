@@ -59,7 +59,11 @@ export default function AppSettingsPage() {
               <AuthMethodsCard />
             </CollapsibleSection>
 
-            <CollapsibleSection title="AI" description="Model provider, instructions and document generation.">
+            <CollapsibleSection
+              title="AI"
+              description="Model provider, instructions and document generation."
+              testId="settings-section-ai"
+            >
               <GlobalInstructionsCard />
               <AiProviderCard connectivity={connectivity} />
               <DocumentGenerationCard />
