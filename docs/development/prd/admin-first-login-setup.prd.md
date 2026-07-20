@@ -52,6 +52,12 @@ environment when it could live in the database.
 - Every setting the wizard writes lands in the database, not the environment —
   the only env values that remain meaningful are the framework secrets and an
   optional seed email fallback.
+- **Starting the app needs no hand-edited env.** A fresh clone starts (via
+  `restart.sh`, which auto-generates the bootstrap secrets, or `pnpm dev` /
+  `pnpm start` / a container against a database), the app logs a clickable setup
+  link on first run regardless of launch method, and everything else is configured
+  in-app. All documentation leads with this simplest path; env config is a
+  demoted, optional override.
 - Finishing **or** skipping marks setup complete; the wizard never auto-reappears
   but is re-openable from admin Settings.
 - `auto_node`, `skills`, and `mcp` feature flags default **off**.
@@ -110,10 +116,20 @@ environment when it could live in the database.
   see §12 and ADR-041) so the create-admin procedure refuses once any admin
   exists and a public URL alone cannot seize the install. Presents a setup-token
   field alongside email + password, pre-filled from a `?token=` query param.
-- **`restart.sh`** — on **first setup only** (no admin exists after migrations),
-  generate the setup token into `.env` and print a clickable
-  `${BETTER_AUTH_URL}/setup?token=<token>` link to the console. Prints nothing
-  once an admin exists.
+- **App startup** (`apps/web/src/instrumentation.ts`) — on boot with no admin,
+  ensure a setup token (env `SETUP_TOKEN` or the persisted `setup_token` DB row)
+  and log a clickable `${BETTER_AUTH_URL}/setup?token=<token>` link. Logs nothing
+  once an admin exists. Emitting it here means the link appears under **every**
+  launch method — `pnpm dev`, `pnpm start`, a bare `node` process, and containers
+  — not just `restart.sh`.
+- **`restart.sh`** — auto-generate `BETTER_AUTH_SECRET` alongside the existing
+  `SETTINGS_ENCRYPTION_KEY` so a fresh clone needs **no hand-edited env**. It
+  otherwise just brings up infra, migrates, and starts the app (inheriting the
+  startup link).
+- **Documentation** — refocus `README.md` quick-start, `.env.example`, and the
+  getting-started guide(s) on the **zero-env** path (start → click the printed
+  link → complete the wizard), demoting env configuration to a clearly-labelled
+  "advanced / optional overrides" section.
 - **New** `apps/web` client component: a stepped setup modal (e.g.
   `components/onboarding/setup-wizard.tsx`) shown to the signed-in admin when
   `onboarding_state.completed` is false.
@@ -134,7 +150,7 @@ environment when it could live in the database.
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
 | `core_users` | NEW admin row via existing auth adapter — no DDL | n/a |
-| `admin_system_settings` | NEW rows only (`onboarding_state`, `deployment_config`) — no DDL | yes (existing table) |
+| `admin_system_settings` | NEW rows only (`onboarding_state`, `deployment_config`, `setup_token`) — no DDL | yes (existing table) |
 | `core_organisations` | NEW row via existing `organisation.create` | n/a |
 | `core_feature_flag` | NEW default keys `skills`, `mcp` (in code; rows only on first toggle) | n/a |
 
@@ -160,9 +176,15 @@ environment when it could live in the database.
 - [ ] On first boot with no admin, a setup token is generated; `createAdmin`
       rejects a missing/wrong token. The token can also be supplied via env for
       automated installs and is void once an admin exists.
-- [ ] On **first setup only**, `restart.sh` prints a clickable
-      `${BETTER_AUTH_URL}/setup?token=<token>` link; once an admin exists it prints
-      no link. The `/setup` screen pre-fills the token from the `?token=` param.
+- [ ] On boot with no admin, the app logs a clickable
+      `${BETTER_AUTH_URL}/setup?token=<token>` link — verified under `pnpm dev`,
+      `pnpm start`, and a container start; once an admin exists it logs no link.
+      The `/setup` screen pre-fills the token from the `?token=` param.
+- [ ] A fresh clone starts with **no hand-edited env**: `restart.sh` auto-generates
+      `BETTER_AUTH_SECRET` and `SETTINGS_ENCRYPTION_KEY`; the app boots against the
+      docker-compose Postgres and defaults.
+- [ ] `README.md` quick-start, `.env.example`, and getting-started guide(s) lead
+      with the zero-env path; env config is a demoted "advanced / optional" section.
 - [ ] Two concurrent `createAdmin` calls cannot both succeed (transactional
       singleton guard / advisory lock or partial unique index).
 - [ ] When `ADMIN_SEED_EMAIL` is set, `createAdmin` accepts only that email.
@@ -194,8 +216,9 @@ environment when it could live in the database.
 
 ## 11. Out of scope / future work
 
-- Trimming `.env.example` to only framework secrets (+ optional seed email) and
-  removing env-config fallbacks once DB config is proven (a follow-up `/enhance`).
+- **Removing** env-config fallbacks / deleting integration vars from
+  `.env.example` once DB config is proven (a follow-up `/enhance`). This phase
+  *refocuses and demotes* env in the docs but keeps every env override working.
 - Building the Skills and MCP execution features and their real config + test.
 - Adding an **embeddings/RAG** step to the wizard — embeddings config + reindex
   exist separately in admin Settings; not part of this wizard (candidate future).

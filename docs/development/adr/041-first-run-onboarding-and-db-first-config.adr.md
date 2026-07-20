@@ -19,11 +19,12 @@ the single source of configuration truth**, leaving only the framework secrets
 (`SETTINGS_ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`) — and an optional seed-email
 fallback — in the environment.
 
-Five decisions need recording: how the admin account is bootstrapped on first
+Six decisions need recording: how the admin account is bootstrapped on first
 run, how first-run onboarding is detected and gated, how far the DB-first move
 goes in this phase (including how env-provided values surface in the wizard),
-what the "multiple organisations" choice maps to, and the default state of the
-automation-related feature flags.
+what the "multiple organisations" choice maps to, the default state of the
+automation-related feature flags, and how the setup link and env-optional
+"simplest start" are delivered across every launch method.
 
 ## Decision
 
@@ -48,18 +49,17 @@ first admin" and closes permanently once an admin exists.
 
 1. **One-time setup token (primary).** On first boot with no admin, a random
    setup token is generated and `createAdmin` requires it. This binds the right to
-   bootstrap to host access, so reaching the `/setup` URL first is not sufficient.
-   The token is auto-generated (zero config, on by default) and may also be
-   supplied via env for automated installs — the same bootstrap-secret pattern
-   `restart.sh` already uses for `SETTINGS_ENCRYPTION_KEY`. It is void once an
-   admin exists. **`restart.sh` surfaces it as a ready-to-use setup link**: after
-   migrations it checks whether an admin exists and, **only on first setup**,
-   generates the token (into `.env`, mirroring the encryption-key step) and prints
-   a clickable `${BETTER_AUTH_URL}/setup?token=<token>` URL to the console. The
-   `/setup` screen reads the token from the query string to pre-fill the field, so
-   the operator can click straight through; the token still comes from the local
-   console (which requires host access) and is single-use. Once an admin exists,
-   `restart.sh` prints no link and the endpoint refuses.
+   bootstrap to host/log access, so reaching the `/setup` URL first is not
+   sufficient. It is auto-generated (zero config, on by default), may be supplied
+   via env (`SETUP_TOKEN`) for automated installs, and is void once an admin
+   exists. **The token is persisted in a DB row** (`setup_token` in
+   `admin_system_settings`, created only while no admin exists) rather than in
+   `.env`, so it survives restarts and is identical whether the app runs from
+   `pnpm dev`, `pnpm start`, `node`, or a container — no writable `.env` required
+   in prod. `createAdmin` deletes the row when it succeeds. See Decision 5 for how
+   the link is emitted; the `/setup` screen reads the token from the `?token=`
+   query string to pre-fill the field, so the operator clicks straight through
+   while the token still originates from a console that requires host access.
 2. **Transactional singleton guard (correctness backstop).** The "no admin
    exists" check runs **inside** the insert transaction under an advisory lock (or
    a partial unique index enforcing at most one admin), so concurrent calls cannot
@@ -129,13 +129,39 @@ and their toggle UI only — the underlying Skills/MCP execution features, and a
 config/test for them, are out of scope. n8n keeps its existing config + probe and
 defaults off in the wizard.
 
+### 5. Setup link is emitted by the app at startup, and the simplest start needs no env
+
+The first-run setup link is printed by the **application at server startup**, not
+by `restart.sh`. `apps/web/src/instrumentation.ts` already runs once on boot for
+`pnpm dev`, `pnpm start`, a bare `node` process, and any container image — so
+emitting the link there makes it appear regardless of how the app is launched.
+On boot, if no admin exists, the app ensures a `setup_token` (env override or the
+persisted DB row) and logs a clickable `${BETTER_AUTH_URL}/setup?token=<token>`
+line. Once an admin exists it logs nothing. `restart.sh` keeps only its existing
+job — bring up infra, migrate, start the app — and inherits the link for free;
+its sole addition is auto-generating `BETTER_AUTH_SECRET` alongside
+`SETTINGS_ENCRYPTION_KEY` so **no secret has to be edited by hand**.
+
+**Env to *start* the app is optional.** Only `DATABASE_URL` and
+`BETTER_AUTH_SECRET` lack safe defaults today; docker-compose supplies Postgres,
+`restart.sh` generates both bootstrap secrets, and every integration
+(storage/AI/auth/mail/n8n) already has a default or is configured in-app via the
+wizard. The **documented default path is therefore zero-env**: start the app →
+click the printed link → complete the wizard. All product documentation
+(`README.md` quick-start, `.env.example`, getting-started guides) is refocused on
+this simplest path, with env-based configuration demoted to a clearly-labelled
+"advanced / optional overrides" section — env stays a supported override (per
+Decision 2), it is just no longer the thing a new operator must touch.
+
 ## Consequences
 
 - **Positive**: An operator can go from a blank deployment to a working install
-  entirely in-app — create the admin, then configure and test every critical
-  integration in one place; no schema migration; non-breaking (env fallbacks
-  intact and surfaced, not ignored); reuses existing auth, settings, probe,
-  organisation, and feature-flag machinery.
+  entirely in-app with **zero env editing** — start the app, click the printed
+  link, create the admin, then configure and test every integration in one place.
+  The link works from any launch method (dev, prod, container) because it is
+  emitted at app startup; no schema migration; non-breaking (env fallbacks intact
+  and surfaced, not ignored); reuses existing auth, settings, probe, organisation,
+  and feature-flag machinery.
 - **Negative / trade-offs**: The `createAdmin` bootstrap endpoint is
   unauthenticated by necessity and carries real risk if its no-admin-exists guard
   is wrong — it must be enforced transactionally. Two config sources (DB + env)
@@ -161,5 +187,11 @@ defaults off in the wizard.
   goal. Retained as a fallback rather than removed.
 - **Separate username field** — rejected; email-password auth already keys on
   email, so email is the username. No new column or auth change.
+- **Emit the link only from `restart.sh`** — rejected; `restart.sh` is a
+  dev-convenience script, so the link would be missing under `pnpm start`, a bare
+  `node` process, or a container. Emitting at app startup covers every path.
+- **Persist the setup token in `.env`** — rejected; prod/containers often have a
+  read-only or ephemeral filesystem, and it splits the token's source of truth
+  from the app. A DB row is portable and self-cleaning.
 - **Remove env config now** — rejected as breaking; deferred behind a proven
   DB-first path.
