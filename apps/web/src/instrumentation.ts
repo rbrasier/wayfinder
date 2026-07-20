@@ -1,10 +1,10 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  // Lazy import to avoid bundling the container into the edge runtime.
-  const { getContainer } = await import("@/lib/container");
-
   if (process.env.NODE_ENV === "production") {
+    // Lazy import to avoid bundling the container into the edge runtime.
+    const { getContainer } = await import("@/lib/container");
+
     const persist = (err: unknown, source: string) => {
       try {
         const error = err instanceof Error ? err : new Error(String(err));
@@ -30,12 +30,13 @@ export async function register() {
   // setup token while no admin exists and logs a clickable link; once an admin
   // exists the use-case returns null and nothing is logged.
   //
-  // Detached on purpose: Next.js awaits register() before binding the HTTP
-  // server, so this must NOT block readiness. It builds the container and does a
-  // DB round-trip — running it in the background lets the server come up
-  // immediately and never hangs boot if the DB is slow to accept connections.
+  // Fully detached — including the container import. Next.js awaits register()
+  // before binding the HTTP server, and in dev the container import triggers
+  // on-demand compilation of the whole backend graph. Doing it here (not on the
+  // awaited path) lets the dev server bind to its port immediately.
   void (async () => {
     try {
+      const { getContainer } = await import("@/lib/container");
       const container = getContainer();
       const result = await container.useCases.ensureSetupToken.execute();
       if (result.error || !result.data) return;
