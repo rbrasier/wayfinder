@@ -11,7 +11,7 @@ Before running tests, verify:
 
 1. The dev server is reachable at `http://localhost:3000` — use `mcp__playwright__browser_navigate`
    to load the root URL and confirm the page responds.
-2. `playwright/.auth/admin.json` exists under `tests/e2e/`. If it does not, the auth
+2. `playwright/.auth/admin.json` exists under `apps/web/e2e/`. If it does not, the auth
    setup project will create it on first run (requires the server to be running with
    `TEST_AUTH_BYPASS=true` in `apps/web/.env.local`).
 
@@ -25,10 +25,10 @@ Before executing the test suite, record the current timestamp in milliseconds:
 const TEST_START_MS = Date.now();
 ```
 
-Then execute from the `tests/e2e/` directory:
+Then execute from the `apps/web/e2e/` directory:
 
 ```bash
-cd tests/e2e && npx playwright test --config=playwright.config.ts 2>&1
+cd apps/web/e2e && npx playwright test --config=playwright.config.ts 2>&1
 ```
 
 Do **not** pass `TEST_AUTH_BYPASS=true` on the command line — the server reads it

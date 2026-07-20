@@ -33,7 +33,7 @@ Ask all of these via `AskUserQuestion` before proceeding:
    - Write tests before implementation for each sub-component
    - Run `./validate.sh` after each sub-component
 4. Write at least one Playwright e2e test that exercises the changed or extended functionality end-to-end:
-   - Place tests under `tests/e2e/` in a file named after the enhancement (e.g. `enhance-<slug>.spec.ts`)
+   - Place tests under `apps/web/e2e/` in a file named after the enhancement (e.g. `enhance-<slug>.spec.ts`)
    - Cover the primary user-facing behaviour introduced or modified by this enhancement
    - The test must pass against the updated code before moving on
 5. On completion:

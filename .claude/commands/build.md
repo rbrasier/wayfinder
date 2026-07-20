@@ -41,7 +41,7 @@ List them before starting so the user can see the plan.
 ### Step 3 — Playwright e2e test
 
 Once all sub-components pass validation, write at least one Playwright e2e test that exercises the completed feature end-to-end through the UI or API surface:
-- Place tests under `tests/e2e/` in a file named after the phase (e.g. `phase-<slug>.spec.ts`)
+- Place tests under `apps/web/e2e/` in a file named after the phase (e.g. `phase-<slug>.spec.ts`)
 - Cover the primary happy path and at least one error path visible to the user
 - The test must pass before proceeding to Step 4
 
