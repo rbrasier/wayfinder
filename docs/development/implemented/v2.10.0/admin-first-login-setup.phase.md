@@ -1,8 +1,9 @@
 # Phase — Admin First-Login Setup
 
-- **Status**: Draft (run `/doc-review` before building)
-- **Target version**: 2.9.0 — **MINOR** (new admin feature; all config is runtime
-  state in existing tables; no schema migration).
+- **Status**: Implemented (v2.10.0)
+- **Target version**: 2.10.0 — **MINOR** (new admin feature; all config is runtime
+  state in existing tables; no schema migration). Originally drafted as 2.9.0;
+  bumped to 2.10.0 because 2.9.0 shipped structured-conversation first.
 - **PRD**: `docs/development/prd/admin-first-login-setup.prd.md`
 - **ADR**: `docs/development/adr/041-first-run-onboarding-and-db-first-config.adr.md`
 - **Depends on**: ADR-025 (runtime auth config), ADR-038 (organisations as sharing

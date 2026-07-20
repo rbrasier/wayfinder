@@ -1,6 +1,7 @@
 import { analyticsRouter } from "./routers/analytics";
 import { approvalRouter } from "./routers/approval";
 import { auditRouter } from "./routers/audit";
+import { bootstrapRouter } from "./routers/bootstrap";
 import { documentRouter } from "./routers/document";
 import { errorRouter } from "./routers/error";
 import { feedbackRouter } from "./routers/feedback";
@@ -27,6 +28,7 @@ import { userRouter } from "./routers/user";
 import { router } from "./trpc";
 
 export const appRouter = router({
+  bootstrap: bootstrapRouter,
   user: userRouter,
   error: errorRouter,
   message: messageRouter,

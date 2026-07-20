@@ -1,3 +1,4 @@
+export * from "./admin-account-creator";
 export * from "./better-auth";
 export * from "./pki-cert-adapter";
 export * from "./seed-admin";

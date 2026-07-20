@@ -8,7 +8,14 @@ import type {
 } from "@rbrasier/domain";
 import { ok } from "@rbrasier/domain";
 
+// Flags that are on for a fresh install with no persisted row. Automation flags
+// (auto_node, skills, mcp) are deliberately absent — they default off (ADR-041
+// §4) until an admin enables them, e.g. from the first-run setup wizard.
 const DEFAULT_ENABLED_FLAGS = new Set(["scheduled_node"]);
+
+// Flags surfaced in admin UI even before a row exists. skills and mcp are listed
+// (off) so their toggles appear on a fresh install without seeding a row
+// (ADR-041 §4); a persisted row always overrides these defaults.
 const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
   {
     id: "default:scheduled_node",
@@ -16,6 +23,24 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
     enabled: true,
     rolloutPct: 100,
     description: "Enables scheduled nodes in flow builder and at runtime",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "default:skills",
+    key: "skills",
+    enabled: false,
+    rolloutPct: 100,
+    description: "Enables Skills library and per-step skill selection",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "default:mcp",
+    key: "mcp",
+    enabled: false,
+    rolloutPct: 100,
+    description: "Enables MCP servers/tools in flow builder and at runtime",
     createdAt: new Date(0),
     updatedAt: new Date(0),
   },

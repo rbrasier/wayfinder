@@ -29,6 +29,10 @@ class FakeSettingsRepo implements ISystemSettingsRepository {
     this.store.set(key, value);
     return ok({ key, value, createdAt: new Date(), updatedAt: new Date() });
   }
+  async delete(key: string): Promise<Result<void>> {
+    this.store.delete(key);
+    return ok(undefined);
+  }
 }
 
 const makeBudget = (overrides: Partial<Budget> = {}): Budget => ({

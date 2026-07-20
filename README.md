@@ -49,19 +49,30 @@ development and is not guaranteed stable. See
 [`docs/guides/managing-releases.md`](docs/guides/managing-releases.md) for
 the release model.
 
+**Zero-env quick-start — no `.env` editing required.**
+
 ```bash
 git clone --branch release/alpha-1 https://github.com/rbrasier/wayfinder
 cd wayfinder
-cp .env.example .env
-# Edit .env: set ADMIN_SEED_EMAIL, ANTHROPIC_API_KEY (or OPENAI_API_KEY / MISTRAL_API_KEY)
-docker compose up
+docker compose up -d      # Postgres + MinIO (skip if you bring your own)
+./restart.sh              # generates secrets, migrates, starts the app
+# → open the printed  http://localhost:3000/setup?token=…  link
+# → set the admin email + password, then complete the setup wizard
 ```
+
+`restart.sh` seeds `.env` from `.env.example` and auto-generates the two required
+secrets (`SETTINGS_ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`); `DATABASE_URL` ships a
+working default. On first boot with no admin, the app prints a clickable
+`/setup?token=…` link to the server log.
 
 - Web UI → http://localhost:3000
 - MinIO console → http://localhost:9001 (user: `minioadmin`, pass: `minioadmin`)
 
-On first run, request a magic link for the email you set in `ADMIN_SEED_EMAIL`. You are automatically
-promoted to admin on login. Navigate to **Admin → Flows** to create your first flow.
+On first run, open the printed setup link, create the administrator account, and
+the **setup wizard** walks you through object storage, an AI provider, a sign-in
+method, and optional integrations — each configured in-app and testable in place.
+No integration needs to be set in `.env`. Env-based configuration is an
+optional override; see [`.env.example`](.env.example) for the advanced path.
 
 ---
 

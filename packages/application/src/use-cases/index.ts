@@ -2,6 +2,7 @@ export * from "./flow/index";
 export * from "./role/index";
 export * from "./group/index";
 export * from "./organisation/index";
+export * from "./onboarding/index";
 export * from "./session/index";
 export * from "./scheduling/index";
 export * from "./retention/index";
