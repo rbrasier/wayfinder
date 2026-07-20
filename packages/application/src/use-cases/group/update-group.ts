@@ -18,6 +18,10 @@ export class UpdateGroup {
     }
     const description =
       patch.description === undefined ? undefined : patch.description?.trim() || null;
-    return this.groups.update(id, { name, description });
+    return this.groups.update(id, {
+      name,
+      description,
+      ...(patch.organisationId !== undefined ? { organisationId: patch.organisationId } : {}),
+    });
   }
 }

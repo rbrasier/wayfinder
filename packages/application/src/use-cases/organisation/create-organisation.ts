@@ -13,17 +13,29 @@ const slugify = (name: string): string =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
+// Normalises a user-entered email domain: lower-cased, trimmed, a leading "@"
+// dropped. An empty value becomes null (unset).
+export const normaliseEmailDomain = (value: string | null | undefined): string | null => {
+  if (value === null || value === undefined) return null;
+  const cleaned = value.trim().toLowerCase().replace(/^@+/, "");
+  return cleaned.length > 0 ? cleaned : null;
+};
+
 export class CreateOrganisation {
   constructor(private readonly organisations: IOrganisationRepository) {}
 
-  async execute(input: { name: string }): Promise<Result<Organisation>> {
+  async execute(input: { name: string; emailDomain?: string | null }): Promise<Result<Organisation>> {
     const name = input.name.trim();
     if (name.length === 0) {
       return err(domainError("VALIDATION_FAILED", "Organisation name is required."));
     }
     const slugResult = await this.freeSlug(slugify(name) || "organisation");
     if (slugResult.error) return slugResult;
-    return this.organisations.create({ name, slug: slugResult.data });
+    return this.organisations.create({
+      name,
+      slug: slugResult.data,
+      emailDomain: normaliseEmailDomain(input.emailDomain),
+    });
   }
 
   // Probes for the first unused slug, appending -2, -3, … on collision so two

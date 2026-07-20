@@ -50,8 +50,14 @@ class FakeOrganisations {
 }
 
 class FakeSettings implements Partial<ISystemSettingsRepository> {
-  constructor(private readonly config: OrganisationResolution | null) {}
-  async get(): Promise<Result<SystemSetting | null>> {
+  constructor(
+    private readonly config: OrganisationResolution | null,
+    private readonly enabled = true,
+  ) {}
+  async get(key: string): Promise<Result<SystemSetting | null>> {
+    if (key === "organisations_enabled") {
+      return ok({ key, value: this.enabled ? "true" : "false", updatedAt: new Date() } as SystemSetting);
+    }
     if (!this.config) return ok(null);
     return ok({
       key: "organisation_resolution",
@@ -61,12 +67,12 @@ class FakeSettings implements Partial<ISystemSettingsRepository> {
   }
 }
 
-const build = (user: User, config: OrganisationResolution | null) => {
+const build = (user: User, config: OrganisationResolution | null, enabled = true) => {
   const users = new FakeUsers(user);
   const useCase = new ResolveOrganisationOnSignIn(
     users as never,
     new FakeOrganisations() as never,
-    new FakeSettings(config) as never,
+    new FakeSettings(config, enabled) as never,
   );
   return { users, useCase };
 };
@@ -109,6 +115,17 @@ describe("ResolveOrganisationOnSignIn", () => {
     });
     const result = await useCase.execute("user-1");
     expect(result.data).toEqual({ status: "nominate" });
+  });
+
+  it("does nothing when organisations are disabled, even under self_nomination", async () => {
+    const { users, useCase } = build(
+      makeUser(),
+      { strategy: "self_nomination", selfNomination: { mode: "create_or_join" } },
+      false,
+    );
+    const result = await useCase.execute("user-1");
+    expect(result.data).toEqual({ status: "none" });
+    expect(users.updates).toEqual([]);
   });
 
   it("asks the user to nominate when email domain is unmatched with onUnmatched=nominate", async () => {

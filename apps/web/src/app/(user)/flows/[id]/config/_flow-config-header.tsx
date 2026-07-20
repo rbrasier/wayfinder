@@ -8,7 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
+  DialogBody,
+  DialogCloseButton,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -348,31 +351,42 @@ function GroupVisibilityDialog({
 
   return (
     <Dialog open={open} onOpenChange={syncOnOpen}>
-      <DialogContent>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Publish to groups</DialogTitle>
+          <DialogCloseButton />
         </DialogHeader>
-        {groups.length === 0 ? (
-          <p className="text-sm text-muted-foreground">You are not in any groups yet.</p>
-        ) : (
-          <ul className="space-y-2">
-            {groups.map((group) => (
-              <li key={group.id} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id={`group-${group.id}`}
-                  checked={selected.includes(group.id)}
-                  onChange={() => toggle(group.id)}
-                />
-                <label htmlFor={`group-${group.id}`} className="text-sm">
-                  {group.name}
-                </label>
-              </li>
-            ))}
-          </ul>
-        )}
+        <DialogBody>
+          <DialogDescription>
+            Choose which of your groups can discover this flow. Members of the selected groups will
+            see it in their workspace.
+          </DialogDescription>
+          {groups.length === 0 ? (
+            <p className="text-[13px] text-[#6d6a65]">You are not in any groups yet.</p>
+          ) : (
+            <ul className="space-y-1">
+              {groups.map((group) => (
+                <li key={group.id}>
+                  <label
+                    htmlFor={`group-${group.id}`}
+                    className="flex cursor-pointer items-center gap-2.5 rounded-[9px] border border-[#dedad2] px-3 py-2 text-[13px] text-[#1a1814] transition-colors hover:bg-[#efede8]"
+                  >
+                    <input
+                      type="checkbox"
+                      id={`group-${group.id}`}
+                      checked={selected.includes(group.id)}
+                      onChange={() => toggle(group.id)}
+                      className="h-4 w-4 accent-[#3a5fd9]"
+                    />
+                    {group.name}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button disabled={selected.length === 0 || isSaving} onClick={() => onConfirm(selected)}>

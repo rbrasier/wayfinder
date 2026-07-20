@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { NodeConfigValues } from "./node-config-modal";
 import type { OutputType } from "./output-type";
-import { TemplateFieldEditor } from "./template-field-editor";
+import { StructuredFieldEditor } from "./structured-field-editor";
 
 const EXAMPLE_TAG = "{{First name}}";
 
@@ -261,12 +261,10 @@ export function NodeConfigModalConversational({
       )}
 
       {values.outputType === "structured" && (
-        <TemplateFieldEditor
-          label="Fields to capture"
-          helpText="One field per line as Label (type) — e.g. Preferred Vendor (text), Approved (yesno), Budget (currency). Use the same tags as a document template; the section type is not available here."
+        <StructuredFieldEditor
           lines={structuredLines}
           onChange={onStructuredLinesChange}
-          disallowSection
+          onOpenHelp={onOpenHelpDialog}
         />
       )}
 

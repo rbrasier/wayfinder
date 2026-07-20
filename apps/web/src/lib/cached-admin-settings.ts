@@ -6,6 +6,9 @@ import type { TtlCache } from "@rbrasier/adapters";
 // reads from the hot path (scaling wall #4) while bounding staleness to seconds.
 export interface ResolvedAdminSettings {
   organisationName: string | null;
+  // Whether the organisations feature is on. When on, a member's chat prompt
+  // resolves to their own organisation's name instead of this global one.
+  organisationsEnabled: boolean;
   globalInstructions: string | null;
   uploadConfig: SessionUploadConfig;
 }
@@ -28,13 +31,15 @@ export const createCachedAdminSettings = (
   cache: TtlCache<ResolvedAdminSettings>,
 ): CachedAdminSettings => {
   const load = async (): Promise<ResolvedAdminSettings> => {
-    const [organisation, globalPrompt, uploadConfig] = await Promise.all([
+    const [organisation, organisationsEnabled, globalPrompt, uploadConfig] = await Promise.all([
       sources.getSystemSetting("organisation_name"),
+      sources.getSystemSetting("organisations_enabled"),
       sources.getSystemSetting("global_prompt"),
       sources.getSessionUploadConfig(),
     ]);
     return {
       organisationName: organisation?.value ?? null,
+      organisationsEnabled: organisationsEnabled?.value === "true",
       globalInstructions: globalPrompt?.value ?? null,
       uploadConfig,
     };

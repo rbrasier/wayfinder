@@ -253,6 +253,13 @@
       "when": 1784459752846,
       "tag": "0035_seed_mcp_skills_flags",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1784573905813,
+      "tag": "0036_stormy_gorgon",
+      "breakpoints": true
     }
   ]
 }

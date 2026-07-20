@@ -5,8 +5,10 @@ import {
   err,
   ok,
   parseOrganisationResolution,
+  parseOrganisationsEnabled,
   resolveOrganisation,
   ORGANISATION_RESOLUTION_SETTING_KEY,
+  ORGANISATIONS_ENABLED_SETTING_KEY,
   type IOrganisationRepository,
   type ISystemSettingsRepository,
   type IUserRepository,
@@ -40,6 +42,12 @@ export class ResolveOrganisationOnSignIn {
     const user = userResult.data;
     if (!user) return err(domainError("NOT_FOUND", "User not found."));
     if (user.organisationId) return ok({ status: "resolved" });
+
+    // With organisations disabled the whole feature is dormant — never prompt a
+    // user to nominate, regardless of the configured strategy (ADR-038).
+    const enabledResult = await this.systemSettings.get(ORGANISATIONS_ENABLED_SETTING_KEY);
+    if (enabledResult.error) return enabledResult;
+    if (!parseOrganisationsEnabled(enabledResult.data?.value)) return ok({ status: "none" });
 
     const configResult = await this.systemSettings.get(ORGANISATION_RESOLUTION_SETTING_KEY);
     if (configResult.error) return configResult;

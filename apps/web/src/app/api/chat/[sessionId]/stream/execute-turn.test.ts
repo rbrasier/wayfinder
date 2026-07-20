@@ -172,8 +172,12 @@ const buildScenario = (options: {
     nodes: [currentNode],
     currentNode,
     nodeConfig: currentNode.config as unknown as ExecuteTurnInput["nodeConfig"],
-    // A prior user message so the best-effort title generation is skipped.
-    dbMessages: [{ role: "user", content: "hi" }] as ExecuteTurnInput["dbMessages"],
+    // Two prior user messages (kickoff + one real) so the best-effort title
+    // logic is a no-op — placeholder and generation only fire on turns 1 and 2.
+    dbMessages: [
+      { role: "user", content: "hi" },
+      { role: "user", content: "more" },
+    ] as ExecuteTurnInput["dbMessages"],
     currentNodeAssistantMessages: [],
     messagesWithNew: [{ role: "user", content: "hi" }],
     systemPrompt: "system",

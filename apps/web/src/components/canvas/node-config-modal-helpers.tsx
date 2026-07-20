@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import type { FieldValueSource } from "@rbrasier/domain";
 import type { NodeConfigValues } from "./node-config-modal";
@@ -52,6 +52,67 @@ export function CopyButton({ text }: { text: string }) {
       {copied ? <Check size={12} /> : <Copy size={12} />}
       {copied ? "Copied!" : "Copy"}
     </button>
+  );
+}
+
+// A single coloured circle that sits at the end of the step-name row. Clicking
+// it opens an inline overlay of the available colours; picking one sets it and
+// closes the menu. Replaces the old always-visible swatch row.
+export function StepColourPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (hex: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const current = COLOURS.find((colour) => colour.hex === value);
+
+  return (
+    <div className="relative shrink-0" ref={containerRef}>
+      <button
+        type="button"
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-label={`Step colour${current ? `: ${current.label}` : ""} — click to change`}
+        onClick={() => setOpen((prev) => !prev)}
+        className="h-6 w-6 rounded-full ring-1 ring-inset ring-[rgba(0,0,0,0.12)] transition-transform hover:scale-110"
+        style={{ background: value }}
+      />
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1.5 flex gap-1.5 rounded-[10px] border border-[#dedad2] bg-white p-2 shadow-[0_4px_16px_rgba(0,0,0,.12)]">
+          {COLOURS.map((colour) => (
+            <button
+              key={colour.hex}
+              type="button"
+              title={colour.label}
+              aria-label={colour.label}
+              onClick={() => {
+                onChange(colour.hex);
+                setOpen(false);
+              }}
+              className={`h-5 w-5 rounded-full transition-transform hover:scale-110 ${
+                value === colour.hex ? "ring-2 ring-[#1a1814] ring-offset-1" : ""
+              }`}
+              style={{ background: colour.hex }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
+import { IconPicker } from "./icon-picker";
 
 const ICONS = ["🗂️", "🏗️", "💬", "📋", "🔄", "⚙️"];
 
@@ -107,7 +108,7 @@ export function FlowMetadataDialog({
           </div>
           <div className="space-y-1">
             <FieldGroupLabel id="flow-icon-label">Icon</FieldGroupLabel>
-            <div className="flex gap-2" role="group" aria-labelledby="flow-icon-label">
+            <div className="flex items-center gap-2" role="group" aria-labelledby="flow-icon-label">
               {ICONS.map((icon) => (
                 <button
                   key={icon}
@@ -122,6 +123,14 @@ export function FlowMetadataDialog({
                   {icon}
                 </button>
               ))}
+              {/* The current icon when it was chosen from the expanded set, so a
+                  custom pick stays visible alongside the six quick options. */}
+              {!ICONS.includes(values.icon) && (
+                <div className="flex h-10 w-10 items-center justify-center rounded-[9px] border border-[#3a5fd9] bg-[#eef1fc] text-xl">
+                  {values.icon}
+                </div>
+              )}
+              <IconPicker value={values.icon} onChange={(icon) => setValues({ ...values, icon })} />
             </div>
           </div>
         </DialogBody>

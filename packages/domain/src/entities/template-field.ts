@@ -395,6 +395,34 @@ export const describeTemplateFieldFormat = (field: TemplateField): string => {
   return parts.join("; ");
 };
 
+// Reconstructs the canonical `Label (annotations)` line for a parsed field, so a
+// structured editor can round-trip a field through the same parser the .docx
+// templates use. `text` with no constraints needs no annotations (it is the
+// default). Section and group fields are multi-line constructs, so their stored
+// `raw` open tag is returned untouched rather than flattened.
+export const templateFieldToLine = (field: TemplateField): string => {
+  if (field.type === "section" || field.type === "group") return field.raw;
+
+  const annotations: string[] = [];
+
+  if (field.type === "narrative") {
+    const instruction = field.instruction?.trim();
+    annotations.push(instruction ? `narrative: "${instruction}"` : "narrative");
+  } else if (field.options && field.options.length > 0) {
+    annotations.push(`${field.multiple ? "multi-options" : "options"}: ${field.options.join(", ")}`);
+  } else if (field.type !== "text") {
+    annotations.push(field.type);
+  }
+
+  if (field.maxLength !== undefined) annotations.push(`maxlen: ${field.maxLength}`);
+  if (field.min !== undefined) annotations.push(`min: ${field.min}`);
+  if (field.max !== undefined) annotations.push(`max: ${field.max}`);
+  if (field.optional) annotations.push("optional");
+
+  const suffix = annotations.map((annotation) => `(${annotation})`).join(" ");
+  return suffix ? `${field.label} ${suffix}` : field.label;
+};
+
 // Human-readable constraints block injected into AI prompts so the model knows
 // the required format of each field and can reformat user input to match.
 export const buildFieldConstraintsText = (fields: TemplateField[]): string =>

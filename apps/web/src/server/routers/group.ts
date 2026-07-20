@@ -93,11 +93,18 @@ export const groupRouter = router({
   // Creating groups and assigning their first delegated admin is a global-admin
   // action (PRD user story 1); delegated admins never mint new groups.
   create: adminProcedure
-    .input(z.object({ name: z.string().min(1), description: z.string().nullable().optional() }))
+    .input(
+      z.object({
+        name: z.string().min(1),
+        description: z.string().nullable().optional(),
+        organisationId: z.string().uuid().nullable().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.createGroup.execute({
         name: input.name,
         description: input.description ?? null,
+        organisationId: input.organisationId ?? null,
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
@@ -109,6 +116,7 @@ export const groupRouter = router({
         groupId: z.string().uuid(),
         name: z.string().min(1).optional(),
         description: z.string().nullable().optional(),
+        organisationId: z.string().uuid().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -116,6 +124,7 @@ export const groupRouter = router({
       const result = await ctx.container.useCases.updateGroup.execute(input.groupId, {
         name: input.name,
         description: input.description,
+        ...(input.organisationId !== undefined ? { organisationId: input.organisationId } : {}),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

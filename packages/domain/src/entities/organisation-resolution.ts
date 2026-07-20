@@ -32,7 +32,12 @@ export interface OrganisationResolution {
   };
 }
 
-export const DEFAULT_ORGANISATION_RESOLUTION: OrganisationResolution = { strategy: "admin" };
+// Self-nomination is the default: when organisations are enabled, a first-time
+// user without an organisation is prompted to create or join one (ADR-038 §4).
+export const DEFAULT_ORGANISATION_RESOLUTION: OrganisationResolution = {
+  strategy: "self_nomination",
+  selfNomination: { mode: "create_or_join" },
+};
 
 // Facts gathered on the sign-in path, fed into the pure mapping. Everything is
 // optional so the same function serves both first sign-in (no nomination yet)

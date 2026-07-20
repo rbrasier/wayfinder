@@ -11,7 +11,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import type { HrColumnMapping } from "@rbrasier/domain";
-import { core_users } from "./core";
+import { core_organisations, core_users } from "./core";
 
 export const admin_roles = pgTable("admin_roles", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -69,6 +69,11 @@ export const admin_groups = pgTable("admin_groups", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description"),
+  // Optional owning organisation (ADR-038). Null = global group. `set null` on
+  // delete returns the group to global rather than cascading it away.
+  organisation_id: uuid("organisation_id").references(() => core_organisations.id, {
+    onDelete: "set null",
+  }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
