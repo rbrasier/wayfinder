@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for the audit & compliance trail (PRD: audit-compliance-trail, ADR-033).
 //

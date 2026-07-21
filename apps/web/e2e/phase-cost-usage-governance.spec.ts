@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for cost / usage governance (PRD: cost-usage-governance, ADR-026).
 //

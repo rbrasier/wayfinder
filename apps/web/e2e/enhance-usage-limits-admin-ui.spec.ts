@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for surfacing per-user spend caps on the Usage admin screen
 // (enhance-usage-limits-admin-ui). The cap CRUD is the same shared

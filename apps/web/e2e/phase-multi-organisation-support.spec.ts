@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for multi-organisation support — organisations as an internal
 // sharing/visibility scope (PRD: multi-organisation-support, ADR-038).

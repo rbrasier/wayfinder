@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E regression for the new-user registration bug (fix: better-auth-uuid-id).
 //
@@ -16,6 +16,11 @@ import { expect, test } from "@playwright/test";
 const REGISTER_PATH = process.env.E2E_REGISTER_PATH ?? "/register";
 
 test.describe("new user registration", () => {
+  // Registration must run logged-out: the shared chromium project applies the
+  // admin storageState, and an authenticated visit to /register redirects to
+  // /chats before the form renders.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test("registers a fresh account and redirects to /chats", async ({ page }) => {
     const uniqueEmail = `e2e-register-${Date.now()}@example.com`;
     const password = "correct horse battery";

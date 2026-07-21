@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for on-demand connectivity testing on /admin/settings
 // (phase: settings-connectivity-test).

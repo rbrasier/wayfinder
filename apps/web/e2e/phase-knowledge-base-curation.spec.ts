@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for knowledge-base curation & correction (PRD: knowledge-base-curation).
 //

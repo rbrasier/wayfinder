@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for Insights Export & On-Screen Summarisation
 // (phase: insights-export-and-summarisation).

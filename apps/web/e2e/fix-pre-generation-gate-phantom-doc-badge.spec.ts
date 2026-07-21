@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E regression for the pre-generation gate "phantom document badge" bug
 // (fix: fix-pre-generation-gate-phantom-doc-badge, v1.58.3).

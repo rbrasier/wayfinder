@@ -21,9 +21,20 @@ permissions:
   pull-requests: write
 
 jobs:
+  # ── Test shards ───────────────────────────────────────────────────────────
+  # The suite runs sequentially within a machine (shared auth + seed data), so
+  # the only safe way to cut wall-clock is to split the specs across several
+  # machines. Each shard is a fully independent job with its own Postgres +
+  # MinIO + app, so there is no cross-shard data contention. Playwright reruns
+  # the setup/seed/cleanup project dependencies inside every shard.
   e2e:
-    name: Playwright E2E
+    name: Playwright E2E (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
     services:
       postgres:
@@ -129,42 +140,100 @@ jobs:
         run: ./node_modules/.bin/wait-on http://localhost:3000 --timeout 120000
         working-directory: apps/web/e2e
 
-      - name: Run Playwright tests
-        run: npm test
+      # Each shard emits a machine-readable "blob" report; the report job below
+      # merges every shard's blob into one HTML report and one results.json.
+      - name: Run Playwright tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        run: npx playwright test --config=playwright.config.ts --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
         working-directory: apps/web/e2e
 
-      # ── Job summary ────────────────────────────────────────────────────────
-      # Parses playwright-results.json and writes a pass/fail table + failure
-      # list to the GitHub Actions job summary (visible in the Actions UI and
-      # the GitHub mobile app).
-      - name: Write job summary
+      - name: Upload blob report
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: apps/web/e2e/blob-report/
+          retention-days: 1
+
+      - name: Upload traces and videos (failures only)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results-shard-${{ matrix.shard }}-${{ github.run_number }}
+          path: apps/web/e2e/test-results/
+          retention-days: 7
+
+  # ── Merge shard reports, publish, comment ─────────────────────────────────
+  # Runs regardless of shard outcome so the PR always gets a result comment.
+  report:
+    name: Merge reports & publish
+    if: always()
+    needs: [e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      # merge-reports only needs @playwright/test (the e2e package), not browsers.
+      - name: Install Playwright (for merge-reports)
+        run: npm install
+        working-directory: apps/web/e2e
+
+      - name: Download all blob reports
+        uses: actions/download-artifact@v4
+        with:
+          path: apps/web/e2e/all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      # Two passes over the same blobs: one for the human HTML report, one for
+      # the machine-readable JSON the summary + PR comment are built from.
+      - name: Merge into HTML + JSON reports
+        working-directory: apps/web/e2e
+        run: |
+          npx playwright merge-reports --reporter html ./all-blob-reports || echo "html merge failed"
+          npx playwright merge-reports --reporter json ./all-blob-reports > playwright-results.json 2> merge-json.log || echo "json merge failed"
+          ls -la playwright-report || true
+          head -c 400 playwright-results.json || true
+
+      # Build the shared summary markdown (table + failure list) from the merged
+      # JSON. Written to summary.md so both the job summary and the PR comment
+      # reuse the exact same body.
+      - name: Build results summary
+        id: summary
         working-directory: apps/web/e2e
         run: |
           node -e "
           const fs = require('fs');
-          if (!fs.existsSync('playwright-results.json')) {
-            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## ⚠️ Playwright E2E\n\nNo results file found — tests may not have run.\n');
+          let md = '';
+          if (!fs.existsSync('playwright-results.json') || fs.statSync('playwright-results.json').size === 0) {
+            md = '## ⚠️ Playwright E2E\n\nNo merged results found — the shards may not have produced a report.\n';
+            fs.writeFileSync('summary.md', md);
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'ok=false\n');
             process.exit(0);
           }
-
           const r = JSON.parse(fs.readFileSync('playwright-results.json', 'utf8'));
-          const s = r.stats;
-          const ok = s.unexpected === 0;
+          const s = r.stats || {};
+          const ok = (s.unexpected || 0) === 0;
           const icon = ok ? '✅' : '❌';
-          const dur = (s.duration / 1000).toFixed(1);
+          const dur = ((s.duration || 0) / 1000 / 60).toFixed(1);
 
-          let md = '## ' + icon + ' Playwright E2E — ' + (ok ? 'All passed' : s.unexpected + ' failed') + '\n\n';
+          md += '## ' + icon + ' Playwright E2E — ' + (ok ? 'All passed' : s.unexpected + ' failed') + '\n\n';
           md += '| ✅ Passed | ❌ Failed | ⏭️ Skipped | 🔁 Flaky | ⏱️ Duration |\n';
           md += '|-----------|-----------|------------|----------|-------------|\n';
-          md += '| ' + s.expected + ' | ' + s.unexpected + ' | ' + s.skipped + ' | ' + s.flaky + ' | ' + dur + 's |\n\n';
+          md += '| ' + (s.expected||0) + ' | ' + (s.unexpected||0) + ' | ' + (s.skipped||0) + ' | ' + (s.flaky||0) + ' | ' + dur + 'm |\n\n';
 
           const failures = [];
           function walk(suite, parents) {
             for (const spec of suite.specs || []) {
               if (!spec.ok) {
                 const err = spec.tests?.[0]?.results?.[0]?.error?.message || '';
-                failures.push({ title: [...parents, spec.title].join(' › '), error: err.split('\n')[0] });
+                failures.push({ title: [...parents, spec.title].join(' › '), error: err.split('\n')[0].replace(/\x1b\[[0-9;]*m/g, '') });
               }
             }
             for (const child of suite.suites || []) walk(child, [...parents, child.title]);
@@ -173,22 +242,21 @@ jobs:
 
           if (failures.length) {
             md += '### Failed tests\n\n';
-            for (const f of failures) {
+            for (const f of failures.slice(0, 40)) {
               md += '- **' + f.title + '**' + (f.error ? ': \`' + f.error + '\`' : '') + '\n';
             }
+            if (failures.length > 40) md += '\n_…and ' + (failures.length - 40) + ' more._\n';
             md += '\n';
           }
 
+          fs.writeFileSync('summary.md', md);
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'ok=' + ok + '\n');
           "
 
-      # ── Netlify deploy ─────────────────────────────────────────────────────
-      # Deploys the HTML report to a unique Netlify preview URL.
-      # Requires two GitHub secrets:
-      #   NETLIFY_AUTH_TOKEN  — Personal access token from netlify.com/user/applications
-      #   NETLIFY_SITE_ID     — Site ID from Site Settings → General on netlify.com
-      #
-      # Both are optional: if either secret is absent the step is skipped gracefully.
+      # ── Netlify deploy (optional) ──────────────────────────────────────────
+      # Deploys the merged HTML report to a Netlify preview URL. Skipped
+      # gracefully when NETLIFY_AUTH_TOKEN / NETLIFY_SITE_ID are absent.
       - name: Deploy report to Netlify
         id: netlify
         if: always()
@@ -218,25 +286,45 @@ jobs:
           fi
 
       # ── PR comment ─────────────────────────────────────────────────────────
-      # Posts (or updates) a comment on the PR with the Netlify report link.
-      # Finds any existing bot comment and replaces it so the thread stays tidy.
-      - name: Comment report link on PR
-        if: always() && github.event_name == 'pull_request' && steps.netlify.outputs.url != ''
+      # Always posts (or updates) a single comment with the pass/fail summary,
+      # the commit it ran against, and a last-updated timestamp — independent of
+      # whether a Netlify report link is available.
+      - name: Comment results on PR
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const url = '${{ steps.netlify.outputs.url }}';
+            const fs = require('fs');
             const marker = '<!-- playwright-report -->';
-            const sha = '${{ github.event.pull_request.head.sha }}'.slice(0, 7);
-            const updated = new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ' UTC');
-            const body = `${marker}\n## 📊 Playwright E2E Report\n\n[View full report with screenshots and traces](${url})\n\nRun [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) on commit [${sha}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha }})\nLast updated: ${updated}`;
+            let summary = '';
+            try { summary = fs.readFileSync('apps/web/e2e/summary.md', 'utf8'); }
+            catch { summary = '## ⚠️ Playwright E2E\n\nNo summary was produced.\n'; }
+
+            const reportUrl = '${{ steps.netlify.outputs.url }}';
+            const runUrl = `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const sha = '${{ github.event.pull_request.head.sha }}';
+            const shortSha = sha.slice(0, 7);
+            const commitUrl = `${{ github.server_url }}/${{ github.repository }}/commit/${sha}`;
+            const updated = new Date().toISOString().replace('T', ' ').replace(/\..*/, ' UTC');
+
+            const reportLine = reportUrl
+              ? `📊 [Full report with screenshots and traces](${reportUrl})`
+              : `📊 HTML report available in the [run artifacts](${runUrl}) (\`playwright-report\`).`;
+
+            const body = [
+              marker,
+              summary.trim(),
+              '',
+              reportLine,
+              '',
+              `Run [#${{ github.run_number }}](${runUrl}) · commit [\`${shortSha}\`](${commitUrl}) · Last updated: ${updated}`,
+            ].join('\n');
 
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
-
             const existing = comments.find(c => c.body?.includes(marker));
             if (existing) {
               await github.rest.issues.updateComment({
@@ -254,8 +342,7 @@ jobs:
               });
             }
 
-      # ── Artifacts ──────────────────────────────────────────────────────────
-      - name: Upload Playwright report
+      - name: Upload merged Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -263,10 +350,10 @@ jobs:
           path: apps/web/e2e/playwright-report/
           retention-days: 30
 
-      - name: Upload traces and videos (failures only)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-test-results-${{ github.run_number }}
-          path: apps/web/e2e/test-results/
-          retention-days: 7
+      # Re-assert the overall test outcome so this workflow's status reflects
+      # whether any spec failed (the report job itself is otherwise always green).
+      - name: Fail if any test failed
+        if: steps.summary.outputs.ok != 'true'
+        run: |
+          echo "One or more E2E tests failed — see the summary above." >&2
+          exit 1
