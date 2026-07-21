@@ -31,7 +31,12 @@
       "@grpc/grpc-js": ">=1.14.4",
       "esbuild": ">=0.28.1",
       "protobufjs": ">=7.6.1",
-      "adm-zip": ">=0.6.0"
+      "adm-zip": ">=0.6.0",
+      "js-yaml@3": "3.15.0",
+      "js-yaml@4": "^4.3.0",
+      "brace-expansion@1": "1.1.16",
+      "brace-expansion@2": "2.1.2",
+      "brace-expansion@5": "5.0.7"
     }
   },
   "devDependencies": {
