@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for the approval-screen context & decision UX enhancement.
 // (docs/development/implemented/alpha-1/v1.47.5/approval-context-ux.phase.md)

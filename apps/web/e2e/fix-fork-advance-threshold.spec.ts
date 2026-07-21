@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for bug #2: a fork node whose advanceConfidenceThreshold is below 90 must
 // still resolve a branch and advance once the turn's confidence crosses that

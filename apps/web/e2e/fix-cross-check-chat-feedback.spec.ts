@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E regression for the cross-check chat-feedback fixes (fix:
 // fix-cross-check-chat-feedback, v1.58.7).

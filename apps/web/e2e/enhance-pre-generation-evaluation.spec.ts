@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for the pre-generation evaluation gate
 // (phase: pre-generation-evaluation, ADR-013 / ADR-026 / ADR-027).

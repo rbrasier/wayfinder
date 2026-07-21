@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E regression for the document-generation gate livelock + misleading
 // messages + lingering cross-check badge (fix:

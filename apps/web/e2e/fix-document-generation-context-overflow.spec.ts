@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for bug #3: producing a document for a flow whose reference documents are
 // very large must no longer overflow the model context window. The context-doc

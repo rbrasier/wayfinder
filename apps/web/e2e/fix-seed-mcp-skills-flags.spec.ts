@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for the bug fix: the mcp and skills feature flags were never seeded on
 // fresh installs, so their admin nav entries (Skills, MCP Servers) never

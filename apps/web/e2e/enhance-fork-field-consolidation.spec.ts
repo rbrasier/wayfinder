@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for fork-sibling field consolidation in Flow Insights
 // (phase: fork-field-consolidation).

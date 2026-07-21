@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for the bug fix: a deliberately-attached session upload must reach the AI
 // even when the user's message is only loosely related to the document body.

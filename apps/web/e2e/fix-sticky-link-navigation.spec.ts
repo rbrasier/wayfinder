@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for the bug fix: clicking a sidebar link must "follow through" immediately
 // instead of feeling sticky. Before the fix there was no loading.tsx boundary and

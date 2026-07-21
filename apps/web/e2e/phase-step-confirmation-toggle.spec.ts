@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for the require-confirmation-before-completing-a-step toggle
 // (PRD: step-confirmation-toggle, ADR-026).

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E regression for the document-generation step-flow follow-ups (fix:
 // fix-document-generation-step-flow, v1.58.6).

@@ -45,6 +45,10 @@ drizzle/meta
 # Playwright E2E artifacts
 apps/web/e2e/playwright-report/
 apps/web/e2e/playwright-results.json
+apps/web/e2e/blob-report/
+apps/web/e2e/all-blob-reports/
+apps/web/e2e/summary.md
+apps/web/e2e/merge-json.log
 apps/web/e2e/test-results/
 apps/web/e2e/screenshots/
 apps/web/e2e/playwright/.auth/

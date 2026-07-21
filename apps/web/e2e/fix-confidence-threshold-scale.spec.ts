@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for bug #1: a node whose advanceConfidenceThreshold was authored as a
 // fraction (0.7) instead of a percentage (70) must NOT auto-advance on its own
