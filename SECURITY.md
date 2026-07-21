@@ -13,8 +13,7 @@ welcome.
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report suspected vulnerabilities privately to **security@your-domain.example**
-(replace with the project's real security address), or via GitHub's private
+Report suspected vulnerabilities privately via GitHub's private
 **Security advisories** ("Report a vulnerability") on this repository.
 
 Please include:
@@ -35,18 +34,6 @@ Please include:
 Please act in good faith: do not access, modify, or exfiltrate data that is not
 yours, and do not run denial-of-service or spam tests against deployments you do
 not own.
-
-## Supported versions
-
-Wayfinder is released in alpha lines (`alpha-N` = the `N.x.x` line; see
-`docs/guides/managing-releases.md`). Security fixes are applied to the current
-alpha's release branch and to `main` (the next alpha). Older alpha lines are not
-maintained.
-
-| Version line | Status |
-| ------------ | ------ |
-| Current `alpha` (latest `2.x`) | Supported |
-| Previous alpha lines | Not supported — please upgrade |
 
 ## Security posture (summary)
 
@@ -94,13 +81,3 @@ Operators are responsible for the environment around the app. At minimum:
   in source control.
 - Apply database least-privilege for the application role.
 - Keep the deployment on a supported version line.
-
-## Known scope / non-goals (today)
-
-The following are recognised gaps with planning docs in
-`docs/development/` and are **not** yet implemented: an audit-log admin
-viewer/export with tamper-evidence and legal hold, generic SAML/OIDC SSO and
-SCIM provisioning, app-enforced MFA and admin session revocation,
-application-managed encryption of stored documents / customer-managed keys, and
-multi-tenant data isolation. Treat these as roadmap, not current guarantees, when
-assessing the project against enterprise requirements.

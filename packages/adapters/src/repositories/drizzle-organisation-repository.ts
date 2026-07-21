@@ -16,6 +16,7 @@ const toEntity = (row: typeof core_organisations.$inferSelect): Organisation => 
   id: row.id,
   name: row.name,
   slug: row.slug,
+  emailDomain: row.email_domain ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -62,7 +63,11 @@ export class DrizzleOrganisationRepository implements IOrganisationRepository {
     try {
       const [row] = await this.db
         .insert(core_organisations)
-        .values({ name: organisation.name, slug: organisation.slug })
+        .values({
+          name: organisation.name,
+          slug: organisation.slug,
+          email_domain: organisation.emailDomain ?? null,
+        })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Organisation insert returned no row."));
       return ok(toEntity(row));
@@ -73,9 +78,15 @@ export class DrizzleOrganisationRepository implements IOrganisationRepository {
 
   async update(id: string, patch: OrganisationUpdate): Promise<Result<Organisation>> {
     try {
-      const values: { name?: string; slug?: string; updated_at: Date } = { updated_at: new Date() };
+      const values: {
+        name?: string;
+        slug?: string;
+        email_domain?: string | null;
+        updated_at: Date;
+      } = { updated_at: new Date() };
       if (patch.name !== undefined) values.name = patch.name;
       if (patch.slug !== undefined) values.slug = patch.slug;
+      if (patch.emailDomain !== undefined) values.email_domain = patch.emailDomain;
       const [row] = await this.db
         .update(core_organisations)
         .set(values)

@@ -6,6 +6,7 @@ import {
   describeTemplateFieldFormat,
   parseTemplateField,
   parseTemplateFields,
+  templateFieldToLine,
 } from "./template-field";
 
 describe("deriveFieldKey", () => {
@@ -453,6 +454,44 @@ describe("repeating group fields", () => {
       "/Outer",
     ]);
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  describe("templateFieldToLine", () => {
+    const semantic = (line: string) => {
+      const parsed = parseTemplateField(line);
+      if (parsed.error) throw new Error(`unexpected parse error for "${line}": ${parsed.error.message}`);
+      const { label, type, options, multiple, optional, maxLength, max, min } = parsed.data;
+      return { label, type, options, multiple, optional, maxLength, max, min };
+    };
+
+    const roundTrips = (line: string) => {
+      const parsed = parseTemplateField(line);
+      if (parsed.error) throw new Error(parsed.error.message);
+      const reserialised = templateFieldToLine(parsed.data);
+      expect(semantic(reserialised)).toEqual(semantic(line));
+    };
+
+    it("omits annotations for a plain text field", () => {
+      const parsed = parseTemplateField("Preferred Vendor (text)");
+      expect(parsed.error).toBeUndefined();
+      expect(templateFieldToLine(parsed.data!)).toBe("Preferred Vendor");
+    });
+
+    it("round-trips scalar, options, multi-options and constraint fields", () => {
+      roundTrips("Approved (yesno)");
+      roundTrips("Budget (currency) (optional)");
+      roundTrips("Headcount (number) (min: 1) (max: 500)");
+      roundTrips("Notes (text) (maxlen: 200) (optional)");
+      roundTrips("Status (options: Approved, Rejected, Pending)");
+      roundTrips("Skills (multi-options: Python, Go, Rust) (max: 3)");
+      roundTrips("Contact (email)");
+    });
+
+    it("returns the raw open tag for a section field untouched", () => {
+      const parsed = parseTemplateField("#Risk Section");
+      expect(parsed.error).toBeUndefined();
+      expect(templateFieldToLine(parsed.data!)).toBe("#Risk Section");
+    });
   });
 
   it("allows a top-level field, a group, and a section together", () => {

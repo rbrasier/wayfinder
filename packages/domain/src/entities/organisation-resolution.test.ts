@@ -169,11 +169,11 @@ describe("resolveOrganisation — self_nomination strategy", () => {
 });
 
 describe("parseOrganisationResolution", () => {
-  it("defaults to the admin strategy on malformed JSON", () => {
+  it("defaults to the default strategy on malformed JSON", () => {
     expect(parseOrganisationResolution("not json")).toEqual(DEFAULT_ORGANISATION_RESOLUTION);
   });
 
-  it("defaults to the admin strategy on an unknown strategy", () => {
+  it("defaults to the default strategy on an unknown strategy", () => {
     expect(parseOrganisationResolution(JSON.stringify({ strategy: "wat" }))).toEqual(
       DEFAULT_ORGANISATION_RESOLUTION,
     );

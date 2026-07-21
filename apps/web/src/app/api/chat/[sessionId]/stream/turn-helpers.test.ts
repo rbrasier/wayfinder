@@ -10,6 +10,7 @@ import {
   generateDocument,
   generateInitialMessage,
   generateTitle,
+  maybeUpdateSessionTitle,
   OUTSTANDING_CONTEXT_KEY,
   persistCrossCheckPassNote,
   persistHeldReply,
@@ -1071,6 +1072,61 @@ describe("generateTitle", () => {
     expect(update).toHaveBeenCalledWith("sess-1", {
       title: "A long first message that should be truncated",
     });
+  });
+});
+
+describe("maybeUpdateSessionTitle", () => {
+  const buildContainer = (generatedText = "Generated Title") => {
+    const generateText = vi.fn().mockResolvedValue({ data: { text: generatedText, usage: {} }, error: null });
+    const update = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const container = {
+      services: { llm: { generateText } },
+      repos: { sessions: { update } },
+    } as unknown as Parameters<typeof maybeUpdateSessionTitle>[0];
+    return { container, generateText, update };
+  };
+
+  it("sets the '{Flow} (new)' placeholder on the kickoff turn (0 prior user messages)", async () => {
+    const { container, generateText, update } = buildContainer();
+    await maybeUpdateSessionTitle(container, { id: "s1", title: null }, "Onboarding", 0, "kickoff", "haiku", "u1");
+    expect(update).toHaveBeenCalledWith("s1", { title: "Onboarding (new)" });
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it("generates a real title on the first real user message (1 prior user message)", async () => {
+    const { container, generateText } = buildContainer("Real Title");
+    await maybeUpdateSessionTitle(
+      container,
+      { id: "s1", title: "Onboarding (new)" },
+      "Onboarding",
+      1,
+      "Please onboard Alex",
+      "haiku",
+      "u1",
+    );
+    expect(generateText).toHaveBeenCalledWith(expect.objectContaining({ purpose: "chat-title", sessionId: "s1" }));
+  });
+
+  it("leaves a manually renamed chat alone on the second message", async () => {
+    const { container, generateText, update } = buildContainer();
+    await maybeUpdateSessionTitle(
+      container,
+      { id: "s1", title: "My custom name" },
+      "Onboarding",
+      1,
+      "second message",
+      "haiku",
+      "u1",
+    );
+    expect(generateText).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("does nothing on later turns (2+ prior user messages)", async () => {
+    const { container, generateText, update } = buildContainer();
+    await maybeUpdateSessionTitle(container, { id: "s1", title: "Set" }, "Onboarding", 2, "third", "haiku", "u1");
+    expect(generateText).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 });
 

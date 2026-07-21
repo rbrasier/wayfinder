@@ -21,6 +21,9 @@ const makeSources = (): AdminSettingsSources & {
         state.orgCalls += 1;
         return { value: "Acme" };
       }
+      if (key === "organisations_enabled") {
+        return { value: "false" };
+      }
       state.instructionCalls += 1;
       return { value: "Be concise" };
     }),
@@ -48,6 +51,7 @@ describe("createCachedAdminSettings", () => {
     const resolved = await settings.get();
 
     expect(resolved.organisationName).toBe("Acme");
+    expect(resolved.organisationsEnabled).toBe(false);
     expect(resolved.globalInstructions).toBe("Be concise");
     expect(resolved.uploadConfig).toEqual(uploadConfig);
   });

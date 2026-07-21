@@ -1,4 +1,8 @@
-import type { OrganisationResolution } from "@rbrasier/domain";
+import {
+  ORGANISATIONS_ENABLED_SETTING_KEY,
+  parseOrganisationsEnabled,
+  type OrganisationResolution,
+} from "@rbrasier/domain";
 import { z } from "zod";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
@@ -32,9 +36,34 @@ export const organisationRouter = router({
     return result.data;
   }),
 
+  // Whether the organisations feature is switched on (ADR-038). Read by the admin
+  // nav, group association control, and the org name setting.
+  isEnabled: authenticatedProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.repos.systemSettings.get(ORGANISATIONS_ENABLED_SETTING_KEY);
+    if (result.error) throw toTrpcError(result.error);
+    return parseOrganisationsEnabled(result.data?.value);
+  }),
+
+  setEnabled: adminProcedure
+    .input(z.object({ enabled: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.repos.systemSettings.set(
+        ORGANISATIONS_ENABLED_SETTING_KEY,
+        input.enabled ? "true" : "false",
+      );
+      if (result.error) throw toTrpcError(result.error);
+      return { enabled: input.enabled };
+    }),
+
   // The caller's own organisation (or null). Backs the flow visibility control's
-  // "Publish to my organisation" option.
+  // "Publish to my organisation" option. Returns null while the feature is off.
   mine: authenticatedProcedure.query(async ({ ctx }) => {
+    const enabledResult = await ctx.container.repos.systemSettings.get(
+      ORGANISATIONS_ENABLED_SETTING_KEY,
+    );
+    if (enabledResult.error) throw toTrpcError(enabledResult.error);
+    if (!parseOrganisationsEnabled(enabledResult.data?.value)) return null;
+
     const userResult = await ctx.container.repos.users.findById(ctx.userId);
     if (userResult.error) throw toTrpcError(userResult.error);
     const organisationId = userResult.data?.organisationId ?? null;
@@ -45,18 +74,28 @@ export const organisationRouter = router({
   }),
 
   create: adminProcedure
-    .input(z.object({ name: z.string().min(1) }))
+    .input(z.object({ name: z.string().min(1), emailDomain: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.createOrganisation.execute({ name: input.name });
+      const result = await ctx.container.useCases.createOrganisation.execute({
+        name: input.name,
+        emailDomain: input.emailDomain ?? null,
+      });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
   update: adminProcedure
-    .input(z.object({ organisationId: z.string().uuid(), name: z.string().min(1) }))
+    .input(
+      z.object({
+        organisationId: z.string().uuid(),
+        name: z.string().min(1).optional(),
+        emailDomain: z.string().nullable().optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.updateOrganisation.execute(input.organisationId, {
-        name: input.name,
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.emailDomain !== undefined ? { emailDomain: input.emailDomain } : {}),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

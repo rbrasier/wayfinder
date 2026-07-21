@@ -27,21 +27,26 @@ test.describe('Phase: Group-Scoped Authorization', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
+    // Groups lives under the "Users and Roles" group, collapsed by default.
+    await page.getByRole('button', { name: /Users and Roles/i }).click();
     const groupsLink = page.getByRole('link', { name: /^groups$/i });
     await expect(groupsLink).toBeVisible();
   });
 
-  test('the Add group button is disabled until a name is entered', async ({ page }) => {
+  test('the create-group button is disabled until a name is entered', async ({ page }) => {
     await page.goto('/admin/groups');
     await page.waitForLoadState('networkidle');
 
-    const addButton = page.getByRole('button', { name: /^add group$/i });
-    await expect(addButton).toBeVisible();
-    await expect(addButton).toBeDisabled();
+    // Creating a group is now a modal, opened from the "New group" button.
+    await page.getByRole('button', { name: /^new group$/i }).click();
+    const dialog = page.getByRole('dialog');
+    const createButton = dialog.getByRole('button', { name: /^create group$/i });
+    await expect(createButton).toBeVisible();
+    await expect(createButton).toBeDisabled();
 
-    await page.getByPlaceholder(/new group name/i).fill('   ');
+    await dialog.getByLabel(/^name$/i).fill('   ');
     // Whitespace-only names must not enable the create action.
-    await expect(addButton).toBeDisabled();
+    await expect(createButton).toBeDisabled();
   });
 
   test('a global admin can create a group and see its membership panel', async ({ page, consoleLogs }) => {
@@ -50,8 +55,10 @@ test.describe('Phase: Group-Scoped Authorization', () => {
     await page.goto('/admin/groups');
     await page.waitForLoadState('networkidle');
 
-    await page.getByPlaceholder(/new group name/i).fill(name);
-    await page.getByRole('button', { name: /^add group$/i }).click();
+    await page.getByRole('button', { name: /^new group$/i }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^name$/i).fill(name);
+    await dialog.getByRole('button', { name: /^create group$/i }).click();
 
     // The new group appears in the list and gets its own membership panel.
     await expect(page.getByText(name, { exact: true }).first()).toBeVisible();

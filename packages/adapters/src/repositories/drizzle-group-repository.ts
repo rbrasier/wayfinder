@@ -19,6 +19,7 @@ const toGroup = (row: typeof admin_groups.$inferSelect): Group => ({
   id: row.id,
   name: row.name,
   description: row.description,
+  organisationId: row.organisation_id ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -57,7 +58,11 @@ export class DrizzleGroupRepository implements IGroupRepository {
     try {
       const [row] = await this.db
         .insert(admin_groups)
-        .values({ name: group.name, description: group.description ?? null })
+        .values({
+          name: group.name,
+          description: group.description ?? null,
+          organisation_id: group.organisationId ?? null,
+        })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Group insert returned no row."));
       return ok(toGroup(row));
@@ -68,11 +73,17 @@ export class DrizzleGroupRepository implements IGroupRepository {
 
   async update(id: string, patch: GroupUpdate): Promise<Result<Group>> {
     try {
-      const values: { name?: string; description?: string | null; updated_at: Date } = {
+      const values: {
+        name?: string;
+        description?: string | null;
+        organisation_id?: string | null;
+        updated_at: Date;
+      } = {
         updated_at: new Date(),
       };
       if (patch.name !== undefined) values.name = patch.name;
       if (patch.description !== undefined) values.description = patch.description;
+      if (patch.organisationId !== undefined) values.organisation_id = patch.organisationId;
       const [row] = await this.db
         .update(admin_groups)
         .set(values)

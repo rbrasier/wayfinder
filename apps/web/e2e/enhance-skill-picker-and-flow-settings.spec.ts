@@ -31,10 +31,13 @@ test.describe('Skill picker modal', () => {
 });
 
 test.describe('Flow Settings admin sub-menu', () => {
-  test('groups Skills, MCP Servers and Knowledge under a Flow Settings heading', async ({ page }) => {
+  test('groups Skills, MCP Servers and Knowledge under an Advanced Flow Settings heading', async ({ page }) => {
     await page.goto('/admin/flows');
 
-    await expect(page.getByText('Flow Settings', { exact: true })).toBeVisible();
+    // The group is now "Advanced Flow Settings" and collapsed by default.
+    const heading = page.getByRole('button', { name: /Advanced Flow Settings/i });
+    await expect(heading).toBeVisible();
+    await heading.click();
     const nav = page.getByRole('navigation');
     await expect(nav.getByRole('link', { name: 'Skills' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'MCP Servers' })).toBeVisible();

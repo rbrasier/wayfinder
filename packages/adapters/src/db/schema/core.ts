@@ -20,6 +20,8 @@ export const core_organisations = pgTable("core_organisations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  // Optional descriptive email domain (e.g. "acme.com"), editable by an admin.
+  email_domain: text("email_domain"),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

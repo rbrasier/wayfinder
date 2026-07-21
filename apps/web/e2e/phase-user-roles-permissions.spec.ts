@@ -23,6 +23,8 @@ test.describe('Phase: User Roles & Permissions', () => {
     await page.goto('/admin/flows');
     await page.waitForLoadState('networkidle');
 
+    // Roles lives under the "Users and Roles" group, collapsed by default.
+    await page.getByRole('button', { name: /Users and Roles/i }).click();
     const rolesLink = page.getByRole('link', { name: /^roles$/i });
     await expect(rolesLink).toBeVisible();
   });

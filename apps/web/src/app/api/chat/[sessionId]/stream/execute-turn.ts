@@ -21,7 +21,7 @@ import { streamTurn } from "./stream-turn";
 import {
   appendShortcomingsToContext,
   applyAdvanceSideEffects,
-  generateTitle,
+  maybeUpdateSessionTitle,
   persistCrossCheckPassNote,
   persistHeldReply,
   streamGapFollowup,
@@ -283,9 +283,15 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
       await appendShortcomingsToContext(container, followup.messageId, evaluation.missingInformation);
     }
 
-    if (dbMessages.filter((m) => m.role === "user").length === 0) {
-      void generateTitle(container, session.id, lastUserMessage, chatModelName, userId);
-    }
+    void maybeUpdateSessionTitle(
+      container,
+      session,
+      flow.name,
+      dbMessages.filter((m) => m.role === "user").length,
+      lastUserMessage,
+      chatModelName,
+      userId,
+    );
     return;
   }
 
@@ -359,7 +365,13 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     });
   }
 
-  if (dbMessages.filter((m) => m.role === "user").length === 0) {
-    void generateTitle(container, session.id, lastUserMessage, chatModelName, userId);
-  }
+  void maybeUpdateSessionTitle(
+    container,
+    session,
+    flow.name,
+    dbMessages.filter((m) => m.role === "user").length,
+    lastUserMessage,
+    chatModelName,
+    userId,
+  );
 }

@@ -152,7 +152,13 @@ export async function POST(
     }),
   ]);
 
-  const organisationName = adminSettings.organisationName;
+  // With organisations enabled, a member's prompt is grounded in their own
+  // organisation; otherwise the single global organisation name is used (ADR-038).
+  let organisationName = adminSettings.organisationName;
+  if (adminSettings.organisationsEnabled && !userResult.error && userResult.data?.organisationId) {
+    const memberOrg = await container.repos.organisations.findById(userResult.data.organisationId);
+    if (!memberOrg.error && memberOrg.data) organisationName = memberOrg.data.name;
+  }
   const globalInstructions = adminSettings.globalInstructions;
   const sessionUploads = uploadsResult.error
     ? []

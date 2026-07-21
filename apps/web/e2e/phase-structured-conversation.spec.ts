@@ -43,18 +43,21 @@ test.describe("structured conversation — config editor", () => {
     await expect(page.getByText(/fields to capture/i)).toBeVisible();
   });
 
-  test("rejects a section field in a structured set and blocks saving", async ({ page }) => {
+  test("captures a field via label + type + the per-field config cog", async ({ page }) => {
     await page.goto(FLOW_CONFIG_PATH);
     await page.getByText(/record intake decision/i).click();
     await page.getByText("Structured conversation").click();
 
-    // A section tag is not allowed in a structured field set (ADR-038 §5).
-    const firstField = page.getByPlaceholder(/preferred vendor/i).first();
-    await firstField.fill("#Optional Clause");
-    await expect(page.getByText(/only available for document templates/i)).toBeVisible();
+    // A structured field is now one row: a label, a type dropdown, a config cog
+    // and a remove button — no free-text `(type)` tags (item 7).
+    const firstLabel = page.getByPlaceholder(/preferred vendor/i).first();
+    await firstLabel.fill("Approved");
+    await page.getByLabel(/field 1 type/i).selectOption("yesno");
 
-    // The invalid set disables Save.
-    await expect(page.getByRole("button", { name: /^save$/i })).toBeDisabled();
+    // The cog opens the per-field settings mini modal with the required toggle.
+    await page.getByRole("button", { name: /configure field 1/i }).click();
+    await expect(page.getByText(/field settings/i)).toBeVisible();
+    await expect(page.getByLabel(/^required$/i)).toBeVisible();
   });
 });
 
