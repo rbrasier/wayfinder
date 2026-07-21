@@ -1,4 +1,5 @@
 import { test, expect } from "./helpers/base";
+import { loadSeedFixtures } from "./helpers/seed";
 
 // E2E for the Structured Conversation output type
 // (PRD: structured-conversation, ADR-038).
@@ -20,9 +21,14 @@ import { test, expect } from "./helpers/base";
 // E2E_STRUCTURED_SESSION_PATH to override the path; E2E_FLOW_CONFIG_PATH to
 // point at a flow's config canvas for the editor test.
 
-const SESSION_PATH =
-  process.env.E2E_STRUCTURED_SESSION_PATH ?? "/chats/e2e-seed-structured-session";
 const FLOW_CONFIG_PATH = process.env.E2E_FLOW_CONFIG_PATH ?? "/flows/e2e-seed-structured-flow/config";
+
+// Resolve the seeded structured session path, or null when nothing is seeded.
+function structuredSessionPath(): string | null {
+  if (process.env.E2E_STRUCTURED_SESSION_PATH) return process.env.E2E_STRUCTURED_SESSION_PATH;
+  const structuredSessionId = loadSeedFixtures()?.structuredSessionId;
+  return structuredSessionId ? `/chats/${structuredSessionId}` : null;
+}
 
 test.describe("structured conversation — config editor", () => {
   test("offers three output types and reveals the field editor for structured", async ({
@@ -63,7 +69,12 @@ test.describe("structured conversation — config editor", () => {
 
 test.describe("structured conversation — record card", () => {
   test("renders the captured record with its field values and no document", async ({ page }) => {
-    await page.goto(SESSION_PATH);
+    const sessionPath = structuredSessionPath();
+    if (!sessionPath) {
+      test.skip(true, "No seeded structured session — run the seed setup to enable this test");
+      return;
+    }
+    await page.goto(sessionPath);
 
     // The completed structured step surfaces a record card of captured values.
     await expect(page.getByText("Record", { exact: true })).toBeVisible();
@@ -77,7 +88,12 @@ test.describe("structured conversation — record card", () => {
   });
 
   test("edits a captured value through the reused manual-edit dialog", async ({ page }) => {
-    await page.goto(SESSION_PATH);
+    const sessionPath = structuredSessionPath();
+    if (!sessionPath) {
+      test.skip(true, "No seeded structured session — run the seed setup to enable this test");
+      return;
+    }
+    await page.goto(sessionPath);
 
     await page.getByRole("button", { name: /^edit$/i }).click();
     await expect(page.getByText(/edit record/i)).toBeVisible();
