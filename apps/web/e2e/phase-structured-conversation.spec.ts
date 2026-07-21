@@ -77,10 +77,14 @@ test.describe("structured conversation — record card", () => {
     await page.goto(sessionPath);
 
     // The completed structured step surfaces a record card of captured values.
-    await expect(page.getByText("Record", { exact: true })).toBeVisible();
-    await expect(page.getByText(/decision/i)).toBeVisible();
-    await expect(page.getByText("Approved")).toBeVisible();
-    await expect(page.getByText("alex@acme.com")).toBeVisible();
+    // Scope the value assertions to the card — the step name ("Record intake
+    // decision") is also rendered in the message feed, so an unscoped
+    // /decision/i would match two elements.
+    const recordCard = page.getByTestId("record-card");
+    await expect(recordCard).toBeVisible();
+    await expect(recordCard.getByText(/decision/i)).toBeVisible();
+    await expect(recordCard.getByText("Approved")).toBeVisible();
+    await expect(recordCard.getByText("alex@acme.com")).toBeVisible();
 
     // No document card / download affordance for a structured step.
     await expect(page.getByText(/\.docx/i)).toBeHidden();
