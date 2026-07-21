@@ -13,8 +13,7 @@ welcome.
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report suspected vulnerabilities privately to **security@your-domain.example**
-(replace with the project's real security address), or via GitHub's private
+Report suspected vulnerabilities privately via GitHub's private
 **Security advisories** ("Report a vulnerability") on this repository.
 
 Please include:
