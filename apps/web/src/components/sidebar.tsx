@@ -146,21 +146,21 @@ function NavGroups({
   // current page is never hidden behind a collapsed header.
   const groupHoldsActive = (group: NavGroup): boolean => group.items.some((item) => isActive(item.href));
 
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    for (const group of groups) {
-      if (group.collapsible && group.label) {
-        initial[group.label] = group.defaultCollapsed ?? false;
-      }
-    }
-    return initial;
-  });
+  // Tracks only groups the user has explicitly toggled. Groups appear
+  // asynchronously (Skills/MCP/Knowledge depend on feature-flag queries that
+  // resolve after mount), so we never seed this from the initial `groups` — an
+  // untouched group falls back to its `defaultCollapsed` at render time instead,
+  // which keeps "Advanced Flow Settings" collapsed even though it loads late.
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+
+  const isGroupCollapsed = (group: NavGroup): boolean =>
+    overrides[group.label as string] ?? group.defaultCollapsed ?? false;
 
   return (
     <>
       {groups.map((group, index) => {
         const isCollapsible = Boolean(group.collapsible && group.label);
-        const isCollapsed = isCollapsible && (collapsed[group.label as string] ?? false) && !groupHoldsActive(group);
+        const isCollapsed = isCollapsible && isGroupCollapsed(group) && !groupHoldsActive(group);
 
         return (
           <div key={group.label ?? `group-${index}`} className={index > 0 ? "mt-[6px]" : undefined}>
@@ -169,7 +169,7 @@ function NavGroups({
                 <button
                   type="button"
                   onClick={() =>
-                    setCollapsed((prev) => ({ ...prev, [group.label as string]: !prev[group.label as string] }))
+                    setOverrides((prev) => ({ ...prev, [group.label as string]: !isGroupCollapsed(group) }))
                   }
                   className="flex w-full items-center justify-between px-[10px] pb-[6px] pt-[8px] text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#6d6a65] transition-colors hover:text-[#5a5650]"
                 >
