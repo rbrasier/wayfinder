@@ -17,6 +17,12 @@ export const SEED_FILE = path.join('playwright', '.seed', 'fixtures.json');
 export interface SeedFixtures {
   flowId: string;
   sessionId: string;
+  // Optional because older seed files (and the graceful unseeded path) may not
+  // carry them; specs that need one skip when it is absent.
+  forkFlowId?: string;
+  confirmationSessionId?: string;
+  approvalSessionId?: string;
+  structuredSessionId?: string;
 }
 
 export function writeSeedFixtures(fixtures: SeedFixtures): void {

@@ -17,6 +17,13 @@ setup('seed e2e fixtures', async ({ request }) => {
   ).toBeTruthy();
 
   const result = await response.json();
-  writeSeedFixtures({ flowId: result.flowId, sessionId: result.sessionId });
+  writeSeedFixtures({
+    flowId: result.flowId,
+    sessionId: result.sessionId,
+    forkFlowId: result.forkFlowId,
+    confirmationSessionId: result.confirmationSessionId,
+    approvalSessionId: result.approvalSessionId,
+    structuredSessionId: result.structuredSessionId,
+  });
   console.log(`✅ Seed: flow=${result.flowId} session=${result.sessionId}`);
 });
