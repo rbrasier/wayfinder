@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { test, expect } from "./helpers/base";
 
 // E2E for the admin / organisations / groups UI cleanup (v2.10.0).
 //
