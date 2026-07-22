@@ -46,17 +46,20 @@ test.describe("structured conversation — config editor", () => {
     }
     await page.goto(flowConfigPath);
 
-    // Open the structured node's config modal.
+    // Open the structured node's config modal. Scope assertions to the modal —
+    // the seeded node's output type ("Structured conversation") also renders on
+    // the canvas node behind it, so an unscoped match is ambiguous.
     await page.getByText(/record intake decision/i).click();
+    const modal = page.getByRole("dialog").first();
 
     // All three output-type labels are present.
-    await expect(page.getByText("Generate document (from template)")).toBeVisible();
-    await expect(page.getByText("Structured conversation")).toBeVisible();
-    await expect(page.getByText("Unstructured conversation")).toBeVisible();
+    await expect(modal.getByText("Generate document (from template)")).toBeVisible();
+    await expect(modal.getByText("Structured conversation").first()).toBeVisible();
+    await expect(modal.getByText("Unstructured conversation")).toBeVisible();
 
     // Structured reveals the inline field editor.
-    await page.getByText("Structured conversation").click();
-    await expect(page.getByText(/fields to capture/i)).toBeVisible();
+    await modal.getByText("Structured conversation").first().click();
+    await expect(modal.getByText(/fields to capture/i)).toBeVisible();
   });
 
   test("captures a field via label + type + the per-field config cog", async ({ page }) => {
@@ -67,16 +70,17 @@ test.describe("structured conversation — config editor", () => {
     }
     await page.goto(flowConfigPath);
     await page.getByText(/record intake decision/i).click();
-    await page.getByText("Structured conversation").click();
+    const modal = page.getByRole("dialog").first();
+    await modal.getByText("Structured conversation").first().click();
 
     // A structured field is now one row: a label, a type dropdown, a config cog
     // and a remove button — no free-text `(type)` tags (item 7).
-    const firstLabel = page.getByPlaceholder(/preferred vendor/i).first();
+    const firstLabel = modal.getByPlaceholder(/preferred vendor/i).first();
     await firstLabel.fill("Approved");
-    await page.getByLabel(/field 1 type/i).selectOption("yesno");
+    await modal.getByLabel(/field 1 type/i).selectOption("yesno");
 
     // The cog opens the per-field settings mini modal with the required toggle.
-    await page.getByRole("button", { name: /configure field 1/i }).click();
+    await modal.getByRole("button", { name: /configure field 1/i }).click();
     await expect(page.getByText(/field settings/i)).toBeVisible();
     await expect(page.getByLabel(/^required$/i)).toBeVisible();
   });
