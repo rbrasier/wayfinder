@@ -3,7 +3,7 @@
 - **Status**: Draft
 - **Date**: 2026-07-19
 - **Author**: rbrasier
-- **Target version**: 2.10.0  (bump: MINOR — new feature, additive `app_flow_nodes.config` jsonb; no migration. See `docs/guides/versioning.md`.)
+- **Target version**: 2.11.0  (bump: MINOR — new feature, additive `app_flow_nodes.config` jsonb; no migration. See `docs/guides/versioning.md`.)
 
 ## 1. Problem
 
@@ -116,7 +116,7 @@ None. `documentTemplateFormat` and `spreadsheetTemplateMode` ride the existing
 - [ ] `documentTemplateFormat` absent is treated as `docx` (existing flows
       unchanged).
 - [ ] Captured fields appear in Insights identically to a `.docx` step.
-- [ ] `VERSION` = `package.json#version` = `2.10.0`; `./validate.sh` passes.
+- [ ] `VERSION` = `package.json#version` = `2.11.0`; `./validate.sh` passes.
 
 ## 11. Out of scope / future work
 

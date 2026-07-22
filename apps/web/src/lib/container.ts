@@ -129,6 +129,8 @@ import {
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import {
   DocxGenerator,
+  XlsxGenerator,
+  DocumentGeneratorRouter,
   DocumentExtractorService,
   DocumentIndexingService,
   DrizzleApprovalRepository,
@@ -385,6 +387,9 @@ const build = () => {
   const agent = new LangGraphAgentRunner(llm);
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
+  // Template gen/extraction routes docx vs xlsx by the file's bytes (ADR-039);
+  // context-doc extraction stays on docx (context docs are never xlsx templates).
+  const documentGenerator = new DocumentGeneratorRouter(docxGenerator, new XlsxGenerator());
   const documentExtractor = new DocumentExtractorService(docxGenerator);
   const nodeExecutors = createNodeExecutors(llm, env.N8N_WEBHOOK_SECRET);
   const n8nWorkflowDirectory = new N8nHttpWorkflowDirectory(() => runtimeConfig.getN8nConfig());
@@ -606,7 +611,7 @@ const build = () => {
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, ...skillsAndMcp.repos },
     useCases: {
       ...buildDocumentUseCases({
-        documentGenerator: docxGenerator,
+        documentGenerator,
         objectStorage,
         languageModel: llm,
         sessionMessages,
@@ -616,7 +621,7 @@ const build = () => {
         approvals,
         auditLogger,
       }),
-      evaluateStepReadiness: new EvaluateStepReadiness(llm, docxGenerator, objectStorage),
+      evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),

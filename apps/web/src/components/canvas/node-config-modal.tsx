@@ -61,6 +61,11 @@ export interface NodeConfigValues {
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
   documentTemplateContent?: string | null;
+  // Uploaded template format and (xlsx only) detected authoring mode, surfaced so
+  // the picker can show "Tag mode"/"Header mode" (ADR-039). Persisted by the
+  // upload endpoint; the modal only displays them.
+  documentTemplateFormat?: "docx" | "xlsx" | null;
+  spreadsheetTemplateMode?: "tags" | "header" | null;
   allowManualEdit: boolean;
   requireConfirmation: boolean;
   // Ids of library skills (app_skills) attached to this conversational step.
@@ -105,7 +110,7 @@ interface NodeConfigModalProps {
   // organisation has not enabled.
   skillsEnabled?: boolean;
   mcpEnabled?: boolean;
-  onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }>;
+  onUploadTemplate?: (file: File, currentValues: NodeConfigValues) => Promise<{ path: string; filename: string; documentTemplateContent: string | null; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null } | { error: string; code?: string }>;
 }
 
 const DEFAULT_VALUES: NodeConfigValues = {
@@ -120,6 +125,8 @@ const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplatePath: null,
   documentTemplateFilename: null,
   documentTemplateContent: null,
+  documentTemplateFormat: null,
+  spreadsheetTemplateMode: null,
   allowManualEdit: true,
   requireConfirmation: false,
   skillRefs: [],
@@ -500,6 +507,8 @@ export function NodeConfigModal({
         set("documentTemplatePath", result.path);
         set("documentTemplateFilename", result.filename);
         set("documentTemplateContent", result.documentTemplateContent ?? null);
+        set("documentTemplateFormat", result.documentTemplateFormat ?? "docx");
+        set("spreadsheetTemplateMode", result.spreadsheetTemplateMode ?? null);
       }
     } finally {
       setIsUploading(false);

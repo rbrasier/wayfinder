@@ -61,7 +61,7 @@ const makeDocumentGenerator = (): IDocumentGenerator => ({
     .fn()
     .mockReturnValue(ok({ fields: [field("project_title"), field("background")] })),
   extractFullText: vi.fn().mockReturnValue(ok({ text: "" })),
-  generate: vi.fn().mockReturnValue(ok({ docxBytes: Buffer.from("x") })),
+  generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("x") })),
 });
 
 const makeObjectStorage = (): IObjectStorage => ({

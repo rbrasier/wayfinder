@@ -100,7 +100,7 @@ const makeDocumentGenerator = (): IDocumentGenerator => ({
   extractTags: vi.fn().mockReturnValue(ok({ tags: [] })),
   extractFields: vi.fn().mockReturnValue(ok({ fields: FIELDS })),
   extractFullText: vi.fn().mockReturnValue(ok({ text: "" })),
-  generate: vi.fn().mockReturnValue(ok({ docxBytes: Buffer.from("edited-docx") })),
+  generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("edited-docx") })),
 });
 
 const makeObjectStorage = (): IObjectStorage => ({
@@ -237,6 +237,30 @@ describe("UpdateDocumentFields", () => {
     );
     // The prior object is never deleted.
     expect(deps.objectStorage.delete).not.toHaveBeenCalled();
+  });
+
+  it("keeps the .xlsx extension and spreadsheet MIME type for an xlsx template", async () => {
+    const message = makeMessage({
+      document: { ...baseDocument(), filename: "rft.xlsx", storagePath: "generated/sess-1/rft.xlsx" },
+    });
+    const sessionMessages = makeSessionMessages();
+    (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(ok(message));
+    const flowNodes = makeFlowNodes(makeNode({ documentTemplateFormat: "xlsx", spreadsheetTemplateMode: "header" }));
+    const { useCase, deps } = build({ sessionMessages, flowNodes });
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      editedByUserId: "user-1",
+      values: validValues,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.document?.storagePath).toBe("generated/sess-1/rft-r1.xlsx");
+    expect(deps.objectStorage.put).toHaveBeenCalledWith(
+      "generated/sess-1/rft-r1.xlsx",
+      expect.any(Buffer),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
   });
 
   it("increments the revision suffix on a subsequent edit", async () => {

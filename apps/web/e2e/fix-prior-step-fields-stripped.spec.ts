@@ -140,7 +140,7 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
   // Set a fake DOCX file directly on the hidden file input — route intercept
   // means the server never sees the actual bytes.
   const fakeDocx = Buffer.from('PK\x03\x04 fake docx content');
-  await page.locator('input[type="file"][accept=".docx"]').setInputFiles({
+  await page.locator('input[type="file"][accept=".docx,.xlsx"]').setInputFiles({
     name: 'mock-template.docx',
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer: fakeDocx,

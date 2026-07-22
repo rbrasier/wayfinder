@@ -20,6 +20,7 @@ import {
   type TemplateField,
 } from "@rbrasier/domain";
 import { documentSummarySchema, type DocumentData } from "@rbrasier/shared";
+import { DOCUMENT_MIME, templateFormat, type DocumentTemplateFormat } from "./document-format";
 import {
   batchTemplateFields,
   buildDocumentTranscript,
@@ -91,13 +92,14 @@ export class GenerateDocument {
     });
     if (generateResult.error) return generateResult;
 
-    const filename = this.buildFilename(input.flow.name, input.node.name, input.sessionId);
+    const format = templateFormat(config);
+    const filename = this.buildFilename(input.flow.name, input.node.name, input.sessionId, format);
     const storageKey = `generated/${input.sessionId}/${filename}`;
 
     const putResult = await this.objectStorage.put(
       storageKey,
-      generateResult.data.docxBytes,
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      generateResult.data.bytes,
+      DOCUMENT_MIME[format],
     );
     if (putResult.error) return putResult;
 
@@ -232,7 +234,12 @@ export class GenerateDocument {
     await this.sessionMessages.updateAiPayload(messageId, mergedPayload);
   }
 
-  private buildFilename(flowName: string, nodeName: string, sessionId: string): string {
+  private buildFilename(
+    flowName: string,
+    nodeName: string,
+    sessionId: string,
+    format: DocumentTemplateFormat,
+  ): string {
     const kebab = (s: string) =>
       s
         .toLowerCase()
@@ -240,6 +247,6 @@ export class GenerateDocument {
         .replace(/^-|-$/g, "");
     const date = new Date().toISOString().slice(0, 10);
     const sessionId8 = sessionId.replace(/-/g, "").slice(0, 8);
-    return `${kebab(flowName)}-${kebab(nodeName)}-${sessionId8}-${date}.docx`;
+    return `${kebab(flowName)}-${kebab(nodeName)}-${sessionId8}-${date}.${format}`;
   }
 }

@@ -69,7 +69,7 @@ const makeDocumentGenerator = (): IDocumentGenerator => ({
     }),
   ),
   extractFullText: vi.fn().mockReturnValue(ok({ text: "template text" })),
-  generate: vi.fn().mockReturnValue(ok({ docxBytes: Buffer.from("fake-docx") })),
+  generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("fake-docx") })),
 });
 
 const makeStepOutputs = (): ISessionStepOutputRepository => ({
@@ -157,6 +157,31 @@ describe("GenerateDocument", () => {
     expect(result.data?.document.storagePath).toContain("sess-1");
     expect(objectStorage.put).toHaveBeenCalled();
     expect(sessionMessages.updateDocument).toHaveBeenCalledWith("msg-1", expect.objectContaining({ filename: expect.stringMatching(/\.docx$/) }));
+  });
+
+  it("names the file .xlsx and stores it with the spreadsheet MIME type when the template format is xlsx", async () => {
+    const documentGenerator = makeDocumentGenerator();
+    (documentGenerator.generate as ReturnType<typeof vi.fn>).mockReturnValue(ok({ bytes: Buffer.from("fake-xlsx") }));
+    const objectStorage = makeObjectStorage();
+    const sessionMessages = makeSessionMessages();
+
+    const useCase = new GenerateDocument(documentGenerator, objectStorage, makeLanguageModel(), sessionMessages, makeStepOutputs());
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode({ documentTemplateFormat: "xlsx", spreadsheetTemplateMode: "header" }),
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.document.filename).toMatch(/\.xlsx$/);
+    expect(objectStorage.put).toHaveBeenCalledWith(
+      expect.stringMatching(/\.xlsx$/),
+      expect.any(Buffer),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
   });
 
   it("persists the generated field values as a step output for reporting", async () => {

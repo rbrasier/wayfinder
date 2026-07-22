@@ -11,13 +11,13 @@ const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const makeDocGenerator = (extractedText: string): IDocumentGenerator => ({
   extractTags: vi.fn().mockReturnValue(ok({ tags: [] })),
   extractFullText: vi.fn().mockReturnValue(ok({ text: extractedText })),
-  generate: vi.fn().mockReturnValue(ok({ docxBytes: Buffer.from("") })),
+  generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("") })),
 });
 
 const makeFailingDocGenerator = (): IDocumentGenerator => ({
   extractTags: vi.fn().mockReturnValue(ok({ tags: [] })),
   extractFullText: vi.fn().mockReturnValue(err(domainError("INFRA_FAILURE", "parse failed"))),
-  generate: vi.fn().mockReturnValue(ok({ docxBytes: Buffer.from("") })),
+  generate: vi.fn().mockReturnValue(ok({ bytes: Buffer.from("") })),
 });
 
 // ── DOCX extraction ──────────────────────────────────────────────────────────
