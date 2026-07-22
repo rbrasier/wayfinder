@@ -13,7 +13,7 @@ const SEED_STRUCTURED_SESSION_TITLE = "E2E SEED Structured Session";
 export const seedStructuredSession = async (
   container: Container,
   ownerUserId: string,
-): Promise<string> => {
+): Promise<{ sessionId: string; flowId: string }> => {
   const flow = unwrap(
     await container.useCases.createFlow.execute({
       name: SEED_STRUCTURED_FLOW_NAME,
@@ -129,5 +129,5 @@ export const seedStructuredSession = async (
     "advance structured session to the next step",
   );
 
-  return session.id;
+  return { sessionId: session.id, flowId: flow.id };
 };

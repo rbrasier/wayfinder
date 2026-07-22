@@ -24,6 +24,7 @@ setup('seed e2e fixtures', async ({ request }) => {
     confirmationSessionId: result.confirmationSessionId,
     approvalSessionId: result.approvalSessionId,
     structuredSessionId: result.structuredSessionId,
+    structuredFlowId: result.structuredFlowId,
   });
   console.log(`✅ Seed: flow=${result.flowId} session=${result.sessionId}`);
 });
