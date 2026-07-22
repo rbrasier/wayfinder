@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HelpCircle, Plus, Settings2, X } from "lucide-react";
 import {
   deriveFieldKey,
@@ -119,11 +119,35 @@ interface StructuredFieldEditorProps {
   onOpenHelp: () => void;
 }
 
+const arraysEqual = (a: string[], b: string[]): boolean =>
+  a.length === b.length && a.every((value, index) => value === b[index]);
+
+const linesToModels = (lines: string[]): FieldModel[] =>
+  (lines.length > 0 ? lines : [""]).map(lineToModel);
+
 export function StructuredFieldEditor({ lines, onChange, onOpenHelp }: StructuredFieldEditorProps) {
-  const models = (lines.length > 0 ? lines : [""]).map(lineToModel);
+  // The field type is held in local state, not re-derived from `lines` on every
+  // render. An options field with no choices yet serialises to a plain label
+  // (its type annotation only appears once choices exist), so re-deriving from
+  // the round-tripped line would silently reset Single/Multi-select back to Text.
+  const [models, setModels] = useState<FieldModel[]>(() => linesToModels(lines));
+  const lastEmittedRef = useRef<string[]>(lines);
   const [configIndex, setConfigIndex] = useState<number | null>(null);
 
-  const commit = (next: FieldModel[]) => onChange(next.map(modelToLine));
+  // Re-seed only when `lines` changes for a reason other than our own commit —
+  // e.g. a different step's field set is loaded into the same editor instance.
+  useEffect(() => {
+    if (arraysEqual(lines, lastEmittedRef.current)) return;
+    lastEmittedRef.current = lines;
+    setModels(linesToModels(lines));
+  }, [lines]);
+
+  const commit = (next: FieldModel[]) => {
+    setModels(next);
+    const nextLines = next.map(modelToLine);
+    lastEmittedRef.current = nextLines;
+    onChange(nextLines);
+  };
 
   const updateModel = (index: number, patch: Partial<FieldModel>) => {
     const next = models.map((model, i) => (i === index ? { ...model, ...patch } : model));
