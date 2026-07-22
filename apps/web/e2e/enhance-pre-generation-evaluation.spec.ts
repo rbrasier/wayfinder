@@ -30,6 +30,9 @@ const FAIL_SESSION_PATH =
 const KNOWN_GAP = process.env.E2E_PREGEN_KNOWN_GAP ?? "contract end date";
 
 test.describe("pre-generation evaluation gate", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_PREGEN_PASS_SESSION_PATH, "Needs pre-generation-eval stubbed sessions the CI seed does not create yet — runs via the /e2e skill with E2E_PREGEN_PASS_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("a passing cross-check advances the step and generates the document once", async ({
     page,
   }) => {

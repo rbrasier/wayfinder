@@ -18,6 +18,9 @@ const BLOCKED_SESSION_PATH =
   process.env.E2E_BLOCKED_SESSION_PATH ?? "/chats/e2e-seed-quota-blocked-session";
 
 test.describe("cost / usage governance dashboard", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_GOVERNANCE_PATH, "Needs seeded governance spend data the CI seed does not create yet — runs via the /e2e skill with E2E_GOVERNANCE_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("renders spend breakdowns and cap utilisation for an admin", async ({ page }) => {
     await page.goto(GOVERNANCE_PATH);
 
@@ -46,6 +49,9 @@ test.describe("cost / usage governance dashboard", () => {
 });
 
 test.describe("blocked-session UX", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_BLOCKED_SESSION_PATH, "Needs a quota-blocked session the CI seed does not create yet — runs via the /e2e skill with E2E_BLOCKED_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("a user at their cap sees a usage-cap message instead of an AI reply", async ({ page }) => {
     await page.goto(BLOCKED_SESSION_PATH);
 
