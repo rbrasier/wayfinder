@@ -16,7 +16,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
+
+interface GroupRecord {
+  id: string;
+  name: string;
+  description: string | null;
+  organisationId: string | null;
+}
 
 export function AdminGroupsContent() {
   return (
@@ -35,7 +43,7 @@ function GroupsManagementCard() {
   const organisationsQuery = trpc.organisation.list.useQuery(undefined, {
     enabled: organisationsEnabledQuery.data === true,
   });
-  const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<GroupRecord | "new" | null>(null);
 
   const organisationsEnabled = organisationsEnabledQuery.data === true;
   const organisations = organisationsQuery.data ?? [];
@@ -48,13 +56,6 @@ function GroupsManagementCard() {
     },
     onError: (error) => toast.error(error.message ?? "Failed to delete group"),
   });
-  const updateGroup = trpc.group.update.useMutation({
-    onSuccess: async () => {
-      toast.success("Group updated");
-      await utils.group.list.invalidate();
-    },
-    onError: (error) => toast.error(error.message ?? "Failed to update group"),
-  });
 
   const groups = groupsQuery.data ?? [];
 
@@ -63,7 +64,7 @@ function GroupsManagementCard() {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Groups</CardTitle>
-          <Button onClick={() => setCreateOpen(true)}>New group</Button>
+          <Button onClick={() => setEditing("new")}>New group</Button>
         </CardHeader>
         <CardContent>
           {groupsQuery.isLoading ? (
@@ -88,27 +89,9 @@ function GroupsManagementCard() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    {organisationsEnabled && (
-                      <select
-                        aria-label={`Organisation for ${group.name}`}
-                        className="rounded-md border border-[#d6d2ca] bg-white px-2 py-1 text-sm"
-                        value={group.organisationId ?? ""}
-                        disabled={updateGroup.isPending}
-                        onChange={(event) =>
-                          updateGroup.mutate({
-                            groupId: group.id,
-                            organisationId: event.target.value === "" ? null : event.target.value,
-                          })
-                        }
-                      >
-                        <option value="">Global</option>
-                        {organisations.map((org) => (
-                          <option key={org.id} value={org.id}>
-                            {org.name}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                    <Button size="sm" variant="outline" onClick={() => setEditing(group)}>
+                      Edit
+                    </Button>
                     <Button
                       size="sm"
                       variant="destructive"
@@ -125,9 +108,10 @@ function GroupsManagementCard() {
         </CardContent>
       </Card>
 
-      <CreateGroupModal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
+      <GroupModal
+        open={editing !== null}
+        group={editing === "new" ? null : editing}
+        onClose={() => setEditing(null)}
         organisationsEnabled={organisationsEnabled}
         organisations={organisations}
       />
@@ -139,19 +123,23 @@ function GroupsManagementCard() {
   );
 }
 
-function CreateGroupModal({
+function GroupModal({
   open,
+  group,
   onClose,
   organisationsEnabled,
   organisations,
 }: {
   open: boolean;
+  group: GroupRecord | null;
   onClose: () => void;
   organisationsEnabled: boolean;
   organisations: { id: string; name: string }[];
 }) {
   const utils = trpc.useUtils();
+  const isEdit = group !== null;
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [organisationId, setOrganisationId] = useState("");
 
   const createGroup = trpc.group.create.useMutation({
@@ -162,19 +150,43 @@ function CreateGroupModal({
     },
     onError: (error) => toast.error(error.message ?? "Failed to create group"),
   });
+  const updateGroup = trpc.group.update.useMutation({
+    onSuccess: async () => {
+      toast.success("Group updated");
+      await utils.group.list.invalidate();
+      onClose();
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to update group"),
+  });
 
   useEffect(() => {
     if (open) {
-      setName("");
-      setOrganisationId("");
+      setName(group?.name ?? "");
+      setDescription(group?.description ?? "");
+      setOrganisationId(group?.organisationId ?? "");
     }
-  }, [open]);
+  }, [open, group]);
 
-  const handleCreate = () => {
+  const isSaving = createGroup.isPending || updateGroup.isPending;
+
+  const handleSave = () => {
     if (!name.trim()) return;
+    const description_ = description.trim() === "" ? null : description.trim();
+    const organisationId_ =
+      organisationsEnabled && organisationId ? organisationId : null;
+    if (isEdit) {
+      updateGroup.mutate({
+        groupId: group.id,
+        name: name.trim(),
+        description: description_,
+        ...(organisationsEnabled ? { organisationId: organisationId_ } : {}),
+      });
+      return;
+    }
     createGroup.mutate({
       name: name.trim(),
-      ...(organisationsEnabled && organisationId ? { organisationId } : {}),
+      ...(description_ ? { description: description_ } : {}),
+      ...(organisationId_ ? { organisationId: organisationId_ } : {}),
     });
   };
 
@@ -182,25 +194,35 @@ function CreateGroupModal({
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle>New group</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit group" : "New group"}</DialogTitle>
           <DialogCloseButton />
         </DialogHeader>
         <DialogBody>
           <div className="space-y-1">
-            <Label htmlFor="new-group-name">Name</Label>
+            <Label htmlFor="group-name">Name</Label>
             <Input
-              id="new-group-name"
+              id="group-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && handleCreate()}
+              onKeyDown={(event) => event.key === "Enter" && handleSave()}
               placeholder="e.g. Procurement"
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="group-description">Description (optional)</Label>
+            <Textarea
+              id="group-description"
+              rows={2}
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="What is this group for?"
             />
           </div>
           {organisationsEnabled && (
             <div className="space-y-1">
-              <Label htmlFor="new-group-org">Organisation</Label>
+              <Label htmlFor="group-org">Organisation</Label>
               <select
-                id="new-group-org"
+                id="group-org"
                 className="flex h-10 w-full rounded-md border border-[#d6d2ca] bg-white px-2 text-sm"
                 value={organisationId}
                 onChange={(event) => setOrganisationId(event.target.value)}
@@ -219,8 +241,8 @@ function CreateGroupModal({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleCreate} disabled={createGroup.isPending || !name.trim()}>
-            Create group
+          <Button onClick={handleSave} disabled={isSaving || !name.trim()}>
+            {isEdit ? "Save changes" : "Create group"}
           </Button>
         </DialogFooter>
       </DialogContent>

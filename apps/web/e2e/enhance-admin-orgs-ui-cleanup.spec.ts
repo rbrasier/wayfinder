@@ -64,8 +64,16 @@ test.describe("organisations admin", () => {
     await dialog.getByLabel(/email domain/i).fill("acme.example");
     await dialog.getByRole("button", { name: /create organisation/i }).click();
 
-    // The new organisation appears as an editable row (its rename field carries
-    // the name as an input value, not page text).
-    await expect(page.getByLabel(new RegExp(`rename ${name}`, "i"))).toBeVisible();
+    // The new organisation appears as a read-only row (name rendered as text,
+    // edited through the modal — v2.11.1) rather than an inline rename input.
+    // Match by the Edit button so the Members card (whose user rows list every
+    // organisation inside a <select>) is never a false match.
+    await expect(dialog).not.toBeVisible({ timeout: 10_000 });
+    const row = page
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("button", { name: /^edit$/i }) })
+      .filter({ hasText: name });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText(name);
   });
 });
