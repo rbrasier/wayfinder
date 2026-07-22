@@ -90,14 +90,19 @@ test.describe("admin — organisations rows", () => {
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
 
     // The row is now plain text (no inline rename input) with Edit + Delete.
-    const row = page.getByRole("listitem").filter({ hasText: name });
-    await expect(row.getByText(name)).toBeVisible();
+    // Identify it by the Edit button so it never collides with the Members
+    // card, whose user rows list this organisation inside a <select>.
+    const row = page
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("button", { name: /^edit$/i }) })
+      .filter({ hasText: name });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText(name);
     await expect(page.getByLabel(new RegExp(`rename ${name}`, "i"))).toHaveCount(0);
-    await expect(row.getByRole("button", { name: /edit/i })).toBeVisible();
-    await expect(row.getByRole("button", { name: /delete/i })).toBeVisible();
+    await expect(row.getByRole("button", { name: /^delete$/i })).toBeVisible();
 
     // Edit opens the same modal, prefilled with the record's values.
-    await row.getByRole("button", { name: /edit/i }).click();
+    await row.getByRole("button", { name: /^edit$/i }).click();
     dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: /edit organisation/i })).toBeVisible();
     await expect(dialog.getByLabel(/^name$/i)).toHaveValue(name);
@@ -117,12 +122,17 @@ test.describe("admin — groups rows", () => {
     await dialog.getByRole("button", { name: /create group/i }).click();
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
 
-    const row = page.getByRole("listitem").filter({ hasText: name });
-    await expect(row.getByText(name)).toBeVisible();
-    await expect(row.getByRole("button", { name: /edit/i })).toBeVisible();
-    await expect(row.getByRole("button", { name: /delete/i })).toBeVisible();
+    // Identify the row by its Edit button so the group's Members panel (which
+    // renders its own listitems) can never be mistaken for it.
+    const row = page
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("button", { name: /^edit$/i }) })
+      .filter({ hasText: name });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText(name);
+    await expect(row.getByRole("button", { name: /^delete$/i })).toBeVisible();
 
-    await row.getByRole("button", { name: /edit/i }).click();
+    await row.getByRole("button", { name: /^edit$/i }).click();
     dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: /edit group/i })).toBeVisible();
     await expect(dialog.getByLabel(/^name$/i)).toHaveValue(name);

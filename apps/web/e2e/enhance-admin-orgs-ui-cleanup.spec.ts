@@ -66,9 +66,14 @@ test.describe("organisations admin", () => {
 
     // The new organisation appears as a read-only row (name rendered as text,
     // edited through the modal — v2.11.1) rather than an inline rename input.
+    // Match by the Edit button so the Members card (whose user rows list every
+    // organisation inside a <select>) is never a false match.
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
-    const row = page.getByRole("listitem").filter({ hasText: name });
-    await expect(row.getByText(name)).toBeVisible();
-    await expect(row.getByRole("button", { name: /edit/i })).toBeVisible();
+    const row = page
+      .getByRole("listitem")
+      .filter({ has: page.getByRole("button", { name: /^edit$/i }) })
+      .filter({ hasText: name });
+    await expect(row).toBeVisible();
+    await expect(row).toContainText(name);
   });
 });
