@@ -29,7 +29,10 @@ test.describe('Synthesise Information — author + sample', () => {
     // Enabled → the list heading (a real <h1>); disabled → the EmptyState body
     // ("… is not available"). Exactly one of the two must render.
     const listHeading = page.getByRole('heading', { name: /^Synthesise Information$/ });
-    const disabledState = page.getByText(/not (available|enabled)/i);
+    // The disabled EmptyState renders the phrase in both its heading and body,
+    // so scope to a single element — a multi-match .isVisible() would throw a
+    // strict-mode violation instead of reporting visibility.
+    const disabledState = page.getByText(/not (available|enabled)/i).first();
     await expect(listHeading.or(disabledState).first()).toBeVisible();
   });
 
@@ -44,7 +47,10 @@ test.describe('Synthesise Information — author + sample', () => {
     // real <h1>) means enabled; the EmptyState body means disabled. This avoids
     // acting during the loading window.
     const listHeading = page.getByRole('heading', { name: /^Synthesise Information$/ });
-    const disabledState = page.getByText(/not (available|enabled)/i);
+    // The disabled EmptyState renders the phrase in both its heading and body,
+    // so scope to a single element — a multi-match .isVisible() would throw a
+    // strict-mode violation instead of reporting visibility.
+    const disabledState = page.getByText(/not (available|enabled)/i).first();
     await expect(listHeading.or(disabledState).first()).toBeVisible();
 
     if (await disabledState.isVisible().catch(() => false)) {
