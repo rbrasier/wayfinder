@@ -10,6 +10,7 @@ import {
   BookOpen,
   ChevronDown,
   Clock,
+  FlaskConical,
   Flag,
   GitBranch,
   LogOut,
@@ -62,6 +63,7 @@ interface AdminNavContext {
   readonly mcpEnabled: boolean;
   readonly canCurate: boolean;
   readonly organisationsEnabled: boolean;
+  readonly extractionEnabled: boolean;
 }
 
 const buildAdminNav = ({
@@ -69,6 +71,7 @@ const buildAdminNav = ({
   mcpEnabled,
   canCurate,
   organisationsEnabled,
+  extractionEnabled,
 }: AdminNavContext): NavGroup[] => {
   // Skills + MCP Servers are hidden when their feature flag is disabled — an
   // admin who turned the flag off should not see the surface it controls.
@@ -88,6 +91,10 @@ const buildAdminNav = ({
         { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Usage" },
         { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
         { href: "/admin/flows", icon: GitBranch, label: "All Flows" },
+        // Shown only when the extraction_flows flag resolves (ADR-033 §7).
+        ...(extractionEnabled
+          ? [{ href: "/admin/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
+          : []),
         { href: "/admin/settings", icon: Settings, label: "Configuration" },
       ],
     },
@@ -243,11 +250,17 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const organisationsEnabledQuery = trpc.organisation.isEnabled.useQuery(undefined, {
     enabled: isAdmin,
   });
+  // Gates the "Synthesise Information" surface on both the user and admin menus.
+  const extractionFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery({
+    key: "extraction_flows",
+  });
+  const extractionEnabled = extractionFlagQuery.data ?? false;
   const adminNav = buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
     canCurate,
     organisationsEnabled: organisationsEnabledQuery.data ?? false,
+    extractionEnabled,
   });
   const nav: NavGroup[] = isAdmin ? adminNav : userNav;
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
@@ -366,9 +379,33 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     </div>
   );
 
+  // On the user side, "Synthesise Information" sits just below Flows, set off by
+  // a subtle horizontal rule (ADR-033 §3 / phase §3). Admins get their item
+  // inside the main admin group instead.
+  const synthesiseBlock = !isAdmin && extractionEnabled && (
+    <>
+      <hr className="my-[10px] border-[#dedad2]" />
+      <Link
+        href="/synthesise"
+        onClick={closeMobile}
+        className={`flex items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13.5px] transition-colors ${
+          isActive("/synthesise")
+            ? "bg-[#eef1fc] font-medium text-[#3a5fd9]"
+            : "text-[#5a5650] hover:bg-[#efede8] hover:text-[#1a1814]"
+        }`}
+      >
+        <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+          <FlaskConical className="h-[15px] w-[15px]" />
+        </span>
+        Synthesise Information
+      </Link>
+    </>
+  );
+
   const navBody = (
     <nav className="flex flex-1 flex-col gap-[2px] overflow-y-auto px-[10px] py-[12px]">
       <NavGroups groups={nav} isActive={isActive} onNavigate={closeMobile} />
+      {synthesiseBlock}
       {recentChatsBlock}
     </nav>
   );

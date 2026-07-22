@@ -87,7 +87,12 @@ describe("seedRoles", () => {
 
     const powerGrants = await roles.listPermissions(powerUsers.data!.id);
     expect([...powerGrants.data!].sort()).toEqual(
-      ["flow:advanced_config", "workflow:publish_to_everyone"].sort(),
+      [
+        "flow:advanced_config",
+        "workflow:publish_to_everyone",
+        "extraction:author",
+        "extraction:run",
+      ].sort(),
     );
 
     const adminGrants = await roles.listPermissions(admins.data!.id);
@@ -97,10 +102,12 @@ describe("seedRoles", () => {
     const scheduledNodeRoles = await flagRoles.listRoleIdsForFlag("scheduled_node");
     const mcpRoles = await flagRoles.listRoleIdsForFlag("mcp");
     const skillsRoles = await flagRoles.listRoleIdsForFlag("skills");
+    const extractionRoles = await flagRoles.listRoleIdsForFlag("extraction_flows");
     expect(autoNodeRoles.data).toEqual([powerUsers.data!.id]);
     expect(scheduledNodeRoles.data).toEqual([powerUsers.data!.id]);
     expect(mcpRoles.data).toEqual([powerUsers.data!.id]);
     expect(skillsRoles.data).toEqual([powerUsers.data!.id]);
+    expect(extractionRoles.data).toEqual([powerUsers.data!.id]);
   });
 
   it("is a no-op on the second run — no duplicate roles", async () => {

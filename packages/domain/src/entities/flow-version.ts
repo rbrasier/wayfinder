@@ -1,4 +1,5 @@
-import type { Flow } from "./flow";
+import type { ExtractionSchema } from "./extraction-schema";
+import type { Flow, FlowType } from "./flow";
 import type { FlowEdge } from "./flow-edge";
 import type { FlowNode } from "./flow-node";
 
@@ -36,11 +37,23 @@ export interface FlowSnapshotEdge {
 
 // Self-contained, frozen copy of a flow's full definition. Stored as jsonb so a
 // version survives any later edit or deletion of the live rows (ADR-015).
+//
+// A guided snapshot carries nodes/edges; an extraction snapshot carries an
+// `extraction` schema and leaves nodes/edges empty (ADR-033 §3). `kind` is the
+// discriminator: it is omitted on legacy guided rows (read back as "guided"),
+// so every existing guided consumer of `.nodes`/`.edges`/`.flow` is untouched.
 export interface FlowSnapshot {
+  kind?: FlowType;
   flow: FlowSnapshotMeta;
   nodes: FlowSnapshotNode[];
   edges: FlowSnapshotEdge[];
+  extraction?: ExtractionSchema;
 }
+
+export const isExtractionSnapshot = (
+  snapshot: FlowSnapshot,
+): snapshot is FlowSnapshot & { extraction: ExtractionSchema } =>
+  snapshot.kind === "extraction" && snapshot.extraction !== undefined;
 
 export interface FlowVersion {
   id: string;
@@ -97,6 +110,26 @@ export const buildFlowSnapshot = (
     fromNodeId: edge.fromNodeId,
     toNodeId: edge.toNodeId,
   })),
+});
+
+// Assembles a frozen extraction snapshot: the same flow metadata as a guided
+// snapshot, plus the extraction schema in place of a node graph. nodes/edges are
+// empty so guided consumers that read them still work (ADR-033 §3).
+export const buildExtractionSnapshot = (
+  flow: Flow,
+  extraction: ExtractionSchema,
+): FlowSnapshot => ({
+  kind: "extraction",
+  flow: {
+    name: flow.name,
+    description: flow.description,
+    icon: flow.icon,
+    expertRole: flow.expertRole,
+    contextDocs: flow.contextDocs,
+  },
+  nodes: [],
+  edges: [],
+  extraction,
 });
 
 // Reconstructs live-shaped `FlowNode`s from a pinned snapshot so the runner and

@@ -28,6 +28,9 @@ export class SyncFlowDraft {
     if (flowResult.error) return flowResult;
     if (!flowResult.data) return err(domainError("NOT_FOUND", "Flow not found."));
     if (flowResult.data.status !== "published") return ok(null);
+    // Extraction drafts are managed by SaveExtractionSchema, not from live
+    // nodes/edges — never overwrite one with an empty guided snapshot (ADR-033).
+    if (flowResult.data.flowType === "extraction") return ok(null);
 
     const [nodesResult, edgesResult] = await Promise.all([
       this.flowNodes.listByFlow(flowId),

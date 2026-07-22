@@ -7,7 +7,9 @@ export type PermissionKey =
   | "flow:advanced_config"
   | "knowledge:submit_feedback"
   | "knowledge:curate"
-  | "group:manage_own";
+  | "group:manage_own"
+  | "extraction:author"
+  | "extraction:run";
 
 export interface PermissionDefinition {
   readonly key: PermissionKey;
@@ -53,6 +55,18 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
     label: "Manage own groups",
     description:
       "Manage members and group-visible flows for groups the user delegate-admins. Scope is enforced per group; the key alone grants nothing global.",
+  },
+  {
+    key: "extraction:author",
+    label: "Author extraction flows",
+    description:
+      "Create, edit, and publish extraction flows (Synthesise Information) and configure their schema, input, and output.",
+  },
+  {
+    key: "extraction:run",
+    label: "Run extraction flows",
+    description:
+      "Upload documents to an extraction flow, run and preview extraction, and review results.",
   },
 ];
 

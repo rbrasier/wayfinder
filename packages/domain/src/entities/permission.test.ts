@@ -109,4 +109,11 @@ describe("PERMISSIONS registry", () => {
       expect(permission.description.length).toBeGreaterThan(0);
     }
   });
+
+  it("registers the extraction-flow author and run permission keys (ADR-033)", () => {
+    const keys = PERMISSIONS.map((permission) => permission.key);
+
+    expect(keys).toContain("extraction:author");
+    expect(keys).toContain("extraction:run");
+  });
 });

@@ -308,6 +308,45 @@ describe("PublishFlowVersion", () => {
     const result = await useCase.execute({ flowId: "missing", publishedByUserId: "user-1" });
     expect(result.error?.code).toBe("NOT_FOUND");
   });
+
+  it("promotes an extraction flow's open draft snapshot instead of rebuilding from nodes/edges", async () => {
+    flows.flows.set("ex-1", makeFlow({ id: "ex-1", flowType: "extraction" }));
+    await versions.upsertDraft({
+      flowId: "ex-1",
+      snapshot: {
+        kind: "extraction",
+        flow: { name: "Ex", description: null, icon: null, expertRole: null, contextDocs: [] },
+        nodes: [],
+        edges: [],
+        extraction: {
+          fields: [
+            {
+              field: { key: "supplier_name", label: "Supplier Name", type: "text", optional: false, raw: "Supplier Name" },
+              instruction: "The legal name.",
+              doneWhen: null,
+            },
+          ],
+          input: { cardinality: "one_per_file", selectionCriteria: null, guidance: "" },
+          output: { format: "xlsx", outputTemplate: null, instruction: "", generateSummary: false, summaryTemplate: null, contextDocs: [] },
+        },
+      },
+    });
+
+    const result = await useCase.execute({ flowId: "ex-1", publishedByUserId: "user-1" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data!.status).toBe("published");
+    expect(result.data!.snapshot.kind).toBe("extraction");
+    expect(result.data!.snapshot.extraction!.fields[0]!.field.key).toBe("supplier_name");
+  });
+
+  it("refuses to publish an extraction flow with no authored draft", async () => {
+    flows.flows.set("ex-2", makeFlow({ id: "ex-2", flowType: "extraction" }));
+
+    const result = await useCase.execute({ flowId: "ex-2", publishedByUserId: "user-1" });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
 });
 
 // ── ListFlowVersions / GetFlowVersion ────────────────────────────────────────
