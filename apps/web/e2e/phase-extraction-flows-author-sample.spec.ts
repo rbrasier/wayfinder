@@ -39,17 +39,24 @@ test.describe('Synthesise Information — author + sample', () => {
       test.skip(true, 'No authenticated session available');
       return;
     }
-    await page.waitForLoadState('networkidle');
 
-    const newButton = page.getByRole('button', { name: /New synthesis/i });
-    if (!(await newButton.isVisible().catch(() => false))) {
+    // Wait for the gated query to settle before deciding — the list heading (a
+    // real <h1>) means enabled; the EmptyState body means disabled. This avoids
+    // acting during the loading window.
+    const listHeading = page.getByRole('heading', { name: /^Synthesise Information$/ });
+    const disabledState = page.getByText(/not (available|enabled)/i);
+    await expect(listHeading.or(disabledState).first()).toBeVisible();
+
+    if (await disabledState.isVisible().catch(() => false)) {
       test.skip(true, 'extraction_flows flag not enabled for this user');
       return;
     }
 
-    await newButton.click();
-    await page.getByLabel('Name').fill('E2E synthesis');
-    await page.getByRole('button', { name: /^Create$/ }).click();
+    await page.getByRole('button', { name: /New synthesis/i }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('Name').fill('E2E synthesis');
+    await dialog.getByRole('button', { name: /^Create$/ }).click();
 
     // The editor renders the two cards (input → output) with the field editor
     // and the run control.

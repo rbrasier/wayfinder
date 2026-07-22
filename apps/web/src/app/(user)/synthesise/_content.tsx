@@ -34,6 +34,17 @@ export function SynthesiseContent() {
     onError: (error) => toast.error(error.message),
   });
 
+  // Guard the loading window explicitly: without this the actionable "New
+  // synthesis" button renders while the gated query is still in flight, so a
+  // flag-off error that arrives later unmounts the subtree mid-interaction.
+  if (flowsQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-[900px] px-[20px] py-[28px]">
+        <p className="text-[13px] text-[#8a857c]">Loading…</p>
+      </div>
+    );
+  }
+
   if (flowsQuery.error) {
     return (
       <div className="mx-auto max-w-[900px] px-[20px] py-[28px]">

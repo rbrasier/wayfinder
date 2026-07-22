@@ -7,6 +7,14 @@ import { trpc } from "@/trpc/client";
 export function AdminSynthesiseContent() {
   const flowsQuery = trpc.extraction.listAll.useQuery();
 
+  if (flowsQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-[1000px] px-[20px] py-[28px]">
+        <p className="text-[13px] text-[#8a857c]">Loading…</p>
+      </div>
+    );
+  }
+
   if (flowsQuery.error) {
     return (
       <div className="mx-auto max-w-[1000px] px-[20px] py-[28px]">
