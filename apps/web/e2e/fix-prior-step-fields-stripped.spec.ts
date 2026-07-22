@@ -131,7 +131,7 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
 
   // The upload button is visible when outputType === "generate_document" and no
   // template has been uploaded yet. If it's already showing a filename, skip.
-  const uploadButton = page.locator('button', { hasText: /click to upload a \.docx template/i });
+  const uploadButton = page.locator('button', { hasText: /click to upload a \.docx/i });
   if (!(await uploadButton.isVisible({ timeout: 2_000 }).catch(() => false))) {
     await page.keyboard.press('Escape');
     return;
@@ -140,7 +140,7 @@ async function uploadMockTemplate(page: Page, stepName: string): Promise<void> {
   // Set a fake DOCX file directly on the hidden file input — route intercept
   // means the server never sees the actual bytes.
   const fakeDocx = Buffer.from('PK\x03\x04 fake docx content');
-  await page.locator('input[type="file"][accept=".docx"]').setInputFiles({
+  await page.locator('input[type="file"][accept=".docx,.xlsx"]').setInputFiles({
     name: 'mock-template.docx',
     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     buffer: fakeDocx,

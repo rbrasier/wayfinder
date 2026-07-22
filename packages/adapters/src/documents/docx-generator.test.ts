@@ -236,7 +236,7 @@ describe("DocxGenerator", () => {
       });
 
       expect(result.error).toBeUndefined();
-      const outputZip = new PizZip(result.data!.docxBytes);
+      const outputZip = new PizZip(result.data!.bytes);
       const outputDoc = new Docxtemplater(outputZip, {
         paragraphLoop: true,
         linebreaks: true,
@@ -345,10 +345,10 @@ describe("DocxGenerator", () => {
       });
 
       expect(result.error).toBeUndefined();
-      expect(result.data?.docxBytes).toBeInstanceOf(Buffer);
-      expect(result.data?.docxBytes.length).toBeGreaterThan(0);
+      expect(result.data?.bytes).toBeInstanceOf(Buffer);
+      expect(result.data?.bytes.length).toBeGreaterThan(0);
 
-      const outputZip = new PizZip(result.data!.docxBytes);
+      const outputZip = new PizZip(result.data!.bytes);
       const outputDoc = new Docxtemplater(outputZip, {
         paragraphLoop: true,
         linebreaks: true,
@@ -369,7 +369,7 @@ describe("DocxGenerator", () => {
       });
 
       expect(result.error).toBeUndefined();
-      const outputZip = new PizZip(result.data!.docxBytes);
+      const outputZip = new PizZip(result.data!.bytes);
       const outputDoc = new Docxtemplater(outputZip, {
         paragraphLoop: true,
         linebreaks: true,
@@ -391,7 +391,7 @@ describe("DocxGenerator", () => {
       });
 
       expect(result.error).toBeUndefined();
-      const outputZip = new PizZip(result.data!.docxBytes);
+      const outputZip = new PizZip(result.data!.bytes);
       const outputDoc = new Docxtemplater(outputZip, {
         paragraphLoop: true,
         linebreaks: true,
@@ -411,7 +411,7 @@ describe("DocxGenerator", () => {
         data: { risk_section: true, mitigation_detail: "Patch the gap" },
       });
       expect(included.error).toBeUndefined();
-      const includedText = new Docxtemplater(new PizZip(included.data!.docxBytes), {
+      const includedText = new Docxtemplater(new PizZip(included.data!.bytes), {
         paragraphLoop: true,
         linebreaks: true,
         delimiters: { start: "{{", end: "}}" },
@@ -423,7 +423,7 @@ describe("DocxGenerator", () => {
         data: { risk_section: false, mitigation_detail: "Patch the gap" },
       });
       expect(omitted.error).toBeUndefined();
-      const omittedText = new Docxtemplater(new PizZip(omitted.data!.docxBytes), {
+      const omittedText = new Docxtemplater(new PizZip(omitted.data!.bytes), {
         paragraphLoop: true,
         linebreaks: true,
         delimiters: { start: "{{", end: "}}" },
@@ -459,7 +459,7 @@ describe("DocxGenerator", () => {
         },
       });
       expect(result.error).toBeUndefined();
-      const text = new Docxtemplater(new PizZip(result.data!.docxBytes), {
+      const text = new Docxtemplater(new PizZip(result.data!.bytes), {
         paragraphLoop: true,
         linebreaks: true,
         delimiters: { start: "{{", end: "}}" },
@@ -503,7 +503,7 @@ describe("DocxGenerator", () => {
 
       expect(result.error).toBeUndefined();
 
-      const zip = new PizZip(result.data!.docxBytes);
+      const zip = new PizZip(result.data!.bytes);
       const doc = new Docxtemplater(zip, { paragraphLoop: true });
       const fullText = doc.getFullText();
       expect(fullText).toContain("World");

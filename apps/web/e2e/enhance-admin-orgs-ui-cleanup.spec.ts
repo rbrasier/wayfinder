@@ -65,7 +65,7 @@ test.describe("organisations admin", () => {
     await dialog.getByRole("button", { name: /create organisation/i }).click();
 
     // The new organisation appears as a read-only row (name rendered as text,
-    // edited through the modal — v2.10.1) rather than an inline rename input.
+    // edited through the modal — v2.11.1) rather than an inline rename input.
     await expect(dialog).not.toBeVisible({ timeout: 10_000 });
     const row = page.getByRole("listitem").filter({ hasText: name });
     await expect(row.getByText(name)).toBeVisible();

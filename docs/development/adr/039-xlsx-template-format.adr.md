@@ -1,6 +1,6 @@
 # ADR-039 — Spreadsheet (xlsx) Template Format
 
-- **Status**: Proposed (scoped by `spreadsheet-templates.prd.md`)
+- **Status**: Accepted (implemented in v2.11.0)
 - **Date**: 2026-07-19
 
 ## Context

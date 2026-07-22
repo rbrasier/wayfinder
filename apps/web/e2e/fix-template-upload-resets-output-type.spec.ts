@@ -93,7 +93,7 @@ test.describe('fix: template upload preserves output type and pre-filled fields'
 
     // Upload the (mocked) template.
     const fakeDocx = Buffer.from('PK\x03\x04 fake docx content');
-    await page.locator('input[type="file"][accept=".docx"]').setInputFiles({
+    await page.locator('input[type="file"][accept=".docx,.xlsx"]').setInputFiles({
       name: 'mock-template.docx',
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       buffer: fakeDocx,

@@ -105,4 +105,4 @@ admin surfaces. All are presentation/state bugs with no schema impact.
     inline rename/domain inputs, and Edit opens a prefilled editor.
   `apps/web/e2e/enhance-admin-orgs-ui-cleanup.spec.ts` was updated: its final
   assertion checked for the now-removed inline rename input.
-- **Version:** PATCH bump `2.10.0` → `2.10.1`.
+- **Version:** PATCH bump `2.11.0` → `2.11.1`.

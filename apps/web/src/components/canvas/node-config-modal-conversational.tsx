@@ -213,31 +213,46 @@ export function NodeConfigModalConversational({
               Save this step first, then re-open to upload a template.
             </p>
           ) : values.documentTemplateFilename ? (
-            <div className="flex items-center gap-2 rounded-[9px] border border-[#c0e8d5] bg-[#eaf6f0] px-3 py-2">
-              <span className="flex-1 truncate text-[12px] text-[#247c53]">
-                {values.documentTemplateFilename}
-              </span>
-              <button
-                type="button"
-                className="shrink-0 text-[12px] text-[#6d6a65] hover:text-[#5a5650]"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-              >
-                Replace
-              </button>
-              <button
-                type="button"
-                className="shrink-0 text-[12px] text-[#c2385a] hover:text-[#a02e4b]"
-                onClick={() => {
-                  set("documentTemplatePath", null);
-                  set("documentTemplateFilename", null);
-                  set("documentTemplateContent", null);
-                  setUploadError(null);
-                }}
-                disabled={isUploading}
-              >
-                Remove
-              </button>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 rounded-[9px] border border-[#c0e8d5] bg-[#eaf6f0] px-3 py-2">
+                <span className="flex-1 truncate text-[12px] text-[#247c53]">
+                  {values.documentTemplateFilename}
+                </span>
+                <button
+                  type="button"
+                  className="shrink-0 text-[12px] text-[#6d6a65] hover:text-[#5a5650]"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                >
+                  Replace
+                </button>
+                <button
+                  type="button"
+                  className="shrink-0 text-[12px] text-[#c2385a] hover:text-[#a02e4b]"
+                  onClick={() => {
+                    set("documentTemplatePath", null);
+                    set("documentTemplateFilename", null);
+                    set("documentTemplateContent", null);
+                    set("documentTemplateFormat", null);
+                    set("spreadsheetTemplateMode", null);
+                    setUploadError(null);
+                  }}
+                  disabled={isUploading}
+                >
+                  Remove
+                </button>
+              </div>
+              {values.documentTemplateFormat === "xlsx" && (
+                <p className="text-[12px] text-[#6d6a65]">
+                  Spreadsheet detected —{" "}
+                  <span className="font-medium text-[#247c53]">
+                    {values.spreadsheetTemplateMode === "tags" ? "Tag mode" : "Header-row mode"}
+                  </span>
+                  {values.spreadsheetTemplateMode === "tags"
+                    ? " (its {{ tags }} become the fields)"
+                    : " (its header row becomes the fields)"}
+                </p>
+              )}
             </div>
           ) : (
             <button
@@ -246,13 +261,13 @@ export function NodeConfigModalConversational({
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
             >
-              {isUploading ? "Uploading…" : "Click to upload a .docx template"}
+              {isUploading ? "Uploading…" : "Click to upload a .docx or .xlsx template"}
             </button>
           )}
           <input
             ref={fileInputRef}
             type="file"
-            accept=".docx"
+            accept=".docx,.xlsx"
             className="sr-only"
             onChange={handleFileChange}
           />

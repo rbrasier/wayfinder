@@ -1,7 +1,7 @@
 import { test, expect } from "./helpers/base";
 import { loadSeedFixtures } from "./helpers/seed";
 
-// E2E regression guards for the v2.10.1 modal-editor UI fixes.
+// E2E regression guards for the v2.11.1 modal-editor UI fixes.
 //
 // Driven by the /e2e (Playwright MCP) skill against a running, seeded stack —
 // excluded from the vitest unit run. Each block maps to one reported defect and
