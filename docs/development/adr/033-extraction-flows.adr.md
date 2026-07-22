@@ -1,4 +1,4 @@
-# ADR-033 — Extraction Flows ("Distillations"): a second flow paradigm
+# ADR-033 — Extraction Flows ("Synthesise Information"): a second flow paradigm
 
 - **Status**: Proposed (scoped by `extraction-flows-*.phase.md`, target next **MINOR** on `main`)
 - **Date**: 2026-07-21
@@ -39,8 +39,11 @@ Add `flow_type text NOT NULL DEFAULT 'guided'` to `app_flows`
 (`'guided' | 'extraction'`). Guided code paths **never read it**, so every
 existing row and every guided-flow code path is untouched. An extraction flow is
 a first-class flow (owned, versioned, published, audited) that carries an
-extraction schema instead of a node graph. User-facing name: **Distillation**;
-in code it stays **extraction flow** / `flow_type = 'extraction'`.
+extraction schema instead of a node graph. User-facing name: **Synthesise
+Information** (provisional — expected to change); in code and throughout these
+docs the entity stays the **extraction flow** / `flow_type = 'extraction'`, and
+all stable identifiers (flag key, permission keys, routes, components) use
+`extraction`, so a later rename touches only display strings.
 
 ### 2. The execution engine is not reused
 
@@ -64,19 +67,43 @@ by the existing publish/restore tests.
 
 ### 4. Record cardinality: the unit of work ≠ the unit of output
 
-A distillation declares, at authoring time, one of two **cardinalities**:
+An extraction flow declares, at authoring time, one of two **cardinalities**:
 
 - **one file → one record** (default): each input document yields one output
   record.
-- **many files → one record**: several input documents (e.g. a folder per
-  supplier) are aggregated into a single output record.
+- **many files → one record**: several input documents are aggregated into a
+  single output record.
 
 This separates the **input document** (the unit of ingestion and of worker
 retry) from the **output record** (the unit the schema is filled for, exported,
 and reviewed). Under one-per-file the two are 1:1; under many-per-record a record
-draws on several documents. The grouping key for many-per-record is the
-**first-level folder** of the preserved upload tree (see §5), falling back to the
-whole upload when the tree is flat.
+draws on several documents.
+
+### 4a. Dynamic file-to-record selection is the first processing stage
+
+Under many-per-record the author does **not** pick a fixed structural key. They
+write **plain-English selection criteria** describing which files belong together
+in one record — e.g. "all files sharing a filename prefix", "all files within the
+same sub-folder", "all files that contain a given heading". The criteria are
+dynamic and may reference filename, folder path, **or content**.
+
+Consequently the **first stage of the processor is a selection/grouping pass**,
+before any field extraction: given the ingested file set — filenames, preserved
+tree paths, and lightweight content signals (e.g. headings / first-page text) —
+it interprets the criteria, decides which files are appropriate for each record,
+and **materialises the records** and their `source_document_ids`. Field
+extraction then runs per record over that record's selected files.
+
+- Purely **structural** criteria (prefix, folder) can be resolved
+  deterministically without a model call.
+- **Content** criteria ("files with heading X") use the **decorated**
+  `ILanguageModel`, so the grouping pass is itself a first-class, **metered and
+  budgeted** step.
+
+Therefore records are **not necessarily known at ingest time** under
+many-per-record: ingestion seeds `app_extraction_documents`; the grouping pass
+seeds `app_extraction_records`. Under one-per-file the grouping pass is trivial
+(one record per document) and no criteria are authored.
 
 ### 5. Results model: input files, output records, and their source links
 
@@ -112,12 +139,14 @@ remains the documented scale path only at thousands of concurrent runs.
 
 The whole feature is gated at two levels, both **server-enforced**:
 
-- **Feature flag `distillations`** (role-scoped per ADR-022) gates the entire
-  surface — the "Distillations" menu item, the routes, and every tRPC procedure.
-  Default **off**; dark-launchable to a role, widened by clearing the allowlist.
-- **Permissions (ADR-021)**: `distillation:author` (create/edit/publish an
-  extraction flow and configure it) and `distillation:run` (upload documents,
-  run, preview, mark complete). These are developer-owned keys added to the
+- **Feature flag `extraction_flows`** (role-scoped per ADR-022) gates the entire
+  surface — the "Synthesise Information" menu item, the routes, and every tRPC
+  procedure. Default **off**; dark-launchable to a role, widened by clearing the
+  allowlist. (The flag key stays `extraction_flows` regardless of the display
+  name; the admin flags page can label it "Synthesise Information".)
+- **Permissions (ADR-021)**: `extraction:author` (create/edit/publish an
+  extraction flow and configure it) and `extraction:run` (upload documents, run,
+  preview, mark complete). These are developer-owned keys added to the
   `PERMISSIONS` registry; admins hold both via the wildcard.
 
 The menu item renders only when the flag resolves for the user
@@ -192,5 +221,5 @@ chat.
   app data with no new service. Reconsider only at thousands of concurrent runs.
 - **A dedicated `extraction` permission-less flag, or a permission-less menu.**
   Rejected: authoring and running are distinct capabilities (an ops user may run
-  a published distillation without authoring one), so both a surface flag and
+  a published extraction flow without authoring one), so both a surface flag and
   action permissions are needed.

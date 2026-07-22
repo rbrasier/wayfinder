@@ -57,10 +57,16 @@ keeping usage metering/quota enforcement intact automatically.
    land in MinIO via a **store-only** path — never injected into any
    conversational context. Intake size/count limits are runtime-configurable
    (mirroring `getSessionUploadConfig`).
-3. **Record cardinality** — from the flow's input config (ADR-033 §4): under
-   `one_per_file`, seed one record per document; under `many_per_record`, group
-   documents by **first-level folder** (fallback: whole upload) and seed one
-   record per group. Each record stores `source_document_ids`.
+3. **Record cardinality — grouping is the first processing stage** (ADR-033 §4a):
+   under `one_per_file`, seed one record per document. Under `many_per_record`,
+   the **first stage is a selection/grouping pass** that interprets the author's
+   plain-English criteria (prefix / sub-folder / heading-in-content) over
+   filenames, `tree_path`, and lightweight content signals, decides which files
+   belong to each record, and materialises the records **before** any field
+   extraction. Structural criteria (prefix/folder) resolve deterministically;
+   content criteria use the decorated (metered) model. Each record stores its
+   `source_document_ids`. The grouping result is shown in the preview so a bad
+   grouping is caught before the batch commits spend.
 4. **Unreadable classification** — `pdf-parse` returns the text layer only; a
    scanned document yields empty/garbage text. Classify these as `unreadable`
    (empty-text heuristic) and route to exceptions rather than emitting confident
@@ -101,7 +107,8 @@ keeping usage metering/quota enforcement intact automatically.
 | domain | `entities/extraction-record.ts` | (from Phase 1) persisted here: fields[], aggregate confidence, sourceDocumentIds. |
 | domain | `ports/extraction-run-repository.ts` | NEW — create/claim/update; count-by-status; cancel; pause/continue. |
 | domain | `ports/archive-extractor.ts` | NEW — zip → sanitised, tree-preserving entries. |
-| application | `extraction/start-batch-run.ts` | NEW — validate published version, ingest, seed documents + records by cardinality. |
+| application | `extraction/start-batch-run.ts` | NEW — validate published version, ingest documents, run the grouping pass, seed records. |
+| application | `extraction/select-record-files.ts` | (from Phase 1) reused at batch scale to group all documents into records. |
 | application | `extraction/process-extraction-task.ts` | NEW — claim → extract → attach to record → retry/fail. |
 | application | `extraction/cancel-run.ts` / `retry-failed.ts` / `continue-run.ts` | NEW — run controls (incl. resume past preview). |
 | adapters | `db/schema/wayfinder.ts` | NEW `app_extraction_runs`, `app_extraction_documents`, `app_extraction_records`. |
@@ -145,8 +152,11 @@ app_extraction_records     (id, run_id, ordinal,
 - **Preview-resume semantics** — a run paused at the preview boundary must resume
   without re-processing the previewed records; define the continue path and audit
   it (parallels cap-pause resume).
-- **Cardinality grouping** — first-level-folder grouping for many-per-record must
-  handle flat uploads and inconsistent nesting deterministically.
+- **Selection/grouping pass** — interpreting free-text criteria over
+  filenames/paths/content is the new correctness risk. Structural criteria resolve
+  deterministically; content criteria need a content pre-scan + metered model
+  pass. It runs once per run before extraction; confirm the grouping in preview
+  and make it re-runnable on refine-input.
 - **Zip safety** — the expansion path is untrusted input; caps and
   path-sanitisation are correctness/security, not polish. Flag for the build-time
   security review.
@@ -157,8 +167,9 @@ app_extraction_records     (id, run_id, ordinal,
 
 - [ ] A full-batch run over N documents executes asynchronously via the worker;
       a container restart resumes mid-run (no re-processing completed documents).
-- [ ] Input files seed documents and records per the flow's cardinality
-      (`one_per_file` vs `many_per_record` grouped by first-level folder), each
+- [ ] Input files seed documents; records are materialised by the first-stage
+      grouping pass per the flow's cardinality (`one_per_file`, or
+      `many_per_record` from the author's plain-English selection criteria), each
       record carrying its `source_document_ids`.
 - [ ] Failed documents retry up to the cap, then land as `failed`; unreadable
       documents are classified, not blanked; the run finishes `complete` or

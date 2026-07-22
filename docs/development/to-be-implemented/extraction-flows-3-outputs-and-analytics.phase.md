@@ -63,8 +63,8 @@ alongside guided-flow insight.
    Insights field report — per-record rows × extraction-field columns, which is
    structurally what `computeFieldReport` already produces for guided flows. Add a
    **runs list** (history, status, cost, counts) rather than forcing extraction
-   data into session dashboards; it appears in the `/distillations` list's
-   run sub-rows (Phase 1) and in `/admin/distillations`.
+   data into session dashboards; it appears in the `/synthesise` list's run
+   sub-rows (Phase 1) and in `/admin/synthesise`.
 
 ## 3. Key entities / files
 
@@ -82,7 +82,7 @@ alongside guided-flow insight.
 | apps/web | `components/extraction/result-grid.tsx` | extend: filters, exceptions, confidence modal, source-link, edit, download. |
 | apps/web | `components/extraction/summary-preview.tsx` | NEW — markdown render + download. |
 | apps/web | `components/extraction/run-history.tsx` | NEW — runs list + status/cost. |
-| apps/web | `app/(user)/distillations/[id]/runs/…` | run history + results routes. |
+| apps/web | `app/(user)/synthesise/[id]/runs/…` | run history + results routes. |
 | apps/web | `server/routers/extraction.ts` | add `generateDocuments`, `export`, `editResult`, `markComplete`, `runReport` (flag+permission gated). |
 
 ## 4. Governance / audit
@@ -96,7 +96,7 @@ alongside guided-flow insight.
   artifacts served via REST (DOCX/XLSX/JSON download, source-document download)
   carry explicit run-ownership/permission checks on every endpoint — the
   session-REST IDOR fix (v1.59.0) is the cautionary precedent. Every procedure
-  re-checks the `distillations` flag and `distillation:run` (ADR-033 §7).
+  re-checks the `extraction_flows` flag and `extraction:run` (ADR-033 §7).
 
 ## 5. Risks / open questions
 
@@ -131,7 +131,7 @@ alongside guided-flow insight.
 - [ ] The viewer supports sort/filter, an exceptions filter, audited per-field
       editing (audit + edit history, no AI re-run), and top-right refine /
       continue / mark-complete controls.
-- [ ] Runs appear in the distillations list run sub-rows and in a run-history view
+- [ ] Runs appear in the Synthesise Information list run sub-rows and in a run-history view
       with status, counts, and cost; a per-run field report reuses the Insights
       report structure.
 - [ ] Confidence-based gating reads stored server-side values; every run-artifact
