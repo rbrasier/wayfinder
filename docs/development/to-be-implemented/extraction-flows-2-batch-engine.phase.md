@@ -65,8 +65,12 @@ keeping usage metering/quota enforcement intact automatically.
    belong to each record, and materialises the records **before** any field
    extraction. Structural criteria (prefix/folder) resolve deterministically;
    content criteria use the decorated (metered) model. Each record stores its
-   `source_document_ids`. The grouping result is shown in the preview so a bad
-   grouping is caught before the batch commits spend.
+   `source_document_ids`. A file matching **no** record is routed to the
+   **exceptions** bucket (never dropped); a file matching **several** is assigned
+   to **all** matching records. There is **no separate confirmation gate** — the
+   grouping is reviewed in the existing preview (the batch pauses at the preview
+   breakpoint) and re-runnable via *refine input*, so a bad grouping is caught
+   before the full batch commits spend.
 4. **Unreadable classification** — `pdf-parse` returns the text layer only; a
    scanned document yields empty/garbage text. Classify these as `unreadable`
    (empty-text heuristic) and route to exceptions rather than emitting confident
@@ -170,7 +174,8 @@ app_extraction_records     (id, run_id, ordinal,
 - [ ] Input files seed documents; records are materialised by the first-stage
       grouping pass per the flow's cardinality (`one_per_file`, or
       `many_per_record` from the author's plain-English selection criteria), each
-      record carrying its `source_document_ids`.
+      record carrying its `source_document_ids`; files matching no record go to
+      exceptions and files matching several are assigned to all of them.
 - [ ] Failed documents retry up to the cap, then land as `failed`; unreadable
       documents are classified, not blanked; the run finishes `complete` or
       `partial`.

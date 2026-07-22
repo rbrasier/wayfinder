@@ -100,6 +100,17 @@ extraction then runs per record over that record's selected files.
   `ILanguageModel`, so the grouping pass is itself a first-class, **metered and
   budgeted** step.
 
+**Edge files.** A file matching **no** record is routed to the run's
+**exceptions** bucket (alongside `unreadable`/`failed`) — never silently dropped.
+A file matching **more than one** record is assigned to **all** matching records
+(over-matching is allowed; the same source can legitimately inform several
+records).
+
+**No separate confirmation gate.** The grouping is not a mandatory approval step;
+it is surfaced in the **existing preview** (the run pauses at the preview
+breakpoint above 5 files, §6/Phase 2) and re-runnable via *refine input*, so a
+wrong grouping is caught there rather than in a bespoke gate.
+
 Therefore records are **not necessarily known at ingest time** under
 many-per-record: ingestion seeds `app_extraction_documents`; the grouping pass
 seeds `app_extraction_records`. Under one-per-file the grouping pass is trivial

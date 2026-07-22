@@ -178,7 +178,9 @@ developer-owned `PERMISSIONS` registry (ADR-021).
       offers docx/xlsx, context-doc upload, and a summary toggle + template.
 - [ ] For many-per-record, the processor's **first stage** interprets the
       selection criteria to group files into records before any field extraction,
-      recording each record's `source_document_ids`.
+      recording each record's `source_document_ids`; unmatched files go to
+      exceptions and multi-matched files are assigned to every matching record.
+      The grouping is reviewed in the preview, not a separate gate.
 - [ ] Running with >5 input files defaults to preview on; a progress bar shows
       `x of y processed` with a preview-breakpoint marker; the operator can stop
       at preview, continue processing, refine input, or mark complete.
@@ -213,8 +215,11 @@ developer-owned `PERMISSIONS` registry (ADR-021).
 - **File-to-record selection reliability** — interpreting free-text criteria over
   filenames/paths/content is the new risk introduced by dynamic grouping.
   Structural criteria (prefix/folder) resolve deterministically; content criteria
-  need a metered model pass and light content pre-scan. Show the grouping result
-  for confirmation before extraction so a bad grouping is caught early.
+  need a metered model pass and light content pre-scan. **No separate confirmation
+  gate** — the grouping is surfaced in the existing preview (which already pauses
+  above 5 files) and is re-runnable via *refine input*. A file matching **no**
+  record goes to **exceptions**; a file matching **several** is assigned to **all**
+  of them (over-matching allowed).
 - **XLSX output has been specced but not built for guided flows** — the writer is
   new work here; reuse the spreadsheet parser's writer if one exists.
 - **Confidence calibration** — self-reported per-field confidence is weakly

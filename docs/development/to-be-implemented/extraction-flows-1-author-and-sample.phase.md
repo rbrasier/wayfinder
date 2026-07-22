@@ -142,8 +142,10 @@ that makes this safe is `app_flows.flow_type`, defaulting to `'guided'`, so
 - **Selection-criteria reliability** — interpreting free-text grouping criteria
   is a new risk. Structural criteria (prefix/folder) resolve deterministically;
   content criteria ("files with heading X") need a light content pre-scan +
-  metered model pass. Surface the grouping result for confirmation before
-  extraction so a bad grouping is caught before spend.
+  metered model pass. No separate confirmation gate — the grouping is caught in
+  the preview (which already pauses above 5 files) and re-run via *refine input*.
+  A file matching no record → exceptions; a file matching several → assigned to
+  all matching records.
 - **Snapshot union** — `publish-flow-version.ts` builds snapshots from nodes/edges
   today; branching per flow type is the one shared-code touchpoint. Cover with the
   existing publish/restore tests to hold zero regression.
