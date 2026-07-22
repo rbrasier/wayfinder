@@ -17,3 +17,4 @@ export * from "./list-flow-versions";
 export * from "./get-flow-version";
 export * from "./restore-flow-version";
 export * from "./sync-flow-draft";
+export * from "./extraction-authoring";

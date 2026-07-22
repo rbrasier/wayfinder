@@ -1,5 +1,10 @@
 export type FlowStatus = "draft" | "published";
 export type FlowPermissionRole = "owner" | "viewer";
+
+// Discriminates the two flow paradigms (ADR-033). Guided code paths never read
+// this — it defaults to "guided" so every existing flow is untouched. An
+// extraction flow carries an extraction schema instead of a node graph.
+export type FlowType = "guided" | "extraction";
 export type ExtractionStatus = "pending" | "complete" | "failed" | "unsupported";
 
 export type FlowVisibility =
@@ -35,6 +40,7 @@ export interface Flow {
   icon: string | null;
   expertRole: string | null;
   ownerUserId: string;
+  flowType: FlowType;
   status: FlowStatus;
   visibility: FlowVisibility;
   permissions: FlowPermission[];
@@ -50,4 +56,6 @@ export interface NewFlow {
   icon?: string | null;
   expertRole?: string | null;
   ownerUserId: string;
+  // Defaults to "guided" at the persistence layer when omitted (ADR-033 §1).
+  flowType?: FlowType;
 }

@@ -11,7 +11,7 @@ import {
   type NewFlow,
   type Result,
 } from "@rbrasier/domain";
-import { desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_flows, kb_context_doc_content } from "../db/schema/wayfinder";
 import { logRepoError } from "./log-repo-error";
@@ -38,6 +38,7 @@ const toEntity = (row: typeof app_flows.$inferSelect, contentRows: ContentRow[] 
     icon: row.icon,
     expertRole: row.expert_role ?? null,
     ownerUserId: row.owner_user_id,
+    flowType: row.flow_type,
     status: row.status,
     visibility: row.visibility,
     permissions: row.permissions,
@@ -70,6 +71,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
           icon: input.icon ?? null,
           expert_role: input.expertRole ?? null,
           owner_user_id: input.ownerUserId,
+          flow_type: input.flowType ?? "guided",
           status: "draft",
           visibility: { kind: "private" },
           permissions: [{ userId: input.ownerUserId, role: "owner" }],
@@ -98,7 +100,11 @@ export class DrizzleFlowRepository implements IFlowRepository {
 
   async list(): Promise<Result<Flow[]>> {
     try {
-      const rows = await this.db.select().from(app_flows).where(isNull(app_flows.deleted_at)).orderBy(desc(app_flows.updated_at));
+      const rows = await this.db
+        .select()
+        .from(app_flows)
+        .where(and(isNull(app_flows.deleted_at), eq(app_flows.flow_type, "guided")))
+        .orderBy(desc(app_flows.updated_at));
       return ok(rows.map((r) => toEntity(r)));
     } catch (cause) {
       logRepoError("DrizzleFlowRepository.list", cause);
@@ -108,12 +114,55 @@ export class DrizzleFlowRepository implements IFlowRepository {
 
   async listForUser(userId: string): Promise<Result<Flow[]>> {
     try {
-      const rows = await this.db.select().from(app_flows).where(eq(app_flows.owner_user_id, userId)).orderBy(desc(app_flows.updated_at));
-      const nonDeleted = rows.filter((r) => r.deleted_at === null);
-      return ok(nonDeleted.map((r) => toEntity(r)));
+      const rows = await this.db
+        .select()
+        .from(app_flows)
+        .where(
+          and(
+            eq(app_flows.owner_user_id, userId),
+            isNull(app_flows.deleted_at),
+            eq(app_flows.flow_type, "guided"),
+          ),
+        )
+        .orderBy(desc(app_flows.updated_at));
+      return ok(rows.map((r) => toEntity(r)));
     } catch (cause) {
       logRepoError("DrizzleFlowRepository.listForUser", cause);
       return err(domainError("INFRA_FAILURE", "Failed to list flows for user.", cause));
+    }
+  }
+
+  async listExtraction(): Promise<Result<Flow[]>> {
+    try {
+      const rows = await this.db
+        .select()
+        .from(app_flows)
+        .where(and(isNull(app_flows.deleted_at), eq(app_flows.flow_type, "extraction")))
+        .orderBy(desc(app_flows.updated_at));
+      return ok(rows.map((r) => toEntity(r)));
+    } catch (cause) {
+      logRepoError("DrizzleFlowRepository.listExtraction", cause);
+      return err(domainError("INFRA_FAILURE", "Failed to list extraction flows.", cause));
+    }
+  }
+
+  async listExtractionForUser(userId: string): Promise<Result<Flow[]>> {
+    try {
+      const rows = await this.db
+        .select()
+        .from(app_flows)
+        .where(
+          and(
+            eq(app_flows.owner_user_id, userId),
+            isNull(app_flows.deleted_at),
+            eq(app_flows.flow_type, "extraction"),
+          ),
+        )
+        .orderBy(desc(app_flows.updated_at));
+      return ok(rows.map((r) => toEntity(r)));
+    } catch (cause) {
+      logRepoError("DrizzleFlowRepository.listExtractionForUser", cause);
+      return err(domainError("INFRA_FAILURE", "Failed to list extraction flows for user.", cause));
     }
   }
 

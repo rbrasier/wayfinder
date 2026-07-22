@@ -3,6 +3,7 @@ export * from "./user";
 export * from "./error-log";
 export * from "./confidence";
 export * from "./document";
+export * from "./extraction";
 export * from "./context-docs";
 export * from "./session-uploads";
 export * from "./document-generation";

@@ -214,6 +214,7 @@ import {
 } from "@rbrasier/adapters";
 import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
+import { buildExtractionUseCases } from "./container-extraction";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import {
   createCachedAdminSettings,
@@ -725,6 +726,7 @@ const build = () => {
       getFlowVersion: new GetFlowVersion(flowVersions),
       restoreFlowVersion: new RestoreFlowVersion(flowVersions, auditLogger),
       syncFlowDraft: new SyncFlowDraft(flows, flowNodes, flowEdges, flowVersions),
+      ...buildExtractionUseCases({ flows, flowVersions, languageModel: llm, documentExtractor }),
       runAutoNode: new RunAutoNode(sessions, llm, nodeExecutors, sessionStepOutputs),
       applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete, notifyOnStepComplete),
       scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock, llm),

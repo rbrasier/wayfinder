@@ -44,12 +44,27 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
       description: "Non-admins granted advanced capability.",
       isSystem: true,
     },
-    defaultPermissions: ["flow:advanced_config", "workflow:publish_to_everyone"],
+    // Extraction authoring and running (ADR-033 §7) are advanced capabilities, so
+    // Power Users hold them by default; admins hold them via the wildcard.
+    defaultPermissions: [
+      "flow:advanced_config",
+      "workflow:publish_to_everyone",
+      "extraction:author",
+      "extraction:run",
+    ],
   },
 ];
 
-// Flags scoped to Power Users on first migrate (ADR-022); admins still pass via wildcard.
-const POWER_USER_SCOPED_FLAGS = ["auto_node", "scheduled_node", "mcp", "skills"];
+// Flags scoped to Power Users on first migrate (ADR-022); admins still pass via
+// wildcard. extraction_flows stays disabled until an admin enables it — scoping
+// only narrows who sees it once on (ADR-033 §7 dark-launch).
+const POWER_USER_SCOPED_FLAGS = [
+  "auto_node",
+  "scheduled_node",
+  "mcp",
+  "skills",
+  "extraction_flows",
+];
 
 /**
  * Idempotent seed of the three system roles, their default permission grants, and

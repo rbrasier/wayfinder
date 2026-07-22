@@ -1,8 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { buildFlowSnapshot, flowEdgesFromSnapshot, flowNodesFromSnapshot } from "./flow-version";
+import {
+  buildExtractionSnapshot,
+  buildFlowSnapshot,
+  flowEdgesFromSnapshot,
+  flowNodesFromSnapshot,
+  isExtractionSnapshot,
+} from "./flow-version";
 import type { Flow } from "./flow";
 import type { FlowNode } from "./flow-node";
 import type { FlowEdge } from "./flow-edge";
+import type { ExtractionSchema } from "./extraction-schema";
 
 const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
   id: "flow-1",
@@ -11,6 +18,7 @@ const makeFlow = (overrides: Partial<Flow> = {}): Flow => ({
   icon: "📋",
   expertRole: "Procurement Officer",
   ownerUserId: "user-1",
+  flowType: "guided",
   status: "published",
   visibility: { kind: "private" },
   permissions: [{ userId: "user-1", role: "owner" }],
@@ -115,5 +123,51 @@ describe("flowNodesFromSnapshot / flowEdgesFromSnapshot", () => {
         updatedAt: at,
       },
     ]);
+  });
+});
+
+describe("extraction snapshots (ADR-033 §3)", () => {
+  const schema: ExtractionSchema = {
+    fields: [
+      {
+        field: { key: "supplier_name", label: "Supplier Name", type: "text", optional: false, raw: "Supplier Name" },
+        instruction: "The supplier's legal name.",
+        doneWhen: null,
+      },
+    ],
+    input: { cardinality: "one_per_file", selectionCriteria: null, guidance: "" },
+    output: {
+      format: "xlsx",
+      outputTemplate: null,
+      instruction: "One row per supplier.",
+      generateSummary: false,
+      summaryTemplate: null,
+      contextDocs: [],
+    },
+  };
+
+  it("builds an extraction snapshot carrying the schema, with empty nodes/edges", () => {
+    const snapshot = buildExtractionSnapshot(makeFlow({ flowType: "extraction" }), schema);
+
+    expect(snapshot.kind).toBe("extraction");
+    expect(snapshot.extraction).toEqual(schema);
+    expect(snapshot.nodes).toEqual([]);
+    expect(snapshot.edges).toEqual([]);
+    expect(snapshot.flow.name).toBe("Procurement Intake");
+  });
+
+  it("isExtractionSnapshot narrows extraction vs guided snapshots", () => {
+    const extraction = buildExtractionSnapshot(makeFlow({ flowType: "extraction" }), schema);
+    const guided = buildFlowSnapshot(makeFlow(), [], []);
+
+    expect(isExtractionSnapshot(extraction)).toBe(true);
+    expect(isExtractionSnapshot(guided)).toBe(false);
+  });
+
+  it("treats a legacy snapshot with no kind as guided", () => {
+    const guided = buildFlowSnapshot(makeFlow(), [], []);
+
+    expect(guided.kind).toBeUndefined();
+    expect(isExtractionSnapshot(guided)).toBe(false);
   });
 });

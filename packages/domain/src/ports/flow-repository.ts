@@ -14,8 +14,13 @@ export interface FlowUpdate {
 export interface IFlowRepository {
   create(input: NewFlow): Promise<Result<Flow>>;
   findById(id: string): Promise<Result<Flow | null>>;
+  // Guided flows only (ADR-033 §8): these feed the conversational surfaces (the
+  // Flows lists and New Chat), which must never show an extraction flow.
   list(): Promise<Result<Flow[]>>;
   listForUser(userId: string): Promise<Result<Flow[]>>;
+  // Extraction flows only — the "Synthesise Information" surfaces.
+  listExtraction(): Promise<Result<Flow[]>>;
+  listExtractionForUser(userId: string): Promise<Result<Flow[]>>;
   update(id: string, patch: FlowUpdate): Promise<Result<Flow>>;
   softDelete(id: string): Promise<Result<Flow>>;
   addContextDoc(flowId: string, doc: FlowContextDoc): Promise<Result<Flow>>;

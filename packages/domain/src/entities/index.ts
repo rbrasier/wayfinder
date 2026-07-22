@@ -23,6 +23,8 @@ export * from "./connectivity";
 export * from "./flow";
 export * from "./flow-visibility";
 export * from "./flow-version";
+export * from "./extraction-schema";
+export * from "./extraction-record";
 export * from "./confidence-threshold";
 export * from "./flow-node";
 export * from "./node-output";

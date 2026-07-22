@@ -3,6 +3,8 @@ import {
   domainError,
   err,
   ok,
+  type Flow,
+  type FlowSnapshot,
   type FlowVersion,
   type IAuditLogger,
   type IFlowEdgeRepository,
@@ -35,14 +37,16 @@ export class PublishFlowVersion {
     if (flowResult.error) return flowResult;
     if (!flowResult.data) return err(domainError("NOT_FOUND", "Flow not found."));
 
-    const [nodesResult, edgesResult] = await Promise.all([
-      this.flowNodes.listByFlow(input.flowId),
-      this.flowEdges.listByFlow(input.flowId),
-    ]);
-    if (nodesResult.error) return nodesResult;
-    if (edgesResult.error) return edgesResult;
+    // The one shared-code touchpoint (ADR-033 §3): a guided flow snapshots its
+    // live nodes/edges; an extraction flow's schema already lives in the open
+    // draft snapshot, so publishing promotes that draft as-is.
+    const snapshotResult =
+      flowResult.data.flowType === "extraction"
+        ? await this.extractionSnapshot(input.flowId)
+        : await this.guidedSnapshot(flowResult.data);
+    if (snapshotResult.error) return snapshotResult;
 
-    const snapshot = buildFlowSnapshot(flowResult.data, nodesResult.data, edgesResult.data);
+    const snapshot = snapshotResult.data;
     const published = await this.flowVersions.createPublished({
       flowId: input.flowId,
       snapshot,
@@ -64,5 +68,29 @@ export class PublishFlowVersion {
     });
 
     return ok(published.data);
+  }
+
+  private async guidedSnapshot(flow: Flow): Promise<Result<FlowSnapshot>> {
+    const [nodesResult, edgesResult] = await Promise.all([
+      this.flowNodes.listByFlow(flow.id),
+      this.flowEdges.listByFlow(flow.id),
+    ]);
+    if (nodesResult.error) return nodesResult;
+    if (edgesResult.error) return edgesResult;
+    return ok(buildFlowSnapshot(flow, nodesResult.data, edgesResult.data));
+  }
+
+  private async extractionSnapshot(flowId: string): Promise<Result<FlowSnapshot>> {
+    const draft = await this.flowVersions.openDraft(flowId);
+    if (draft.error) return draft;
+    if (!draft.data) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          "Configure the extraction schema before publishing this flow.",
+        ),
+      );
+    }
+    return ok(draft.data.snapshot);
   }
 }

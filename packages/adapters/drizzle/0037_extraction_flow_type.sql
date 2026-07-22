@@ -1,0 +1,1 @@
+ALTER TABLE "app_flows" ADD COLUMN "flow_type" text DEFAULT 'guided' NOT NULL;

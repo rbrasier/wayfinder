@@ -49,6 +49,11 @@ export const app_flows = pgTable(
     owner_user_id: uuid("owner_user_id")
       .notNull()
       .references(() => core_users.id, { onDelete: "restrict" }),
+    // Flow paradigm discriminator (ADR-033). Defaults to "guided" so every
+    // existing row and guided code path is untouched.
+    flow_type: text("flow_type", { enum: ["guided", "extraction"] })
+      .notNull()
+      .default("guided"),
     status: text("status", { enum: ["draft", "published"] }).notNull().default("draft"),
     visibility: jsonb("visibility")
       .$type<FlowVisibility>()
