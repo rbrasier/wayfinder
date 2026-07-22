@@ -18,6 +18,9 @@ const FLOWS_DASHBOARD_PATH = process.env.E2E_FLOWS_DASHBOARD_PATH ?? "/admin/das
 const FORK_FLOW_NAME = "E2E SEED Fork Flow";
 
 test.describe("fork-sibling field consolidation", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_FLOWS_DASHBOARD_PATH, "Needs seeded fork-flow dashboard data the CI seed does not create yet — runs via the /e2e skill with E2E_FLOWS_DASHBOARD_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("two fork branches sharing a field render as one combined column by default", async ({
     page,
   }) => {

@@ -25,6 +25,9 @@ const EMPTY_GAP_SESSION_PATH =
   "/chats/e2e-seed-pregen-empty-gap-session";
 
 test.describe("pre-generation gate — empty-gap confidence dip", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_PREGEN_EMPTY_GAP_SESSION_PATH, "Needs a doc-gen phantom-badge session the CI seed does not create yet — runs via the /e2e skill with E2E_PREGEN_EMPTY_GAP_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("advances quietly and generates the document without a phantom badge or duplicate turn", async ({
     page,
   }) => {

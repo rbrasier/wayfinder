@@ -18,6 +18,9 @@ import { test, expect } from "./helpers/base";
 const SESSION_PATH = process.env.E2E_FORK_SESSION_PATH ?? "/chats/e2e-seed-fork-threshold-session";
 
 test.describe("fork advances at a sub-90 configured threshold", () => {
+  test.beforeEach(() => {
+    test.skip(!process.env.E2E_FORK_SESSION_PATH, "Needs a fork-threshold session the CI seed does not create yet — runs via the /e2e skill with E2E_FORK_SESSION_PATH set; skipped in CI (tracked in the e2e seed backlog).");
+  });
   test("a mid-confidence turn on a low-threshold fork advances instead of stalling", async ({
     page,
   }) => {
