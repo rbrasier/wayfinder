@@ -21,8 +21,6 @@ import { loadSeedFixtures } from "./helpers/seed";
 // E2E_STRUCTURED_SESSION_PATH to override the path; E2E_FLOW_CONFIG_PATH to
 // point at a flow's config canvas for the editor test.
 
-const FLOW_CONFIG_PATH = process.env.E2E_FLOW_CONFIG_PATH ?? "/flows/e2e-seed-structured-flow/config";
-
 // Resolve the seeded structured session path, or null when nothing is seeded.
 function structuredSessionPath(): string | null {
   if (process.env.E2E_STRUCTURED_SESSION_PATH) return process.env.E2E_STRUCTURED_SESSION_PATH;
@@ -30,11 +28,23 @@ function structuredSessionPath(): string | null {
   return structuredSessionId ? `/chats/${structuredSessionId}` : null;
 }
 
+// Resolve the seeded structured flow's config-canvas path, or null when unseeded.
+function structuredFlowConfigPath(): string | null {
+  if (process.env.E2E_FLOW_CONFIG_PATH) return process.env.E2E_FLOW_CONFIG_PATH;
+  const structuredFlowId = loadSeedFixtures()?.structuredFlowId;
+  return structuredFlowId ? `/flows/${structuredFlowId}/config` : null;
+}
+
 test.describe("structured conversation — config editor", () => {
   test("offers three output types and reveals the field editor for structured", async ({
     page,
   }) => {
-    await page.goto(FLOW_CONFIG_PATH);
+    const flowConfigPath = structuredFlowConfigPath();
+    if (!flowConfigPath) {
+      test.skip(true, "No seeded structured flow — run the seed setup to enable this test");
+      return;
+    }
+    await page.goto(flowConfigPath);
 
     // Open the structured node's config modal.
     await page.getByText(/record intake decision/i).click();
@@ -50,7 +60,12 @@ test.describe("structured conversation — config editor", () => {
   });
 
   test("captures a field via label + type + the per-field config cog", async ({ page }) => {
-    await page.goto(FLOW_CONFIG_PATH);
+    const flowConfigPath = structuredFlowConfigPath();
+    if (!flowConfigPath) {
+      test.skip(true, "No seeded structured flow — run the seed setup to enable this test");
+      return;
+    }
+    await page.goto(flowConfigPath);
     await page.getByText(/record intake decision/i).click();
     await page.getByText("Structured conversation").click();
 

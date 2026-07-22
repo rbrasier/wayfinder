@@ -23,6 +23,7 @@ export interface SeedFixtures {
   confirmationSessionId?: string;
   approvalSessionId?: string;
   structuredSessionId?: string;
+  structuredFlowId?: string;
 }
 
 export function writeSeedFixtures(fixtures: SeedFixtures): void {
