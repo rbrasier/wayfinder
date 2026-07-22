@@ -21,6 +21,7 @@ import {
   type TemplateField,
 } from "@rbrasier/domain";
 import { documentSummarySchema, type DocumentData, type GroupItems } from "@rbrasier/shared";
+import { DOCUMENT_MIME, templateFormat } from "./document-format";
 import { buildRenderData } from "./render-data";
 import { validateGroupItems } from "./group-edit";
 
@@ -43,22 +44,23 @@ export type UpdateDocumentFieldsOutput =
   | { document: SessionDocument; fieldErrors?: undefined }
   | { fieldErrors: DocumentFieldError[]; document?: undefined };
 
-const DOCX_MIME =
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-
-// `generated/{sessionId}/{basename}-r{n}.docx`: the previous object is retained,
-// so each edit lands at the next revision suffix (first edit becomes r1).
+// `generated/{sessionId}/{basename}-r{n}.{ext}`: the previous object is retained,
+// so each edit lands at the next revision suffix (first edit becomes r1). The
+// extension is preserved from the current path so an xlsx document keeps `.xlsx`.
 const nextRevisionPath = (storagePath: string): string => {
   const lastSlash = storagePath.lastIndexOf("/");
   const directory = storagePath.slice(0, lastSlash + 1);
-  const filename = storagePath.slice(lastSlash + 1).replace(/\.docx$/i, "");
+  const nameWithExt = storagePath.slice(lastSlash + 1);
+  const extMatch = nameWithExt.match(/\.([a-z0-9]+)$/i);
+  const ext = extMatch ? extMatch[1] : "docx";
+  const filename = nameWithExt.replace(/\.[a-z0-9]+$/i, "");
   const revisionMatch = filename.match(/^(.*)-r(\d+)$/);
   if (revisionMatch) {
     const base = revisionMatch[1]!;
     const next = Number(revisionMatch[2]) + 1;
-    return `${directory}${base}-r${next}.docx`;
+    return `${directory}${base}-r${next}.${ext}`;
   }
-  return `${directory}${filename}-r1.docx`;
+  return `${directory}${filename}-r1.${ext}`;
 };
 
 export class UpdateDocumentFields {
@@ -132,8 +134,8 @@ export class UpdateDocumentFields {
     const newStoragePath = nextRevisionPath(currentDocument.storagePath);
     const putResult = await this.objectStorage.put(
       newStoragePath,
-      generateResult.data.docxBytes,
-      DOCX_MIME,
+      generateResult.data.bytes,
+      DOCUMENT_MIME[templateFormat(config)],
     );
     if (putResult.error) return putResult;
 

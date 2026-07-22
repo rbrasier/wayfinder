@@ -2,7 +2,7 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import InspectModule from "docxtemplater/js/inspect-module.js";
 import { domainError, err, ok, parseTemplateFields, templateFieldKey } from "@rbrasier/domain";
-import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateDocxInput, GenerateDocxOutput } from "@rbrasier/domain";
+import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateInput, GenerateOutput } from "@rbrasier/domain";
 import type { Result } from "@rbrasier/domain";
 
 interface RunInfo {
@@ -63,7 +63,7 @@ export class DocxGenerator implements IDocumentGenerator {
     }
   }
 
-  generate(input: GenerateDocxInput): Result<GenerateDocxOutput> {
+  generate(input: GenerateInput): Result<GenerateOutput> {
     try {
       const processedBytes = this.preprocessTemplate(input.templateBytes);
       const zip = new PizZip(processedBytes);
@@ -73,8 +73,8 @@ export class DocxGenerator implements IDocumentGenerator {
         delimiters: { start: "{{", end: "}}" },
       });
       doc.render(input.data);
-      const docxBytes = doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
-      return ok({ docxBytes });
+      const bytes = doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
+      return ok({ bytes });
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to generate DOCX from template.", cause));
     }

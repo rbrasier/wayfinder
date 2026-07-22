@@ -84,7 +84,7 @@ test.describe('phase: repeating / structured groups', () => {
     });
 
     const fakeDocx = Buffer.from('PK\x03\x04 fake docx content');
-    await page.locator('input[type="file"][accept=".docx"]').setInputFiles({
+    await page.locator('input[type="file"][accept=".docx,.xlsx"]').setInputFiles({
       name: 'nested-group.docx',
       mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       buffer: fakeDocx,

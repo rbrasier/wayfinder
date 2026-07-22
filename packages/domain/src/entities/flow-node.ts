@@ -31,6 +31,14 @@ export interface ConversationalNodeConfig {
   documentTemplatePath?: string | null;
   documentTemplateFilename?: string | null;
   documentTemplateFields?: TemplateField[] | null;
+  // The uploaded template's file format. Absent is treated as "docx" so flows
+  // authored before xlsx templates existed are unchanged (ADR-039).
+  documentTemplateFormat?: "docx" | "xlsx";
+  // How an xlsx template's fields were authored, decided at upload and never
+  // re-guessed at runtime (ADR-039): "tags" when any {{ tag }} is present
+  // (precedence), "header" when the first non-empty row's headings are the
+  // fields. Absent for docx templates.
+  spreadsheetTemplateMode?: "tags" | "header";
   // Author-declared fields for a `structured` output type (ADR-038). Kept
   // distinct from documentTemplateFields so a document-named slot never carries
   // non-document data; read only through nodeFieldSet.

@@ -261,7 +261,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     positionTimers.current.set(node.id, timer);
   }, [updatePositionMutation, flowId, markEdited]);
 
-  const handleUploadTemplate = useCallback(async (file: File, _currentValues: NodeConfigValues): Promise<{ path: string; filename: string; documentTemplateContent: string | null } | { error: string; code?: string }> => {
+  const handleUploadTemplate = useCallback(async (file: File, _currentValues: NodeConfigValues): Promise<{ path: string; filename: string; documentTemplateContent: string | null; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null } | { error: string; code?: string }> => {
     if (!editingNodeId) {
       return { error: "Save the step first before uploading a template." };
     }
@@ -271,7 +271,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
       method: "POST",
       body: formData,
     });
-    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; documentTemplateFields?: TemplateField[]; error?: string; code?: string };
+    const data = await res.json() as { path?: string; filename?: string; documentTemplateContent?: string | null; documentTemplateFields?: TemplateField[]; documentTemplateFormat?: "docx" | "xlsx"; spreadsheetTemplateMode?: "tags" | "header" | null; error?: string; code?: string };
     if (!res.ok || data.error) {
       return { error: data.error ?? "Upload failed", code: data.code };
     }
@@ -292,13 +292,21 @@ function CanvasInner({ flowId }: { flowId: string }) {
               documentTemplatePath: data.path ?? null,
               documentTemplateFilename: data.filename ?? null,
               documentTemplateContent: data.documentTemplateContent ?? null,
+              documentTemplateFormat: data.documentTemplateFormat ?? "docx",
+              spreadsheetTemplateMode: data.spreadsheetTemplateMode ?? null,
               ...(data.documentTemplateFields ? { documentTemplateFields: data.documentTemplateFields } : {}),
             },
           },
         };
       }),
     );
-    return { path: data.path!, filename: data.filename!, documentTemplateContent: data.documentTemplateContent ?? null };
+    return {
+      path: data.path!,
+      filename: data.filename!,
+      documentTemplateContent: data.documentTemplateContent ?? null,
+      documentTemplateFormat: data.documentTemplateFormat ?? "docx",
+      spreadsheetTemplateMode: data.spreadsheetTemplateMode ?? null,
+    };
   }, [editingNodeId, flowId]);
 
   const handleConfigSave = useCallback(async (values: NodeConfigValues) => {
@@ -356,6 +364,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplateContent: values.documentTemplateContent ?? null,
         documentTemplateFields: hasTemplate ? (existingNodeConfig.documentTemplateFields ?? null) : null,
         documentTemplateStructuredContent: hasTemplate ? (existingNodeConfig.documentTemplateStructuredContent ?? null) : null,
+        documentTemplateFormat: hasTemplate ? (existingNodeConfig.documentTemplateFormat ?? null) : null,
+        spreadsheetTemplateMode: hasTemplate ? (existingNodeConfig.spreadsheetTemplateMode ?? null) : null,
         allowManualEdit: values.allowManualEdit,
         requireConfirmation: values.neverDone ? false : values.requireConfirmation,
         skillRefs: values.skillRefs,
@@ -569,6 +579,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         documentTemplatePath: (editingConfig.documentTemplatePath as string | null) ?? null,
         documentTemplateFilename: (editingConfig.documentTemplateFilename as string | null) ?? null,
         documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
+        documentTemplateFormat: (editingConfig.documentTemplateFormat as "docx" | "xlsx" | null | undefined) ?? null,
+        spreadsheetTemplateMode: (editingConfig.spreadsheetTemplateMode as "tags" | "header" | null | undefined) ?? null,
         allowManualEdit: (editingConfig.allowManualEdit as boolean | undefined) ?? true,
         requireConfirmation: Boolean(editingConfig.requireConfirmation),
         skillRefs: (editingConfig.skillRefs as string[] | undefined) ?? [],

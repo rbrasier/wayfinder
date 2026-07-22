@@ -1,12 +1,88 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { DocxGenerator } from "@rbrasier/adapters";
+import { DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
+import type { TemplateField } from "@rbrasier/domain";
 import { TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+type TemplateFormat = "docx" | "xlsx";
+
+const TEMPLATE_MIME: Record<TemplateFormat, string> = {
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
 const docxGenerator = new DocxGenerator();
+const xlsxGenerator = new XlsxGenerator();
+
+interface TemplateExtraction {
+  tags: string[];
+  fields: TemplateField[];
+  documentTemplateContent: string;
+  spreadsheetTemplateMode: "tags" | "header" | null;
+}
+
+interface ExtractionFailure {
+  status: number;
+  body: { error: string; code?: string };
+}
+
+// Reduces an uploaded template to the fields a conversation must gather, the
+// prose to summarise/index, and (for xlsx) the detected authoring mode. Mirrors
+// the .docx validation for .xlsx via the XlsxGenerator (ADR-039): any {{ tag }}
+// ⇒ tag mode, otherwise the header row's headings; a file with neither is
+// rejected here rather than mid-session.
+const extractTemplate = (
+  format: TemplateFormat,
+  buffer: Buffer,
+): { data: TemplateExtraction; error?: undefined } | { data?: undefined; error: ExtractionFailure } => {
+  const generator = format === "xlsx" ? xlsxGenerator : docxGenerator;
+
+  const tagsResult = generator.extractTags({ templateBytes: buffer });
+  if (tagsResult.error) {
+    return { error: { status: 422, body: { error: `Invalid template: ${tagsResult.error.message}` } } };
+  }
+
+  // A .docx with no tags cannot capture anything; a .xlsx with no tags is valid
+  // (header mode), so only .docx is rejected here.
+  if (format === "docx" && tagsResult.data.tags.length === 0) {
+    return {
+      error: {
+        status: 422,
+        body: {
+          error:
+            "This template has no {{ tag }} placeholders. Add at least one tag (e.g. {{ client_name }}) where you want the AI to fill in information, then re-upload.",
+          code: "NO_TEMPLATE_TAGS",
+        },
+      },
+    };
+  }
+
+  const fieldsResult = generator.extractFields({ templateBytes: buffer });
+  if (fieldsResult.error) {
+    return { error: { status: 422, body: { error: fieldsResult.error.message, code: "INVALID_TEMPLATE_FIELDS" } } };
+  }
+
+  const textResult = generator.extractFullText({ templateBytes: buffer });
+  const documentTemplateContent = textResult.data?.text ?? null;
+  if (!documentTemplateContent) {
+    return { error: { status: 422, body: { error: "Could not extract text from template" } } };
+  }
+
+  const spreadsheetTemplateMode =
+    format === "xlsx" ? (tagsResult.data.tags.length > 0 ? "tags" : "header") : null;
+
+  return {
+    data: {
+      tags: tagsResult.data.tags,
+      fields: fieldsResult.data.fields,
+      documentTemplateContent,
+      spreadsheetTemplateMode,
+    },
+  };
+};
 
 export async function POST(
   req: NextRequest,
@@ -56,65 +132,32 @@ export async function POST(
     return NextResponse.json({ error: "File exceeds 10 MB limit" }, { status: 400 });
   }
 
-  if (!file.name.toLowerCase().endsWith(".docx")) {
-    return NextResponse.json({ error: "Only .docx files are accepted" }, { status: 400 });
+  const lowerName = file.name.toLowerCase();
+  if (!lowerName.endsWith(".docx") && !lowerName.endsWith(".xlsx")) {
+    return NextResponse.json({ error: "Only .docx and .xlsx files are accepted" }, { status: 400 });
   }
+  const format: TemplateFormat = lowerName.endsWith(".xlsx") ? "xlsx" : "docx";
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const validationResult = docxGenerator.extractTags({ templateBytes: buffer });
-  if (validationResult.error) {
-    return NextResponse.json(
-      { error: `Invalid template: ${validationResult.error.message}` },
-      { status: 422 },
-    );
+  const extraction = extractTemplate(format, buffer);
+  if (extraction.error) {
+    return NextResponse.json(extraction.error.body, { status: extraction.error.status });
   }
-
-  if (validationResult.data.tags.length === 0) {
-    return NextResponse.json(
-      {
-        error:
-          "This template has no {{ tag }} placeholders. Add at least one tag (e.g. {{ client_name }}) where you want the AI to fill in information, then re-upload.",
-        code: "NO_TEMPLATE_TAGS",
-      },
-      { status: 422 },
-    );
-  }
-
-  const fieldsResult = docxGenerator.extractFields({ templateBytes: buffer });
-  if (fieldsResult.error) {
-    return NextResponse.json(
-      { error: fieldsResult.error.message, code: "INVALID_TEMPLATE_FIELDS" },
-      { status: 422 },
-    );
-  }
+  const { tags, fields, documentTemplateContent, spreadsheetTemplateMode } = extraction.data;
 
   const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const storageKey = `templates/${nodeId}/${timestamp}-${safeFilename}`;
 
-  const putResult = await container.objectStorage.put(
-    storageKey,
-    buffer,
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  );
+  const putResult = await container.objectStorage.put(storageKey, buffer, TEMPLATE_MIME[format]);
   if (putResult.error) {
     return NextResponse.json({ error: "Failed to store template" }, { status: 500 });
   }
 
-  const textResult = docxGenerator.extractFullText({ templateBytes: buffer });
-  const documentTemplateContent = textResult.data?.text ?? null;
-
-  if (!documentTemplateContent) {
-    return NextResponse.json(
-      { error: "Could not extract text from template" },
-      { status: 422 },
-    );
-  }
-
   const summariseResult = await container.useCases.summariseTemplate.execute({
     fullExtractedText: documentTemplateContent,
-    tags: validationResult.data.tags,
+    tags,
   });
   if (summariseResult.error) {
     return NextResponse.json({ error: "Failed to process template" }, { status: 500 });
@@ -139,7 +182,9 @@ export async function POST(
     documentTemplateFilename: safeFilename,
     documentTemplateContent,
     documentTemplateStructuredContent,
-    documentTemplateFields: fieldsResult.data.fields,
+    documentTemplateFields: fields,
+    documentTemplateFormat: format,
+    spreadsheetTemplateMode,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {
@@ -179,10 +224,12 @@ export async function POST(
     {
       path: storageKey,
       filename: safeFilename,
-      tagCount: validationResult.data.tags.length,
+      tagCount: tags.length,
       templateContentLength: documentTemplateStructuredContent.length,
       documentTemplateContent,
-      documentTemplateFields: fieldsResult.data.fields,
+      documentTemplateFields: fields,
+      documentTemplateFormat: format,
+      spreadsheetTemplateMode,
       indexed: !indexResult.error,
       chunkCount: indexResult.error ? 0 : indexResult.data.chunkCount,
     },
@@ -234,6 +281,8 @@ export async function DELETE(
     documentTemplateContent: null,
     documentTemplateStructuredContent: null,
     documentTemplateFields: null,
+    documentTemplateFormat: null,
+    spreadsheetTemplateMode: null,
   };
 
   const updateResult = await container.useCases.updateFlowNode.execute(nodeId, {

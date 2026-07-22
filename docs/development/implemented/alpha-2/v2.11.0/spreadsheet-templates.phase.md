@@ -1,7 +1,7 @@
 # Phase — Spreadsheet (xlsx) Templates
 
-- **Status**: Awaiting review
-- **Target version**: 2.10.0  (bump: MINOR — new feature, additive `app_flow_nodes.config` jsonb; no migration)
+- **Status**: Implemented (v2.11.0)
+- **Target version**: 2.11.0  (bump: MINOR — new feature, additive `app_flow_nodes.config` jsonb; no migration)
 - **PRD**: `docs/development/prd/spreadsheet-templates.prd.md`
 - **ADRs**: ADR-039 (tag-mode precedence, header-row fallback, in-place fill vs single-row append, one new renderer)
 - **Depends on**: `.docx` tag parser + upload validation (`packages/domain/src/entities/template-field.ts`), `ISpreadsheetParser` (`packages/domain/src/ports/spreadsheet-parser.ts`), document generation (ADR-009, `generate-document.ts`, `packages/adapters/src/documents/docx-generator.ts`), extraction/summarise path
@@ -65,14 +65,19 @@ by format. No schema change.
    tag cell in place; header mode appends one data row. Tests: values land in the
    right cells; untouched cells preserved; output opens as valid `.xlsx`.
 4. **Application — renderer selection.** `generate-document.ts` routes by format;
-   `docx` unchanged. Tests: xlsx step calls the xlsx renderer, docx step the docx
-   renderer.
+   `docx` unchanged. This also means the output MIME type and the `.docx`
+   extension in `buildFilename` become format-dependent, and the use case must be
+   wired with both renderers (constructor + `lib/container.ts`) rather than a
+   single `documentGenerator`; decide whether xlsx reuses the docx-named
+   `GenerateDocxOutput.docxBytes` field or the port gains a format-neutral name.
+   Tests: xlsx step calls the xlsx renderer with an `.xlsx` filename + xlsx MIME
+   type, docx step the docx renderer unchanged.
 5. **Web — upload + config.** Accept `.xlsx` in the conversational modal and the
    `flow` router; show detected mode; persist format + mode. Router tests cover
    both modes and rejection paths.
-6. **Version + validate.** Bump `VERSION` and `package.json#version` to `2.10.0`.
+6. **Version + validate.** Bump `VERSION` and `package.json#version` to `2.11.0`.
    Run `./validate.sh`; fix all failures. Move this phase doc to
-   `docs/development/implemented/alpha-2/v2.10.0/` with a summary.
+   `docs/development/implemented/alpha-2/v2.11.0/` with a summary.
 
 ## 7. Acceptance criteria
 
@@ -87,7 +92,7 @@ Mirror PRD §10:
 - [ ] `documentTemplateFormat` absent ⇒ treated as `docx`; existing flows unchanged.
 - [ ] Captured fields appear in Insights like a `.docx` step.
 - [ ] Architecture intact; no migration.
-- [ ] `VERSION` = `package.json#version` = `2.10.0`; `./validate.sh` passes.
+- [ ] `VERSION` = `package.json#version` = `2.11.0`; `./validate.sh` passes.
 
 ## 8. Risks / open questions
 
