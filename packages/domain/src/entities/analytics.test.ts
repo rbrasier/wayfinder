@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeConfidenceLifecycle,
+  computeExtractionFieldReport,
   computeFieldReport,
   computeFlowDistribution,
   computeNodeBreakdown,
@@ -10,6 +11,7 @@ import {
   type AnalyticsNode,
   type AnalyticsSessionRow,
 } from "./analytics";
+import type { ExtractionRecord } from "./extraction-record";
 
 const session = (overrides: Partial<AnalyticsSessionRow>): AnalyticsSessionRow => ({
   id: "s1",
@@ -530,5 +532,46 @@ describe("computeFieldReport", () => {
     );
 
     expect(report.columns.every((column) => column.versionGroupId === undefined)).toBe(true);
+  });
+});
+
+describe("computeExtractionFieldReport", () => {
+  const record = (
+    id: string,
+    fields: ExtractionRecord["fields"],
+    sourceDocumentIds: string[] = [],
+  ): ExtractionRecord => ({ id, label: id, fields, sourceDocumentIds });
+
+  it("emits one column per schema field in order and one row per record", () => {
+    const report = computeExtractionFieldReport(
+      [
+        { key: "supplier_name", label: "Supplier", type: "text" },
+        { key: "price", label: "Price", type: "currency" },
+      ],
+      [
+        record("r1", [
+          { key: "supplier_name", value: "Acme", confidence: 0.9, rationale: "" },
+          { key: "price", value: "£10", confidence: 0.4, rationale: "" },
+        ]),
+        record("r2", [{ key: "supplier_name", value: "Globex", confidence: 0.8, rationale: "" }]),
+      ],
+    );
+
+    expect(report.columns.map((column) => column.fieldKey)).toEqual(["supplier_name", "price"]);
+    expect(report.rows).toHaveLength(2);
+    expect(report.rows[0]).toMatchObject({
+      recordId: "r1",
+      values: { supplier_name: "Acme", price: "£10" },
+    });
+    // Missing field → blank, never undefined.
+    expect(report.rows[1]!.values.price).toBe("");
+  });
+
+  it("carries each record's aggregate (weakest-field) confidence for RAG banding", () => {
+    const report = computeExtractionFieldReport(
+      [{ key: "price", label: "Price", type: "currency" }],
+      [record("r1", [{ key: "price", value: "£10", confidence: 0.3, rationale: "" }])],
+    );
+    expect(report.rows[0]!.aggregateConfidence).toBe(0.3);
   });
 });

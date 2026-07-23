@@ -3,18 +3,25 @@ import {
   CancelRun,
   ContinueRun,
   CreateExtractionFlow,
+  EditRecordField,
+  ExportRunResults,
+  GenerateRunDocuments,
+  GetExtractionRunReport,
   GetExtractionSchema,
   ListExtractionFlows,
   ListExtractionFlowsForUser,
+  MarkRunComplete,
   ProcessExtractionTask,
   RetryFailed,
   RunSampleExtraction,
   SaveExtractionSchema,
   StartBatchRun,
 } from "@rbrasier/application";
-import { DrizzleExtractionRunRepository, ZipIngestor, createDatabase } from "@rbrasier/adapters";
+import { DrizzleExtractionRunRepository, XlsxWriter, ZipIngestor, createDatabase } from "@rbrasier/adapters";
 import type {
+  IAuditLogger,
   IDocumentExtractor,
+  IDocumentGenerator,
   IFlowRepository,
   IFlowVersionRepository,
   ILanguageModel,
@@ -29,7 +36,9 @@ interface ExtractionDependencies {
   flowVersions: IFlowVersionRepository;
   languageModel: ILanguageModel;
   documentExtractor: IDocumentExtractor;
+  documentGenerator: IDocumentGenerator;
   objectStorage: IObjectStorage;
+  auditLogger: IAuditLogger;
 }
 
 // The extraction-flow ("Synthesise Information") module (ADR-033), factored out
@@ -41,10 +50,13 @@ export const buildExtractionModule = ({
   flowVersions,
   languageModel,
   documentExtractor,
+  documentGenerator,
   objectStorage,
+  auditLogger,
 }: ExtractionDependencies) => {
   const extractionRuns = new DrizzleExtractionRunRepository(db);
   const archiveExtractor = new ZipIngestor();
+  const spreadsheetWriter = new XlsxWriter();
   const processExtractionTask = new ProcessExtractionTask(
     extractionRuns,
     objectStorage,
@@ -74,6 +86,24 @@ export const buildExtractionModule = ({
       cancelRun: new CancelRun(extractionRuns),
       retryFailed: new RetryFailed(extractionRuns),
       continueRun: new ContinueRun(extractionRuns),
+      exportRunResults: new ExportRunResults(
+        extractionRuns,
+        flowVersions,
+        spreadsheetWriter,
+        objectStorage,
+        auditLogger,
+      ),
+      generateRunDocuments: new GenerateRunDocuments(
+        extractionRuns,
+        flowVersions,
+        documentGenerator,
+        objectStorage,
+        languageModel,
+        auditLogger,
+      ),
+      editRecordField: new EditRecordField(extractionRuns, auditLogger),
+      markRunComplete: new MarkRunComplete(extractionRuns, auditLogger),
+      getExtractionRunReport: new GetExtractionRunReport(extractionRuns, flowVersions),
     },
   };
 };

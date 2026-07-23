@@ -15,7 +15,7 @@ import {
   type RunStatus,
   type RunStatusCounts,
 } from "@rbrasier/domain";
-import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {
   app_extraction_documents,
@@ -342,6 +342,72 @@ export class DrizzleExtractionRunRepository implements IExtractionRunRepository 
       return ok(reset.length);
     } catch (cause) {
       return this.fail("Failed to requeue failed documents.", cause);
+    }
+  }
+
+  async listRunsForFlow(flowId: string): Promise<Result<ExtractionRun[]>> {
+    try {
+      const rows = await this.db
+        .select()
+        .from(app_extraction_runs)
+        .where(eq(app_extraction_runs.flow_id, flowId))
+        .orderBy(desc(app_extraction_runs.created_at));
+      return ok(rows.map(toRun));
+    } catch (cause) {
+      return this.fail("Failed to list the flow's runs.", cause);
+    }
+  }
+
+  async listRecords(runId: string): Promise<Result<ExtractionRecord[]>> {
+    try {
+      const rows = await this.db
+        .select()
+        .from(app_extraction_records)
+        .where(eq(app_extraction_records.run_id, runId))
+        .orderBy(asc(app_extraction_records.ordinal));
+
+      const documents = await this.db
+        .select({ id: app_extraction_documents.id, recordId: app_extraction_documents.record_id })
+        .from(app_extraction_documents)
+        .where(eq(app_extraction_documents.run_id, runId));
+
+      const sourcesByRecord = new Map<string, string[]>();
+      for (const document of documents) {
+        if (!document.recordId) continue;
+        const list = sourcesByRecord.get(document.recordId) ?? [];
+        list.push(document.id);
+        sourcesByRecord.set(document.recordId, list);
+      }
+
+      return ok(rows.map((row) => this.toRecord(row, sourcesByRecord.get(row.id) ?? [])));
+    } catch (cause) {
+      return this.fail("Failed to list the run's records.", cause);
+    }
+  }
+
+  async listDocuments(runId: string): Promise<Result<ExtractionDocument[]>> {
+    try {
+      const rows = await this.db
+        .select()
+        .from(app_extraction_documents)
+        .where(eq(app_extraction_documents.run_id, runId))
+        .orderBy(asc(app_extraction_documents.tree_path), asc(app_extraction_documents.filename));
+      return ok(rows.map(toDocument));
+    } catch (cause) {
+      return this.fail("Failed to list the run's documents.", cause);
+    }
+  }
+
+  async getDocument(documentId: string): Promise<Result<ExtractionDocument | null>> {
+    try {
+      const [row] = await this.db
+        .select()
+        .from(app_extraction_documents)
+        .where(eq(app_extraction_documents.id, documentId))
+        .limit(1);
+      return ok(row ? toDocument(row) : null);
+    } catch (cause) {
+      return this.fail("Failed to load the document.", cause);
     }
   }
 

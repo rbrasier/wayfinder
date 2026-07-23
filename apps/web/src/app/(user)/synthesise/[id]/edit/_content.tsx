@@ -35,14 +35,19 @@ export function EditSynthesisContent({ flowId }: { flowId: string }) {
           </Link>
           <h1 className="mt-[4px] text-[20px] font-bold text-[#1a1814]">Edit synthesis</h1>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={publishMutation.isPending}
-          onClick={() => publishMutation.mutate({ flowId })}
-        >
-          Publish
-        </Button>
+        <div className="flex items-center gap-[8px]">
+          <Button asChild variant="outline">
+            <Link href={`/synthesise/${flowId}/runs`}>Runs</Link>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={publishMutation.isPending}
+            onClick={() => publishMutation.mutate({ flowId })}
+          >
+            Publish
+          </Button>
+        </div>
       </div>
 
       {schemaQuery.isLoading ? (

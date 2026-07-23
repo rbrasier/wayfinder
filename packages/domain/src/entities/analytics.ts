@@ -3,6 +3,7 @@ import type { MessageRole } from "./conversation";
 import type { StepOutputField } from "./session-step-output";
 import type { TemplateFieldType } from "./template-field";
 import { computeForkSiblingGroups, type FlowGraphEdge } from "./flow-graph";
+import { aggregateConfidence, type ExtractionRecord } from "./extraction-record";
 
 export const parseNumeric = (value: string): number | null => {
   const cleaned = value.replace(/[^0-9.\-]/g, "");
@@ -112,6 +113,61 @@ export interface FieldReport {
   columns: FieldReportColumn[];
   rows: FieldReportSessionRow[];
 }
+
+// ── Extraction-run field report ──────────────────────────────────────────────
+// The extraction analogue of the Insights field report (phase §5): per-record
+// rows × extraction-field columns, structurally what computeFieldReport produces
+// for guided flows but keyed on records rather than sessions. Session metrics
+// (completion rate, drop-off) do not apply to a batch, so this is the reuse.
+
+export interface ExtractionReportField {
+  key: string;
+  label: string;
+  type: TemplateFieldType;
+}
+
+export interface ExtractionFieldReportColumn {
+  fieldKey: string;
+  label: string;
+  type: TemplateFieldType;
+}
+
+export interface ExtractionFieldReportRow {
+  recordId: string;
+  label: string;
+  aggregateConfidence: number;
+  values: Record<string, string>;
+}
+
+export interface ExtractionFieldReport {
+  columns: ExtractionFieldReportColumn[];
+  rows: ExtractionFieldReportRow[];
+}
+
+export const computeExtractionFieldReport = (
+  fields: ExtractionReportField[],
+  records: ExtractionRecord[],
+): ExtractionFieldReport => {
+  const columns: ExtractionFieldReportColumn[] = fields.map((field) => ({
+    fieldKey: field.key,
+    label: field.label,
+    type: field.type,
+  }));
+
+  const rows: ExtractionFieldReportRow[] = records.map((record) => {
+    const byKey = new Map(record.fields.map((field) => [field.key, field.value]));
+    const values: Record<string, string> = {};
+    for (const field of fields) values[field.key] = byKey.get(field.key) ?? "";
+    return {
+      recordId: record.id,
+      label: record.label,
+      aggregateConfidence: aggregateConfidence(record),
+      values,
+    };
+  });
+
+  return { columns, rows };
+};
 
 // ── Pure aggregation helpers ─────────────────────────────────────────────────
 

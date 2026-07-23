@@ -490,7 +490,9 @@ const build = () => {
     flowVersions,
     languageModel: llm,
     documentExtractor,
+    documentGenerator,
     objectStorage,
+    auditLogger,
   });
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);

@@ -302,4 +302,137 @@ export const extractionRouter = router({
     if (result.error) throw toTrpcError(result.error);
     return { ok: true };
   }),
+
+  // Run history for a flow's /synthesise sub-rows and the run-history view
+  // (phase §5): status, counts, and cost per run, newest first.
+  listRuns: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow's runs." });
+    }
+    const runs = await ctx.container.repos.extractionRuns.listRunsForFlow(input.flowId);
+    if (runs.error) throw toTrpcError(runs.error);
+    return runs.data;
+  }),
+
+  // The results viewer's data (phase §4): the run, its output records (with
+  // stored server-side confidence), and its input documents for the files pane
+  // and source highlighting. Exceptions are files with no record or a failed /
+  // unreadable status.
+  getResults: runProcedure.input(runIdInput).query(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const run = await ctx.container.repos.extractionRuns.getRun(input.runId);
+    if (run.error) throw toTrpcError(run.error);
+
+    const records = await ctx.container.repos.extractionRuns.listRecords(input.runId);
+    if (records.error) throw toTrpcError(records.error);
+
+    const documents = await ctx.container.repos.extractionRuns.listDocuments(input.runId);
+    if (documents.error) throw toTrpcError(documents.error);
+
+    return {
+      run: run.data,
+      records: records.data,
+      documents: documents.data.map((document) => ({
+        id: document.id,
+        filename: document.filename,
+        treePath: document.treePath,
+        status: document.status,
+        recordId: document.recordId,
+        readable: document.status !== "unreadable",
+      })),
+      exceptionFileIds: documents.data
+        .filter(
+          (document) =>
+            document.recordId === null ||
+            document.status === "failed" ||
+            document.status === "unreadable",
+        )
+        .map((document) => document.id),
+    };
+  }),
+
+  generateDocuments: runProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const config = await ctx.container.runtimeConfig.getExtractionConfig();
+    const result = await ctx.container.useCases.generateRunDocuments.execute({
+      runId: input.runId,
+      userId: ctx.userId,
+      costCeilingUsd: config.perRunCostCeilingUsd,
+    });
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  export: runProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const result = await ctx.container.useCases.exportRunResults.execute({
+      runId: input.runId,
+      userId: ctx.userId,
+    });
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  editResult: runProcedure
+    .input(
+      z.object({
+        runId: z.string().uuid(),
+        recordId: z.string().uuid(),
+        fieldKey: z.string().min(1),
+        newValue: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await assertRunEditable(ctx, input.runId);
+
+      // The record must belong to the run whose ownership we just checked —
+      // knowing a record UUID is not itself authorisation (v1.59.0 IDOR precedent).
+      const records = await ctx.container.repos.extractionRuns.listRecords(input.runId);
+      if (records.error) throw toTrpcError(records.error);
+      if (!records.data.some((record) => record.id === input.recordId)) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Record not found in this run." });
+      }
+
+      const editor = await ctx.container.repos.users.findById(ctx.userId);
+      const editorLabel = editor.data?.name ?? editor.data?.email ?? "an operator";
+
+      const result = await ctx.container.useCases.editRecordField.execute({
+        recordId: input.recordId,
+        fieldKey: input.fieldKey,
+        newValue: input.newValue,
+        editorUserId: ctx.userId,
+        editorLabel,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
+  markComplete: runProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const result = await ctx.container.useCases.markRunComplete.execute({
+      runId: input.runId,
+      userId: ctx.userId,
+    });
+    if (result.error) throw toTrpcError(result.error);
+    return { ok: true };
+  }),
+
+  // The summary rendered as markdown above the rows (phase §2.3). Reads the
+  // stored markdown artifact; null when no summary was generated for the run.
+  summaryMarkdown: runProcedure.input(runIdInput).query(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const bytes = await ctx.container.objectStorage.get(
+      `extraction-runs/${input.runId}/outputs/summary.md`,
+    );
+    if (bytes.error) return { markdown: null };
+    return { markdown: bytes.data.toString("utf8") };
+  }),
+
+  // The per-run field report (phase §5), reusing the Insights report structure.
+  runReport: runProcedure.input(runIdInput).query(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const result = await ctx.container.useCases.getExtractionRunReport.execute({ runId: input.runId });
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
 });

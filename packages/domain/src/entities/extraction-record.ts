@@ -1,3 +1,7 @@
+import { domainError } from "../errors/domain-error";
+import { err, ok } from "../result";
+import type { Result } from "../result";
+
 // Red/Amber/Green triage bands for extraction confidence. Confidence is a
 // weakly-calibrated self-assessment (phase §5), so bands are a triage signal,
 // not a gate — the UI says as much.
@@ -67,4 +71,80 @@ export const mergeFieldResults = (
     }
   }
   return [...merged.values()];
+};
+
+// The before/after of one manual correction, carried into the audit log so the
+// edit history is reconstructable without a separate versions table (phase §4).
+export interface FieldEditChange {
+  key: string;
+  previousValue: string;
+  newValue: string;
+}
+
+export interface FieldEditResult {
+  record: ExtractionRecord;
+  change: FieldEditChange;
+}
+
+// Applies an operator's per-field correction (phase §2.4, ADR-024). The human
+// edit is authoritative: no AI re-run, the field is stamped fully confident and
+// its rationale records who corrected it. Returns a new record (pure) plus the
+// before/after change for the audit trail.
+export const applyFieldEdit = (
+  record: ExtractionRecord,
+  fieldKey: string,
+  newValue: string,
+  editorLabel: string,
+): Result<FieldEditResult> => {
+  const target = record.fields.find((field) => field.key === fieldKey);
+  if (!target) {
+    return err(domainError("NOT_FOUND", `Record has no field "${fieldKey}" to edit.`));
+  }
+
+  const editorNote = editorLabel.trim().length > 0 ? ` by ${editorLabel.trim()}` : "";
+  const fields = record.fields.map((field) =>
+    field.key === fieldKey
+      ? { ...field, value: newValue, confidence: 1, rationale: `Manually corrected${editorNote}.` }
+      : field,
+  );
+
+  return ok({
+    record: { ...record, fields },
+    change: { key: fieldKey, previousValue: target.value, newValue },
+  });
+};
+
+export interface FieldFillCount {
+  key: string;
+  filled: number;
+  total: number;
+}
+
+export interface FieldCompleteness {
+  perField: FieldFillCount[];
+  overallFilled: number;
+  overallTotal: number;
+}
+
+// Per-field completeness across a run's records — how many records carry a
+// non-empty value for each schema field (phase §2.3). Feeds the summary
+// document's per-field completeness aggregate. A whitespace-only value is empty.
+export const fieldCompleteness = (
+  records: ExtractionRecord[],
+  fieldKeys: string[],
+): FieldCompleteness => {
+  const perField = fieldKeys.map((key) => {
+    let filled = 0;
+    for (const record of records) {
+      const field = record.fields.find((candidate) => candidate.key === key);
+      if (field && field.value.trim().length > 0) filled += 1;
+    }
+    return { key, filled, total: records.length };
+  });
+
+  return {
+    perField,
+    overallFilled: perField.reduce((sum, entry) => sum + entry.filled, 0),
+    overallTotal: fieldKeys.length * records.length,
+  };
 };
