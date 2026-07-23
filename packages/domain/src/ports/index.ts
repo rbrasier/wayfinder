@@ -57,6 +57,7 @@ export * from "./people-directory";
 export * from "./reporting-line-resolver";
 export * from "./hr-dataset-repository";
 export * from "./spreadsheet-parser";
+export * from "./spreadsheet-writer";
 export * from "./column-mapping-detector";
 export * from "./unit-of-work";
 export * from "./rate-limiter";

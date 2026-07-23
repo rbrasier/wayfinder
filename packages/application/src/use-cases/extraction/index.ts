@@ -7,3 +7,8 @@ export * from "./advance-batch-runs";
 export * from "./cancel-run";
 export * from "./retry-failed";
 export * from "./continue-run";
+export * from "./run-schema";
+export * from "./export-run-results";
+export * from "./generate-run-documents";
+export * from "./edit-record-field";
+export * from "./mark-run-complete";

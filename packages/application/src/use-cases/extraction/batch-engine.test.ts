@@ -255,6 +255,37 @@ class InMemoryExtractionRunRepository implements IExtractionRunRepository {
     return ok(reset);
   }
 
+  async listRunsForFlow(flowId: string): Promise<Result<ExtractionRun[]>> {
+    return ok([...this.runs.values()].filter((run) => run.flowId === flowId).map((run) => ({ ...run })));
+  }
+
+  async listRecords(runId: string): Promise<Result<ExtractionRecord[]>> {
+    return ok(
+      [...this.records.values()]
+        .filter((record) => record.runId === runId)
+        .sort((a, b) => a.ordinal - b.ordinal)
+        .map((record) => ({
+          id: record.id,
+          label: record.label,
+          fields: record.fields.map((field) => ({ ...field })),
+          sourceDocumentIds: record.sourceDocumentIds,
+        })),
+    );
+  }
+
+  async listDocuments(runId: string): Promise<Result<ExtractionDocument[]>> {
+    return ok(
+      [...this.documents.values()]
+        .filter((document) => document.runId === runId)
+        .map((document) => ({ ...document })),
+    );
+  }
+
+  async getDocument(documentId: string): Promise<Result<ExtractionDocument | null>> {
+    const document = this.documents.get(documentId);
+    return ok(document ? { ...document } : null);
+  }
+
   // Test helpers.
   documentById(id: string): ExtractionDocument | undefined {
     const document = this.documents.get(id);

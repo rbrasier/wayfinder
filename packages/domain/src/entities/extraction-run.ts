@@ -84,3 +84,33 @@ export const settledRunStatus = (run: ExtractionRun): RunStatus =>
 // instruction, always a server-side number.
 export const wouldExceedCostCeiling = (run: ExtractionRun, ceilingUsd: number): boolean =>
   ceilingUsd > 0 && run.costUsd >= ceilingUsd;
+
+// Documents that did not yield a clean record — the run's exception bucket
+// surfaced in the viewer's exceptions filter and the summary aggregates.
+export const exceptionCount = (run: ExtractionRun): number =>
+  run.failedCount + run.unreadableCount;
+
+// Run-level aggregates the summary document consumes (phase §2.3): the counts
+// plus the fraction of the total that completed cleanly.
+export interface RunCompleteness {
+  total: number;
+  done: number;
+  failed: number;
+  unreadable: number;
+  exceptions: number;
+  completionRatio: number;
+}
+
+export const runCompleteness = (run: ExtractionRun): RunCompleteness => ({
+  total: run.totalCount,
+  done: run.doneCount,
+  failed: run.failedCount,
+  unreadable: run.unreadableCount,
+  exceptions: exceptionCount(run),
+  completionRatio: run.totalCount === 0 ? 0 : run.doneCount / run.totalCount,
+});
+
+// Marking complete is the operator's finalisation control (phase §2.4). It is an
+// authoritative override available from any live or settled state — the one thing
+// it cannot re-open is a cancelled run.
+export const canMarkComplete = (run: ExtractionRun): boolean => run.status !== "cancelled";

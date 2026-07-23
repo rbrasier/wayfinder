@@ -83,4 +83,13 @@ export interface IExtractionRunRepository {
 
   // Controls.
   resetFailedToPending(runId: string): Promise<Result<number>>;
+
+  // Reads for the run-history list, the results viewer, document generation, and
+  // exports (phase §2-5). Records/documents come back fully materialised (each
+  // record with its sourceDocumentIds) so the viewer, exporter, and doc generator
+  // read the same server-side truth.
+  listRunsForFlow(flowId: string): Promise<Result<ExtractionRun[]>>;
+  listRecords(runId: string): Promise<Result<ExtractionRecord[]>>;
+  listDocuments(runId: string): Promise<Result<ExtractionDocument[]>>;
+  getDocument(documentId: string): Promise<Result<ExtractionDocument | null>>;
 }

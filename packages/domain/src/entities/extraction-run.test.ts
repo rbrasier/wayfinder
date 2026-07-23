@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  canMarkComplete,
+  exceptionCount,
   hasReachedPreviewBoundary,
   isRunActive,
   isTerminalRun,
   processedCount,
+  runCompleteness,
   runProgress,
   settledRunStatus,
   wouldExceedCostCeiling,
@@ -100,5 +103,46 @@ describe("wouldExceedCostCeiling", () => {
   it("is true once accrued cost reaches the ceiling", () => {
     expect(wouldExceedCostCeiling(buildRun({ costUsd: 5 }), 5)).toBe(true);
     expect(wouldExceedCostCeiling(buildRun({ costUsd: 4.99 }), 5)).toBe(false);
+  });
+});
+
+describe("exceptionCount", () => {
+  it("sums failed and unreadable documents", () => {
+    expect(exceptionCount(buildRun({ failedCount: 2, unreadableCount: 3 }))).toBe(5);
+  });
+
+  it("is zero for a clean run", () => {
+    expect(exceptionCount(buildRun({ doneCount: 10 }))).toBe(0);
+  });
+});
+
+describe("runCompleteness", () => {
+  it("reports counts and the clean-completion ratio", () => {
+    const run = buildRun({ totalCount: 10, doneCount: 7, failedCount: 2, unreadableCount: 1 });
+    expect(runCompleteness(run)).toEqual({
+      total: 10,
+      done: 7,
+      failed: 2,
+      unreadable: 1,
+      exceptions: 3,
+      completionRatio: 0.7,
+    });
+  });
+
+  it("is a zero ratio for an empty run rather than dividing by zero", () => {
+    expect(runCompleteness(buildRun({ totalCount: 0 })).completionRatio).toBe(0);
+  });
+});
+
+describe("canMarkComplete", () => {
+  it("allows finalising any run that is not cancelled", () => {
+    expect(canMarkComplete(buildRun({ status: "running" }))).toBe(true);
+    expect(canMarkComplete(buildRun({ status: "paused_preview" }))).toBe(true);
+    expect(canMarkComplete(buildRun({ status: "partial" }))).toBe(true);
+    expect(canMarkComplete(buildRun({ status: "complete" }))).toBe(true);
+  });
+
+  it("refuses to finalise a cancelled run", () => {
+    expect(canMarkComplete(buildRun({ status: "cancelled" }))).toBe(false);
   });
 });
