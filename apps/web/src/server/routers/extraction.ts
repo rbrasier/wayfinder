@@ -1,4 +1,5 @@
 import type { ExtractionSchemaDraft } from "@rbrasier/domain";
+import type { Container } from "@/lib/container";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { authenticatedProcedure, router } from "../trpc";
@@ -51,6 +52,23 @@ const viewProcedure = extractionEnabled.use(({ ctx, next }) => {
 
 const flowIdInput = z.object({ flowId: z.string().uuid() });
 
+// Run controls carry a run id, so ownership is re-checked through the run's
+// owning flow — the same flow-edit gate the rest of the router uses. Every
+// control procedure passes through here before mutating a run.
+interface RunControlContext {
+  container: Container;
+  userId: string;
+  isAdmin: boolean;
+}
+
+const assertRunEditable = async (ctx: RunControlContext, runId: string): Promise<void> => {
+  const run = await ctx.container.repos.extractionRuns.getRun(runId);
+  if (run.error) throw toTrpcError(run.error);
+  if (!(await canEditFlow(ctx.container, run.data.flowId, ctx.userId, ctx.isAdmin))) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "You cannot control this run." });
+  }
+};
+
 const fieldDraftSchema = z.object({
   label: z.string().min(1),
   annotation: z.string().min(1),
@@ -91,6 +109,20 @@ const sampleDocumentSchema = z.object({
   mimeType: z.string().min(1),
   contentBase64: z.string(),
 });
+
+const batchFileSchema = z.object({
+  filename: z.string().min(1),
+  treePath: z.string().min(1),
+  mimeType: z.string().min(1),
+  contentBase64: z.string(),
+});
+
+const batchArchiveSchema = z.object({
+  filename: z.string().min(1),
+  contentBase64: z.string(),
+});
+
+const runIdInput = z.object({ runId: z.string().uuid() });
 
 export const extractionRouter = router({
   // The user's own extraction flows (the /synthesise list).
@@ -191,4 +223,83 @@ export const extractionRouter = router({
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
+
+  // Starts a durable full-batch run (ADR-033 §5-6, Phase 2). Requires a
+  // published extraction version — enforced server-side inside StartBatchRun.
+  startBatch: runProcedure
+    .input(
+      z.object({
+        flowId: z.string().uuid(),
+        files: z.array(batchFileSchema),
+        archives: z.array(batchArchiveSchema).default([]),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot run this flow." });
+      }
+
+      // Resolve the admin-configured intake limits at run time so a settings
+      // change takes effect without a redeploy (extraction-flows-2 §2).
+      const config = await ctx.container.runtimeConfig.getExtractionConfig();
+
+      const result = await ctx.container.useCases.startBatchRun.execute({
+        flowId: input.flowId,
+        userId: ctx.userId,
+        files: input.files.map((file) => ({
+          filename: file.filename,
+          treePath: file.treePath,
+          mimeType: file.mimeType,
+          buffer: Buffer.from(file.contentBase64, "base64"),
+        })),
+        archives: input.archives.map((archive) => ({
+          filename: archive.filename,
+          buffer: Buffer.from(archive.contentBase64, "base64"),
+        })),
+        limits: {
+          maxFiles: config.maxFilesPerRun,
+          archiveLimits: {
+            maxEntries: config.maxArchiveEntries,
+            maxEntryBytes: config.maxArchiveEntryBytes,
+            maxTotalBytes: config.maxArchiveTotalBytes,
+          },
+        },
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { runId: result.data.id, totalCount: result.data.totalCount };
+    }),
+
+  // Live progress for the run screen: the run row plus COUNT(*) GROUP BY status
+  // (phase §8). Ownership is enforced by the run's flow-edit check.
+  runStatus: runProcedure.input(runIdInput).query(async ({ ctx, input }) => {
+    const run = await ctx.container.repos.extractionRuns.getRun(input.runId);
+    if (run.error) throw toTrpcError(run.error);
+    if (!(await canEditFlow(ctx.container, run.data.flowId, ctx.userId, ctx.isAdmin))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this run." });
+    }
+    const counts = await ctx.container.repos.extractionRuns.countByStatus(input.runId);
+    if (counts.error) throw toTrpcError(counts.error);
+    return { run: run.data, counts: counts.data };
+  }),
+
+  cancel: runProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const result = await ctx.container.useCases.cancelRun.execute(input.runId);
+    if (result.error) throw toTrpcError(result.error);
+    return { ok: true };
+  }),
+
+  retryFailed: runProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const result = await ctx.container.useCases.retryFailed.execute(input.runId);
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  continue: runProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const result = await ctx.container.useCases.continueRun.execute(input.runId);
+    if (result.error) throw toTrpcError(result.error);
+    return { ok: true };
+  }),
 });

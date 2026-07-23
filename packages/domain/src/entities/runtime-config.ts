@@ -33,6 +33,21 @@ export interface SessionUploadConfig {
   totalBudgetChars: number;
 }
 
+// Admin-controlled intake + governance limits for extraction batch runs
+// (ADR-033, extraction-flows-2 §2). Stored as one system_settings row so an
+// operator can tune ingestion caps and the per-run spend ceiling without a
+// redeploy — mirroring SessionUploadConfig.
+export interface ExtractionConfig {
+  // Hard caps on a single run's ingestion (the zip-bomb / oversize guards).
+  maxFilesPerRun: number;
+  maxArchiveEntries: number;
+  maxArchiveEntryBytes: number;
+  maxArchiveTotalBytes: number;
+  // Per-run spend ceiling in USD, checked worker-side before each claim; 0
+  // disables it (ADR-033 §9).
+  perRunCostCeilingUsd: number;
+}
+
 // How the document-generation context budget is expressed: a fixed token cap,
 // or a percentage of the configured model's context window.
 export type DocumentGenerationContextBudgetMode = "tokens" | "model_percent";
@@ -211,6 +226,7 @@ export const SIEM_CONFIG_SETTING_KEY = "siem_config";
 export const STORAGE_CONFIG_SETTING_KEY = "storage_config";
 export const REGISTRATION_ENABLED_SETTING_KEY = "registration_enabled";
 export const SESSION_UPLOAD_CONFIG_SETTING_KEY = "session_upload_config";
+export const EXTRACTION_CONFIG_SETTING_KEY = "extraction_config";
 export const DOCUMENT_GENERATION_CONFIG_SETTING_KEY = "document_generation_config";
 export const EMAIL_CONFIG_SETTING_KEY = "email_config";
 export const EMBEDDINGS_CONFIG_SETTING_KEY = "embeddings_config";

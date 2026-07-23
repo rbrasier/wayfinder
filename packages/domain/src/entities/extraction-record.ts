@@ -49,3 +49,22 @@ export const aggregateConfidence = (record: ExtractionRecord): number => {
 
 export const recordConfidenceBand = (record: ExtractionRecord): ConfidenceBand =>
   confidenceBand(aggregateConfidence(record));
+
+// Under many-per-record a record draws on several documents, each extracted on
+// its own worker task (phase §5). Their field results are merged into the one
+// record by keeping, per field key, the value with the highest confidence — the
+// best-supported answer wins, and a later low-confidence document never
+// overwrites an earlier confident one. Incoming keys not yet present are added.
+export const mergeFieldResults = (
+  existing: ExtractionFieldResult[],
+  incoming: ExtractionFieldResult[],
+): ExtractionFieldResult[] => {
+  const merged = new Map(existing.map((field) => [field.key, field]));
+  for (const field of incoming) {
+    const current = merged.get(field.key);
+    if (!current || field.confidence > current.confidence) {
+      merged.set(field.key, field);
+    }
+  }
+  return [...merged.values()];
+};

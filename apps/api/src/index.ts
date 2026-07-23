@@ -48,11 +48,24 @@ if (env.RETENTION_ENABLED && container.retentionWorkers.length > 0) {
   console.log(`[api] retention worker started (${container.retentionWorkers.length} worker(s))`);
 }
 
+if (env.EXTRACTION_WORKER_ENABLED && container.extractionWorkers.length > 0) {
+  for (const worker of container.extractionWorkers) {
+    void worker.start().catch((error: unknown) => {
+      container.logger.error("Extraction worker failed to start.", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[api] extraction worker started (${container.extractionWorkers.length} worker(s))`);
+}
+
 const shutdown = (signal: string) => {
   // eslint-disable-next-line no-console
   console.log(`[api] received ${signal}, shutting down`);
   for (const worker of container.schedulerWorkers) worker.stop();
   for (const worker of container.retentionWorkers) worker.stop();
+  for (const worker of container.extractionWorkers) worker.stop();
   server.close(() => process.exit(0));
 };
 

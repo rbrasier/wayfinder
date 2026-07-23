@@ -12,6 +12,7 @@ import {
   N8N_CONFIG_SETTING_KEY,
   ORGANISATION_RESOLUTION_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
+  EXTRACTION_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   DEFAULT_ORGANISATION_RESOLUTION,
   createDefaultAuthConfig,
@@ -31,6 +32,7 @@ import {
   type ProviderName,
   type ResolvedDocumentGenerationBudget,
   type SessionUploadConfig,
+  type ExtractionConfig,
   type SiemConfig,
   type StorageConfig,
   type UsageLimitsConfig,
@@ -185,6 +187,45 @@ const parseSessionUploadConfig = (
       totalBudgetChars: isPositiveInteger(parsed.totalBudgetChars)
         ? parsed.totalBudgetChars
         : fallback.totalBudgetChars,
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+// Mirrors StartBatchRun's DEFAULT_ARCHIVE_LIMITS / DEFAULT_MAX_FILES so the
+// stored config and the code defaults agree (extraction-flows-2 §2).
+export const DEFAULT_EXTRACTION_CONFIG: ExtractionConfig = {
+  maxFilesPerRun: 1000,
+  maxArchiveEntries: 500,
+  maxArchiveEntryBytes: 25 * 1024 * 1024,
+  maxArchiveTotalBytes: 500 * 1024 * 1024,
+  perRunCostCeilingUsd: 0,
+};
+
+const isNonNegativeNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+const parseExtractionConfig = (raw: string, fallback: ExtractionConfig): ExtractionConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    return {
+      maxFilesPerRun: isPositiveInteger(parsed.maxFilesPerRun)
+        ? parsed.maxFilesPerRun
+        : fallback.maxFilesPerRun,
+      maxArchiveEntries: isPositiveInteger(parsed.maxArchiveEntries)
+        ? parsed.maxArchiveEntries
+        : fallback.maxArchiveEntries,
+      maxArchiveEntryBytes: isPositiveInteger(parsed.maxArchiveEntryBytes)
+        ? parsed.maxArchiveEntryBytes
+        : fallback.maxArchiveEntryBytes,
+      maxArchiveTotalBytes: isPositiveInteger(parsed.maxArchiveTotalBytes)
+        ? parsed.maxArchiveTotalBytes
+        : fallback.maxArchiveTotalBytes,
+      perRunCostCeilingUsd: isNonNegativeNumber(parsed.perRunCostCeilingUsd)
+        ? parsed.perRunCostCeilingUsd
+        : fallback.perRunCostCeilingUsd,
     };
   } catch {
     return fallback;
@@ -363,6 +404,8 @@ export class RuntimeConfigStore {
   private storageVersion = 0;
   private sessionUploadCache: SessionUploadConfig | null = null;
   private sessionUploadPending: Promise<SessionUploadConfig> | null = null;
+  private extractionCache: ExtractionConfig | null = null;
+  private extractionPending: Promise<ExtractionConfig> | null = null;
   private documentGenerationCache: DocumentGenerationConfig | null = null;
   private documentGenerationPending: Promise<DocumentGenerationConfig> | null = null;
   private embeddingsCache: EmbeddingsConfig | null = null;
@@ -426,6 +469,22 @@ export class RuntimeConfigStore {
       return config;
     })();
     return this.sessionUploadPending;
+  }
+
+  async getExtractionConfig(): Promise<ExtractionConfig> {
+    if (this.extractionCache) return this.extractionCache;
+    if (this.extractionPending) return this.extractionPending;
+    this.extractionPending = (async () => {
+      const result = await this.settingsRepo.get(EXTRACTION_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseExtractionConfig(result.data.value, DEFAULT_EXTRACTION_CONFIG)
+          : DEFAULT_EXTRACTION_CONFIG;
+      this.extractionCache = config;
+      this.extractionPending = null;
+      return config;
+    })();
+    return this.extractionPending;
   }
 
   async getDocumentGenerationConfig(): Promise<DocumentGenerationConfig> {
@@ -599,6 +658,11 @@ export class RuntimeConfigStore {
   invalidateSessionUpload(): void {
     this.sessionUploadCache = null;
     this.sessionUploadPending = null;
+  }
+
+  invalidateExtraction(): void {
+    this.extractionCache = null;
+    this.extractionPending = null;
   }
 
   invalidateDocumentGeneration(): void {

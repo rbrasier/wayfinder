@@ -20,6 +20,7 @@ import { OrganisationsToggleCard } from "@/components/settings/organisations-tog
 import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
+import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
 import { StorageCard } from "@/components/settings/storage-card";
 import { trpc } from "@/trpc/client";
@@ -81,6 +82,7 @@ export default function AppSettingsPage() {
             <CollapsibleSection title="Storage & uploads" description="Where files live and upload limits.">
               <StorageCard connectivity={connectivity} />
               <SessionUploadsCard />
+              <ExtractionConfigCard />
             </CollapsibleSection>
 
             <CollapsibleSection title="Notifications" description="How and when Wayfinder notifies people.">
