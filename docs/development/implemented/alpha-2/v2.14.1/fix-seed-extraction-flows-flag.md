@@ -112,6 +112,19 @@ Owned by migration, mirroring how `mcp`/`skills` are seeded in `0035` and
   seeded admin sees the "Synthesise Information" nav entry and that
   `extraction_flows` is listed on `/admin/flags` — the surfaces that were
   hidden before the fix.
+- **Follow-on fix surfaced by enabling the flag:** with `extraction_flows` off,
+  the `phase-extraction-flows-outputs` e2e suite only ever exercised the 403
+  flag gate. Enabling the flag let an admin reach `extraction.listRuns`, which
+  called `canEditFlow` — and that short-circuits `true` for admins *without*
+  checking the flow exists (`apps/web/src/server/routers/flow.ts:31`), so an
+  unknown flow id returned an empty list with HTTP 200. The suite's
+  "outputs queries reject an unknown run with a handled 4xx" case
+  (`apps/web/e2e/phase-extraction-flows-outputs.spec.ts:110`) asserts a 4xx.
+  Fixed in `apps/web/src/server/routers/extraction.ts` by checking flow
+  existence up front in `listRuns` and throwing `NOT_FOUND` for an unknown
+  flow — mirroring how the run-scoped procedures 404 an unknown run via
+  `assertRunEditable`. The only production consumer (`run-history.tsx`) always
+  passes a real flow id, so legitimate calls are unaffected.
 - **Validation:** `./validate.sh` — all 19 checks pass.
 - **Version:** PATCH bump `2.14.0` → `2.14.1`.
 </content>
