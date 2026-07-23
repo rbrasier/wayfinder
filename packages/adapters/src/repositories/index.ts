@@ -38,3 +38,4 @@ export * from "./drizzle-hr-dataset-repository";
 export * from "./drizzle-skill-repository";
 export * from "./drizzle-mcp-server-repository";
 export * from "./drizzle-budget-repository";
+export * from "./drizzle-extraction-run-repository";

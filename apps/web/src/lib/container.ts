@@ -181,10 +181,6 @@ import {
   AiColumnMappingDetector,
   CompositeConnectivityTester,
   FlowSessionGraph,
-  GraphClient,
-  GraphPeopleDirectory,
-  GraphReportingLineResolver,
-  HrPeopleDirectory,
   LangGraphAgentRunner,
   LanguageModelAdapter,
   LlmCallGovernor,
@@ -196,7 +192,6 @@ import {
   PkiCertAdapter,
   QuotaEnforcer,
   RuntimeConfigStore,
-  SpreadsheetParser,
   SystemClock,
   TtlCache,
   createAuth,
@@ -214,7 +209,8 @@ import {
 } from "@rbrasier/adapters";
 import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
-import { buildExtractionUseCases } from "./container-extraction";
+import { buildExtractionModule } from "./container-extraction";
+import { buildPeopleDirectory } from "./container-people-directory";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import {
   createCachedAdminSettings,
@@ -484,23 +480,18 @@ const build = () => {
     languageModel: llm,
     sessionStepOutputs,
   });
-  const spreadsheetParser = new SpreadsheetParser();
-  // Reuses the Email-Notifications M365 app registration (ADR-018), degrading to
-  // HR/manual resolution when the added Graph scopes are not yet consented.
-  const graphConfig =
-    env.M365_TENANT_ID && env.M365_CLIENT_ID && env.M365_CLIENT_SECRET
-      ? {
-          tenantId: env.M365_TENANT_ID,
-          clientId: env.M365_CLIENT_ID,
-          clientSecret: env.M365_CLIENT_SECRET,
-        }
-      : null;
-  const graphClient = new GraphClient(graphConfig);
-  const graphPeopleDirectory = new GraphPeopleDirectory(graphClient);
-  const hrPeopleDirectory = new HrPeopleDirectory(hrDatasets);
-  const reportingLineResolver = new GraphReportingLineResolver(graphClient, hrDatasets, users);
+  const { spreadsheetParser, graphClient, graphPeopleDirectory, hrPeopleDirectory, reportingLineResolver } =
+    buildPeopleDirectory({ env, hrDatasets, users });
 
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
+  const extraction = buildExtractionModule({
+    db,
+    flows,
+    flowVersions,
+    languageModel: llm,
+    documentExtractor,
+    objectStorage,
+  });
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);
   const chunkCuration = new DrizzleChunkCurationRepository(db);
@@ -609,7 +600,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, ...skillsAndMcp.repos },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, ...skillsAndMcp.repos },
     useCases: {
       ...buildDocumentUseCases({
         documentGenerator,
@@ -726,7 +717,7 @@ const build = () => {
       getFlowVersion: new GetFlowVersion(flowVersions),
       restoreFlowVersion: new RestoreFlowVersion(flowVersions, auditLogger),
       syncFlowDraft: new SyncFlowDraft(flows, flowNodes, flowEdges, flowVersions),
-      ...buildExtractionUseCases({ flows, flowVersions, languageModel: llm, documentExtractor }),
+      ...extraction.useCases,
       runAutoNode: new RunAutoNode(sessions, llm, nodeExecutors, sessionStepOutputs),
       applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete, notifyOnStepComplete),
       scheduleNodeEvent: new ScheduleNodeEvent(schedules, clock, llm),

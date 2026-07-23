@@ -61,3 +61,5 @@ export * from "./hr-dataset";
 export * from "./rate-limit";
 export * from "./skill";
 export * from "./mcp-server";
+export * from "./extraction-run";
+export * from "./extraction-document";

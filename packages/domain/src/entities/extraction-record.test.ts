@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateConfidence,
   confidenceBand,
+  mergeFieldResults,
   recordConfidenceBand,
   type ExtractionFieldResult,
   type ExtractionRecord,
@@ -71,5 +72,28 @@ describe("recordConfidenceBand", () => {
 
   it("is red for an empty record", () => {
     expect(recordConfidenceBand(record([]))).toBe("red");
+  });
+});
+
+describe("mergeFieldResults", () => {
+  it("keeps the higher-confidence value when a key appears twice", () => {
+    const existing = [fieldResult({ key: "price", value: "£10", confidence: 0.4 })];
+    const incoming = [fieldResult({ key: "price", value: "£12", confidence: 0.9 })];
+    expect(mergeFieldResults(existing, incoming)).toEqual([
+      fieldResult({ key: "price", value: "£12", confidence: 0.9 }),
+    ]);
+  });
+
+  it("does not let a weaker later value overwrite a stronger earlier one", () => {
+    const existing = [fieldResult({ key: "price", value: "£12", confidence: 0.9 })];
+    const incoming = [fieldResult({ key: "price", value: "£10", confidence: 0.4 })];
+    expect(mergeFieldResults(existing, incoming)[0]?.value).toBe("£12");
+  });
+
+  it("adds keys not yet present", () => {
+    const existing = [fieldResult({ key: "price", confidence: 0.9 })];
+    const incoming = [fieldResult({ key: "delivery", value: "30 days", confidence: 0.7 })];
+    const merged = mergeFieldResults(existing, incoming);
+    expect(merged.map((field) => field.key).sort()).toEqual(["delivery", "price"]);
   });
 });

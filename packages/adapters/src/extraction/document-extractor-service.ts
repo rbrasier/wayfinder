@@ -6,6 +6,12 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
 const TEXT_MIMES = new Set(["text/plain", "text/markdown", "text/csv"]);
 const PDF_MIME = "application/pdf";
 
+// pdf-parse returns the text layer only; a scanned document yields empty or
+// whitespace-only text. Treat that as unreadable and route it to exceptions
+// rather than extracting confident nonsense from a blank page (phase §4). OCR is
+// out of scope (ADR-030).
+export const isReadableText = (text: string): boolean => text.trim().length > 0;
+
 export class DocumentExtractorService implements IDocumentExtractor {
   constructor(private readonly documentGenerator: IDocumentGenerator) {}
 

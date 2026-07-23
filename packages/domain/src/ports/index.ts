@@ -65,3 +65,5 @@ export * from "./skill-repository";
 export * from "./mcp-client";
 export * from "./mcp-server-directory";
 export * from "./mcp-server-repository";
+export * from "./extraction-run-repository";
+export * from "./archive-extractor";

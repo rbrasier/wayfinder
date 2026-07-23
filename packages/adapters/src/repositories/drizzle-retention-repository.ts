@@ -11,7 +11,11 @@ import type { Database } from "../db/client";
 import { ai_usage_events } from "../db/schema/ai";
 import { app_error_log } from "../db/schema/app";
 import { core_audit_log } from "../db/schema/core";
-import { app_notification_log, app_session_messages } from "../db/schema/wayfinder";
+import {
+  app_extraction_runs,
+  app_notification_log,
+  app_session_messages,
+} from "../db/schema/wayfinder";
 
 interface RetentionTarget {
   readonly tableName: string;
@@ -58,6 +62,14 @@ const RETENTION_TARGETS: Record<RetentionTargetKey, RetentionTarget> = {
     table: app_notification_log,
     idColumn: app_notification_log.id,
     timestampColumn: app_notification_log.created_at,
+  },
+  // Deleting a run cascades to its documents and records via FK (ADR-033 §9).
+  // Supplier responses are sensitive, so a run and its rows must be deletable.
+  app_extraction_runs: {
+    tableName: "app_extraction_runs",
+    table: app_extraction_runs,
+    idColumn: app_extraction_runs.id,
+    timestampColumn: app_extraction_runs.created_at,
   },
 };
 

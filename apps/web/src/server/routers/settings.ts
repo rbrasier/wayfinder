@@ -11,6 +11,7 @@ import {
   NOTIFICATION_PREFS_SETTING_KEY,
   REGISTRATION_ENABLED_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
+  EXTRACTION_CONFIG_SETTING_KEY,
   SIEM_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   type SiemConfig,
@@ -81,6 +82,14 @@ const n8nConfigInputSchema = z.object({
 const sessionUploadConfigInputSchema = z.object({
   maxFileSizeBytes: z.number().int().positive(),
   totalBudgetChars: z.number().int().positive(),
+});
+
+export const extractionConfigInputSchema = z.object({
+  maxFilesPerRun: z.number().int().positive(),
+  maxArchiveEntries: z.number().int().positive(),
+  maxArchiveEntryBytes: z.number().int().positive(),
+  maxArchiveTotalBytes: z.number().int().positive(),
+  perRunCostCeilingUsd: z.number().nonnegative(),
 });
 
 export const documentGenerationConfigInputSchema = z.object({
@@ -432,6 +441,22 @@ export const settingsRouter = router({
       );
       if (result.error) throw toTrpcError(result.error);
       ctx.container.runtimeConfig.invalidateSessionUpload();
+      return { ok: true };
+    }),
+
+  getExtractionConfig: adminProcedure.query(async ({ ctx }) => {
+    return ctx.container.runtimeConfig.getExtractionConfig();
+  }),
+
+  setExtractionConfig: adminProcedure
+    .input(extractionConfigInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.repos.systemSettings.set(
+        EXTRACTION_CONFIG_SETTING_KEY,
+        JSON.stringify(input),
+      );
+      if (result.error) throw toTrpcError(result.error);
+      ctx.container.runtimeConfig.invalidateExtraction();
       return { ok: true };
     }),
 

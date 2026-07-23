@@ -15,9 +15,11 @@ import {
   ListUsers,
   LogAuditEvent,
   LogError,
+  AdvanceBatchRuns,
   NotifyOnSessionComplete,
   NotifyOnStepComplete,
   PingJob,
+  ProcessExtractionTask,
   RegisterJob,
   TrackUsage,
   UpdateErrorStatus,
@@ -50,7 +52,13 @@ import {
   createSettingsEncryptionKey,
   DrizzleUsageRepository,
   DrizzleUserRepository,
+  DrizzleExtractionRunRepository,
+  DrizzleFlowVersionRepository,
+  DocumentExtractorService,
+  DocxGenerator,
+  ExtractionWorker,
   LanguageModelAdapter,
+  MinioStorageAdapter,
   NodemailerEmailSender,
   PinoLogger,
   RetentionWorker,
@@ -202,6 +210,7 @@ export const buildContainer = (env: Env) => {
     coreAuditLogDays: env.RETENTION_AUDIT_LOG_DAYS,
     appErrorLogDays: env.RETENTION_ERROR_LOG_DAYS,
     appNotificationLogDays: env.RETENTION_NOTIFICATION_LOG_DAYS,
+    appExtractionRunsDays: env.RETENTION_EXTRACTION_RUNS_DAYS,
   });
   const applyRetentionPolicies = new ApplyRetentionPolicies(
     retentionRepository,
@@ -221,6 +230,30 @@ export const buildContainer = (env: Env) => {
       ]
     : [];
 
+  // Extraction batch engine (ADR-033 §6): a second poller alongside the
+  // scheduler that advances every claimable run one batch per tick, in-process
+  // with the decorated model so usage metering and spend caps apply
+  // automatically. Only started when enabled.
+  const flowVersions = new DrizzleFlowVersionRepository(db);
+  const extractionRuns = new DrizzleExtractionRunRepository(db);
+  const objectStorage = new MinioStorageAdapter(runtimeConfig);
+  const documentExtractor = new DocumentExtractorService(new DocxGenerator());
+  const advanceBatchRuns = new AdvanceBatchRuns(
+    extractionRuns,
+    flowVersions,
+    new ProcessExtractionTask(extractionRuns, objectStorage, documentExtractor, llm),
+    // The per-run cost ceiling is the admin ExtractionConfig value (resolved each
+    // tick from system_settings), not an env var.
+    { resolveCostCeilingUsd: () => runtimeConfig.getExtractionConfig().then((c) => c.perRunCostCeilingUsd) },
+  );
+  const extractionWorkers = env.EXTRACTION_WORKER_ENABLED
+    ? [
+        new ExtractionWorker(advanceBatchRuns, jobRepo, logger, {
+          tickIntervalMs: env.EXTRACTION_TICK_MS,
+        }),
+      ]
+    : [];
+
   return {
     env,
     db,
@@ -228,6 +261,7 @@ export const buildContainer = (env: Env) => {
     runtimeConfig,
     schedulerWorkers,
     retentionWorkers,
+    extractionWorkers,
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {

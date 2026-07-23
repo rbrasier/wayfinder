@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { AiConfig } from "@rbrasier/domain";
-import { documentGenerationConfigInputSchema, mergeApiKeys } from "./settings";
+import {
+  documentGenerationConfigInputSchema,
+  extractionConfigInputSchema,
+  mergeApiKeys,
+} from "./settings";
 
 const stored: AiConfig["apiKeys"] = {
   anthropic: "sk-stored-anthropic",
@@ -135,6 +139,38 @@ describe("settings router — documentGenerationConfigInputSchema", () => {
       documentGenerationConfigInputSchema.safeParse({ ...valid, contextBudgetMode: "bananas" })
         .success,
     ).toBe(false);
+  });
+});
+
+describe("settings router — extractionConfigInputSchema", () => {
+  const valid = {
+    maxFilesPerRun: 1000,
+    maxArchiveEntries: 500,
+    maxArchiveEntryBytes: 25 * 1024 * 1024,
+    maxArchiveTotalBytes: 500 * 1024 * 1024,
+    perRunCostCeilingUsd: 0,
+  };
+
+  it("accepts a valid configuration", () => {
+    expect(extractionConfigInputSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("allows a zero cost ceiling (no ceiling) but rejects a negative one", () => {
+    expect(extractionConfigInputSchema.safeParse({ ...valid, perRunCostCeilingUsd: 0 }).success).toBe(
+      true,
+    );
+    expect(
+      extractionConfigInputSchema.safeParse({ ...valid, perRunCostCeilingUsd: -1 }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a non-positive file or entry cap", () => {
+    expect(extractionConfigInputSchema.safeParse({ ...valid, maxFilesPerRun: 0 }).success).toBe(
+      false,
+    );
+    expect(extractionConfigInputSchema.safeParse({ ...valid, maxArchiveEntries: -5 }).success).toBe(
+      false,
+    );
   });
 });
 

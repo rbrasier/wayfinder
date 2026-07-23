@@ -13,6 +13,7 @@ const config: RetentionConfig = {
   coreAuditLogDays: 0,
   appErrorLogDays: 90,
   appNotificationLogDays: 180,
+  appExtractionRunsDays: 30,
 };
 
 describe("buildRetentionPolicies", () => {
@@ -29,6 +30,7 @@ describe("buildRetentionPolicies", () => {
     expect(byKey.app_notification_log).toBe(180);
     expect(byKey.core_audit_log).toBe(0);
     expect(byKey.app_session_messages).toBe(0);
+    expect(byKey.app_extraction_runs).toBe(30);
   });
 
   it("gives every policy a human-readable label", () => {

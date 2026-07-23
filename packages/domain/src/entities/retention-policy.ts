@@ -9,7 +9,8 @@ export type RetentionTargetKey =
   | "app_session_messages"
   | "core_audit_log"
   | "app_error_log"
-  | "app_notification_log";
+  | "app_notification_log"
+  | "app_extraction_runs";
 
 // Fixed iteration order so a sweep run is deterministic and the render tests can
 // assert a stable shape.
@@ -19,6 +20,7 @@ export const RETENTION_TARGET_KEYS: readonly RetentionTargetKey[] = [
   "core_audit_log",
   "app_error_log",
   "app_notification_log",
+  "app_extraction_runs",
 ] as const;
 
 export interface RetentionPolicy {
@@ -35,6 +37,7 @@ export interface RetentionConfig {
   readonly coreAuditLogDays: number;
   readonly appErrorLogDays: number;
   readonly appNotificationLogDays: number;
+  readonly appExtractionRunsDays: number;
 }
 
 const LABELS: Record<RetentionTargetKey, string> = {
@@ -43,6 +46,7 @@ const LABELS: Record<RetentionTargetKey, string> = {
   core_audit_log: "Audit log",
   app_error_log: "Error log",
   app_notification_log: "Notification log",
+  app_extraction_runs: "Extraction runs",
 };
 
 export const buildRetentionPolicies = (config: RetentionConfig): RetentionPolicy[] => {
@@ -52,6 +56,7 @@ export const buildRetentionPolicies = (config: RetentionConfig): RetentionPolicy
     core_audit_log: config.coreAuditLogDays,
     app_error_log: config.appErrorLogDays,
     app_notification_log: config.appNotificationLogDays,
+    app_extraction_runs: config.appExtractionRunsDays,
   };
   return RETENTION_TARGET_KEYS.map((key) => ({
     key,
