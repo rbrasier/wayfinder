@@ -64,10 +64,12 @@ test.describe('Synthesise Information — author + sample', () => {
     await dialog.getByLabel('Name').fill('E2E synthesis');
     await dialog.getByRole('button', { name: /^Create$/ }).click();
 
-    // The editor renders the two cards (input → output) with the field editor
-    // and the run control.
+    // The editor renders the two focus cards (input → output). The input card
+    // holds focus first; the output card sits behind its "Configure output"
+    // overlay until clicked, which reveals the Run sample control in its header.
     await expect(page.getByRole('heading', { name: /Input — documents/i })).toBeVisible();
     await expect(page.getByRole('heading', { name: /Output — records/i })).toBeVisible();
+    await page.getByRole('button', { name: /Configure output/i }).click();
     await expect(page.getByRole('button', { name: /Run sample/i })).toBeVisible();
   });
 });

@@ -47,12 +47,17 @@ interface NavGroup {
   defaultCollapsed?: boolean;
 }
 
-const userNav: NavGroup[] = [
+// Synthesise Information sits directly under Approvals when the extraction_flows
+// flag resolves (ADR-033 §7) — inline in the main group, no separate rule.
+const buildUserNav = (extractionEnabled: boolean): NavGroup[] => [
   {
     items: [
       { href: "/chats", icon: MessageSquare, label: "My Chats" },
       { href: "/flows", icon: GitBranch, label: "Flows" },
       { href: "/approvals", icon: Stamp, label: "Approvals" },
+      ...(extractionEnabled
+        ? [{ href: "/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
+        : []),
       { href: "/settings", icon: Settings, label: "Settings" },
     ],
   },
@@ -262,7 +267,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     organisationsEnabled: organisationsEnabledQuery.data ?? false,
     extractionEnabled,
   });
-  const nav: NavGroup[] = isAdmin ? adminNav : userNav;
+  const nav: NavGroup[] = isAdmin ? adminNav : buildUserNav(extractionEnabled);
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
 
   const recentChats = isAdmin
@@ -379,33 +384,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     </div>
   );
 
-  // On the user side, "Synthesise Information" sits just below Flows, set off by
-  // a subtle horizontal rule (ADR-033 §3 / phase §3). Admins get their item
-  // inside the main admin group instead.
-  const synthesiseBlock = !isAdmin && extractionEnabled && (
-    <>
-      <hr className="my-[10px] border-[#dedad2]" />
-      <Link
-        href="/synthesise"
-        onClick={closeMobile}
-        className={`flex items-center gap-[9px] rounded-[8px] px-[10px] py-[8px] text-[13.5px] transition-colors ${
-          isActive("/synthesise")
-            ? "bg-[#eef1fc] font-medium text-[#3a5fd9]"
-            : "text-[#5a5650] hover:bg-[#efede8] hover:text-[#1a1814]"
-        }`}
-      >
-        <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-          <FlaskConical className="h-[15px] w-[15px]" />
-        </span>
-        Synthesise Information
-      </Link>
-    </>
-  );
-
   const navBody = (
     <nav className="flex flex-1 flex-col gap-[2px] overflow-y-auto px-[10px] py-[12px]">
       <NavGroups groups={nav} isActive={isActive} onNavigate={closeMobile} />
-      {synthesiseBlock}
       {recentChatsBlock}
     </nav>
   );

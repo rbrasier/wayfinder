@@ -34,28 +34,6 @@ export function SynthesiseContent() {
     onError: (error) => toast.error(error.message),
   });
 
-  // Guard the loading window explicitly: without this the actionable "New
-  // synthesis" button renders while the gated query is still in flight, so a
-  // flag-off error that arrives later unmounts the subtree mid-interaction.
-  if (flowsQuery.isLoading) {
-    return (
-      <div className="mx-auto max-w-[900px] px-[20px] py-[28px]">
-        <p className="text-[13px] text-[#8a857c]">Loading…</p>
-      </div>
-    );
-  }
-
-  if (flowsQuery.error) {
-    return (
-      <div className="mx-auto max-w-[900px] px-[20px] py-[28px]">
-        <EmptyState
-          heading="Synthesise Information is not available"
-          body="This feature is not enabled for your account. Ask an administrator to enable it."
-        />
-      </div>
-    );
-  }
-
   const rows: ExtractionFlowRow[] = (flowsQuery.data ?? []).map((flow) => ({
     id: flow.id,
     name: flow.name,
@@ -64,34 +42,45 @@ export function SynthesiseContent() {
   }));
 
   return (
-    <div className="mx-auto max-w-[900px] px-[20px] py-[28px]">
-      <div className="mb-[20px] flex items-center justify-between">
-        <div>
-          <h1 className="text-[20px] font-bold text-[#1a1814]">Synthesise Information</h1>
-          <p className="mt-[2px] text-[13px] text-[#6d6a65]">
-            Pull the same fields from many documents at once.
-          </p>
-        </div>
-        <Button type="button" onClick={() => setCreating(true)}>
-          New synthesis
-        </Button>
-      </div>
+    <div className="flex h-full flex-col overflow-hidden">
+      <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#dedad2] bg-white pl-5 pr-[52px]">
+        <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1a1814]">
+          Synthesise Information
+        </h1>
+        {!flowsQuery.error && (
+          <Button onClick={() => setCreating(true)}>New synthesis</Button>
+        )}
+      </header>
 
-      {rows.length === 0 ? (
-        <EmptyState
-          heading="No syntheses yet"
-          body="Create one to define a schema and sample it over a few documents."
-        />
-      ) : (
-        <ExtractionList flows={rows} editable />
-      )}
+      <div className="flex-1 overflow-auto">
+        <div className="container py-6">
+          {flowsQuery.isLoading ? (
+            <p className="text-[13px] text-[#8a857c]">Loading…</p>
+          ) : flowsQuery.error ? (
+            <EmptyState
+              heading="Synthesise Information is not available"
+              body="This feature is not enabled for your account. Ask an administrator to enable it."
+            />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              icon="🧪"
+              heading="No syntheses yet"
+              body="Create one to define a schema and sample it over a few documents."
+              ctaLabel="New synthesis"
+              onCta={() => setCreating(true)}
+            />
+          ) : (
+            <ExtractionList flows={rows} editable />
+          )}
+        </div>
+      </div>
 
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New synthesis</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-[6px]">
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor="synthesis-name">Name</Label>
             <Input
               id="synthesis-name"
