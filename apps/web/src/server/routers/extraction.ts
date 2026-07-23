@@ -1,4 +1,5 @@
 import type { ExtractionSchemaDraft } from "@rbrasier/domain";
+import { DocumentGeneratorRouter, DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
 import type { Container } from "@/lib/container";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -49,6 +50,10 @@ const viewProcedure = extractionEnabled.use(({ ctx, next }) => {
   }
   return next();
 });
+
+// Template parsing routes docx vs xlsx by the file's bytes (ADR-039), so a
+// single router instance handles both without the caller pre-selecting a format.
+const templateGenerator = new DocumentGeneratorRouter(new DocxGenerator(), new XlsxGenerator());
 
 const flowIdInput = z.object({ flowId: z.string().uuid() });
 
@@ -174,6 +179,90 @@ export const extractionRouter = router({
       });
       if (result.error) throw toTrpcError(result.error);
       return { versionId: result.data.id };
+    }),
+
+  // Soft-deletes an extraction flow (a `flow` row with flowType "extraction").
+  // Author-gated and re-checked through the shared flow-edit guard.
+  delete: authorProcedure.input(flowIdInput).mutation(async ({ ctx, input }) => {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You cannot delete this flow." });
+    }
+    const result = await ctx.container.useCases.deleteFlow.execute(input.flowId);
+    if (result.error) throw toTrpcError(result.error);
+    return { ok: true };
+  }),
+
+  // Parses an uploaded output template (.docx/.xlsx) into the fields it declares
+  // — its {{ tags }} or header row — the same mechanism the conversational node
+  // uses. Stores the template so a later run can render into it, and returns the
+  // FlowContextDoc the author saves onto the schema's output config.
+  parseOutputTemplate: authorProcedure
+    .input(
+      z.object({
+        flowId: z.string().uuid(),
+        filename: z.string().min(1),
+        contentBase64: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
+      }
+
+      const lowerName = input.filename.toLowerCase();
+      if (!lowerName.endsWith(".docx") && !lowerName.endsWith(".xlsx")) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Only .docx and .xlsx templates are accepted." });
+      }
+      const format: "docx" | "xlsx" = lowerName.endsWith(".xlsx") ? "xlsx" : "docx";
+
+      const buffer = Buffer.from(input.contentBase64, "base64");
+      const generator = templateGenerator;
+
+      const tags = generator.extractTags({ templateBytes: buffer });
+      if (tags.error) throw toTrpcError(tags.error);
+      // A .docx with no tags captures nothing; a .xlsx with none is valid (header
+      // mode), so only .docx is rejected here — matching the node template route.
+      if (format === "docx" && tags.data.tags.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "This template has no {{ tag }} placeholders. Add at least one tag (e.g. {{ supplier_name }}) where the extracted value should go, then re-upload.",
+        });
+      }
+
+      const fields = generator.extractFields({ templateBytes: buffer });
+      if (fields.error) throw toTrpcError(fields.error);
+
+      const fullText = generator.extractFullText({ templateBytes: buffer });
+
+      const mimeType =
+        format === "xlsx"
+          ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      const safeFilename = input.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const storagePath = `extraction-templates/${input.flowId}/${timestamp}-${safeFilename}`;
+
+      const stored = await ctx.container.objectStorage.put(storagePath, buffer, mimeType);
+      if (stored.error) throw toTrpcError(stored.error);
+
+      const spreadsheetTemplateMode: "tags" | "header" | null =
+        format === "xlsx" ? (tags.data.tags.length > 0 ? "tags" : "header") : null;
+
+      return {
+        template: {
+          id: crypto.randomUUID(),
+          filename: safeFilename,
+          mimeType,
+          sizeBytes: buffer.byteLength,
+          storagePath,
+          extractedText: fullText.data?.text ?? null,
+          extractionStatus: "complete" as const,
+        },
+        fields: fields.data.fields,
+        format,
+        spreadsheetTemplateMode,
+      };
     }),
 
   publish: authorProcedure.input(flowIdInput).mutation(async ({ ctx, input }) => {
