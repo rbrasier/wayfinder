@@ -29,4 +29,8 @@ describe("core_feature_flag seed migrations", () => {
   it("seeds the skills flag so Skills UI surfaces on fresh installs", () => {
     expect(seedsFlag("skills")).toBe(true);
   });
+
+  it("seeds the extraction_flows flag so the Synthesise UI surfaces on fresh installs", () => {
+    expect(seedsFlag("extraction_flows")).toBe(true);
+  });
 });
