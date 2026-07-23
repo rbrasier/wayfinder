@@ -276,6 +276,7 @@ jobs:
           fi
           npm install --global netlify-cli --silent
           netlify deploy \
+            --no-build \
             --dir playwright-report \
             --message "E2E run #${{ github.run_number }}" \
             --json > /tmp/netlify-output.json
