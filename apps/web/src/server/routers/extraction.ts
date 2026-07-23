@@ -306,6 +306,14 @@ export const extractionRouter = router({
   // Run history for a flow's /synthesise sub-rows and the run-history view
   // (phase §5): status, counts, and cost per run, newest first.
   listRuns: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
+    // canEditFlow short-circuits true for admins without checking the flow
+    // exists, so an unknown flow id would otherwise return an empty list. Reject
+    // it up front — mirroring how run-scoped procedures 404 an unknown run.
+    const flow = await ctx.container.repos.flows.findById(input.flowId);
+    if (flow.error) throw toTrpcError(flow.error);
+    if (!flow.data) {
+      throw new TRPCError({ code: "NOT_FOUND", message: "Flow not found." });
+    }
     if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow's runs." });
     }
