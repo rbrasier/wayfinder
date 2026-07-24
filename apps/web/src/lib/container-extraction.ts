@@ -79,7 +79,7 @@ export const buildExtractionModule = ({
     draftRepository: extractionDrafts,
     useCases: {
       createExtractionFlow: new CreateExtractionFlow(flows),
-      uploadDraftDocuments: new UploadDraftDocuments(extractionDrafts, objectStorage),
+      uploadDraftDocuments: new UploadDraftDocuments(extractionDrafts, objectStorage, archiveExtractor),
       listDraftDocuments: new ListDraftDocuments(extractionDrafts),
       removeDraftDocument: new RemoveDraftDocument(extractionDrafts, objectStorage),
       saveExtractionSchema: new SaveExtractionSchema(flows, flowVersions),

@@ -76,6 +76,9 @@ missing persistence, and UX gaps:
 - `extraction.listDraftDocuments` / `uploadDraftDocuments` / `removeDraftDocument`.
 - The input card **auto-saves on upload**, lists the persisted files (including
   sub-folders) in the tree, and supports **per-file removal**.
+- An uploaded **zip is expanded server-side** into its entries (folder structure
+  preserved) via the archive extractor under the admin-configured limits, so it
+  lands as the individual files — not stored as a single opaque archive.
 
 ### 6. Sample as a durable run + summary screen — server + editor + run screen
 - **A sample is a single durable run.** `StartBatchRun.startSample` runs against

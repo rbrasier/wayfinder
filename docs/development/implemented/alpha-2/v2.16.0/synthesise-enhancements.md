@@ -47,6 +47,9 @@ Phase doc: `synthesise-enhancements.phase.md` (same directory).
   and matching `extraction.*` procedures.
 - The input card auto-saves on upload, renders the persisted tree (with
   sub-folders) and supports per-file removal (`upload-tree.tsx` gained `onRemove`).
+- An uploaded zip is expanded server-side into its entries (folder structure
+  preserved) in `UploadDraftDocuments` via the archive extractor, so it lands as
+  the individual files rather than a single archive.
 
 ### Sample as a durable run + summary screen
 - `StartBatchRun.startSample` runs against the flow's **open draft** version

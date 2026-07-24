@@ -1,6 +1,8 @@
 import {
   ok,
+  type ArchiveLimits,
   type ExtractionDraftDocument,
+  type IArchiveExtractor,
   type IExtractionDraftDocumentRepository,
   type IObjectStorage,
   type Result,
@@ -18,22 +20,36 @@ export interface DraftDocumentUpload {
 export interface UploadDraftDocumentsInput {
   flowId: string;
   files: DraftDocumentUpload[];
+  // Safety bounds for expanding any uploaded zip (entry count, per-entry size,
+  // decompression-bomb). Resolved from the admin ExtractionConfig by the caller.
+  archiveLimits: ArchiveLimits;
 }
+
+// A zip is recognised by content type or extension; sniffing the bytes is the
+// archive extractor's job once we decide to expand.
+const isArchive = (file: DraftDocumentUpload): boolean =>
+  file.mimeType.includes("zip") || file.filename.toLowerCase().endsWith(".zip");
 
 // Persists staged input documents against a flow's draft: each file's bytes go
 // to the object store (store-only — they never enter any conversational
 // context), then a row records where it lives so the intake survives a reload
-// and can seed a run. Best-effort atomic: a storage failure aborts before any
-// row is written.
+// and can seed a run. An uploaded zip is expanded into its entries first, so it
+// lands as the individual files (folder structure preserved) rather than a
+// single opaque archive. Best-effort atomic: a storage or expansion failure
+// aborts before any row is written.
 export class UploadDraftDocuments {
   constructor(
     private readonly drafts: IExtractionDraftDocumentRepository,
     private readonly storage: IObjectStorage,
+    private readonly archiveExtractor: IArchiveExtractor,
   ) {}
 
   async execute(input: UploadDraftDocumentsInput): Promise<Result<ExtractionDraftDocument[]>> {
+    const resolved = await this.expandArchives(input.files, input.archiveLimits);
+    if (resolved.error) return resolved;
+
     const stored: { filename: string; treePath: string; storageKey: string; mimeType: string }[] = [];
-    for (const file of input.files) {
+    for (const file of resolved.data) {
       const storageKey = `extraction-drafts/${input.flowId}/${crypto.randomUUID()}-${file.filename}`;
       const put = await this.storage.put(storageKey, file.buffer, file.mimeType);
       if (put.error) return put;
@@ -45,6 +61,30 @@ export class UploadDraftDocuments {
       });
     }
     return this.drafts.add(input.flowId, stored);
+  }
+
+  private async expandArchives(
+    files: DraftDocumentUpload[],
+    limits: ArchiveLimits,
+  ): Promise<Result<DraftDocumentUpload[]>> {
+    const resolved: DraftDocumentUpload[] = [];
+    for (const file of files) {
+      if (!isArchive(file)) {
+        resolved.push(file);
+        continue;
+      }
+      const expanded = await this.archiveExtractor.expand(file.buffer, limits);
+      if (expanded.error) return expanded;
+      for (const entry of expanded.data) {
+        resolved.push({
+          filename: entry.filename,
+          treePath: entry.treePath,
+          mimeType: entry.mimeType,
+          buffer: entry.buffer,
+        });
+      }
+    }
+    return ok(resolved);
   }
 }
 

@@ -405,6 +405,9 @@ export const extractionRouter = router({
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
       }
+      // Resolve the admin-configured archive limits at upload time so a zip is
+      // expanded under the same safety bounds as a full batch run.
+      const config = await ctx.container.runtimeConfig.getExtractionConfig();
       const result = await ctx.container.useCases.uploadDraftDocuments.execute({
         flowId: input.flowId,
         files: input.files.map((file) => ({
@@ -413,6 +416,11 @@ export const extractionRouter = router({
           mimeType: file.mimeType,
           buffer: Buffer.from(file.contentBase64, "base64"),
         })),
+        archiveLimits: {
+          maxEntries: config.maxArchiveEntries,
+          maxEntryBytes: config.maxArchiveEntryBytes,
+          maxTotalBytes: config.maxArchiveTotalBytes,
+        },
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data.map((document) => ({

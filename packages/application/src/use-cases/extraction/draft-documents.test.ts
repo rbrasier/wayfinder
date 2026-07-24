@@ -2,10 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { ok, err, domainError } from "@rbrasier/domain";
 import type {
   ExtractionDraftDocument,
+  IArchiveExtractor,
   IExtractionDraftDocumentRepository,
   IObjectStorage,
 } from "@rbrasier/domain";
 import { ListDraftDocuments, RemoveDraftDocument, UploadDraftDocuments } from "./draft-documents";
+
+const archiveLimits = { maxEntries: 500, maxEntryBytes: 1000, maxTotalBytes: 10000 };
+
+const makeArchive = (overrides: Partial<IArchiveExtractor> = {}) =>
+  ({
+    expand: vi.fn().mockResolvedValue(ok([])),
+    ...overrides,
+  }) as unknown as IArchiveExtractor;
 
 const draftDoc = (overrides: Partial<ExtractionDraftDocument> = {}): ExtractionDraftDocument => ({
   id: "doc-1",
@@ -38,10 +47,11 @@ describe("UploadDraftDocuments", () => {
   it("stores each file's bytes then records the rows", async () => {
     const repo = makeRepo();
     const storage = makeStorage();
-    const useCase = new UploadDraftDocuments(repo, storage);
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive());
 
     const result = await useCase.execute({
       flowId: "flow-1",
+      archiveLimits,
       files: [
         { filename: "acme.pdf", treePath: "acme.pdf", mimeType: "application/pdf", buffer: Buffer.from("a") },
       ],
@@ -58,15 +68,66 @@ describe("UploadDraftDocuments", () => {
     ]);
   });
 
+  it("expands a zip into its entries rather than storing the archive itself", async () => {
+    const repo = makeRepo();
+    const storage = makeStorage();
+    const archive = makeArchive({
+      expand: vi.fn().mockResolvedValue(
+        ok([
+          { filename: "one.pdf", treePath: "bundle/one.pdf", mimeType: "application/pdf", buffer: Buffer.from("1") },
+          { filename: "two.pdf", treePath: "bundle/sub/two.pdf", mimeType: "application/pdf", buffer: Buffer.from("2") },
+        ]),
+      ),
+    });
+    const useCase = new UploadDraftDocuments(repo, storage, archive);
+
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      archiveLimits,
+      files: [
+        { filename: "bundle.zip", treePath: "bundle.zip", mimeType: "application/zip", buffer: Buffer.from("zip") },
+      ],
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(archive.expand).toHaveBeenCalledWith(Buffer.from("zip"), archiveLimits);
+    // The archive itself is never stored — only its entries, tree paths preserved.
+    expect(storage.put).toHaveBeenCalledTimes(2);
+    expect(repo.add).toHaveBeenCalledWith("flow-1", [
+      expect.objectContaining({ filename: "one.pdf", treePath: "bundle/one.pdf" }),
+      expect.objectContaining({ filename: "two.pdf", treePath: "bundle/sub/two.pdf" }),
+    ]);
+  });
+
+  it("aborts when a zip cannot be safely expanded", async () => {
+    const repo = makeRepo();
+    const storage = makeStorage();
+    const archive = makeArchive({
+      expand: vi.fn().mockResolvedValue(err(domainError("VALIDATION_FAILED", "zip bomb"))),
+    });
+    const useCase = new UploadDraftDocuments(repo, storage, archive);
+
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      archiveLimits,
+      files: [{ filename: "bad.zip", treePath: "bad.zip", mimeType: "application/zip", buffer: Buffer.from("z") }],
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(storage.put).not.toHaveBeenCalled();
+    expect(repo.add).not.toHaveBeenCalled();
+  });
+
   it("aborts before writing rows when storage fails", async () => {
     const repo = makeRepo();
     const storage = makeStorage({
       put: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "disk full"))),
     });
-    const useCase = new UploadDraftDocuments(repo, storage);
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive());
 
     const result = await useCase.execute({
       flowId: "flow-1",
+      archiveLimits,
       files: [{ filename: "a.pdf", treePath: "a.pdf", mimeType: "application/pdf", buffer: Buffer.from("a") }],
     });
 
