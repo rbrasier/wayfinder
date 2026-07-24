@@ -287,6 +287,53 @@ export const extractionRouter = router({
       };
     }),
 
+  // Uploads a context document to the output config — the extraction-flow
+  // equivalent of a flow's whole-flow context. Stores the bytes, extracts their
+  // text, and returns the FlowContextDoc the author saves onto output.contextDocs
+  // so every document extraction is grounded on the same reference material.
+  parseContextDoc: authorProcedure
+    .input(
+      z.object({
+        flowId: z.string().uuid(),
+        filename: z.string().min(1),
+        mimeType: z.string().min(1),
+        contentBase64: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
+      }
+
+      const buffer = Buffer.from(input.contentBase64, "base64");
+      const safeFilename = input.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const storagePath = `extraction-context/${input.flowId}/${timestamp}-${safeFilename}`;
+
+      const stored = await ctx.container.objectStorage.put(storagePath, buffer, input.mimeType);
+      if (stored.error) throw toTrpcError(stored.error);
+
+      const extracted = await ctx.container.services.documentExtractor.extract({
+        buffer,
+        mimeType: input.mimeType,
+      });
+      // Unsupported/blank extraction is not fatal — the doc is still stored and
+      // listed; it simply contributes no text to the grounding section.
+      const extractedText = extracted.error ? null : extracted.data;
+
+      return {
+        contextDoc: {
+          id: crypto.randomUUID(),
+          filename: safeFilename,
+          mimeType: input.mimeType,
+          sizeBytes: buffer.byteLength,
+          storagePath,
+          extractedText,
+          extractionStatus: (extracted.error ? "failed" : "complete") as "complete" | "failed",
+        },
+      };
+    }),
+
   publish: authorProcedure.input(flowIdInput).mutation(async ({ ctx, input }) => {
     if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot publish this flow." });

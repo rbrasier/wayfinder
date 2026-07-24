@@ -93,6 +93,11 @@ export function EditorCards({
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [outputInstruction, setOutputInstruction] = useState(initialSchema?.output.instruction ?? "");
   const [generateSummary, setGenerateSummary] = useState(initialSchema?.output.generateSummary ?? false);
+  // Whole-flow context material every extraction is grounded on (item: output
+  // context upload). Kept apart from the input documents (which are the records).
+  const [contextDocs, setContextDocs] = useState<FlowContextDoc[]>(
+    initialSchema?.output.contextDocs ?? [],
+  );
 
   const [uploads, setUploads] = useState<UploadedFile[]>([]);
   const [sample, setSample] = useState<SampleResult | null>(null);
@@ -105,6 +110,7 @@ export function EditorCards({
   const [promptLoading, setPromptLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const templateInputRef = useRef<HTMLInputElement | null>(null);
+  const contextInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -134,7 +140,7 @@ export function EditorCards({
       instruction: outputInstruction,
       generateSummary,
       summaryTemplate: null,
-      contextDocs: [],
+      contextDocs,
     },
   });
 
@@ -168,6 +174,14 @@ export function EditorCards({
     onError: (error) => toast.error(error.message),
   });
 
+  const parseContextDocMutation = trpc.extraction.parseContextDoc.useMutation({
+    onSuccess: (data) => {
+      setContextDocs((current) => [...current, data.contextDoc]);
+      toast.success(`Context document added — ${data.contextDoc.filename}`);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
   const deleteMutation = trpc.extraction.delete.useMutation({
     onSuccess: () => {
       void utils.extraction.listMine.invalidate();
@@ -196,6 +210,17 @@ export function EditorCards({
       next.push({ name: file.name, path, mimeType: file.type || "application/octet-stream", contentBase64 });
     }
     setUploads((current) => [...current, ...next]);
+  };
+
+  const handleUploadContextDoc = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+    const contentBase64 = await readFileAsBase64(file);
+    parseContextDocMutation.mutate({
+      flowId,
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      contentBase64,
+    });
   };
 
   const handleUploadTemplate = async (file: File | undefined): Promise<void> => {
@@ -505,6 +530,60 @@ export function EditorCards({
                         onChange={(event) => setOutputInstruction(event.target.value)}
                         placeholder="e.g. One row per supplier, sorted by contract value."
                         rows={2}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="context-upload">Context material</Label>
+                      <p className="text-[12px] text-[#6d6a65]">
+                        Reference documents every extraction is grounded on — e.g. evaluation
+                        criteria or a scoring rubric. The equivalent of whole-flow context.
+                      </p>
+                      {contextDocs.length > 0 && (
+                        <ul className="space-y-1">
+                          {contextDocs.map((doc) => (
+                            <li
+                              key={doc.id}
+                              className="flex items-center gap-2 rounded-[9px] border border-[#e5e1d8] bg-[#faf9f6] px-3 py-2"
+                            >
+                              <span className="flex-1 truncate text-[12px] text-[#5a5650]">
+                                {doc.filename}
+                              </span>
+                              {doc.extractionStatus === "failed" && (
+                                <span className="shrink-0 text-[11px] text-[#9b6215]">no text</span>
+                              )}
+                              <button
+                                type="button"
+                                aria-label={`Remove ${doc.filename}`}
+                                className="shrink-0 text-[12px] text-[#c2385a] hover:text-[#a02e4b]"
+                                onClick={() =>
+                                  setContextDocs((current) => current.filter((entry) => entry.id !== doc.id))
+                                }
+                              >
+                                Remove
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <button
+                        id="context-upload"
+                        type="button"
+                        className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
+                        onClick={() => contextInputRef.current?.click()}
+                        disabled={parseContextDocMutation.isPending}
+                      >
+                        {parseContextDocMutation.isPending ? "Reading…" : "Add a context document"}
+                      </button>
+                      <input
+                        ref={contextInputRef}
+                        type="file"
+                        accept=".docx,.pdf,.txt,.md,.csv"
+                        className="sr-only"
+                        onChange={(event) => {
+                          void handleUploadContextDoc(event.target.files?.[0]);
+                          event.target.value = "";
+                        }}
                       />
                     </div>
 
