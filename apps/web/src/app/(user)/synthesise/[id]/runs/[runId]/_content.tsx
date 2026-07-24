@@ -25,7 +25,7 @@ export function RunScreenContent({ flowId, runId }: { flowId: string; runId: str
         </Link>
       </div>
 
-      <div className="mb-[24px] rounded-[10px] border border-[#e5e1d8] bg-white p-[16px]">
+      <div className="mb-[16px] rounded-[10px] border border-[#e5e1d8] bg-white px-[14px] py-[10px]">
         <RunProgress runId={runId} />
       </div>
 
