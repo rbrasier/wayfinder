@@ -550,7 +550,11 @@ export function EditorCards({
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor="context-upload">Context material</Label>
+                      {/* A section heading, not a control label: pointing a <label
+                          for> at the upload button would override its accessible
+                          name (a button is labelable, and the label wins over the
+                          button's own text). */}
+                      <span className="text-[13px] font-medium text-[#3a352e]">Context material</span>
                       <p className="text-[12px] text-[#6d6a65]">
                         Reference documents every extraction is grounded on — e.g. evaluation
                         criteria or a scoring rubric. The equivalent of whole-flow context.
@@ -583,7 +587,6 @@ export function EditorCards({
                         </ul>
                       )}
                       <button
-                        id="context-upload"
                         type="button"
                         className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
                         onClick={() => contextInputRef.current?.click()}
