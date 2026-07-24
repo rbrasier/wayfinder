@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Info, Pencil } from "lucide-react";
+import { Download, Info, Pencil } from "lucide-react";
 import {
   aggregateConfidence,
   confidenceBand,
@@ -159,10 +159,13 @@ export function ResultGrid({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-[1fr_3fr] gap-[16px]">
-        {/* Included files (left, ~¼ width) */}
-        <div className="rounded-[10px] border border-[#e5e1d8] bg-white p-[12px]">
-          <h3 className="mb-[8px] text-[12px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]">
+      <div className="grid grid-cols-[minmax(0,200px)_1fr] items-start gap-[16px]">
+        {/* Included files (left, narrow sidebar) */}
+        <div
+          className="sticky top-[16px] overflow-y-auto rounded-[10px] border border-[#e5e1d8] bg-white p-[12px]"
+          style={{ maxHeight: "calc(100vh - 120px)" }}
+        >
+          <h3 className="sticky top-0 mb-[8px] bg-white pb-[4px] text-[12px] font-semibold uppercase tracking-[0.05em] text-[#6d6a65]">
             Included files
           </h3>
           <ul className="flex flex-col gap-[4px]">
@@ -176,16 +179,20 @@ export function ResultGrid({
                     highlighted ? "bg-[#eef1fc] text-[#3a5fd9]" : "text-[#5a5650]"
                   }`}
                 >
-                  {options.documentHref ? (
-                    <a
-                      href={options.documentHref(document.id)}
-                      className="block truncate font-medium hover:underline"
-                    >
-                      {document.filename}
-                    </a>
-                  ) : (
-                    <span className="block truncate font-medium">{document.filename}</span>
-                  )}
+                  <span className="flex min-w-0 items-center gap-[4px]">
+                    <span className="min-w-0 truncate font-medium">{document.filename}</span>
+                    {options.documentHref ? (
+                      <a
+                        href={options.documentHref(document.id)}
+                        download
+                        aria-label={`Download ${document.filename}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="shrink-0 text-[#8a857c] hover:text-[#3a5fd9]"
+                      >
+                        <Download className="h-[11px] w-[11px]" />
+                      </a>
+                    ) : null}
+                  </span>
                   <span className="block truncate text-[11px] text-[#8a857c]">{document.treePath}</span>
                   {!document.readable && (
                     <span className="mt-[2px] inline-block rounded-[4px] bg-[#fbecea] px-[5px] py-[1px] text-[10px] font-semibold text-[#b23b30]">
