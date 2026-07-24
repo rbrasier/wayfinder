@@ -213,7 +213,10 @@ section "12. Semgrep static security scan (p/typescript + p/owasp-top-ten)"
 if ! command -v semgrep &>/dev/null; then
   skip "semgrep not installed — install it (e.g. 'pip install semgrep') to run the same static scan CI enforces"
 else
-  SEMGREP_OUTPUT=$(semgrep scan --config=p/typescript --config=p/owasp-top-ten --error --metrics=off --quiet 2>&1)
+  # --quiet suppresses the crash traceback along with everything else on a
+  # registry-fetch failure, leaving nothing for the skip-detection grep below
+  # to match — so this intentionally runs without it.
+  SEMGREP_OUTPUT=$(semgrep scan --config=p/typescript --config=p/owasp-top-ten --error --metrics=off 2>&1)
   SEMGREP_STATUS=$?
   echo "$SEMGREP_OUTPUT"
   if [ "$SEMGREP_STATUS" -eq 0 ]; then
