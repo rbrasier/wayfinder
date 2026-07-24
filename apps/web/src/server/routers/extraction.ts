@@ -1,4 +1,5 @@
-import type { ExtractionSchemaDraft } from "@rbrasier/domain";
+import { parseExtractionSchema, type ExtractionSchemaDraft } from "@rbrasier/domain";
+import { buildExtractionSystemPrompt } from "@rbrasier/application";
 import { DocumentGeneratorRouter, DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
 import type { Container } from "@/lib/container";
 import { TRPCError } from "@trpc/server";
@@ -166,6 +167,27 @@ export const extractionRouter = router({
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
+
+  // The exact system prompt each document extraction is given, built from the
+  // author's current (unsaved) draft — the same builder the runtime uses, so the
+  // "view system prompt" preview matches what the AI actually receives. Mirrors
+  // the conversational node's flow.node.previewPrompt.
+  previewSystemPrompt: viewProcedure
+    .input(z.object({ flowId: z.string().uuid(), schema: schemaInput }))
+    .query(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
+      }
+      const parsed = parseExtractionSchema(input.schema);
+      if (parsed.error) throw toTrpcError(parsed.error);
+      return {
+        systemPrompt: buildExtractionSystemPrompt({
+          fields: parsed.data.fields,
+          guidance: parsed.data.input.guidance,
+          contextDocs: parsed.data.output.contextDocs,
+        }),
+      };
+    }),
 
   saveSchema: authorProcedure
     .input(z.object({ flowId: z.string().uuid(), schema: schemaInput }))

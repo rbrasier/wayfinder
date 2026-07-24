@@ -28,6 +28,19 @@ export const extractionFieldResultSchema = z.object({
 // The per-record extraction result: a record keyed by the schema's field keys.
 export const extractionResultSchema = z.record(extractionFieldResultSchema);
 
+// Builds an explicit object schema with one required property per field key.
+// A free-form z.record lets the provider omit keys it is unsure about — the
+// cause of records after the first losing every field but the most obvious one
+// (only the key is required, never a non-empty value, so this adds no pressure
+// to invent). Making every key required forces the model to return an entry for
+// each field, blank + zero-confidence when the value is genuinely absent.
+export const buildExtractionResultSchema = (
+  keys: string[],
+): z.ZodType<Record<string, ExtractionFieldResultData>> => {
+  const shape = Object.fromEntries(keys.map((key) => [key, extractionFieldResultSchema]));
+  return z.object(shape) as z.ZodType<Record<string, ExtractionFieldResultData>>;
+};
+
 // The file-to-record grouping pass output (ADR-033 §4a). Each record lists the
 // ids of the files that make it up; a file may appear in several records
 // (over-matching is allowed) and files in no record are exceptions.

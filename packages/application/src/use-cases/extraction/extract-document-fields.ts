@@ -1,5 +1,5 @@
 import {
-  buildFieldConstraintsText,
+  applyConfidenceFloor,
   ok,
   type ExtractionField,
   type ExtractionFieldResult,
@@ -7,8 +7,8 @@ import {
   type ILanguageModel,
   type Result,
 } from "@rbrasier/domain";
-import { extractionResultSchema, type ExtractionResultData } from "@rbrasier/shared";
-import { buildContextDocsSection } from "../document/structured-fields";
+import { buildExtractionResultSchema, type ExtractionResultData } from "@rbrasier/shared";
+import { buildExtractionSystemPrompt } from "./build-extraction-prompt";
 
 // Shown when a record's source documents carry no readable text (e.g. a scanned
 // PDF with no text layer). The value is left blank rather than letting the model
@@ -45,14 +45,6 @@ const unreadableResults = (fields: ExtractionField[]): ExtractionFieldResult[] =
     rationale: UNREADABLE_RATIONALE,
   }));
 
-const buildInstructionsBlock = (fields: ExtractionField[]): string =>
-  fields
-    .map((field) => {
-      const doneWhen = field.doneWhen ? ` Done when: ${field.doneWhen}` : "";
-      return `- "${field.field.label}" (key: ${field.field.key}): ${field.instruction}${doneWhen}`;
-    })
-    .join("\n");
-
 const buildDocumentsSection = (documentTexts: RecordDocumentText[]): string =>
   documentTexts
     .map((document) => `\n[${document.filename}]\n${document.text}`)
@@ -70,25 +62,20 @@ export const extractDocumentFields = async (
   const hasReadableText = input.documentTexts.some((document) => document.text.trim().length > 0);
   if (!hasReadableText) return ok(unreadableResults(input.fields));
 
-  const templateFields = input.fields.map((field) => field.field);
   const keys = input.fields.map((field) => field.field.key);
 
   const prompt = [
-    `Extract these fields for the record "${input.recordLabel}".`,
+    `Extract the fields for the record "${input.recordLabel}".`,
     `Return a JSON object whose keys are exactly: ${JSON.stringify(keys)}.`,
-    `For each key return { value, confidence (0-100), rationale }. Leave value empty and confidence 0 when the information is genuinely absent — never invent a value.`,
-    `\n<field_formats>\n${buildFieldConstraintsText(templateFields)}\n</field_formats>`,
-    `\n<field_instructions>\n${buildInstructionsBlock(input.fields)}\n</field_instructions>`,
-    buildContextDocsSection(input.contextDocs),
+    `For each key return { value, confidence (0-100), rationale }, following the extraction rules and field formats in your instructions.`,
     `\nRecord source documents:\n${buildDocumentsSection(input.documentTexts)}`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  ].join("\n");
 
-  const system =
-    input.instruction.trim().length > 0
-      ? `You extract structured fields from documents. ${input.instruction.trim()}`
-      : "You extract structured fields from documents.";
+  const system = buildExtractionSystemPrompt({
+    fields: input.fields,
+    guidance: input.instruction,
+    contextDocs: input.contextDocs,
+  });
 
   const result = await languageModel.generateObject<ExtractionResultData>({
     purpose: "extractionFieldExtraction",
@@ -96,7 +83,9 @@ export const extractDocumentFields = async (
     flowId: input.flowId,
     system,
     prompt,
-    schema: extractionResultSchema,
+    // An explicit keyed schema (every field required) forces a complete result —
+    // a free-form record let the model silently drop fields it was unsure of.
+    schema: buildExtractionResultSchema(keys),
     temperature: 0.2,
   });
   if (result.error) return result;
@@ -112,12 +101,12 @@ export const extractDocumentFields = async (
         rationale: "The model did not return this field.",
       };
     }
-    return {
+    return applyConfidenceFloor({
       key: field.field.key,
       value: scored.value,
       confidence: normaliseConfidence(scored.confidence),
       rationale: scored.rationale,
-    };
+    });
   });
 
   return ok(results);

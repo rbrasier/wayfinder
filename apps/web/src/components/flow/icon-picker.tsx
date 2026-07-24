@@ -172,10 +172,12 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
       </button>
 
       {open && (
-        // Anchored to the bottom of the trigger (opening upward) so the panel
-        // stays inside the dialog — DialogContent clips with overflow-hidden, and
-        // the icon field is the last row, so a downward panel would be cut off.
-        <div className="absolute left-0 bottom-full z-50 mb-1.5 w-[280px] rounded-[12px] border border-[#dedad2] bg-white p-2 shadow-[0_6px_24px_rgba(0,0,0,.14)]">
+        // Anchored to the bottom-right of the trigger (opening upward) so the
+        // panel stays inside the dialog — DialogContent clips with
+        // overflow-hidden, and the icon field is the last row, so a downward
+        // panel would be cut off. Right-aligned so the "More…" trigger sits at
+        // the panel's bottom-right corner.
+        <div className="absolute right-0 bottom-full z-50 mb-1.5 w-[280px] rounded-[12px] border border-[#dedad2] bg-white p-2 shadow-[0_6px_24px_rgba(0,0,0,.14)]">
           <div className="relative mb-2">
             <Search
               size={13}

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, MoreHorizontal, Upload } from "lucide-react";
+import { ChevronLeft, Eye, MoreHorizontal, Upload } from "lucide-react";
 import { shouldPreviewByDefault, type ExtractionSchema, type FlowContextDoc } from "@rbrasier/domain";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
+import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
 import { UploadTree, type UploadedFile } from "./upload-tree";
 import { ResultGrid, type SampleResult } from "./result-grid";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
@@ -98,6 +99,10 @@ export function EditorCards({
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [promptLoading, setPromptLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const templateInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -227,6 +232,24 @@ export function EditorCards({
     );
   };
 
+  const handleViewSystemPrompt = async (): Promise<void> => {
+    setPromptOpen(true);
+    setPromptError(null);
+    setSystemPrompt(null);
+    setPromptLoading(true);
+    try {
+      const result = await utils.extraction.previewSystemPrompt.fetch({
+        flowId,
+        schema: buildSchemaInput(),
+      });
+      setSystemPrompt(result.systemPrompt);
+    } catch (error) {
+      setPromptError(error instanceof Error ? error.message : "Could not build the system prompt.");
+    } finally {
+      setPromptLoading(false);
+    }
+  };
+
   const runSampleButton = (
     <Button
       type="button"
@@ -236,6 +259,21 @@ export function EditorCards({
     >
       {runSampleMutation.isPending ? "Extracting…" : "Run sample"}
     </Button>
+  );
+
+  const outputHeaderActions = (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-label="View system prompt"
+        title="View the system prompt each extraction is given"
+        onClick={() => void handleViewSystemPrompt()}
+        className="rounded-md p-1 text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+      >
+        <Eye size={15} />
+      </button>
+      {runSampleButton}
+    </div>
   );
 
   return (
@@ -372,7 +410,7 @@ export function EditorCards({
                   title="Output — records"
                   focused={focused === "output"}
                   onFocus={() => setFocused("output")}
-                  headerAction={runSampleButton}
+                  headerAction={outputHeaderActions}
                 >
                   <div className="space-y-4">
                     <Segmented
@@ -497,6 +535,34 @@ export function EditorCards({
           )}
         </div>
       </div>
+
+      <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Extraction system prompt</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <DialogBody className="max-h-[70vh] overflow-hidden">
+            {promptLoading ? (
+              <p className="text-[13px] text-[#8a857c]">Building…</p>
+            ) : promptError ? (
+              <p className="text-[13px] text-[#c2385a]">{promptError}</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-[12px] text-[#6d6a65]">
+                    System prompt given to the AI for each document extraction (read-only)
+                  </p>
+                  <CopyButton text={systemPrompt ?? ""} />
+                </div>
+                <pre className="max-h-[56vh] flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3 font-mono text-[12px] leading-[1.6] text-[#1a1814]">
+                  {systemPrompt}
+                </pre>
+              </>
+            )}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="max-w-md">

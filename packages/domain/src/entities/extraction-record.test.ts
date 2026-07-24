@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateConfidence,
+  applyConfidenceFloor,
   applyFieldEdit,
   confidenceBand,
+  EXTRACTION_CONFIDENCE_FLOOR,
   fieldCompleteness,
   mergeFieldResults,
   recordConfidenceBand,
@@ -23,6 +25,26 @@ const record = (fields: ExtractionFieldResult[]): ExtractionRecord => ({
   label: "Acme response",
   fields,
   sourceDocumentIds: ["doc-1"],
+});
+
+describe("applyConfidenceFloor", () => {
+  it("keeps a value whose confidence is at or above the floor", () => {
+    const result = applyConfidenceFloor(fieldResult({ confidence: EXTRACTION_CONFIDENCE_FLOOR }));
+    expect(result.value).toBe("Acme Ltd");
+    expect(result.confidence).toBe(EXTRACTION_CONFIDENCE_FLOOR);
+  });
+
+  it("discards a value below the floor, zeroing confidence and noting why", () => {
+    const result = applyConfidenceFloor(fieldResult({ value: "$9,999", confidence: 0.1 }));
+    expect(result.value).toBe("");
+    expect(result.confidence).toBe(0);
+    expect(result.rationale).toContain("threshold");
+  });
+
+  it("leaves an already-blank value untouched", () => {
+    const blank = fieldResult({ value: "", confidence: 0, rationale: "absent" });
+    expect(applyConfidenceFloor(blank)).toEqual(blank);
+  });
 });
 
 describe("confidenceBand", () => {

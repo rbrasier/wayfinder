@@ -10,6 +10,7 @@ import {
 } from "@rbrasier/domain";
 import {
   Dialog,
+  DialogBody,
   DialogContent,
   DialogFooter,
   DialogHeader,
@@ -277,7 +278,7 @@ export function ResultGrid({
             <DialogTitle>Confidence rationale</DialogTitle>
           </DialogHeader>
           {rationale && (
-            <div className="flex flex-col gap-[8px] text-[13px]">
+            <DialogBody className="gap-[8px] text-[13px]">
               <p>
                 <span className="font-semibold">{BAND_LABEL[confidenceBand(rationale.confidence)]}</span>{" "}
                 ({Math.round(rationale.confidence * 100)}%)
@@ -287,7 +288,7 @@ export function ResultGrid({
                 Confidence is a self-assessed triage signal, not a guarantee — always verify amber and
                 red values.
               </p>
-            </div>
+            </DialogBody>
           )}
         </DialogContent>
       </Dialog>
@@ -297,14 +298,16 @@ export function ResultGrid({
           <DialogHeader>
             <DialogTitle>Edit {editTarget?.field.key}</DialogTitle>
           </DialogHeader>
-          <Input
-            value={draftValue}
-            onChange={(event) => setDraftValue(event.target.value)}
-            aria-label="Corrected value"
-          />
-          <p className="text-[11px] text-[#8a857c]">
-            Your correction is recorded in the audit trail. The AI is not re-run.
-          </p>
+          <DialogBody>
+            <Input
+              value={draftValue}
+              onChange={(event) => setDraftValue(event.target.value)}
+              aria-label="Corrected value"
+            />
+            <p className="text-[11px] text-[#8a857c]">
+              Your correction is recorded in the audit trail. The AI is not re-run.
+            </p>
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>
               Cancel
