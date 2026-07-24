@@ -218,7 +218,7 @@ else
   echo "$SEMGREP_OUTPUT"
   if [ "$SEMGREP_STATUS" -eq 0 ]; then
     pass "no Semgrep findings"
-  elif echo "$SEMGREP_OUTPUT" | grep -qiE 'could not connect|connection (error|refused)|timed? ?out|registry\.semgrep\.dev|network is unreachable|name or service not known|temporary failure in name resolution'; then
+  elif echo "$SEMGREP_OUTPUT" | grep -qiE 'could not connect|connection (error|refused)|timed? ?out|semgrep\.dev|proxyerror|unable to connect to proxy|tunnel connection failed|403 forbidden|maxretryerror|network is unreachable|name or service not known|temporary failure in name resolution'; then
     # Same rationale as the pnpm audit skip above: the rulesets are fetched
     # from the Semgrep registry, so a registry-side outage is not a code
     # failure. A real finding still prints and fails through the branch below.
