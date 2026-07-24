@@ -1,4 +1,4 @@
-import { parseExtractionSchema, type ExtractionSchemaDraft } from "@rbrasier/domain";
+import { buildExtractionField, type ExtractionSchemaDraft } from "@rbrasier/domain";
 import { buildExtractionSystemPrompt } from "@rbrasier/application";
 import { DocumentGeneratorRouter, DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
 import type { Container } from "@/lib/container";
@@ -178,13 +178,19 @@ export const extractionRouter = router({
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
       }
-      const parsed = parseExtractionSchema(input.schema);
-      if (parsed.error) throw toTrpcError(parsed.error);
+      // Build best-effort from the fields that parse, so the author can preview
+      // the prompt mid-authoring (an incomplete field is skipped rather than
+      // failing the whole preview — the same latitude the node prompt preview has).
+      const fields = [];
+      for (const field of input.schema.fields) {
+        const built = buildExtractionField(field);
+        if (!built.error) fields.push(built.data);
+      }
       return {
         systemPrompt: buildExtractionSystemPrompt({
-          fields: parsed.data.fields,
-          guidance: parsed.data.input.guidance,
-          contextDocs: parsed.data.output.contextDocs,
+          fields,
+          guidance: input.schema.input.guidance,
+          contextDocs: input.schema.output.contextDocs,
         }),
       };
     }),

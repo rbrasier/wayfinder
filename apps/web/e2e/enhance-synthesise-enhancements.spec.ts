@@ -44,13 +44,9 @@ test.describe('Synthesise Information — enhancements', () => {
     await page.getByRole('button', { name: /Configure output/i }).click();
     await expect(page.getByRole('button', { name: /Run sample/i })).toBeVisible();
 
-    // A field is needed for the prompt to build; add one via the structured editor.
-    const labelField = page.getByPlaceholder(/field name/i).first();
-    if (await labelField.isVisible().catch(() => false)) {
-      await labelField.fill('Vendor');
-    }
-
-    // View system prompt → read-only preview mirroring the node config.
+    // View system prompt → read-only preview mirroring the node config. Builds
+    // best-effort from the current draft, so it works even before any field is
+    // fully configured.
     await page.getByRole('button', { name: /View system prompt/i }).click();
     const promptDialog = page.getByRole('dialog').filter({ hasText: /system prompt/i });
     await expect(promptDialog).toBeVisible();
