@@ -208,8 +208,28 @@ else
   fail "high or critical vulnerabilities found — run 'pnpm audit' for details"
 fi
 
-# ── 12. test files exist in domain and application ────────────────────────────
-section "12. domain and application packages have tests"
+# ── 12. static security scan (Semgrep: p/typescript + p/owasp-top-ten) ────────
+section "12. Semgrep static security scan (p/typescript + p/owasp-top-ten)"
+if ! command -v semgrep &>/dev/null; then
+  skip "semgrep not installed — install it (e.g. 'pip install semgrep') to run the same static scan CI enforces"
+else
+  SEMGREP_OUTPUT=$(semgrep scan --config=p/typescript --config=p/owasp-top-ten --error --metrics=off --quiet 2>&1)
+  SEMGREP_STATUS=$?
+  echo "$SEMGREP_OUTPUT"
+  if [ "$SEMGREP_STATUS" -eq 0 ]; then
+    pass "no Semgrep findings"
+  elif echo "$SEMGREP_OUTPUT" | grep -qiE 'could not connect|connection (error|refused)|timed? ?out|registry\.semgrep\.dev|network is unreachable|name or service not known|temporary failure in name resolution'; then
+    # Same rationale as the pnpm audit skip above: the rulesets are fetched
+    # from the Semgrep registry, so a registry-side outage is not a code
+    # failure. A real finding still prints and fails through the branch below.
+    skip "semgrep registry unreachable — static security scan not run"
+  else
+    fail "Semgrep findings — run 'semgrep scan --config=p/typescript --config=p/owasp-top-ten' for details"
+  fi
+fi
+
+# ── 13. test files exist in domain and application ────────────────────────────
+section "13. domain and application packages have tests"
 DOMAIN_TESTS=$(find packages/domain/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')
 APP_TESTS=$(find packages/application/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')
 if [ "$DOMAIN_TESTS" -ge 1 ]; then
@@ -223,8 +243,8 @@ else
   fail "packages/application has no test files — write tests before shipping"
 fi
 
-# ── 13. test coverage meets thresholds (domain + application) ─────────────────
-section "13. test coverage thresholds (domain + application)"
+# ── 14. test coverage meets thresholds (domain + application) ─────────────────
+section "14. test coverage thresholds (domain + application)"
 DOMAIN_PKG=$(node -e "process.stdout.write(require('./packages/domain/package.json').name)")
 APP_PKG=$(node -e "process.stdout.write(require('./packages/application/package.json').name)")
 if { pnpm --filter "$DOMAIN_PKG" -s test:coverage && \
@@ -234,8 +254,8 @@ else
   fail "coverage below thresholds — see output above (targets: 70% lines, 70% functions)"
 fi
 
-# ── 14. restart.sh uses runMigrations in scaffolded mode ─────────────────────
-section "14. restart.sh uses runMigrations for scaffolded projects"
+# ── 15. restart.sh uses runMigrations in scaffolded mode ─────────────────────
+section "15. restart.sh uses runMigrations for scaffolded projects"
 # In a scaffolded project pnpm --filter finds no workspace package for adapters.
 # restart.sh must detect scaffolded mode and call runMigrations() instead.
 if grep -q "runMigrations" restart.sh; then
@@ -244,13 +264,13 @@ else
   fail "restart.sh does not call runMigrations — scaffolded projects cannot run migrations"
 fi
 
-# ── 15. web accessibility (WCAG 2.2 AA — jsx-a11y) ───────────────────────────
+# ── 16. web accessibility (WCAG 2.2 AA — jsx-a11y) ───────────────────────────
 # Runs the jsx-a11y "strict" ruleset over apps/web in isolation so a11y
 # regressions fail CI even if the general lint config is weakened. Covers the
 # machine-checkable WCAG 2.2 AA criteria (alt text, labels, ARIA, keyboard
 # handlers, no positive tabindex). Runtime-only criteria (contrast, focus
 # order, target size) are documented in docs/accessibility.md.
-section "15. web accessibility (jsx-a11y strict)"
+section "16. web accessibility (jsx-a11y strict)"
 A11Y_CONFIG="apps/web/eslint.config.a11y.js"
 if [ ! -f "$A11Y_CONFIG" ]; then
   fail "accessibility config missing — expected $A11Y_CONFIG"
@@ -260,13 +280,13 @@ else
   fail "web accessibility — jsx-a11y violations found (see output above)"
 fi
 
-# ── 16. source file size guard ────────────────────────────────────────────────
+# ── 17. source file size guard ────────────────────────────────────────────────
 # Large files concentrate change risk and merge conflicts. Warn at 700 lines,
 # fail at 800. Test files are excluded (covered by review, not by this ratchet).
 # The allowlist holds legacy offenders scheduled for decomposition in
 # docs/development/to-be-implemented/code-quality-hot-paths-and-decomposition.phase.md
 # — they warn instead of failing. NEVER add new entries; only remove them.
-section "16. source file size (warn ≥ 700, fail ≥ 800 lines)"
+section "17. source file size (warn ≥ 700, fail ≥ 800 lines)"
 SIZE_WARN_LINES=700
 SIZE_FAIL_LINES=800
 # Empty: the Code-Quality Hot-Paths phase decomposed every legacy offender below
@@ -300,11 +320,11 @@ else
   printf '%b' "$SIZE_FAILURES"
 fi
 
-# ── 17. application layer purity ─────────────────────────────────────────────
+# ── 18. application layer purity ─────────────────────────────────────────────
 # Allowlist counterpart to the ESLint denylist: packages/application may import
 # only @rbrasier/domain and @rbrasier/shared. A denylist misses newly added
 # dependencies; this catches any non-relative import outside the two packages.
-section "17. packages/application imports only @rbrasier/domain and @rbrasier/shared"
+section "18. packages/application imports only @rbrasier/domain and @rbrasier/shared"
 APPLICATION_LEAKS=$(grep -rnE "from ['\"][^.]" packages/application/src \
     --include="*.ts" --exclude="*.test.ts" 2>/dev/null \
   | grep -vE "from ['\"]@rbrasier/(domain|shared)['\"/]" \
@@ -316,11 +336,11 @@ else
   echo "$APPLICATION_LEAKS"
 fi
 
-# ── 18. apps do not import the ORM directly ──────────────────────────────────
+# ── 19. apps do not import the ORM directly ──────────────────────────────────
 # Apps wire adapters; they must not talk to Drizzle or the driver themselves.
 # e2e-fixtures.ts is exempt: test seeding writes rows the product deliberately
 # exposes no API for.
-section "18. apps/* do not import drizzle-orm or postgres directly"
+section "19. apps/* do not import drizzle-orm or postgres directly"
 APP_ORM_LEAKS=$(grep -rnE "from ['\"](drizzle-orm|postgres)['\"/]" apps/web/src apps/api/src \
     --include="*.ts" --include="*.tsx" 2>/dev/null \
   | grep -v "e2e-fixtures.ts" \
@@ -332,9 +352,9 @@ else
   echo "$APP_ORM_LEAKS"
 fi
 
-# ── 19. no focused tests ─────────────────────────────────────────────────────
+# ── 20. no focused tests ─────────────────────────────────────────────────────
 # A committed .only silently skips the rest of the suite in CI.
-section "19. no describe.only / it.only / test.only committed"
+section "20. no describe.only / it.only / test.only committed"
 FOCUSED_TESTS=$(grep -rnE "\b(describe|it|test)\.only\(" \
     packages/*/src apps/*/src tests \
     --include="*.test.ts" --include="*.test.tsx" --include="*.spec.ts" 2>/dev/null)
