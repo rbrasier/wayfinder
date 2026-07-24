@@ -208,33 +208,6 @@ else
   fail "high or critical vulnerabilities found — run 'pnpm audit' for details"
 fi
 
-# ── 11b. static security scan (Semgrep) ───────────────────────────────────────
-# Mirrors the CI "Security scan" job's Semgrep step so the same static findings
-# surface locally. Semgrep is optional tooling (pip install semgrep) and its
-# rulesets are fetched from semgrep.dev, so — like the DB and audit checks — this
-# skips when the binary is absent or the registry is unreachable, and only fails
-# on a genuine finding.
-section "11b. static security scan (Semgrep — p/typescript + p/owasp-top-ten)"
-if ! command -v semgrep >/dev/null 2>&1; then
-  skip "semgrep not installed — CI runs it; 'pip install semgrep' to run this locally"
-else
-  # Exit codes are the reliable signal: 0 = clean, 1 = findings (with --error),
-  # anything else = semgrep could not run (rulesets are fetched from semgrep.dev,
-  # so a blocked/offline registry surfaces here). A timeout guards the retry loop
-  # a blocked registry triggers. Skip when it cannot run — CI runs the full scan.
-  SEMGREP_OUTPUT=$(timeout 300 semgrep --config p/typescript --config p/owasp-top-ten \
-    --error --metrics=off --exclude node_modules 2>&1)
-  SEMGREP_STATUS=$?
-  if [ "$SEMGREP_STATUS" -eq 0 ]; then
-    pass "semgrep static scan"
-  elif [ "$SEMGREP_STATUS" -eq 1 ]; then
-    echo "$SEMGREP_OUTPUT"
-    fail "semgrep static security findings — run 'semgrep --config p/typescript --config p/owasp-top-ten' for details"
-  else
-    skip "semgrep could not run (rulesets unreachable or tooling error, status $SEMGREP_STATUS) — CI runs the full scan"
-  fi
-fi
-
 # ── 12. test files exist in domain and application ────────────────────────────
 section "12. domain and application packages have tests"
 DOMAIN_TESTS=$(find packages/domain/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')
