@@ -38,20 +38,29 @@ test.describe('Synthesise Information — enhancements', () => {
     await expect(dialog).toBeVisible();
     await dialog.getByLabel('Name').fill('E2E enhancements synthesis');
     await dialog.getByRole('button', { name: /^Create$/ }).click();
-    await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible();
+    // The E2E server runs `next dev`, so the editor route (and its tRPC routes)
+    // compile on first hit — allow generously for that cold start.
+    await page.waitForURL(/\/synthesise\/[^/]+\/edit/, { timeout: 30_000 });
+    await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible({
+      timeout: 30_000,
+    });
 
-    // Focus the output card.
+    // Focus the output card (its cards depend on a first-hit tRPC schema fetch).
     await page.getByRole('button', { name: /Configure output/i }).click();
-    await expect(page.getByRole('button', { name: /Run sample/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Run sample/i })).toBeVisible({ timeout: 20_000 });
 
     // View system prompt → read-only preview mirroring the node config. Builds
     // best-effort from the current draft, so it works even before any field is
     // fully configured.
     await page.getByRole('button', { name: /View system prompt/i }).click();
     const promptDialog = page.getByRole('dialog').filter({ hasText: /system prompt/i });
-    await expect(promptDialog).toBeVisible();
+    await expect(promptDialog).toBeVisible({ timeout: 20_000 });
     await expect(promptDialog.getByText(/read-only/i)).toBeVisible();
-    await page.keyboard.press('Escape').catch(() => undefined);
+    // Close deterministically and wait until it is gone: while a Radix modal is
+    // open it marks the rest of the page aria-hidden, so background controls are
+    // absent from the accessibility tree until it fully closes.
+    await promptDialog.getByRole('button', { name: /close/i }).click();
+    await expect(promptDialog).toBeHidden();
 
     // Context material uploader is present in the output card.
     await expect(page.getByRole('button', { name: /Add a context document/i })).toBeVisible();
@@ -63,6 +72,6 @@ test.describe('Synthesise Information — enhancements', () => {
     await page.getByRole('button', { name: /Run sample/i }).click();
     const summaryHeading = page.getByRole('heading', { name: /Summary of outputs/i });
     const needDocsToast = page.getByText(/Upload .*document/i).first();
-    await expect(summaryHeading.or(needDocsToast).first()).toBeVisible();
+    await expect(summaryHeading.or(needDocsToast).first()).toBeVisible({ timeout: 20_000 });
   });
 });
