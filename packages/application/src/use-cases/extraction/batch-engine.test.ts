@@ -819,6 +819,33 @@ describe("AdvanceBatchRuns", () => {
     expect(run.doneCount).toBe(1);
   });
 
+  it("advances only the named run through advanceOne", async () => {
+    const runs = new InMemoryExtractionRunRepository();
+    const storage = new FakeObjectStorage();
+    const target = await seedFullRun(runs, storage, { documentCount: 2 });
+    const bystander = await seedFullRun(runs, storage, { documentCount: 2 });
+
+    const result = await advancerFor(runs, storage).advanceOne(target);
+
+    expect(result.error).toBeUndefined();
+    expect((await runs.getRun(target)).data?.status).toBe("complete");
+    expect((await runs.getRun(bystander)).data?.doneCount).toBe(0);
+    expect((await runs.getRun(bystander)).data?.status).toBe("running");
+  });
+
+  it("leaves a paused run alone when advanceOne names it", async () => {
+    const runs = new InMemoryExtractionRunRepository();
+    const storage = new FakeObjectStorage();
+    const runId = await seedFullRun(runs, storage, { documentCount: 2 });
+    await runs.updateRunStatus(runId, "paused_preview");
+
+    await advancerFor(runs, storage).advanceOne(runId);
+
+    const run = (await runs.getRun(runId)).data!;
+    expect(run.status).toBe("paused_preview");
+    expect(run.doneCount).toBe(0);
+  });
+
   it("settles a run partial when a document has failed and the queue drains", async () => {
     const runs = new InMemoryExtractionRunRepository();
     const storage = new FakeObjectStorage();

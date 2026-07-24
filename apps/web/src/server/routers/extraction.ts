@@ -568,6 +568,18 @@ export const extractionRouter = router({
     return result.data;
   }),
 
+  // Advances this run by one batch from the caller's request. The batch engine
+  // is a poller in `apps/api`, so without this a run makes no progress until
+  // the next sweep — and none at all if that process is not running. The run
+  // screen drives it while the run is live; document claiming is
+  // `FOR UPDATE SKIP LOCKED`, so this never double-processes against the worker.
+  tick: runProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
+    await assertRunEditable(ctx, input.runId);
+    const result = await ctx.container.useCases.advanceBatchRuns.advanceOne(input.runId);
+    if (result.error) throw toTrpcError(result.error);
+    return { ok: true };
+  }),
+
   continue: runProcedure.input(runIdInput).mutation(async ({ ctx, input }) => {
     await assertRunEditable(ctx, input.runId);
     const result = await ctx.container.useCases.continueRun.execute(input.runId);

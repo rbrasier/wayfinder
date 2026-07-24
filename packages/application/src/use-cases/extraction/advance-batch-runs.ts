@@ -69,13 +69,17 @@ export class AdvanceBatchRuns {
 
     let runsAdvanced = 0;
     for (const runId of ids.data) {
-      await this.advanceRun(runId);
+      await this.advanceOne(runId);
       runsAdvanced += 1;
     }
     return ok({ runsAdvanced });
   }
 
-  private async advanceRun(runId: string): Promise<Result<void>> {
+  // Advances exactly one run, used by the caller-driven tick so a run makes
+  // progress the moment it is started rather than waiting on the poller's next
+  // sweep. Claiming is `FOR UPDATE SKIP LOCKED`, so racing the worker is safe:
+  // whichever caller claims a document first processes it.
+  async advanceOne(runId: string): Promise<Result<void>> {
     const runResult = await this.runs.getRun(runId);
     if (runResult.error) return runResult;
     const run = runResult.data;

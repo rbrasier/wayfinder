@@ -48,6 +48,9 @@ interface ExtractionDependencies {
   documentGenerator: IDocumentGenerator;
   objectStorage: IObjectStorage;
   auditLogger: IAuditLogger;
+  // Resolved per tick from the admin ExtractionConfig so a caller-driven tick
+  // honours the same per-run spend cap as the background worker (ADR-033 §9).
+  resolveCostCeilingUsd: () => Promise<number>;
 }
 
 // The extraction-flow ("Synthesise Information") module (ADR-033), factored out
@@ -62,6 +65,7 @@ export const buildExtractionModule = ({
   documentGenerator,
   objectStorage,
   auditLogger,
+  resolveCostCeilingUsd,
 }: ExtractionDependencies) => {
   const extractionRuns = new DrizzleExtractionRunRepository(db);
   const extractionDrafts = new DrizzleExtractionDraftRepository(db);
@@ -96,7 +100,9 @@ export const buildExtractionModule = ({
         documentExtractor,
       ),
       processExtractionTask,
-      advanceBatchRuns: new AdvanceBatchRuns(extractionRuns, flowVersions, processExtractionTask),
+      advanceBatchRuns: new AdvanceBatchRuns(extractionRuns, flowVersions, processExtractionTask, {
+        resolveCostCeilingUsd,
+      }),
       cancelRun: new CancelRun(extractionRuns),
       retryFailed: new RetryFailed(extractionRuns),
       continueRun: new ContinueRun(extractionRuns),

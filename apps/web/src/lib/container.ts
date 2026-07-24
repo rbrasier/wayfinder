@@ -493,6 +493,8 @@ const build = () => {
     documentGenerator,
     objectStorage,
     auditLogger,
+    resolveCostCeilingUsd: async () =>
+      (await runtimeConfig.getExtractionConfig()).perRunCostCeilingUsd,
   });
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);
