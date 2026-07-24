@@ -11,6 +11,13 @@ export type ConfidenceBand = "red" | "amber" | "green";
 export const AMBER_THRESHOLD = 0.5;
 export const GREEN_THRESHOLD = 0.8;
 
+// A value the model is barely confident in is far more likely to be a
+// hallucination than a genuine extraction, so anything below this floor is
+// discarded (blanked) rather than surfaced as data. Deliberately low — it only
+// removes near-guesses, leaving the red/amber bands to triage the rest. Tune
+// here; it is the single source of truth for the "only extract real data" guard.
+export const EXTRACTION_CONFIDENCE_FLOOR = 0.25;
+
 const clampConfidence = (confidence: number): number => Math.min(1, Math.max(0, confidence));
 
 export const confidenceBand = (confidence: number): ConfidenceBand => {
@@ -53,6 +60,23 @@ export const aggregateConfidence = (record: ExtractionRecord): number => {
 
 export const recordConfidenceBand = (record: ExtractionRecord): ConfidenceBand =>
   confidenceBand(aggregateConfidence(record));
+
+// Guards against the model surfacing an ungrounded guess as a real value. A
+// field whose confidence falls below the floor is treated as absent — its value
+// is cleared and its confidence zeroed, with the reason folded into the
+// rationale so the operator can still see what the model attempted. An already
+// blank value is returned untouched. Pure and per-field so it is trivially
+// testable and reused by every extraction path.
+export const applyConfidenceFloor = (
+  result: ExtractionFieldResult,
+  floor: number = EXTRACTION_CONFIDENCE_FLOOR,
+): ExtractionFieldResult => {
+  if (result.value.trim().length === 0) return result;
+  if (clampConfidence(result.confidence) >= floor) return result;
+  const reason = "Discarded: confidence below the reliable-extraction threshold, so no value was recorded.";
+  const rationale = result.rationale.trim().length > 0 ? `${result.rationale.trim()} ${reason}` : reason;
+  return { ...result, value: "", confidence: 0, rationale };
+};
 
 // Under many-per-record a record draws on several documents, each extracted on
 // its own worker task (phase §5). Their field results are merged into the one

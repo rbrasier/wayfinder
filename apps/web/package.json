@@ -29,7 +29,7 @@
     "@trpc/server": "^11.0.0-rc.500",
     "@xyflow/react": "^12.10.2",
     "ai": "^4.0.0",
-    "better-auth": "^1.6.14",
+    "better-auth": "^1.6.22",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",

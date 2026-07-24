@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, MoreHorizontal, Upload } from "lucide-react";
+import { ChevronLeft, Eye, MoreHorizontal, Upload } from "lucide-react";
 import { shouldPreviewByDefault, type ExtractionSchema, type FlowContextDoc } from "@rbrasier/domain";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,10 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
+import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
 import { UploadTree, type UploadedFile } from "./upload-tree";
-import { ResultGrid, type SampleResult } from "./result-grid";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
+import { FocusCard, Segmented, Switch } from "./editor-cards-controls";
 import {
   deriveOutputMode,
   emptyExtractionField,
@@ -92,14 +93,35 @@ export function EditorCards({
   const [templateError, setTemplateError] = useState<string | null>(null);
   const [outputInstruction, setOutputInstruction] = useState(initialSchema?.output.instruction ?? "");
   const [generateSummary, setGenerateSummary] = useState(initialSchema?.output.generateSummary ?? false);
+  // Whole-flow context material every extraction is grounded on (item: output
+  // context upload). Kept apart from the input documents (which are the records).
+  const [contextDocs, setContextDocs] = useState<FlowContextDoc[]>(
+    initialSchema?.output.contextDocs ?? [],
+  );
 
-  const [uploads, setUploads] = useState<UploadedFile[]>([]);
-  const [sample, setSample] = useState<SampleResult | null>(null);
+  // Input documents are persisted server-side (progressive upload), so the tree
+  // reflects the saved intake rather than transient in-memory state.
+  const draftDocsQuery = trpc.extraction.listDraftDocuments.useQuery({ flowId });
+  const uploads: UploadedFile[] = useMemo(
+    () =>
+      (draftDocsQuery.data ?? []).map((document) => ({
+        id: document.id,
+        name: document.filename,
+        path: document.treePath,
+        mimeType: document.mimeType,
+      })),
+    [draftDocsQuery.data],
+  );
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
+  const [promptError, setPromptError] = useState<string | null>(null);
+  const [promptLoading, setPromptLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const templateInputRef = useRef<HTMLInputElement | null>(null);
+  const contextInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -129,7 +151,7 @@ export function EditorCards({
       instruction: outputInstruction,
       generateSummary,
       summaryTemplate: null,
-      contextDocs: [],
+      contextDocs,
     },
   });
 
@@ -155,10 +177,27 @@ export function EditorCards({
     onError: (error) => setTemplateError(error.message),
   });
 
-  const runSampleMutation = trpc.extraction.runSample.useMutation({
+  const invalidateDraftDocs = () => void utils.extraction.listDraftDocuments.invalidate({ flowId });
+
+  const uploadDraftMutation = trpc.extraction.uploadDraftDocuments.useMutation({
+    onSuccess: invalidateDraftDocs,
+    onError: (error) => toast.error(error.message),
+  });
+
+  const removeDraftMutation = trpc.extraction.removeDraftDocument.useMutation({
+    onSuccess: invalidateDraftDocs,
+    onError: (error) => toast.error(error.message),
+  });
+
+  const startSampleMutation = trpc.extraction.startSample.useMutation({
+    onSuccess: ({ runId }) => router.push(`/synthesise/${flowId}/runs/${runId}`),
+    onError: (error) => toast.error(error.message),
+  });
+
+  const parseContextDocMutation = trpc.extraction.parseContextDoc.useMutation({
     onSuccess: (data) => {
-      setSample(data as SampleResult);
-      toast.success("Sample extracted");
+      setContextDocs((current) => [...current, data.contextDoc]);
+      toast.success(`Context document added — ${data.contextDoc.filename}`);
     },
     onError: (error) => toast.error(error.message),
   });
@@ -184,13 +223,34 @@ export function EditorCards({
 
   const handleUploadSamples = async (fileList: FileList | null): Promise<void> => {
     if (!fileList) return;
-    const next: UploadedFile[] = [];
+    const files: { filename: string; treePath: string; mimeType: string; contentBase64: string }[] = [];
     for (const file of Array.from(fileList)) {
       const contentBase64 = await readFileAsBase64(file);
       const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
-      next.push({ name: file.name, path, mimeType: file.type || "application/octet-stream", contentBase64 });
+      files.push({
+        filename: file.name,
+        treePath: path,
+        mimeType: file.type || "application/octet-stream",
+        contentBase64,
+      });
     }
-    setUploads((current) => [...current, ...next]);
+    // Auto-save on upload — the intake persists without a separate Save step.
+    if (files.length > 0) uploadDraftMutation.mutate({ flowId, files });
+  };
+
+  const handleRemoveDraft = (file: UploadedFile): void => {
+    if (file.id) removeDraftMutation.mutate({ documentId: file.id });
+  };
+
+  const handleUploadContextDoc = async (file: File | undefined): Promise<void> => {
+    if (!file) return;
+    const contentBase64 = await readFileAsBase64(file);
+    parseContextDocMutation.mutate({
+      flowId,
+      filename: file.name,
+      mimeType: file.type || "application/octet-stream",
+      contentBase64,
+    });
   };
 
   const handleUploadTemplate = async (file: File | undefined): Promise<void> => {
@@ -202,40 +262,59 @@ export function EditorCards({
 
   const handleRunSample = (): void => {
     if (uploads.length === 0) {
-      toast.error("Upload one to three documents in the input card to sample.");
+      toast.error("Upload one or more documents in the input card to sample.");
       return;
     }
     if (!canSave) {
       toast.error("Upload a template before running, or switch to structured output.");
       return;
     }
+    // Save the schema, then start a durable run over the draft and its persisted
+    // input documents; the run screen shows progress and the results.
     saveMutation.mutate(
       { flowId, schema: buildSchemaInput() },
-      {
-        onSuccess: () => {
-          runSampleMutation.mutate({
-            flowId,
-            documents: uploads.slice(0, 3).map((file) => ({
-              filename: file.name,
-              treePath: file.path,
-              mimeType: file.mimeType,
-              contentBase64: file.contentBase64,
-            })),
-          });
-        },
-      },
+      { onSuccess: () => startSampleMutation.mutate({ flowId }) },
     );
   };
 
+  const handleViewSystemPrompt = async (): Promise<void> => {
+    setPromptOpen(true);
+    setPromptError(null);
+    setSystemPrompt(null);
+    setPromptLoading(true);
+    try {
+      const result = await utils.extraction.previewSystemPrompt.fetch({
+        flowId,
+        schema: buildSchemaInput(),
+      });
+      setSystemPrompt(result.systemPrompt);
+    } catch (error) {
+      setPromptError(error instanceof Error ? error.message : "Could not build the system prompt.");
+    } finally {
+      setPromptLoading(false);
+    }
+  };
+
+  const sampleStarting = startSampleMutation.isPending || saveMutation.isPending;
   const runSampleButton = (
-    <Button
-      type="button"
-      size="sm"
-      onClick={handleRunSample}
-      disabled={runSampleMutation.isPending || saveMutation.isPending}
-    >
-      {runSampleMutation.isPending ? "Extracting…" : "Run sample"}
+    <Button type="button" size="sm" onClick={handleRunSample} disabled={sampleStarting}>
+      {sampleStarting ? "Starting…" : "Run sample"}
     </Button>
+  );
+
+  const outputHeaderActions = (
+    <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-label="View system prompt"
+        title="View the system prompt each extraction is given"
+        onClick={() => void handleViewSystemPrompt()}
+        className="rounded-md p-1 text-[#6d6a65] transition-colors hover:bg-[#efede8] hover:text-[#1a1814]"
+      >
+        <Eye size={15} />
+      </button>
+      {runSampleButton}
+    </div>
   );
 
   return (
@@ -362,7 +441,7 @@ export function EditorCards({
                           onChange={(event) => void handleUploadSamples(event.target.files)}
                         />
                       </label>
-                      <UploadTree files={uploads} />
+                      <UploadTree files={uploads} onRemove={handleRemoveDraft} />
                     </div>
                   </div>
                 </FocusCard>
@@ -372,7 +451,7 @@ export function EditorCards({
                   title="Output — records"
                   focused={focused === "output"}
                   onFocus={() => setFocused("output")}
-                  headerAction={runSampleButton}
+                  headerAction={outputHeaderActions}
                 >
                   <div className="space-y-4">
                     <Segmented
@@ -470,6 +549,63 @@ export function EditorCards({
                       />
                     </div>
 
+                    <div className="space-y-1.5">
+                      {/* A section heading, not a control label: pointing a <label
+                          for> at the upload button would override its accessible
+                          name (a button is labelable, and the label wins over the
+                          button's own text). */}
+                      <span className="text-[13px] font-medium text-[#3a352e]">Context material</span>
+                      <p className="text-[12px] text-[#6d6a65]">
+                        Reference documents every extraction is grounded on — e.g. evaluation
+                        criteria or a scoring rubric. The equivalent of whole-flow context.
+                      </p>
+                      {contextDocs.length > 0 && (
+                        <ul className="space-y-1">
+                          {contextDocs.map((doc) => (
+                            <li
+                              key={doc.id}
+                              className="flex items-center gap-2 rounded-[9px] border border-[#e5e1d8] bg-[#faf9f6] px-3 py-2"
+                            >
+                              <span className="flex-1 truncate text-[12px] text-[#5a5650]">
+                                {doc.filename}
+                              </span>
+                              {doc.extractionStatus === "failed" && (
+                                <span className="shrink-0 text-[11px] text-[#9b6215]">no text</span>
+                              )}
+                              <button
+                                type="button"
+                                aria-label={`Remove ${doc.filename}`}
+                                className="shrink-0 text-[12px] text-[#c2385a] hover:text-[#a02e4b]"
+                                onClick={() =>
+                                  setContextDocs((current) => current.filter((entry) => entry.id !== doc.id))
+                                }
+                              >
+                                Remove
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <button
+                        type="button"
+                        className="w-full rounded-[9px] border border-dashed border-[#dedad2] bg-[#f7f6f3] p-3 text-center text-[13px] text-[#6d6a65] transition-colors hover:border-[#c5d0f7] hover:bg-[#eef1fc] hover:text-[#3a5fd9] disabled:opacity-50"
+                        onClick={() => contextInputRef.current?.click()}
+                        disabled={parseContextDocMutation.isPending}
+                      >
+                        {parseContextDocMutation.isPending ? "Reading…" : "Add a context document"}
+                      </button>
+                      <input
+                        ref={contextInputRef}
+                        type="file"
+                        accept=".docx,.pdf,.txt,.md,.csv"
+                        className="sr-only"
+                        onChange={(event) => {
+                          void handleUploadContextDoc(event.target.files?.[0]);
+                          event.target.value = "";
+                        }}
+                      />
+                    </div>
+
                     <Switch
                       id="generate-summary"
                       label="Also generate a summary document"
@@ -484,19 +620,41 @@ export function EditorCards({
               <p className="mt-3 text-[12px] text-[#8a857c]">
                 Preview is {previewOn ? "on" : "off"} by default
                 {uploads.length > 0 ? ` (${uploads.length} file${uploads.length === 1 ? "" : "s"})` : ""}. A
-                sample runs over up to 3 documents.
+                sample processes the first few documents and pauses; open the run to see results and
+                process the rest.
               </p>
-
-              {sample && (
-                <div className="mt-6">
-                  <h2 className="mb-2.5 text-[15px] font-semibold text-[#1a1814]">Sample results</h2>
-                  <ResultGrid result={sample} />
-                </div>
-              )}
             </>
           )}
         </div>
       </div>
+
+      <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Extraction system prompt</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <DialogBody className="max-h-[70vh] overflow-hidden">
+            {promptLoading ? (
+              <p className="text-[13px] text-[#8a857c]">Building…</p>
+            ) : promptError ? (
+              <p className="text-[13px] text-[#c2385a]">{promptError}</p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-[12px] text-[#6d6a65]">
+                    System prompt given to the AI for each document extraction (read-only)
+                  </p>
+                  <CopyButton text={systemPrompt ?? ""} />
+                </div>
+                <pre className="max-h-[56vh] flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#dedad2] bg-[#f7f6f3] p-3 font-mono text-[12px] leading-[1.6] text-[#1a1814]">
+                  {systemPrompt}
+                </pre>
+              </>
+            )}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent className="max-w-md">
@@ -525,142 +683,6 @@ export function EditorCards({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-// A large card that either holds focus (enlarged, raised, overlapping its
-// sibling) or sits behind a frosted overlay inviting the author to configure it.
-function FocusCard({
-  side,
-  title,
-  focused,
-  onFocus,
-  headerAction,
-  children,
-}: {
-  side: FocusedCard;
-  title: string;
-  focused: boolean;
-  onFocus: () => void;
-  headerAction?: ReactNode;
-  children: ReactNode;
-}) {
-  const overlapClass = focused
-    ? side === "input"
-      ? "lg:mr-[-28px]"
-      : "lg:ml-[-28px]"
-    : "";
-
-  return (
-    <section
-      className={`relative rounded-[14px] border bg-white transition-all duration-200 ${
-        focused
-          ? `z-20 flex-[1.75] border-[#c5d0f7] shadow-[0_12px_36px_rgba(58,95,217,0.14)] ${overlapClass}`
-          : "z-10 flex-[1] border-[#e5e1d8] shadow-sm"
-      }`}
-    >
-      <div className="flex items-center justify-between border-b border-[#f0ede7] px-5 py-3.5">
-        <h2 className="text-[15px] font-semibold text-[#1a1814]">{title}</h2>
-        {focused && headerAction}
-      </div>
-      <div className={`p-5 ${focused ? "" : "pointer-events-none select-none"}`}>{children}</div>
-
-      {!focused && (
-        <button
-          type="button"
-          aria-label={`Configure ${side}`}
-          onClick={onFocus}
-          className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-[14px] bg-white/55 text-center backdrop-blur-[3px] transition-colors hover:bg-white/40"
-        >
-          <span className="text-[14px] font-semibold text-[#1a1814]">
-            Configure {side === "input" ? "input" : "output"}
-          </span>
-          <span className="text-[12px] text-[#6d6a65]">Click here to configure</span>
-        </button>
-      )}
-    </section>
-  );
-}
-
-// A segmented, toggle-style two-option control matching the node-config look —
-// used in place of radio groups.
-function Segmented({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div className="space-y-1.5">
-      <span className="text-[13px] font-medium text-[#3a352e]">{label}</span>
-      <div className="flex gap-2" role="radiogroup" aria-label={label}>
-        {options.map((option) => {
-          const active = value === option.value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(option.value)}
-              className={`flex flex-1 items-center justify-center rounded-[9px] border px-3 py-2 text-center text-[13px] transition-colors ${
-                active
-                  ? "border-[#3a5fd9] bg-[#eef1fc] font-medium text-[#3a5fd9]"
-                  : "border-[#dedad2] text-[#5a5650] hover:bg-[#efede8]"
-              }`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// The node-config switch, reused so the extraction editor's on/off controls read
-// identically to the rest of the app.
-function Switch({
-  id,
-  label,
-  description,
-  checked,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  description: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="space-y-0.5">
-        <Label htmlFor={id}>{label}</Label>
-        <p className="text-[12px] text-[#6d6a65]">{description}</p>
-      </div>
-      <button
-        id={id}
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-          checked ? "bg-[#1f8a4c]" : "bg-[#d7d3cc]"
-        }`}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-            checked ? "translate-x-4" : "translate-x-0.5"
-          }`}
-        />
-      </button>
     </div>
   );
 }

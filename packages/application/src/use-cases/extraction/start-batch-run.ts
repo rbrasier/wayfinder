@@ -4,6 +4,7 @@ import {
   isExtractionSnapshot,
   ok,
   PREVIEW_FILE_THRESHOLD,
+  SAMPLE_MAX_DOCUMENTS,
   shouldPreviewByDefault,
   type ArchiveLimits,
   type ExtractionDocument,
@@ -114,27 +115,99 @@ export class StartBatchRun {
       );
     }
 
+    // The preview breakpoint is defined in records; documents approximate it
+    // (exact under one-per-file). 0 disables the pause (phase §6).
+    return this.materialiseRun({
+      flowId: input.flowId,
+      userId: input.userId,
+      schema: publishedSchema.data.schema,
+      versionId: publishedSchema.data.versionId,
+      files,
+      previewBoundary: shouldPreviewByDefault(files.length) ? PREVIEW_FILE_THRESHOLD : 0,
+      mode: "full",
+    });
+  }
+
+  // Starts a run over the flow's draft (unpublished) schema — the authoring
+  // sample. A sample is one run that pauses at the sample boundary; "Process all
+  // documents" continues the same run past it (ADR-033 §6). Runs against the
+  // open draft version so the author never has to publish to sample.
+  async startSample(input: {
+    flowId: string;
+    userId: string;
+    files: UploadedFile[];
+    sampleSize?: number;
+  }): Promise<Result<ExtractionRun>> {
+    const draftSchema = await this.loadDraftSchema(input.flowId);
+    if (draftSchema.error) return draftSchema;
+
+    if (input.files.length === 0) {
+      return err(domainError("VALIDATION_FAILED", "Upload at least one document to run a sample."));
+    }
+    if (input.files.length > this.maxFiles) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `A run takes at most ${this.maxFiles} files; ${input.files.length} were supplied.`,
+        ),
+      );
+    }
+
+    const sampleSize = input.sampleSize ?? SAMPLE_MAX_DOCUMENTS;
+    return this.materialiseRun({
+      flowId: input.flowId,
+      userId: input.userId,
+      schema: draftSchema.data.schema,
+      versionId: draftSchema.data.versionId,
+      files: input.files,
+      // Pause once the sample's worth of documents is processed; "Process all"
+      // clears the boundary. Never exceeds the intake so a small run completes.
+      previewBoundary: Math.min(sampleSize, input.files.length),
+      mode: "sample",
+    });
+  }
+
+  private async materialiseRun(input: {
+    flowId: string;
+    userId: string;
+    schema: ExtractionSchema;
+    versionId: string;
+    files: UploadedFile[];
+    previewBoundary: number;
+    mode: "sample" | "full";
+  }): Promise<Result<ExtractionRun>> {
     const run = await this.runs.createRun({
       flowId: input.flowId,
-      flowVersionId: publishedSchema.data.versionId,
+      flowVersionId: input.versionId,
       initiatedByUserId: input.userId,
-      mode: "full",
-      // The preview breakpoint is defined in records; documents approximate it
-      // (exact under one-per-file). 0 disables the pause (phase §6).
-      previewBoundary: shouldPreviewByDefault(files.length) ? PREVIEW_FILE_THRESHOLD : 0,
+      mode: input.mode,
+      previewBoundary: input.previewBoundary,
     });
     if (run.error) return run;
 
-    const documents = await this.storeDocuments(run.data.id, files);
+    const documents = await this.storeDocuments(run.data.id, input.files);
     if (documents.error) return documents;
 
-    const grouped = await this.groupIntoRecords(publishedSchema.data.schema, documents.data, files);
+    const grouped = await this.groupIntoRecords(input.schema, documents.data, input.files);
     if (grouped.error) return grouped;
 
     const seeded = await this.runs.seedRecords(run.data.id, this.toRecords(grouped.data));
     if (seeded.error) return seeded;
 
     return this.runs.getRun(run.data.id);
+  }
+
+  private async loadDraftSchema(
+    flowId: string,
+  ): Promise<Result<{ schema: ExtractionSchema; versionId: string }>> {
+    const draft = await this.flowVersions.openDraft(flowId);
+    if (draft.error) return draft;
+    if (!draft.data || !isExtractionSnapshot(draft.data.snapshot)) {
+      return err(
+        domainError("VALIDATION_FAILED", "Configure the extraction schema before running a sample."),
+      );
+    }
+    return ok({ schema: draft.data.snapshot.extraction, versionId: draft.data.id });
   }
 
   private async loadPublishedSchema(

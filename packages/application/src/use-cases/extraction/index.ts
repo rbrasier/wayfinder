@@ -1,4 +1,6 @@
 export * from "./select-record-files";
+export * from "./build-extraction-prompt";
+export * from "./draft-documents";
 export * from "./extract-document-fields";
 export * from "./run-sample-extraction";
 export * from "./start-batch-run";

@@ -716,6 +716,29 @@ export const app_extraction_records = pgTable(
   }),
 );
 
+// Input documents saved against an extraction flow's draft before any run is
+// started (progressive upload). Kept separate from app_extraction_documents
+// (which belong to a run): these persist the author's staged intake so it
+// survives leaving the editor, and seed the run when a sample is started.
+export const app_extraction_draft_documents = pgTable(
+  "app_extraction_draft_documents",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    filename: text("filename").notNull(),
+    tree_path: text("tree_path").notNull(),
+    storage_key: text("storage_key").notNull(),
+    mime_type: text("mime_type").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_flow: index("app_extraction_draft_documents_flow_id_idx").on(t.flow_id),
+  }),
+);
+
 export const app_extraction_documents = pgTable(
   "app_extraction_documents",
   {

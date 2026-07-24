@@ -55,7 +55,7 @@ describe("extractDocumentFields", () => {
     ]);
   });
 
-  it("puts the field instructions and record documents into the prompt", async () => {
+  it("puts field instructions and guidance in the system prompt and the record documents in the user prompt", async () => {
     const model = makeModel({
       supplier_name: { value: "Acme", confidence: 80, rationale: "x" },
     });
@@ -69,10 +69,53 @@ describe("extractDocumentFields", () => {
     });
 
     const call = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
-    expect(call.prompt).toContain("The supplier's legal name.");
+    // The stable, authored content moves into the system prompt (mirrors the
+    // conversational node and lets the "view system prompt" preview reuse it).
+    expect(call.system).toContain("The supplier's legal name.");
+    expect(call.system).toContain("Read carefully.");
+    expect(call.system).toContain("never ask questions");
+    // The per-record document text stays in the user prompt.
     expect(call.prompt).toContain("acme.pdf");
     expect(call.prompt).toContain("Acme Ltd");
-    expect(call.system).toContain("Read carefully.");
+  });
+
+  it("requests an explicit key for every field so the model cannot silently drop later fields", async () => {
+    const model = makeModel({
+      supplier_name: { value: "Acme", confidence: 80, rationale: "x" },
+      contract_value: { value: "$5", confidence: 70, rationale: "y" },
+    });
+
+    await extractDocumentFields(model, {
+      fields: [supplierName, contractValue],
+      recordLabel: "Acme",
+      documentTexts: [{ filename: "a.pdf", text: "Acme $5" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    const call = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    // Every field key is a required property of the schema (not a free-form record).
+    const schemaKeys = Object.keys(call.schema.shape ?? {});
+    expect(schemaKeys).toEqual(["supplier_name", "contract_value"]);
+  });
+
+  it("discards a value the model returns with confidence below the reliable-extraction floor", async () => {
+    const model = makeModel({
+      supplier_name: { value: "Acme", confidence: 90, rationale: "clear" },
+      contract_value: { value: "$9,999", confidence: 10, rationale: "a wild guess" },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName, contractValue],
+      recordLabel: "Acme",
+      documentTexts: [{ filename: "a.pdf", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.value).toBe("Acme");
+    expect(result.data![1]).toMatchObject({ key: "contract_value", value: "", confidence: 0 });
+    expect(result.data![1]!.rationale).toContain("threshold");
   });
 
   it("fills a missing field key best-effort with an empty, zero-confidence result", async () => {

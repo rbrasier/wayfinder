@@ -106,7 +106,7 @@ export function RunProgress({ runId }: RunProgressProps) {
           disabled={!isPaused || continueMutation.isPending}
           onClick={() => continueMutation.mutate({ runId })}
         >
-          Continue processing
+          Process all documents
         </Button>
         <Button
           variant="outline"
