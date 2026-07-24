@@ -22,7 +22,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
 import { UploadTree, type UploadedFile } from "./upload-tree";
-import { ResultGrid, type SampleResult } from "./result-grid";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
 import {
   deriveOutputMode,
@@ -99,8 +98,19 @@ export function EditorCards({
     initialSchema?.output.contextDocs ?? [],
   );
 
-  const [uploads, setUploads] = useState<UploadedFile[]>([]);
-  const [sample, setSample] = useState<SampleResult | null>(null);
+  // Input documents are persisted server-side (progressive upload), so the tree
+  // reflects the saved intake rather than transient in-memory state.
+  const draftDocsQuery = trpc.extraction.listDraftDocuments.useQuery({ flowId });
+  const uploads: UploadedFile[] = useMemo(
+    () =>
+      (draftDocsQuery.data ?? []).map((document) => ({
+        id: document.id,
+        name: document.filename,
+        path: document.treePath,
+        mimeType: document.mimeType,
+      })),
+    [draftDocsQuery.data],
+  );
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -166,11 +176,20 @@ export function EditorCards({
     onError: (error) => setTemplateError(error.message),
   });
 
-  const runSampleMutation = trpc.extraction.runSample.useMutation({
-    onSuccess: (data) => {
-      setSample(data as SampleResult);
-      toast.success("Sample extracted");
-    },
+  const invalidateDraftDocs = () => void utils.extraction.listDraftDocuments.invalidate({ flowId });
+
+  const uploadDraftMutation = trpc.extraction.uploadDraftDocuments.useMutation({
+    onSuccess: invalidateDraftDocs,
+    onError: (error) => toast.error(error.message),
+  });
+
+  const removeDraftMutation = trpc.extraction.removeDraftDocument.useMutation({
+    onSuccess: invalidateDraftDocs,
+    onError: (error) => toast.error(error.message),
+  });
+
+  const startSampleMutation = trpc.extraction.startSample.useMutation({
+    onSuccess: ({ runId }) => router.push(`/synthesise/${flowId}/runs/${runId}`),
     onError: (error) => toast.error(error.message),
   });
 
@@ -203,13 +222,23 @@ export function EditorCards({
 
   const handleUploadSamples = async (fileList: FileList | null): Promise<void> => {
     if (!fileList) return;
-    const next: UploadedFile[] = [];
+    const files: { filename: string; treePath: string; mimeType: string; contentBase64: string }[] = [];
     for (const file of Array.from(fileList)) {
       const contentBase64 = await readFileAsBase64(file);
       const path = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
-      next.push({ name: file.name, path, mimeType: file.type || "application/octet-stream", contentBase64 });
+      files.push({
+        filename: file.name,
+        treePath: path,
+        mimeType: file.type || "application/octet-stream",
+        contentBase64,
+      });
     }
-    setUploads((current) => [...current, ...next]);
+    // Auto-save on upload — the intake persists without a separate Save step.
+    if (files.length > 0) uploadDraftMutation.mutate({ flowId, files });
+  };
+
+  const handleRemoveDraft = (file: UploadedFile): void => {
+    if (file.id) removeDraftMutation.mutate({ documentId: file.id });
   };
 
   const handleUploadContextDoc = async (file: File | undefined): Promise<void> => {
@@ -232,28 +261,18 @@ export function EditorCards({
 
   const handleRunSample = (): void => {
     if (uploads.length === 0) {
-      toast.error("Upload one to three documents in the input card to sample.");
+      toast.error("Upload one or more documents in the input card to sample.");
       return;
     }
     if (!canSave) {
       toast.error("Upload a template before running, or switch to structured output.");
       return;
     }
+    // Save the schema, then start a durable run over the draft and its persisted
+    // input documents; the run screen shows progress and the results.
     saveMutation.mutate(
       { flowId, schema: buildSchemaInput() },
-      {
-        onSuccess: () => {
-          runSampleMutation.mutate({
-            flowId,
-            documents: uploads.slice(0, 3).map((file) => ({
-              filename: file.name,
-              treePath: file.path,
-              mimeType: file.mimeType,
-              contentBase64: file.contentBase64,
-            })),
-          });
-        },
-      },
+      { onSuccess: () => startSampleMutation.mutate({ flowId }) },
     );
   };
 
@@ -275,14 +294,10 @@ export function EditorCards({
     }
   };
 
+  const sampleStarting = startSampleMutation.isPending || saveMutation.isPending;
   const runSampleButton = (
-    <Button
-      type="button"
-      size="sm"
-      onClick={handleRunSample}
-      disabled={runSampleMutation.isPending || saveMutation.isPending}
-    >
-      {runSampleMutation.isPending ? "Extracting…" : "Run sample"}
+    <Button type="button" size="sm" onClick={handleRunSample} disabled={sampleStarting}>
+      {sampleStarting ? "Starting…" : "Run sample"}
     </Button>
   );
 
@@ -425,7 +440,7 @@ export function EditorCards({
                           onChange={(event) => void handleUploadSamples(event.target.files)}
                         />
                       </label>
-                      <UploadTree files={uploads} />
+                      <UploadTree files={uploads} onRemove={handleRemoveDraft} />
                     </div>
                   </div>
                 </FocusCard>
@@ -601,15 +616,9 @@ export function EditorCards({
               <p className="mt-3 text-[12px] text-[#8a857c]">
                 Preview is {previewOn ? "on" : "off"} by default
                 {uploads.length > 0 ? ` (${uploads.length} file${uploads.length === 1 ? "" : "s"})` : ""}. A
-                sample runs over up to 3 documents.
+                sample processes the first few documents and pauses; open the run to see results and
+                process the rest.
               </p>
-
-              {sample && (
-                <div className="mt-6">
-                  <h2 className="mb-2.5 text-[15px] font-semibold text-[#1a1814]">Sample results</h2>
-                  <ResultGrid result={sample} />
-                </div>
-              )}
             </>
           )}
         </div>

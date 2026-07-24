@@ -8,16 +8,25 @@ import {
   GenerateRunDocuments,
   GetExtractionRunReport,
   GetExtractionSchema,
+  ListDraftDocuments,
   ListExtractionFlows,
   ListExtractionFlowsForUser,
   MarkRunComplete,
   ProcessExtractionTask,
+  RemoveDraftDocument,
   RetryFailed,
   RunSampleExtraction,
   SaveExtractionSchema,
   StartBatchRun,
+  UploadDraftDocuments,
 } from "@rbrasier/application";
-import { DrizzleExtractionRunRepository, XlsxWriter, ZipIngestor, createDatabase } from "@rbrasier/adapters";
+import {
+  DrizzleExtractionDraftRepository,
+  DrizzleExtractionRunRepository,
+  XlsxWriter,
+  ZipIngestor,
+  createDatabase,
+} from "@rbrasier/adapters";
 import type {
   IAuditLogger,
   IDocumentExtractor,
@@ -55,6 +64,7 @@ export const buildExtractionModule = ({
   auditLogger,
 }: ExtractionDependencies) => {
   const extractionRuns = new DrizzleExtractionRunRepository(db);
+  const extractionDrafts = new DrizzleExtractionDraftRepository(db);
   const archiveExtractor = new ZipIngestor();
   const spreadsheetWriter = new XlsxWriter();
   const processExtractionTask = new ProcessExtractionTask(
@@ -66,8 +76,12 @@ export const buildExtractionModule = ({
 
   return {
     repository: extractionRuns,
+    draftRepository: extractionDrafts,
     useCases: {
       createExtractionFlow: new CreateExtractionFlow(flows),
+      uploadDraftDocuments: new UploadDraftDocuments(extractionDrafts, objectStorage),
+      listDraftDocuments: new ListDraftDocuments(extractionDrafts),
+      removeDraftDocument: new RemoveDraftDocument(extractionDrafts, objectStorage),
       saveExtractionSchema: new SaveExtractionSchema(flows, flowVersions),
       getExtractionSchema: new GetExtractionSchema(flowVersions),
       listExtractionFlows: new ListExtractionFlows(flows),

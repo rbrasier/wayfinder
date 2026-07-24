@@ -382,6 +382,106 @@ export const extractionRouter = router({
       return result.data;
     }),
 
+  // The input documents staged against the flow's draft (progressive upload).
+  listDraftDocuments: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
+    }
+    const result = await ctx.container.useCases.listDraftDocuments.execute(input.flowId);
+    if (result.error) throw toTrpcError(result.error);
+    return result.data.map((document) => ({
+      id: document.id,
+      filename: document.filename,
+      treePath: document.treePath,
+      mimeType: document.mimeType,
+    }));
+  }),
+
+  // Persists staged input documents on upload (auto-save) so the intake survives
+  // leaving the editor and can seed a run.
+  uploadDraftDocuments: runProcedure
+    .input(z.object({ flowId: z.string().uuid(), files: z.array(batchFileSchema).min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
+      }
+      const result = await ctx.container.useCases.uploadDraftDocuments.execute({
+        flowId: input.flowId,
+        files: input.files.map((file) => ({
+          filename: file.filename,
+          treePath: file.treePath,
+          mimeType: file.mimeType,
+          buffer: Buffer.from(file.contentBase64, "base64"),
+        })),
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data.map((document) => ({
+        id: document.id,
+        filename: document.filename,
+        treePath: document.treePath,
+        mimeType: document.mimeType,
+      }));
+    }),
+
+  // Removes one staged input document (the author corrected a mistake).
+  // Ownership is re-checked through the draft's owning flow.
+  removeDraftDocument: runProcedure
+    .input(z.object({ documentId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const document = await ctx.container.repos.extractionDrafts.getById(input.documentId);
+      if (document.error) throw toTrpcError(document.error);
+      if (!document.data) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Draft document not found." });
+      }
+      if (!(await canEditFlow(ctx.container, document.data.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
+      }
+      const result = await ctx.container.useCases.removeDraftDocument.execute(input.documentId);
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
+  // Starts a sample as a durable run over the flow's draft schema and its staged
+  // input documents. One run pauses at the sample boundary; "Process all
+  // documents" continues the same run (ADR-033 §6). A new sample is a new run.
+  startSample: runProcedure
+    .input(z.object({ flowId: z.string().uuid(), sampleSize: z.number().int().min(1).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot run this flow." });
+      }
+
+      const drafts = await ctx.container.useCases.listDraftDocuments.execute(input.flowId);
+      if (drafts.error) throw toTrpcError(drafts.error);
+      if (drafts.data.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Upload at least one input document before running a sample.",
+        });
+      }
+
+      const files: { filename: string; treePath: string; mimeType: string; buffer: Buffer }[] = [];
+      for (const document of drafts.data) {
+        const bytes = await ctx.container.objectStorage.get(document.storageKey);
+        if (bytes.error) throw toTrpcError(bytes.error);
+        files.push({
+          filename: document.filename,
+          treePath: document.treePath,
+          mimeType: document.mimeType,
+          buffer: bytes.data,
+        });
+      }
+
+      const result = await ctx.container.useCases.startBatchRun.startSample({
+        flowId: input.flowId,
+        userId: ctx.userId,
+        files,
+        sampleSize: input.sampleSize,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { runId: result.data.id, totalCount: result.data.totalCount };
+    }),
+
   // Starts a durable full-batch run (ADR-033 §5-6, Phase 2). Requires a
   // published extraction version — enforced server-side inside StartBatchRun.
   startBatch: runProcedure

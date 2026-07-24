@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, File as FileIcon, Folder } from "lucide-react";
+import { ChevronDown, ChevronRight, File as FileIcon, Folder, X } from "lucide-react";
 
-// One uploaded sample file, carried in the editor's state until a sample runs.
+// One staged input file. Once persisted it carries the server row `id` (used to
+// remove it); `contentBase64` is only present transiently while a fresh upload
+// is being saved.
 export interface UploadedFile {
+  id?: string;
   name: string;
   // Preserved folder path, e.g. "acme/pricing.pdf" — drives the tree structure.
   path: string;
   mimeType: string;
-  contentBase64: string;
+  contentBase64?: string;
 }
 
 interface TreeNode {
@@ -35,7 +38,15 @@ const buildTree = (files: UploadedFile[]): TreeNode => {
   return root;
 };
 
-function FolderRow({ node, depth }: { node: TreeNode; depth: number }) {
+function FolderRow({
+  node,
+  depth,
+  onRemove,
+}: {
+  node: TreeNode;
+  depth: number;
+  onRemove?: (file: UploadedFile) => void;
+}) {
   // First level open, second level closed by default (phase §6).
   const [open, setOpen] = useState(depth < 1);
   const childFolders = [...node.children.values()];
@@ -60,10 +71,10 @@ function FolderRow({ node, depth }: { node: TreeNode; depth: number }) {
       {open && (
         <div>
           {childFolders.map((child) => (
-            <FolderRow key={child.name} node={child} depth={depth + 1} />
+            <FolderRow key={child.name} node={child} depth={depth + 1} onRemove={onRemove} />
           ))}
           {node.files.map((file) => (
-            <FileRow key={file.path} file={file} depth={depth + 1} />
+            <FileRow key={file.id ?? file.path} file={file} depth={depth + 1} onRemove={onRemove} />
           ))}
         </div>
       )}
@@ -71,19 +82,43 @@ function FolderRow({ node, depth }: { node: TreeNode; depth: number }) {
   );
 }
 
-function FileRow({ file, depth }: { file: UploadedFile; depth: number }) {
+function FileRow({
+  file,
+  depth,
+  onRemove,
+}: {
+  file: UploadedFile;
+  depth: number;
+  onRemove?: (file: UploadedFile) => void;
+}) {
   return (
     <div
-      className="flex items-center gap-[6px] py-[3px] text-[13px] text-[#5a5650]"
+      className="group flex items-center gap-[6px] py-[3px] text-[13px] text-[#5a5650]"
       style={{ paddingLeft: `${depth * 16 + 20}px` }}
     >
       <FileIcon className="h-[13px] w-[13px] shrink-0 text-[#8a857c]" />
-      <span className="truncate">{file.name}</span>
+      <span className="flex-1 truncate">{file.name}</span>
+      {onRemove ? (
+        <button
+          type="button"
+          aria-label={`Remove ${file.name}`}
+          onClick={() => onRemove(file)}
+          className="shrink-0 rounded p-[2px] text-[#b6b1a8] opacity-0 transition hover:bg-[#fbecea] hover:text-[#c2385a] group-hover:opacity-100"
+        >
+          <X className="h-[13px] w-[13px]" />
+        </button>
+      ) : null}
     </div>
   );
 }
 
-export function UploadTree({ files }: { files: UploadedFile[] }) {
+export function UploadTree({
+  files,
+  onRemove,
+}: {
+  files: UploadedFile[];
+  onRemove?: (file: UploadedFile) => void;
+}) {
   if (files.length === 0) {
     return <p className="py-[8px] text-[12.5px] text-[#8a857c]">No files uploaded yet.</p>;
   }
@@ -92,10 +127,10 @@ export function UploadTree({ files }: { files: UploadedFile[] }) {
   return (
     <div className="mt-[8px]">
       {[...root.children.values()].map((child) => (
-        <FolderRow key={child.name} node={child} depth={0} />
+        <FolderRow key={child.name} node={child} depth={0} onRemove={onRemove} />
       ))}
       {root.files.map((file) => (
-        <FileRow key={file.path} file={file} depth={0} />
+        <FileRow key={file.id ?? file.path} file={file} depth={0} onRemove={onRemove} />
       ))}
     </div>
   );
