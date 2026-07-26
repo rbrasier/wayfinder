@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useHydrated } from "@/components/site-banner";
 import { trpc } from "@/trpc/client";
 
 const HEX_COLOUR_PATTERN = /^#[0-9a-fA-F]{6}$/;
@@ -103,8 +104,12 @@ export function SiteBannerCard() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<SiteBannerConfig>(createDefaultSiteBannerConfig());
   const [textSizePt, setTextSizePt] = useState("12");
+  const hydrated = useHydrated();
 
-  const config = bannerQuery.data;
+  // The root-layout banner shares this query key and starts fetching before
+  // this card hydrates, so reading the cache during the first client render
+  // would diverge from the server's "Loading…" markup. See useHydrated.
+  const config = hydrated ? bannerQuery.data : undefined;
 
   useEffect(() => {
     if (!open || !config) return;

@@ -38,6 +38,24 @@ const resolveAdminUserId = async (container: Container): Promise<string> => {
   return created.id;
 };
 
+// A plain (non-admin) member. Several admin surfaces — organisation
+// membership, group assignment — only render their per-user controls when at
+// least one non-admin user exists. Specs used to get one incidentally from
+// whichever registration spec happened to share their shard, which made them
+// break whenever shard boundaries moved. Seeding it makes that explicit.
+const resolveMemberUserId = async (container: Container): Promise<string> => {
+  const email = "e2e-member@example.com";
+
+  const existing = unwrap(await container.repos.users.findByEmail(email), "find member user");
+  if (existing) return existing.id;
+
+  const created = unwrap(
+    await container.repos.users.create({ email, name: "E2E Member", isAdmin: false }),
+    "create member user",
+  );
+  return created.id;
+};
+
 export interface SeedResult {
   flowId: string;
   sessionId: string;
@@ -407,6 +425,7 @@ const seedApprovalRequest = async (
 
 export const seedE2EFixtures = async (container: Container): Promise<SeedResult> => {
   const ownerUserId = await resolveAdminUserId(container);
+  await resolveMemberUserId(container);
 
   // Seed a library skill so the flow-editor skill picker is populated — its
   // search box only renders once the library is non-empty.

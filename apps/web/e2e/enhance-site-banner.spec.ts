@@ -38,8 +38,12 @@ async function setBannerEnabled(page: Page, enabled: boolean): Promise<void> {
   await openSettings(page);
   const toggle = page.locator(BANNER.enabled);
   if ((await toggle.isChecked()) === enabled) return;
-  await toggle.setChecked(enabled);
+  // The card's toggle is driven by the saved config, not local state, so it
+  // only flips once the mutation lands. setChecked() asserts the change
+  // synchronously and would fail — click, then wait for the round trip.
+  await toggle.click();
   await expect(page.getByText(/site banner saved/i)).toBeVisible();
+  await expect(toggle).toBeChecked({ checked: enabled });
 }
 
 test.describe.configure({ mode: 'serial' });

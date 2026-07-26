@@ -106,6 +106,27 @@ global state shared with every later spec.
 The suite was **not** run in the authoring sandbox — it runs in CI against the
 provisioned stack.
 
+### Two follow-up fixes from the first CI run
+
+**Hydration mismatch on `/admin/settings`.** Three unrelated specs
+(`enhance-configurable-embeddings`, `enhance-reindex-documents`,
+`phase-code-quality-hot-paths-group-d`) assert zero console errors on the
+settings page and all three failed. `SiteBanner` runs its query at the root of
+every page, so the result could land in the react-query cache while React was
+still hydrating the settings subtree below; the card then rendered its loaded
+state on a first client pass whose server HTML said "Loading…". `useHydrated`
+defers the cache read to after mount, so the first client render always matches
+the server. Applied to both `SiteBanner` and `SiteBannerCard`. This is a
+consequence of putting a query at the root of the tree — no other settings card
+had a reason to hit it.
+
+**A shard-boundary knock-on.** Adding a spec file redistributed Playwright's
+shards, and `phase-multi-organisation-support` lost the non-admin user it had
+been getting incidentally from whichever registration spec previously shared its
+shard — its Members card renders no per-user `<select>` without one. The spec
+already documented the assumption ("the seeded fixtures provide one"); the seed
+now actually provides it, via `resolveMemberUserId` in `e2e-fixtures.ts`.
+
 ## Validation
 
 `./validate.sh` — 19 passed, 0 failed. One pre-existing WARN

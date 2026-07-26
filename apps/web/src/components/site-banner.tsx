@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import {
   isExternalSiteBannerLink,
@@ -15,6 +15,17 @@ export const buildSiteBannerStyle = (config: SiteBannerConfig): CSSProperties =>
   color: config.textColour,
   fontSize: `${config.textSizePt}pt`,
 });
+
+// The banner query runs at the root of every page, so its result can land in
+// the react-query cache while React is still hydrating the tree below. Any
+// consumer that rendered "no data" on the server would then render "data" on
+// its first client pass and throw a hydration mismatch. Deferring the read to
+// after mount keeps the first client render identical to the server's.
+export function useHydrated(): boolean {
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  return hydrated;
+}
 
 function SiteBannerLink({ url, label }: { url: string; label: string }) {
   const className = "shrink-0 underline underline-offset-2 hover:no-underline";
@@ -48,8 +59,9 @@ export function SiteBanner() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
+  const hydrated = useHydrated();
 
-  const config = bannerQuery.data;
+  const config = hydrated ? bannerQuery.data : undefined;
   if (!config || !isSiteBannerVisible(config)) return null;
 
   return (
