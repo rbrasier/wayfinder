@@ -394,7 +394,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   return (
     <>
       {/* Desktop: 220px text sidebar */}
-      <aside className="hidden h-screen w-[220px] shrink-0 flex-col border-r border-[#dedad2] bg-white md:flex">
+      <aside className="hidden w-[220px] shrink-0 flex-col border-r border-[#dedad2] bg-white md:flex">
         {/* Logo */}
         <div className="flex items-center gap-[9px] border-b border-[#dedad2] px-[18px] pb-[14px] pt-[16px]">
           <Link href={homeHref}>

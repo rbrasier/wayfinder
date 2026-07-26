@@ -22,6 +22,7 @@ import { RegistrationToggleCard } from "@/components/settings/registration-toggl
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
 import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
+import { SiteBannerCard } from "@/components/settings/site-banner-card";
 import { StorageCard } from "@/components/settings/storage-card";
 import { trpc } from "@/trpc/client";
 
@@ -87,6 +88,7 @@ export default function AppSettingsPage() {
 
             <CollapsibleSection title="Notifications" description="How and when Wayfinder notifies people.">
               <NotificationSettingsCard />
+              <SiteBannerCard />
             </CollapsibleSection>
 
             <CollapsibleSection

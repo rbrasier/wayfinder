@@ -13,9 +13,12 @@ import {
   ORGANISATION_RESOLUTION_SETTING_KEY,
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   EXTRACTION_CONFIG_SETTING_KEY,
+  SITE_BANNER_CONFIG_SETTING_KEY,
   STORAGE_CONFIG_SETTING_KEY,
   DEFAULT_ORGANISATION_RESOLUTION,
   createDefaultAuthConfig,
+  createDefaultSiteBannerConfig,
+  parseSiteBannerConfig,
   isEntraConfigured,
   parseOrganisationResolution,
   type AiConfig,
@@ -34,6 +37,7 @@ import {
   type SessionUploadConfig,
   type ExtractionConfig,
   type SiemConfig,
+  type SiteBannerConfig,
   type StorageConfig,
   type UsageLimitsConfig,
 } from "@rbrasier/domain";
@@ -404,6 +408,8 @@ export class RuntimeConfigStore {
   private storageVersion = 0;
   private sessionUploadCache: SessionUploadConfig | null = null;
   private sessionUploadPending: Promise<SessionUploadConfig> | null = null;
+  private siteBannerCache: SiteBannerConfig | null = null;
+  private siteBannerPending: Promise<SiteBannerConfig> | null = null;
   private extractionCache: ExtractionConfig | null = null;
   private extractionPending: Promise<ExtractionConfig> | null = null;
   private documentGenerationCache: DocumentGenerationConfig | null = null;
@@ -469,6 +475,23 @@ export class RuntimeConfigStore {
       return config;
     })();
     return this.sessionUploadPending;
+  }
+
+  async getSiteBannerConfig(): Promise<SiteBannerConfig> {
+    if (this.siteBannerCache) return this.siteBannerCache;
+    if (this.siteBannerPending) return this.siteBannerPending;
+    this.siteBannerPending = (async () => {
+      const fallback = createDefaultSiteBannerConfig();
+      const result = await this.settingsRepo.get(SITE_BANNER_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseSiteBannerConfig(result.data.value, fallback)
+          : fallback;
+      this.siteBannerCache = config;
+      this.siteBannerPending = null;
+      return config;
+    })();
+    return this.siteBannerPending;
   }
 
   async getExtractionConfig(): Promise<ExtractionConfig> {
@@ -658,6 +681,11 @@ export class RuntimeConfigStore {
   invalidateSessionUpload(): void {
     this.sessionUploadCache = null;
     this.sessionUploadPending = null;
+  }
+
+  invalidateSiteBanner(): void {
+    this.siteBannerCache = null;
+    this.siteBannerPending = null;
   }
 
   invalidateExtraction(): void {

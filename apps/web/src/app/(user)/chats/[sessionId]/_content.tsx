@@ -373,7 +373,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   if (sessionQuery.isLoading) {
     return (
-      <main className="flex h-screen flex-col items-center justify-center gap-4">
+      <main className="flex flex-1 flex-col items-center justify-center gap-4">
         <p className="text-[13px] text-[#6d6a65]">Loading session…</p>
       </main>
     );
@@ -381,7 +381,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   if (!sessionData) {
     return (
-      <main className="flex h-screen flex-col items-center justify-center gap-4">
+      <main className="flex flex-1 flex-col items-center justify-center gap-4">
         <p className="text-[14px] font-semibold text-[#1a1814]">Session not found</p>
         <Link href="/chats" className="text-[13px] text-[#3a5fd9] underline">
           Back to My Chats

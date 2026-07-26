@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AI_CONFIG_SETTING_KEY,
+  SITE_BANNER_MAX_TEXT_SIZE_PT,
+  createDefaultSiteBannerConfig,
   type AiConfig,
   type ISystemSettingsRepository,
   type StorageConfig,
@@ -246,6 +248,85 @@ describe("RuntimeConfigStore.getSessionUploadConfig", () => {
     await store.getSessionUploadConfig();
 
     expect(repo.get).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("RuntimeConfigStore.getSiteBannerConfig", () => {
+  it("returns the off-by-default banner when no value is stored", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getSiteBannerConfig();
+
+    expect(config).toEqual(createDefaultSiteBannerConfig());
+  });
+
+  it("parses a stored configuration", async () => {
+    const stored = JSON.stringify({
+      enabled: true,
+      text: "Scheduled maintenance 8pm",
+      textSizePt: 16,
+      textColour: "#ffffff",
+      backgroundColour: "#b91c1c",
+      linkUrl: "https://status.example.com",
+      linkLabel: "View status",
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getSiteBannerConfig();
+
+    expect(config).toEqual({
+      enabled: true,
+      text: "Scheduled maintenance 8pm",
+      textSizePt: 16,
+      textColour: "#ffffff",
+      backgroundColour: "#b91c1c",
+      linkUrl: "https://status.example.com",
+      linkLabel: "View status",
+    });
+  });
+
+  it("drops a link URL that could execute script", async () => {
+    const stored = JSON.stringify({
+      enabled: true,
+      text: "Heads up",
+      linkUrl: "javascript:alert(1)",
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getSiteBannerConfig();
+
+    expect(config.linkUrl).toBe("");
+  });
+
+  it("falls back to defaults for an unparseable colour or size", async () => {
+    const stored = JSON.stringify({ textColour: "red", textSizePt: 500 });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getSiteBannerConfig();
+
+    expect(config.textColour).toBe(createDefaultSiteBannerConfig().textColour);
+    expect(config.textSizePt).toBe(SITE_BANNER_MAX_TEXT_SIZE_PT);
+  });
+
+  it("re-reads after invalidateSiteBanner", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getSiteBannerConfig();
+    store.invalidateSiteBanner();
+    await store.getSiteBannerConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("caches the config so repeated reads do not hit the repository", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getSiteBannerConfig();
+    await store.getSiteBannerConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(1);
   });
 });
 

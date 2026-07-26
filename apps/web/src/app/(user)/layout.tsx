@@ -34,7 +34,7 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
   return (
     <SidebarProvider>
       <HydrateClient>
-        <div className="flex h-screen overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
           <AppSidebar isAdmin={false} />
           <div className="flex flex-1 flex-col overflow-hidden bg-[#f7f6f3]">
             {children}
