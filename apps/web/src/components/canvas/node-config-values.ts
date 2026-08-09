@@ -95,7 +95,10 @@ export const DEFAULT_VALUES: NodeConfigValues = {
   documentTemplateFormat: null,
   spreadsheetTemplateMode: null,
   allowManualEdit: true,
-  requireConfirmation: false,
+  // A step that advances the moment it completes carries the session past
+  // output nobody has read. New steps hold for the operator's Proceed; existing
+  // ones keep their saved value, which the modal always supplies explicitly.
+  requireConfirmation: true,
   skillRefs: [],
   allowedMcpToolRefs: [],
   instruction: "",

@@ -35,6 +35,15 @@ async function createFlowReturningId(page: Page, name: string): Promise<string |
   return match?.[1] ?? null;
 }
 
+// Secondary step controls sit behind a collapsed "Advanced" disclosure
+// (v0.27.5). It expands itself for some step types, so only click when closed.
+async function openAdvanced(page: Page): Promise<void> {
+  const section = page.locator('[data-advanced-section="section"]');
+  await expect(section).toBeAttached({ timeout: 5_000 });
+  if (await section.evaluate((element: HTMLDetailsElement) => element.open)) return;
+  await section.locator('summary').click();
+}
+
 test.describe('RAG node config & chat UI improvements', () => {
   test('Add step opens a type picker, then a blank config with a notify toggle', async ({ page }) => {
     const flowId = await createFlowReturningId(page, `RAG Config ${Date.now()}`);
@@ -61,7 +70,9 @@ test.describe('RAG node config & chat UI improvements', () => {
     await expect(page.locator('#node-name')).toHaveValue('');
     await expect(page.getByText('Step type', { exact: true })).toHaveCount(0);
 
-    // Every node type offers the notify-on-complete toggle.
+    // Every node type offers the notify-on-complete toggle. It moved behind the
+    // collapsed "Advanced" disclosure in v0.27.5, so open that first.
+    await openAdvanced(page);
     await expect(
       page.getByText('Notify chat participants when step complete'),
     ).toBeVisible();
@@ -83,6 +94,7 @@ test.describe('RAG node config & chat UI improvements', () => {
     // The default output type is "generate document" (v0.21.0); this spec drives
     // a real chat with no template, so it needs a plain conversation.
     await page.locator('label', { hasText: 'Unstructured conversation' }).click();
+    await openAdvanced(page);
     await page.locator('#done-when-mode').selectOption('condition');
     await page.locator('#done-when').fill('The user has provided their details.');
     await page.getByRole('button', { name: /^Save$/i }).click();

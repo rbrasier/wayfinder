@@ -139,6 +139,20 @@ export const signatureSlotControl = (
 ): SignatureSlotControl =>
   slots.length === 0 ? { mode: "none" } : { mode: "choose", slots };
 
+// Whether the modal's Advanced section starts expanded. Signing is the point of
+// an approval step on a signed document, and the canvas advisory for an
+// unclaimed slot sends the author here to set it — so the section holding that
+// control opens whenever the subject step has a signature at all.
+//
+// Deliberately keyed on the slots existing rather than on their being unclaimed:
+// the lone-slot effect in the modal claims a single signature the moment it
+// opens, so an "unclaimed only" rule would collapse the commonest case — one
+// signature, one approval step — on the control the author came to check.
+export const approvalAdvancedDefaultOpen = (
+  priorStepFields: PriorStepField[],
+  subjectNodeId: string,
+): boolean => signatureSlotsFor(priorStepFields, subjectNodeId).length > 0;
+
 // Two approval steps must not sign the same slot on the same document — a
 // config-time error, not a runtime surprise (ADR-043 §5).
 export const signatureSlotConflict = (

@@ -29,6 +29,15 @@ const MOCK_TEMPLATE_FIELDS = [
 
 const FLAG_KEY = 'auto_node';
 
+// Secondary step controls sit behind a collapsed "Advanced" disclosure
+// (v0.27.5). It expands itself for some step types, so only click when closed.
+async function openAdvanced(page: Page): Promise<void> {
+  const section = page.locator('[data-advanced-section="section"]');
+  await expect(section).toBeAttached({ timeout: 5_000 });
+  if (await section.evaluate((element: HTMLDetailsElement) => element.open)) return;
+  await section.locator('summary').click();
+}
+
 async function enableAutoNodeFlag(page: Page): Promise<boolean> {
   await page.goto('/admin/flags');
   await page.waitForLoadState('networkidle');
@@ -82,11 +91,11 @@ async function addConversationalDocStep(page: Page, name: string): Promise<void>
   // Switch to "Generate document" output type
   await page.locator('label', { hasText: 'Generate document' }).click();
 
-  // Choose "Template complete" done-when mode so we don't need to type a condition
-  const doneWhenSelect = page.locator('#done-when-mode');
-  if (await doneWhenSelect.isVisible().catch(() => false)) {
-    await doneWhenSelect.selectOption('template');
-  }
+  // Choose "Template complete" done-when mode so we don't need to type a
+  // condition. The control moved behind the collapsed "Advanced" disclosure in
+  // v0.27.5, so open that before driving it.
+  await openAdvanced(page);
+  await page.locator('#done-when-mode').selectOption('template');
 
   await page.getByRole('button', { name: /^Save$/i }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 10_000 });

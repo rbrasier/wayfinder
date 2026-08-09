@@ -24,6 +24,7 @@ import { SkillPickerModal } from "./skill-picker-modal";
 import { McpPickerModal } from "./mcp-picker-modal";
 import { TEMPLATE_COMPLETE_SENTINEL, doneWhenForOutputType } from "./output-type";
 import { NodeConfigModalConversational } from "./node-config-modal-conversational";
+import { NodeConfigModalAdvanced } from "./node-config-modal-advanced";
 import {
   TemplateAnnotationHost,
   templateValuesFrom,
@@ -32,7 +33,7 @@ import {
 import { NodeConfigModalAuto } from "./node-config-modal-auto";
 import { NodeConfigModalScheduled } from "./node-config-modal-scheduled";
 import { NodeConfigModalApproval } from "./node-config-modal-approval";
-import type { PriorStep } from "./approval-node-config";
+import { approvalAdvancedDefaultOpen, type PriorStep } from "./approval-node-config";
 import { DEFAULT_VALUES, type NodeConfigValues } from "./node-config-values";
 
 // Re-exported so the many call sites that import these from the modal keep
@@ -189,6 +190,17 @@ export function NodeConfigModal({
   const structuredParsed = parseFieldLines(structuredLines, { disallowSection: true });
 
   const usesN8n = isAuto && values.executor === "n8n";
+
+  // The Advanced section starts expanded where its contents are the author's
+  // likely next action rather than a refinement.
+  //
+  // An unstructured conversation has no template and no field set, so "Done
+  // when…" is the only thing deciding when the step ends — primary for that
+  // output type, secondary for the other two. An approval on a step that
+  // declares a signature is there to sign it.
+  const advancedOpenWhen =
+    (isConversational && values.outputType === "unstructured") ||
+    (isApproval && approvalAdvancedDefaultOpen(priorStepFields, values.approvalSubjectNodeId));
 
   // Servers + discovered tools feed both the MCP node and the conversational
   // MCP-tools picker, so fetch once whenever either surface is visible.
@@ -535,8 +547,6 @@ export function NodeConfigModal({
                     <NodeConfigModalConversational
                       values={values}
                       set={set}
-                      doneWhenMode={doneWhenMode}
-                      handleDoneWhenModeChange={handleDoneWhenModeChange}
                       handleOutputTypeChange={handleOutputTypeChange}
                       structuredLines={structuredLines}
                       onStructuredLinesChange={setStructuredLines}
@@ -603,13 +613,7 @@ export function NodeConfigModal({
                   )}
 
                   {isApproval && (
-                    <NodeConfigModalApproval
-                      values={values}
-                      set={set}
-                      priorSteps={priorSteps}
-                      priorStepFields={priorStepFields}
-                      takenSignatureFieldKeys={takenSignatureFieldKeys}
-                    />
+                    <NodeConfigModalApproval values={values} set={set} priorSteps={priorSteps} />
                   )}
 
                   {isMcp && (
@@ -629,30 +633,18 @@ export function NodeConfigModal({
                     />
                   )}
 
-                  <div className="flex items-start justify-between gap-3 border-t border-[#f0ede8] pt-3">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="notify-on-complete">Notify chat participants when step complete</Label>
-                      <p className="text-[12px] text-[#666055]">
-                        Emails everyone in the chat once this step finishes.
-                      </p>
-                    </div>
-                    <button
-                      id="notify-on-complete"
-                      type="button"
-                      role="switch"
-                      aria-checked={values.notifyOnComplete}
-                      onClick={() => set("notifyOnComplete", !values.notifyOnComplete)}
-                      className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                        values.notifyOnComplete ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          values.notifyOnComplete ? "translate-x-4" : "translate-x-0.5"
-                        }`}
-                      />
-                    </button>
-                  </div>
+                  <NodeConfigModalAdvanced
+                    values={values}
+                    set={set}
+                    isConversational={isConversational}
+                    isApproval={isApproval}
+                    openWhen={advancedOpenWhen}
+                    doneWhenMode={doneWhenMode}
+                    handleDoneWhenModeChange={handleDoneWhenModeChange}
+                    priorSteps={priorSteps}
+                    priorStepFields={priorStepFields}
+                    takenSignatureFieldKeys={takenSignatureFieldKeys}
+                  />
                 </DialogBody>
 
                 <DialogFooter className="flex-row items-center justify-between">

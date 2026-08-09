@@ -61,7 +61,7 @@ export const defaultConfigForType = (type: NodeConfigType): Record<string, unkno
     documentTemplateFields: null,
     documentTemplateStructuredContent: null,
     allowManualEdit: true,
-    requireConfirmation: false,
+    requireConfirmation: true,
     notifyOnComplete: false,
   };
 };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PriorStepField } from "@rbrasier/domain";
 import {
+  approvalAdvancedDefaultOpen,
   approvalSubjectChoice,
   approvalSubjectFromChoice,
   CUSTOM_SUBJECT_CHOICE,
@@ -243,6 +244,63 @@ describe("describeApprovalSubject", () => {
     expect(describeApprovalSubject({ signatureFieldKey: "delegate_signature" })).toContain(
       "signs the document",
     );
+  });
+});
+
+describe("approvalAdvancedDefaultOpen", () => {
+  it("stays closed when the subject step declares no signature", () => {
+    const fields = [priorField("node-draft", "applicant_name", "text")];
+
+    expect(approvalAdvancedDefaultOpen(fields, "node-draft")).toBe(false);
+  });
+
+  it("opens when the subject step declares one signature", () => {
+    const fields = [
+      priorField("node-draft", "applicant_name", "text"),
+      priorField("node-draft", "delegate_signature", "signature"),
+    ];
+
+    expect(approvalAdvancedDefaultOpen(fields, "node-draft")).toBe(true);
+  });
+
+  it("opens when the subject step declares several signatures", () => {
+    const fields = [
+      priorField("node-draft", "delegate_signature", "signature"),
+      priorField("node-draft", "witness_signature", "signature"),
+    ];
+
+    expect(approvalAdvancedDefaultOpen(fields, "node-draft")).toBe(true);
+  });
+
+  // The lone-slot effect claims a single signature as soon as the modal opens,
+  // so a rule keyed on "unclaimed" would collapse the commonest case — one
+  // signature, one approval step — hiding the control the author came to check.
+  it("opens on a slot that is already claimed", () => {
+    const fields = [priorField("node-draft", "delegate_signature", "signature")];
+
+    expect(approvalAdvancedDefaultOpen(fields, "node-draft")).toBe(true);
+  });
+
+  it("resolves the empty subject choice through the last-completed-step default", () => {
+    const fields = [
+      priorField("node-intake", "applicant_name", "text", 1),
+      priorField("node-draft", "delegate_signature", "signature", 2),
+    ];
+
+    expect(approvalAdvancedDefaultOpen(fields, "")).toBe(true);
+  });
+
+  it("stays closed when the default subject step has no signature", () => {
+    const fields = [
+      priorField("node-draft", "delegate_signature", "signature", 1),
+      priorField("node-review", "reviewer_note", "text", 2),
+    ];
+
+    expect(approvalAdvancedDefaultOpen(fields, "")).toBe(false);
+  });
+
+  it("stays closed when there are no prior steps at all", () => {
+    expect(approvalAdvancedDefaultOpen([], "")).toBe(false);
   });
 });
 

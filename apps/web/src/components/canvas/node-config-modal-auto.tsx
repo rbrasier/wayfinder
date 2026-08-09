@@ -6,6 +6,7 @@ import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { AdvancedSection } from "./advanced-section";
 import { TemplateFieldEditor } from "./template-field-editor";
 import {
   FieldValueList,
@@ -234,20 +235,14 @@ export function NodeConfigModalAuto({
                   + Add field
                 </button>
                 {advancedDerivedInputs.length > 0 && (
-                  <details className="group mt-1">
-                    <summary className="cursor-pointer list-none text-[13px] font-medium text-[#666055] hover:text-[#605c57] [&::-webkit-details-marker]:hidden">
-                      <span className="group-open:hidden">▶ Advanced fields</span>
-                      <span className="hidden group-open:inline">▼ Advanced fields</span>
-                    </summary>
-                    <div className="mt-2 space-y-2 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3">
-                      <FieldValueList
-                        fields={advancedDerivedInputs}
-                        values={values.requestFieldValues}
-                        onChange={setFieldValue}
-                        priorStepFields={priorStepFields}
-                      />
-                    </div>
-                  </details>
+                  <AdvancedSection label="Advanced fields" variant="inline">
+                    <FieldValueList
+                      fields={advancedDerivedInputs}
+                      values={values.requestFieldValues}
+                      onChange={setFieldValue}
+                      priorStepFields={priorStepFields}
+                    />
+                  </AdvancedSection>
                 )}
               </>
             )}

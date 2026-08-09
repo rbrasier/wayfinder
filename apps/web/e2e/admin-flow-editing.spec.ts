@@ -49,6 +49,15 @@ async function publishGlobally(page: Page): Promise<void> {
   await page.waitForTimeout(1_000);
 }
 
+// Secondary step controls sit behind a collapsed "Advanced" disclosure
+// (v0.27.5). It expands itself for some step types, so only click when closed.
+async function openAdvanced(page: Page): Promise<void> {
+  const section = page.locator('[data-advanced-section="section"]');
+  await expect(section).toBeAttached({ timeout: 5_000 });
+  if (await section.evaluate((element: HTMLDetailsElement) => element.open)) return;
+  await section.locator('summary').click();
+}
+
 async function addAndConfigureStep(
   page: Page,
   options: {
@@ -75,6 +84,7 @@ async function addAndConfigureStep(
 
   // "Generate document" pairs with "all fields captured", which replaces the
   // free-text condition with an explainer — switch back before typing one.
+  await openAdvanced(page);
   await page.locator('#done-when-mode').selectOption('condition');
   await page.locator('#done-when').fill(options.doneWhen);
 

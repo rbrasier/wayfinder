@@ -33,8 +33,6 @@ interface SkillSummary {
 export interface NodeConfigModalConversationalProps {
   values: NodeConfigValues;
   set: <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) => void;
-  doneWhenMode: DoneWhenMode;
-  handleDoneWhenModeChange: (mode: string) => void;
   handleOutputTypeChange: (outputType: NodeConfigValues["outputType"]) => void;
   // Raw `Label (annotations)` lines for a structured conversation's field set.
   structuredLines: string[];
@@ -63,8 +61,6 @@ export interface NodeConfigModalConversationalProps {
 export function NodeConfigModalConversational({
   values,
   set,
-  doneWhenMode,
-  handleDoneWhenModeChange,
   handleOutputTypeChange,
   structuredLines,
   onStructuredLinesChange,
@@ -313,6 +309,28 @@ export function NodeConfigModalConversational({
         />
       )}
 
+    </>
+  );
+}
+
+export interface NodeConfigModalConversationalAdvancedProps {
+  values: NodeConfigValues;
+  set: <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) => void;
+  doneWhenMode: DoneWhenMode;
+  handleDoneWhenModeChange: (mode: string) => void;
+}
+
+// The conversational controls that refine a step rather than define it, shown
+// inside the modal's Advanced disclosure. Each keeps the visibility rule it had
+// when these sat in the main body.
+export function NodeConfigModalConversationalAdvanced({
+  values,
+  set,
+  doneWhenMode,
+  handleDoneWhenModeChange,
+}: NodeConfigModalConversationalAdvancedProps) {
+  return (
+    <>
       {(values.outputType === "generate_document" || values.outputType === "structured") && (
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-0.5">

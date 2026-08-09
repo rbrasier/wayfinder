@@ -28,46 +28,15 @@ const WARNING_CLASS = "text-[12px] text-[#a8601a]";
 export interface NodeConfigModalApprovalProps {
   values: NodeConfigValues;
   set: <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) => void;
-  // Steps earlier in the flow, for the subject and return-target dropdowns.
+  // Steps earlier in the flow, for the subject dropdown.
   priorSteps?: PriorStep[];
-  // The raw template fields of those steps — the only place signature slots are
-  // visible, since `nodeFieldSet` filters them out everywhere else.
-  priorStepFields?: PriorStepField[];
-  // Signature slots already claimed by other approval steps on the same step's
-  // template, so two nodes cannot target one slot.
-  takenSignatureFieldKeys?: string[];
 }
 
 export function NodeConfigModalApproval({
   values,
   set,
   priorSteps = [],
-  priorStepFields = [],
-  takenSignatureFieldKeys = [],
 }: NodeConfigModalApprovalProps) {
-  const slots = signatureSlotsFor(priorStepFields, values.approvalSubjectNodeId);
-  const slotControl = signatureSlotControl(slots);
-  const slotConflict = signatureSlotConflict(values.signatureFieldKey, takenSignatureFieldKeys, slots);
-  const returnSteps = editableReturnSteps(priorSteps);
-  const returnWarning = noEditablePredecessorWarning(
-    priorSteps,
-    values.changesRequestedTargetNodeId,
-  );
-  const onDefaultSubject =
-    values.approvalSubjectKind === "step" && !values.approvalSubjectNodeId;
-  const defaultSubjectLabel =
-    priorStepFields.find((entry) => entry.nodeId === defaultSubjectNodeId(priorStepFields))
-      ?.stepLabel ?? "the last completed step";
-
-  // A lone slot is pre-selected by writing it, not by displaying it. Displaying
-  // a default while leaving the config empty is exactly the v0.26.2 bug: the
-  // author reads "this step signs X" and the decision then finds no slot key.
-  const onlySlotKey = slots.length === 1 ? slots[0]!.key : null;
-  useEffect(() => {
-    if (!onlySlotKey || values.signatureFieldKey) return;
-    set("signatureFieldKey", onlySlotKey);
-  }, [onlySlotKey, values.signatureFieldKey, set]);
-
   return (
     <>
       <div className="space-y-1">
@@ -150,6 +119,61 @@ export function NodeConfigModalApproval({
         </div>
       )}
 
+    </>
+  );
+}
+
+export interface NodeConfigModalApprovalAdvancedProps {
+  values: NodeConfigValues;
+  set: <K extends keyof NodeConfigValues>(key: K, value: NodeConfigValues[K]) => void;
+  priorSteps?: PriorStep[];
+  // The raw template fields of those steps — the only place signature slots are
+  // visible, since `nodeFieldSet` filters them out everywhere else.
+  priorStepFields?: PriorStepField[];
+  // Signature slots already claimed by other approval steps on the same step's
+  // template, so two nodes cannot target one slot.
+  takenSignatureFieldKeys?: string[];
+}
+
+// The approval controls shown inside the modal's Advanced disclosure: which
+// signature this step signs, where a change request returns to, and the
+// instructions shown to the approver.
+//
+// Rendered inside a <details>, so this subtree stays mounted while the section
+// is closed. The lone-slot effect below depends on that — it must write
+// `signatureFieldKey` whether or not the author has opened the section.
+export function NodeConfigModalApprovalAdvanced({
+  values,
+  set,
+  priorSteps = [],
+  priorStepFields = [],
+  takenSignatureFieldKeys = [],
+}: NodeConfigModalApprovalAdvancedProps) {
+  const slots = signatureSlotsFor(priorStepFields, values.approvalSubjectNodeId);
+  const slotControl = signatureSlotControl(slots);
+  const slotConflict = signatureSlotConflict(values.signatureFieldKey, takenSignatureFieldKeys, slots);
+  const returnSteps = editableReturnSteps(priorSteps);
+  const returnWarning = noEditablePredecessorWarning(
+    priorSteps,
+    values.changesRequestedTargetNodeId,
+  );
+  const onDefaultSubject =
+    values.approvalSubjectKind === "step" && !values.approvalSubjectNodeId;
+  const defaultSubjectLabel =
+    priorStepFields.find((entry) => entry.nodeId === defaultSubjectNodeId(priorStepFields))
+      ?.stepLabel ?? "the last completed step";
+
+  // A lone slot is pre-selected by writing it, not by displaying it. Displaying
+  // a default while leaving the config empty is exactly the v0.26.2 bug: the
+  // author reads "this step signs X" and the decision then finds no slot key.
+  const onlySlotKey = slots.length === 1 ? slots[0]!.key : null;
+  useEffect(() => {
+    if (!onlySlotKey || values.signatureFieldKey) return;
+    set("signatureFieldKey", onlySlotKey);
+  }, [onlySlotKey, values.signatureFieldKey, set]);
+
+  return (
+    <>
       {slotControl.mode === "choose" && (
         <div className="space-y-1">
           <Label htmlFor="approval-signature-slot">Which signature does this step sign?</Label>
