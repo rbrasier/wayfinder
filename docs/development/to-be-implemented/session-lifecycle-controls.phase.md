@@ -98,3 +98,72 @@ Still open, and safe to settle in code: the throttle interval for the
 
 Noted and deliberately out of scope: no `core_audit_log` entry is written for
 revoke-all or policy changes, though ADR-033 covers comparable admin actions.
+
+---
+
+## 7. Approved change summary (`/build`, 2026-08-17)
+
+Admins get three new controls over authentication sessions: end every session a
+user holds immediately; idle and absolute timeouts checked at resolution; and a
+cap on concurrent sessions per user. Policy lives in the existing `auth_config`
+row, so changes apply on the next request with no redeploy. Everything is **off
+by default** — an upgraded install behaves exactly as before until an admin sets
+a value.
+
+### Business rules
+
+- `idleTimeoutMinutes > 0` and `now - lastActiveAt` beyond it → resolution
+  returns no principal.
+- `absoluteTimeoutMinutes > 0` and `now - createdAt` beyond it → no principal,
+  regardless of activity.
+- At session creation, when the user already holds `concurrentSessionLimit`
+  sessions: `evict_oldest` deletes the oldest surplus, `refuse` cancels the new
+  session — **except for admins, who always evict** (ADR-035 §4).
+- Revocation deletes every `core_sessions` row for the user and bumps that
+  user's cache epoch.
+- `absolute < idle`, or a negative number, is rejected at the API. `0` means off.
+
+### Data & types
+
+- New `SessionPolicy` (domain): three minute/count numbers plus
+  `evictionStrategy: "evict_oldest" | "refuse"`.
+- `AuthConfig` carries `sessionPolicy`; `createDefaultAuthConfig` and
+  `parseAuthConfig` default-fill it for rows written before this phase.
+- Cache entries become `CachedPrincipal = ResolvedSession & { epoch: number }`.
+- `core_sessions.last_active_at timestamptz | null`; null falls back to
+  `created_at`.
+
+### Migration
+
+`0045_*.sql`, generated (never `push`):
+`ALTER TABLE "core_sessions" ADD COLUMN "last_active_at" timestamp with time zone;`
+Nullable with no default — additive, cannot fail on existing rows. Carries
+`-- data-impact: preserved`. No backfill: null reads as "last active at
+creation", which is the truthful answer for an older row.
+
+### Build order
+
+1. Domain `SessionPolicy` + pure predicates.
+2. `AuthConfig` carries the policy; tolerant parse.
+3. Schema + generated migration.
+4. Revocation + per-user epoch cache.
+5. Resolver timeout enforcement + throttled last-active write.
+6. Concurrency enforcer, wired into Better Auth and the PKI adapter.
+7. Container wiring; re-point `admin-recovery` and `entra-precedence`.
+8. tRPC: `user.revokeSessions`, `settings.get/setSessionPolicy`.
+9. UI: session policy card, "Sign out everywhere" action.
+10. E2E `session-lifecycle.spec.ts` (policy group 1) — written, not run.
+
+### Version, branch, PR
+
+**MINOR**, `0.30.0` → `0.31.0`. Base and PR target `main`; implemented docs to
+`implemented/alpha-3/v0.31.0/`. Built on
+`claude/session-lifecycle-controls-review-fh5iv9` rather than a `feature/`
+branch, per this session's branch instruction.
+
+### Risks
+
+Cache coherence is the correctness risk (an epoch bug means a revoked user keeps
+access until the 5 s TTL). `TtlCache` is per-process, so multi-instance
+revocation degrades to that TTL. The concurrency hook runs inside Better Auth's
+sign-in request, so it fails open on a query error rather than breaking login.
