@@ -22,11 +22,19 @@ export interface ValueSetListing {
   stale: boolean;
 }
 
-// The step-end batch outcome. `matched` holds the canonicalised entries in the
-// order their input values were given; `unresolved` and `ambiguous` name the raw
-// values that failed, which block step completion until corrected.
+// One input value paired with the entry it resolved to. The pairing is explicit
+// because canonicalisation rewrites the value — a caller cannot re-derive which
+// input produced which entry by comparing strings.
+export interface ResolvedValue {
+  input: string;
+  entry: ValueSetEntry;
+}
+
+// The step-end batch outcome. `unresolved` and `ambiguous` name the raw values
+// that failed, which block step completion until corrected — unless the outcome
+// is `stale`, when the set itself is not authoritative (ADR-050 §5, §6).
 export interface ResolveOutcome {
-  matched: ValueSetEntry[];
+  matched: ResolvedValue[];
   unresolved: string[];
   ambiguous: string[];
   stale: boolean;
