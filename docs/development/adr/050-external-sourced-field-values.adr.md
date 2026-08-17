@@ -1,7 +1,11 @@
-# ADR-032 — External-sourced field values (named lookup registry + display/key model)
+# ADR-050 — External-sourced field values (named lookup registry + display/key model)
 
-- **Status**: Proposed (scoped by `external-field-values.phase.md`, target v2.5.0)
+- **Status**: Proposed (scoped by `external-field-values.phase.md`, target v0.31.0)
 - **Date**: 2026-07-17
+- **Revised**: 2026-08-17 — renumbered from 032 (three ADRs held that number; the
+  accepted repeating-groups ADR-032 is cited from shipped code); `api` source kind
+  brought into scope; Test-time display/key field selection and the `value (key)`
+  presentation convention added
 - **Relates to**: ADR-018 (external directory degrades gracefully) — extends its
   fail-degraded philosophy from *value resolution* to *constraint sets*, adding a
   snapshot so audit survives an outage. Does not supersede any ADR.
@@ -31,7 +35,7 @@ constrained by an external source.
 ### 1. A named lookup registry, referenced from templates
 
 Admins register **lookup sources** in a new `kb_lookup_sources` table, each with a
-unique `name` (slug), a `kind` (`directory` | `managed`), a `config`, a
+unique `name` (slug), a `kind` (`directory` | `managed` | `api`), a `config`, a
 `displayField`, an optional `keyField`, a `cacheTtlSeconds`, and an `enabled`
 flag. A template author references one by name:
 
@@ -45,9 +49,13 @@ and `(multi-options: …)` — declaring both is `VALIDATION_FAILED`. An unknown
 `NAME` fails at **template-upload** time (the registry is consulted then), so the
 error surfaces to the author, not the operator.
 
+`(options-source: …)` **may** be combined with `(multiple)`: the source supplies
+the valid set, the operator picks several from it, and every picked value is
+resolved and keyed at step end. The existing guard that rejects `(multiple)`
+without an options list is relaxed to accept `optionsSource` as an options list.
+
 The registry is CRUD-managed under **Configuration** (`/admin/settings`) with a
-**Test** action that fetches a small sample and shows resolved `display / key`
-pairs, so an admin validates wiring before any template uses it.
+**Test** action (§2b), so an admin validates wiring before any template uses it.
 
 ### 2. A generic `IValueSetProvider` port; adapters per kind
 
@@ -58,14 +66,65 @@ knows where values come from:
 search(sourceName, query, limit)  -> Result<ValueSetEntry[]>   // type-ahead
 list(sourceName)                   -> Result<ValueSetEntry[]>   // small sets / cache fill
 resolve(sourceName, values)        -> Result<ResolveOutcome>    // batch, step-end
+probe(config)                      -> Result<ValueSetProbe>     // Test / field selection
 ```
 
 `ValueSetEntry = { display: string; key?: string }`. Adapters live in
 `packages/adapters`: the `directory` kind reuses the existing Graph/HR
-directory; the `managed` kind reads admin-entered rows. A future `http` kind
-slots in without touching domain or application. Every method returns the Result
-pattern and **fails degraded** — a provider error yields last-known-good (§5),
-never a throw across the boundary.
+directory; the `managed` kind reads admin-entered rows; the `api` kind (§2a)
+calls a configured HTTP endpoint. Every method returns the Result pattern and
+**fails degraded** — a provider error yields last-known-good (§5), never a throw
+across the boundary.
+
+`probe` is the only method that takes a raw config rather than a registered
+name, because Test must run against an **unsaved draft** — the admin has to see
+the source's fields before choosing which is the display and which is the key
+(§2b). It returns `ValueSetProbe = { fields: string[]; sample: Array<Record<string,
+string>> }`: the selectable field names found on the returned records, plus a
+bounded sample (10 records) of those records.
+
+#### 2a. The `api` source kind
+
+An admin can point a source at an HTTP endpoint that returns a JSON array of
+records. Config: `{ url, method: "GET" | "POST", headers?, searchParam?,
+recordsPath?, pageLimit? }`. `recordsPath` is a dotted path to the array inside
+the response body (empty means the body *is* the array); `searchParam` names the
+query parameter that carries the type-ahead term — when it is absent the adapter
+fetches the full set and filters in memory, which also caps the source at the
+`list`-able size.
+
+Three constraints make this safe enough to ship:
+
+- **Read-only.** `GET` and `POST` (for endpoints that require a search body)
+  only; no write-back, no other verbs. This ADR does not introduce two-way sync.
+- **Credentials are never stored on the row.** Following the `admin_mcp_servers`
+  precedent, `kb_lookup_sources` carries a `credential_ref` pointing at the
+  encrypted secret store (`SettingsEncryptionService`); the secret itself is
+  never persisted in `config` and never returned to a client.
+- **Egress is guarded.** The URL is validated before every call: `https` only
+  (except explicit localhost in development), and the resolved address is
+  rejected if it is loopback, link-local, or RFC1918 — an admin-supplied URL is
+  an SSRF vector, and this is the first place in the product where one exists.
+  Requests carry a timeout and a response-size cap; a breach fails degraded like
+  any other provider error.
+
+The `http`-shaped kind was previously deferred; bringing it forward does not
+change the port, which was designed to admit it.
+
+#### 2b. Test selects the display and key fields
+
+**Test** is not just a connectivity check — it is how display and key get chosen.
+The admin fills in the kind and config, clicks **Test**, and the editor calls
+`probe(config)`. Two things come back: the field names present on the returned
+records, and a sample of the records themselves. The admin then picks the
+**display field** and, optionally, the **key field** from those names, and the
+sample re-renders as resolved pairs so the choice is verifiable before saving.
+Both selections are persisted on the source (`display_field`, `key_field`), and
+both are stored on every value the source later validates (§3).
+
+Re-running Test on a saved source re-probes and lets the admin change either
+selection. A source cannot be saved without a display field; the key field stays
+optional.
 
 ### 3. Display + optional key; store both; `Field.key` accessor
 
@@ -79,12 +138,23 @@ an optional `valueKey` and a `sourceRef` snapshot, so **no migration on
   sourceRef: { name: "departments", version, fetchedAt } }
 ```
 
-The document renders the display (`value`); reporting reads the `valueKey`
-automatically. A companion accessor `{{ Field.key }}` (e.g. `{{ Department.key }}`)
-renders the stored key. It is resolved at **render time** from the parent field's
-`valueKey` — not a separately-answered field — so the operator answers
-`Department` once. A `.key` accessor on a source without a `keyField`, or on a
-non-external field, renders empty and is flagged at upload.
+**Presentation convention.** Wherever a keyed value is shown to a human for
+*selection or verification* — the admin Test panel, the operator's dropdown and
+type-ahead results, the conversational preview, and the flagged-field correction
+list — it renders as `display (key)`: `Finance (FIN-001)`. A source with no key
+field renders the display alone, with no empty parentheses.
+
+The **generated document is deliberately exempt**: `{{ Field }}` renders the
+display only, exactly as it does today, and the key is available solely through
+the `{{ Field.key }}` accessor. Selection surfaces show both because the admin
+and operator are choosing between potentially ambiguous labels; the document
+shows what the author asked for.
+
+`{{ Field.key }}` (e.g. `{{ Department.key }}`) renders the stored key. It is
+resolved at **render time** from the parent field's `valueKey` — not a
+separately-answered field — so the operator answers `Department` once. A `.key`
+accessor on a source without a `keyField`, or on a non-external field, renders
+empty and is flagged at upload.
 
 ### 4. Size-adaptive prompting and picking
 
@@ -96,6 +166,12 @@ adapts to set size (a per-source count from the cache):
 - **Large** (> 30): values are **not** inlined. The model proposes a value from
   context; the picker is a server-side **type-ahead** (`search`). Correctness is
   guaranteed by the step-end resolve (§6), not by constraining the prompt.
+
+Inlined entries are written into the prompt as `display (key)` when a key exists,
+so the model can propose an unambiguous value between duplicate labels. The
+`StepOutputField.options` array is **not** populated for external fields — the
+valid set lives in the source and its cache, and a copy on the output row would
+silently disagree with `sourceRef.version`.
 
 **Conversation preview is separate from inlining.** What the model *knows* (the
 inlined set) and what the operator is *shown* when asked the question are two
@@ -123,6 +199,11 @@ consequences:
   the snapshot is mandatory, not optional: Wayfinder's governance claim depends
   on "why was this valid then?" being answerable.
 
+The default `cacheTtlSeconds` is **3600**. A refresh writes a new `version` only
+when the resolved content differs from the current version — a Test run or a TTL
+expiry that returns identical entries reuses the existing version, so snapshots
+do not churn on every poll.
+
 ### 6. Hybrid validation — live type-ahead + authoritative step-end batch
 
 Two checkpoints, because AI-filled and free-typed values must be caught even
@@ -146,7 +227,9 @@ though the picker offers only valid options:
 - The document and the backend store both label and code, so reporting needs no
   second lookup and no reverse mapping.
 - The `IValueSetProvider` port keeps `domain`/`application` ignorant of source
-  mechanics and admits new kinds (HTTP) without a domain change.
+  mechanics; `directory`, `managed` and `api` differ only by adapter.
+- Test-time field selection means an admin never has to know the source's field
+  names in advance — the source tells them, and the sample proves the choice.
 - Snapshotting makes an externally-derived constraint auditable — a
   differentiator, not just a safeguard — and lets the system stay up through a
   source outage.
@@ -158,10 +241,16 @@ though the picker offers only valid options:
 - A second external axis (source availability, cache freshness) enters the
   generate/validate path. Mitigated by lazy caching, the inline fast-path for
   small sets, and fail-degraded resolution.
+- The `api` kind puts an **admin-controlled outbound URL** in the product for the
+  first time. SSRF, credential handling, untrusted response shapes, and a slow
+  endpoint stalling a step are all new exposure; §2a's guards (scheme and address
+  validation, `credential_ref`, timeout, size cap, read-only verbs) are the
+  mitigation and must be tested, not assumed.
 - Step-end validation can reject an AI-filled value the operator did not type,
   requiring a correction pass; the UX must make the flagged fields obvious.
 - Duplicate display labels with distinct keys need disambiguation in the picker
-  and rejection of ambiguous free/AI values at resolve time.
+  and rejection of ambiguous free/AI values at resolve time. The `display (key)`
+  convention (§3) is what makes the picker case tractable.
 
 ## Open questions — to resolve at build
 
@@ -169,9 +258,7 @@ though the picker offers only valid options:
   constants** for this version — not per-deployment or per-source configurable.
 - **Preview affordance** — confirm the "ask to see all N" wording and the trigger
   phrase(s) that expand to the full list.
-- **`Field.key` mechanics** — confirm render-time accessor vs a synthetic parsed
-  companion field; the ADR proposes render-time.
-- **Cache TTL default** and whether **Test** forces a version bump on every run
-  or only on content change (to avoid snapshot churn).
+- **`api` pagination** — v1 fetches a single page (`pageLimit`, default 500) for
+  `list`; whether to follow `next`-style cursors for very large sets is deferred.
 - **Managed source editing** — whether `managed` entries are edited inline in the
   admin UI or imported (CSV) — leaning inline for v1, import as follow-up.
