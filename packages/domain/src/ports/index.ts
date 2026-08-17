@@ -74,3 +74,5 @@ export * from "./mcp-server-repository";
 export * from "./extraction-run-repository";
 export * from "./extraction-draft-repository";
 export * from "./archive-extractor";
+export * from "./value-set-provider";
+export * from "./lookup-source-repository";

@@ -21,6 +21,10 @@ export interface TemplateField {
   label: string;
   type: TemplateFieldType;
   options?: string[];
+  // The name of a registered lookup source supplying this field's valid set.
+  // Mutually exclusive with `options` at parse time; the application may inline a
+  // small set into `options` when building a prompt (ADR-050 §1, §4).
+  optionsSource?: string;
   multiple?: boolean;
   optional: boolean;
   maxLength?: number;
@@ -45,7 +49,15 @@ export const DEFAULT_ITEM_CAP = 20;
 const SCALAR_TYPES: TemplateFieldType[] = ["text", "date", "currency", "number", "email", "yesno"];
 
 const VALID_ANNOTATIONS_HINT =
-  "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (approval), (options: A, B, C), (multi-options: A, B, C), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
+  "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (approval), (options: A, B, C), (multi-options: A, B, C), (options-source: name), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
+
+// A lookup source name as written in a tag. Matches the slug rule the registry
+// validates on, so an author's typo fails at upload rather than at resolve.
+const OPTIONS_SOURCE_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+// {{ Department.key }} renders the key stored for {{ Department }}. It is an
+// accessor, not a field — the operator answers the parent once (ADR-050 §3).
+const KEY_ACCESSOR_PATTERN = /^(.+)\.key$/i;
 
 const extractAnnotationGroups = (rawTag: string): string[] => {
   const matches = [...rawTag.matchAll(/\(([^()]*)\)/g)];
@@ -145,6 +157,44 @@ const applyAnnotation = (
     return ok({ ...field, type: lower as TemplateFieldType });
   }
 
+  const optionsSourceMatch = lower.match(/^options-source\s*:(.*)$/s);
+  if (optionsSourceMatch) {
+    if (field.type !== "text") {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" combines a type with (options-source: …). Use one or the other.`,
+        ),
+      );
+    }
+    if (field.options !== undefined) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" has both an inline options list and (options-source: …). Use one or the other.`,
+        ),
+      );
+    }
+    if (field.optionsSource !== undefined) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" declares more than one (options-source: …). Pick a single source.`,
+        ),
+      );
+    }
+    const sourceName = annotation.slice(annotation.indexOf(":") + 1).trim();
+    if (!OPTIONS_SOURCE_NAME_PATTERN.test(sourceName)) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" names the lookup source "${sourceName}", which is not a valid source name. Use lowercase letters, numbers and hyphens.`,
+        ),
+      );
+    }
+    return ok({ ...field, optionsSource: sourceName });
+  }
+
   const optionsMatch = lower.match(/^options\s*:(.*)$/s);
   if (optionsMatch) {
     if (field.type !== "text") {
@@ -152,6 +202,14 @@ const applyAnnotation = (
         domainError(
           "VALIDATION_FAILED",
           `Tag "{{${rawTag}}}" combines a type with (options: …). Use one or the other.`,
+        ),
+      );
+    }
+    if (field.optionsSource !== undefined) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" has both an inline options list and (options-source: …). Use one or the other.`,
         ),
       );
     }
@@ -190,6 +248,14 @@ const applyAnnotation = (
         domainError(
           "VALIDATION_FAILED",
           `Tag "{{${rawTag}}}" has both (options: …) and (multi-options: …). Use only one.`,
+        ),
+      );
+    }
+    if (field.optionsSource !== undefined) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" has both (multi-options: …) and (options-source: …). Use one or the other.`,
         ),
       );
     }
@@ -365,11 +431,13 @@ export const parseTemplateField = (rawTag: string): Result<TemplateField> => {
     }
   }
 
-  if (field.multiple && !field.options) {
+  // A lookup source is an options list too — it just lives outside the template
+  // (ADR-050 §1), so it satisfies (multiple) exactly as an inline list does.
+  if (field.multiple && !field.options && !field.optionsSource) {
     return err(
       domainError(
         "VALIDATION_FAILED",
-        `Tag "{{${rawTag.trim()}}}" uses (multiple) without an options list. Add (options: A, B, C) or use (multi-options: A, B, C) instead.`,
+        `Tag "{{${rawTag.trim()}}}" uses (multiple) without an options list. Add (options: A, B, C), (multi-options: A, B, C) or (options-source: name) instead.`,
       ),
     );
   }
@@ -401,6 +469,12 @@ const describeType = (field: TemplateField): string => {
   if (field.options && field.options.length > 0) {
     const prefix = field.multiple ? "one or more of" : "exactly one of";
     return `${prefix}: ${field.options.join(", ")}`;
+  }
+  // A large external set is deliberately not inlined, so the model proposes from
+  // context and the step-end resolve is what guarantees correctness (ADR-050 §4).
+  if (field.optionsSource) {
+    const prefix = field.multiple ? "one or more values" : "exactly one value";
+    return `${prefix} from the "${field.optionsSource}" list — propose the closest match from the documents; it is checked against the live list when the step completes`;
   }
   switch (field.type) {
     case "date":
@@ -451,6 +525,11 @@ export const templateFieldToLine = (field: TemplateField): string => {
   if (field.type === "narrative") {
     const instruction = field.instruction?.trim();
     annotations.push(instruction ? `narrative: "${instruction}"` : "narrative");
+  } else if (field.optionsSource) {
+    annotations.push(`options-source: ${field.optionsSource}`);
+    // (multi-options) carries multiplicity for an inline list, but an external
+    // list needs (multiple) stated separately to survive a round-trip.
+    if (field.multiple) annotations.push("multiple");
   } else if (field.options && field.options.length > 0) {
     annotations.push(`${field.multiple ? "multi-options" : "options"}: ${field.options.join(", ")}`);
   } else if (field.type !== "text") {
@@ -473,112 +552,6 @@ export const buildFieldConstraintsText = (fields: TemplateField[]): string =>
     .map((field) => `- "${field.label}" (key: ${field.key}): ${describeTemplateFieldFormat(field)}`)
     .join("\n");
 
-const splitMultiValue = (value: string): string[] =>
-  value
-    .split(",")
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0);
-
-const validateOptions = (field: TemplateField, value: string): Result<string> => {
-  const selected = field.multiple ? splitMultiValue(value) : [value];
-  const matched = selected.map((candidate) =>
-    field.options?.find((option) => option.toLowerCase() === candidate.toLowerCase()),
-  );
-
-  if (matched.some((option) => option === undefined)) {
-    return err(
-      domainError(
-        "VALIDATION_FAILED",
-        `"${field.label}" must be ${field.multiple ? "values" : "one"} of: ${field.options?.join(", ")}.`,
-      ),
-    );
-  }
-
-  const canonical = matched as string[];
-  if (field.multiple && field.max !== undefined && canonical.length > field.max) {
-    return err(
-      domainError("VALIDATION_FAILED", `"${field.label}" allows at most ${field.max} values.`),
-    );
-  }
-
-  return ok(field.multiple ? canonical.join(", ") : canonical[0]!);
-};
-
-const validateYesNo = (field: TemplateField, value: string): Result<string> => {
-  const lower = value.toLowerCase();
-  if (lower === "yes") return ok("Yes");
-  if (lower === "no") return ok("No");
-  return err(domainError("VALIDATION_FAILED", `"${field.label}" must be either Yes or No.`));
-};
-
-const validateNumber = (field: TemplateField, value: string): Result<string> => {
-  const numeric = Number(value.replace(/[$,\s]/g, ""));
-  if (Number.isNaN(numeric)) {
-    return err(domainError("VALIDATION_FAILED", `"${field.label}" must be a number.`));
-  }
-  if (field.min !== undefined && numeric < field.min) {
-    return err(domainError("VALIDATION_FAILED", `"${field.label}" must be at least ${field.min}.`));
-  }
-  if (field.max !== undefined && numeric > field.max) {
-    return err(domainError("VALIDATION_FAILED", `"${field.label}" must be at most ${field.max}.`));
-  }
-  return ok(value);
-};
-
-// Pure value-level validation for a single edited field. Mirrors the
-// TemplateFieldType vocabulary used at generation time and never throws — it
-// returns the canonicalised value (trimmed, Yes/No normalised, options matched
-// to their declared casing) or a VALIDATION_FAILED DomainError.
-export const validateTemplateFieldValue = (
-  field: TemplateField,
-  rawValue: string,
-): Result<string> => {
-  const value = rawValue.trim();
-
-  if (value === "") {
-    if (field.optional || field.type === "section") return ok("");
-    return err(domainError("VALIDATION_FAILED", `"${field.label}" is required.`));
-  }
-
-  // Reached only if a caller bypasses nodeFieldSet's filter. A signature typed
-  // by anyone other than the decision path is a forged signature.
-  if (field.type === "signature") {
-    return err(
-      domainError(
-        "VALIDATION_FAILED",
-        `"${field.label}" is filled by its approval step and cannot be entered manually.`,
-      ),
-    );
-  }
-
-  if (field.maxLength !== undefined && value.length > field.maxLength) {
-    return err(
-      domainError(
-        "VALIDATION_FAILED",
-        `"${field.label}" must be ${field.maxLength} characters or fewer.`,
-      ),
-    );
-  }
-
-  if (field.options && field.options.length > 0) {
-    return validateOptions(field, value);
-  }
-
-  switch (field.type) {
-    case "email":
-      return /.+@.+\..+/.test(value)
-        ? ok(value)
-        : err(domainError("VALIDATION_FAILED", `"${field.label}" must be a valid email address.`));
-    case "number":
-    case "currency":
-      return validateNumber(field, value);
-    case "yesno":
-    case "section":
-      return validateYesNo(field, value);
-    default:
-      return ok(value);
-  }
-};
 
 interface OpenGroup {
   field: TemplateField;
@@ -597,6 +570,8 @@ export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> 
   let openGroup: OpenGroup | null = null;
   const openSections: string[] = [];
 
+  const keyAccessors: Array<{ rawTag: string; parentKey: string }> = [];
+
   const addTopLevel = (field: TemplateField): void => {
     if (seenKeys.has(field.key)) return;
     seenKeys.add(field.key);
@@ -606,6 +581,16 @@ export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> 
   for (const rawTag of rawTags) {
     const trimmed = rawTag.trim();
     const sigil = /^[#/^]/.test(trimmed) ? trimmed[0] : null;
+
+    // Collected rather than parsed: the accessor renders a value the parent
+    // field already carries, so it must not become a field of its own. Validated
+    // after the loop, when every field it could reference has been seen.
+    const accessorMatch = sigil === null ? trimmed.match(KEY_ACCESSOR_PATTERN) : null;
+    if (accessorMatch) {
+      keyAccessors.push({ rawTag: trimmed, parentKey: deriveFieldKey(accessorMatch[1] ?? "") });
+      continue;
+    }
+
     const parsed = parseTemplateField(trimmed);
     if (parsed.error) return parsed;
     const field = parsed.data;
@@ -683,6 +668,26 @@ export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> 
       continue;
     }
     addTopLevel(field);
+  }
+
+  for (const accessor of keyAccessors) {
+    const target = fields.find((field) => field.key === accessor.parentKey);
+    if (!target) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${accessor.rawTag}}}" reads the key of a field this template does not have. Add the field, or remove the accessor.`,
+        ),
+      );
+    }
+    if (!target.optionsSource) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${accessor.rawTag}}}" reads the key of the field "${target.label}", which is not bound to a lookup source. Only a field with (options-source: …) has a key.`,
+        ),
+      );
+    }
   }
 
   return ok(fields);

@@ -232,3 +232,61 @@ Mirror PRD §10. In particular:
 - **File paths**: corrected to the real tree — `schema/kb.ts`,
   `use-cases/lookup/`, flat `routers/`, `components/settings/*-card.tsx`,
   `apps/api/src/container.ts`.
+
+## 10. Approved change summary (build gate, 2026-08-17)
+
+Admins register named **lookup sources** (`directory`, `managed`, or a read-only
+HTTPS `api`), **Test** one to discover its fields, and pick which field is the
+display and which is the key. Authors bind a field's valid set with
+`{{ Department (options-source: departments) }}`; operators pick live values via
+type-ahead; every answer is re-resolved in one batch per source at step end,
+attaching the key and a `{ name, version, fetchedAt }` snapshot to the stored
+output. `{{ Department.key }}` renders the code. An outage falls back to
+last-known-good and flags the value stale rather than halting the workflow.
+
+**Business rules changing**
+
+- `(options-source: NAME)` is `VALIDATION_FAILED` alongside `(options: …)`,
+  `(multi-options: …)` or a scalar type; an unregistered `NAME` fails at upload.
+- `(options-source: …)` **composes with** `(multiple)` — relaxes the existing
+  `multiple && !options` guard in `template-field.ts`.
+- Step end resolves per source: matches canonicalise + gain key and snapshot;
+  unmatched block completion; a value matching two distinct keys is ambiguous
+  and rejected.
+- Provider error → last-known-good, `stale: true`, accept + flag, never block.
+- A refresh writes a new `version` only when content changed.
+
+**Data & types** — `LookupSource`, `NewLookupSource`, `ValueSetEntry`,
+`ValueSetProbe`, `formatValueSetEntry`; `IValueSetProvider`
+(`search`/`list`/`resolve`/`probe`) and `ILookupSourceRepository`;
+`ResolveOutcome { matched, unresolved, ambiguous, stale, version }`;
+`TemplateField.optionsSource?`; `StepOutputField.valueKey?` + `sourceRef?`.
+
+**Database** — `kb_lookup_sources` and `kb_lookup_source_entries` in
+`db/schema/kb.ts`, one additive generated migration, no `app_session_step_outputs`
+change. A separately-emitted `CREATE UNIQUE INDEX` carries
+`-- data-impact: preserved — new table, no existing rows`.
+
+**Tests** — domain (parser, entities), application (step-end resolve, inlining,
+preview, CRUD), adapters (three providers, egress guard, cache, repository),
+apps (routers, settings card, picker). **No e2e spec** — nothing here falls into
+the six groups in `e2e-test-policy.md`.
+
+**Version / branch** — MINOR → `0.31.0`; built on
+`claude/external-field-values-phase-gb98mt` (cut from `main`, session-pinned in
+place of `feature/<slug>`); base and PR target `main`, release line `alpha-3`.
+
+**Risks** — first admin-controlled outbound URL (SSRF, credentials, untrusted
+shapes, slow endpoints); parser guard relaxation touches shipped behaviour;
+step-end blocking needs an obvious correction UI; per-process cache windows over
+shared rows. Nothing destructive — additive tables only.
+
+**Out of scope** — write-back/sync, `api` cursor pagination, background refresh,
+cascading lookups, row-level security, CSV import for `managed`, bulk
+re-validation of historical outputs.
+
+**Build order** — (1) domain entities, (2) domain ports + step-output fields,
+(3) parser, (4) step-end validate, (5) inline + preview, (6) admin use-case,
+(7) schema + migration + repo, (8) egress guard + `api` provider, (9) directory +
+managed providers, (10) caching wrapper, (11) routers + wiring, (12) settings
+card, (13) picker, (14) close-out (version, doc move, validate, PR).

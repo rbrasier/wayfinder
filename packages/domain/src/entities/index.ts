@@ -86,3 +86,5 @@ export * from "./skill";
 export * from "./mcp-server";
 export * from "./extraction-run";
 export * from "./extraction-document";
+export * from "./lookup-source";
+export * from "./template-field-value";
