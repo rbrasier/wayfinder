@@ -613,6 +613,7 @@ const build = () => {
     flowNodes,
     approvals,
     auditLogger,
+    valueSetProvider: lookupSources.valueSetProvider,
   });
   const approvalUseCases = buildApprovalUseCases({
     unitOfWork,

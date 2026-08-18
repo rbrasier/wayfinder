@@ -660,3 +660,143 @@ describe("GenerateDocument", () => {
     expect(extractionCalls).toHaveLength(0);
   });
 });
+
+describe("GenerateDocument — external-sourced fields", () => {
+  const SNAPSHOT_VERSION = "v-2026-08-02";
+  const FETCHED_AT = new Date("2026-08-02T09:00:00.000Z");
+
+  const externalGenerator = (): IDocumentGenerator => {
+    const generator = makeDocumentGenerator();
+    (generator.extractFields as ReturnType<typeof vi.fn>).mockReturnValue(
+      ok({
+        fields: [
+          {
+            key: "department",
+            label: "Department",
+            type: "text",
+            optionsSource: "departments",
+            optional: false,
+            raw: "Department (options-source: departments)",
+          },
+        ],
+      }),
+    );
+    return generator;
+  };
+
+  const externalLanguageModel = (department: string): ILanguageModel => {
+    const languageModel = makeLanguageModel();
+    (languageModel.generateObject as ReturnType<typeof vi.fn>).mockImplementation(
+      async (input: { purpose: string }) => {
+        if (input.purpose === "documentGeneration") return ok({ object: { department }, usage });
+        if (input.purpose === "documentGrading") {
+          return ok({
+            object: {
+              guidanceAlignmentConfidence: 88,
+              guidanceAlignmentRationale: "ok",
+              criteriaAlignmentConfidence: 92,
+              criteriaAlignmentRationale: "ok",
+            },
+            usage,
+          });
+        }
+        return ok({ object: { summary: "A brief summary." }, usage });
+      },
+    );
+    return languageModel;
+  };
+
+  const valueSetProvider = (options: { stale?: boolean } = {}) => ({
+    list: vi.fn(),
+    search: vi.fn(),
+    probe: vi.fn(),
+    resolve: vi.fn(async (_sourceName: string, values: string[]) => {
+      const matched = values
+        .filter((value) => value.toLowerCase() === "finance")
+        .map((value) => ({ input: value, entry: { display: "Finance", key: "FIN-001" } }));
+      return ok({
+        matched,
+        unresolved: values.filter((value) => value.toLowerCase() !== "finance"),
+        ambiguous: [],
+        stale: options.stale ?? false,
+        version: SNAPSHOT_VERSION,
+        fetchedAt: FETCHED_AT,
+      });
+    }),
+  });
+
+  const run = async (
+    languageModel: ILanguageModel,
+    provider: ReturnType<typeof valueSetProvider> | undefined,
+    stepOutputs = makeStepOutputs(),
+    documentGenerator = externalGenerator(),
+  ) => {
+    const useCase = new GenerateDocument(
+      documentGenerator,
+      makeObjectStorage(),
+      languageModel,
+      makeSessionMessages(),
+      stepOutputs,
+      provider,
+    );
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+    });
+    return { result, documentGenerator, stepOutputs };
+  };
+
+  it("canonicalises the value and renders its key for the accessor", async () => {
+    const { result, documentGenerator } = await run(
+      externalLanguageModel("finance"),
+      valueSetProvider(),
+    );
+
+    expect(result.error).toBeUndefined();
+    const [generateInput] = (documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(generateInput.data.department).toBe("Finance");
+    expect(generateInput.data.department_key).toBe("FIN-001");
+  });
+
+  it("stores the key and the snapshot on the step output", async () => {
+    const stepOutputs = makeStepOutputs();
+    await run(externalLanguageModel("finance"), valueSetProvider(), stepOutputs);
+
+    const [createInput] = (stepOutputs.create as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(createInput.fields[0]).toMatchObject({
+      key: "department",
+      value: "Finance",
+      valueKey: "FIN-001",
+      sourceRef: { name: "departments", version: SNAPSHOT_VERSION, fetchedAt: FETCHED_AT },
+    });
+  });
+
+  it("blocks generation when the value is not in the source", async () => {
+    const { result, documentGenerator } = await run(
+      externalLanguageModel("Marketing"),
+      valueSetProvider(),
+    );
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Department");
+    expect(documentGenerator.generate).not.toHaveBeenCalled();
+  });
+
+  it("generates anyway when the set is stale, rather than halting on an outage", async () => {
+    const { result } = await run(
+      externalLanguageModel("Marketing"),
+      valueSetProvider({ stale: true }),
+    );
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("generates normally when no provider is wired", async () => {
+    const { result } = await run(externalLanguageModel("finance"), undefined);
+
+    expect(result.error).toBeUndefined();
+  });
+});
