@@ -9,6 +9,7 @@ import {
   type LookupSource,
   type NewLookupSource,
   type Result,
+  type TemplateField,
   type ValueSetEntry,
   type ValueSetProbe,
 } from "@rbrasier/domain";
@@ -18,6 +19,7 @@ import {
   RegisterLookupSource,
   TestLookupSource,
   UpdateLookupSource,
+  ValidateTemplateLookupSources,
 } from "./lookup-source";
 
 const draft: NewLookupSource = {
@@ -332,5 +334,82 @@ describe("ListLookupSources and DeleteLookupSource", () => {
     const result = await new DeleteLookupSource(repository).execute("missing");
 
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("ValidateTemplateLookupSources", () => {
+  const externalField = (key: string, sourceName?: string): TemplateField => ({
+    key,
+    label: key,
+    type: "text",
+    optional: false,
+    raw: key,
+    ...(sourceName ? { optionsSource: sourceName } : {}),
+  });
+
+  const repositoryWith = async (names: string[]) => {
+    const repository = new FakeLookupSourceRepository();
+    const register = new RegisterLookupSource(repository);
+    for (const name of names) await register.execute({ ...draft, name });
+    return repository;
+  };
+
+  it("accepts a template whose sources are all registered", async () => {
+    const repository = await repositoryWith(["departments"]);
+
+    const result = await new ValidateTemplateLookupSources(repository).execute([
+      externalField("department", "departments"),
+    ]);
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("rejects a template naming a source that does not exist", async () => {
+    const repository = await repositoryWith(["departments"]);
+
+    const result = await new ValidateTemplateLookupSources(repository).execute([
+      externalField("supplier", "suppliers"),
+    ]);
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("suppliers");
+  });
+
+  it("accepts a template with no external fields", async () => {
+    const repository = await repositoryWith([]);
+
+    const result = await new ValidateTemplateLookupSources(repository).execute([
+      externalField("client_name"),
+    ]);
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("checks the fields inside a repeating group too", async () => {
+    const repository = await repositoryWith([]);
+    const group: TemplateField = {
+      key: "recommendations",
+      label: "Recommendations",
+      type: "group",
+      optional: true,
+      raw: "#recommendations (repeat)",
+      itemFields: [externalField("owner", "people")],
+    };
+
+    const result = await new ValidateTemplateLookupSources(repository).execute([group]);
+
+    expect(result.error?.message).toContain("people");
+  });
+
+  it("reports every unknown source at once", async () => {
+    const repository = await repositoryWith([]);
+
+    const result = await new ValidateTemplateLookupSources(repository).execute([
+      externalField("department", "departments"),
+      externalField("supplier", "suppliers"),
+    ]);
+
+    expect(result.error?.message).toContain("departments");
+    expect(result.error?.message).toContain("suppliers");
   });
 });

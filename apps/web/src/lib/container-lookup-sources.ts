@@ -12,6 +12,7 @@ import {
   RegisterLookupSource,
   TestLookupSource,
   UpdateLookupSource,
+  ValidateTemplateLookupSources,
 } from "@rbrasier/application";
 import { domainError, err, isValidLookupCredentialRef, ok, type IPeopleDirectory, type Result } from "@rbrasier/domain";
 
@@ -65,6 +66,7 @@ export const buildLookupSources = ({
       updateLookupSource: new UpdateLookupSource(repository),
       deleteLookupSource: new DeleteLookupSource(repository),
       testLookupSource: new TestLookupSource(valueSetProvider),
+      validateTemplateLookupSources: new ValidateTemplateLookupSources(repository),
     },
   };
 };

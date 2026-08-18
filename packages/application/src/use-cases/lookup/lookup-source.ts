@@ -11,6 +11,7 @@ import {
   type LookupSourceKind,
   type NewLookupSource,
   type Result,
+  type TemplateField,
   type ValueSetEntry,
 } from "@rbrasier/domain";
 
@@ -147,5 +148,39 @@ export class TestLookupSource {
     });
 
     return ok({ fields, sample, preview });
+  }
+}
+
+// Checked at template upload, so an author who mistypes a source name learns of
+// it while editing the template rather than an operator hitting it mid-session
+// (ADR-050 §1).
+export class ValidateTemplateLookupSources {
+  constructor(private readonly sources: ILookupSourceRepository) {}
+
+  async execute(fields: TemplateField[]): Promise<Result<void>> {
+    const names = [
+      ...new Set(
+        fields
+          .flatMap((field) => [field, ...(field.itemFields ?? [])])
+          .map((field) => field.optionsSource)
+          .filter((name): name is string => !!name),
+      ),
+    ];
+
+    const unknown: string[] = [];
+    for (const name of names) {
+      const found = await this.sources.findByName(name);
+      if (found.error) return found;
+      if (!found.data) unknown.push(name);
+    }
+
+    if (unknown.length === 0) return ok(undefined);
+
+    return err(
+      domainError(
+        "VALIDATION_FAILED",
+        `This template references lookup sources that are not registered: ${unknown.join(", ")}. Add them under Configuration, or correct the tag.`,
+      ),
+    );
   }
 }
