@@ -1,4 +1,5 @@
 import {
+  nodeFieldSet,
   normaliseOutputType,
   type AiTurnPayload,
   type ConversationalNodeConfig,
@@ -14,7 +15,7 @@ import {
   type SessionUpload,
   type TurnStreamWriter,
 } from "@rbrasier/domain";
-import { buildTurnRetrievalQueries, resolveChangeRequests } from "@rbrasier/application";
+import { buildTurnRetrievalQueries, inlineExternalOptions, resolveChangeRequests } from "@rbrasier/application";
 import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
@@ -546,8 +547,17 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     const skillsResult = await container.useCases.resolveStepSkills.execute(newNodeConfig);
     const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
 
+    // A field bound to a lookup source gets its set inlined here when it is small
+    // enough, so the assistant can name real values when it asks. A large set stays
+    // out and the operator searches it instead (ADR-050 §4).
+    const templateFields = await inlineExternalOptions(
+      container.services.valueSetProvider,
+      nodeFieldSet(newNodeConfig),
+    );
+
     const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
       nodeConfig: newNodeConfig,
+      templateFields,
       retrievedChunks,
       sessionUploads,
       gatheredContext,

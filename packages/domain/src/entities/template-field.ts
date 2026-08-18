@@ -1,3 +1,4 @@
+import { CONVERSATION_PREVIEW_LIMIT } from "./lookup-source";
 import { domainError } from "../errors/domain-error";
 import { err, ok } from "../result";
 import type { Result } from "../result";
@@ -445,6 +446,14 @@ export const parseTemplateField = (rawTag: string): Result<TemplateField> => {
   return ok(field);
 };
 
+// What an assistant may show when it asks the question. Deliberately separate
+// from what the model knows: the cap is CONVERSATION_PREVIEW_LIMIT whatever the
+// set size, so a fully-inlined small set is not dumped into the chat turn.
+const conversationPreviewRule = (totalCount: number): string => {
+  if (totalCount <= CONVERSATION_PREVIEW_LIMIT) return "";
+  return `. When asking the operator about this field, name at most ${CONVERSATION_PREVIEW_LIMIT} of these options and add that you can list all ${totalCount} if they ask — never recite the whole set unprompted`;
+};
+
 const describeType = (field: TemplateField): string => {
   if (field.type === "section") {
     return `decide whether to include the "${field.label}" section — answer exactly "Yes" to include it or "No" to omit it`;
@@ -468,13 +477,19 @@ const describeType = (field: TemplateField): string => {
   }
   if (field.options && field.options.length > 0) {
     const prefix = field.multiple ? "one or more of" : "exactly one of";
-    return `${prefix}: ${field.options.join(", ")}`;
+    const listed = `${prefix}: ${field.options.join(", ")}`;
+    // The model holds the whole set for extraction, but a conversational turn
+    // that recites 30 options is unreadable — so name a few and let the operator
+    // ask for the rest (ADR-050 §4). Inert in an extraction prompt, which asks
+    // the operator nothing.
+    if (!field.optionsSource) return listed;
+    return `${listed}${conversationPreviewRule(field.options.length)}`;
   }
   // A large external set is deliberately not inlined, so the model proposes from
   // context and the step-end resolve is what guarantees correctness (ADR-050 §4).
   if (field.optionsSource) {
     const prefix = field.multiple ? "one or more values" : "exactly one value";
-    return `${prefix} from the "${field.optionsSource}" list — propose the closest match from the documents; it is checked against the live list when the step completes`;
+    return `${prefix} from the "${field.optionsSource}" list — propose the closest match from the documents; it is checked against the live list when the step completes. When asking the operator about this field, do not invent example values: say you can look the list up and offer to search it for them`;
   }
   switch (field.type) {
     case "date":

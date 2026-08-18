@@ -7,6 +7,7 @@ import {
   parseTemplateField,
   parseTemplateFields,
   templateFieldToLine,
+  type TemplateField,
 } from "./template-field";
 import { validateTemplateFieldValue } from "./template-field-value";
 
@@ -774,5 +775,58 @@ describe("validateTemplateFieldValue — external fields", () => {
     const field = parseTemplateField("Department (options-source: departments)").data!;
 
     expect(validateTemplateFieldValue(field, "   ").error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("describeTemplateFieldFormat — conversation preview cap", () => {
+  const external = (count: number, multiple = false): TemplateField => {
+    const parsed = parseTemplateField(
+      `Department (options-source: departments)${multiple ? " (multiple)" : ""}`,
+    );
+    return {
+      ...parsed.data!,
+      options: Array.from({ length: count }, (_, index) => `Dept ${index + 1} (D-${index + 1})`),
+    };
+  };
+
+  it("tells the assistant to name at most three of a large inlined set", () => {
+    const description = describeTemplateFieldFormat(external(12));
+
+    expect(description).toContain("name at most 3 of these options");
+    expect(description).toContain("list all 12 if they ask");
+  });
+
+  it("still caps a small set that fits entirely in the prompt", () => {
+    const description = describeTemplateFieldFormat(external(8));
+
+    expect(description).toContain("name at most 3");
+    expect(description).toContain("Dept 8");
+  });
+
+  it("adds no cap when the whole set is three or fewer", () => {
+    const description = describeTemplateFieldFormat(external(3));
+
+    expect(description).not.toContain("name at most");
+  });
+
+  it("leaves an inline (options: …) field's description untouched", () => {
+    const inline = parseTemplateField("Status (options: Open, Closed, Pending, Void)").data!;
+
+    expect(describeTemplateFieldFormat(inline)).toBe(
+      "exactly one of: Open, Closed, Pending, Void",
+    );
+  });
+
+  it("tells the assistant to offer a lookup rather than invent values when nothing is inlined", () => {
+    const description = describeTemplateFieldFormat(
+      parseTemplateField("Department (options-source: departments)").data!,
+    );
+
+    expect(description).toContain("do not invent example values");
+    expect(description).toContain("offer to search it");
+  });
+
+  it("keeps the cap on a multi-select external field", () => {
+    expect(describeTemplateFieldFormat(external(12, true))).toContain("name at most 3");
   });
 });
