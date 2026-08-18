@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   AI_CONFIG_SETTING_KEY,
   CONNECTIVITY_TARGETS,
-  AUTH_CONFIG_SETTING_KEY,
   DOCUMENT_GENERATION_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
@@ -22,9 +21,7 @@ import {
   type SiemConfig,
   isAiConfigured,
   isAtLeastOneMethodEnabled,
-  isPkiUsable,
   isEmailConfigured,
-  isEntraConfigured,
   isN8nConfigured,
   isStorageConfigured,
   normaliseSiteBannerLinkUrl,
@@ -47,7 +44,8 @@ import {
 import { DEFAULT_MODELS_FOR, RuntimeConfigStore, resolveContextWindow } from "@rbrasier/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
-import { authConfigInputSchema, mergeAuthConfig } from "./settings-auth";
+import { authSettingsProcedures } from "./settings-auth";
+import { apiKeyState } from "./settings-secrets";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
 const providerSchema = z.enum(["anthropic", "openai", "mistral", "bedrock"]);
@@ -268,9 +266,6 @@ export const mergeApiKeys = (
   bedrock: mergeBedrockCredentials(incoming.bedrock, stored.bedrock),
 });
 
-const apiKeyState = (value: string | null): "set" | "unset" =>
-  value && value.length > 0 ? "set" : "unset";
-
 const bedrockState = (value: BedrockCredentials | null) => ({
   region: value?.region ?? null,
   accessKeyId: apiKeyState(value?.accessKeyId ?? null),
@@ -328,69 +323,7 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getAuthConfig: adminProcedure.query(async ({ ctx }) => {
-    const config = await ctx.container.runtimeConfig.getAuthConfig();
-    return {
-      emailPasswordEnabled: config.emailPasswordEnabled,
-      entraEnabled: config.entraEnabled,
-      entra: {
-        tenantId: config.entra.tenantId,
-        clientId: config.entra.clientId,
-        clientSecret: apiKeyState(config.entra.clientSecret),
-      },
-      pkiEnabled: config.pkiEnabled,
-      pki: {
-        sessionTtlHours: config.pki.sessionTtlHours,
-        // The boolean only. An admin-scoped response is still a network
-        // payload, and the client has no business knowing which addresses the
-        // trust anchor names (ADR-042 §1).
-        envConfigured: ctx.container.runtimeConfig.isPkiEnvConfigured(),
-      },
-      redirectUri: `${ctx.container.env.BETTER_AUTH_URL}/api/auth/callback/microsoft`,
-    };
-  }),
-
-  setAuthConfig: adminProcedure
-    .input(authConfigInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const current = await ctx.container.runtimeConfig.getAuthConfig();
-      const merged = mergeAuthConfig(input, current);
-      const envHasTrustedProxies = ctx.container.runtimeConfig.isPkiEnvConfigured();
-
-      // A disabled checkbox is a UI affordance, not an authorisation check.
-      if (merged.pkiEnabled && !envHasTrustedProxies) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "Certificate sign-in cannot be enabled until PKI_TRUSTED_PROXY_IPS is set in the environment.",
-        });
-      }
-
-      if (!isAtLeastOneMethodEnabled(merged, envHasTrustedProxies)) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "At least one usable sign-in method must stay enabled. Certificate sign-in does not count while PKI_TRUSTED_PROXY_IPS is unset.",
-        });
-      }
-      const result = await ctx.container.repos.systemSettings.set(
-        AUTH_CONFIG_SETTING_KEY,
-        JSON.stringify(merged),
-      );
-      if (result.error) throw toTrpcError(result.error);
-      ctx.container.runtimeConfig.invalidateAuth();
-      return { ok: true };
-    }),
-
-  // Public so the unauthenticated /login page can render the right controls.
-  enabledAuthMethods: publicProcedure.query(async ({ ctx }) => {
-    const config = await ctx.container.runtimeConfig.getAuthConfig();
-    return {
-      emailPassword: config.emailPasswordEnabled,
-      entra: config.entraEnabled && isEntraConfigured(config.entra),
-      pki: isPkiUsable(config, ctx.container.runtimeConfig.isPkiEnvConfigured()),
-    };
-  }),
+  ...authSettingsProcedures,
 
   getN8nConfig: adminProcedure.query(async ({ ctx }) => {
     const config: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();

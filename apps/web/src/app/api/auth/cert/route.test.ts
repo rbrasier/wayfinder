@@ -8,6 +8,12 @@ const { authenticate, container, setPkiState } = vi.hoisted(() => {
     entra: { tenantId: "", clientId: "", clientSecret: "" },
     pkiEnabled: true,
     pki: { sessionTtlHours: 8 },
+    sessionPolicy: {
+      idleTimeoutMinutes: 0,
+      absoluteTimeoutMinutes: 0,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    },
   };
   let envConfigured = true;
   return {

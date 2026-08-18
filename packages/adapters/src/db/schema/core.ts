@@ -56,6 +56,12 @@ export const core_sessions = pgTable("core_sessions", {
   expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
   ip_address: text("ip_address"),
   user_agent: text("user_agent"),
+  // Stamped by session resolution, throttled to once a minute. Better Auth's own
+  // refresh only touches updated_at once per updateAge (a day by default), and
+  // the PKI adapter never touches it at all, so neither is a last-activity
+  // signal the idle timeout can read (ADR-035 §2). Null on rows written before
+  // this column existed; readers fall back to created_at.
+  last_active_at: timestamp("last_active_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

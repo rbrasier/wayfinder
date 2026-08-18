@@ -5,6 +5,8 @@ import type { Database } from "../db/client";
 import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
 import { applyEntraPrecedence } from "./entra-precedence";
 import { userInfoFromIdToken } from "./entra-user-info";
+import { enforceSessionConcurrency } from "./session-concurrency";
+import type { SessionRevocationRegistry } from "./session-revocation";
 
 // PKI is deliberately absent: certificate sign-in is decided by the runtime
 // auth config, not by the process's boot-time mechanism, and Better Auth never
@@ -21,6 +23,9 @@ export interface CreateAuthOptions {
   readonly authMethod: AuthMethod;
   readonly authConfig: AuthMethodsConfig;
   readonly entraAuthority?: string;
+  // Shared with the cached session resolver so an eviction takes effect on the
+  // evicted device's next request rather than at the end of the cache TTL.
+  readonly sessionRevocations: SessionRevocationRegistry;
 }
 
 export interface MicrosoftProviderOptions {
@@ -183,10 +188,28 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
           // issued. Revoking sessions from there kills the sign-in that
           // triggered the link. `create.before` is awaited inline instead.
           before: async (account) => {
-            await applyEntraPrecedence(db, {
-              userId: account.userId,
-              providerId: account.providerId,
+            await applyEntraPrecedence(
+              db,
+              { userId: account.userId, providerId: account.providerId },
+              config.sessionRevocations,
+            );
+          },
+        },
+      },
+      session: {
+        create: {
+          // `before` for the same reason the account hook uses it: a
+          // `create.after` hook is queued until the request ends, by which point
+          // the session it was meant to vet has already been issued. Returning
+          // false here cancels the insert, which is what `refuse` means
+          // (ADR-035 §3).
+          before: async (session) => {
+            const admitted = await enforceSessionConcurrency(db, config.sessionRevocations, {
+              userId: session.userId,
+              policy: config.authConfig.sessionPolicy,
             });
+            // Anything but `false` lets the insert proceed unchanged.
+            return admitted ? undefined : false;
           },
         },
       },

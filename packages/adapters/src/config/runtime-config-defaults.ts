@@ -42,6 +42,7 @@ import {
   type OrganisationResolution,
   type ProviderName,
   type ResolvedDocumentGenerationBudget,
+  type SessionPolicy,
   type SessionUploadConfig,
   type ExtractionConfig,
   type SiemConfig,
@@ -407,6 +408,9 @@ export const buildEnvAuthConfig = (env: EnvDefaults): AuthConfig => {
     // nothing once the row exists (ADR-042 §3).
     pkiEnabled: env.pki?.authMethodNamesPki ?? defaults.pkiEnabled,
     pki: { sessionTtlHours: env.pki?.sessionTtlHours ?? defaults.pki.sessionTtlHours },
+    // No env seed: session policy is admin-configured state from the start, so
+    // an unconfigured install enforces nothing (ADR-035 §4).
+    sessionPolicy: defaults.sessionPolicy,
   };
 };
 
@@ -434,10 +438,35 @@ export const parseAuthConfig = (raw: string, fallback: AuthConfig): AuthConfig =
       // fall back rather than reading as undefined.
       pkiEnabled: typeof parsed.pkiEnabled === "boolean" ? parsed.pkiEnabled : fallback.pkiEnabled,
       pki: { sessionTtlHours: parsePkiSessionTtlHours(parsed.pki, fallback.pki.sessionTtlHours) },
+      sessionPolicy: parseSessionPolicy(parsed.sessionPolicy, fallback.sessionPolicy),
     };
   } catch {
     return fallback;
   }
+};
+
+// A count that is not a whole non-negative number means enforcement of unknown
+// strength; fall back to the default rather than guess at what was intended.
+const parseMinuteCount = (raw: unknown, fallback: number): number =>
+  typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : fallback;
+
+const parseSessionPolicy = (raw: unknown, fallback: SessionPolicy): SessionPolicy => {
+  if (!isObject(raw)) return fallback;
+  return {
+    idleTimeoutMinutes: parseMinuteCount(raw.idleTimeoutMinutes, fallback.idleTimeoutMinutes),
+    absoluteTimeoutMinutes: parseMinuteCount(
+      raw.absoluteTimeoutMinutes,
+      fallback.absoluteTimeoutMinutes,
+    ),
+    concurrentSessionLimit: parseMinuteCount(
+      raw.concurrentSessionLimit,
+      fallback.concurrentSessionLimit,
+    ),
+    evictionStrategy:
+      raw.evictionStrategy === "refuse" || raw.evictionStrategy === "evict_oldest"
+        ? raw.evictionStrategy
+        : fallback.evictionStrategy,
+  };
 };
 
 const parsePkiSessionTtlHours = (raw: unknown, fallback: number): number => {

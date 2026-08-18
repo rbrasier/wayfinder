@@ -28,12 +28,22 @@ Constraints:
 
 ### 1. Revocation = delete sessions + bust cache
 
-`admin.revokeUserSessions(userId)` deletes the user's rows from `core_sessions`
-and invalidates that user's entries in `CachedSessionResolver`. Because
-resolution reads the cache then the table, and both are cleared, the user's next
-request resolves to no principal. The cache gains a targeted `invalidateUser`
-path (or, if keyed only by session token, a version/epoch bump per user) — the
-exact mechanism is chosen against the resolver's actual cache key during Build.
+`user.revokeSessions(userId)` (admin-only) deletes the user's rows from
+`core_sessions` and invalidates that user's entries in `CachedSessionResolver`.
+Because resolution reads the cache then the table, and both are cleared, the
+user's next request resolves to no principal.
+
+The cache is keyed by cookie value, so it cannot be addressed by user id
+directly. Invalidation is therefore a **per-user epoch**: each cache entry
+records the epoch its principal was resolved under, `invalidateUser` bumps that
+user's epoch, and a read whose entry is behind the current epoch misses. This is
+preferred over a userId→token reverse index, which would have to be kept in step
+with both TTL expiry and max-entries eviction to avoid leaking. The invalidator
+is exposed on the container alongside `resolveSession`.
+
+The same invalidator is used by the existing paths that already delete a user's
+sessions — `admin-recovery.ts` (password reset) and `entra-precedence.ts` (Entra
+takes over a credential account) — which today leave cached principals behind.
 
 ### 2. Timeouts enforced at resolution, from fields on the session
 
@@ -53,13 +63,32 @@ At login completion, the number of the user's active sessions is compared to
 (and busts their cache entries); `refuse` rejects the new login. Default is
 `evict_oldest` — it favours the human at the keyboard over a stale session.
 
+There is no single login path in this codebase. Enforcement lives in **one shared
+adapter function** called from two places: Better Auth's
+`databaseHooks.session.create` (the hook block already exists for account
+linking) and `pki-cert-adapter.ts`'s `createSession`, which mints
+`core_sessions` rows directly. `apps/web/src/app/api/dev-login/route.ts` also
+mints sessions and is deliberately **not** covered — it is a dev-only backdoor,
+not a sign-in a deployment can reach. The Better Auth hook's exact signature is
+verified in `node_modules/better-auth` at Build; this ADR does not freeze it.
+
 ### 4. Policy is runtime config with an admin-lockout guard
 
-`SessionPolicy` is persisted in `admin_system_settings` and resolved via
-`RuntimeConfigStore` (reusing `invalidateAuth()` or a dedicated
-`invalidateSessionPolicy()`), so changes apply on the next request. `setSessionPolicy`
-validates bounds (e.g. absolute ≥ idle, limits ≥ 1) so a policy cannot be set
-that immediately strands every admin.
+`SessionPolicy` **nests on `AuthConfig`**, so it is persisted in the existing
+`auth_config` row in `admin_system_settings`, read through `getAuthConfig()`, and
+busted by `invalidateAuth()` — a nested field cannot have its own cache entry, so
+there is no `invalidateSessionPolicy()`. `parseAuthConfig` default-fills the field
+so `auth_config` rows written before this phase still resolve; `mergeAuthConfig`
+and `authConfigInputSchema` extend alongside it.
+
+`setSessionPolicy` validates bounds (absolute ≥ idle, limits ≥ 1). Bounds alone
+do **not** prevent admin lockout: under `refuse`, an admin whose limit is already
+consumed by stale sessions — Better Auth sessions live for days, and a closed
+browser never signs out — cannot sign in at all. So the guard is behavioural:
+**an admin always evicts.** `refuse` applies to non-admin users only; an admin at
+the limit evicts their oldest session whatever the strategy. This is a pure
+domain predicate, unit-testable without a database, and makes "an admin cannot
+lock every admin out via policy" literally true rather than merely likely.
 
 ## Alternatives considered
 
@@ -71,6 +100,17 @@ that immediately strands every admin.
 - **A `revoked_at` tombstone column checked on every request.** Adds a per-request
   read and leaves the cache-coherence problem unsolved; deleting the row + busting
   the cache is simpler and strictly stronger.
+- **A userId→token reverse index for cache invalidation.** Precise, but the index
+  has to be maintained against TTL expiry and max-entries eviction or it leaks
+  entries; the epoch bump carries no such bookkeeping.
+- **Clearing the whole session cache on revoke.** Trivially correct and revocation
+  is rare, but it discards every user's cached principal and pushes all in-flight
+  traffic onto the auth DB query the cache exists to avoid.
+- **`refuse` applying to admins too.** Honest to the setting's name, but it hands
+  an admin a policy that can lock them out of their own instance, recoverable only
+  through the `admin-recovery` CLI and shell access to the host. Rejected.
+- **Dropping `refuse` entirely.** Would remove the lockout path outright, but the
+  PRD names both strategies and `refuse` is what some security policies require.
 - **Per-user policy overrides now.** Deferred — org-wide policy meets the
   requirement; per-user is additive later.
 
@@ -87,9 +127,21 @@ that immediately strands every admin.
 
 **Negative**
 
-- `CachedSessionResolver` gains an invalidation path that must be correct — the
-  highest-risk area; a miss means a revoked user keeps access until TTL.
-- Idle timeout may require a `last_active_at` column and a throttled write on
+- `CachedSessionResolver` gains an epoch-aware invalidation path that must be
+  correct — the highest-risk area; a miss means a revoked user keeps access until
+  TTL. `TtlCache` is in-process, so the proactive bust does not cross instances
+  and a multi-instance deployment falls back to the TTL bound (5 s by default)
+  until the cache is promoted to a shared store.
+- Idle timeout requires the `last_active_at` column and a throttled write on
   resolution, a small hot-path cost.
 - `evict_oldest` can surprise a user whose older session vanishes; documented as
   the intended default with `refuse` available.
+- Admins are exempt from `refuse`, so a policy does not mean quite the same thing
+  for an admin as for everyone else. The exemption is deliberate and documented in
+  the settings card.
+- PKI sessions now carry two lifetimes: ADR-042's `sessionTtlHours` sets
+  `expires_at`, while the absolute timeout measures from `created_at`. Both apply
+  and the stricter one wins.
+- Revocation and policy changes write no `core_audit_log` entry in this phase,
+  though ADR-033 covers comparable admin actions. Deliberate scope call; adding
+  them later is additive.
