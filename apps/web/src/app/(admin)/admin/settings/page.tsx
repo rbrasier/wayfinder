@@ -16,6 +16,7 @@ import { EmailCard } from "@/components/settings/email-card";
 import { EntraDirectoryCard } from "@/components/settings/entra-directory-card";
 import { GlobalInstructionsCard } from "@/components/settings/global-instructions-card";
 import { HrDataCard } from "@/components/settings/hr-data-card";
+import { LookupSourcesCard } from "@/components/settings/lookup-sources-card";
 import { N8nIntegrationCard } from "@/components/settings/n8n-integration-card";
 import { NotificationSettingsCard } from "@/components/settings/notification-settings-card";
 import { OrganisationNameCard } from "@/components/settings/organisation-name-card";
@@ -112,6 +113,7 @@ export default function AppSettingsPage() {
               description="HR data, directory sync and audit streaming."
             >
               <HrDataCard />
+              <LookupSourcesCard />
               <EntraDirectoryCard connectivity={connectivity} />
               <SiemStreamingCard />
             </CollapsibleSection>
