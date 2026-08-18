@@ -82,3 +82,54 @@ describe("DirectoryValueSetAdapter", () => {
     expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 });
+
+describe("DirectoryValueSetAdapter — federation", () => {
+  it("merges several directories, keeping the first entry for a shared email", async () => {
+    const accounts = directoryServing([person({ source: "user", displayName: "Ada (account)" })]);
+    const entra = directoryServing([person({ source: "entra", displayName: "Ada (Entra)" })]);
+
+    const result = await new DirectoryValueSetAdapter(accounts, entra).fetchRecords({ config: {} });
+
+    expect(result.data).toHaveLength(1);
+    expect(result.data?.[0]?.displayName).toBe("Ada (account)");
+  });
+
+  it("keeps distinct people from different directories", async () => {
+    const accounts = directoryServing([person()]);
+    const hr = directoryServing([
+      person({ source: "hr", email: "grace@example.gov", displayName: "Grace Hopper" }),
+    ]);
+
+    const result = await new DirectoryValueSetAdapter(accounts, hr).fetchRecords({ config: {} });
+
+    expect(result.data).toHaveLength(2);
+  });
+
+  it("skips a directory that fails and serves the rest", async () => {
+    const failing: IPeopleDirectory = {
+      search: vi.fn(async () => ({
+        error: { code: "INFRA_FAILURE" as const, message: "Entra unavailable" },
+      })),
+    };
+    const accounts = directoryServing([person()]);
+
+    const result = await new DirectoryValueSetAdapter(failing, accounts).fetchRecords({
+      config: {},
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(1);
+  });
+
+  it("reports the failure when every directory fails", async () => {
+    const failing: IPeopleDirectory = {
+      search: vi.fn(async () => ({
+        error: { code: "INFRA_FAILURE" as const, message: "Entra unavailable" },
+      })),
+    };
+
+    const result = await new DirectoryValueSetAdapter(failing).fetchRecords({ config: {} });
+
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+  });
+});

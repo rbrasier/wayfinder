@@ -5,6 +5,8 @@ import {
   INLINE_OPTIONS_THRESHOLD,
   entriesMatchVersion,
   formatValueSetEntry,
+  isValidLookupCredentialRef,
+  LOOKUP_CREDENTIAL_ENV_PREFIX,
   isLookupSourceKind,
   previewValueSetEntries,
   probeFieldNames,
@@ -186,5 +188,38 @@ describe("entriesMatchVersion", () => {
 
   it("detects a removed entry", () => {
     expect(entriesMatchVersion(current, [finance])).toBe(false);
+  });
+});
+
+describe("isValidLookupCredentialRef", () => {
+  it("accepts a reference inside the lookup namespace", () => {
+    expect(isValidLookupCredentialRef(`${LOOKUP_CREDENTIAL_ENV_PREFIX}DEPARTMENTS`)).toBe(true);
+  });
+
+  it("rejects an arbitrary process secret", () => {
+    expect(isValidLookupCredentialRef("DATABASE_URL")).toBe(false);
+  });
+
+  it("rejects the bare prefix", () => {
+    expect(isValidLookupCredentialRef(LOOKUP_CREDENTIAL_ENV_PREFIX)).toBe(false);
+  });
+});
+
+describe("validateNewLookupSource — credentials", () => {
+  it("accepts a namespaced credential reference", () => {
+    const result = validateNewLookupSource({
+      ...validSource,
+      credentialRef: `${LOOKUP_CREDENTIAL_ENV_PREFIX}DEPARTMENTS`,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.credentialRef).toBe(`${LOOKUP_CREDENTIAL_ENV_PREFIX}DEPARTMENTS`);
+  });
+
+  it("refuses a credential reference pointing at another process secret", () => {
+    const result = validateNewLookupSource({ ...validSource, credentialRef: "DATABASE_URL" });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain(LOOKUP_CREDENTIAL_ENV_PREFIX);
   });
 });
