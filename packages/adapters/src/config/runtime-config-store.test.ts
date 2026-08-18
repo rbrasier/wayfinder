@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AI_CONFIG_SETTING_KEY,
+  DEFAULT_SESSION_POLICY,
   SITE_BANNER_MAX_TEXT_SIZE_PT,
   createDefaultSiteBannerConfig,
   type AiConfig,
@@ -473,6 +474,77 @@ describe("RuntimeConfigStore — getAuthConfig", () => {
 
     expect(redacted.pkiEnabled).toBe(true);
     expect(redacted.pki).toEqual({ sessionTtlHours: 12 });
+  });
+});
+
+describe("RuntimeConfigStore — session policy", () => {
+  it("defaults to a policy that enforces nothing when no value is stored", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    expect(config.sessionPolicy).toEqual({
+      idleTimeoutMinutes: 0,
+      absoluteTimeoutMinutes: 0,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    });
+  });
+
+  // Every auth_config row written before this phase lacks the key entirely.
+  // Reading one must not produce an undefined policy on the hot path.
+  it("default-fills the policy for a row written before the field existed", async () => {
+    const stored = JSON.stringify({ emailPasswordEnabled: true, entraEnabled: false });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    expect(config.sessionPolicy).toEqual(DEFAULT_SESSION_POLICY);
+  });
+
+  it("reads a stored policy back", async () => {
+    const stored = JSON.stringify({
+      emailPasswordEnabled: true,
+      sessionPolicy: {
+        idleTimeoutMinutes: 30,
+        absoluteTimeoutMinutes: 480,
+        concurrentSessionLimit: 3,
+        evictionStrategy: "refuse",
+      },
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    expect(config.sessionPolicy).toEqual({
+      idleTimeoutMinutes: 30,
+      absoluteTimeoutMinutes: 480,
+      concurrentSessionLimit: 3,
+      evictionStrategy: "refuse",
+    });
+  });
+
+  it("falls back field by field when the stored policy is malformed", async () => {
+    const stored = JSON.stringify({
+      sessionPolicy: {
+        idleTimeoutMinutes: "thirty",
+        absoluteTimeoutMinutes: 480,
+        concurrentSessionLimit: -1,
+        evictionStrategy: "delete_everything",
+      },
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    // A hand-edited or half-migrated row must not switch enforcement on in a
+    // shape nothing else understands.
+    expect(config.sessionPolicy).toEqual({
+      idleTimeoutMinutes: 0,
+      absoluteTimeoutMinutes: 480,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    });
   });
 });
 

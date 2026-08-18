@@ -19,6 +19,7 @@
 import "dotenv/config";
 import {
   BetterAuthAdminRecovery,
+  createSessionRevocationRegistry,
   DrizzleAuditLogger,
   DrizzleSystemSettingsRepository,
   DrizzleUserRepository,
@@ -137,6 +138,10 @@ const main = async (): Promise<number> => {
           // is all this instance needs; taking them from the domain means a
           // future field on AuthConfig cannot silently break recovery.
           authConfig: createDefaultAuthConfig(),
+          // Its own registry, and deliberately so: this is a separate CLI
+          // process, so it shares no session cache with the running app. The
+          // app's own cache TTL is what bounds the recovery's effect there.
+          sessionRevocations: createSessionRevocationRegistry(),
         }),
     });
 

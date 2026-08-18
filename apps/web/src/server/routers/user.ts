@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   createUserInputSchema,
   deleteUserInputSchema,
@@ -60,4 +61,15 @@ export const userRouter = router({
     if (result.error) throw toTrpcError(result.error);
     return { ok: true };
   }),
+
+  // The leaver flow: end every session the user holds now, rather than waiting
+  // out their natural expiry (ADR-035 §1). Lives here because there is no admin
+  // router; adminProcedure is the authorisation boundary.
+  revokeSessions: adminProcedure
+    .input(z.object({ userId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.revokeUserSessions(input.userId);
+      if (result.error) throw toTrpcError(result.error);
+      return { revokedCount: result.data };
+    }),
 });

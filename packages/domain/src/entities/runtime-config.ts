@@ -1,4 +1,5 @@
 import type { ProviderName } from "../ports/language-model";
+import { DEFAULT_SESSION_POLICY, type SessionPolicy } from "./session-policy";
 
 export type AiPurpose = "chat" | "documentGeneration" | "branching";
 
@@ -204,6 +205,9 @@ export interface AuthConfig {
   // (ADR-042 §1).
   pkiEnabled: boolean;
   pki: PkiSessionConfig;
+  // Idle/absolute timeouts and the concurrency limit (ADR-035). Rides the auth
+  // config so it shares one settings row, one cache entry and one invalidation.
+  sessionPolicy: SessionPolicy;
 }
 
 export const DEFAULT_PKI_SESSION_TTL_HOURS = 8;
@@ -214,6 +218,7 @@ export const createDefaultAuthConfig = (): AuthConfig => ({
   entra: { tenantId: "", clientId: "", clientSecret: "" },
   pkiEnabled: false,
   pki: { sessionTtlHours: DEFAULT_PKI_SESSION_TTL_HOURS },
+  sessionPolicy: { ...DEFAULT_SESSION_POLICY },
 });
 
 export const isEntraConfigured = (entra: EntraCredentials): boolean =>
