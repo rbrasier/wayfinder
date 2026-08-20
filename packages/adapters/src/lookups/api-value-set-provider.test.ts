@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
 import { ApiValueSetAdapter, API_RESPONSE_BYTE_CAP } from "./api-value-set-provider";
 
 const jsonResponse = (body: unknown, init: { status?: number } = {}) =>
@@ -15,15 +14,8 @@ const departments = [
 
 const resolvesPublic = async () => ["93.184.216.34"];
 
-const adapterWith = (
-  fetchImpl: typeof fetch,
-  credential: string | null = null,
-): ApiValueSetAdapter =>
-  new ApiValueSetAdapter({
-    fetchImpl,
-    readCredential: async () => ok(credential),
-    guardOptions: { resolveHost: resolvesPublic },
-  });
+const adapterWith = (fetchImpl: typeof fetch): ApiValueSetAdapter =>
+  new ApiValueSetAdapter({ fetchImpl, guardOptions: { resolveHost: resolvesPublic } });
 
 describe("ApiValueSetAdapter", () => {
   it("reads a top-level JSON array", async () => {
@@ -88,12 +80,12 @@ describe("ApiValueSetAdapter", () => {
     expect(String(requestUrl)).toBe("https://directory.example.gov/departments");
   });
 
-  it("sends the stored credential as the Authorization header", async () => {
+  it("sends the credential it was given as the Authorization header", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(departments));
 
-    await adapterWith(fetchImpl as unknown as typeof fetch, "Bearer secret-token").fetchRecords({
+    await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
       config: { url: "https://directory.example.gov/departments" },
-      credentialRef: "lookup_departments_token",
+      credential: "Bearer secret-token",
     });
 
     const [, requestInit] = fetchImpl.mock.calls[0]!;
@@ -239,22 +231,63 @@ describe("ApiValueSetAdapter", () => {
     expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 
-  it("reports a credential that cannot be read rather than calling out without it", async () => {
-    const fetchImpl = vi.fn();
-    const adapter = new ApiValueSetAdapter({
-      fetchImpl: fetchImpl as unknown as typeof fetch,
-      readCredential: async () => ({
-        error: { code: "NOT_FOUND" as const, message: "no such secret" },
-      }),
-      guardOptions: { resolveHost: resolvesPublic },
-    });
+  it("never reads a credential itself — it uses only what the caller passed", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(departments));
+    process.env.LOOKUP_CRED_SHOULD_NOT_BE_READ = "Bearer leaked";
 
-    const result = await adapter.fetchRecords({
+    await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
       config: { url: "https://directory.example.gov/departments" },
-      credentialRef: "lookup_missing",
     });
 
-    expect(result.error).toBeDefined();
+    const [, requestInit] = fetchImpl.mock.calls[0]!;
+    expect(JSON.stringify(requestInit.headers)).not.toContain("leaked");
+    delete process.env.LOOKUP_CRED_SHOULD_NOT_BE_READ;
+  });
+});
+
+describe("ApiValueSetAdapter.discoverCollections", () => {
+  it("reports every list in the response, ignoring the configured records path", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({ result: { items: departments }, meta: [{ page: 1 }] }),
+    );
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).discoverCollections({
+      config: { url: "https://directory.example.gov/departments", recordsPath: "ignored" },
+    });
+
+    expect(result.data?.map((collection) => collection.path)).toEqual(["result.items", "meta"]);
+    expect(result.data?.[0]?.fields).toEqual(["department", "department_code"]);
+    expect(result.data?.[0]?.count).toBe(2);
+  });
+
+  it("reports the response itself when it is the list", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(departments));
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).discoverCollections({
+      config: { url: "https://directory.example.gov/departments" },
+    });
+
+    expect(result.data?.[0]?.path).toBe("");
+  });
+
+  it("returns nothing when the response holds no lists", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ department: "Finance" }));
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).discoverCollections({
+      config: { url: "https://directory.example.gov/departments" },
+    });
+
+    expect(result.data).toEqual([]);
+  });
+
+  it("still refuses an internal address", async () => {
+    const fetchImpl = vi.fn();
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).discoverCollections({
+      config: { url: "https://10.0.0.5/departments" },
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

@@ -2,7 +2,6 @@ import {
   domainError,
   err,
   ok,
-  probeFieldNames,
   validateNewLookupSource,
   type ILookupSourceRepository,
   type IValueSetProvider,
@@ -10,6 +9,7 @@ import {
   type LookupSourceConfig,
   type LookupSourceKind,
   type NewLookupSource,
+  type RecordCollection,
   type Result,
   type TemplateField,
   type ValueSetEntry,
@@ -90,20 +90,53 @@ export class DeleteLookupSource {
 export interface TestLookupSourceInput {
   kind: LookupSourceKind;
   config: LookupSourceConfig;
-  credentialRef?: string;
-  // Absent on the first Test: the admin has not chosen the fields yet, and
-  // `fields` is what tells them what there is to choose from (ADR-050 §2b).
+  // Plaintext. Absent when editing a saved source whose stored secret should be
+  // reused; the caller decrypts and supplies it in that case.
+  credential?: string;
+  // Which discovered collection the admin picked. Absent on the first Test —
+  // `collections` is what tells them what there is to choose from.
+  recordsPath?: string;
+  // Absent until the admin picks; the chosen collection's `fields` is the menu.
   displayField?: string;
   keyField?: string;
 }
 
 export interface TestLookupSourceResult {
+  // Every list of records found in the response, for the admin to choose from.
+  collections: RecordCollection[];
+  // The chosen collection's fields and sample, or the sole collection's when
+  // there is only one — so a single-list source needs no choice at all.
   fields: string[];
   sample: Array<Record<string, string>>;
   // Populated once a display field is chosen, so the admin verifies the mapping
   // against real records before saving.
   preview: ValueSetEntry[];
 }
+
+// One collection needs no choosing; several do, and an unknown path is an error
+// rather than a silent fallback — the admin would not see which list they got.
+const selectCollection = (
+  collections: RecordCollection[],
+  recordsPath?: string,
+): Result<RecordCollection | null> => {
+  if (collections.length === 0) return ok(null);
+
+  if (recordsPath === undefined) {
+    return ok(collections.length === 1 ? collections[0]! : null);
+  }
+
+  const chosen = collections.find((collection) => collection.path === recordsPath);
+  if (!chosen) {
+    const available = collections.map((collection) => collection.path || "(whole response)");
+    return err(
+      domainError(
+        "VALIDATION_FAILED",
+        `The source has no list of records at "${recordsPath || "(whole response)"}". It returns: ${available.join(", ")}.`,
+      ),
+    );
+  }
+  return ok(chosen);
+};
 
 const missingFieldError = (fieldName: string, available: string[]) =>
   domainError(
@@ -121,15 +154,19 @@ export class TestLookupSource {
     const probed = await this.valueSetProvider.probe({
       kind: input.kind,
       config: input.config,
-      ...(input.credentialRef ? { credentialRef: input.credentialRef } : {}),
+      ...(input.credential ? { credential: input.credential } : {}),
     });
     if (probed.error) return probed;
 
-    const fields = probed.data.fields.length > 0 ? probed.data.fields : probeFieldNames(probed.data.sample);
-    const sample = probed.data.sample;
+    const collections = probed.data.collections;
+    const chosen = selectCollection(collections, input.recordsPath);
+    if (chosen.error) return chosen;
+
+    const fields = chosen.data?.fields ?? [];
+    const sample = chosen.data?.sample ?? [];
 
     if (!input.displayField) {
-      return ok({ fields, sample, preview: [] });
+      return ok({ collections, fields, sample, preview: [] });
     }
 
     if (!fields.includes(input.displayField)) {
@@ -147,7 +184,7 @@ export class TestLookupSource {
       };
     });
 
-    return ok({ fields, sample, preview });
+    return ok({ collections, fields, sample, preview });
   }
 }
 

@@ -5,7 +5,10 @@
 - **Revised**: 2026-08-17 — renumbered from 032 (three ADRs held that number; the
   accepted repeating-groups ADR-032 is cited from shipped code); `api` source kind
   brought into scope; Test-time display/key field selection and the `value (key)`
-  presentation convention added
+  presentation convention added. Revised again the same day after UI review:
+  Test now discovers the record collections rather than taking a hand-typed
+  path, and credentials are stored encrypted in the app instead of naming an
+  environment variable (§2a, §2b)
 - **Relates to**: ADR-018 (external directory degrades gracefully) — extends its
   fail-degraded philosophy from *value resolution* to *constraint sets*, adding a
   snapshot so audit survives an outage. Does not supersede any ADR.
@@ -66,7 +69,7 @@ knows where values come from:
 search(sourceName, query, limit)  -> Result<ValueSetEntry[]>   // type-ahead
 list(sourceName)                   -> Result<ValueSetEntry[]>   // small sets / cache fill
 resolve(sourceName, values)        -> Result<ResolveOutcome>    // batch, step-end
-probe(config)                      -> Result<ValueSetProbe>     // Test / field selection
+probe(config)                      -> Result<ValueSetProbe>     // Test: the lists on offer
 ```
 
 `ValueSetEntry = { display: string; key?: string }`. Adapters live in
@@ -78,10 +81,10 @@ across the boundary.
 
 `probe` is the only method that takes a raw config rather than a registered
 name, because Test must run against an **unsaved draft** — the admin has to see
-the source's fields before choosing which is the display and which is the key
-(§2b). It returns `ValueSetProbe = { fields: string[]; sample: Array<Record<string,
-string>> }`: the selectable field names found on the returned records, plus a
-bounded sample (10 records) of those records.
+what the source returns before choosing a list and its display and key fields
+(§2b). It returns `ValueSetProbe = { collections: RecordCollection[] }`, where
+`RecordCollection = { path, count, fields, sample }` describes one array of
+records found in the response.
 
 #### 2a. The `api` source kind
 
@@ -97,10 +100,15 @@ Three constraints make this safe enough to ship:
 
 - **Read-only.** `GET` and `POST` (for endpoints that require a search body)
   only; no write-back, no other verbs. This ADR does not introduce two-way sync.
-- **Credentials are never stored on the row.** Following the `admin_mcp_servers`
-  precedent, `kb_lookup_sources` carries a `credential_ref` pointing at the
-  encrypted secret store (`SettingsEncryptionService`); the secret itself is
-  never persisted in `config` and never returned to a client.
+- **Credentials are entered in the app and encrypted at rest.** The secret is
+  typed into the editor and stored in `kb_lookup_sources.credential`, encrypted
+  with `SettingsEncryptionService` — the same key protecting the n8n, AI provider
+  and SMTP secrets. It is decrypted only by the adapter making the call, so it
+  never rides the read model and no query returns it; a source reports
+  `credentialSet` and nothing more. Saving with the field blank keeps the stored
+  secret, matching the n8n API key. (Revised 2026-08-17: an earlier draft used a
+  `credential_ref` naming an environment variable, which meant configuring a
+  source took two systems and an admin could not finish the job alone.)
 - **Egress is guarded.** The URL is validated before every call: `https` only
   (except explicit localhost in development), and the resolved address is
   rejected if it is loopback, link-local, or RFC1918 — an admin-supplied URL is
@@ -113,14 +121,21 @@ change the port, which was designed to admit it.
 
 #### 2b. Test selects the display and key fields
 
-**Test** is not just a connectivity check — it is how display and key get chosen.
-The admin fills in the kind and config, clicks **Test**, and the editor calls
-`probe(config)`. Two things come back: the field names present on the returned
-records, and a sample of the records themselves. The admin then picks the
-**display field** and, optionally, the **key field** from those names, and the
-sample re-renders as resolved pairs so the choice is verifiable before saving.
-Both selections are persisted on the source (`display_field`, `key_field`), and
-both are stored on every value the source later validates (§3).
+**Test** is not just a connectivity check — it is how the whole mapping gets
+chosen. The admin fills in the kind and config, clicks **Test**, and the editor
+calls `probe(config)`, which walks the response and returns **every array of
+records in it** — each with its dotted path, record count, field names and a
+bounded sample. The admin picks the list (the response itself is offered as
+"(whole response)"; a source returning exactly one list needs no choice), and
+that sets `recordsPath`. The display and key selectors then offer only that
+list's fields, and the sample re-renders as resolved pairs so the mapping is
+verifiable before saving.
+
+The walk is bounded in depth and breadth (`COLLECTION_WALK_MAX_DEPTH`,
+`COLLECTION_WALK_MAX_COLLECTIONS`) because the body is admin-supplied and may be
+malformed or hostile. (Revised 2026-08-17: the admin previously typed
+`recordsPath` by hand, which failed with "did not return a list of records" and
+no indication of what it *did* return.)
 
 Re-running Test on a saved source re-probes and lets the admin change either
 selection. A source cannot be saved without a display field; the key field stays

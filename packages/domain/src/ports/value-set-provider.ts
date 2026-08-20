@@ -48,7 +48,9 @@ export interface ResolveOutcome {
 export interface ValueSetProbeInput {
   kind: LookupSourceKind;
   config: LookupSourceConfig;
-  credentialRef?: string;
+  // The secret in plaintext. Test runs against a draft, so the caller supplies
+  // either what the admin just typed or what the repository decrypted.
+  credential?: string;
 }
 
 // Abstracts where a field's valid set comes from, so neither `application` nor

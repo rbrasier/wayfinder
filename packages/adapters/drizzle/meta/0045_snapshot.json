@@ -1,5 +1,5 @@
 {
-  "id": "08d27068-1b10-4be9-a59f-7dbe4357a827",
+  "id": "35006900-3c38-4617-9ac0-d13af6fb2a30",
   "prevId": "f3bb0400-ca72-4585-8913-cc067ed21c5f",
   "version": "7",
   "dialect": "postgresql",
@@ -6027,8 +6027,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "credential_ref": {
-          "name": "credential_ref",
+        "credential": {
+          "name": "credential",
           "type": "text",
           "primaryKey": false,
           "notNull": false

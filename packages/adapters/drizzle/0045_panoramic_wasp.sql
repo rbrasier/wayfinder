@@ -17,7 +17,7 @@ CREATE TABLE "kb_lookup_sources" (
 	"config" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"display_field" text NOT NULL,
 	"key_field" text,
-	"credential_ref" text,
+	"credential" text,
 	"cache_ttl_seconds" integer DEFAULT 3600 NOT NULL,
 	"enabled" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

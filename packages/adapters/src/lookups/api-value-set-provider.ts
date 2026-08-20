@@ -1,5 +1,5 @@
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { Result } from "@rbrasier/domain";
+import { domainError, err, findRecordCollections, ok } from "@rbrasier/domain";
+import type { RecordCollection, Result } from "@rbrasier/domain";
 import { guardOutboundUrl, type OutboundUrlGuardOptions } from "./outbound-url-guard";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "./value-set-kind-adapter";
 
@@ -24,11 +24,8 @@ export interface ApiSourceConfig {
   pageLimit?: number;
 }
 
-export type CredentialReader = (credentialRef: string) => Promise<Result<string | null>>;
-
 export interface ApiValueSetAdapterOptions {
   fetchImpl?: typeof fetch;
-  readCredential: CredentialReader;
   guardOptions?: OutboundUrlGuardOptions;
   timeoutMs?: number;
 }
@@ -96,14 +93,7 @@ export class ApiValueSetAdapter implements ValueSetKindAdapter {
     const url = new URL(guarded.data.toString());
     if (config.searchParam && input.query) url.searchParams.set(config.searchParam, input.query);
 
-    const headers: Record<string, string> = { Accept: "application/json", ...config.headers };
-    if (input.credentialRef) {
-      const credential = await this.options.readCredential(input.credentialRef);
-      if (credential.error) return credential;
-      if (credential.data) headers.Authorization = credential.data;
-    }
-
-    const body = await this.requestBody(url, method, headers);
+    const body = await this.requestBody(url, method, this.headersFor(config, input.credential));
     if (body.error) return body;
 
     const parsed = readArrayAtPath(body.data, config.recordsPath);
@@ -124,6 +114,29 @@ export class ApiValueSetAdapter implements ValueSetKindAdapter {
         .filter((record): record is Record<string, string> => record !== null)
         .slice(0, limit),
     );
+  }
+
+  // Test walks the whole body rather than one configured path, so the admin
+  // picks the list from what actually came back (ADR-050 §2b).
+  async discoverCollections(input: FetchRecordsInput): Promise<Result<RecordCollection[]>> {
+    const config = input.config as unknown as ApiSourceConfig;
+    const guarded = await guardOutboundUrl(config.url ?? "", this.options.guardOptions ?? {});
+    if (guarded.error) return guarded;
+
+    const body = await this.requestBody(
+      new URL(guarded.data.toString()),
+      config.method ?? "GET",
+      this.headersFor(config, input.credential),
+    );
+    if (body.error) return body;
+
+    return ok(findRecordCollections(body.data));
+  }
+
+  private headersFor(config: ApiSourceConfig, credential?: string): Record<string, string> {
+    const headers: Record<string, string> = { Accept: "application/json", ...config.headers };
+    if (credential) headers.Authorization = credential;
+    return headers;
   }
 
   private async requestBody(

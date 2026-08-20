@@ -8,6 +8,7 @@ import {
   type IValueSetProvider,
   type LookupSource,
   type NewLookupSource,
+  type RecordCollection,
   type Result,
   type TemplateField,
   type ValueSetEntry,
@@ -89,6 +90,7 @@ class FakeValueSetProvider implements IValueSetProvider {
   constructor(
     private readonly sample: Array<Record<string, string>>,
     private readonly failing = false,
+    private readonly collections?: RecordCollection[],
   ) {}
 
   async probe(): Promise<Result<ValueSetProbe>> {
@@ -96,8 +98,18 @@ class FakeValueSetProvider implements IValueSetProvider {
     if (this.failing) {
       return { error: { code: "INFRA_FAILURE" as const, message: "source unreachable" } };
     }
+    if (this.sample.length === 0) return ok({ collections: [] });
     const fields = [...new Set(this.sample.flatMap((record) => Object.keys(record)))];
-    return ok({ fields, sample: this.sample.slice(0, PROBE_SAMPLE_LIMIT) });
+    return ok({
+      collections: this.collections ?? [
+        {
+          path: "",
+          count: this.sample.length,
+          fields,
+          sample: this.sample.slice(0, PROBE_SAMPLE_LIMIT),
+        },
+      ],
+    });
   }
 
   async search(): Promise<Result<ValueSetEntry[]>> {
@@ -295,14 +307,85 @@ describe("TestLookupSource", () => {
     expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 
-  it("reports a source that returns no records", async () => {
+  it("reports a source that returns no lists at all", async () => {
     const provider = new FakeValueSetProvider([]);
 
     const result = await new TestLookupSource(provider).execute({ kind: "api", config: {} });
 
+    expect(result.data?.collections).toEqual([]);
     expect(result.data?.fields).toEqual([]);
-    expect(result.data?.sample).toEqual([]);
     expect(result.data?.preview).toEqual([]);
+  });
+
+  it("offers every list it found so the admin can choose", async () => {
+    const collections: RecordCollection[] = [
+      { path: "", count: 1, fields: ["name"], sample: [{ name: "Root" }] },
+      {
+        path: "result.items",
+        count: 2,
+        fields: ["department", "department_code"],
+        sample: sampleRecords,
+      },
+    ];
+    const provider = new FakeValueSetProvider(sampleRecords, false, collections);
+
+    const result = await new TestLookupSource(provider).execute({ kind: "directory", config: {} });
+
+    expect(result.data?.collections.map((collection) => collection.path)).toEqual([
+      "",
+      "result.items",
+    ]);
+    // Several lists and no choice yet, so no fields are offered.
+    expect(result.data?.fields).toEqual([]);
+  });
+
+  it("scopes the fields to the list the admin picked", async () => {
+    const collections: RecordCollection[] = [
+      { path: "", count: 1, fields: ["name"], sample: [{ name: "Root" }] },
+      {
+        path: "result.items",
+        count: 2,
+        fields: ["department", "department_code"],
+        sample: sampleRecords,
+      },
+    ];
+    const provider = new FakeValueSetProvider(sampleRecords, false, collections);
+
+    const result = await new TestLookupSource(provider).execute({
+      kind: "directory",
+      config: {},
+      recordsPath: "result.items",
+      displayField: "department",
+      keyField: "department_code",
+    });
+
+    expect(result.data?.fields).toEqual(["department", "department_code"]);
+    expect(result.data?.preview[0]).toEqual({ display: "Finance", key: "FIN-001" });
+  });
+
+  it("rejects a list the source does not have", async () => {
+    const provider = new FakeValueSetProvider(sampleRecords);
+
+    const result = await new TestLookupSource(provider).execute({
+      kind: "directory",
+      config: {},
+      recordsPath: "nope.items",
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("nope.items");
+  });
+
+  it("needs no choice when the source returns exactly one list", async () => {
+    const provider = new FakeValueSetProvider(sampleRecords);
+
+    const result = await new TestLookupSource(provider).execute({
+      kind: "directory",
+      config: {},
+      displayField: "department",
+    });
+
+    expect(result.data?.fields).toEqual(["department", "department_code"]);
   });
 });
 

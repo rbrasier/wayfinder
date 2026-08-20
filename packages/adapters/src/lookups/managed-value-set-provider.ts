@@ -1,5 +1,5 @@
-import { ok } from "@rbrasier/domain";
-import type { ILookupSourceRepository, Result } from "@rbrasier/domain";
+import { findRecordCollections, ok } from "@rbrasier/domain";
+import type { ILookupSourceRepository, RecordCollection, Result } from "@rbrasier/domain";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "./value-set-kind-adapter";
 
 // A managed source has no external schema to discover, so its two fields are
@@ -39,5 +39,13 @@ export class ManagedValueSetAdapter implements ValueSetKindAdapter {
         ...(entry.key ? { [MANAGED_KEY_FIELD]: entry.key } : {}),
       })),
     );
+  }
+
+  // Admin-entered rows have the fixed managed shape, so there is only ever the
+  // one collection.
+  async discoverCollections(input: FetchRecordsInput): Promise<Result<RecordCollection[]>> {
+    const records = await this.fetchRecords(input);
+    if (records.error) return records;
+    return ok(findRecordCollections(records.data));
   }
 }

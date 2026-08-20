@@ -490,6 +490,7 @@ const build = () => {
     db,
     peopleDirectories: [userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory],
     allowLocalhost: env.NODE_ENV !== "production",
+    encryption: settingsEncryption,
   });
 
   const objectStorage = new MinioStorageAdapter(runtimeConfig);

@@ -3,7 +3,6 @@ import {
   entriesMatchVersion,
   err,
   ok,
-  probeFieldNames,
   PROBE_SAMPLE_LIMIT,
   type CachedValueSet,
   type ILookupSourceRepository,
@@ -50,9 +49,12 @@ export class CachingValueSetProvider implements IValueSetProvider {
     const adapter = this.adapterFor(source.data.kind);
     if (adapter.error) return adapter;
 
+    const credential = await this.credentialFor(source.data);
+    if (credential.error) return credential;
+
     const records = await adapter.data.fetchRecords({
       config: source.data.config,
-      ...(source.data.credentialRef ? { credentialRef: source.data.credentialRef } : {}),
+      ...(credential.data ? { credential: credential.data } : {}),
       sourceId: source.data.id,
       query: input.query,
       limit: input.limit,
@@ -118,15 +120,21 @@ export class CachingValueSetProvider implements IValueSetProvider {
     const adapter = this.adapterFor(input.kind);
     if (adapter.error) return adapter;
 
-    const records = await adapter.data.fetchRecords({
+    const collections = await adapter.data.discoverCollections({
       config: input.config,
-      ...(input.credentialRef ? { credentialRef: input.credentialRef } : {}),
+      ...(input.credential ? { credential: input.credential } : {}),
       limit: PROBE_SAMPLE_LIMIT,
     });
-    if (records.error) return records;
+    if (collections.error) return collections;
 
-    const sample = records.data.slice(0, PROBE_SAMPLE_LIMIT);
-    return ok({ fields: probeFieldNames(sample), sample });
+    return ok({ collections: collections.data });
+  }
+
+  // Read on demand rather than carried on the source, so the plaintext exists
+  // only for the duration of the call that needs it (ADR-050 §2a).
+  private async credentialFor(source: LookupSource): Promise<Result<string | null>> {
+    if (!source.credentialSet) return ok(null);
+    return this.options.sources.readCredential(source.id);
   }
 
   private async findSource(sourceName: string): Promise<Result<LookupSource>> {
@@ -184,9 +192,12 @@ export class CachingValueSetProvider implements IValueSetProvider {
     const adapter = this.adapterFor(source.kind);
     if (adapter.error) return adapter;
 
+    const credential = await this.credentialFor(source);
+    if (credential.error) return credential;
+
     const records = await adapter.data.fetchRecords({
       config: source.config,
-      ...(source.credentialRef ? { credentialRef: source.credentialRef } : {}),
+      ...(credential.data ? { credential: credential.data } : {}),
       sourceId: source.id,
     });
 

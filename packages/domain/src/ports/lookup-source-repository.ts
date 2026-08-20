@@ -17,6 +17,9 @@ export interface ILookupSourceRepository {
   create(source: NewLookupSource): Promise<Result<LookupSource>>;
   update(id: string, source: NewLookupSource): Promise<Result<LookupSource>>;
   deleteById(id: string): Promise<Result<void>>;
+  // The decrypted secret, read only by the adapter making the outbound call so
+  // it never rides the read model (ADR-050 §2a). Null when none is stored.
+  readCredential(id: string): Promise<Result<string | null>>;
   readCachedEntries(sourceId: string): Promise<Result<CachedValueSet | null>>;
   replaceCachedEntries(sourceId: string, cached: CachedValueSet): Promise<Result<void>>;
 }

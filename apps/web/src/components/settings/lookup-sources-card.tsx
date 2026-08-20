@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { DEFAULT_CACHE_TTL_SECONDS, formatValueSetEntry, type LookupSourceKind, type ValueSetEntry } from "@rbrasier/domain";
+import {
+  DEFAULT_CACHE_TTL_SECONDS,
+  formatValueSetEntry,
+  type LookupSourceKind,
+  type RecordCollection,
+  type ValueSetEntry,
+} from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,7 +25,9 @@ export interface LookupSourceDraft {
   searchParam: string;
   recordsPath: string;
   directoryQuery: string;
-  credentialRef: string;
+  // Typed by the admin. Blank on an existing source means "keep the stored one".
+  credential: string;
+  credentialSet: boolean;
   displayField: string;
   keyField: string;
   cacheTtlSeconds: number;
@@ -34,7 +42,8 @@ export const emptyDraft = (): LookupSourceDraft => ({
   searchParam: "",
   recordsPath: "",
   directoryQuery: "",
-  credentialRef: "",
+  credential: "",
+  credentialSet: false,
   displayField: "",
   keyField: "",
   cacheTtlSeconds: DEFAULT_CACHE_TTL_SECONDS,
@@ -63,7 +72,9 @@ export const draftToInput = (draft: LookupSourceDraft) => ({
   config: draftToConfig(draft),
   displayField: draft.displayField.trim(),
   ...(draft.keyField.trim() ? { keyField: draft.keyField.trim() } : {}),
-  ...(draft.credentialRef.trim() ? { credentialRef: draft.credentialRef.trim() } : {}),
+  // Omitted when blank so the stored secret survives an edit that does not
+  // touch it — the same rule the n8n API key follows.
+  ...(draft.credential.length > 0 ? { credential: draft.credential } : {}),
   cacheTtlSeconds: draft.cacheTtlSeconds,
   enabled: true,
 });
@@ -80,6 +91,25 @@ export const draftSaveBlocker = (draft: LookupSourceDraft): string | null => {
   if (draft.displayField.trim().length === 0) return "Test the source and choose a display field.";
   return null;
 };
+
+// A single list needs no choosing; several are offered by path, with the record
+// count and field names so the admin can tell them apart (ADR-050 §2b).
+export const collectionLabel = (collection: RecordCollection): string => {
+  const path = collection.path || "(whole response)";
+  const fields = collection.fields.slice(0, 4).join(", ");
+  return `${path} · ${collection.count} records${fields ? ` · ${fields}` : ""}`;
+};
+
+export const fieldsForCollection = (
+  collections: RecordCollection[],
+  recordsPath: string,
+): string[] => collections.find((collection) => collection.path === recordsPath)?.fields ?? [];
+
+export const sampleForCollection = (
+  collections: RecordCollection[],
+  recordsPath: string,
+): Array<Record<string, string>> =>
+  collections.find((collection) => collection.path === recordsPath)?.sample ?? [];
 
 export const previewRows = (
   sample: Array<Record<string, string>>,
@@ -114,22 +144,29 @@ export function LookupSourcesCard() {
   const sourcesQuery = trpc.lookupSource.list.useQuery();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<LookupSourceDraft>(emptyDraft());
-  const [fields, setFields] = useState<string[]>([]);
-  const [sample, setSample] = useState<Array<Record<string, string>>>([]);
+  const [collections, setCollections] = useState<RecordCollection[]>([]);
 
   const closeEditor = async () => {
     setOpen(false);
-    setFields([]);
-    setSample([]);
+    setCollections([]);
     await utils.lookupSource.list.invalidate();
   };
 
   const testMutation = trpc.lookupSource.test.useMutation({
     onSuccess: (result) => {
-      setFields(result.fields);
-      setSample(result.sample);
-      if (result.fields.length === 0) toast.warning("The source returned no records.");
-      else toast.success("Source reached — choose the display and key fields.");
+      setCollections(result.collections);
+      if (result.collections.length === 0) {
+        toast.warning("The source returned no lists of records.");
+        return;
+      }
+      // One list needs no choosing, so select it and go straight to the fields.
+      const only = result.collections.length === 1 ? result.collections[0]! : null;
+      if (only) update({ recordsPath: only.path });
+      toast.success(
+        only
+          ? "Source reached — choose the display and key fields."
+          : `Source reached — ${result.collections.length} lists found. Choose one.`,
+      );
     },
     onError: (error) => toast.error(error.message ?? "Could not reach the source"),
   });
@@ -173,7 +210,12 @@ export function LookupSourcesCard() {
     saveMutation.mutate(draftToInput(draft));
   };
 
-  const rows = previewRows(sample, draft.displayField, draft.keyField);
+  const fields = fieldsForCollection(collections, draft.recordsPath);
+  const rows = previewRows(
+    sampleForCollection(collections, draft.recordsPath),
+    draft.displayField,
+    draft.keyField,
+  );
   const sources = sourcesQuery.data ?? [];
 
   return (
@@ -185,8 +227,7 @@ export function LookupSourcesCard() {
           variant="outline"
           onClick={() => {
             setDraft(emptyDraft());
-            setFields([]);
-            setSample([]);
+            setCollections([]);
             setOpen(true);
           }}
         >
@@ -232,13 +273,22 @@ export function LookupSourcesCard() {
                     searchParam: config.searchParam ?? "",
                     recordsPath: config.recordsPath ?? "",
                     directoryQuery: config.query ?? "",
-                    credentialRef: source.credentialRef ?? "",
+                    credential: "",
+                    credentialSet: source.credentialSet,
                     displayField: source.displayField,
                     keyField: source.keyField ?? "",
                     cacheTtlSeconds: source.cacheTtlSeconds,
                   });
-                  setFields([source.displayField, ...(source.keyField ? [source.keyField] : [])]);
-                  setSample([]);
+                  // Re-Test to repopulate the lists: the saved fields are shown
+                  // as-is until then rather than guessed at.
+                  setCollections([
+                    {
+                      path: config.recordsPath ?? "",
+                      count: 0,
+                      fields: [source.displayField, ...(source.keyField ? [source.keyField] : [])],
+                      sample: [],
+                    },
+                  ]);
                   setOpen(true);
                 }}
               >
@@ -315,18 +365,6 @@ export function LookupSourcesCard() {
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="lookup-records-path">Records path</Label>
-                  <Input
-                    id="lookup-records-path"
-                    value={draft.recordsPath}
-                    onChange={(event) => update({ recordsPath: event.target.value })}
-                    placeholder="result.items"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Leave blank when the response is itself a list.
-                  </p>
-                </div>
-                <div className="space-y-1">
                   <Label htmlFor="lookup-search-param">Search parameter</Label>
                   <Input
                     id="lookup-search-param"
@@ -339,13 +377,15 @@ export function LookupSourcesCard() {
                   <Label htmlFor="lookup-credential">Credential</Label>
                   <Input
                     id="lookup-credential"
-                    value={draft.credentialRef}
-                    onChange={(event) => update({ credentialRef: event.target.value })}
-                    placeholder="LOOKUP_CRED_DEPARTMENTS"
+                    type="password"
+                    autoComplete="off"
+                    value={draft.credential}
+                    onChange={(event) => update({ credential: event.target.value })}
+                    placeholder={draft.credentialSet ? "•••• stored" : "Bearer …"}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Names an environment variable holding the Authorization header value. The
-                    secret itself is never stored here.
+                    Sent as the Authorization header and encrypted at rest.{" "}
+                    {draft.credentialSet ? "Leave blank to keep the current credential." : null}
                   </p>
                 </div>
               </>
@@ -374,7 +414,9 @@ export function LookupSourcesCard() {
                     testMutation.mutate({
                       kind: draft.kind,
                       config: draftToConfig(draft),
-                      ...(draft.credentialRef.trim() ? { credentialRef: draft.credentialRef.trim() } : {}),
+                      ...(draft.credential ? { credential: draft.credential } : {}),
+                      ...(draft.id ? { sourceId: draft.id } : {}),
+                      ...(draft.recordsPath ? { recordsPath: draft.recordsPath } : {}),
                       ...(draft.displayField.trim() ? { displayField: draft.displayField.trim() } : {}),
                       ...(draft.keyField.trim() ? { keyField: draft.keyField.trim() } : {}),
                     })
@@ -388,6 +430,31 @@ export function LookupSourcesCard() {
                 code is stored for reporting.
               </p>
 
+              {collections.length > 0 ? (
+                <div className="space-y-1">
+                  <Label htmlFor="lookup-records">Records</Label>
+                  <select
+                    id="lookup-records"
+                    value={draft.recordsPath}
+                    onChange={(event) =>
+                      update({ recordsPath: event.target.value, displayField: "", keyField: "" })
+                    }
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="">Choose a list</option>
+                    {collections.map((collection) => (
+                      <option key={collection.path} value={collection.path}>
+                        {collectionLabel(collection)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    The lists found in the response. Choosing one sets which fields you can pick
+                    from.
+                  </p>
+                </div>
+              ) : null}
+
               <div className="space-y-1">
                 <Label htmlFor="lookup-display-field">Display field</Label>
                 <select
@@ -397,7 +464,9 @@ export function LookupSourcesCard() {
                   disabled={fields.length === 0}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
                 >
-                  <option value="">{fields.length === 0 ? "Test the source first" : "Choose a field"}</option>
+                  <option value="">
+                    {fields.length === 0 ? "Test the source and choose a list first" : "Choose a field"}
+                  </option>
                   {fields.map((field) => (
                     <option key={field} value={field}>
                       {field}

@@ -15,7 +15,7 @@ const registeredSource = {
   config: { url: "https://directory.example.gov/departments" },
   displayField: "department",
   keyField: "department_code",
-  credentialRef: "LOOKUP_CRED_DEPARTMENTS",
+  credentialSet: true,
   cacheTtlSeconds: 3600,
   enabled: true,
   createdAt: new Date("2026-08-01T00:00:00.000Z"),
@@ -30,6 +30,14 @@ const spies = () => ({
   testLookupSource: {
     execute: vi.fn(async () => ({
       data: {
+        collections: [
+          {
+            path: "result.items",
+            count: 2,
+            fields: ["department", "department_code"],
+            sample: [{ department: "Finance", department_code: "FIN-001" }],
+          },
+        ],
         fields: ["department", "department_code"],
         sample: [{ department: "Finance", department_code: "FIN-001" }],
         preview: [{ display: "Finance", key: "FIN-001" }],
@@ -43,6 +51,7 @@ const searchSpy = vi.fn(async () => ({ data: [{ display: "Finance", key: "FIN-00
 const containerWith = (useCases: ReturnType<typeof spies>): Container =>
   ({
     useCases,
+    repos: { lookupSources: { readCredential: async () => ({ data: "Bearer stored" }) } },
     services: {
       valueSetProvider: { search: searchSpy },
       errorLogger: { log: async () => undefined },
@@ -79,12 +88,13 @@ describe("lookup source router — admin operations", () => {
     await expect(caller.lookupSource.list()).resolves.toHaveLength(1);
   });
 
-  it("returns the credential reference but never a secret value", async () => {
+  it("reports that a credential is stored without ever returning it", async () => {
     const caller = createCaller(contextFor(spies()));
 
     const [source] = await caller.lookupSource.list();
 
-    expect(source?.credentialRef).toBe("LOOKUP_CRED_DEPARTMENTS");
+    expect(source?.credentialSet).toBe(true);
+    expect(JSON.stringify(source)).not.toContain("Bearer");
     expect(JSON.stringify(source)).not.toContain("secret");
   });
 

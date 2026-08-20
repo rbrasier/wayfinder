@@ -8,9 +8,12 @@ import type {
 } from "@rbrasier/domain";
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
+import type { SettingsEncryptionService } from "../config/settings-encryption";
 import { kb_lookup_source_entries, kb_lookup_sources } from "../db/schema/kb";
 import { logRepoError } from "./log-repo-error";
 
+// The read model reports only that a credential exists. The ciphertext stays in
+// the row and the plaintext is produced solely by readCredential (ADR-050 §2a).
 export const toLookupSource = (row: typeof kb_lookup_sources.$inferSelect): LookupSource => ({
   id: row.id,
   name: row.name,
@@ -19,23 +22,31 @@ export const toLookupSource = (row: typeof kb_lookup_sources.$inferSelect): Look
   config: row.config ?? {},
   displayField: row.display_field,
   ...(row.key_field ? { keyField: row.key_field } : {}),
-  ...(row.credential_ref ? { credentialRef: row.credential_ref } : {}),
+  credentialSet: !!row.credential,
   cacheTtlSeconds: row.cache_ttl_seconds,
   enabled: row.enabled,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
 
-export const toLookupSourceColumns = (source: NewLookupSource) => ({
+// `credential: undefined` means "leave the stored one alone", so it is omitted
+// from the column set entirely rather than written as null — the same semantics
+// the n8n API key has.
+export const toLookupSourceColumns = (
+  source: NewLookupSource,
+  encryptCredential: (plaintext: string) => string,
+) => ({
   name: source.name,
   label: source.label,
   kind: source.kind,
   config: source.config as Record<string, unknown>,
   display_field: source.displayField,
   key_field: source.keyField ?? null,
-  credential_ref: source.credentialRef ?? null,
   cache_ttl_seconds: source.cacheTtlSeconds,
   enabled: source.enabled,
+  ...(source.credential === undefined
+    ? {}
+    : { credential: source.credential ? encryptCredential(source.credential) : null }),
 });
 
 export const toEntryRows = (sourceId: string, cached: CachedValueSet) =>
@@ -64,7 +75,10 @@ export const toCachedValueSet = (
 };
 
 export class DrizzleLookupSourceRepository implements ILookupSourceRepository {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly encryption: SettingsEncryptionService,
+  ) {}
 
   async list(): Promise<Result<LookupSource[]>> {
     try {
@@ -108,7 +122,7 @@ export class DrizzleLookupSourceRepository implements ILookupSourceRepository {
     try {
       const [row] = await this.db
         .insert(kb_lookup_sources)
-        .values(toLookupSourceColumns(source))
+        .values(this.columnsFor(source))
         .returning();
       return ok(toLookupSource(row!));
     } catch (cause) {
@@ -120,7 +134,7 @@ export class DrizzleLookupSourceRepository implements ILookupSourceRepository {
     try {
       const [row] = await this.db
         .update(kb_lookup_sources)
-        .set({ ...toLookupSourceColumns(source), updated_at: new Date() })
+        .set({ ...this.columnsFor(source), updated_at: new Date() })
         .where(eq(kb_lookup_sources.id, id))
         .returning();
       if (!row) return err(domainError("NOT_FOUND", `Lookup source "${id}" does not exist.`));
@@ -136,6 +150,20 @@ export class DrizzleLookupSourceRepository implements ILookupSourceRepository {
       return ok(undefined);
     } catch (cause) {
       return this.failure("delete a lookup source", cause);
+    }
+  }
+
+  async readCredential(id: string): Promise<Result<string | null>> {
+    try {
+      const [row] = await this.db
+        .select({ credential: kb_lookup_sources.credential })
+        .from(kb_lookup_sources)
+        .where(eq(kb_lookup_sources.id, id))
+        .limit(1);
+      if (!row?.credential) return ok(null);
+      return ok(this.encryption.decrypt(row.credential));
+    } catch (cause) {
+      return this.failure("read a lookup source credential", cause);
     }
   }
 
@@ -167,6 +195,10 @@ export class DrizzleLookupSourceRepository implements ILookupSourceRepository {
     } catch (cause) {
       return this.failure("cache lookup entries", cause);
     }
+  }
+
+  private columnsFor(source: NewLookupSource) {
+    return toLookupSourceColumns(source, (plaintext) => this.encryption.encrypt(plaintext));
   }
 
   private failure(action: string, cause: unknown) {

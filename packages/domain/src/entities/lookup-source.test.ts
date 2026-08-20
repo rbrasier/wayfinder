@@ -5,8 +5,6 @@ import {
   INLINE_OPTIONS_THRESHOLD,
   entriesMatchVersion,
   formatValueSetEntry,
-  isValidLookupCredentialRef,
-  LOOKUP_CREDENTIAL_ENV_PREFIX,
   isLookupSourceKind,
   previewValueSetEntries,
   probeFieldNames,
@@ -191,35 +189,22 @@ describe("entriesMatchVersion", () => {
   });
 });
 
-describe("isValidLookupCredentialRef", () => {
-  it("accepts a reference inside the lookup namespace", () => {
-    expect(isValidLookupCredentialRef(`${LOOKUP_CREDENTIAL_ENV_PREFIX}DEPARTMENTS`)).toBe(true);
-  });
-
-  it("rejects an arbitrary process secret", () => {
-    expect(isValidLookupCredentialRef("DATABASE_URL")).toBe(false);
-  });
-
-  it("rejects the bare prefix", () => {
-    expect(isValidLookupCredentialRef(LOOKUP_CREDENTIAL_ENV_PREFIX)).toBe(false);
-  });
-});
-
 describe("validateNewLookupSource — credentials", () => {
-  it("accepts a namespaced credential reference", () => {
-    const result = validateNewLookupSource({
-      ...validSource,
-      credentialRef: `${LOOKUP_CREDENTIAL_ENV_PREFIX}DEPARTMENTS`,
-    });
+  it("carries the credential through untouched, for the repository to encrypt", () => {
+    const result = validateNewLookupSource({ ...validSource, credential: "Bearer abc123" });
 
-    expect(result.error).toBeUndefined();
-    expect(result.data?.credentialRef).toBe(`${LOOKUP_CREDENTIAL_ENV_PREFIX}DEPARTMENTS`);
+    expect(result.data?.credential).toBe("Bearer abc123");
   });
 
-  it("refuses a credential reference pointing at another process secret", () => {
-    const result = validateNewLookupSource({ ...validSource, credentialRef: "DATABASE_URL" });
+  it("keeps an absent credential absent, which means 'leave the stored one alone'", () => {
+    const result = validateNewLookupSource(validSource);
 
-    expect(result.error?.code).toBe("VALIDATION_FAILED");
-    expect(result.error?.message).toContain(LOOKUP_CREDENTIAL_ENV_PREFIX);
+    expect(result.data?.credential).toBeUndefined();
+  });
+
+  it("preserves an explicit empty credential, which means 'clear it'", () => {
+    const result = validateNewLookupSource({ ...validSource, credential: "" });
+
+    expect(result.data?.credential).toBe("");
   });
 });

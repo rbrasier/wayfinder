@@ -1,5 +1,5 @@
-import { ok } from "@rbrasier/domain";
-import type { IPeopleDirectory, Person, Result } from "@rbrasier/domain";
+import { findRecordCollections, ok } from "@rbrasier/domain";
+import type { IPeopleDirectory, Person, RecordCollection, Result } from "@rbrasier/domain";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "../lookups/value-set-kind-adapter";
 
 // How many people a listing pulls when there is no type-ahead term. Well above
@@ -67,5 +67,13 @@ export class DirectoryValueSetAdapter implements ValueSetKindAdapter {
     if (people.length === 0 && lastError) return lastError;
 
     return ok(people.slice(0, limit).map(toRecord));
+  }
+
+  // A directory has one shape, so there is nothing to choose between — the
+  // records are the collection.
+  async discoverCollections(input: FetchRecordsInput): Promise<Result<RecordCollection[]>> {
+    const records = await this.fetchRecords(input);
+    if (records.error) return records;
+    return ok(findRecordCollections(records.data));
   }
 }

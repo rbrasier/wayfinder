@@ -87,9 +87,11 @@ key and snapshot ride the existing `fields` jsonb.
 
 ## Security controls
 
-- `credentialRef` must name an environment variable in the `LOOKUP_CRED_`
-  namespace, mirroring the MCP guard. Without it an admin could point a source
-  at `DATABASE_URL` and have it sent as a bearer token to a host they control.
+- The `api` credential is typed into the app and stored encrypted in
+  `kb_lookup_sources.credential` under `SETTINGS_ENCRYPTION_KEY`, the same key
+  the n8n, AI provider and SMTP secrets use. It is decrypted only by the adapter
+  making the call, never rides the read model, and no query returns it — a
+  source reports `credentialSet` and nothing more.
 - Every `api` call is guarded: HTTPS only, and the target rejected if it is —
   or resolves to — loopback, link-local (including the cloud metadata address)
   or RFC1918 space. `GET`/`POST` only, 10s timeout, 5MB response cap.
@@ -114,10 +116,13 @@ repository), and component/router level in `apps/web`. `./validate.sh` passes
 2. **The step-end resolve runs on the document-generation path.** Structured
    capture (`CaptureStructuredStepOutput`) does not yet re-resolve; a structured
    step with an external field stores the value without a key or snapshot.
-3. **`managed` source entries have no editing UI yet.** The kind, its adapter
+3. **A Test is needed after editing a saved source** before its lists repopulate:
+   the editor shows the saved display/key fields until then rather than guessing
+   what the source currently returns.
+4. **`managed` source entries have no editing UI yet.** The kind, its adapter
    and its storage all work, but rows must be seeded another way; inline editing
    was scoped as the follow-up the ADR describes.
-4. **`api` pagination is a single bounded page** (`pageLimit`, default 500) for
+5. **`api` pagination is a single bounded page** (`pageLimit`, default 500) for
    listing; large sets rely on `search`.
 
 ## The conversation preview, and the runner guard
@@ -142,6 +147,24 @@ legitimately grows new prompt inputs, while what ADR-048 actually forbids — a
 test-mode branch or a seed threaded through the execution path — lives in the
 three files still guarded. Verified the narrowed guard still fails on a change
 to `flow-session-graph.ts`.
+
+## Post-review revisions (same version, same PR)
+
+A UI review of the shipped editor produced two changes, planned in
+`lookup-source-config-discovery.phase.md` in this folder:
+
+- **Record discovery replaces the hand-typed path.** `findRecordCollections`
+  walks the response and reports every array of records in it — path, count,
+  fields, bounded sample — and the editor offers them as a **Records** picker.
+  Choosing one sets `recordsPath` and scopes the display/key selectors to that
+  list's fields. A source returning exactly one list needs no choice. The walk
+  is bounded in depth and breadth because the body is admin-supplied.
+- **Credentials moved from the environment into the app.** `credential_ref` and
+  the `LOOKUP_CRED_` namespace are gone; the secret is entered in the editor as
+  a password field, encrypted at rest, and blank-on-save keeps the stored one —
+  n8n's semantics exactly. Migration 0045 was regenerated (never applied
+  anywhere), so the column ships as `credential` with no drop and no
+  `-- data-impact:` line.
 
 ## Deviations from the approved summary
 

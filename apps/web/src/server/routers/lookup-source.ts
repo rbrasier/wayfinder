@@ -15,7 +15,8 @@ const sourceInput = z.object({
   config: z.record(z.unknown()).default({}),
   displayField: z.string().min(1),
   keyField: z.string().optional(),
-  credentialRef: z.string().optional(),
+  // Omitted means "keep the stored secret"; an empty string clears it.
+  credential: z.string().optional(),
   cacheTtlSeconds: z.number().int().positive().default(DEFAULT_CACHE_TTL_SECONDS),
   enabled: z.boolean().default(true),
 });
@@ -25,8 +26,8 @@ export const lookupSourceRouter = router({
     requireAdmin(ctx.isAdmin);
     const result = await ctx.container.useCases.listLookupSources.execute();
     if (result.error) throw toTrpcError(result.error);
-    // Safe to return whole: a source stores only `credentialRef`, the name of an
-    // environment variable, never the secret itself (ADR-050 §2a).
+    // Safe to return whole: the read model carries `credentialSet`, a boolean —
+    // the secret is decrypted only by the adapter making the call (ADR-050 §2a).
     return result.data;
   }),
 
@@ -65,14 +66,27 @@ export const lookupSourceRouter = router({
       z.object({
         kind: z.enum(["directory", "managed", "api"]),
         config: z.record(z.unknown()).default({}),
-        credentialRef: z.string().optional(),
+        credential: z.string().optional(),
+        recordsPath: z.string().optional(),
         displayField: z.string().optional(),
         keyField: z.string().optional(),
+        // Test a saved source without re-typing its secret: the stored one is
+        // decrypted server-side and never travels to the browser.
+        sourceId: z.string().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
-      const result = await ctx.container.useCases.testLookupSource.execute(input);
+      const { sourceId, ...draft } = input;
+      const stored = sourceId
+        ? await ctx.container.repos.lookupSources.readCredential(sourceId)
+        : null;
+      if (stored?.error) throw toTrpcError(stored.error);
+
+      const result = await ctx.container.useCases.testLookupSource.execute({
+        ...draft,
+        ...(draft.credential || !stored?.data ? {} : { credential: stored.data }),
+      });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),

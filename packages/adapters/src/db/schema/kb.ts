@@ -161,7 +161,9 @@ export const kb_lookup_sources = pgTable(
     config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
     display_field: text("display_field").notNull(),
     key_field: text("key_field"),
-    credential_ref: text("credential_ref"),
+    // The Authorization header value for an `api` source, encrypted at rest with
+    // SettingsEncryptionService — the same key the n8n and AI credentials use.
+    credential: text("credential"),
     cache_ttl_seconds: integer("cache_ttl_seconds").notNull().default(3600),
     enabled: boolean("enabled").notNull().default(true),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

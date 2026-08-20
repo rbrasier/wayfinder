@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { findRecordCollections, ok } from "@rbrasier/domain";
 import type {
   CachedValueSet,
   ILookupSourceRepository,
@@ -20,6 +20,7 @@ const source = (overrides: Partial<LookupSource> = {}): LookupSource => ({
   config: { url: "https://directory.example.gov/departments" },
   displayField: "department",
   keyField: "department_code",
+  credentialSet: false,
   cacheTtlSeconds: 3600,
   enabled: true,
   createdAt: NOW,
@@ -46,6 +47,13 @@ class FakeRepository implements Partial<ILookupSourceRepository> {
     return ok(this.cached);
   }
 
+  readonly credentialReads: string[] = [];
+
+  async readCredential(id: string): Promise<Result<string | null>> {
+    this.credentialReads.push(id);
+    return ok("Bearer stored-secret");
+  }
+
   async replaceCachedEntries(_sourceId: string, cached: CachedValueSet): Promise<Result<void>> {
     this.writes.push(cached);
     this.cached = cached;
@@ -68,6 +76,14 @@ class FakeAdapter implements ValueSetKindAdapter {
       return { error: { code: "INFRA_FAILURE" as const, message: "source unreachable" } };
     }
     return ok(this.rows);
+  }
+
+  async discoverCollections(input: FetchRecordsInput) {
+    this.calls.push(input);
+    if (this.failing) {
+      return { error: { code: "INFRA_FAILURE" as const, message: "source unreachable" } };
+    }
+    return ok(findRecordCollections(this.rows));
   }
 }
 
@@ -319,7 +335,7 @@ describe("CachingValueSetProvider.resolve", () => {
 });
 
 describe("CachingValueSetProvider.probe", () => {
-  it("returns the selectable field names and a bounded sample", async () => {
+  it("returns the lists found in the response", async () => {
     const repository = new FakeRepository(null);
     const adapter = new FakeAdapter(records);
 
@@ -328,8 +344,22 @@ describe("CachingValueSetProvider.probe", () => {
       config: { url: "https://directory.example.gov/departments" },
     });
 
-    expect(result.data?.fields).toEqual(["department", "department_code"]);
-    expect(result.data?.sample).toHaveLength(2);
+    expect(result.data?.collections).toHaveLength(1);
+    expect(result.data?.collections[0]?.fields).toEqual(["department", "department_code"]);
+    expect(result.data?.collections[0]?.count).toBe(2);
+  });
+
+  it("passes the caller's credential through to the adapter", async () => {
+    const repository = new FakeRepository(null);
+    const adapter = new FakeAdapter(records);
+
+    await build(repository, { api: adapter }).probe({
+      kind: "api",
+      config: {},
+      credential: "Bearer typed-by-admin",
+    });
+
+    expect(adapter.calls[0]?.credential).toBe("Bearer typed-by-admin");
   });
 
   it("surfaces a probe failure so Test reports it to the admin", async () => {
@@ -349,5 +379,27 @@ describe("CachingValueSetProvider.probe", () => {
     const result = await build(repository, {}).probe({ kind: "directory", config: {} });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("CachingValueSetProvider — credentials", () => {
+  it("decrypts the stored credential only for a source that has one", async () => {
+    const repository = new FakeRepository(source({ credentialSet: true }));
+    const adapter = new FakeAdapter(records);
+
+    await build(repository, { api: adapter }).list("departments");
+
+    expect(repository.credentialReads).toEqual(["source-1"]);
+    expect(adapter.calls[0]?.credential).toBe("Bearer stored-secret");
+  });
+
+  it("never reads a credential for a source without one", async () => {
+    const repository = new FakeRepository(source({ credentialSet: false }));
+    const adapter = new FakeAdapter(records);
+
+    await build(repository, { api: adapter }).list("departments");
+
+    expect(repository.credentialReads).toEqual([]);
+    expect(adapter.calls[0]?.credential).toBeUndefined();
   });
 });

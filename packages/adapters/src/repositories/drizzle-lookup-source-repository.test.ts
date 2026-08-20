@@ -21,7 +21,7 @@ const sourceRow = (
   config: {},
   display_field: "department",
   key_field: "department_code",
-  credential_ref: null,
+  credential: null,
   cache_ttl_seconds: 3600,
   enabled: true,
   created_at: CREATED_AT,
@@ -50,7 +50,7 @@ const draft: NewLookupSource = {
   config: { url: "https://directory.example.gov/departments" },
   displayField: "department",
   keyField: "department_code",
-  credentialRef: "lookup_departments_token",
+  credential: "Bearer plaintext-secret",
   cacheTtlSeconds: 3600,
   enabled: true,
 };
@@ -67,6 +67,7 @@ describe("toLookupSource", () => {
       config: {},
       displayField: "department",
       keyField: "department_code",
+      credentialSet: false,
       cacheTtlSeconds: 3600,
       enabled: true,
       createdAt: CREATED_AT,
@@ -80,30 +81,48 @@ describe("toLookupSource", () => {
     expect("keyField" in source).toBe(false);
   });
 
-  it("omits an absent credential reference", () => {
-    const source = toLookupSource(sourceRow({ credential_ref: null }));
-
-    expect("credentialRef" in source).toBe(false);
+  it("reports no credential when the column is empty", () => {
+    expect(toLookupSource(sourceRow({ credential: null })).credentialSet).toBe(false);
   });
 
-  it("carries a credential reference when the source has one", () => {
-    const source = toLookupSource(sourceRow({ credential_ref: "lookup_departments_token" }));
+  it("reports that a credential exists without exposing the ciphertext", () => {
+    const source = toLookupSource(sourceRow({ credential: "enc:v1:abcdef" }));
 
-    expect(source.credentialRef).toBe("lookup_departments_token");
+    expect(source.credentialSet).toBe(true);
+    expect(JSON.stringify(source)).not.toContain("abcdef");
   });
 });
 
 describe("toLookupSourceColumns", () => {
+  const encrypt = (plaintext: string) => `enc(${plaintext})`;
+
   it("writes snake_case columns and nulls the optional fields", () => {
-    const columns = toLookupSourceColumns({ ...draft, keyField: undefined, credentialRef: undefined });
+    const columns = toLookupSourceColumns(
+      { ...draft, keyField: undefined, credential: undefined },
+      encrypt,
+    );
 
     expect(columns.display_field).toBe("department");
     expect(columns.key_field).toBeNull();
-    expect(columns.credential_ref).toBeNull();
   });
 
-  it("keeps the credential reference, which points at the secret store", () => {
-    expect(toLookupSourceColumns(draft).credential_ref).toBe("lookup_departments_token");
+  it("encrypts the credential rather than storing what the admin typed", () => {
+    const columns = toLookupSourceColumns(draft, encrypt);
+
+    expect(columns.credential).toBe("enc(Bearer plaintext-secret)");
+    expect(columns.credential).not.toBe(draft.credential);
+  });
+
+  it("omits the column entirely when no credential was supplied, keeping the stored one", () => {
+    const columns = toLookupSourceColumns({ ...draft, credential: undefined }, encrypt);
+
+    expect("credential" in columns).toBe(false);
+  });
+
+  it("clears the stored credential when an empty one is supplied", () => {
+    const columns = toLookupSourceColumns({ ...draft, credential: "" }, encrypt);
+
+    expect(columns.credential).toBeNull();
   });
 });
 

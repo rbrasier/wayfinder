@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectionLabel,
   draftSaveBlocker,
   draftToConfig,
   draftToInput,
   emptyDraft,
+  fieldsForCollection,
   previewRows,
+  sampleForCollection,
   type LookupSourceDraft,
 } from "./lookup-sources-card";
 
@@ -67,14 +70,14 @@ describe("draftToInput", () => {
     expect("keyField" in input).toBe(false);
   });
 
-  it("omits an unset credential reference", () => {
-    expect("credentialRef" in draftToInput(apiDraft())).toBe(false);
+  it("omits a blank credential, so an edit keeps the stored secret", () => {
+    expect("credential" in draftToInput(apiDraft())).toBe(false);
   });
 
-  it("carries a credential reference when one is given", () => {
-    const input = draftToInput(apiDraft({ credentialRef: "LOOKUP_CRED_DEPARTMENTS" }));
+  it("carries a credential the admin typed", () => {
+    const input = draftToInput(apiDraft({ credential: "Bearer abc123" }));
 
-    expect(input.credentialRef).toBe("LOOKUP_CRED_DEPARTMENTS");
+    expect(input.credential).toBe("Bearer abc123");
   });
 });
 
@@ -137,5 +140,48 @@ describe("previewRows", () => {
     expect(previewRows([{ department_code: "FIN-001" }], "department", "department_code")).toEqual(
       [],
     );
+  });
+});
+
+describe("collection helpers", () => {
+  const collections = [
+    {
+      path: "",
+      count: 3,
+      fields: ["name"],
+      sample: [{ name: "Root" }],
+    },
+    {
+      path: "result.items",
+      count: 12,
+      fields: ["department", "department_code", "portfolio", "active", "extra"],
+      sample: [{ department: "Finance", department_code: "FIN-001" }],
+    },
+  ];
+
+  it("labels the response itself rather than showing an empty path", () => {
+    expect(collectionLabel(collections[0]!)).toBe("(whole response) · 3 records · name");
+  });
+
+  it("labels a nested list with its path, count and first few fields", () => {
+    expect(collectionLabel(collections[1]!)).toBe(
+      "result.items · 12 records · department, department_code, portfolio, active",
+    );
+  });
+
+  it("scopes the selectable fields to the chosen list", () => {
+    expect(fieldsForCollection(collections, "")).toEqual(["name"]);
+    expect(fieldsForCollection(collections, "result.items")).toContain("department_code");
+  });
+
+  it("offers no fields for a list that is not there", () => {
+    expect(fieldsForCollection(collections, "missing")).toEqual([]);
+    expect(sampleForCollection(collections, "missing")).toEqual([]);
+  });
+
+  it("takes the sample from the chosen list", () => {
+    expect(sampleForCollection(collections, "result.items")).toEqual([
+      { department: "Finance", department_code: "FIN-001" },
+    ]);
   });
 });

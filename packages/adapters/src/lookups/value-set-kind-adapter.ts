@@ -1,8 +1,15 @@
-import type { LookupSourceConfig, Result, ValueSetEntry } from "@rbrasier/domain";
+import type {
+  LookupSourceConfig,
+  RecordCollection,
+  Result,
+  ValueSetEntry,
+} from "@rbrasier/domain";
 
 export interface FetchRecordsInput {
   config: LookupSourceConfig;
-  credentialRef?: string;
+  // The secret in plaintext, decrypted by the caller. The adapter never reads a
+  // store or an environment variable itself.
+  credential?: string;
   // The registered source's id, present for every call except a Test against an
   // unsaved draft. Only the `managed` kind needs it — its records are rows.
   sourceId?: string;
@@ -17,6 +24,9 @@ export interface FetchRecordsInput {
 // this line, so adding a kind never touches domain or application (ADR-050 §2).
 export interface ValueSetKindAdapter {
   fetchRecords(input: FetchRecordsInput): Promise<Result<Array<Record<string, string>>>>;
+  // Every list of records the source's response contains, so Test can offer them
+  // rather than making the admin guess a path (ADR-050 §2b).
+  discoverCollections(input: FetchRecordsInput): Promise<Result<RecordCollection[]>>;
   // True when fetchRecords already applied `query`, so the caller must not
   // filter again (and cannot treat the result as the full set).
   readonly filtersAtSource: boolean;
