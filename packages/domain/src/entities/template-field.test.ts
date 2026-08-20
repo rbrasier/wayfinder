@@ -830,3 +830,36 @@ describe("describeTemplateFieldFormat — conversation preview cap", () => {
     expect(describeTemplateFieldFormat(external(12, true))).toContain("name at most 3");
   });
 });
+
+describe("describeTemplateFieldFormat — examples for a large external set", () => {
+  const large = (sample?: string[]): TemplateField => ({
+    ...parseTemplateField("Department (options-source: departments)").data!,
+    ...(sample ? { optionsSample: sample } : {}),
+  });
+
+  it("shows real values from the list rather than describing it abstractly", () => {
+    const description = describeTemplateFieldFormat(
+      large(["Finance (FIN-001)", "Human Resources (HR-002)", "Legal Services (LEG-003)"]),
+    );
+
+    expect(description).toContain("Finance (FIN-001)");
+    expect(description).toContain("Legal Services (LEG-003)");
+    expect(description).toContain("examples from a longer list");
+  });
+
+  it("makes clear the examples are not the whole set", () => {
+    const description = describeTemplateFieldFormat(large(["Finance (FIN-001)"]));
+
+    expect(description).toContain("never that they are the only choices");
+  });
+
+  it("falls back to offering a lookup when no sample could be fetched", () => {
+    const description = describeTemplateFieldFormat(large());
+
+    expect(description).toContain("do not invent example values");
+  });
+
+  it("still defers correctness to the step-end check", () => {
+    expect(describeTemplateFieldFormat(large(["Finance (FIN-001)"]))).toContain("step completes");
+  });
+});

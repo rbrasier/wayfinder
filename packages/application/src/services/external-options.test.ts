@@ -115,6 +115,44 @@ describe("inlineExternalOptions", () => {
     expect(fields[0]?.optionsSource).toBe("departments");
   });
 
+  it("attaches a few real values from a large set as examples", async () => {
+    const provider = new FakeValueSetProvider({
+      departments: entriesOfSize(INLINE_OPTIONS_THRESHOLD + 20),
+    });
+
+    const fields = await inlineExternalOptions(provider, [
+      field("Department (options-source: departments)"),
+    ]);
+
+    expect(fields[0]?.optionsSample).toEqual([
+      "Department 1 (D-1)",
+      "Department 2 (D-2)",
+      "Department 3 (D-3)",
+    ]);
+  });
+
+  it("does not attach a sample to an inlined set, which already carries them all", async () => {
+    const provider = new FakeValueSetProvider({ departments: entriesOfSize(5) });
+
+    const fields = await inlineExternalOptions(provider, [
+      field("Department (options-source: departments)"),
+    ]);
+
+    expect(fields[0]?.optionsSample).toBeUndefined();
+    expect(fields[0]?.options).toHaveLength(5);
+  });
+
+  it("attaches nothing when the source is empty", async () => {
+    const provider = new FakeValueSetProvider({ departments: [] });
+
+    const fields = await inlineExternalOptions(provider, [
+      field("Department (options-source: departments)"),
+    ]);
+
+    expect(fields[0]?.options).toBeUndefined();
+    expect(fields[0]?.optionsSample).toBeUndefined();
+  });
+
   it("degrades without throwing when the provider fails", async () => {
     const provider = new FakeValueSetProvider({}, true);
 

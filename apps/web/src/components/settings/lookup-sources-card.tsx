@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   DEFAULT_CACHE_TTL_SECONDS,
@@ -65,13 +65,21 @@ export const draftToConfig = (draft: LookupSourceDraft): Record<string, unknown>
   return {};
 };
 
+// A managed source has no external schema to probe, so its two fields are fixed
+// and the admin never chooses them (ADR-050 §2).
+export const MANAGED_FIELDS = { display: "display", key: "key" } as const;
+
 export const draftToInput = (draft: LookupSourceDraft) => ({
   name: draft.name.trim(),
   label: draft.label.trim(),
   kind: draft.kind,
   config: draftToConfig(draft),
-  displayField: draft.displayField.trim(),
-  ...(draft.keyField.trim() ? { keyField: draft.keyField.trim() } : {}),
+  displayField: draft.kind === "managed" ? MANAGED_FIELDS.display : draft.displayField.trim(),
+  ...(draft.kind === "managed"
+    ? { keyField: MANAGED_FIELDS.key }
+    : draft.keyField.trim()
+      ? { keyField: draft.keyField.trim() }
+      : {}),
   // Omitted when blank so the stored secret survives an edit that does not
   // touch it — the same rule the n8n API key follows.
   ...(draft.credential.length > 0 ? { credential: draft.credential } : {}),
@@ -88,6 +96,9 @@ export const draftSaveBlocker = (draft: LookupSourceDraft): string | null => {
   }
   if (draft.label.trim().length === 0) return "Give the source a label.";
   if (draft.kind === "api" && draft.url.trim().length === 0) return "Give the source a URL.";
+  // A managed source's fields are fixed, so there is nothing to test or choose —
+  // it is saved first and its values entered afterwards.
+  if (draft.kind === "managed") return null;
   if (draft.displayField.trim().length === 0) return "Test the source and choose a display field.";
   return null;
 };
@@ -97,7 +108,10 @@ export const draftSaveBlocker = (draft: LookupSourceDraft): string | null => {
 export const collectionLabel = (collection: RecordCollection): string => {
   const path = collection.path || "(whole response)";
   const fields = collection.fields.slice(0, 4).join(", ");
-  return `${path} · ${collection.count} records${fields ? ` · ${fields}` : ""}`;
+  // A count of zero means this is the saved mapping seeded on edit, not a list
+  // that came back empty — saying "0 records" there would be a lie.
+  const count = collection.count > 0 ? ` · ${collection.count} records` : " · saved mapping";
+  return `${path}${count}${fields ? ` · ${fields}` : ""}`;
 };
 
 export const fieldsForCollection = (
@@ -110,6 +124,50 @@ export const sampleForCollection = (
   recordsPath: string,
 ): Array<Record<string, string>> =>
   collections.find((collection) => collection.path === recordsPath)?.sample ?? [];
+
+export interface ManagedRow {
+  display: string;
+  key: string;
+}
+
+export const emptyManagedRow = (): ManagedRow => ({ display: "", key: "" });
+
+export const toManagedRows = (entries: ValueSetEntry[]): ManagedRow[] =>
+  entries.map((entry) => ({ display: entry.display, key: entry.key ?? "" }));
+
+// Blank rows are the editor's way of showing an empty slot, so they are dropped
+// on the way out rather than saved as invisible options.
+export const toManagedEntries = (rows: ManagedRow[]): ValueSetEntry[] =>
+  rows
+    .filter((row) => row.display.trim().length > 0)
+    .map((row) => ({
+      display: row.display.trim(),
+      ...(row.key.trim() ? { key: row.key.trim() } : {}),
+    }));
+
+export const updateManagedRow = (
+  rows: ManagedRow[],
+  index: number,
+  patch: Partial<ManagedRow>,
+): ManagedRow[] => rows.map((row, at) => (at === index ? { ...row, ...patch } : row));
+
+export const removeManagedRow = (rows: ManagedRow[], index: number): ManagedRow[] =>
+  rows.filter((_row, at) => at !== index);
+
+// Two rows are the same value only when both parts match: the same label under
+// two codes is legitimate, and the picker tells those apart by key.
+export const duplicateManagedRow = (rows: ManagedRow[]): number | null => {
+  const seen = new Map<string, number>();
+  for (const [index, row] of rows.entries()) {
+    if (row.display.trim().length === 0) continue;
+    const parts = [row.display.trim().toLowerCase(), row.key.trim().toLowerCase()];
+    const fingerprint = parts.join("|");
+    const first = seen.get(fingerprint);
+    if (first !== undefined) return index;
+    seen.set(fingerprint, index);
+  }
+  return null;
+};
 
 export const previewRows = (
   sample: Array<Record<string, string>>,
@@ -145,6 +203,28 @@ export function LookupSourcesCard() {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<LookupSourceDraft>(emptyDraft());
   const [collections, setCollections] = useState<RecordCollection[]>([]);
+  const [managedRows, setManagedRows] = useState<ManagedRow[]>([]);
+
+  const isManaged = draft.kind === "managed";
+  const entriesQuery = trpc.lookupSource.listEntries.useQuery(
+    { sourceId: draft.id ?? "" },
+    { enabled: open && isManaged && !!draft.id },
+  );
+
+  useEffect(() => {
+    if (!entriesQuery.data) return;
+    setManagedRows(
+      entriesQuery.data.length > 0 ? toManagedRows(entriesQuery.data) : [emptyManagedRow()],
+    );
+  }, [entriesQuery.data]);
+
+  const saveEntriesMutation = trpc.lookupSource.replaceEntries.useMutation({
+    onSuccess: async (entries) => {
+      toast.success(`Saved ${entries.length} value${entries.length === 1 ? "" : "s"}`);
+      await utils.lookupSource.listEntries.invalidate();
+    },
+    onError: (error) => toast.error(error.message ?? "Could not save the values"),
+  });
 
   const closeEditor = async () => {
     setOpen(false);
@@ -208,6 +288,18 @@ export function LookupSourcesCard() {
       return;
     }
     saveMutation.mutate(draftToInput(draft));
+  };
+
+  const handleSaveEntries = () => {
+    if (!draft.id) return;
+    const duplicate = duplicateManagedRow(managedRows);
+    if (duplicate !== null) {
+      toast.error(
+        `"${managedRows[duplicate]?.display}" is listed twice with the same code. Change one, or remove it.`,
+      );
+      return;
+    }
+    saveEntriesMutation.mutate({ sourceId: draft.id, entries: toManagedEntries(managedRows) });
   };
 
   const fields = fieldsForCollection(collections, draft.recordsPath);
@@ -403,6 +495,91 @@ export function LookupSourcesCard() {
               </div>
             ) : null}
 
+            {isManaged ? (
+              <div className="space-y-2 rounded-md border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Values</p>
+                  {draft.id ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={saveEntriesMutation.isPending}
+                      onClick={handleSaveEntries}
+                    >
+                      {saveEntriesMutation.isPending ? "Saving…" : "Save values"}
+                    </Button>
+                  ) : null}
+                </div>
+
+                {!draft.id ? (
+                  <p className="text-xs text-muted-foreground">
+                    Save the source first, then add the values operators can pick from.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      The list operators pick from. The code is optional and is what gets stored
+                      for reporting.
+                    </p>
+
+                    <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-2">
+                      <span className="text-xs font-medium text-muted-foreground">Value</span>
+                      <span className="text-xs font-medium text-muted-foreground">Code</span>
+                      {/* Occupies the third column so the rows below line up; the
+                          remove buttons carry their own labels. */}
+                      <span aria-hidden />
+
+                      {managedRows.map((row, index) => (
+                        <Fragment key={index}>
+                          <Input
+                            aria-label={`Value ${index + 1}`}
+                            value={row.display}
+                            onChange={(event) =>
+                              setManagedRows((rows) =>
+                                updateManagedRow(rows, index, { display: event.target.value }),
+                              )
+                            }
+                            placeholder="Corporate Services"
+                          />
+                          <Input
+                            aria-label={`Code ${index + 1}`}
+                            value={row.key}
+                            onChange={(event) =>
+                              setManagedRows((rows) =>
+                                updateManagedRow(rows, index, { key: event.target.value }),
+                              )
+                            }
+                            placeholder="CC-100"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            aria-label={`Remove value ${index + 1}`}
+                            onClick={() =>
+                              setManagedRows((rows) =>
+                                rows.length === 1
+                                  ? [emptyManagedRow()]
+                                  : removeManagedRow(rows, index),
+                              )
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </Fragment>
+                      ))}
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setManagedRows((rows) => [...rows, emptyManagedRow()])}
+                    >
+                      Add value
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : (
             <div className="space-y-2 rounded-md border p-3">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-medium">Test</p>
@@ -504,6 +681,7 @@ export function LookupSourcesCard() {
                 </div>
               ) : null}
             </div>
+            )}
           </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)}>

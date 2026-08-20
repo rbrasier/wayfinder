@@ -4,6 +4,10 @@ import { DEFAULT_CACHE_TTL_SECONDS } from "@rbrasier/domain";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
+// A hand-maintained list past this size wants a real source behind it, and the
+// cap keeps one request from writing an unbounded number of rows.
+const MANAGED_ENTRY_LIMIT = 500;
+
 const requireAdmin = (isAdmin: boolean): void => {
   if (!isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
 };
@@ -87,6 +91,36 @@ export const lookupSourceRouter = router({
         ...draft,
         ...(draft.credential || !stored?.data ? {} : { credential: stored.data }),
       });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // A managed source's rows are its system of record, so the admin edits them
+  // here rather than anywhere else (ADR-050 §2).
+  listEntries: authenticatedProcedure
+    .input(z.object({ sourceId: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      requireAdmin(ctx.isAdmin);
+      const result = await ctx.container.useCases.listManagedEntries.execute(input.sourceId);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  replaceEntries: authenticatedProcedure
+    .input(
+      z.object({
+        sourceId: z.string().min(1),
+        entries: z
+          .array(z.object({ display: z.string(), key: z.string().optional() }))
+          .max(MANAGED_ENTRY_LIMIT),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      requireAdmin(ctx.isAdmin);
+      const result = await ctx.container.useCases.replaceManagedEntries.execute(
+        input.sourceId,
+        input.entries,
+      );
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),

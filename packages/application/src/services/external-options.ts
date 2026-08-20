@@ -1,4 +1,5 @@
 import {
+  CONVERSATION_PREVIEW_LIMIT,
   formatValueSetEntry,
   INLINE_OPTIONS_THRESHOLD,
   previewValueSetEntries,
@@ -35,18 +36,31 @@ export const inlineExternalOptions = async (
   if (sourceNames.length === 0) return fields;
 
   const inlinedBySource = new Map<string, string[]>();
+  const sampledBySource = new Map<string, string[]>();
   for (const sourceName of sourceNames) {
     const listing = await valueSetProvider.list(sourceName);
     if (listing.error) continue;
-    if (listing.data.entries.length > INLINE_OPTIONS_THRESHOLD) continue;
-    inlinedBySource.set(sourceName, listing.data.entries.map(formatValueSetEntry));
+    const formatted = listing.data.entries.map(formatValueSetEntry);
+    if (formatted.length === 0) continue;
+
+    if (formatted.length <= INLINE_OPTIONS_THRESHOLD) {
+      inlinedBySource.set(sourceName, formatted);
+      continue;
+    }
+    // Too large to inline, but a handful of real values still beats describing
+    // the list abstractly — the assistant shows what it looks like and says so
+    // (ADR-050 §4). The set is already loaded, so this costs nothing extra.
+    sampledBySource.set(sourceName, formatted.slice(0, CONVERSATION_PREVIEW_LIMIT));
   }
 
   return fields.map((field) => {
     if (!field.optionsSource) return field;
     const options = inlinedBySource.get(field.optionsSource);
-    if (!options || options.length === 0) return field;
-    return { ...field, options };
+    if (options && options.length > 0) return { ...field, options };
+
+    const optionsSample = sampledBySource.get(field.optionsSource);
+    if (optionsSample && optionsSample.length > 0) return { ...field, optionsSample };
+    return field;
   });
 };
 

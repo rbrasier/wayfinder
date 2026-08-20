@@ -26,6 +26,10 @@ export interface TemplateField {
   // Mutually exclusive with `options` at parse time; the application may inline a
   // small set into `options` when building a prompt (ADR-050 §1, §4).
   optionsSource?: string;
+  // A few real values from a set too large to inline, attached at prompt-build
+  // time so the assistant can show the operator what the list looks like instead
+  // of describing it abstractly. Illustrative, never the valid set (ADR-050 §4).
+  optionsSample?: string[];
   multiple?: boolean;
   optional: boolean;
   maxLength?: number;
@@ -489,7 +493,14 @@ const describeType = (field: TemplateField): string => {
   // context and the step-end resolve is what guarantees correctness (ADR-050 §4).
   if (field.optionsSource) {
     const prefix = field.multiple ? "one or more values" : "exactly one value";
-    return `${prefix} from the "${field.optionsSource}" list — propose the closest match from the documents; it is checked against the live list when the step completes. When asking the operator about this field, do not invent example values: say you can look the list up and offer to search it for them`;
+    const base = `${prefix} from the "${field.optionsSource}" list — propose the closest match from the documents; it is checked against the live list when the step completes`;
+    const sample = field.optionsSample ?? [];
+    // Real values beat an abstract description: the operator learns what the
+    // list looks like without the model inventing plausible-sounding ones.
+    if (sample.length === 0) {
+      return `${base}. When asking the operator about this field, do not invent example values: say you can look the list up and offer to search it for them`;
+    }
+    return `${base}. When asking the operator about this field, show these real examples — ${sample.join(", ")} — and say they are examples from a longer list they can search, never that they are the only choices`;
   }
   switch (field.type) {
     case "date":

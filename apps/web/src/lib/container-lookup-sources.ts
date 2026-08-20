@@ -9,6 +9,8 @@ import type { Database, SettingsEncryptionService } from "@rbrasier/adapters";
 import {
   DeleteLookupSource,
   ListLookupSources,
+  ListManagedEntries,
+  ReplaceManagedEntries,
   RegisterLookupSource,
   TestLookupSource,
   UpdateLookupSource,
@@ -55,6 +57,8 @@ export const buildLookupSources = ({
       deleteLookupSource: new DeleteLookupSource(repository),
       testLookupSource: new TestLookupSource(valueSetProvider),
       validateTemplateLookupSources: new ValidateTemplateLookupSources(repository),
+      listManagedEntries: new ListManagedEntries(repository),
+      replaceManagedEntries: new ReplaceManagedEntries(repository),
     },
   };
 };

@@ -117,12 +117,9 @@ repository), and component/router level in `apps/web`. `./validate.sh` passes
    capture (`CaptureStructuredStepOutput`) does not yet re-resolve; a structured
    step with an external field stores the value without a key or snapshot.
 3. **A Test is needed after editing a saved source** before its lists repopulate:
-   the editor shows the saved display/key fields until then rather than guessing
-   what the source currently returns.
-4. **`managed` source entries have no editing UI yet.** The kind, its adapter
-   and its storage all work, but rows must be seeded another way; inline editing
-   was scoped as the follow-up the ADR describes.
-5. **`api` pagination is a single bounded page** (`pageLimit`, default 500) for
+   the editor shows the saved mapping until then rather than guessing what the
+   source currently returns.
+4. **`api` pagination is a single bounded page** (`pageLimit`, default 500) for
    listing; large sets rely on `search`.
 
 ## The conversation preview, and the runner guard
@@ -159,6 +156,19 @@ A UI review of the shipped editor produced two changes, planned in
   Choosing one sets `recordsPath` and scopes the display/key selectors to that
   list's fields. A source returning exactly one list needs no choice. The walk
   is bounded in depth and breadth because the body is admin-supplied.
+- **A managed source's values are editable in the app.** `ListManagedEntries` /
+  `ReplaceManagedEntries` back a row editor in the source dialog — add, edit and
+  remove value/code pairs, saved as one list. Blank rows are dropped, rows are
+  trimmed, and two rows that are the same value *and* the same code are rejected
+  (the same label under two different codes is legitimate and allowed). An
+  unchanged save reuses the existing version, so snapshots do not churn. A
+  managed source's display/key fields are fixed, so it needs no Test.
+- **A large set now carries real examples into the prompt.** Above the inline
+  threshold, `inlineExternalOptions` attaches the first three entries as
+  `TemplateField.optionsSample`, and the field's description tells the assistant
+  to show them as examples from a longer list the operator can search — rather
+  than describing the list abstractly or inventing plausible-looking values. The
+  set is already loaded for the size check, so this costs nothing extra.
 - **Credentials moved from the environment into the app.** `credential_ref` and
   the `LOOKUP_CRED_` namespace are gone; the secret is entered in the editor as
   a password field, encrypted at rest, and blank-on-save keeps the stored one —
