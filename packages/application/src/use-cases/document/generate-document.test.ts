@@ -710,6 +710,26 @@ describe("GenerateDocument — external-sourced fields", () => {
     list: vi.fn(),
     search: vi.fn(),
     probe: vi.fn(),
+    match: vi.fn(async (input: { values: string[] }) =>
+      ok({
+        matches: input.values.map((value) => ({
+          input: value,
+          outcome: {
+            kind: "candidates" as const,
+            candidates: [
+              {
+                entry: { display: "Finance", key: "FIN-001" },
+                score: 0.7,
+                tier: "semantic" as const,
+              },
+            ],
+          },
+        })),
+        stale: options.stale ?? false,
+        version: SNAPSHOT_VERSION,
+        fetchedAt: FETCHED_AT,
+      }),
+    ),
     resolve: vi.fn(async (_sourceName: string, values: string[]) => {
       const matched = values
         .filter((value) => value.toLowerCase() === "finance")
@@ -783,6 +803,12 @@ describe("GenerateDocument — external-sourced fields", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(result.error?.message).toContain("Department");
     expect(documentGenerator.generate).not.toHaveBeenCalled();
+  });
+
+  it("names what the operator probably meant, so the block can be answered", async () => {
+    const { result } = await run(externalLanguageModel("Marketing"), valueSetProvider());
+
+    expect(result.error?.message).toContain("did you mean Finance (FIN-001)?");
   });
 
   it("generates anyway when the set is stale, rather than halting on an outage", async () => {

@@ -34,7 +34,11 @@ const toRecord = (person: Person): Record<string, string> => {
 // search, no free-typed email is appended — a value set may only contain values
 // the source actually holds.
 export class DirectoryValueSetAdapter implements ValueSetKindAdapter {
-  readonly filtersAtSource = true;
+  // Every people directory takes the search term itself.
+  filtersAtSource(): boolean {
+    return true;
+  }
+
   private readonly directories: IPeopleDirectory[];
 
   constructor(...directories: IPeopleDirectory[]) {

@@ -11,7 +11,11 @@ export const MANAGED_KEY_FIELD = "key";
 // kb_lookup_source_entries — the same table that caches the other kinds, except
 // here the rows are the source of truth rather than a copy of one (ADR-050 §2).
 export class ManagedValueSetAdapter implements ValueSetKindAdapter {
-  readonly filtersAtSource = true;
+  // Managed rows are filtered in memory by fetchRecords itself, whatever the
+  // config holds.
+  filtersAtSource(): boolean {
+    return true;
+  }
 
   constructor(private readonly sources: ILookupSourceRepository) {}
 

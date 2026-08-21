@@ -27,9 +27,12 @@ export interface ValueSetKindAdapter {
   // Every list of records the source's response contains, so Test can offer them
   // rather than making the admin guess a path (ADR-050 §2b).
   discoverCollections(input: FetchRecordsInput): Promise<Result<RecordCollection[]>>;
-  // True when fetchRecords already applied `query`, so the caller must not
-  // filter again (and cannot treat the result as the full set).
-  readonly filtersAtSource: boolean;
+  // True when fetchRecords will apply `query` for this config, so the caller must
+  // not filter again (and cannot treat the result as the full set). It takes the
+  // config because whether a kind can filter is a per-source setting, not a
+  // property of the kind — an `api` source filters only when it declares a search
+  // parameter (ADR-051 §1).
+  filtersAtSource(config: LookupSourceConfig): boolean;
 }
 
 export const recordsToEntries = (

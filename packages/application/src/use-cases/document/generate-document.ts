@@ -30,7 +30,10 @@ import {
 } from "./field-resolution";
 import { gradeDocumentFields } from "./grade-document";
 import { buildRenderData } from "./render-data";
-import { validateExternalFields } from "../session/validate-external-fields";
+import {
+  describeExternalFieldFlag,
+  validateExternalFields,
+} from "../session/validate-external-fields";
 import { buildStepOutputFields, type ResolvedExternalValues } from "./step-output-fields";
 import { extractStructuredFields, scalarValues } from "./structured-fields";
 
@@ -236,9 +239,7 @@ export class GenerateDocument {
     if (outcome.error) return outcome;
 
     if (outcome.data.blocksCompletion) {
-      const listed = outcome.data.flagged
-        .map((flag) => `"${flag.label}" (${flag.value})`)
-        .join(", ");
+      const listed = outcome.data.flagged.map(describeExternalFieldFlag).join(", ");
       return err(
         domainError(
           "VALIDATION_FAILED",

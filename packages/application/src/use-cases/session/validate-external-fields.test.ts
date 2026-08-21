@@ -1,14 +1,17 @@
 import { describe, it, expect } from "vitest";
 import {
+  classifyValueSetMatch,
   parseTemplateField,
+  rankValueSetCandidates,
   type IValueSetProvider,
   type ResolveOutcome,
   type TemplateField,
   type ValueSetEntry,
   type ValueSetListing,
+  type ValueSetMatchInput,
   type ValueSetProbe,
 } from "@rbrasier/domain";
-import { validateExternalFields } from "./validate-external-fields";
+import { describeExternalFieldFlag, validateExternalFields } from "./validate-external-fields";
 
 const field = (rawTag: string): TemplateField => {
   const parsed = parseTemplateField(rawTag);
@@ -29,6 +32,7 @@ const FETCHED_AT = new Date("2026-07-01T09:00:00.000Z");
 interface FakeProviderOptions {
   stale?: boolean;
   failing?: boolean;
+  matchFailing?: boolean;
 }
 
 // Resolves against a fixed set with the canonicalisation the real adapters
@@ -57,7 +61,29 @@ class FakeValueSetProvider implements IValueSetProvider {
   }
 
   async probe(): Promise<{ data: ValueSetProbe }> {
-    return { data: { fields: [], sample: [] } };
+    return { data: { collections: [] } };
+  }
+
+  readonly matchCalls: ValueSetMatchInput[] = [];
+
+  async match(input: ValueSetMatchInput) {
+    this.matchCalls.push(input);
+    if (this.options.matchFailing) {
+      return { error: { code: "INFRA_FAILURE" as const, message: "source unreachable" } };
+    }
+
+    const entries = this.sets[input.sourceName] ?? [];
+    return {
+      data: {
+        matches: input.values.map((value) => ({
+          input: value,
+          outcome: classifyValueSetMatch(rankValueSetCandidates(entries, value)),
+        })),
+        stale: this.options.stale ?? false,
+        version: VERSION,
+        fetchedAt: FETCHED_AT,
+      },
+    };
   }
 
   async resolve(sourceName: string, values: string[]) {
@@ -256,5 +282,124 @@ describe("validateExternalFields", () => {
     expect(provider.resolveCalls).toHaveLength(0);
     expect(result.data?.flagged).toEqual([]);
     expect(result.data?.blocksCompletion).toBe(false);
+  });
+});
+
+describe("validateExternalFields — suggestions", () => {
+  const departmentField = field("Department (options-source: departments)");
+
+  it("offers what the operator probably meant when a value does not exist", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Finence" },
+    });
+
+    expect(result.data?.flagged[0]?.suggestions).toEqual([{ display: "Finance", key: "FIN-001" }]);
+  });
+
+  it("still blocks the step — a suggestion is not a substitution", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Finence" },
+    });
+
+    expect(result.data?.blocksCompletion).toBe(true);
+    expect(result.data?.resolved.department).toBeUndefined();
+  });
+
+  it("offers both entries when the value is ambiguous between them", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Operations" },
+    });
+
+    expect(result.data?.flagged[0]?.suggestions).toEqual([
+      { display: "Operations", key: "OPS-003" },
+      { display: "Operations", key: "OPS-009" },
+    ]);
+  });
+
+  it("does not narrow a stale flag, whose value stands as the operator typed it", async () => {
+    const provider = new FakeValueSetProvider({ departments }, { stale: true });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Finence" },
+    });
+
+    expect(provider.matchCalls).toEqual([]);
+    expect(result.data?.flagged[0]?.suggestions).toBeUndefined();
+  });
+
+  it("leaves the block in place without suggestions when narrowing itself fails", async () => {
+    const provider = new FakeValueSetProvider({ departments }, { matchFailing: true });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Finence" },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.blocksCompletion).toBe(true);
+    expect(result.data?.flagged[0]?.suggestions).toBeUndefined();
+  });
+
+  it("narrows a source once for every value that failed against it", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    await validateExternalFields(provider, {
+      fields: [departmentField, field("Owner (options-source: departments)")],
+      values: { department: "Finence", owner: "Humn Resources" },
+    });
+
+    expect(provider.matchCalls).toHaveLength(1);
+    expect(provider.matchCalls[0]?.values).toEqual(["Finence", "Humn Resources"]);
+  });
+
+  it("says nothing about a value with no plausible neighbour", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "aardvark" },
+    });
+
+    expect(result.data?.flagged[0]?.suggestions).toBeUndefined();
+  });
+});
+
+describe("describeExternalFieldFlag", () => {
+  it("names the field and the value that failed", () => {
+    expect(
+      describeExternalFieldFlag({
+        fieldKey: "department",
+        label: "Department",
+        value: "Finence",
+        reason: "unresolved",
+        sourceName: "departments",
+      }),
+    ).toBe('"Department" (Finence)');
+  });
+
+  it("adds the shortlist with codes, so two similar entries can be told apart", () => {
+    expect(
+      describeExternalFieldFlag({
+        fieldKey: "department",
+        label: "Department",
+        value: "Operations",
+        reason: "ambiguous",
+        sourceName: "departments",
+        suggestions: [
+          { display: "Operations", key: "OPS-003" },
+          { display: "Operations", key: "OPS-009" },
+        ],
+      }),
+    ).toBe('"Department" (Operations) — did you mean Operations (OPS-003), Operations (OPS-009)?');
   });
 });

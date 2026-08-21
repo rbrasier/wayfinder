@@ -1,9 +1,13 @@
 import {
+  classifyValueSetMatch,
   domainError,
   entriesMatchVersion,
   err,
+  MATCH_CANDIDATE_LIMIT,
+  mergeCandidates,
   ok,
   PROBE_SAMPLE_LIMIT,
+  rankValueSetCandidates,
   type CachedValueSet,
   type ILookupSourceRepository,
   type IValueSetProvider,
@@ -11,12 +15,17 @@ import {
   type LookupSourceKind,
   type ResolveOutcome,
   type Result,
+  type ValueSetCandidate,
   type ValueSetEntry,
   type ValueSetListing,
+  type ValueSetMatch,
+  type ValueSetMatchInput,
+  type ValueSetMatchResult,
   type ValueSetProbe,
   type ValueSetProbeInput,
   type ValueSetSearchInput,
 } from "@rbrasier/domain";
+import type { SemanticEntryIndex } from "./semantic-entry-index";
 import { recordsToEntries, type ValueSetKindAdapter } from "./value-set-kind-adapter";
 
 export interface CachingValueSetProviderOptions {
@@ -24,6 +33,9 @@ export interface CachingValueSetProviderOptions {
   adapters: Partial<Record<LookupSourceKind, ValueSetKindAdapter>>;
   now?: () => Date;
   newVersion?: () => string;
+  // Optional: without it `match` runs the string ladder alone, which is the
+  // correct behaviour when no embeddings provider is configured.
+  semanticIndex?: SemanticEntryIndex;
 }
 
 const EMPTY_VERSION = "empty";
@@ -66,7 +78,8 @@ export class CachingValueSetProvider implements IValueSetProvider {
         source.data.displayField,
         source.data.keyField,
       );
-      return ok(adapter.data.filtersAtSource ? entries : filterEntries(entries, input.query, input.limit));
+      if (adapter.data.filtersAtSource(source.data.config)) return ok(entries);
+      return ok(narrowEntries(entries, input.query, input.limit));
     }
 
     // Type-ahead must keep working through an outage: the cached set is what the
@@ -75,7 +88,7 @@ export class CachingValueSetProvider implements IValueSetProvider {
     if (cached.error) return cached;
     if (!cached.data) return records;
 
-    return ok(filterEntries(cached.data.entries, input.query, input.limit));
+    return ok(narrowEntries(cached.data.entries, input.query, input.limit));
   }
 
   async resolve(sourceName: string, values: string[]): Promise<Result<ResolveOutcome>> {
@@ -114,6 +127,55 @@ export class CachingValueSetProvider implements IValueSetProvider {
       version: listing.data.version,
       fetchedAt: listing.data.fetchedAt,
     });
+  }
+
+  // Narrows a value nobody has confirmed yet. It never rewrites anything: a
+  // caller acts on the outcome by proposing it to the operator, and the value
+  // they confirm still has to survive `resolve` at step end (ADR-051 §4).
+  async match(input: ValueSetMatchInput): Promise<Result<ValueSetMatchResult>> {
+    const source = await this.findSource(input.sourceName);
+    if (source.error) return source;
+
+    const listing = await this.readListing(source.data);
+    if (listing.error) return listing;
+
+    const limit = input.limit ?? MATCH_CANDIDATE_LIMIT;
+    const matches: ValueSetMatch[] = [];
+
+    for (const value of input.values) {
+      const strings = rankValueSetCandidates(listing.data.entries, value, limit);
+      const outcome = classifyValueSetMatch(strings);
+      // A spelling match is the value itself, so the expensive rung is skipped.
+      if (outcome.kind === "resolved") {
+        matches.push({ input: value, outcome });
+        continue;
+      }
+
+      const semantic = await this.semanticCandidates(source.data.id, value, limit);
+      matches.push({
+        input: value,
+        outcome: classifyValueSetMatch(mergeCandidates(strings, semantic, limit)),
+      });
+    }
+
+    return ok({
+      matches,
+      stale: listing.data.stale,
+      version: listing.data.version,
+      fetchedAt: listing.data.fetchedAt,
+    });
+  }
+
+  private async semanticCandidates(
+    sourceId: string,
+    value: string,
+    limit: number,
+  ): Promise<ValueSetCandidate[]> {
+    const index = this.options.semanticIndex;
+    if (!index) return [];
+
+    const similar = await index.similar(sourceId, value, limit);
+    return similar.data ?? [];
   }
 
   async probe(input: ValueSetProbeInput): Promise<Result<ValueSetProbe>> {
@@ -234,15 +296,19 @@ export class CachingValueSetProvider implements IValueSetProvider {
   }
 }
 
-const filterEntries = (entries: ValueSetEntry[], query: string, limit: number): ValueSetEntry[] => {
+// Substring first, because a type-ahead that reorders under every keystroke is
+// unusable. The ranked ladder is the fallback for when substring finds nothing —
+// which is where a typo or a different word order would otherwise dead-end
+// (ADR-051 §2).
+const narrowEntries = (entries: ValueSetEntry[], query: string, limit: number): ValueSetEntry[] => {
   const term = query.trim().toLowerCase();
-  const matching =
-    term.length === 0
-      ? entries
-      : entries.filter(
-          (entry) =>
-            entry.display.toLowerCase().includes(term) ||
-            (entry.key ?? "").toLowerCase().includes(term),
-        );
-  return matching.slice(0, limit);
+  if (term.length === 0) return entries.slice(0, limit);
+
+  const substring = entries.filter(
+    (entry) =>
+      entry.display.toLowerCase().includes(term) || (entry.key ?? "").toLowerCase().includes(term),
+  );
+  if (substring.length > 0) return substring.slice(0, limit);
+
+  return rankValueSetCandidates(entries, query, limit).map((candidate) => candidate.entry);
 };

@@ -48,12 +48,31 @@ const spies = () => ({
 
 const searchSpy = vi.fn(async () => ({ data: [{ display: "Finance", key: "FIN-001" }] }));
 
+const matchSpy = vi.fn(async () => ({
+  data: {
+    matches: [
+      {
+        input: "procurement",
+        outcome: {
+          kind: "candidates" as const,
+          candidates: [
+            { entry: { display: "Finance", key: "FIN-001" }, score: 0.78, tier: "semantic" as const },
+          ],
+        },
+      },
+    ],
+    stale: false,
+    version: "v-1",
+    fetchedAt: new Date("2026-08-01T00:00:00.000Z"),
+  },
+}));
+
 const containerWith = (useCases: ReturnType<typeof spies>): Container =>
   ({
     useCases,
     repos: { lookupSources: { readCredential: async () => ({ data: "Bearer stored" }) } },
     services: {
-      valueSetProvider: { search: searchSpy },
+      valueSetProvider: { search: searchSpy, match: matchSpy },
       errorLogger: { log: async () => undefined },
     },
   }) as unknown as Container;
@@ -206,6 +225,46 @@ describe("lookup source router — authorization", () => {
 
     await expect(
       caller.lookupSource.search({ sourceName: "departments", query: "fin", limit: 500 }),
+    ).rejects.toBeDefined();
+  });
+});
+
+describe("lookup source router — match", () => {
+  it("lets a non-admin operator narrow a value, which they must to answer a block", async () => {
+    const caller = createCaller(contextFor(spies(), { isAdmin: false }));
+
+    const result = await caller.lookupSource.match({
+      sourceName: "departments",
+      values: ["procurement"],
+    });
+
+    expect(result.matches[0]?.outcome.kind).toBe("candidates");
+  });
+
+  it("refuses an unbounded batch of values", async () => {
+    const caller = createCaller(contextFor(spies(), { isAdmin: false }));
+
+    await expect(
+      caller.lookupSource.match({
+        sourceName: "departments",
+        values: Array.from({ length: 11 }, (_, index) => `value-${index}`),
+      }),
+    ).rejects.toBeDefined();
+  });
+
+  it("refuses an empty batch rather than walking the whole set for nothing", async () => {
+    const caller = createCaller(contextFor(spies(), { isAdmin: false }));
+
+    await expect(
+      caller.lookupSource.match({ sourceName: "departments", values: [] }),
+    ).rejects.toBeDefined();
+  });
+
+  it("caps how many candidates one value may return", async () => {
+    const caller = createCaller(contextFor(spies(), { isAdmin: false }));
+
+    await expect(
+      caller.lookupSource.match({ sourceName: "departments", values: ["x"], limit: 50 }),
     ).rejects.toBeDefined();
   });
 });

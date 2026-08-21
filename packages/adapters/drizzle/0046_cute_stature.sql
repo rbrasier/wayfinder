@@ -1,0 +1,2 @@
+ALTER TABLE "kb_lookup_source_entries" ADD COLUMN "embedding" vector(384);--> statement-breakpoint
+CREATE INDEX "kb_lookup_source_entries_embedding_hnsw_idx" ON "kb_lookup_source_entries" USING hnsw ("embedding" vector_cosine_ops) WITH (m=16,ef_construction=64);

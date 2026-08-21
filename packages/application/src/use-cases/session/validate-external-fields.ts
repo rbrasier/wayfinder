@@ -1,10 +1,13 @@
 import {
+  formatValueSetEntry,
   ok,
   type FieldValueSnapshot,
   type IValueSetProvider,
   type ResolveOutcome,
   type Result,
   type TemplateField,
+  type ValueSetEntry,
+  type ValueSetMatch,
 } from "@rbrasier/domain";
 
 export interface ValidateExternalFieldsInput {
@@ -21,6 +24,10 @@ export interface ExternalFieldFlag {
   value: string;
   reason: ExternalFieldFlagReason;
   sourceName: string;
+  // What the narrowing ladder thinks the operator may have meant. Suggestions
+  // never substitute themselves for the value — they exist so the block can be
+  // answered with a choice instead of a search (ADR-051 §4).
+  suggestions?: ValueSetEntry[];
 }
 
 export interface ResolvedExternalField {
@@ -104,6 +111,7 @@ export const validateExternalFields = async (
   for (const batch of batchBySource(input)) {
     const outcome = await valueSetProvider.resolve(batch.sourceName, batch.values);
     const data = outcome.data ?? degradedOutcome(batch.values);
+    const batchFlags: ExternalFieldFlag[] = [];
     const snapshot: FieldValueSnapshot = {
       name: batch.sourceName,
       version: data.version,
@@ -139,13 +147,15 @@ export const validateExternalFields = async (
           ? "ambiguous"
           : "unresolved";
 
-      flagged.push({
+      const flag: ExternalFieldFlag = {
         fieldKey: field.key,
         label: field.label,
         value: failedValue,
         reason,
         sourceName: batch.sourceName,
-      });
+      };
+      flagged.push(flag);
+      batchFlags.push(flag);
 
       // A stale set is not authoritative, so the operator's value stands and is
       // flagged for review rather than rejected.
@@ -158,7 +168,52 @@ export const validateExternalFields = async (
       }
       blocksCompletion = true;
     }
+
+    await attachSuggestions(valueSetProvider, batch.sourceName, batchFlags);
   }
 
   return ok({ resolved, flagged, blocksCompletion });
+};
+
+// Best-effort, and deliberately after the fact: narrowing runs only for values
+// that have already failed the authoritative resolve, so it can never widen what
+// counts as valid. A narrowing failure leaves the block in place without
+// suggestions rather than turning into an error of its own.
+const attachSuggestions = async (
+  valueSetProvider: IValueSetProvider,
+  sourceName: string,
+  flags: ExternalFieldFlag[],
+): Promise<void> => {
+  const blocked = flags.filter((flag) => flag.reason !== "stale");
+  if (blocked.length === 0) return;
+
+  const narrowed = await valueSetProvider.match({
+    sourceName,
+    values: [...new Set(blocked.map((flag) => flag.value))],
+  });
+  if (narrowed.error) return;
+
+  blocked.forEach((flag) => {
+    const match = narrowed.data.matches.find((candidate) => candidate.input === flag.value);
+    const entries = suggestedEntries(match);
+    if (entries.length === 0) return;
+    flag.suggestions = entries;
+  });
+};
+
+const suggestedEntries = (match: ValueSetMatch | undefined): ValueSetEntry[] => {
+  if (!match) return [];
+  // A value the ladder can resolve on its own still failed the exact resolve —
+  // a spelling variant, say — so it is offered as the one thing to confirm.
+  if (match.outcome.kind === "resolved") return [match.outcome.candidate.entry];
+  if (match.outcome.kind === "none") return [];
+  return match.outcome.candidates.map((candidate) => candidate.entry);
+};
+
+// The operator-facing rendering of a block: what failed, and what to say instead.
+export const describeExternalFieldFlag = (flag: ExternalFieldFlag): string => {
+  const base = `"${flag.label}" (${flag.value})`;
+  if (!flag.suggestions || flag.suggestions.length === 0) return base;
+
+  return `${base} — did you mean ${flag.suggestions.map(formatValueSetEntry).join(", ")}?`;
 };

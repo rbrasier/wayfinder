@@ -1,12 +1,16 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { DEFAULT_CACHE_TTL_SECONDS } from "@rbrasier/domain";
+import { DEFAULT_CACHE_TTL_SECONDS, MATCH_CANDIDATE_LIMIT } from "@rbrasier/domain";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 // A hand-maintained list past this size wants a real source behind it, and the
 // cap keeps one request from writing an unbounded number of rows.
 const MANAGED_ENTRY_LIMIT = 500;
+
+// Narrowing runs the ladder once per value, and the semantic rung costs a model
+// call, so one request may not ask for an unbounded batch.
+const MATCH_VALUE_LIMIT = 10;
 
 const requireAdmin = (isAdmin: boolean): void => {
   if (!isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
@@ -137,6 +141,23 @@ export const lookupSourceRouter = router({
     )
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.services.valueSetProvider.search(input);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // Narrowing rather than searching: it answers "which of these did they mean"
+  // for values nobody has confirmed yet, so the caller can offer a shortlist
+  // instead of a dead end (ADR-051 §4). Like `search`, not admin-gated.
+  match: authenticatedProcedure
+    .input(
+      z.object({
+        sourceName: z.string().min(1),
+        values: z.array(z.string().min(1)).min(1).max(MATCH_VALUE_LIMIT),
+        limit: z.number().int().positive().max(MATCH_CANDIDATE_LIMIT).optional(),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.services.valueSetProvider.match(input);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),

@@ -4,6 +4,7 @@ import type {
   ValueSetEntry,
   ValueSetProbe,
 } from "../entities/lookup-source";
+import type { ValueSetMatchOutcome } from "../entities/value-set-matching";
 import type { Result } from "../result";
 
 export interface ValueSetSearchInput {
@@ -42,6 +43,31 @@ export interface ResolveOutcome {
   fetchedAt: Date;
 }
 
+// What `match` runs against: raw values as an operator typed or an assistant
+// proposed them, before anything has been confirmed.
+export interface ValueSetMatchInput {
+  sourceName: string;
+  values: string[];
+  limit?: number;
+}
+
+// One input value, narrowed. `outcome` says whether the ladder settled it or
+// only shortlisted candidates for someone to choose between (ADR-051 §2).
+export interface ValueSetMatch {
+  input: string;
+  outcome: ValueSetMatchOutcome;
+}
+
+// A narrowing pass over a whole batch. It carries the same audit fields as a
+// resolve because a caller acting on a suggestion needs to know which version of
+// the set produced it — and whether that version was last-known-good.
+export interface ValueSetMatchResult {
+  matches: ValueSetMatch[];
+  stale: boolean;
+  version: string;
+  fetchedAt: Date;
+}
+
 // What Test runs against. It carries a raw config rather than a registered name
 // because the admin has to see the source's fields before they can choose a
 // display and key field, which is before the source can be saved (ADR-050 §2b).
@@ -61,5 +87,6 @@ export interface IValueSetProvider {
   search(input: ValueSetSearchInput): Promise<Result<ValueSetEntry[]>>;
   list(sourceName: string): Promise<Result<ValueSetListing>>;
   resolve(sourceName: string, values: string[]): Promise<Result<ResolveOutcome>>;
+  match(input: ValueSetMatchInput): Promise<Result<ValueSetMatchResult>>;
   probe(input: ValueSetProbeInput): Promise<Result<ValueSetProbe>>;
 }

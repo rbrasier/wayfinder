@@ -15,6 +15,13 @@ import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogFooter, Dia
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
+import {
+  emptyPagingDraft,
+  LookupSourcePagingFields,
+  pagingFromConfig,
+  pagingToConfig,
+  type LookupSourcePagingDraft,
+} from "./lookup-source-paging";
 
 export interface LookupSourceDraft {
   id: string | null;
@@ -31,6 +38,7 @@ export interface LookupSourceDraft {
   displayField: string;
   keyField: string;
   cacheTtlSeconds: number;
+  paging: LookupSourcePagingDraft;
 }
 
 export const emptyDraft = (): LookupSourceDraft => ({
@@ -47,6 +55,7 @@ export const emptyDraft = (): LookupSourceDraft => ({
   displayField: "",
   keyField: "",
   cacheTtlSeconds: DEFAULT_CACHE_TTL_SECONDS,
+  paging: emptyPagingDraft(),
 });
 
 // Only the fields that kind actually uses reach the stored config, so a source
@@ -57,6 +66,7 @@ export const draftToConfig = (draft: LookupSourceDraft): Record<string, unknown>
       url: draft.url.trim(),
       ...(draft.searchParam.trim() ? { searchParam: draft.searchParam.trim() } : {}),
       ...(draft.recordsPath.trim() ? { recordsPath: draft.recordsPath.trim() } : {}),
+      ...pagingToConfig(draft.paging),
     };
   }
   if (draft.kind === "directory" && draft.directoryQuery.trim()) {
@@ -370,6 +380,7 @@ export function LookupSourcesCard() {
                     displayField: source.displayField,
                     keyField: source.keyField ?? "",
                     cacheTtlSeconds: source.cacheTtlSeconds,
+                    paging: pagingFromConfig(source.config as Record<string, unknown>),
                   });
                   // Re-Test to repopulate the lists: the saved fields are shown
                   // as-is until then rather than guessed at.
@@ -465,6 +476,10 @@ export function LookupSourcesCard() {
                     placeholder="q"
                   />
                 </div>
+                <LookupSourcePagingFields
+                  draft={draft.paging}
+                  onChange={(patch) => update({ paging: { ...draft.paging, ...patch } })}
+                />
                 <div className="space-y-1">
                   <Label htmlFor="lookup-credential">Credential</Label>
                   <Input

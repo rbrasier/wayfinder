@@ -6,8 +6,10 @@ import type {
   LookupSource,
   LookupSourceKind,
   Result,
+  ValueSetCandidate,
 } from "@rbrasier/domain";
 import { CachingValueSetProvider } from "./caching-value-set-provider";
+import type { SemanticEntryIndex } from "./semantic-entry-index";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "./value-set-kind-adapter";
 
 const NOW = new Date("2026-08-02T12:00:00.000Z");
@@ -62,13 +64,17 @@ class FakeRepository implements Partial<ILookupSourceRepository> {
 }
 
 class FakeAdapter implements ValueSetKindAdapter {
-  readonly filtersAtSource = true;
   readonly calls: FetchRecordsInput[] = [];
 
   constructor(
     private readonly rows: Array<Record<string, string>>,
     private readonly failing = false,
+    private readonly filters = true,
   ) {}
+
+  filtersAtSource(): boolean {
+    return this.filters;
+  }
 
   async fetchRecords(input: FetchRecordsInput) {
     this.calls.push(input);
@@ -401,5 +407,173 @@ describe("CachingValueSetProvider — credentials", () => {
 
     expect(repository.credentialReads).toEqual([]);
     expect(adapter.calls[0]?.credential).toBeUndefined();
+  });
+});
+
+describe("CachingValueSetProvider.search — narrowing", () => {
+  const wideRecords = [
+    { department: "Finance", department_code: "FIN-001" },
+    { department: "Finance & Procurement", department_code: "FIN-002" },
+    { department: "Corporate Services", department_code: "CS-001" },
+  ];
+
+  it("filters in memory when the adapter cannot filter for this source", async () => {
+    const repository = new FakeRepository(source());
+    const adapter = new FakeAdapter(wideRecords, false, false);
+
+    const result = await build(repository, { api: adapter }).search({
+      sourceName: "departments",
+      query: "corporate",
+      limit: 20,
+    });
+
+    expect(result.data?.map((entry) => entry.display)).toEqual(["Corporate Services"]);
+  });
+
+  it("trusts an adapter that says it filtered, rather than filtering twice", async () => {
+    const repository = new FakeRepository(source());
+    const adapter = new FakeAdapter(wideRecords, false, true);
+
+    const result = await build(repository, { api: adapter }).search({
+      sourceName: "departments",
+      query: "corporate",
+      limit: 20,
+    });
+
+    expect(result.data).toHaveLength(3);
+  });
+
+  it("falls back to the ranked ladder when substring finds nothing", async () => {
+    const repository = new FakeRepository(source());
+    const adapter = new FakeAdapter(wideRecords, false, false);
+
+    const result = await build(repository, { api: adapter }).search({
+      sourceName: "departments",
+      query: "Corprate Servces",
+      limit: 20,
+    });
+
+    expect(result.data?.[0]?.display).toBe("Corporate Services");
+  });
+
+  it("returns the head of the set for an empty query", async () => {
+    const repository = new FakeRepository(source());
+    const adapter = new FakeAdapter(wideRecords, false, false);
+
+    const result = await build(repository, { api: adapter }).search({
+      sourceName: "departments",
+      query: "",
+      limit: 2,
+    });
+
+    expect(result.data).toHaveLength(2);
+  });
+});
+
+describe("CachingValueSetProvider.match", () => {
+  const wideRecords = [
+    { department: "Finance", department_code: "FIN-001" },
+    { department: "Corporate Services", department_code: "CS-001" },
+  ];
+
+  const semanticIndex = (candidates: ValueSetCandidate[]) => ({
+    similar: vi.fn().mockResolvedValue(ok(candidates)),
+  });
+
+  const buildMatcher = (
+    repository: FakeRepository,
+    adapter: ValueSetKindAdapter,
+    index?: { similar: ReturnType<typeof vi.fn> },
+  ) =>
+    new CachingValueSetProvider({
+      sources: repository as unknown as ILookupSourceRepository,
+      adapters: { api: adapter },
+      now: () => NOW,
+      newVersion: () => "v-new",
+      ...(index ? { semanticIndex: index as unknown as SemanticEntryIndex } : {}),
+    });
+
+  it("resolves a spelling variant without consulting the semantic index", async () => {
+    const index = semanticIndex([]);
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords), index);
+
+    const result = await provider.match({ sourceName: "departments", values: ["  finance  "] });
+
+    expect(result.data?.matches[0]?.outcome).toEqual({
+      kind: "resolved",
+      candidate: { entry: { display: "Finance", key: "FIN-001" }, score: 1, tier: "exact" },
+    });
+    expect(index.similar).not.toHaveBeenCalled();
+  });
+
+  it("shortlists rather than deciding when the best it has is a related word", async () => {
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords));
+
+    const result = await provider.match({ sourceName: "departments", values: ["corporate"] });
+    const outcome = result.data?.matches[0]?.outcome;
+
+    expect(outcome?.kind).toBe("candidates");
+    expect(outcome?.kind === "candidates" && outcome.candidates[0]?.entry.display).toBe(
+      "Corporate Services",
+    );
+  });
+
+  it("reaches an entry that shares no letters with the input, via the semantic index", async () => {
+    const index = semanticIndex([
+      { entry: { display: "Finance", key: "FIN-001" }, score: 0.78, tier: "semantic" },
+    ]);
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords), index);
+
+    const result = await provider.match({ sourceName: "departments", values: ["procurement"] });
+    const outcome = result.data?.matches[0]?.outcome;
+
+    expect(outcome?.kind).toBe("candidates");
+    expect(outcome?.kind === "candidates" && outcome.candidates[0]?.entry.key).toBe("FIN-001");
+    expect(index.similar).toHaveBeenCalledWith("source-1", "procurement", 5);
+  });
+
+  it("reports nothing found rather than guessing when every rung comes up empty", async () => {
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords));
+
+    const result = await provider.match({ sourceName: "departments", values: ["aardvark"] });
+
+    expect(result.data?.matches[0]?.outcome.kind).toBe("none");
+  });
+
+  it("carries the version and staleness of the set the suggestions came from", async () => {
+    const repository = new FakeRepository(source());
+    repository.cached = {
+      entries: [{ display: "Finance", key: "FIN-001" }],
+      version: "v-old",
+      fetchedAt: new Date("2020-01-01T00:00:00.000Z"),
+    };
+    const provider = buildMatcher(repository, new FakeAdapter([], true));
+
+    const result = await provider.match({ sourceName: "departments", values: ["finance"] });
+
+    expect(result.data?.stale).toBe(true);
+    expect(result.data?.version).toBe("v-old");
+  });
+
+  it("runs the whole batch in one pass over the set", async () => {
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords));
+
+    const result = await provider.match({
+      sourceName: "departments",
+      values: ["finance", "corporate services"],
+    });
+
+    expect(result.data?.matches.map((match) => match.outcome.kind)).toEqual([
+      "resolved",
+      "resolved",
+    ]);
+  });
+
+  it("reports an unregistered source rather than an empty shortlist", async () => {
+    const provider = buildMatcher(new FakeRepository(null), new FakeAdapter(wideRecords));
+
+    const result = await provider.match({ sourceName: "departments", values: ["finance"] });
+
+    expect(result.error?.code).toBe("NOT_FOUND");
   });
 });

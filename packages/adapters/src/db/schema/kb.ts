@@ -187,6 +187,11 @@ export const kb_lookup_source_entries = pgTable(
     display: text("display").notNull(),
     key: text("key"),
     version: text("version").notNull(),
+    // The semantic index over this row (ADR-051 §3), so an operator's word for a
+    // value reaches the source's word for it. Nullable and filled in lazily: a
+    // refresh writes rows without paying for a model call per entry, and 384
+    // dims matches the rest of the schema (ADR-017).
+    embedding: vector("embedding", { dimensions: 384 }),
     fetched_at: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -194,5 +199,8 @@ export const kb_lookup_source_entries = pgTable(
   (t) => ({
     by_source: index("kb_lookup_source_entries_source_id_idx").on(t.source_id),
     by_display: index("kb_lookup_source_entries_display_idx").on(t.source_id, t.display),
+    embedding_hnsw: index("kb_lookup_source_entries_embedding_hnsw_idx")
+      .using("hnsw", t.embedding.op("vector_cosine_ops"))
+      .with({ m: 16, ef_construction: 64 }),
   }),
 );

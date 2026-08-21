@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiValueSetAdapter, API_RESPONSE_BYTE_CAP } from "./api-value-set-provider";
+import { ApiValueSetAdapter, API_MAX_PAGES, API_RESPONSE_BYTE_CAP } from "./api-value-set-provider";
 
 const jsonResponse = (body: unknown, init: { status?: number } = {}) =>
   new Response(JSON.stringify(body), {
@@ -219,7 +219,6 @@ describe("ApiValueSetAdapter", () => {
 
     const adapter = new ApiValueSetAdapter({
       fetchImpl: fetchImpl as unknown as typeof fetch,
-      readCredential: async () => ok(null),
       guardOptions: { resolveHost: resolvesPublic },
       timeoutMs: 5,
     });
@@ -289,5 +288,150 @@ describe("ApiValueSetAdapter.discoverCollections", () => {
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe("ApiValueSetAdapter.filtersAtSource", () => {
+  const adapter = new ApiValueSetAdapter({});
+
+  it("is true only when the source was given a search parameter to use", () => {
+    expect(adapter.filtersAtSource({ url: "https://x.example.gov", searchParam: "q" })).toBe(true);
+  });
+
+  it("is false without one, so the caller knows it has to filter itself", () => {
+    expect(adapter.filtersAtSource({ url: "https://x.example.gov" })).toBe(false);
+  });
+});
+
+describe("ApiValueSetAdapter pagination", () => {
+  const page = (from: number, size: number) =>
+    Array.from({ length: size }, (_, index) => ({ department: `D${from + index}` }));
+
+  const pagedConfig = {
+    url: "https://directory.example.gov/departments",
+    paging: { style: "offset" as const, param: "offset", sizeParam: "limit", size: 2 },
+  };
+
+  it("walks offset pages until a short page ends the set", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(page(0, 2)))
+      .mockResolvedValueOnce(jsonResponse(page(2, 2)))
+      .mockResolvedValueOnce(jsonResponse(page(4, 1)));
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: pagedConfig,
+    });
+
+    expect(result.data).toHaveLength(5);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(String(fetchImpl.mock.calls[1]![0])).toContain("offset=2");
+    expect(String(fetchImpl.mock.calls[1]![0])).toContain("limit=2");
+  });
+
+  it("counts pages rather than records for a page-numbered source", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(page(0, 2)))
+      .mockResolvedValueOnce(jsonResponse(page(2, 1)));
+
+    await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: {
+        url: "https://directory.example.gov/departments",
+        paging: { style: "page", param: "page", size: 2 },
+      },
+    });
+
+    expect(String(fetchImpl.mock.calls[0]![0])).toContain("page=1");
+    expect(String(fetchImpl.mock.calls[1]![0])).toContain("page=2");
+  });
+
+  it("honours a source that numbers its pages from zero", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page(0, 1)));
+
+    await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: {
+        url: "https://directory.example.gov/departments",
+        paging: { style: "page", param: "page", size: 2, startPage: 0 },
+      },
+    });
+
+    expect(String(fetchImpl.mock.calls[0]![0])).toContain("page=0");
+  });
+
+  it("follows a cursor the previous response carried", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ items: page(0, 2), next: "abc" }))
+      .mockResolvedValueOnce(jsonResponse({ items: page(2, 2) }));
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: {
+        url: "https://directory.example.gov/departments",
+        recordsPath: "items",
+        paging: { style: "cursor", param: "cursor", cursorPath: "next", size: 2 },
+      },
+    });
+
+    expect(result.data).toHaveLength(4);
+    expect(String(fetchImpl.mock.calls[0]![0])).not.toContain("cursor=");
+    expect(String(fetchImpl.mock.calls[1]![0])).toContain("cursor=abc");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("stops at the configured record ceiling", async () => {
+    const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse(page(0, 2)));
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: { ...pagedConfig, maxRecords: 3 },
+    });
+
+    expect(result.data).toHaveLength(3);
+  });
+
+  it("stops at the page ceiling when a source ignores its paging parameters", async () => {
+    const fetchImpl = vi.fn().mockImplementation(async () => jsonResponse(page(0, 2)));
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: pagedConfig,
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(API_MAX_PAGES);
+    expect(result.data).toHaveLength(API_MAX_PAGES * 2);
+  });
+
+  it("fetches a single page when the source is doing the searching", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page(0, 2)));
+
+    await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: { ...pagedConfig, searchParam: "q" },
+      query: "fin",
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards the walk when a page fails, rather than returning a partial set", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(page(0, 2)))
+      .mockResolvedValueOnce(jsonResponse({ message: "nope" }, { status: 500 }));
+
+    const result = await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: pagedConfig,
+    });
+
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+    expect(result.data).toBeUndefined();
+  });
+
+  it("makes one request when the source declares no paging at all", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page(0, 2)));
+
+    await adapterWith(fetchImpl as unknown as typeof fetch).fetchRecords({
+      config: { url: "https://directory.example.gov/departments" },
+    });
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 });

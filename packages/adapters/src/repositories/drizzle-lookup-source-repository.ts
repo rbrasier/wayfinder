@@ -1,12 +1,14 @@
 import { domainError, err, ok } from "@rbrasier/domain";
 import type {
+  CachedEntryRow,
   CachedValueSet,
   ILookupSourceRepository,
   LookupSource,
   NewLookupSource,
   Result,
+  SimilarValueSetEntry,
 } from "@rbrasier/domain";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, cosineDistance, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import type { SettingsEncryptionService } from "../config/settings-encryption";
 import { kb_lookup_source_entries, kb_lookup_sources } from "../db/schema/kb";
@@ -194,6 +196,90 @@ export class DrizzleLookupSourceRepository implements ILookupSourceRepository {
       return ok(undefined);
     } catch (cause) {
       return this.failure("cache lookup entries", cause);
+    }
+  }
+
+  async listEntriesWithoutEmbedding(
+    sourceId: string,
+    limit: number,
+  ): Promise<Result<CachedEntryRow[]>> {
+    try {
+      const rows = await this.db
+        .select({
+          id: kb_lookup_source_entries.id,
+          display: kb_lookup_source_entries.display,
+          key: kb_lookup_source_entries.key,
+        })
+        .from(kb_lookup_source_entries)
+        .where(
+          and(
+            eq(kb_lookup_source_entries.source_id, sourceId),
+            isNull(kb_lookup_source_entries.embedding),
+          ),
+        )
+        .orderBy(asc(kb_lookup_source_entries.display))
+        .limit(limit);
+
+      return ok(
+        rows.map((row) => ({ id: row.id, display: row.display, ...(row.key ? { key: row.key } : {}) })),
+      );
+    } catch (cause) {
+      return this.failure("read unindexed lookup entries", cause);
+    }
+  }
+
+  async writeEntryEmbeddings(rows: Array<{ id: string; embedding: number[] }>): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+
+    try {
+      await this.db.transaction(async (tx) => {
+        for (const row of rows) {
+          await tx
+            .update(kb_lookup_source_entries)
+            .set({ embedding: row.embedding, updated_at: new Date() })
+            .where(eq(kb_lookup_source_entries.id, row.id));
+        }
+      });
+      return ok(undefined);
+    } catch (cause) {
+      return this.failure("index lookup entries", cause);
+    }
+  }
+
+  async findSimilarEntries(
+    sourceId: string,
+    embedding: number[],
+    limit: number,
+  ): Promise<Result<SimilarValueSetEntry[]>> {
+    try {
+      const similarity = sql<number>`1 - (${cosineDistance(kb_lookup_source_entries.embedding, embedding)})`;
+      const rows = await this.db
+        .select({
+          display: kb_lookup_source_entries.display,
+          key: kb_lookup_source_entries.key,
+          similarity,
+        })
+        .from(kb_lookup_source_entries)
+        .where(
+          and(
+            eq(kb_lookup_source_entries.source_id, sourceId),
+            // The index is built lazily, so a source part-way through warming
+            // holds rows with no vector at all. They are not "distant" — they
+            // are unknown, and must not be ranked as if they were.
+            isNotNull(kb_lookup_source_entries.embedding),
+          ),
+        )
+        .orderBy(desc(similarity))
+        .limit(limit);
+
+      return ok(
+        rows.map((row) => ({
+          entry: { display: row.display, ...(row.key ? { key: row.key } : {}) },
+          similarity: Number(row.similarity),
+        })),
+      );
+    } catch (cause) {
+      return this.failure("search indexed lookup entries", cause);
     }
   }
 
