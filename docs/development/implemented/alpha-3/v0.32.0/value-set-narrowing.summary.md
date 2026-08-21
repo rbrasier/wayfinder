@@ -1,5 +1,11 @@
 # Implementation Summary — Value-Set Narrowing (v0.32.0)
 
+> **Superseded in part by v0.33.0.** The semantic rung described below — the
+> `embedding` column, its HNSW index, `SemanticEntryIndex` and migration `0046` —
+> was replaced by a bounded AI shortlist call and removed entirely. The string
+> ladder, the `api` pagination and the `filtersAtSource` fix all still stand. See
+> `implemented/alpha-3/v0.33.0/value-set-ai-shortlist.summary.md`.
+
 - **Phase doc**: `value-set-narrowing.phase.md` (this folder)
 - **ADR**: ADR-051 — Narrowing a large value set to what the operator meant
 - **Version bump**: **MINOR**, `0.31.0` → `0.32.0` (additive schema + new capability)

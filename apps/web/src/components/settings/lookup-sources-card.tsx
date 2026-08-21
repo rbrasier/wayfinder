@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   DEFAULT_CACHE_TTL_SECONDS,
   formatValueSetEntry,
+  SHORTLIST_ENTRY_BUDGET,
   type LookupSourceKind,
   type RecordCollection,
   type ValueSetEntry,
@@ -38,6 +39,9 @@ export interface LookupSourceDraft {
   displayField: string;
   keyField: string;
   cacheTtlSeconds: number;
+  // Blank means "use the built-in default". Kept as a string so the admin can
+  // clear the box without it snapping back to a number under their cursor.
+  shortlistBudget: string;
   paging: LookupSourcePagingDraft;
 }
 
@@ -55,24 +59,43 @@ export const emptyDraft = (): LookupSourceDraft => ({
   displayField: "",
   keyField: "",
   cacheTtlSeconds: DEFAULT_CACHE_TTL_SECONDS,
+  shortlistBudget: "",
   paging: emptyPagingDraft(),
 });
 
 // Only the fields that kind actually uses reach the stored config, so a source
 // switched from api to directory does not carry a stale URL.
 export const draftToConfig = (draft: LookupSourceDraft): Record<string, unknown> => {
+  // Matching applies to every kind, so this rides alongside whatever the kind
+  // itself stores rather than inside one kind's branch.
+  const shared = shortlistBudgetToConfig(draft.shortlistBudget);
+
   if (draft.kind === "api") {
     return {
       url: draft.url.trim(),
       ...(draft.searchParam.trim() ? { searchParam: draft.searchParam.trim() } : {}),
       ...(draft.recordsPath.trim() ? { recordsPath: draft.recordsPath.trim() } : {}),
       ...pagingToConfig(draft.paging),
+      ...shared,
     };
   }
   if (draft.kind === "directory" && draft.directoryQuery.trim()) {
-    return { query: draft.directoryQuery.trim() };
+    return { query: draft.directoryQuery.trim(), ...shared };
   }
-  return {};
+  return { ...shared };
+};
+
+// A blank or unusable box stores nothing, so the source falls back to the
+// built-in budget rather than being pinned to a number nobody chose.
+const shortlistBudgetToConfig = (raw: string): Record<string, number> => {
+  const parsed = Number(raw.trim());
+  if (!raw.trim() || !Number.isFinite(parsed) || parsed <= 0) return {};
+  return { shortlistBudget: Math.floor(parsed) };
+};
+
+export const shortlistBudgetFromConfig = (config: Record<string, unknown>): string => {
+  const stored = config.shortlistBudget;
+  return typeof stored === "number" && stored > 0 ? String(stored) : "";
 };
 
 // A managed source has no external schema to probe, so its two fields are fixed
@@ -380,6 +403,9 @@ export function LookupSourcesCard() {
                     displayField: source.displayField,
                     keyField: source.keyField ?? "",
                     cacheTtlSeconds: source.cacheTtlSeconds,
+                    shortlistBudget: shortlistBudgetFromConfig(
+                      source.config as Record<string, unknown>,
+                    ),
                     paging: pagingFromConfig(source.config as Record<string, unknown>),
                   });
                   // Re-Test to repopulate the lists: the saved fields are shown
@@ -509,6 +535,22 @@ export function LookupSourcesCard() {
                 />
               </div>
             ) : null}
+
+            <div className="space-y-1">
+              <Label htmlFor="lookup-shortlist-budget">Entries sent for AI matching</Label>
+              <Input
+                id="lookup-shortlist-budget"
+                inputMode="numeric"
+                value={draft.shortlistBudget}
+                onChange={(event) => update({ shortlistBudget: event.target.value })}
+                placeholder={String(SHORTLIST_ENTRY_BUDGET)}
+              />
+              <p className="text-xs text-muted-foreground">
+                When a value cannot be matched, this many entries are sent to the AI to suggest what
+                was meant. A larger number reaches more of a big list but costs more per lookup.
+                Leave blank for the default.
+              </p>
+            </div>
 
             {isManaged ? (
               <div className="space-y-2 rounded-md border p-3">

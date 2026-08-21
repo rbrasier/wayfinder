@@ -104,6 +104,11 @@ export interface FieldValueSnapshot {
   readonly name: string;
   readonly version: string;
   readonly fetchedAt: Date;
+  // What was actually typed or proposed, when the step-end check accepted a
+  // near-certain misspelling of an entry rather than the entry itself. Absent
+  // when the value matched outright, so its presence is the audit record that a
+  // correction happened and what it corrected (ADR-050 §6).
+  readonly correctedFrom?: string;
 }
 
 export const isLookupSourceKind = (value: string): value is LookupSourceKind =>

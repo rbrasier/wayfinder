@@ -486,6 +486,13 @@ const build = () => {
   });
   const { graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver, useCases: peopleUseCases } =
     buildPeopleDirectory({ env, hrDatasets, users, languageModel: llm });
+  const lookupSources = buildLookupSources({
+    db,
+    peopleDirectories: [userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory],
+    allowLocalhost: env.NODE_ENV !== "production",
+    encryption: settingsEncryption,
+    languageModel: llm,
+  });
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const extraction = buildExtractionModule({
     db,
@@ -513,14 +520,6 @@ const build = () => {
     },
   });
   const documentIndexer = new DocumentIndexingService(embeddings, documentChunks);
-  // After the embeddings provider: the value-set matcher's semantic rung needs it.
-  const lookupSources = buildLookupSources({
-    db,
-    peopleDirectories: [userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory],
-    allowLocalhost: env.NODE_ENV !== "production",
-    encryption: settingsEncryption,
-    embeddings,
-  });
   const reindexSource = new DrizzleReindexSourceRepository(db);
   const connectivityTester = new CompositeConnectivityTester({
     runtimeConfig,

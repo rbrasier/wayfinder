@@ -75,4 +75,5 @@ export * from "./extraction-run-repository";
 export * from "./extraction-draft-repository";
 export * from "./archive-extractor";
 export * from "./value-set-provider";
+export * from "./value-set-shortlister";
 export * from "./lookup-source-repository";

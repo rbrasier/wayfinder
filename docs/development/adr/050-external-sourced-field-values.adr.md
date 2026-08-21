@@ -233,6 +233,25 @@ though the picker offers only valid options:
    This is the single point that attaches keys and writes the snapshot, and the
    natural place to amortise the external call.
 
+**Amended in v0.33.0 (ADR-051 §2):** a value that is unambiguously one entry
+misspelled is now a match, not a block. After the exact resolve has rejected a
+value, the matching ladder may accept it — but only when the arithmetic makes it
+certain: the score clears `NEAR_CERTAIN_SCORE` **and** beats every other distinct
+entry by `NEAR_CERTAIN_MARGIN`. Two entries a character apart still block, which
+is the case this rule exists to keep blocking.
+
+Three things keep the widening within the spirit of this decision:
+
+- It is **deterministic arithmetic over the cached set**, not a model's judgement.
+  An AI-shortlisted candidate is never accepted this way, at any confidence.
+- It can only ever select an entry the source genuinely holds, so no value enters
+  a document that was not in the set.
+- Every value it changes is recorded. `FieldValueSnapshot.correctedFrom` carries
+  what was actually typed or proposed, so an auditor can see the document says
+  *Corporate Services* because someone wrote *Corprate Services*. A value that
+  matched outright carries no `correctedFrom`, so its presence is the record that
+  a correction happened.
+
 ## Consequences
 
 **Positive**

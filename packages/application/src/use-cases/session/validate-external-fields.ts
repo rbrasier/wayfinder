@@ -7,7 +7,6 @@ import {
   type Result,
   type TemplateField,
   type ValueSetEntry,
-  type ValueSetMatch,
 } from "@rbrasier/domain";
 
 export interface ValidateExternalFieldsInput {
@@ -106,37 +105,30 @@ export const validateExternalFields = async (
 ): Promise<Result<ValidateExternalFieldsResult>> => {
   const resolved: Record<string, ResolvedExternalField> = {};
   const flagged: ExternalFieldFlag[] = [];
-  let blocksCompletion = false;
 
   for (const batch of batchBySource(input)) {
     const outcome = await valueSetProvider.resolve(batch.sourceName, batch.values);
     const data = outcome.data ?? degradedOutcome(batch.values);
-    const batchFlags: ExternalFieldFlag[] = [];
     const snapshot: FieldValueSnapshot = {
       name: batch.sourceName,
       version: data.version,
       fetchedAt: data.fetchedAt,
     };
+    const narrowed = await narrowFailures(valueSetProvider, batch, data);
 
     for (const field of batch.fields) {
       const rawValues = splitValues(field, input.values[field.key] ?? "").filter(
         (value) => value.length > 0,
       );
-      const entries = rawValues.map((value) =>
-        data.matched.find((match) => match.input === value),
+      const entries = rawValues.map(
+        (value) =>
+          data.matched.find((match) => match.input === value)?.entry ??
+          narrowed.corrections.get(value),
       );
       const failedIndex = entries.findIndex((entry) => entry === undefined);
 
       if (failedIndex === -1) {
-        const matchedEntries = entries.map((entry) => entry!.entry);
-        const keys = matchedEntries.map((entry) => entry.key).filter((key): key is string => !!key);
-        resolved[field.key] = {
-          value: matchedEntries.map((entry) => entry.display).join(MULTI_VALUE_SEPARATOR),
-          ...(keys.length === matchedEntries.length && keys.length > 0
-            ? { valueKey: keys.join(MULTI_VALUE_SEPARATOR) }
-            : {}),
-          sourceRef: snapshot,
-        };
+        resolved[field.key] = resolveField(entries as ValueSetEntry[], rawValues, snapshot);
         continue;
       }
 
@@ -147,15 +139,15 @@ export const validateExternalFields = async (
           ? "ambiguous"
           : "unresolved";
 
-      const flag: ExternalFieldFlag = {
+      const suggestions = narrowed.suggestions.get(failedValue);
+      flagged.push({
         fieldKey: field.key,
         label: field.label,
         value: failedValue,
         reason,
         sourceName: batch.sourceName,
-      };
-      flagged.push(flag);
-      batchFlags.push(flag);
+        ...(suggestions && suggestions.length > 0 ? { suggestions } : {}),
+      });
 
       // A stale set is not authoritative, so the operator's value stands and is
       // flagged for review rather than rejected.
@@ -164,50 +156,86 @@ export const validateExternalFields = async (
           value: rawValues.join(MULTI_VALUE_SEPARATOR),
           sourceRef: snapshot,
         };
-        continue;
       }
-      blocksCompletion = true;
     }
-
-    await attachSuggestions(valueSetProvider, batch.sourceName, batchFlags);
   }
 
-  return ok({ resolved, flagged, blocksCompletion });
+  return ok({
+    resolved,
+    flagged,
+    blocksCompletion: flagged.some((flag) => flag.reason !== "stale"),
+  });
 };
 
-// Best-effort, and deliberately after the fact: narrowing runs only for values
-// that have already failed the authoritative resolve, so it can never widen what
-// counts as valid. A narrowing failure leaves the block in place without
-// suggestions rather than turning into an error of its own.
-const attachSuggestions = async (
+const resolveField = (
+  entries: ValueSetEntry[],
+  rawValues: string[],
+  snapshot: FieldValueSnapshot,
+): ResolvedExternalField => {
+  const canonical = entries.map((entry) => entry.display).join(MULTI_VALUE_SEPARATOR);
+  const original = rawValues.join(MULTI_VALUE_SEPARATOR);
+  const keys = entries.map((entry) => entry.key).filter((key): key is string => !!key);
+  // Casing was always normalised by the resolve itself (ADR-050 §6), so only a
+  // difference the letters themselves make counts as a correction worth recording.
+  const corrected = original.toLowerCase() !== canonical.toLowerCase();
+
+  return {
+    value: canonical,
+    ...(keys.length === entries.length && keys.length > 0
+      ? { valueKey: keys.join(MULTI_VALUE_SEPARATOR) }
+      : {}),
+    sourceRef: corrected ? { ...snapshot, correctedFrom: original } : snapshot,
+  };
+};
+
+interface Narrowing {
+  // Values the ladder placed beyond doubt, which are accepted without asking.
+  corrections: Map<string, ValueSetEntry>;
+  // Values it could only narrow, offered with the block for the operator to pick.
+  suggestions: Map<string, ValueSetEntry[]>;
+}
+
+const NO_NARROWING: Narrowing = { corrections: new Map(), suggestions: new Map() };
+
+// Runs only for values the authoritative resolve already rejected, and never for
+// a stale set, whose values are not authoritative and whose suggestions would
+// carry false confidence (ADR-050 §5). A narrowing failure yields nothing rather
+// than becoming an error of its own.
+const narrowFailures = async (
   valueSetProvider: IValueSetProvider,
-  sourceName: string,
-  flags: ExternalFieldFlag[],
-): Promise<void> => {
-  const blocked = flags.filter((flag) => flag.reason !== "stale");
-  if (blocked.length === 0) return;
+  batch: SourceBatch,
+  data: ResolveOutcome,
+): Promise<Narrowing> => {
+  if (data.stale) return NO_NARROWING;
+
+  const failed = [...new Set([...data.unresolved, ...data.ambiguous])];
+  if (failed.length === 0) return NO_NARROWING;
 
   const narrowed = await valueSetProvider.match({
-    sourceName,
-    values: [...new Set(blocked.map((flag) => flag.value))],
+    sourceName: batch.sourceName,
+    values: failed,
+    // One call serves the whole source, so a label is only honest when a single
+    // field is asking. Two fields sharing a source would each need their own.
+    ...(batch.fields.length === 1 ? { context: batch.fields[0]!.label } : {}),
   });
-  if (narrowed.error) return;
+  if (narrowed.error) return NO_NARROWING;
 
-  blocked.forEach((flag) => {
-    const match = narrowed.data.matches.find((candidate) => candidate.input === flag.value);
-    const entries = suggestedEntries(match);
-    if (entries.length === 0) return;
-    flag.suggestions = entries;
+  const corrections = new Map<string, ValueSetEntry>();
+  const suggestions = new Map<string, ValueSetEntry[]>();
+
+  narrowed.data.matches.forEach((match) => {
+    if (match.outcome.kind === "resolved") {
+      corrections.set(match.input, match.outcome.candidate.entry);
+      return;
+    }
+    if (match.outcome.kind === "none") return;
+    suggestions.set(
+      match.input,
+      match.outcome.candidates.map((candidate) => candidate.entry),
+    );
   });
-};
 
-const suggestedEntries = (match: ValueSetMatch | undefined): ValueSetEntry[] => {
-  if (!match) return [];
-  // A value the ladder can resolve on its own still failed the exact resolve —
-  // a spelling variant, say — so it is offered as the one thing to confirm.
-  if (match.outcome.kind === "resolved") return [match.outcome.candidate.entry];
-  if (match.outcome.kind === "none") return [];
-  return match.outcome.candidates.map((candidate) => candidate.entry);
+  return { corrections, suggestions };
 };
 
 // The operator-facing rendering of a block: what failed, and what to say instead.

@@ -11,6 +11,7 @@ import {
   type CachedValueSet,
   type ILookupSourceRepository,
   type IValueSetProvider,
+  type IValueSetShortlister,
   type LookupSource,
   type LookupSourceKind,
   type ResolveOutcome,
@@ -25,7 +26,6 @@ import {
   type ValueSetProbeInput,
   type ValueSetSearchInput,
 } from "@rbrasier/domain";
-import type { SemanticEntryIndex } from "./semantic-entry-index";
 import { recordsToEntries, type ValueSetKindAdapter } from "./value-set-kind-adapter";
 
 export interface CachingValueSetProviderOptions {
@@ -34,8 +34,8 @@ export interface CachingValueSetProviderOptions {
   now?: () => Date;
   newVersion?: () => string;
   // Optional: without it `match` runs the string ladder alone, which is the
-  // correct behaviour when no embeddings provider is configured.
-  semanticIndex?: SemanticEntryIndex;
+  // correct behaviour when no language model is configured.
+  shortlister?: IValueSetShortlister;
 }
 
 const EMPTY_VERSION = "empty";
@@ -145,16 +145,19 @@ export class CachingValueSetProvider implements IValueSetProvider {
     for (const value of input.values) {
       const strings = rankValueSetCandidates(listing.data.entries, value, limit);
       const outcome = classifyValueSetMatch(strings);
-      // A spelling match is the value itself, so the expensive rung is skipped.
+      // The letters already settled it, so the model is never consulted.
       if (outcome.kind === "resolved") {
         matches.push({ input: value, outcome });
         continue;
       }
 
-      const semantic = await this.semanticCandidates(source.data.id, value, limit);
+      const inferred = await this.inferredCandidates(source.data, listing.data.entries, value, {
+        limit,
+        ...(input.context ? { context: input.context } : {}),
+      });
       matches.push({
         input: value,
-        outcome: classifyValueSetMatch(mergeCandidates(strings, semantic, limit)),
+        outcome: classifyValueSetMatch(mergeCandidates(strings, inferred, limit)),
       });
     }
 
@@ -166,16 +169,24 @@ export class CachingValueSetProvider implements IValueSetProvider {
     });
   }
 
-  private async semanticCandidates(
-    sourceId: string,
+  private async inferredCandidates(
+    source: LookupSource,
+    entries: ValueSetEntry[],
     value: string,
-    limit: number,
+    options: { limit: number; context?: string },
   ): Promise<ValueSetCandidate[]> {
-    const index = this.options.semanticIndex;
-    if (!index) return [];
+    const shortlister = this.options.shortlister;
+    if (!shortlister) return [];
 
-    const similar = await index.similar(sourceId, value, limit);
-    return similar.data ?? [];
+    const budget = shortlistBudgetOf(source);
+    const shortlisted = await shortlister.shortlist({
+      query: value,
+      entries,
+      ...(options.context ? { fieldLabel: options.context } : {}),
+      ...(budget ? { budget } : {}),
+      limit: options.limit,
+    });
+    return shortlisted.data ?? [];
   }
 
   async probe(input: ValueSetProbeInput): Promise<Result<ValueSetProbe>> {
@@ -295,6 +306,16 @@ export class CachingValueSetProvider implements IValueSetProvider {
     return this.options.newVersion?.() ?? new Date().toISOString();
   }
 }
+
+// An admin ceiling on how much of a source is worth sending to the model. It
+// rides the config jsonb, so raising it costs no migration.
+const shortlistBudgetOf = (source: LookupSource): number | undefined => {
+  const configured = (source.config as { shortlistBudget?: unknown }).shortlistBudget;
+  if (typeof configured !== "number" || !Number.isFinite(configured) || configured <= 0) {
+    return undefined;
+  }
+  return Math.floor(configured);
+};
 
 // Substring first, because a type-ahead that reorders under every keystroke is
 // unusable. The ranked ladder is the fallback for when substring finds nothing —

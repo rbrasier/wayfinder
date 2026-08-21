@@ -49,6 +49,10 @@ export interface ValueSetMatchInput {
   sourceName: string;
   values: string[];
   limit?: number;
+  // The field being filled, where the caller knows it. It reaches the shortlist
+  // prompt so a value can be read as what it is meant to be — a department
+  // rather than a job title — which is the context letter-matching discards.
+  context?: string;
 }
 
 // One input value, narrowed. `outcome` says whether the ladder settled it or

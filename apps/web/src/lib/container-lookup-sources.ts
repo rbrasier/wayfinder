@@ -1,13 +1,13 @@
 import {
+  AiValueSetShortlister,
   ApiValueSetAdapter,
   CachingValueSetProvider,
   DirectoryValueSetAdapter,
   DrizzleLookupSourceRepository,
   ManagedValueSetAdapter,
-  SemanticEntryIndex,
 } from "@rbrasier/adapters";
 import type { Database, SettingsEncryptionService } from "@rbrasier/adapters";
-import type { IEmbeddingsProvider } from "@rbrasier/domain";
+import type { ILanguageModel } from "@rbrasier/domain";
 import {
   DeleteLookupSource,
   ListLookupSources,
@@ -28,8 +28,8 @@ interface LookupSourceDependencies {
   allowLocalhost: boolean;
   // The same service that protects the n8n, AI and SMTP secrets.
   encryption: SettingsEncryptionService;
-  // Backs the semantic rung of the matching ladder (ADR-051 §3).
-  embeddings: IEmbeddingsProvider;
+  // Backs the inferred rung of the matching ladder (ADR-051 §3).
+  languageModel: ILanguageModel;
 }
 
 // The lookup-source registry and value-set provider wiring (ADR-050), factored
@@ -40,7 +40,7 @@ export const buildLookupSources = ({
   peopleDirectories,
   allowLocalhost,
   encryption,
-  embeddings,
+  languageModel,
 }: LookupSourceDependencies) => {
   const repository = new DrizzleLookupSourceRepository(db, encryption);
   const valueSetProvider = new CachingValueSetProvider({
@@ -50,7 +50,7 @@ export const buildLookupSources = ({
       managed: new ManagedValueSetAdapter(repository),
       api: new ApiValueSetAdapter({ guardOptions: { allowLocalhost } }),
     },
-    semanticIndex: new SemanticEntryIndex({ sources: repository, embeddings }),
+    shortlister: new AiValueSetShortlister(languageModel),
   });
 
   return {

@@ -372,6 +372,145 @@ describe("validateExternalFields — suggestions", () => {
 
     expect(result.data?.flagged[0]?.suggestions).toBeUndefined();
   });
+
+  it("tells the source which field is being filled, so a value can be read in context", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Finence" },
+    });
+
+    expect(provider.matchCalls[0]?.context).toBe("Department");
+  });
+
+  it("says nothing about the field when one source serves several of them", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    await validateExternalFields(provider, {
+      fields: [departmentField, field("Owner (options-source: departments)")],
+      values: { department: "Finence", owner: "aardvark" },
+    });
+
+    expect(provider.matchCalls[0]?.context).toBeUndefined();
+  });
+});
+
+describe("validateExternalFields — near-certain corrections", () => {
+  const departmentField = field("Department (options-source: departments)");
+
+  it("accepts a misspelling that names one entry, and does not block the step", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Human Resorces" },
+    });
+
+    expect(result.data?.blocksCompletion).toBe(false);
+    expect(result.data?.flagged).toEqual([]);
+    expect(result.data?.resolved.department?.value).toBe("Human Resources");
+    expect(result.data?.resolved.department?.valueKey).toBe("HR-002");
+  });
+
+  it("records what was actually written, so the correction is auditable", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Human Resorces" },
+    });
+
+    expect(result.data?.resolved.department?.sourceRef.correctedFrom).toBe("Human Resorces");
+  });
+
+  it("records nothing when the value matched outright", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Finance" },
+    });
+
+    expect(result.data?.resolved.department?.sourceRef.correctedFrom).toBeUndefined();
+  });
+
+  it("treats a difference of casing alone as a match, not a correction", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "finance" },
+    });
+
+    expect(result.data?.resolved.department?.value).toBe("Finance");
+    expect(result.data?.resolved.department?.sourceRef.correctedFrom).toBeUndefined();
+  });
+
+  it("refuses to correct a typo that reaches two entries at once", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Operatons" },
+    });
+
+    expect(result.data?.blocksCompletion).toBe(true);
+    expect(result.data?.resolved.department).toBeUndefined();
+    expect(result.data?.flagged[0]?.suggestions).toHaveLength(2);
+  });
+
+  it("leaves a value too far from anything alone", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Finence" },
+    });
+
+    expect(result.data?.blocksCompletion).toBe(true);
+    expect(result.data?.resolved.department).toBeUndefined();
+  });
+
+  it("never corrects against a stale set, whose values are not authoritative", async () => {
+    const provider = new FakeValueSetProvider({ departments }, { stale: true });
+
+    const result = await validateExternalFields(provider, {
+      fields: [departmentField],
+      values: { department: "Human Resorces" },
+    });
+
+    expect(provider.matchCalls).toEqual([]);
+    expect(result.data?.resolved.department?.value).toBe("Human Resorces");
+  });
+
+  it("corrects one value of a multi-value field and keeps the others", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [field("Departments (options-source: departments) (multiple)")],
+      values: { departments: "Finance, Human Resorces" },
+    });
+
+    expect(result.data?.blocksCompletion).toBe(false);
+    expect(result.data?.resolved.departments?.value).toBe("Finance, Human Resources");
+    expect(result.data?.resolved.departments?.sourceRef.correctedFrom).toBe(
+      "Finance, Human Resorces",
+    );
+  });
+
+  it("blocks a multi-value field when only some of its values can be corrected", async () => {
+    const provider = new FakeValueSetProvider({ departments });
+
+    const result = await validateExternalFields(provider, {
+      fields: [field("Departments (options-source: departments) (multiple)")],
+      values: { departments: "Human Resorces, aardvark" },
+    });
+
+    expect(result.data?.blocksCompletion).toBe(true);
+    expect(result.data?.resolved.departments).toBeUndefined();
+    expect(result.data?.flagged[0]?.value).toBe("aardvark");
+  });
 });
 
 describe("describeExternalFieldFlag", () => {

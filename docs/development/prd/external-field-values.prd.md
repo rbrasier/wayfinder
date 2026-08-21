@@ -5,8 +5,12 @@
 - **Revised**: 2026-08-17 — `api` source kind brought into scope; Test-time
   display/key field selection and the `value (key)` presentation convention
   added; version corrected to `0.31.0`; ADR renumbered to ADR-050
+- **Revised**: 2026-08-21 — narrowing brought into scope (§3, §6, §10): an
+  operator's word now reaches the source's word through a matching ladder and an
+  AI shortlist, and `api` pagination moved from non-goal to shipped. Delivered
+  across `0.32.0` and `0.33.0`; see ADR-051.
 - **Author**: rbrasier
-- **Target version**: 0.31.0  (bump: MINOR — new feature + additive schema; see `docs/guides/versioning.md`)
+- **Target version**: 0.31.0 (bump: MINOR — new feature + additive schema; see `docs/guides/versioning.md`). Narrowing follows in `0.32.0`–`0.33.0`.
 
 ## 1. Problem
 
@@ -65,19 +69,41 @@ a downstream system needs.
   stop).
 - Validation is **hybrid**: live type-ahead in the manual picker, plus an
   authoritative **batch re-check of every external-sourced field at step end**.
+- **A value that fails the step-end check ends in a choice, not a wall.** The
+  operator's word is narrowed against the cached set through a ladder — exact,
+  then the same value spelled differently, then word overlap and letter
+  similarity — and, where those find nothing, a single bounded AI call that
+  shortlists what they probably meant. The block names the candidates rather
+  than only naming the failure.
+- **An unambiguous correction costs no turn.** A value that differs from exactly
+  one entry by punctuation, a plural, or a single typo resolves on its own,
+  provided no other entry is a comparably close match. Everything less certain
+  is shortlisted for the operator to confirm.
+- **Narrowing proposes; it never decides.** A suggestion is never substituted
+  for the operator's value, and whatever they confirm passes the same step-end
+  resolve as any other value. An AI-shortlisted candidate never auto-resolves.
+- An `api` source **walks its pages** so the cache holds the whole set, bounded
+  by an admin-settable record ceiling and a fixed page cap.
 
 ## 4. Non-goals
 
 - Writing back to the external system, or two-way sync. The `api` kind is
   read-only (`GET`/`POST`-for-search only).
 - Cascading / dependent lookups (e.g. sub-department filtered by department).
-- Cursor/`next`-link pagination for the `api` kind — v1 fetches a single bounded
-  page for `list`, and delegates large sets to `search`.
 - Free-typing the source name in a tag without a registered source (the name
   must resolve to a registry row at template-upload time).
 - Per-operator personalised value sets / row-level security on the source.
 - Scheduled background cache refresh (v1 refreshes lazily on TTL expiry or on
   demand via Test).
+- **An AI choosing a value on the operator's behalf.** Narrowing shortlists;
+  the operator confirms. Auto-accepting a shortlisted candidate is out of scope
+  and would defeat the step-end check (§10, ADR-050 §6).
+- **Narrowing on the structured-capture path** — the step-end re-check still
+  runs on the document-generation path only.
+
+*No longer a non-goal:* cursor/`next`-link pagination for the `api` kind, which
+shipped in `0.32.0`. `list` walks offset, page-numbered or cursor pagination
+under a record ceiling instead of fetching one bounded page.
 
 ## 5. Key entities
 
@@ -86,7 +112,9 @@ a downstream system needs.
 | `LookupSource` | `packages/domain/src/entities/lookup-source.ts` | new | Registry row: `name` (slug used in tags), `label`, `kind` (`directory` \| `managed` \| `api`), `config`, `displayField`, `keyField?`, `credentialRef?`, `cacheTtlSeconds`, `enabled`. |
 | `ValueSetEntry` | `packages/domain/src/entities/lookup-source.ts` | new | `{ display: string; key?: string }` — one resolved option. |
 | `ValueSetProbe` | `packages/domain/src/entities/lookup-source.ts` | new | `{ fields: string[]; sample: Array<Record<string, string>> }` — what Test returns so the admin can pick display/key. |
-| `IValueSetProvider` | `packages/domain/src/ports/value-set-provider.ts` | new | `search`, `list`, `resolve` (batch) over a named source, plus `probe` over a draft config. Result pattern. |
+| `IValueSetProvider` | `packages/domain/src/ports/value-set-provider.ts` | new | `search`, `list`, `resolve` (batch) over a named source, `match` (batch narrowing), plus `probe` over a draft config. Result pattern. |
+| `ValueSetCandidate` / `MatchTier` | `packages/domain/src/entities/value-set-matching.ts` | new (0.32.0) | One narrowed suggestion and how it was found: `exact`, `normalised`, `token`, `fuzzy`, `inferred`. Only the first two, and a near-certain third, resolve without the operator. |
+| `IValueSetShortlister` | `packages/domain/src/ports/value-set-shortlister.ts` | new (0.33.0) | One bounded AI call: given a query and the cached set, return the ranked candidates it believes were meant. Never consulted until the string ladder has failed. |
 | `TemplateField.optionsSource` | `packages/domain/src/entities/template-field.ts` | existing (add field) | Optional `string` ref; mutually exclusive with `options`; composes with `multiple`. |
 | `StepOutputField.valueKey` / `sourceRef` | `packages/domain/src/entities/session-step-output.ts` | existing (add fields) | Optional key + `{ name, version, fetchedAt }` snapshot; rides existing jsonb — no output-table migration. `options` stays empty for external fields. |
 | `FieldValueSnapshot` | (inline on `StepOutputField`) | new (type) | The audit record of which source/version validated the value. |
@@ -123,6 +151,9 @@ a downstream system needs.
 - `/admin/settings` (**Configuration**) — new **Lookup Sources** card: list,
   create, edit, delete, and a **Test** panel that probes the source, offers the
   returned field names as display/key selectors, and previews resolved pairs.
+  An `api` source also carries a **Pagination** panel (style, parameter names,
+  page size, cursor path, record ceiling), and every source carries the number of
+  entries sent for AI matching.
 - Node config / template review picker — external-sourced fields render a
   type-ahead search control instead of a static dropdown, showing `display (key)`.
 - Document template upload — parser accepts `(options-source: NAME)` and
@@ -156,6 +187,10 @@ to a client.
   prompting, cache + snapshot degradation, hybrid step-end validation).
   Renumbered from 032, which three ADRs already claimed — one of them accepted
   and cited from shipped code (`session-step-output.ts`).
+- **New**: ADR-051 — Narrowing a large value set to what the operator meant (the
+  matching ladder, `api` pagination, the AI shortlist rung, the near-certain
+  auto-resolve rule, and the invariant that narrowing proposes while the
+  step-end resolve still decides). Extends ADR-050 without superseding it.
 - **Assumes / extends**: ADR-018 (external directory degrades gracefully) — the
   same fail-degraded philosophy applied to constraint sets, hardened with a
   snapshot so audit survives an outage.
@@ -204,15 +239,39 @@ to a client.
 - [ ] Source outage serves last-known-good entries with a stale flag; generation
       / validation never hard-fails on the external call (Result pattern, fail
       degraded).
+- [ ] An `api` source with a paging block walks offset, page-numbered or cursor
+      pagination until the source runs out, the record ceiling is reached, or the
+      page cap is spent; a page failing mid-walk discards the walk rather than
+      caching a truncated set.
+- [ ] A value differing from exactly one entry only by punctuation, a joining
+      word, or a plural resolves without a confirmation turn.
+- [ ] A value differing from exactly one entry by a single typo resolves without
+      a confirmation turn **only** when no other entry scores within the margin;
+      two entries one character apart (`Region 1` / `Region 2`) are shortlisted,
+      never auto-filled.
+- [ ] When the string ladder finds nothing, one bounded AI call shortlists at
+      most 5 candidates from the cached set; any option it returns that is not in
+      that set is dropped; an AI-shortlisted candidate never auto-resolves.
+- [ ] A blocked value's message names the candidates
+      (`"Department" (procurement) — did you mean Finance (FIN-001)?`), and the
+      value the operator confirms passes the same step-end resolve.
+- [ ] A **stale** set is never narrowed, and a narrowing failure (no model, an
+      outage, an unparseable response) leaves the block in place without
+      suggestions rather than raising an error.
 - [ ] Architecture boundaries intact (`domain` dependency-free; port in domain,
       adapters implement; Result at all boundaries).
 - [ ] `VERSION` = `package.json#version` = `0.31.0`; `./validate.sh` passes.
+      Narrowing lands at `0.32.0`, the AI shortlist and near-certain rule at
+      `0.33.0`.
 
 ## 11. Out of scope / future work
 
 - Dependent / cascading lookups and server-side filtering by another field.
-- Cursor-based pagination and scheduled background cache refresh for the `api`
-  kind; a job-queue refresh (`job_`) is a follow-up.
+- Scheduled background cache refresh for the `api` kind; a job-queue refresh
+  (`job_`) is a follow-up. (Cursor-based pagination is no longer future work —
+  it shipped in `0.32.0`.)
+- Prompt caching of the entry list sent to the shortlist call; worth doing once
+  real set sizes are known.
 - Write-back / two-way sync to any source kind.
 - Bulk re-validation of historical outputs after a source changes.
 - CSV import for `managed` source entries (inline editing ships first).
@@ -239,3 +298,13 @@ to a client.
   UNIQUE` and `CREATE UNIQUE INDEX` regardless of table age, so the unique
   `name` must be inline in `CREATE TABLE` or carry a `-- data-impact: preserved`
   declaration.
+- **The near-certain threshold is the one number that can seat a wrong value**
+  without anyone confirming it. The runner-up margin, not the score, is the real
+  protection; both are named constants with direct tests, and both are unvalidated
+  against real data until a live source exercises them.
+- **The AI shortlist costs a model call per distinct blocked value**, and sends
+  the cached set in the prompt. Sets above the admin-settable budget are sampled,
+  so the right answer can fall outside the slice — a missing suggestion, never a
+  wrong one.
+- **Stemming folds "Service" onto "Services"**, so a source deliberately holding
+  both as distinct entries sees them shortlisted rather than one resolving.

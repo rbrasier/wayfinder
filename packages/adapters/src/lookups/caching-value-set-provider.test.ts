@@ -9,7 +9,6 @@ import type {
   ValueSetCandidate,
 } from "@rbrasier/domain";
 import { CachingValueSetProvider } from "./caching-value-set-provider";
-import type { SemanticEntryIndex } from "./semantic-entry-index";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "./value-set-kind-adapter";
 
 const NOW = new Date("2026-08-02T12:00:00.000Z");
@@ -476,25 +475,25 @@ describe("CachingValueSetProvider.match", () => {
     { department: "Corporate Services", department_code: "CS-001" },
   ];
 
-  const semanticIndex = (candidates: ValueSetCandidate[]) => ({
-    similar: vi.fn().mockResolvedValue(ok(candidates)),
+  const shortlister = (candidates: ValueSetCandidate[]) => ({
+    shortlist: vi.fn().mockResolvedValue(ok(candidates)),
   });
 
   const buildMatcher = (
     repository: FakeRepository,
     adapter: ValueSetKindAdapter,
-    index?: { similar: ReturnType<typeof vi.fn> },
+    index?: { shortlist: ReturnType<typeof vi.fn> },
   ) =>
     new CachingValueSetProvider({
       sources: repository as unknown as ILookupSourceRepository,
       adapters: { api: adapter },
       now: () => NOW,
       newVersion: () => "v-new",
-      ...(index ? { semanticIndex: index as unknown as SemanticEntryIndex } : {}),
+      ...(index ? { shortlister: index } : {}),
     });
 
-  it("resolves a spelling variant without consulting the semantic index", async () => {
-    const index = semanticIndex([]);
+  it("resolves a spelling variant without consulting the model", async () => {
+    const index = shortlister([]);
     const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords), index);
 
     const result = await provider.match({ sourceName: "departments", values: ["  finance  "] });
@@ -503,7 +502,7 @@ describe("CachingValueSetProvider.match", () => {
       kind: "resolved",
       candidate: { entry: { display: "Finance", key: "FIN-001" }, score: 1, tier: "exact" },
     });
-    expect(index.similar).not.toHaveBeenCalled();
+    expect(index.shortlist).not.toHaveBeenCalled();
   });
 
   it("shortlists rather than deciding when the best it has is a related word", async () => {
@@ -518,9 +517,9 @@ describe("CachingValueSetProvider.match", () => {
     );
   });
 
-  it("reaches an entry that shares no letters with the input, via the semantic index", async () => {
-    const index = semanticIndex([
-      { entry: { display: "Finance", key: "FIN-001" }, score: 0.78, tier: "semantic" },
+  it("reaches an entry that shares no letters with the input, via the model", async () => {
+    const index = shortlister([
+      { entry: { display: "Finance", key: "FIN-001" }, score: 0.9, tier: "inferred" },
     ]);
     const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords), index);
 
@@ -529,7 +528,9 @@ describe("CachingValueSetProvider.match", () => {
 
     expect(outcome?.kind).toBe("candidates");
     expect(outcome?.kind === "candidates" && outcome.candidates[0]?.entry.key).toBe("FIN-001");
-    expect(index.similar).toHaveBeenCalledWith("source-1", "procurement", 5);
+    expect(index.shortlist).toHaveBeenCalledWith(
+      expect.objectContaining({ query: "procurement", limit: 5 }),
+    );
   });
 
   it("reports nothing found rather than guessing when every rung comes up empty", async () => {
@@ -575,5 +576,75 @@ describe("CachingValueSetProvider.match", () => {
     const result = await provider.match({ sourceName: "departments", values: ["finance"] });
 
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+
+  it("hands the model the cached set, so it chooses from the source and not from memory", async () => {
+    const index = shortlister([]);
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords), index);
+
+    await provider.match({ sourceName: "departments", values: ["procurement"] });
+
+    expect(index.shortlist.mock.calls[0]?.[0]?.entries).toEqual([
+      { display: "Finance", key: "FIN-001" },
+      { display: "Corporate Services", key: "CS-001" },
+    ]);
+  });
+
+  it("passes the field label through as context when the caller supplies one", async () => {
+    const index = shortlister([]);
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords), index);
+
+    await provider.match({
+      sourceName: "departments",
+      values: ["procurement"],
+      context: "Department",
+    });
+
+    expect(index.shortlist.mock.calls[0]?.[0]?.fieldLabel).toBe("Department");
+  });
+
+  it("corrects a near-certain misspelling without consulting the model", async () => {
+    const index = shortlister([]);
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords), index);
+
+    const result = await provider.match({
+      sourceName: "departments",
+      values: ["Corprate Services"],
+    });
+    const outcome = result.data?.matches[0]?.outcome;
+
+    expect(outcome?.kind).toBe("resolved");
+    expect(outcome?.kind === "resolved" && outcome.candidate.entry.key).toBe("CS-001");
+    expect(index.shortlist).not.toHaveBeenCalled();
+  });
+
+  it("passes the source's own entry budget to the model", async () => {
+    const index = shortlister([]);
+    const configured = source();
+    configured.config = { ...configured.config, shortlistBudget: 250 };
+    const provider = buildMatcher(new FakeRepository(configured), new FakeAdapter(wideRecords), index);
+
+    await provider.match({ sourceName: "departments", values: ["procurement"] });
+
+    expect(index.shortlist.mock.calls[0]?.[0]?.budget).toBe(250);
+  });
+
+  it("ignores a budget that is not a usable number", async () => {
+    const index = shortlister([]);
+    const configured = source();
+    configured.config = { ...configured.config, shortlistBudget: 0 };
+    const provider = buildMatcher(new FakeRepository(configured), new FakeAdapter(wideRecords), index);
+
+    await provider.match({ sourceName: "departments", values: ["procurement"] });
+
+    expect(index.shortlist.mock.calls[0]?.[0]?.budget).toBeUndefined();
+  });
+
+  it("still narrows when no model is configured at all", async () => {
+    const provider = buildMatcher(new FakeRepository(source()), new FakeAdapter(wideRecords));
+
+    const result = await provider.match({ sourceName: "departments", values: ["corporate"] });
+
+    expect(result.data?.matches[0]?.outcome.kind).toBe("candidates");
   });
 });

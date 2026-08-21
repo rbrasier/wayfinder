@@ -1,13 +1,20 @@
 # ADR-051 — Narrowing a large value set to what the operator meant
 
-- **Status**: Proposed (scoped by `value-set-narrowing.phase.md`, target v0.32.0)
+- **Status**: Accepted (v0.32.0), revised in v0.33.0 by
+  `value-set-ai-shortlist.phase.md`
 - **Date**: 2026-08-21
+- **Revised**: 2026-08-21 — §3's vector index is replaced by a bounded AI
+  shortlist call, and §2 gains the near-certain correction rule. The revision
+  amends ADR-050 §6, which had been left untouched by the original decision.
 - **Relates to**: ADR-050 (external-sourced field values) — this ADR does not
   supersede it. It adds a *narrowing* path in front of the exact resolve ADR-050
-  §6 defines, and leaves that resolve unchanged as the authoritative gate.
-  Also relates to ADR-016/017 (embeddings and the 384-dimension convention) and
-  ADR-029 (hybrid retrieval), whose split of "letters" from "meaning" this
-  reuses.
+  §6 defines, which remains the authoritative gate: a shortlisted candidate is
+  never accepted on its own, and whatever the operator confirms passes that same
+  resolve. In v0.33.0 it also **amends** §6 to accept a near-certain misspelling
+  without a confirmation turn (§2), recorded on the snapshot as `correctedFrom`.
+  ADR-029's split of "letters" from "meaning" is the shape this reuses; the
+  embedding conventions of ADR-016/017 were used by the v0.32.0 rung and no
+  longer apply here.
 
 ## Context
 
@@ -70,33 +77,66 @@ input through four rungs, each tried only when the one above found nothing:
 |---|---|---|
 | `exact` | display or key equal, case- and space-insensitive | yes |
 | `normalised` | equal after folding punctuation, diacritics, joining words and plurals | yes |
-| `token` | shared words, Jaccard with a discounted credit for prefixes | no |
-| `fuzzy` | Dice coefficient over padded trigrams | no |
+| `token` | shared words, Jaccard with a discounted credit for prefixes | only if near-certain |
+| `fuzzy` | Dice coefficient over padded trigrams | only if near-certain |
+| `inferred` | a model reading the set (§3) | never |
 
-Only the top two resolve, and only when they name a single entry: two entries
-sharing a display under different keys is exactly the case an operator must
-settle. Everything below is a **shortlist**, capped at five.
+The two spelling tiers resolve outright, and only when they name a single entry:
+two entries sharing a display under different keys is exactly the case an
+operator must settle. Everything else is a **shortlist**, capped at five.
+
+**The near-certain rule (v0.33.0).** Blocking on *Corprate Services* costs a
+confirmation turn and buys nothing — it is the interaction a search box performs
+silently, and the turn is better spent on a value where reasonable people could
+disagree. So a `token` or `fuzzy` top candidate resolves when its score reaches
+`NEAR_CERTAIN_SCORE` (0.72) **and** exceeds every other distinct entry by
+`NEAR_CERTAIN_MARGIN` (0.18).
+
+Both conditions are load-bearing, and the margin is the one that matters. The
+thresholds were calibrated against the scores this ladder actually produces:
+*Corprate Services* reaches *Corporate Services* at 0.87 with its nearest rival
+at 0.46, while *Cost Centre 100* reaches both *Cost Centre 1001* and *1002* at
+0.86 — a high score and no winner. A strong match is not enough; a clear one is.
+
+This widens what the authoritative step-end resolve accepts, so it amends
+ADR-050 §6 rather than sitting beside it. `FieldValueSnapshot.correctedFrom`
+records every value it changes.
 
 Each rung is tried in isolation rather than blended, so an exact match is never
 diluted by near misses ranking alongside it.
 
-### 3. The semantic rung, over the cached rows
+### 3. The inferred rung — one bounded AI call over the cached set
 
-Nothing built from letters reaches "Finance" from "procurement". A nullable
-`embedding vector(384)` column on `kb_lookup_source_entries`, an HNSW cosine
-index, and `SemanticEntryIndex` supply that rung: an entry's label and code are
-embedded together, and a query is matched against them by cosine similarity with
-a floor of 0.6.
+Nothing built from letters reaches "Finance" from "procurement". When the string
+ladder settles nothing, `AiValueSetShortlister` makes a single `generateObject`
+call in the shape of the branch decision (`flow-session-graph.ts`): the cached
+entries go into the prompt, the model ranks the ones it believes were meant, and
+at most five come back. Every returned option is looked up in the cached set —
+by key where the source has one, else by display — and **anything not found is
+discarded**, so a model that invents a plausible department cannot put a value in
+front of an operator that no source has ever held.
 
-The index is built **lazily, in bounded batches** on the narrowing path — 25 rows
-per call — rather than on refresh. A refresh that embedded every entry would pay
-a model call per row for a set nobody may ever narrow, and would make caching a
-large source slow enough to time out. The index instead warms across the calls
-that actually need it.
+A set at or under `SHORTLIST_ENTRY_BUDGET` (1,500 entries, settable per source)
+is sent whole. Above that the budget is filled with the best string matches
+first, then an even stride through the remainder, so an unrelated-but-relevant
+entry — the whole reason this rung exists — still reaches the model.
 
-Every part of this rung degrades to nothing rather than failing: no embeddings
-provider, a model outage, a vector-search error, and the ladder falls back to its
+Every part of this rung degrades to nothing rather than failing: no language
+model, a provider outage, an unparseable object, and the ladder falls back to its
 string rungs.
+
+**This replaces the vector index of v0.32.0**, which embedded each cached entry
+into a nullable `vector(384)` column and searched it by cosine similarity. Two
+things were wrong with it. It had to be *warmed* — 25 rows per narrowing call, so
+a five-thousand-entry source needed roughly two hundred calls before the rung
+could see all of it, and until then the feature was partly on with no way to say
+which part; an operator could not be told why the same query worked for a
+colleague and not for them. And a 384-dimension mean-pooled vector over a one- or
+two-word label is weak at the specific comparison being asked for:
+*procurement* → *Finance* is knowledge about how organisations file spend, not
+similarity between two short strings, and the vector discards the field context
+that would settle it. The column, its HNSW index, `SemanticEntryIndex` and
+migration `0046` were all removed.
 
 ### 4. Narrowing proposes; the operator confirms; the exact resolve still gates
 
@@ -130,18 +170,30 @@ unreachable source's last-known-good set would carry false confidence.
   has already rejected something.
 - The type-ahead gains typo and word-order recovery for free, as a fallback when
   substring matching finds nothing.
+- Narrowing behaves identically on a brand-new source and a long-used one. There
+  is no index to warm, no background job, and no vector column — and a deployment
+  needs no embeddings provider for any of it to work.
+- An unambiguous misspelling no longer costs a confirmation turn, and the turns
+  that remain are spent on values where the answer is genuinely in doubt.
 - The matching rules are pure functions in `packages/domain` with no I/O, so the
   thresholds are testable and tunable without touching an adapter.
 
 **Bad / risky**
 
-- The thresholds (`FUZZY_MATCH_FLOOR` 0.42, token floor 0.3, semantic floor 0.6)
-  are judgement calls. They are named constants in one file precisely because
+- `NEAR_CERTAIN_SCORE` is the one number in the system that can seat a value in a
+  document without anyone confirming it. The margin is the real protection, and
+  both were calibrated against measured scores rather than chosen by feel — but
+  neither has met a production source yet.
+- The remaining thresholds (`FUZZY_MATCH_FLOOR` 0.42, token floor 0.3) are
+  judgement calls. They are named constants in one domain file precisely because
   they will need tuning against real sets.
-- The semantic index costs a model call per entry, once. A five-thousand-entry
-  source needs 200 narrowing calls to warm fully, and until it does the semantic
-  rung sees only part of the set. It is bounded and lazy by choice — the
-  alternative was a refresh slow enough to fail.
+- The inferred rung costs a model call for every distinct value that failed the
+  step-end resolve, and sends the cached set in the prompt. A step with three bad
+  values against one source makes three calls. Prompt caching on the entry list
+  is the obvious next economy — the set only changes when its `version` does —
+  and is deliberately left until real set sizes are known.
+- Above the entry budget the sample can omit the right answer. The failure mode
+  is a missing suggestion, never a wrong one.
 - Stemming folds "Service" and "Services" into one normalised value. A source
   that deliberately holds both as distinct entries will find them shortlisted
   together rather than one resolving — correct, but it will look like a false
@@ -152,15 +204,25 @@ unreachable source's last-known-good set would carry false confidence.
 
 ## Alternatives considered
 
-- **An LLM picks from the shortlist.** Rejected for this version. It adds a model
-  call on the blocking path, and the thing it would decide — which of five
-  candidates the operator meant — is precisely the decision ADR-050 §6 says the
-  operator must make. Worth revisiting once shortlists are shown to be reliable.
+- **An LLM *decides* rather than shortlists.** Still rejected. The model is
+  already the thing that proposed the wrong value, so letting it also confirm its
+  own guess removes the only check that knows what the operator meant — and the
+  audit snapshot would claim the value was resolved against the source when it
+  was inferred. Shortlisting is a different act from deciding, and only the first
+  is safe here.
+- **Keeping the vector index and warming it from a background job.** Considered
+  seriously in the v0.33.0 revision. It would have made the semantic rung
+  predictable without latency on the operator's request, but it needed a new job
+  type and lookup-source wiring in `apps/api`, which runs no field-resolution path
+  at all — and it would still have been the weaker instrument for this comparison.
+- **A bigger lazy batch, or embedding on refresh.** Both fix the warm-up at the
+  operator's expense: on the default in-process provider, embedding a
+  five-thousand-entry set on refresh costs tens of seconds inside that request;
+  on a hosted provider the port embeds one string per call, so it becomes
+  thousands of sequential round-trips.
 - **Postgres `pg_trgm` instead of trigrams in the domain.** Rejected: it would
   put the matching rules in SQL, unavailable to `managed` and `directory` sources
   served from memory, and untestable without a database.
-- **Embedding on refresh.** Rejected: a model call per entry on every cache
-  refresh, for sets that may never be narrowed.
 - **Auto-substituting the top candidate above a confidence threshold.** Rejected
   outright. It is the one change that would break the invariant the whole feature
   rests on.
