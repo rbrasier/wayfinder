@@ -30,6 +30,7 @@
 // permitted to do.
 
 import { createHash } from "node:crypto";
+import { featuredEmployees } from "../directory/roster.mjs";
 
 const BASE_PATH = "/pki";
 
@@ -40,14 +41,16 @@ const APP_ORIGIN = process.env.MOCK_PKI_APP_ORIGIN ?? "http://localhost:3000";
 // PKI_TRUSTED_PROXY_IPS or every sign-in comes back 401.
 const FORWARDED_FOR = process.env.MOCK_PKI_FORWARDED_FOR ?? "127.0.0.1";
 
-// The same three addresses the mock Entra provider seeds, so the two methods
-// collide on one identity and "one address is one account" stays testable
-// across them.
-const SEEDED_CERTIFICATES = [
-  { email: "ada@example.com", name: "Ada Lovelace", organisationalUnit: "Engineering" },
-  { email: "grace@example.com", name: "Grace Hopper", organisationalUnit: "Engineering" },
-  { email: "admin@example.com", name: "Wayfinder Admin", organisationalUnit: "Operations" },
-];
+// The same identities the mock Entra picker features, drawn from the roster the
+// mock HR upload and the mock Graph also serve. Signing in by certificate and by
+// Entra therefore collide on one address, which is what keeps "one address is
+// one account" testable across the two methods.
+const seededCertificates = () =>
+  featuredEmployees().map((employee) => ({
+    email: employee.email,
+    name: employee.name,
+    organisationalUnit: employee.businessUnit,
+  }));
 
 const subjectDnFor = (name, organisationalUnit) =>
   `CN=${name},OU=${organisationalUnit},O=Wayfinder,C=GB`;
@@ -99,7 +102,7 @@ const pickerPage = (redirectPath) => `<!doctype html>
     <code>x-ssl-client-*</code> headers. Not a real certificate authority.
   </p>
   <ul>
-    ${SEEDED_CERTIFICATES.map(
+    ${seededCertificates().map(
       (certificate) => `<li>
       <form method="post">
         <input type="hidden" name="redirect" value="${escapeHtml(redirectPath)}" />

@@ -4,11 +4,21 @@ export interface GraphConfig {
   tenantId: string;
   clientId: string;
   clientSecret: string;
+  // Host overrides for the two Microsoft endpoints this client talks to. Both
+  // are env-only and absent from the admin UI, for the same reason
+  // ENTRA_AUTHORITY is: a directory lookup must not be repointable at an
+  // arbitrary host from a settings form. Unset, the real hosts are used. The
+  // local mock Graph (restart.sh --with-mocks) is what these exist for.
+  baseUrl?: string;
+  authority?: string;
 }
 
 const GRAPH_SCOPE = "https://graph.microsoft.com/.default";
-const GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+const DEFAULT_GRAPH_BASE = "https://graph.microsoft.com/v1.0";
+const DEFAULT_AUTHORITY = "https://login.microsoftonline.com";
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;
+
+const withoutTrailingSlash = (value: string): string => value.replace(/\/+$/, "");
 
 interface CachedToken {
   value: string;
@@ -26,6 +36,14 @@ export class GraphClient {
     private readonly fetchImplementation: typeof fetch = fetch,
   ) {}
 
+  private baseUrl(): string {
+    return withoutTrailingSlash(this.config?.baseUrl || DEFAULT_GRAPH_BASE);
+  }
+
+  private authority(): string {
+    return withoutTrailingSlash(this.config?.authority || DEFAULT_AUTHORITY);
+  }
+
   isConfigured(): boolean {
     return Boolean(
       this.config?.tenantId && this.config.clientId && this.config.clientSecret,
@@ -40,7 +58,7 @@ export class GraphClient {
     const tokenResult = await this.resolveToken();
     if (tokenResult.error) return tokenResult;
 
-    const url = new URL(`${GRAPH_BASE}${path}`);
+    const url = new URL(`${this.baseUrl()}${path}`);
     for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
 
     try {
@@ -65,7 +83,7 @@ export class GraphClient {
     }
     try {
       const response = await this.fetchImplementation(
-        `https://login.microsoftonline.com/${this.config.tenantId}/oauth2/v2.0/token`,
+        `${this.authority()}/${this.config.tenantId}/oauth2/v2.0/token`,
         {
           method: "POST",
           headers: { "Content-Type": "application/x-www-form-urlencoded" },
