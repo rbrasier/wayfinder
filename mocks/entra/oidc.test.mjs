@@ -60,6 +60,10 @@ describe("the identity picker", () => {
     expect(body).toContain('data-testid="mock-entra-submit"');
   });
 
+  it("offers a toggle for an unverified email domain", async () => {
+    expect(await picker()).toContain('data-testid="mock-entra-unverified"');
+  });
+
   it("offers a filter over the full list", async () => {
     expect(await picker()).toContain('data-testid="mock-entra-filter"');
   });
@@ -73,7 +77,7 @@ describe("the identity picker", () => {
     expect(structure.swallowed).toEqual([]);
     // Three forms only: the filter, the identity list, and the free-typed
     // address. Not one per identity.
-    expect(structure.opened).toBe(3);
+    expect(structure.opened).toBe(4);
   });
 
   it("keeps the free-typed address in a form of its own, with no identity attached", async () => {
@@ -98,7 +102,8 @@ describe("the identity picker", () => {
     // Rendering a form, three hidden inputs and a duplicated search attribute
     // for each of 100 rows put this at 62 KB and 818 elements, on a page the
     // Entra e2e specs load and screenshot full-page.
-    expect((body.match(/<input\b/g) ?? []).length).toBeLessThan(10);
+    // A fixed handful for the four forms — never one per identity.
+    expect((body.match(/<input\b/g) ?? []).length).toBeLessThan(15);
     expect((body.match(/<[a-z]/g) ?? []).length).toBeLessThan(500);
     expect(body.length).toBeLessThan(35_000);
   });
@@ -131,14 +136,19 @@ describe("the authorization-code flow", () => {
     expect(claims.exp).toBeGreaterThan(claims.iat);
   });
 
-  it("does not claim the address is verified, because Entra never does", async () => {
+  it("sends neither email_verified nor xms_edov by default, as a stock tenant does", async () => {
     const { token } = await signIn({ email: "ada@example.com" });
     const claims = decodeIdToken(json(token).id_token);
-    // `email_verified` is not a v2.0 claim. Emitting it made accounts land
-    // verified locally and unverified in production — and `emailVerified` is
-    // what gates email-domain organisation assignment, so the feature looked
-    // alive in dev and was dead in a real tenant.
+    // `email_verified` is not a v2.0 claim at all, and `xms_edov` is an optional
+    // claim a tenant has to turn on. Absent both, the app trusts the identity.
     expect(claims.email_verified).toBeUndefined();
+    expect(claims.xms_edov).toBeUndefined();
+  });
+
+  it("sends xms_edov: false on request, so the unverified branch is reachable", async () => {
+    const { token } = await signIn({ email: "ada@example.com", unverified: "1" });
+    const claims = decodeIdToken(json(token).id_token);
+    expect(claims.xms_edov).toBe(false);
   });
 
   it("issues an opaque subject that does not leak the address, and is stable per identity", async () => {

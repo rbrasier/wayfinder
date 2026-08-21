@@ -116,6 +116,8 @@ const pickerPage = (tenant, redirectUri, state) => `<!doctype html>
     form.filter input, form.custom input { width: 100%; padding: 0.5rem; box-sizing: border-box; }
     form.custom { margin-top: 1.5rem; display: flex; gap: 0.5rem; }
     form.custom input { flex: 1; }
+    form.unverified { margin-top: 1rem; border-top: 1px solid #ddd; padding-top: 1rem; font-size: 0.85rem; color: #666; }
+    form.unverified input[type="email"] { width: 100%; padding: 0.5rem; box-sizing: border-box; margin-bottom: 0.4rem; }
   </style>
 </head>
 <body>
@@ -138,6 +140,16 @@ const pickerPage = (tenant, redirectUri, state) => `<!doctype html>
     <input type="hidden" name="state" value="${escapeHtml(state)}" />
     <input type="email" name="email" placeholder="any@address.example" required data-testid="mock-entra-email" />
     <button type="submit" data-testid="mock-entra-submit">Sign in</button>
+  </form>
+  <form method="post" class="unverified">
+    <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
+    <input type="hidden" name="state" value="${escapeHtml(state)}" />
+    <input type="hidden" name="unverified" value="1" />
+    <label>
+      <input type="email" name="email" placeholder="any@address.example" required data-testid="mock-entra-unverified" />
+      Sign in with an unverified email domain (sends <code>xms_edov: false</code>)
+    </label>
+    <button type="submit">Sign in unverified</button>
   </form>
   <script>
     function filterIdentities(query) {
@@ -189,7 +201,11 @@ const handleAuthorizePost = async (req, res, tenant) => {
   }
 
   const code = randomUUID();
-  pendingCodes.set(code, { tenant, email: email.trim().toLowerCase() });
+  pendingCodes.set(code, {
+    tenant,
+    email: email.trim().toLowerCase(),
+    unverified: form.get("unverified") === "1",
+  });
 
   const location = new URL(redirectUri);
   location.searchParams.set("code", code);
@@ -235,9 +251,11 @@ const handleAuthorizationCode = (res, tenant, form, issuer) => {
     name: employee?.name ?? pending.email,
     email: pending.email,
     preferred_username: pending.email,
-    // No `email_verified`: it is not an Entra v2.0 claim. The mock used to send
-    // it, which made every local account verified and every production one not
-    // — and that flag is what decides email-domain organisation assignment.
+    // No `email_verified`: it is not an Entra v2.0 claim, and sending it made
+    // every local account verified and every production one not. `xms_edov` is
+    // the real signal, and it is an optional claim a tenant has to turn on — so
+    // the mock omits it unless asked, which is the stock tenant's behaviour.
+    ...(pending.unverified ? { xms_edov: false } : {}),
     ...(employee
       ? { jobTitle: employee.jobTitle, department: employee.businessUnit, employeeId: employee.employeeId }
       : {}),

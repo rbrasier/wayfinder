@@ -10,6 +10,7 @@ import { mock as entraOidc } from "../../../../mocks/entra/oidc.mjs";
 // @ts-expect-error - .mjs mock, no types
 import { certificateHeadersFor } from "../../../../mocks/pki/proxy.mjs";
 import { commonNameFrom, emailAddressFrom } from "../auth/subject-dn";
+import { userInfoFromIdToken } from "../auth/entra-user-info";
 
 let server: Server;
 let origin: string;
@@ -84,5 +85,40 @@ describe("the PKI mock's certificates against the real DN parser", () => {
     ];
     expect(commonNameFrom(dn ?? null)).toBe("Ada Lovelace");
     expect(emailAddressFrom(dn ?? null)).toBeNull();
+  });
+});
+
+describe("the Entra mock's tokens through the real claim reader", () => {
+  const signIn = async (form: Record<string, string>) => {
+    const body = new URLSearchParams({ redirect_uri: "http://localhost:3000/cb", ...form });
+    const authorize = await fetch(`${origin}/entra/mock-tenant/oauth2/v2.0/authorize`, {
+      method: "POST",
+      body,
+      redirect: "manual",
+    });
+    const code = new URL(authorize.headers.get("location") ?? "").searchParams.get("code");
+    const token = await fetch(`${origin}/entra/mock-tenant/oauth2/v2.0/token`, {
+      method: "POST",
+      body: new URLSearchParams({ grant_type: "authorization_code", code: code ?? "" }),
+    });
+    const payload = (await token.json()) as { id_token: string };
+    return userInfoFromIdToken({ idToken: payload.id_token });
+  };
+
+  it("marks a stock tenant's identity verified, so organisation assignment can act on it", async () => {
+    const info = await signIn({ email: "ada@example.com" });
+    expect(info?.user.email).toBe("ada@example.com");
+    expect(info?.user.emailVerified).toBe(true);
+  });
+
+  it("marks an xms_edov: false identity unverified", async () => {
+    const info = await signIn({ email: "ada@example.com", unverified: "1" });
+    expect(info?.user.emailVerified).toBe(false);
+  });
+
+  it("keeps the opaque subject as the account id", async () => {
+    const info = await signIn({ email: "ada@example.com" });
+    expect(info?.user.id).toBeTruthy();
+    expect(info?.user.id).not.toContain("ada@example.com");
   });
 });

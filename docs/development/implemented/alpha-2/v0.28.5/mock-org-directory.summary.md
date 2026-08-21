@@ -54,6 +54,12 @@
   hosts, overridden and default.
 - `packages/adapters/src/auth/pki-cert-adapter.ts` — identity extraction goes
   through the new DN parser, and reads the subject's `emailAddress` attribute.
+- `packages/adapters/src/auth/entra-user-info.ts` — `emailVerifiedFrom` replaces
+  the `email_verified === true` read, honouring `xms_edov` and trusting a
+  tenant-issued identity otherwise.
+- `packages/adapters/src/auth/__tests__/entra-user-info.test.ts` — the
+  verification matrix, including the superseded "missing claim means unverified"
+  case, rewritten to the new rule.
 - `packages/adapters/src/auth/__tests__/pki-cert-adapter.test.ts` — four cases
   for the escaped comma, the `emailAddress` fallback, SAN precedence over it, and
   the legacy oneline DN.
@@ -129,6 +135,7 @@ can pass CI and fail in production, so those were closed rather than documented.
 | Real behaviour | Mock now |
 |---|---|
 | v2.0 `iss` is an https URI ending `/v2.0` | Derived from the request host: `…/entra/{tenant}/v2.0` |
+| `email_verified` is not a claim Entra emits; `xms_edov` is the optional claim that carries it | Neither is sent by default, matching a stock tenant; a picker field sends `xms_edov: false` to reach the unverified branch |
 | `sub` is pairwise and opaque — never derived from the address | Stable SHA-256-derived base64url value; the address no longer appears in it |
 | `oid` is the stable per-tenant object GUID | Emitted, GUID-shaped and stable per identity |
 | `ver: "2.0"`, `nbf` | Emitted |
@@ -192,17 +199,37 @@ is now SAN → subject `emailAddress` (also accepted as `E` and as OID
 certificate resolves differently; the trust boundary is unchanged, because this
 only reads identity out of a certificate the proxy has already verified.
 
-**3. The mock told the app every address was verified.** `email_verified` is not
-an Entra v2.0 claim, but the mock emitted it, and `userInfoFromIdToken` reads it.
-Locally every Entra account landed verified; in production every one lands
-unverified — and `resolveEmailDomain` refuses to place a user on an unverified
-address. Email-domain organisation assignment therefore worked in dev and was
-silently dead in a real tenant. The mock no longer sends the claim, so local now
-behaves as production does.
+**3. Email-domain organisation assignment never fired for Entra users.**
+`email_verified` is not an Entra v2.0 claim, but `userInfoFromIdToken` read it,
+so in production every Entra account landed unverified — and `resolveEmailDomain`
+refuses to place a user on an unverified address. The mock happened to send the
+claim, so the feature looked alive in dev and was dead in a real tenant.
 
-Whether an Entra-issued address *should* count as verified is a real product
-question — the tenant does vouch for it — but that is a security decision about
-organisation placement, so it is left as-is rather than decided here.
+Both halves are fixed. The mock no longer sends a claim Entra does not send, and
+`userInfoFromIdToken` now decides verification the way Entra actually expresses
+it:
+
+1. `xms_edov` — "email domain owner verified", the authoritative Entra signal —
+   decides it when present, in either direction. Read as boolean, string or
+   number, because tenants have been observed emitting all three.
+2. A legacy `email_verified`, if some provider sends one, is still honoured.
+3. Absent both, the identity is **trusted**. The address comes from the tenant
+   directory rather than being self-asserted, and an app registration created
+   after June 2023 omits the `email` claim entirely when the address is
+   unverified.
+
+**That trust rests on the deployment pinning a single tenant**, which is what
+`ENTRA_TENANT_ID` and the admin Authentication card configure. A deployment that
+sets `tenantId` to `common` or `organizations` accepts identities from tenants it
+does not control, where an unverified address is an account-linking risk (the
+nOAuth pattern) — such a deployment should enable the `xms_edov` optional claim on
+its app registration so step 1 decides rather than step 3. This is called out in
+the code comment on `emailVerifiedFrom`, and is worth an amendment to ADR-025 if
+multi-tenant ever becomes a supported configuration.
+
+The mock can produce both branches: the picker's normal paths send no
+verification claim at all (a stock tenant), and a dedicated field signs in with
+`xms_edov: false`.
 
 ## Known limitations
 
