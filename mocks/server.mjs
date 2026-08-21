@@ -22,10 +22,21 @@ import { mock as mcpToolsStreamableHttp } from "./mcp-tools/streamable-http.mjs"
 import { mock as mcpToolsSse } from "./mcp-tools/sse.mjs";
 import { mock as entraOidc } from "./entra/oidc.mjs";
 import { mock as pkiProxy } from "./pki/proxy.mjs";
+import { mock as lookupContractTypes } from "./lookup/contract-types.mjs";
+import { mock as lookupSkills } from "./lookup/skills.mjs";
+import { mock as lookupBusinessUnits } from "./lookup/business-units.mjs";
 
 const PORT = Number(process.env.MOCKS_PORT ?? 4001);
 
-const MOCKS = [mcpToolsStreamableHttp, mcpToolsSse, entraOidc, pkiProxy];
+const MOCKS = [
+  mcpToolsStreamableHttp,
+  mcpToolsSse,
+  entraOidc,
+  pkiProxy,
+  lookupContractTypes,
+  lookupSkills,
+  lookupBusinessUnits,
+];
 
 const routes = new Map();
 for (const mock of MOCKS) {
