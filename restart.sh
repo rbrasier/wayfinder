@@ -6,15 +6,18 @@
 #                           on MOCKS_PORT (default 4001). All local mocks share
 #                           this one port; each mock owns a URL path — e.g. the
 #                           MCP tools mock is at :4001/mcp, the mock Entra
-#                           identity provider at :4001/entra, and the mock PKI
-#                           reverse proxy at :4001/pki. To add a new mock,
+#                           identity provider at :4001/entra, the mock Microsoft
+#                           Graph at :4001/graph, the mock HR roster at :4001/hr,
+#                           and the mock PKI reverse proxy at :4001/pki. To add a new mock,
 #                           follow the instructions at the top of
 #                           mocks/server.mjs and pick a new path (not a new port).
 #                           This flag also points Entra sign-in at the mock via
-#                           ENTRA_AUTHORITY. It does not enable Entra or fill in
+#                           ENTRA_AUTHORITY, and the directory adapters at the
+#                           mock Graph via M365_GRAPH_BASE_URL / M365_AUTHORITY.
+#                           It does not enable Entra or Graph or fill in
 #                           credentials — it prints the values to paste into
-#                           /admin/settings, so a mocked install starts with the
-#                           same auth methods as any other.
+#                           /admin/settings and .env, so a mocked install starts
+#                           with the same auth methods as any other.
 #
 #   --with-pki              Implies --with-mocks, and additionally boots the web
 #                           app in PKI mode so the mock proxy at
@@ -49,7 +52,7 @@ for arg in "$@"; do
       WITH_PKI=1
       ;;
     -h|--help)
-      sed -n '2,27p' "$0"
+      sed -n '2,30p' "$0"
       exit 0
       ;;
     *)
@@ -288,6 +291,35 @@ if [ "$WITH_MOCKS" -eq 1 ]; then
     Tenant ID      mock-tenant
     Client ID      mock-client
     Client secret  mock-secret
+EOF
+
+  # Point the directory adapters at the mock Graph, and *only* that. Same
+  # reasoning as Entra above: buildPeopleDirectory treats a full set of M365_*
+  # credentials as "Graph is configured", so exporting those would switch every
+  # mocked install onto Graph behind the operator's back. These two are host
+  # overrides — inert until the credentials are set — so they are safe to export.
+  export M365_GRAPH_BASE_URL="http://localhost:$MOCKS_PORT/graph/v1.0"
+  export M365_AUTHORITY="http://localhost:$MOCKS_PORT/entra"
+  cat <<EOF
+  mock HR roster at http://localhost:$MOCKS_PORT/hr
+  100 employees across five reporting levels, shared by every mock here. Save it:
+    curl -sSO http://localhost:$MOCKS_PORT/hr/employees.csv
+  Upload it at /admin/settings → HR Directory Data, then map the columns:
+    Employee Email → Email        Job Title     → Position / role
+    Full Name      → Display name Grade         → Band / grade
+    Manager Email  → Manager      Business Unit → Business unit
+  Leave Employee ID, Location and Start Date unmapped.
+
+  mock Microsoft Graph at http://localhost:$MOCKS_PORT/graph/v1.0
+  Serves the same people, so first/second-level approver resolution can be driven
+  on its Graph path instead of the HR-column fallback. The host overrides were
+  exported for this run; the credentials are not, because all three together
+  switch Graph on. To use it, put these in .env (any non-empty values will do):
+    M365_TENANT_ID=mock-tenant
+    M365_CLIENT_ID=mock-client
+    M365_CLIENT_SECRET=mock-secret
+    M365_GRAPH_BASE_URL=$M365_GRAPH_BASE_URL
+    M365_AUTHORITY=$M365_AUTHORITY
 EOF
 
   # Where the mock PKI proxy forwards the certificates it issues. Safe to export

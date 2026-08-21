@@ -26,6 +26,42 @@ const decodeClaims = (idToken: string): Record<string, unknown> | null => {
 const asString = (value: unknown): string | null =>
   typeof value === "string" && value.length > 0 ? value : null;
 
+// Tenants have been observed emitting xms_edov as a boolean, as a string and as
+// a number, so read all three rather than trusting one spelling.
+const asBoolean = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalised = value.trim().toLowerCase();
+    if (normalised === "true" || normalised === "1") return true;
+    if (normalised === "false" || normalised === "0") return false;
+  }
+  return null;
+};
+
+/**
+ * Whether the address may be trusted as the user's own.
+ *
+ * Entra does not emit `email_verified` — that is a generic OIDC claim, and
+ * reading it left every Entra account unverified, which silently disabled
+ * email-domain organisation assignment for exactly the users it was meant for.
+ *
+ * The authoritative Entra signal is `xms_edov` ("email domain owner verified"),
+ * so an explicit value there decides it either way. Absent both claims the
+ * identity is trusted: the address comes from the tenant directory rather than
+ * being self-asserted, and an app registration created after June 2023 omits
+ * the `email` claim altogether when the address is unverified.
+ *
+ * This trust rests on the deployment pinning a single tenant, which is what
+ * `ENTRA_TENANT_ID` / the admin Authentication card configure. A deployment that
+ * points `tenantId` at `common` or `organizations` accepts identities from
+ * tenants it does not control, where an unverified address is an account-linking
+ * risk (the nOAuth pattern) — there, `xms_edov` should be turned on for the app
+ * registration so the claim decides rather than this fallback.
+ */
+const emailVerifiedFrom = (claims: Record<string, unknown>): boolean =>
+  asBoolean(claims.xms_edov) ?? asBoolean(claims.email_verified) ?? true;
+
 /**
  * Resolves the signed-in identity from the id token alone.
  *
@@ -57,7 +93,7 @@ export const userInfoFromIdToken = (token: { idToken?: string }): EntraUserInfo 
       id: subject,
       name: asString(claims.name) ?? email,
       email: normaliseEmail(email),
-      emailVerified: claims.email_verified === true,
+      emailVerified: emailVerifiedFrom(claims),
     },
     data: claims,
   };

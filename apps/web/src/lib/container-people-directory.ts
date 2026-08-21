@@ -26,6 +26,8 @@ export const buildPeopleDirectory = ({ env, hrDatasets, users }: PeopleDirectory
           tenantId: env.M365_TENANT_ID,
           clientId: env.M365_CLIENT_ID,
           clientSecret: env.M365_CLIENT_SECRET,
+          baseUrl: env.M365_GRAPH_BASE_URL,
+          authority: env.M365_AUTHORITY,
         }
       : null;
   const graphClient = new GraphClient(graphConfig);

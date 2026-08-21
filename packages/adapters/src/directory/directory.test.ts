@@ -157,6 +157,88 @@ describe("HrPeopleDirectory", () => {
   });
 });
 
+describe("GraphClient host overrides", () => {
+  const recordingFetch = () => {
+    const urls: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      urls.push(url);
+      if (url.includes("/oauth2/")) {
+        return new Response(JSON.stringify({ access_token: "tok", expires_in: 3600 }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ value: [] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    return { urls, fetchImpl };
+  };
+
+  it("targets the real Microsoft hosts when no override is configured", async () => {
+    const { urls, fetchImpl } = recordingFetch();
+    const graph = new GraphClient({ tenantId: "t", clientId: "c", clientSecret: "s" }, fetchImpl);
+
+    await graph.get("/users");
+
+    expect(urls[0]).toBe("https://login.microsoftonline.com/t/oauth2/v2.0/token");
+    expect(urls[1]).toBe("https://graph.microsoft.com/v1.0/users");
+  });
+
+  it("targets the configured authority and base URL when both are set", async () => {
+    const { urls, fetchImpl } = recordingFetch();
+    const graph = new GraphClient(
+      {
+        tenantId: "mock-tenant",
+        clientId: "c",
+        clientSecret: "s",
+        authority: "http://localhost:4001/entra",
+        baseUrl: "http://localhost:4001/graph/v1.0",
+      },
+      fetchImpl,
+    );
+
+    await graph.get("/users", { $top: "5" });
+
+    expect(urls[0]).toBe("http://localhost:4001/entra/mock-tenant/oauth2/v2.0/token");
+    expect(urls[1]).toBe("http://localhost:4001/graph/v1.0/users?%24top=5");
+  });
+
+  it("tolerates a trailing slash on either override", async () => {
+    const { urls, fetchImpl } = recordingFetch();
+    const graph = new GraphClient(
+      {
+        tenantId: "mock-tenant",
+        clientId: "c",
+        clientSecret: "s",
+        authority: "http://localhost:4001/entra/",
+        baseUrl: "http://localhost:4001/graph/v1.0/",
+      },
+      fetchImpl,
+    );
+
+    await graph.get("/users");
+
+    expect(urls[0]).toBe("http://localhost:4001/entra/mock-tenant/oauth2/v2.0/token");
+    expect(urls[1]).toBe("http://localhost:4001/graph/v1.0/users");
+  });
+
+  it("overrides one host without moving the other", async () => {
+    const { urls, fetchImpl } = recordingFetch();
+    const graph = new GraphClient(
+      {
+        tenantId: "t",
+        clientId: "c",
+        clientSecret: "s",
+        baseUrl: "http://localhost:4001/graph/v1.0",
+      },
+      fetchImpl,
+    );
+
+    await graph.get("/users");
+
+    expect(urls[0]).toBe("https://login.microsoftonline.com/t/oauth2/v2.0/token");
+    expect(urls[1]).toBe("http://localhost:4001/graph/v1.0/users");
+  });
+});
+
 describe("GraphPeopleDirectory", () => {
   it("returns no results when Graph is not configured", async () => {
     const directory = new GraphPeopleDirectory(new GraphClient(null));
