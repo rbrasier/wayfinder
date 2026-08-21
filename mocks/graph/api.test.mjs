@@ -3,9 +3,13 @@ import { request, response, json } from "../test-support/http.mjs";
 import { findEmployeeByEmail, roster } from "../directory/roster.mjs";
 import { mock, searchTermsFrom, toGraphUser } from "./api.mjs";
 
-const call = async (url) => {
+// Every $search request the adapter makes carries this header, and real Graph
+// rejects the query without it.
+const EVENTUAL = { ConsistencyLevel: "eventual" };
+
+const call = async (url, headers = EVENTUAL) => {
   const res = response();
-  await mock.handle(request("GET", url), res);
+  await mock.handle(request("GET", url, null, headers), res);
   return res.recorded;
 };
 
@@ -120,6 +124,75 @@ describe("GET /users/{id}/manager", () => {
       `/graph/v1.0/users/${encodeURIComponent(chiefExecutive.email)}/manager`,
     );
     expect(recorded.statusCode).toBe(404);
+  });
+});
+
+describe("advanced-query rules", () => {
+  // Real Graph requires ConsistencyLevel: eventual for $search on directory
+  // objects and answers 400 without it. A mock that accepted the query anyway
+  // would let a dropped header pass CI and fail in production.
+  it("400s a $search with no ConsistencyLevel header", async () => {
+    const recorded = await call('/graph/v1.0/users?$search="displayName:Lovelace"', {});
+    expect(recorded.statusCode).toBe(400);
+    expect(json(recorded).error.code).toBe("Request_UnsupportedQuery");
+  });
+
+  it("400s a $search whose ConsistencyLevel is not eventual", async () => {
+    const recorded = await call('/graph/v1.0/users?$search="displayName:Lovelace"', {
+      ConsistencyLevel: "strong",
+    });
+    expect(recorded.statusCode).toBe(400);
+  });
+
+  it("does not require the header when there is no $search", async () => {
+    expect((await call("/graph/v1.0/users", {})).statusCode).toBe(200);
+  });
+
+  it("reads the header case-insensitively, as a real HTTP server does", async () => {
+    const recorded = await call('/graph/v1.0/users?$search="mail:ada@example.com"', {
+      consistencylevel: "Eventual",
+    });
+    expect(recorded.statusCode).toBe(200);
+  });
+});
+
+describe("$select", () => {
+  it("returns only the selected properties, plus id as real Graph always does", async () => {
+    const recorded = await call("/graph/v1.0/users?$select=displayName,mail");
+    const [user] = json(recorded).value;
+    expect(Object.keys(user).sort()).toEqual(["displayName", "id", "mail"]);
+  });
+
+  it("returns the full projection when nothing is selected", async () => {
+    const [user] = json(await call("/graph/v1.0/users")).value;
+    expect(Object.keys(user).sort()).toEqual([
+      "department",
+      "displayName",
+      "id",
+      "jobTitle",
+      "mail",
+      "userPrincipalName",
+    ]);
+  });
+
+  it("applies to a single user and to the manager hop", async () => {
+    const single = json(
+      await call(`/graph/v1.0/users/${encodeURIComponent(contributor.email)}?$select=mail`),
+    );
+    expect(Object.keys(single).sort()).toEqual(["id", "mail"]);
+    const manager = json(
+      await call(
+        `/graph/v1.0/users/${encodeURIComponent(contributor.email)}/manager?$select=mail,userPrincipalName`,
+      ),
+    );
+    expect(Object.keys(manager).sort()).toEqual(["id", "mail", "userPrincipalName"]);
+  });
+});
+
+describe("response envelope", () => {
+  it("carries an @odata.context on the collection, as real Graph does", async () => {
+    const payload = json(await call("/graph/v1.0/users"));
+    expect(payload["@odata.context"]).toContain("$metadata#users");
   });
 });
 

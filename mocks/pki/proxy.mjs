@@ -55,10 +55,17 @@ const seededCertificates = () =>
 const subjectDnFor = (name, organisationalUnit) =>
   `CN=${name},OU=${organisationalUnit},O=Wayfinder,C=GB`;
 
-// Stable across restarts so a repeat sign-in refreshes the same cert_fingerprint
-// rather than looking like a newly issued certificate.
+// nginx computes $ssl_client_fingerprint with SHA-1 and forwards it as bare hex
+// — no algorithm prefix. Stable across restarts so a repeat sign-in refreshes
+// the same cert_fingerprint rather than looking like a newly issued certificate.
 const fingerprintFor = (email) =>
-  `sha256:${createHash("sha256").update(email.trim().toLowerCase()).digest("hex")}`;
+  createHash("sha1").update(email.trim().toLowerCase()).digest("hex");
+
+// $ssl_client_verify is "SUCCESS", "NONE" when no certificate was presented, or
+// "FAILED:<reason>" (nginx >= 1.11.7). The adapter treats anything but SUCCESS
+// as a rejection, so what matters here is that the mock never teaches a string
+// shape no real proxy sends.
+const VERIFICATION_FAILURE = "FAILED:unable to get local issuer certificate";
 
 const escapeHtml = (value) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -161,7 +168,7 @@ const safeRedirectPath = (raw) => {
   return raw;
 };
 
-const certificateHeadersFor = (form) => {
+export const certificateHeadersFor = (form) => {
   const email = form.get("email")?.trim().toLowerCase() ?? "";
   const name = form.get("name")?.trim() || email;
   const organisationalUnit = form.get("organisational_unit")?.trim() || "Engineering";
@@ -173,7 +180,8 @@ const certificateHeadersFor = (form) => {
   const commonName = omitSanEmail ? email : name;
 
   const headers = {
-    "x-ssl-client-verified": form.get("verification_failed") === "1" ? "FAILED" : "SUCCESS",
+    "x-ssl-client-verified":
+      form.get("verification_failed") === "1" ? VERIFICATION_FAILURE : "SUCCESS",
     "x-ssl-client-subject-dn": subjectDnFor(commonName, organisationalUnit),
     "x-ssl-client-fingerprint": fingerprintFor(email),
     "x-forwarded-for": FORWARDED_FOR,

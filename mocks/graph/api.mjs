@@ -10,6 +10,11 @@
 //
 // The version segment is optional so a base URL with or without /v1.0 works.
 //
+// What this mock *does* enforce is the advanced-query rule: $search on directory
+// objects is rejected with 400 unless the request carries
+// `ConsistencyLevel: eventual`, exactly as real Graph does. Accepting the query
+// anyway would let a dropped header pass CI and fail in production.
+//
 // Nothing here checks the bearer token. It is a mock: it must only ever be
 // reachable on loopback, behind restart.sh --with-mocks.
 
@@ -64,16 +69,39 @@ const sendJson = (res, status, body) => {
 const sendNotFound = (res, message) =>
   sendJson(res, 404, { error: { code: "Request_ResourceNotFound", message } });
 
+const sendBadRequest = (res, message) =>
+  sendJson(res, 400, { error: { code: "Request_UnsupportedQuery", message } });
+
+// Real Graph returns id whether or not it was selected, and nothing else beyond
+// the selection. A mock that ignored $select would hide a missing field until
+// production.
+const applySelect = (user, select) => {
+  if (!select) return user;
+  const wanted = new Set(
+    select
+      .split(",")
+      .map((field) => field.trim())
+      .filter(Boolean),
+  );
+  wanted.add("id");
+  return Object.fromEntries(Object.entries(user).filter(([field]) => wanted.has(field)));
+};
+
 const handleUserCollection = (res, url) => {
   const terms = searchTermsFrom(url.searchParams.get("$search"));
   const matched = terms.length === 0 ? roster : roster.filter((employee) => matches(employee, terms));
   const top = Number(url.searchParams.get("$top") ?? matched.length);
   const limit = Number.isFinite(top) && top > 0 ? top : matched.length;
-  sendJson(res, 200, { value: matched.slice(0, limit).map(toGraphUser) });
+  const select = url.searchParams.get("$select");
+  sendJson(res, 200, {
+    "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users",
+    value: matched.slice(0, limit).map((employee) => applySelect(toGraphUser(employee), select)),
+  });
 };
 
 const handle = (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  const select = url.searchParams.get("$select");
   const segments = url.pathname.slice(BASE_PATH.length).split("/").filter(Boolean);
   const path = segments[0] === "v1.0" ? segments.slice(1) : segments;
 
@@ -83,6 +111,16 @@ const handle = (req, res) => {
   }
 
   if (path.length === 1) {
+    if (
+      url.searchParams.has("$search") &&
+      (req.headers["consistencylevel"] ?? "").toLowerCase() !== "eventual"
+    ) {
+      sendBadRequest(
+        res,
+        "Request with $search requires the ConsistencyLevel header set to eventual.",
+      );
+      return;
+    }
     handleUserCollection(res, url);
     return;
   }
@@ -94,7 +132,7 @@ const handle = (req, res) => {
   }
 
   if (path.length === 2) {
-    sendJson(res, 200, toGraphUser(employee));
+    sendJson(res, 200, applySelect(toGraphUser(employee), select));
     return;
   }
 
@@ -104,7 +142,7 @@ const handle = (req, res) => {
       sendNotFound(res, `${employee.email} has no manager.`);
       return;
     }
-    sendJson(res, 200, toGraphUser(manager));
+    sendJson(res, 200, applySelect(toGraphUser(manager), select));
     return;
   }
 

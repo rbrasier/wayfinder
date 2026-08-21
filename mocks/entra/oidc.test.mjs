@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { request, response, json } from "../test-support/http.mjs";
+import { formOwning, formStructure, json, request, response } from "../test-support/http.mjs";
 import { FEATURED_EMAILS, findEmployeeByEmail, roster } from "../directory/roster.mjs";
 import { mock } from "./oidc.mjs";
 
@@ -64,6 +64,36 @@ describe("the identity picker", () => {
     expect(await picker()).toContain('data-testid="mock-entra-filter"');
   });
 
+  it("closes every form it opens", async () => {
+    const structure = formStructure(await picker());
+    expect(structure.unclosed).toBe(false);
+    // An unclosed form is ignored by the parser rather than nested, so the
+    // buttons after it post the *first* form's hidden fields. That is how a
+    // typed address silently signed in as whoever heads the list.
+    expect(structure.swallowed).toEqual([]);
+    expect(structure.opened).toBe(roster.length + 2);
+  });
+
+  it("keeps the free-typed address in a form of its own, with no identity attached", async () => {
+    const body = await picker();
+    const form = formOwning(body, "mock-entra-email");
+    expect(form).toContain('data-testid="mock-entra-submit"');
+    expect(form).not.toContain('type="hidden" name="email"');
+    expect(form).not.toContain('data-testid="mock-entra-identity"');
+  });
+
+  it("gives each identity its own form carrying only that identity", async () => {
+    const body = await picker();
+    for (const employee of [roster[0], roster[50], roster.at(-1)]) {
+      const form = formOwning(body, "mock-entra-identity");
+      expect(form).toContain('name="email"');
+      expect(
+        body.split("<form").filter((chunk) => chunk.includes(`value="${employee.email}"`)).length,
+        employee.email,
+      ).toBe(1);
+    }
+  });
+
   it("400s without a redirect_uri", async () => {
     const recorded = await call("GET", `/entra/${TENANT}/oauth2/v2.0/authorize`);
     expect(recorded.statusCode).toBe(400);
@@ -77,6 +107,32 @@ describe("the authorization-code flow", () => {
     const location = new URL(authorize.headers.Location);
     expect(location.searchParams.get("code")).toBeTruthy();
     expect(location.searchParams.get("state")).toBe("st");
+  });
+
+  it("issues the claims a real v2.0 id_token carries", async () => {
+    const { token } = await signIn({ email: "ada@example.com" });
+    const claims = decodeIdToken(json(token).id_token);
+    // Entra v2.0 issues an https issuer URI ending in /v2.0, a per-tenant object
+    // id, and a version marker. Better Auth reads `sub`; the rest exist so the
+    // mock does not teach a shape production will not deliver.
+    expect(claims.iss).toMatch(/^https?:\/\/[^/]+\/entra\/mock-tenant\/v2\.0$/);
+    expect(claims.ver).toBe("2.0");
+    expect(claims.oid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(claims.nbf).toBe(claims.iat);
+    expect(claims.exp).toBeGreaterThan(claims.iat);
+  });
+
+  it("issues an opaque subject that does not leak the address, and is stable per identity", async () => {
+    const first = decodeIdToken(json((await signIn({ email: "ada@example.com" })).token).id_token);
+    const second = decodeIdToken(json((await signIn({ email: "ada@example.com" })).token).id_token);
+    // Real Entra's `sub` is a pairwise, opaque identifier — not derived from the
+    // address. Stable across sign-ins, or account linking would break.
+    expect(first.sub).not.toContain("ada@example.com");
+    expect(first.sub).toBe(second.sub);
+    expect(first.oid).toBe(second.oid);
+
+    const other = decodeIdToken(json((await signIn({ email: "grace@example.com" })).token).id_token);
+    expect(other.sub).not.toBe(first.sub);
   });
 
   it("carries the roster's job title and business unit into the id_token", async () => {

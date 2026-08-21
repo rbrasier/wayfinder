@@ -22,7 +22,7 @@
 // with a fixed "none"-style placeholder. That is the whole point of a mock:
 // never wire this to anything real.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { FEATURED_EMAILS, findEmployeeByEmail, roster } from "../directory/roster.mjs";
 
 const BASE_PATH = "/entra";
@@ -41,6 +41,31 @@ const pickerIdentities = () => {
     ...rest.map((employee) => ({ employee, isFeatured: false })),
   ];
 };
+
+// Entra's `oid` is a per-tenant GUID and its `sub` a pairwise, opaque
+// identifier — neither is derived from the address, and both are stable across
+// sign-ins. Deriving them from a hash keeps that shape while surviving a mock
+// restart, so a linked account still resolves.
+const stableDigest = (seed) => createHash("sha256").update(seed).digest("hex");
+
+const objectIdFor = (tenant, email) => {
+  const digest = stableDigest(`oid|${tenant}|${email}`);
+  return [
+    digest.slice(0, 8),
+    digest.slice(8, 12),
+    digest.slice(12, 16),
+    digest.slice(16, 20),
+    digest.slice(20, 32),
+  ].join("-");
+};
+
+const subjectFor = (tenant, email) =>
+  Buffer.from(stableDigest(`sub|${tenant}|${email}`), "hex")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "")
+    .slice(0, 43);
 
 const base64url = (input) =>
   Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -65,7 +90,8 @@ const identityRow = ({ employee, isFeatured }, redirectUri, state) => `<li${
           <span class="who">${escapeHtml(employee.name)} — ${escapeHtml(employee.email)}</span>
           <span class="role">${escapeHtml(employee.jobTitle)} · ${escapeHtml(employee.businessUnit)}</span>
         </button>
-      </li>`;
+      </form>
+    </li>`;
 
 const pickerPage = (tenant, redirectUri, state) => `<!doctype html>
 <html lang="en">
@@ -180,7 +206,7 @@ const handleClientCredentials = (res) => {
   });
 };
 
-const handleAuthorizationCode = (res, tenant, form) => {
+const handleAuthorizationCode = (res, tenant, form, issuer) => {
   const code = form.get("code");
   const pending = code ? pendingCodes.get(code) : undefined;
   if (!pending) {
@@ -194,9 +220,12 @@ const handleAuthorizationCode = (res, tenant, form) => {
   const employee = findEmployeeByEmail(pending.email);
   const issuedAt = Math.floor(Date.now() / 1000);
   const idToken = encodeIdToken({
-    iss: `mock-entra/${tenant}`,
+    // Real v2.0 issuer: https://login.microsoftonline.com/{tid}/v2.0
+    iss: `${issuer}/${tenant}/v2.0`,
     aud: form.get("client_id") ?? "mock-client",
-    sub: `mock-entra|${pending.email}`,
+    sub: subjectFor(tenant, pending.email),
+    oid: objectIdFor(tenant, pending.email),
+    ver: "2.0",
     tid: tenant,
     name: employee?.name ?? pending.email,
     email: pending.email,
@@ -206,6 +235,7 @@ const handleAuthorizationCode = (res, tenant, form) => {
       ? { jobTitle: employee.jobTitle, department: employee.businessUnit, employeeId: employee.employeeId }
       : {}),
     iat: issuedAt,
+    nbf: issuedAt,
     exp: issuedAt + 3600,
   });
 
@@ -219,13 +249,13 @@ const handleAuthorizationCode = (res, tenant, form) => {
   });
 };
 
-const handleToken = async (req, res, tenant) => {
+const handleToken = async (req, res, tenant, issuer) => {
   const form = new URLSearchParams(await readBody(req));
   if (form.get("grant_type") === "client_credentials") {
     handleClientCredentials(res);
     return;
   }
-  handleAuthorizationCode(res, tenant, form);
+  handleAuthorizationCode(res, tenant, form, issuer);
 };
 
 async function handle(req, res) {
@@ -251,7 +281,7 @@ async function handle(req, res) {
   }
 
   if (endpoint === "oauth2/v2.0/token" && req.method === "POST") {
-    await handleToken(req, res, tenant);
+    await handleToken(req, res, tenant, `${url.origin}${BASE_PATH}`);
     return;
   }
 
