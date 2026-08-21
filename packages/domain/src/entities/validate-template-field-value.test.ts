@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { TemplateField } from "./template-field";
-import { validateTemplateFieldValue } from "./template-field";
+import { validateTemplateFieldValue } from "./template-field-value";
 
 const field = (overrides: Partial<TemplateField> = {}): TemplateField => ({
   key: "supplier_name",

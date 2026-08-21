@@ -6,12 +6,14 @@ import {
   type ApprovalChangeRequest,
   type FlowContextDoc,
   type ILanguageModel,
+  type IValueSetProvider,
   type Result,
   type SessionStepOutput,
   type StepOutputField,
   type TemplateField,
 } from "@rbrasier/domain";
 import { documentDataSchema, type DocumentData, type GroupItems } from "@rbrasier/shared";
+import { inlineExternalOptions } from "../../services/external-options";
 
 // Rough char-per-token ratio for English prose, used only to keep prompts under
 // the model context window — it does not need to be exact, only conservative.
@@ -76,6 +78,9 @@ export interface ExtractStructuredFieldsInput {
   // constants apply so existing callers behave identically.
   contextBudgetChars?: number;
   maxPromptTokens?: number;
+  // Supplies the valid set for fields bound to a lookup source. Optional so
+  // callers with no external fields are unaffected (ADR-050 §4).
+  valueSetProvider?: IValueSetProvider;
 }
 
 const buildStepOutputsSection = (outputs: SessionStepOutput[]): string => {
@@ -136,12 +141,15 @@ export const extractStructuredFields = async (
   languageModel: ILanguageModel,
   input: ExtractStructuredFieldsInput,
 ): Promise<Result<DocumentData>> => {
-  const keys = input.fields.map((field) => field.key);
+  // A small external set is inlined here so the model chooses from real values;
+  // a large one is left out and caught by the step-end resolve (ADR-050 §4).
+  const fields = await inlineExternalOptions(input.valueSetProvider, input.fields);
+  const keys = fields.map((field) => field.key);
   const contextDocsSection = buildContextDocsSection(
     input.contextDocs,
     input.contextBudgetChars ?? CONTEXT_DOCS_CHAR_BUDGET,
   );
-  const generationGuidance = buildGenerationGuidance(input.fields);
+  const generationGuidance = buildGenerationGuidance(fields);
   const stepOutputsSection = buildStepOutputsSection(input.priorStepOutputs ?? []);
   const insightsSection = buildInsightsSection(input.insights ?? []);
   const changeRequestsSection = buildChangeRequestsSection(input.changeRequests ?? []);
@@ -151,7 +159,7 @@ export const extractStructuredFields = async (
     `Fill each value using the session context below.`,
     `\nEach field has a required format. Reformat the information the user provided into the required format whenever you reasonably can — for example, parse a written date into DD-MM-YYYY, or format an amount as currency. Only leave a value blank when its field is marked optional and the information is genuinely missing.`,
     `\nDates are always day-first: in DD-MM-YYYY the first number is the day and the second is the month. This holds in both directions. Writing one out, "10 Aug 2026" becomes 10-08-2026, never 08-10-2026. Reading one the session already captured in that format, 10-08-2026 means 10 August 2026, never 8 October 2026. Carry such a date through exactly as written — never reorder its day and month.`,
-    `\n<field_constraints>\n${buildFieldConstraintsText(input.fields)}\n</field_constraints>`,
+    `\n<field_constraints>\n${buildFieldConstraintsText(fields)}\n</field_constraints>`,
     generationGuidance,
     changeRequestsSection,
     stepOutputsSection,
@@ -187,7 +195,7 @@ export const extractStructuredFields = async (
   if (result.error) return result;
 
   const object = result.data.object;
-  const groupFields = input.fields.filter((field) => field.type === "group");
+  const groupFields = fields.filter((field) => field.type === "group");
   // Scalar values are trusted as-returned (unchanged from v1.49.0); only group
   // arrays are best-effort coerced — capped, invalid items dropped, sub-fields
   // blanked — so a malformed array can never fail the turn (ADR-032 §3).

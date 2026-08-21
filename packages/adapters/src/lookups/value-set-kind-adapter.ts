@@ -1,0 +1,49 @@
+import type {
+  LookupSourceConfig,
+  RecordCollection,
+  Result,
+  ValueSetEntry,
+} from "@rbrasier/domain";
+
+export interface FetchRecordsInput {
+  config: LookupSourceConfig;
+  // The secret in plaintext, decrypted by the caller. The adapter never reads a
+  // store or an environment variable itself.
+  credential?: string;
+  // The registered source's id, present for every call except a Test against an
+  // unsaved draft. Only the `managed` kind needs it — its records are rows.
+  sourceId?: string;
+  // Set for type-ahead. A kind that cannot filter at the source ignores it and
+  // lets the caller filter the full set.
+  query?: string;
+  limit?: number;
+}
+
+// One source kind, reduced to the single thing they all differ on: producing raw
+// records. Field selection, caching, matching and staleness are shared above
+// this line, so adding a kind never touches domain or application (ADR-050 §2).
+export interface ValueSetKindAdapter {
+  fetchRecords(input: FetchRecordsInput): Promise<Result<Array<Record<string, string>>>>;
+  // Every list of records the source's response contains, so Test can offer them
+  // rather than making the admin guess a path (ADR-050 §2b).
+  discoverCollections(input: FetchRecordsInput): Promise<Result<RecordCollection[]>>;
+  // True when fetchRecords will apply `query` for this config, so the caller must
+  // not filter again (and cannot treat the result as the full set). It takes the
+  // config because whether a kind can filter is a per-source setting, not a
+  // property of the kind — an `api` source filters only when it declares a search
+  // parameter (ADR-051 §1).
+  filtersAtSource(config: LookupSourceConfig): boolean;
+}
+
+export const recordsToEntries = (
+  records: Array<Record<string, string>>,
+  displayField: string,
+  keyField?: string,
+): ValueSetEntry[] =>
+  records
+    .map((record) => {
+      const display = (record[displayField] ?? "").trim();
+      const key = keyField ? (record[keyField] ?? "").trim() : "";
+      return { display, ...(key ? { key } : {}) };
+    })
+    .filter((entry) => entry.display.length > 0);

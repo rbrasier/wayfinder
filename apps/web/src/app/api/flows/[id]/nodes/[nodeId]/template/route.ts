@@ -75,6 +75,13 @@ const storeTemplate = async (input: StoreTemplateInput): Promise<NextResponse> =
   }
   const { tags, fields, documentTemplateContent, spreadsheetTemplateMode } = extraction.data;
 
+  // An unregistered (options-source: …) fails here, so the author sees it while
+  // editing the template rather than an operator hitting it mid-session.
+  const sourcesResult = await container.useCases.validateTemplateLookupSources.execute(fields);
+  if (sourcesResult.error) {
+    return NextResponse.json({ error: sourcesResult.error.message }, { status: 422 });
+  }
+
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const storageKey = `templates/${nodeId}/${timestamp}-${safeFilename}`;
 

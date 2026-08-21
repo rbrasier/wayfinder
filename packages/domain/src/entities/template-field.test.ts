@@ -7,8 +7,9 @@ import {
   parseTemplateField,
   parseTemplateFields,
   templateFieldToLine,
-  validateTemplateFieldValue,
+  type TemplateField,
 } from "./template-field";
+import { validateTemplateFieldValue } from "./template-field-value";
 
 describe("deriveFieldKey", () => {
   it("converts a label to lowercase snake_case", () => {
@@ -608,5 +609,257 @@ describe("repeating group fields", () => {
       ["recommendations", "group"],
       ["risk_section", "section"],
     ]);
+  });
+});
+
+describe("parseTemplateField — (options-source: …)", () => {
+  it("binds the field to a registered source", () => {
+    const result = parseTemplateField("Department (options-source: departments)");
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.optionsSource).toBe("departments");
+    expect(result.data?.options).toBeUndefined();
+    expect(result.data?.type).toBe("text");
+  });
+
+  it("rejects an options source combined with an inline options list", () => {
+    const result = parseTemplateField("Department (options-source: departments) (options: A, B)");
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("options-source");
+  });
+
+  it("rejects the same combination written in the other order", () => {
+    const result = parseTemplateField("Department (options: A, B) (options-source: departments)");
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects an options source combined with multi-options", () => {
+    const result = parseTemplateField(
+      "Department (options-source: departments) (multi-options: A, B)",
+    );
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects an options source combined with a scalar type", () => {
+    const result = parseTemplateField("Department (date) (options-source: departments)");
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("rejects a source name that is not a slug", () => {
+    const result = parseTemplateField("Department (options-source: My Departments)");
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("lowercase");
+  });
+
+  it("rejects two options sources on one tag", () => {
+    const result = parseTemplateField("Department (options-source: a) (options-source: b)");
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("accepts (multiple) alongside an options source", () => {
+    const result = parseTemplateField("Departments (options-source: departments) (multiple)");
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.multiple).toBe(true);
+    expect(result.data?.optionsSource).toBe("departments");
+  });
+
+  it("still rejects (multiple) with no options list of any kind", () => {
+    const result = parseTemplateField("Departments (multiple)");
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("describeTemplateFieldFormat — external fields", () => {
+  it("names the source and defers correctness to the step-end check when nothing is inlined", () => {
+    const field = parseTemplateField("Department (options-source: departments)").data!;
+
+    const description = describeTemplateFieldFormat(field);
+
+    expect(description).toContain("departments");
+    expect(description).toContain("step completes");
+  });
+
+  it("describes a multi-select external field as accepting more than one value", () => {
+    const field = parseTemplateField("Departments (options-source: departments) (multiple)").data!;
+
+    expect(describeTemplateFieldFormat(field)).toContain("one or more");
+  });
+
+  it("uses the inlined entries when the application has supplied a small set", () => {
+    const field = parseTemplateField("Department (options-source: departments)").data!;
+    const inlined = { ...field, options: ["Finance (FIN-001)", "HR (HR-002)"] };
+
+    expect(describeTemplateFieldFormat(inlined)).toContain("exactly one of: Finance (FIN-001)");
+  });
+});
+
+describe("templateFieldToLine — external fields", () => {
+  it("round-trips an options source through the parser", () => {
+    const field = parseTemplateField("Department (options-source: departments)").data!;
+
+    const line = templateFieldToLine(field);
+
+    expect(line).toBe("Department (options-source: departments)");
+    expect(parseTemplateField(line).data?.optionsSource).toBe("departments");
+  });
+
+  it("round-trips a multi-select external field", () => {
+    const field = parseTemplateField("Departments (options-source: departments) (multiple)").data!;
+
+    const line = templateFieldToLine(field);
+
+    expect(parseTemplateField(line).data?.multiple).toBe(true);
+    expect(parseTemplateField(line).data?.optionsSource).toBe("departments");
+  });
+});
+
+describe("parseTemplateFields — the Field.key accessor", () => {
+  it("does not emit a field for the accessor tag", () => {
+    const result = parseTemplateFields([
+      "Department (options-source: departments)",
+      "Department.key",
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(1);
+    expect(result.data?.[0]?.key).toBe("department");
+  });
+
+  it("rejects an accessor on a field with no options source", () => {
+    const result = parseTemplateFields(["Department", "Department.key"]);
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Department.key");
+  });
+
+  it("rejects an accessor that names no field in the template", () => {
+    const result = parseTemplateFields([
+      "Department (options-source: departments)",
+      "Supplier.key",
+    ]);
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Supplier.key");
+  });
+
+  it("accepts an accessor written before the field it references", () => {
+    const result = parseTemplateFields([
+      "Department.key",
+      "Department (options-source: departments)",
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(1);
+  });
+});
+
+describe("validateTemplateFieldValue — external fields", () => {
+  it("accepts any non-empty value, leaving correctness to the step-end resolve", () => {
+    const field = parseTemplateField("Department (options-source: departments)").data!;
+
+    const result = validateTemplateFieldValue(field, "Finance");
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe("Finance");
+  });
+
+  it("still requires a value when the field is not optional", () => {
+    const field = parseTemplateField("Department (options-source: departments)").data!;
+
+    expect(validateTemplateFieldValue(field, "   ").error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("describeTemplateFieldFormat — conversation preview cap", () => {
+  const external = (count: number, multiple = false): TemplateField => {
+    const parsed = parseTemplateField(
+      `Department (options-source: departments)${multiple ? " (multiple)" : ""}`,
+    );
+    return {
+      ...parsed.data!,
+      options: Array.from({ length: count }, (_, index) => `Dept ${index + 1} (D-${index + 1})`),
+    };
+  };
+
+  it("tells the assistant to name at most three of a large inlined set", () => {
+    const description = describeTemplateFieldFormat(external(12));
+
+    expect(description).toContain("name at most 3 of these options");
+    expect(description).toContain("list all 12 if they ask");
+  });
+
+  it("still caps a small set that fits entirely in the prompt", () => {
+    const description = describeTemplateFieldFormat(external(8));
+
+    expect(description).toContain("name at most 3");
+    expect(description).toContain("Dept 8");
+  });
+
+  it("adds no cap when the whole set is three or fewer", () => {
+    const description = describeTemplateFieldFormat(external(3));
+
+    expect(description).not.toContain("name at most");
+  });
+
+  it("leaves an inline (options: …) field's description untouched", () => {
+    const inline = parseTemplateField("Status (options: Open, Closed, Pending, Void)").data!;
+
+    expect(describeTemplateFieldFormat(inline)).toBe(
+      "exactly one of: Open, Closed, Pending, Void",
+    );
+  });
+
+  it("tells the assistant to offer a lookup rather than invent values when nothing is inlined", () => {
+    const description = describeTemplateFieldFormat(
+      parseTemplateField("Department (options-source: departments)").data!,
+    );
+
+    expect(description).toContain("do not invent example values");
+    expect(description).toContain("offer to search it");
+  });
+
+  it("keeps the cap on a multi-select external field", () => {
+    expect(describeTemplateFieldFormat(external(12, true))).toContain("name at most 3");
+  });
+});
+
+describe("describeTemplateFieldFormat — examples for a large external set", () => {
+  const large = (sample?: string[]): TemplateField => ({
+    ...parseTemplateField("Department (options-source: departments)").data!,
+    ...(sample ? { optionsSample: sample } : {}),
+  });
+
+  it("shows real values from the list rather than describing it abstractly", () => {
+    const description = describeTemplateFieldFormat(
+      large(["Finance (FIN-001)", "Human Resources (HR-002)", "Legal Services (LEG-003)"]),
+    );
+
+    expect(description).toContain("Finance (FIN-001)");
+    expect(description).toContain("Legal Services (LEG-003)");
+    expect(description).toContain("examples from a longer list");
+  });
+
+  it("makes clear the examples are not the whole set", () => {
+    const description = describeTemplateFieldFormat(large(["Finance (FIN-001)"]));
+
+    expect(description).toContain("never that they are the only choices");
+  });
+
+  it("falls back to offering a lookup when no sample could be fetched", () => {
+    const description = describeTemplateFieldFormat(large());
+
+    expect(description).toContain("do not invent example values");
+  });
+
+  it("still defers correctness to the step-end check", () => {
+    expect(describeTemplateFieldFormat(large(["Finance (FIN-001)"]))).toContain("step completes");
   });
 });

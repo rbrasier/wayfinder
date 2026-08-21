@@ -15,6 +15,7 @@ import type {
   ISessionMessageRepository,
   ISessionRepository,
   ISessionStepOutputRepository,
+  IValueSetProvider,
 } from "@rbrasier/domain";
 
 export interface DocumentUseCaseDeps {
@@ -27,6 +28,7 @@ export interface DocumentUseCaseDeps {
   flowNodes: IFlowNodeRepository;
   approvals: IApprovalRepository;
   auditLogger: IAuditLogger;
+  valueSetProvider: IValueSetProvider;
 }
 
 // The document / structured-record use-case cluster, factored out of the main
@@ -39,6 +41,7 @@ export const buildDocumentUseCases = (deps: DocumentUseCaseDeps) => ({
     deps.languageModel,
     deps.sessionMessages,
     deps.sessionStepOutputs,
+    deps.valueSetProvider,
   ),
   captureStructuredStepOutput: new CaptureStructuredStepOutput(
     deps.languageModel,
