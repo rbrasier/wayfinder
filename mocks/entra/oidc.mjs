@@ -79,18 +79,20 @@ const encodeIdToken = (claims) => {
 const escapeHtml = (value) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const identityRow = ({ employee, isFeatured }, redirectUri, state) => `<li${
+// One shared form, one submit button per identity, each carrying its own
+// address as the submitter's name/value. A form per row would repeat the
+// redirect_uri and state 100 times and put 100 form elements on the page — and
+// it is a form nested inside a list that the parser will happily swallow if a
+// closing tag is ever missed. This shape cannot express that bug.
+// No data-search attribute: the row's own text already holds the name, address,
+// role and unit, so duplicating it into an attribute doubled the page for nothing.
+const identityRow = ({ employee, isFeatured }) => `<li${
   isFeatured ? ' class="featured"' : ""
-} data-search="${escapeHtml(`${employee.name} ${employee.email} ${employee.jobTitle} ${employee.businessUnit}`.toLowerCase())}">
-      <form method="post">
-        <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
-        <input type="hidden" name="state" value="${escapeHtml(state)}" />
-        <input type="hidden" name="email" value="${escapeHtml(employee.email)}" />
-        <button type="submit" data-testid="mock-entra-identity">
-          <span class="who">${escapeHtml(employee.name)} — ${escapeHtml(employee.email)}</span>
-          <span class="role">${escapeHtml(employee.jobTitle)} · ${escapeHtml(employee.businessUnit)}</span>
-        </button>
-      </form>
+}>
+      <button type="submit" name="email" value="${escapeHtml(employee.email)}" data-testid="mock-entra-identity">
+        <span class="who">${escapeHtml(employee.name)} — ${escapeHtml(employee.email)}</span>
+        <span class="role">${escapeHtml(employee.jobTitle)} · ${escapeHtml(employee.businessUnit)}</span>
+      </button>
     </li>`;
 
 const pickerPage = (tenant, redirectUri, state) => `<!doctype html>
@@ -124,11 +126,13 @@ const pickerPage = (tenant, redirectUri, state) => `<!doctype html>
   <form class="filter" onsubmit="return false">
     <input type="search" data-testid="mock-entra-filter" placeholder="Filter by name, email, role or unit" oninput="filterIdentities(this.value)" />
   </form>
-  <ul id="identities">
-    ${pickerIdentities()
-      .map((identity) => identityRow(identity, redirectUri, state))
-      .join("\n")}
-  </ul>
+  <form method="post">
+    <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
+    <input type="hidden" name="state" value="${escapeHtml(state)}" />
+    <ul id="identities">
+      ${pickerIdentities().map(identityRow).join("\n")}
+    </ul>
+  </form>
   <form method="post" class="custom">
     <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
     <input type="hidden" name="state" value="${escapeHtml(state)}" />
@@ -141,7 +145,8 @@ const pickerPage = (tenant, redirectUri, state) => `<!doctype html>
       var rows = document.getElementById("identities").children;
       for (var index = 0; index < rows.length; index += 1) {
         var row = rows[index];
-        row.hidden = needle !== "" && row.dataset.search.indexOf(needle) === -1;
+        if (row.searchText === undefined) row.searchText = row.textContent.toLowerCase();
+        row.hidden = needle !== "" && row.searchText.indexOf(needle) === -1;
       }
     }
   </script>

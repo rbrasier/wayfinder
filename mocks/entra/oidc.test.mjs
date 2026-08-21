@@ -71,7 +71,9 @@ describe("the identity picker", () => {
     // buttons after it post the *first* form's hidden fields. That is how a
     // typed address silently signed in as whoever heads the list.
     expect(structure.swallowed).toEqual([]);
-    expect(structure.opened).toBe(roster.length + 2);
+    // Three forms only: the filter, the identity list, and the free-typed
+    // address. Not one per identity.
+    expect(structure.opened).toBe(3);
   });
 
   it("keeps the free-typed address in a form of its own, with no identity attached", async () => {
@@ -82,16 +84,23 @@ describe("the identity picker", () => {
     expect(form).not.toContain('data-testid="mock-entra-identity"');
   });
 
-  it("gives each identity its own form carrying only that identity", async () => {
+  it("carries each identity on its own submit button, exactly once", async () => {
     const body = await picker();
     for (const employee of [roster[0], roster[50], roster.at(-1)]) {
-      const form = formOwning(body, "mock-entra-identity");
-      expect(form).toContain('name="email"');
-      expect(
-        body.split("<form").filter((chunk) => chunk.includes(`value="${employee.email}"`)).length,
-        employee.email,
-      ).toBe(1);
+      const button = `<button type="submit" name="email" value="${employee.email}"`;
+      expect(body.split(button).length - 1, employee.email).toBe(1);
     }
+  });
+
+  it("keeps the identity list light enough not to slow a browser down", async () => {
+    const body = await picker();
+    // A guard against per-row duplication creeping back, not a byte target.
+    // Rendering a form, three hidden inputs and a duplicated search attribute
+    // for each of 100 rows put this at 62 KB and 818 elements, on a page the
+    // Entra e2e specs load and screenshot full-page.
+    expect((body.match(/<input\b/g) ?? []).length).toBeLessThan(10);
+    expect((body.match(/<[a-z]/g) ?? []).length).toBeLessThan(500);
+    expect(body.length).toBeLessThan(35_000);
   });
 
   it("400s without a redirect_uri", async () => {

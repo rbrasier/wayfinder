@@ -244,10 +244,25 @@ behind a hidden `name="email"` carrying the first listed employee's address.
 `URLSearchParams.get("email")` returns the first value, so every typed sign-in
 silently authenticated as the chief executive.
 
-The fix is the missing `</form>`. The guard is `formStructure()` in
+The immediate fix was the missing `</form>`. The structural fix came after CI
+flagged that same spec as flaky on the next run — first attempt over the 45s test
+timeout, passing on retry. Measuring the page explained why: a form, three hidden
+inputs and a duplicated search attribute per row had taken the picker from 2.4 KB
+and 36 elements to **62 KB and 818 elements**, on a page the Entra specs load,
+interact with, and screenshot full-page.
+
+The list is now **one form with a submit button per identity**, each button
+carrying its own address as the submitter's `name`/`value`, and the filter reads
+each row's own text instead of a duplicated `data-search` attribute. That is
+62 KB → 32 KB, 818 → 421 elements, 304 → 6 inputs, 102 → 3 forms — and the shape
+cannot express the original bug at all, because there is no per-row form left to
+leave unclosed.
+
+The guard is `formStructure()` in
 `mocks/test-support/http.mjs`, which models that exact parser rule and asserts no
 form start tag ever appears while another is open — applied to both the Entra and
-PKI pickers. The original test only checked that the markup *contained* the test
+PKI pickers, alongside a page-weight assertion that fails if per-row duplication
+creeps back. The original test only checked that the markup *contained* the test
 ids, which a swallowed form still does; string presence could never have caught
 this.
 
