@@ -230,7 +230,9 @@ const handleAuthorizationCode = (res, tenant, form, issuer) => {
     name: employee?.name ?? pending.email,
     email: pending.email,
     preferred_username: pending.email,
-    email_verified: true,
+    // No `email_verified`: it is not an Entra v2.0 claim. The mock used to send
+    // it, which made every local account verified and every production one not
+    // — and that flag is what decides email-domain organisation assignment.
     ...(employee
       ? { jobTitle: employee.jobTitle, department: employee.businessUnit, employeeId: employee.employeeId }
       : {}),

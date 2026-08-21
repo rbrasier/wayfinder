@@ -122,6 +122,16 @@ describe("the authorization-code flow", () => {
     expect(claims.exp).toBeGreaterThan(claims.iat);
   });
 
+  it("does not claim the address is verified, because Entra never does", async () => {
+    const { token } = await signIn({ email: "ada@example.com" });
+    const claims = decodeIdToken(json(token).id_token);
+    // `email_verified` is not a v2.0 claim. Emitting it made accounts land
+    // verified locally and unverified in production — and `emailVerified` is
+    // what gates email-domain organisation assignment, so the feature looked
+    // alive in dev and was dead in a real tenant.
+    expect(claims.email_verified).toBeUndefined();
+  });
+
   it("issues an opaque subject that does not leak the address, and is stable per identity", async () => {
     const first = decodeIdToken(json((await signIn({ email: "ada@example.com" })).token).id_token);
     const second = decodeIdToken(json((await signIn({ email: "ada@example.com" })).token).id_token);

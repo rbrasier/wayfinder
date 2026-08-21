@@ -40,6 +40,10 @@
 - `mocks/graph/api.mjs`, `mocks/graph/api.test.mjs`
 - `mocks/entra/oidc.test.mjs`, `mocks/pki/proxy.test.mjs`
 - `mocks/test-support/http.mjs`, `mocks/vitest.config.mjs`
+- `packages/adapters/src/auth/subject-dn.ts` + `subject-dn.test.ts` — RFC 2253 /
+  RFC 4514 subject-DN parsing
+- `packages/adapters/src/directory/mock-fidelity.test.ts` — the real adapters
+  driven against the real mocks
 
 ## Files modified
 
@@ -48,6 +52,11 @@
   and a trailing slash on either is tolerated.
 - `packages/adapters/src/directory/directory.test.ts` — four cases pinning both
   hosts, overridden and default.
+- `packages/adapters/src/auth/pki-cert-adapter.ts` — identity extraction goes
+  through the new DN parser, and reads the subject's `emailAddress` attribute.
+- `packages/adapters/src/auth/__tests__/pki-cert-adapter.test.ts` — four cases
+  for the escaped comma, the `emailAddress` fallback, SAN precedence over it, and
+  the legacy oneline DN.
 - `apps/web/src/lib/env.ts`, `apps/api/src/env.ts` — `M365_GRAPH_BASE_URL` and
   `M365_AUTHORITY`, optional URLs.
 - `apps/web/src/lib/container-people-directory.ts` — passes both through.
@@ -130,17 +139,70 @@ can pass CI and fail in production, so those were closed rather than documented.
 
 | Real behaviour | Mock now |
 |---|---|
-| `$ssl_client_verify` is `SUCCESS`, `NONE`, or `FAILED:<reason>` since nginx 1.11.7 | Failure now sends `FAILED:unable to get local issuer certificate`, not a bare `FAILED` |
+| `$ssl_client_verify` is `SUCCESS`, `NONE`, or `FAILED:<reason>` since nginx 1.11.7 | Failure sends `FAILED:unable to get local issuer certificate`, not a bare `FAILED`; a new toggle sends `NONE` with no certificate fields at all |
 | `$ssl_client_fingerprint` is **SHA-1**, bare hex, no algorithm prefix | 40-char SHA-1 hex; the previous `sha256:…` form was not a shape any real proxy sends |
-| `$ssl_client_s_dn` is RFC 2253 (comma-separated, most specific first) since nginx 1.11.6 | Already matched; now asserted |
+| `$ssl_client_s_dn` is RFC 2253 (comma-separated, most specific first) since nginx 1.11.6 | Matched, and now RFC 4514-escaped on issue |
+| CAs commonly issue `CN=Surname, Given`, and put the address in the subject when there is no SAN | Two new toggles issue exactly those certificates — the shapes that exposed defects 1 and 2 below |
+
+**Search now behaves like Graph's, not like a substring scan.** `$search` is
+scoped to the property named in the term (`displayName:`, `mail:`,
+`userPrincipalName:`, `givenName:`, `surname:`), matches on word prefixes rather
+than mid-word substrings, and returns `400` for a property real Graph cannot
+search on a user — `jobTitle` and `department` among them. The mock previously
+matched all four fields as substrings, so a local search could find someone a
+real tenant would not.
 
 **An integration test replaces the argument.** `packages/adapters/src/directory/mock-fidelity.test.ts`
 stands the mock Graph and mock Entra up on a real HTTP server and drives the
 *real* `GraphClient` and `GraphPeopleDirectory` against them — client-credentials
 token, `$search` with the header, `$select`, a two-hop manager walk, and the
-`404` at the top of the org that resolution reads as unresolved. If the mock
-drifts from what the adapters send, that test fails rather than CI going quietly
-green.
+`404` at the top of the org that resolution reads as unresolved. It also feeds
+the PKI mock's issued DNs through the same `subject-dn` parser the cert adapter
+uses. If the mock drifts from what the adapters send, that test fails rather
+than CI going quietly green.
+
+## Defects the fidelity audit exposed, and their fixes
+
+Making the mocks faithful turned up two genuine defects in production code. Both
+predate this change; neither could be seen while the mocks emitted only the
+shapes the code already handled.
+
+**1. A subject DN with an escaped comma mangled the account name.**
+`PkiCertAdapter` read the common name with `/CN=([^,]+)/`. RFC 4514 escapes a
+comma inside a value as `\,`, which is the standard encoding of a
+`Surname, Given` common name — a routine CA issuance convention. The regex
+stopped at the escape:
+
+```
+CN=Ravenscroft\, Cordelia,OU=Technology,…   →   name = "Ravenscroft\"
+```
+
+Fixed by `packages/adapters/src/auth/subject-dn.ts`, a real RFC 2253 / RFC 4514
+parser: unescapes `\,` `\+` `\;` `\<` `\>` `\=` `\"` `\\` and `\XX` hex escapes,
+splits only on unescaped separators, handles multi-valued RDNs, and also reads
+the OpenSSL oneline form (`/C=GB/O=…/CN=…`) that nginx's
+`$ssl_client_s_dn_legacy` and Apache's `SSL_CLIENT_S_DN` still emit.
+
+**2. A certificate carrying its address in the subject was rejected.**
+Identity extraction went SAN `rfc822Name` → CN-if-it-is-an-address, skipping the
+`emailAddress` attribute that a CA issuing without SANs normally sets. Such a
+certificate failed with "cannot extract email" despite carrying one. The order
+is now SAN → subject `emailAddress` (also accepted as `E` and as OID
+`1.2.840.113549.1.9.1`) → CN-if-it-is-an-address. SAN still wins, so no existing
+certificate resolves differently; the trust boundary is unchanged, because this
+only reads identity out of a certificate the proxy has already verified.
+
+**3. The mock told the app every address was verified.** `email_verified` is not
+an Entra v2.0 claim, but the mock emitted it, and `userInfoFromIdToken` reads it.
+Locally every Entra account landed verified; in production every one lands
+unverified — and `resolveEmailDomain` refuses to place a user on an unverified
+address. Email-domain organisation assignment therefore worked in dev and was
+silently dead in a real tenant. The mock no longer sends the claim, so local now
+behaves as production does.
+
+Whether an Entra-issued address *should* count as verified is a real product
+question — the tenant does vouch for it — but that is a security decision about
+organisation placement, so it is left as-is rather than decided here.
 
 ## Known limitations
 
@@ -155,20 +217,19 @@ green.
   `SpreadsheetParser` still has only its unit tests.
 - **The roster is static.** There is no mock for hierarchy changes over time,
   and nothing writes back to it.
-- **`$search` is still a substring scan** across name, mail, job title and unit.
-  Real Graph tokenises and scopes the term to the named field, so the mock
-  matches *more* than production will — a local search that finds someone may
-  find nobody in a real tenant.
-- **`email_verified` is not an Entra claim.** The mock emits it, and
-  `userInfoFromIdToken` reads it, so accounts land verified locally and
-  unverified in production. Left alone deliberately: removing it changes
-  sign-in behaviour and belongs in its own change, not a mocks one.
 - **`jobTitle` / `department` in the id_token model *configured optional
   claims*.** Entra does not emit them by default.
-- **No `NONE` verification case.** The picker can force `FAILED:<reason>` but
-  not the "no certificate presented" state a real proxy reports.
-- **The mock Graph still authenticates nothing** and does not paginate
-  (`@odata.nextLink`); 100 users fit in one page.
+- **The mock Graph does not validate the bearer token.** It now requires one to
+  be present — a client that forgets the header gets the 401 real Graph sends —
+  but any non-empty bearer is accepted. It must stay on loopback.
+- **No pagination.** Real Graph returns `@odata.nextLink` past the page size;
+  100 users fit in one page, so the mock never emits one.
+- **`$search` phrase matching is approximate.** Property scoping and word-prefix
+  matching now mirror real Graph, but a multi-word quoted term falls back to a
+  substring check rather than true phrase tokenisation.
+- **The roster carries no name needing RFC 4514 escaping.** The escaped-comma
+  case is reachable through the picker's surname-first toggle rather than by
+  default, so ordinary runs still exercise the ordinary DN.
 
 ## Defect found and fixed after the first CI run
 

@@ -7,6 +7,9 @@ import { GraphPeopleDirectory } from "./graph-people-directory";
 import { mock as graphApi } from "../../../../mocks/graph/api.mjs";
 // @ts-expect-error - .mjs mock, no types
 import { mock as entraOidc } from "../../../../mocks/entra/oidc.mjs";
+// @ts-expect-error - .mjs mock, no types
+import { certificateHeadersFor } from "../../../../mocks/pki/proxy.mjs";
+import { commonNameFrom, emailAddressFrom } from "../auth/subject-dn";
 
 let server: Server;
 let origin: string;
@@ -54,5 +57,32 @@ describe("the real adapters against the real mock", () => {
   it("reports the top of the org as an error, which resolution reads as unresolved", async () => {
     const top = await client().get("/users/rosalind.whitfield%40example.com/manager");
     expect(top.error?.code).toBe("INFRA_FAILURE");
+  });
+});
+
+describe("the PKI mock's certificates against the real DN parser", () => {
+  const headers = (form: Record<string, string>) =>
+    certificateHeadersFor(new URLSearchParams(form)) as Record<string, string | undefined>;
+
+  it("round-trips a surname-first CN through the parser the adapter uses", () => {
+    const dn = headers({ email: "ada@example.com", name: "Ada Lovelace", surname_first: "1" })[
+      "x-ssl-client-subject-dn"
+    ];
+    expect(commonNameFrom(dn ?? null)).toBe("Lovelace, Ada");
+  });
+
+  it("round-trips an address carried in the subject rather than a SAN", () => {
+    const forwarded = headers({ email: "ada@example.com", name: "Ada Lovelace", dn_email: "1" });
+    expect(forwarded["x-ssl-client-san-email"]).toBeUndefined();
+    expect(emailAddressFrom(forwarded["x-ssl-client-subject-dn"] ?? null)).toBe("ada@example.com");
+    expect(commonNameFrom(forwarded["x-ssl-client-subject-dn"] ?? null)).toBe("Ada Lovelace");
+  });
+
+  it("round-trips an ordinary certificate unchanged", () => {
+    const dn = headers({ email: "ada@example.com", name: "Ada Lovelace" })[
+      "x-ssl-client-subject-dn"
+    ];
+    expect(commonNameFrom(dn ?? null)).toBe("Ada Lovelace");
+    expect(emailAddressFrom(dn ?? null)).toBeNull();
   });
 });

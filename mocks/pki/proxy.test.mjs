@@ -30,12 +30,19 @@ describe("the certificate picker", () => {
     }
   });
 
-  it("keeps the free-typed address and the two failure toggles", async () => {
+  it("keeps the free-typed address and every certificate-shape toggle", async () => {
     const body = (await picker()).body;
-    expect(body).toContain('data-testid="mock-pki-email"');
-    expect(body).toContain('data-testid="mock-pki-omit-san"');
-    expect(body).toContain('data-testid="mock-pki-fail-verification"');
-    expect(body).toContain('data-testid="mock-pki-submit"');
+    for (const testId of [
+      "mock-pki-email",
+      "mock-pki-omit-san",
+      "mock-pki-fail-verification",
+      "mock-pki-surname-first",
+      "mock-pki-dn-email",
+      "mock-pki-no-cert",
+      "mock-pki-submit",
+    ]) {
+      expect(body, testId).toContain(`data-testid="${testId}"`);
+    }
   });
 
   it("closes every form it opens", async () => {
@@ -90,6 +97,34 @@ describe("the headers a real mTLS proxy would forward", () => {
     expect(headers({ email: "ada@example.com" })["x-ssl-client-fingerprint"]).not.toBe(
       headers({ email: "grace@example.com" })["x-ssl-client-fingerprint"],
     );
+  });
+
+  it("issues a surname-first common name, escaped as RFC 2253 requires", () => {
+    const forwarded = headers({
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+      surname_first: "1",
+    });
+    expect(forwarded["x-ssl-client-subject-dn"]).toContain("CN=Lovelace\\, Ada,");
+  });
+
+  it("issues an address in the subject instead of a SAN, as a CA without SANs does", () => {
+    const forwarded = headers({
+      email: "ada@example.com",
+      name: "Ada Lovelace",
+      dn_email: "1",
+    });
+    expect(forwarded["x-ssl-client-san-email"]).toBeUndefined();
+    expect(forwarded["x-ssl-client-subject-dn"]).toContain("emailAddress=ada@example.com");
+    expect(forwarded["x-ssl-client-subject-dn"]).toContain("CN=Ada Lovelace");
+  });
+
+  it("reports NONE and sends no certificate when none was presented", () => {
+    const forwarded = headers({ email: "ada@example.com", no_certificate: "1" });
+    expect(forwarded["x-ssl-client-verified"]).toBe("NONE");
+    expect(forwarded["x-ssl-client-subject-dn"]).toBeUndefined();
+    expect(forwarded["x-ssl-client-fingerprint"]).toBeUndefined();
+    expect(forwarded["x-ssl-client-san-email"]).toBeUndefined();
   });
 
   it("omits the SAN email on request, leaving the CN as the only address", () => {

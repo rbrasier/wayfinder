@@ -5,7 +5,7 @@ import { mock, searchTermsFrom, toGraphUser } from "./api.mjs";
 
 // Every $search request the adapter makes carries this header, and real Graph
 // rejects the query without it.
-const EVENTUAL = { ConsistencyLevel: "eventual" };
+const EVENTUAL = { ConsistencyLevel: "eventual", Authorization: "Bearer mock-app-token" };
 
 const call = async (url, headers = EVENTUAL) => {
   const res = response();
@@ -37,12 +37,15 @@ describe("user projection", () => {
 });
 
 describe("$search parsing", () => {
-  it("reads the terms out of the syntax GraphPeopleDirectory sends", () => {
-    expect(searchTermsFrom('"displayName:Ada" OR "mail:Ada"')).toEqual(["ada"]);
+  it("reads the scoped terms out of the syntax GraphPeopleDirectory sends", () => {
+    expect(searchTermsFrom('"displayName:Ada" OR "mail:Ada"')).toEqual([
+      { property: "displayName".toLowerCase(), value: "ada" },
+      { property: "mail", value: "ada" },
+    ]);
   });
 
-  it("reads a bare term and ignores empty or missing input", () => {
-    expect(searchTermsFrom("Hopper")).toEqual(["hopper"]);
+  it("reads a bare term as unscoped, and ignores empty or missing input", () => {
+    expect(searchTermsFrom("Hopper")).toEqual([{ property: null, value: "hopper" }]);
     expect(searchTermsFrom("")).toEqual([]);
     expect(searchTermsFrom(null)).toEqual([]);
   });
@@ -61,7 +64,7 @@ describe("GET /users", () => {
   });
 
   it("honours $top", async () => {
-    const recorded = await call("/graph/v1.0/users?$search=Manager&$top=3");
+    const recorded = await call('/graph/v1.0/users?$search="displayName:a"&$top=3');
     expect(json(recorded).value.length).toBe(3);
   });
 
@@ -132,7 +135,9 @@ describe("advanced-query rules", () => {
   // objects and answers 400 without it. A mock that accepted the query anyway
   // would let a dropped header pass CI and fail in production.
   it("400s a $search with no ConsistencyLevel header", async () => {
-    const recorded = await call('/graph/v1.0/users?$search="displayName:Lovelace"', {});
+    const recorded = await call('/graph/v1.0/users?$search="displayName:Lovelace"', {
+      Authorization: "Bearer mock-app-token",
+    });
     expect(recorded.statusCode).toBe(400);
     expect(json(recorded).error.code).toBe("Request_UnsupportedQuery");
   });
@@ -140,17 +145,20 @@ describe("advanced-query rules", () => {
   it("400s a $search whose ConsistencyLevel is not eventual", async () => {
     const recorded = await call('/graph/v1.0/users?$search="displayName:Lovelace"', {
       ConsistencyLevel: "strong",
+      Authorization: "Bearer mock-app-token",
     });
     expect(recorded.statusCode).toBe(400);
   });
 
   it("does not require the header when there is no $search", async () => {
-    expect((await call("/graph/v1.0/users", {})).statusCode).toBe(200);
+    const recorded = await call("/graph/v1.0/users", { Authorization: "Bearer mock-app-token" });
+    expect(recorded.statusCode).toBe(200);
   });
 
   it("reads the header case-insensitively, as a real HTTP server does", async () => {
     const recorded = await call('/graph/v1.0/users?$search="mail:ada@example.com"', {
       consistencylevel: "Eventual",
+      authorization: "Bearer mock-app-token",
     });
     expect(recorded.statusCode).toBe(200);
   });
@@ -199,5 +207,52 @@ describe("response envelope", () => {
 describe("rejections", () => {
   it("404s an endpoint the mock does not implement", async () => {
     expect((await call("/graph/v1.0/groups")).statusCode).toBe(404);
+  });
+});
+
+describe("bearer token", () => {
+  it("401s a request with no Authorization header", async () => {
+    const recorded = await call("/graph/v1.0/users", {});
+    expect(recorded.statusCode).toBe(401);
+    expect(json(recorded).error.code).toBe("InvalidAuthenticationToken");
+  });
+
+  it("401s an Authorization header that is not a bearer token", async () => {
+    const recorded = await call("/graph/v1.0/users", { Authorization: "Basic abc123" });
+    expect(recorded.statusCode).toBe(401);
+  });
+});
+
+describe("$search scoping", () => {
+  // Real Graph scopes a "field:term" search to that field and tokenises the
+  // term — it does not substring-match across everything. A mock that matched
+  // more than production would make a local search look like it works.
+  it("scopes displayName: to the display name", async () => {
+    const byName = json(await call('/graph/v1.0/users?$search="displayName:Lovelace"')).value;
+    expect(byName.map((user) => user.mail)).toEqual(["ada@example.com"]);
+  });
+
+  it("does not match a job title through a displayName: search", async () => {
+    const found = json(
+      await call('/graph/v1.0/users?$search="displayName:Chief Executive Officer"'),
+    ).value;
+    expect(found).toEqual([]);
+  });
+
+  it("matches on a word prefix, not on any substring", async () => {
+    const prefix = json(await call('/graph/v1.0/users?$search="displayName:Love"')).value;
+    expect(prefix.map((user) => user.mail)).toContain("ada@example.com");
+    const middle = json(await call('/graph/v1.0/users?$search="displayName:ovelac"')).value;
+    expect(middle).toEqual([]);
+  });
+
+  it("searches the default searchable properties for an unscoped term", async () => {
+    const found = json(await call('/graph/v1.0/users?$search="Hopper"')).value;
+    expect(found.map((user) => user.mail)).toEqual(["grace@example.com"]);
+  });
+
+  it("rejects a search scoped to a property real Graph cannot search on users", async () => {
+    const recorded = await call('/graph/v1.0/users?$search="jobTitle:Director"');
+    expect(recorded.statusCode).toBe(400);
   });
 });

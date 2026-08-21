@@ -52,8 +52,26 @@ const seededCertificates = () =>
     organisationalUnit: employee.businessUnit,
   }));
 
-const subjectDnFor = (name, organisationalUnit) =>
-  `CN=${name},OU=${organisationalUnit},O=Wayfinder,C=GB`;
+// RFC 4514 §3: a comma inside an attribute value is escaped, not a separator.
+// A "Surname, Given" common name is a routine CA issuance convention, so the
+// mock has to be able to produce one — it is the shape that breaks a DN parser
+// that splits on commas.
+const escapeRdnValue = (value) => value.replace(/([,+"\\<>;=])/g, "\\$1");
+
+const subjectDnFor = (name, organisationalUnit, emailAddress = null) => {
+  const rdns = [`CN=${escapeRdnValue(name)}`];
+  if (emailAddress) rdns.push(`emailAddress=${escapeRdnValue(emailAddress)}`);
+  rdns.push(`OU=${escapeRdnValue(organisationalUnit)}`, "O=Wayfinder", "C=GB");
+  return rdns.join(",");
+};
+
+// "Lovelace, Ada" from "Ada Lovelace" — how a CA that orders names
+// surname-first would issue the same person.
+const surnameFirst = (name) => {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length < 2) return name;
+  return `${parts.at(-1)}, ${parts.slice(0, -1).join(" ")}`;
+};
 
 // nginx computes $ssl_client_fingerprint with SHA-1 and forwards it as bare hex
 // — no algorithm prefix. Stable across restarts so a repeat sign-in refreshes
@@ -135,7 +153,25 @@ const pickerPage = (redirectPath) => `<!doctype html>
     <div class="row">
       <label>
         <input type="checkbox" name="verification_failed" value="1" data-testid="mock-pki-fail-verification" />
-        Fail chain verification (sends <code>x-ssl-client-verified: FAILED</code>)
+        Fail chain verification (sends <code>x-ssl-client-verified: FAILED:&lt;reason&gt;</code>)
+      </label>
+    </div>
+    <div class="row">
+      <label>
+        <input type="checkbox" name="surname_first" value="1" data-testid="mock-pki-surname-first" />
+        Issue a surname-first CN (<code>CN=Surname\, Given</code> — an escaped comma)
+      </label>
+    </div>
+    <div class="row">
+      <label>
+        <input type="checkbox" name="dn_email" value="1" data-testid="mock-pki-dn-email" />
+        Put the address in the subject as <code>emailAddress=</code>, with no SAN
+      </label>
+    </div>
+    <div class="row">
+      <label>
+        <input type="checkbox" name="no_certificate" value="1" data-testid="mock-pki-no-cert" />
+        Present no certificate at all (sends <code>x-ssl-client-verified: NONE</code>)
       </label>
     </div>
     <button type="submit" data-testid="mock-pki-submit">Present certificate</button>
@@ -173,20 +209,33 @@ export const certificateHeadersFor = (form) => {
   const name = form.get("name")?.trim() || email;
   const organisationalUnit = form.get("organisational_unit")?.trim() || "Engineering";
 
-  // With no SAN email the adapter falls back to the CN, which only yields an
-  // address when the CN *is* one — so issue the cert that way to keep the
-  // fallback reachable rather than guaranteed to fail.
+  // No certificate at all — the user dismissed the smart-card prompt. nginx
+  // reports NONE and forwards no certificate fields.
+  if (form.get("no_certificate") === "1") {
+    return { "x-ssl-client-verified": "NONE", "x-forwarded-for": FORWARDED_FOR };
+  }
+
+  // With no SAN email the adapter falls back to the subject — either an
+  // emailAddress attribute, which is what a CA issuing without SANs normally
+  // sets, or a CN that happens to be an address.
   const omitSanEmail = form.get("omit_san_email") === "1";
-  const commonName = omitSanEmail ? email : name;
+  const addressInDn = form.get("dn_email") === "1";
+  const withoutSan = omitSanEmail || addressInDn;
+  const displayName = form.get("surname_first") === "1" ? surnameFirst(name) : name;
+  const commonName = omitSanEmail && !addressInDn ? email : displayName;
 
   const headers = {
     "x-ssl-client-verified":
       form.get("verification_failed") === "1" ? VERIFICATION_FAILURE : "SUCCESS",
-    "x-ssl-client-subject-dn": subjectDnFor(commonName, organisationalUnit),
+    "x-ssl-client-subject-dn": subjectDnFor(
+      commonName,
+      organisationalUnit,
+      addressInDn ? email : null,
+    ),
     "x-ssl-client-fingerprint": fingerprintFor(email),
     "x-forwarded-for": FORWARDED_FOR,
   };
-  if (!omitSanEmail) headers["x-ssl-client-san-email"] = email;
+  if (!withoutSan) headers["x-ssl-client-san-email"] = email;
 
   return headers;
 };
