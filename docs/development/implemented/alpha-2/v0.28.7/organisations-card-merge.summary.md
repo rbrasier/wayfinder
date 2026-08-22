@@ -62,15 +62,35 @@ None. No table, column, index or migration. `organisation_name` and
   session lifecycle, streaming, file transfer, navigation state across a page
   load, the accessibility tree, or smoke. Coverage belongs at the layer owning
   the logic, which is the unit test above.
+- **One existing spec needed updating.**
+  `apps/web/e2e/code-quality-hot-paths.spec.ts` (Group D — settings page
+  decomposition) asserts that every extracted settings card still renders its
+  own `<h3>` title, guarding against a card being dropped. Its `CARD_TITLES`
+  list contained `'General'`, which was `OrganisationNameCard`'s title on
+  `/admin/settings`. The merged card is titled `'Organisations'`, so the entry
+  was updated. This was **missed in the phase doc**, which stated no e2e spec
+  touched this surface — see "Known limitations".
 - **Existing e2e still covers the wizard path.**
   `apps/web/e2e/phase-admin-first-login-setup.spec.ts` asserts `#org-name` is
   visible on the wizard's single-organisation branch and absent on the multi
   branch. The wizard still renders `OrganisationNameCard` and the extraction kept
   the input id, so both assertions hold unchanged.
+- The four specs calling `openSettingsSection(page, 'General')` are unaffected:
+  that helper targets the section's `aria-expanded` button (an `<h2>`), which was
+  not renamed. `openAllSettingsSections` likewise only clicks
+  `button[aria-expanded]`, so it never touches the organisations switch
+  (`role="switch"`, `aria-checked`).
 - `./validate.sh` — 24 passed, 0 failed. The web suite went from 81 files / 821
   tests to 82 / 824.
 
 ## Known limitations
+
+- **The e2e impact analysis was incomplete.** The phase doc checked
+  `phase-admin-first-login-setup.spec.ts` (which references `#org-name`) but not
+  `code-quality-hot-paths.spec.ts`, which asserts card *titles* rather than
+  field ids and so did not surface in a search for the field. CI caught it:
+  1 failed of 132. The lesson for the next card rename is to grep the e2e suite
+  for the **card title** as well as its testids and element ids.
 
 - **ADR-038 drift, carried not fixed.** ADR-038 §6 states organisations have no
   enable/disable toggle and need no disable-guard; the app has had
