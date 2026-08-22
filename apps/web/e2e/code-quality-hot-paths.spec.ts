@@ -218,7 +218,9 @@ test.describe('Code quality Group C: transactional turn persistence', () => {
  */
 // One title per extracted card file — each an <h3> rendered unconditionally.
 const CARD_TITLES = [
-  'General',
+  // Was 'General' until v0.28.7, when the organisation name card and the
+  // organisations toggle merged into one card titled 'Organisations'.
+  'Organisations',
   'User Registration',
   'Authentication',
   'Global AI Instructions',
