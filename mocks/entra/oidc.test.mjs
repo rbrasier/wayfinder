@@ -224,6 +224,60 @@ describe("the client-credentials grant", () => {
   });
 });
 
+// probeAuthEntra fetches the discovery document to find the token endpoint
+// before it will attempt a client-credentials grant, so a mock without one
+// fails the Authentication card's Test with HTTP 404 while sign-in itself works.
+describe("the OpenID discovery document", () => {
+  it("is served at the v2.0 well-known path the sign-in probe asks for", async () => {
+    const recorded = await call("GET", `/entra/${TENANT}/v2.0/.well-known/openid-configuration`);
+
+    expect(recorded.statusCode).toBe(200);
+    expect(json(recorded).token_endpoint).toBe(
+      `http://localhost:4001/entra/${TENANT}/oauth2/v2.0/token`,
+    );
+  });
+
+  it("is served at the tenant-root well-known path too, as the real authority is", async () => {
+    const recorded = await call("GET", `/entra/${TENANT}/.well-known/openid-configuration`);
+
+    expect(recorded.statusCode).toBe(200);
+    expect(json(recorded).token_endpoint).toBeTruthy();
+  });
+
+  it("points every endpoint back at the mock, never at Microsoft", async () => {
+    const document = json(await call("GET", `/entra/${TENANT}/v2.0/.well-known/openid-configuration`));
+
+    for (const endpoint of [
+      document.authorization_endpoint,
+      document.token_endpoint,
+      document.jwks_uri,
+    ]) {
+      expect(endpoint).toContain(`/entra/${TENANT}/`);
+      expect(endpoint).not.toContain("microsoftonline.com");
+    }
+  });
+
+  it("names the tenant in the issuer, as a v2.0 authority does", async () => {
+    const document = json(await call("GET", `/entra/${TENANT}/v2.0/.well-known/openid-configuration`));
+
+    expect(document.issuer).toBe(`http://localhost:4001/entra/${TENANT}/v2.0`);
+  });
+
+  it("advertises the token endpoint the client-credentials grant actually answers on", async () => {
+    const document = json(await call("GET", `/entra/${TENANT}/v2.0/.well-known/openid-configuration`));
+    const path = new URL(document.token_endpoint).pathname;
+
+    const token = await call(
+      "POST",
+      path,
+      new URLSearchParams({ grant_type: "client_credentials" }).toString(),
+    );
+
+    expect(token.statusCode).toBe(200);
+    expect(json(token).access_token).toBeTruthy();
+  });
+});
+
 describe("routing", () => {
   it("serves an empty JWKS for completeness", async () => {
     const recorded = await call("GET", `/entra/${TENANT}/discovery/v2.0/keys`);

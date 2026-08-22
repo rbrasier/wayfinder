@@ -9,6 +9,13 @@
   request back, a fourth transition out of `pending` (v0.25.0)
 - **Extended**: 2026-08-07 — "Reassignment": the session owner may change who an
   open request is with, without moving the session (v0.26.0)
+- **Extended**: 2026-08-22 — "Directory configuration is runtime DB state": the
+  Entra app registration the directory queries moves from the `M365_*`
+  environment variables into a `directory_config` row an admin edits at
+  `/admin/settings`, choosing to inherit the email or sign-in registration or to
+  supply a separate one. `M365_*` stays as a fallback, and the Graph base URL and
+  token authority stay environment-only — they decide where a client secret is
+  sent, the same split ADR-042 draws for `PKI_TRUSTED_PROXY_IPS` (v0.28.6)
 - **Relates to**: ADR-010 (`INodeExecutor` / `pending_approval`), ADR-016 /
   ADR-017 (pgvector RAG over the knowledge base), ADR-023 Email Notification
   Transport (`IEmailSender` + `app_notification_log` outbox, M365 app registration)

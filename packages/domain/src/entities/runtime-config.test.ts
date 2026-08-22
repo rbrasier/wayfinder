@@ -5,6 +5,8 @@ import {
   DEFAULT_PKI_SESSION_TTL_HOURS,
   DEFAULT_SIEM_CONFIG,
   createDefaultAuthConfig,
+  createDefaultDirectoryConfig,
+  createDefaultEmailConfig,
   isAtLeastOneMethodEnabled,
   isEntraConfigured,
   isPkiUsable,
@@ -12,7 +14,10 @@ import {
   parseDeploymentConfig,
   parseOnboardingState,
   parseSiemConfig,
+  resolveDirectoryCredentials,
   type AuthConfig,
+  type DirectoryConfig,
+  type EntraCredentials,
 } from "./runtime-config";
 
 describe("AuthConfig defaults", () => {
@@ -208,5 +213,108 @@ describe("parseDeploymentConfig", () => {
 
   it("treats a non-boolean flag as single organisation", () => {
     expect(parseDeploymentConfig(JSON.stringify({ multiOrganisation: 1 })).multiOrganisation).toBe(false);
+  });
+});
+
+describe("createDefaultDirectoryConfig", () => {
+  it("starts disabled, inheriting the email app registration", () => {
+    const config = createDefaultDirectoryConfig();
+
+    expect(config.enabled).toBe(false);
+    expect(config.credentialSource).toBe("email");
+  });
+
+  it("starts with blank separate credentials", () => {
+    expect(createDefaultDirectoryConfig().entra).toEqual({
+      tenantId: "",
+      clientId: "",
+      clientSecret: "",
+    });
+  });
+});
+
+describe("resolveDirectoryCredentials", () => {
+  const emailCredentials: EntraCredentials = {
+    tenantId: "email-tenant",
+    clientId: "email-client",
+    clientSecret: "email-secret",
+  };
+  const authCredentials: EntraCredentials = {
+    tenantId: "auth-tenant",
+    clientId: "auth-client",
+    clientSecret: "auth-secret",
+  };
+  const ownCredentials: EntraCredentials = {
+    tenantId: "own-tenant",
+    clientId: "own-client",
+    clientSecret: "own-secret",
+  };
+  const sources = { email: emailCredentials, auth: authCredentials };
+
+  const config = (overrides: Partial<DirectoryConfig> = {}): DirectoryConfig => ({
+    ...createDefaultDirectoryConfig(),
+    enabled: true,
+    ...overrides,
+  });
+
+  it("takes the email app registration when the source is email", () => {
+    expect(resolveDirectoryCredentials(config({ credentialSource: "email" }), sources)).toEqual(
+      emailCredentials,
+    );
+  });
+
+  it("takes the sign-in app registration when the source is auth", () => {
+    expect(resolveDirectoryCredentials(config({ credentialSource: "auth" }), sources)).toEqual(
+      authCredentials,
+    );
+  });
+
+  it("takes its own credentials when the source is own", () => {
+    const own = config({ credentialSource: "own", entra: ownCredentials });
+
+    expect(resolveDirectoryCredentials(own, sources)).toEqual(ownCredentials);
+  });
+
+  it("resolves to nothing while the directory is switched off", () => {
+    expect(resolveDirectoryCredentials(config({ enabled: false }), sources)).toBeNull();
+  });
+
+  it("resolves to nothing when the inherited source is incomplete", () => {
+    const incomplete = { email: { tenantId: "t", clientId: "", clientSecret: "" }, auth: authCredentials };
+
+    expect(resolveDirectoryCredentials(config({ credentialSource: "email" }), incomplete)).toBeNull();
+  });
+
+  it("resolves to nothing when its own credentials are incomplete", () => {
+    const own = config({
+      credentialSource: "own",
+      entra: { tenantId: "own-tenant", clientId: "own-client", clientSecret: "" },
+    });
+
+    expect(resolveDirectoryCredentials(own, sources)).toBeNull();
+  });
+
+  it("never falls back to another source when the chosen one is empty", () => {
+    const own = config({ credentialSource: "own" });
+
+    expect(resolveDirectoryCredentials(own, sources)).toBeNull();
+  });
+});
+
+describe("createDefaultEmailConfig", () => {
+  it("defaults to SMTP on the submission port with nothing filled in", () => {
+    const config = createDefaultEmailConfig();
+
+    expect(config.provider).toBe("smtp");
+    expect(config.port).toBe(587);
+    expect(config.fromAddress).toBe("");
+  });
+
+  it("starts with blank Microsoft 365 credentials", () => {
+    const config = createDefaultEmailConfig();
+
+    expect(config.m365TenantId).toBe("");
+    expect(config.m365ClientId).toBe("");
+    expect(config.m365ClientSecret).toBe("");
   });
 });
