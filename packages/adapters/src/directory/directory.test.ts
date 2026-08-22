@@ -239,6 +239,92 @@ describe("GraphClient host overrides", () => {
   });
 });
 
+describe("GraphClient credential resolution", () => {
+  const recordingFetch = () => {
+    const tokenBodies: string[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      if (url.includes("/oauth2/")) {
+        tokenBodies.push(String(init?.body ?? ""));
+        return new Response(JSON.stringify({ access_token: "tok", expires_in: 3600 }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ value: [] }), { status: 200 });
+    }) as unknown as typeof fetch;
+    return { tokenBodies, fetchImpl };
+  };
+
+  it("reports itself unconfigured while the resolver returns nothing", async () => {
+    const graph = new GraphClient(async () => null);
+
+    expect(await graph.isConfigured()).toBe(false);
+  });
+
+  it("makes no request while the resolver returns nothing", async () => {
+    const { tokenBodies, fetchImpl } = recordingFetch();
+    const graph = new GraphClient(async () => null, fetchImpl);
+
+    const result = await graph.get("/users");
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(tokenBodies).toEqual([]);
+  });
+
+  it("becomes configured once the resolver returns credentials, with no restart", async () => {
+    let credentials: { tenantId: string; clientId: string; clientSecret: string } | null = null;
+    const graph = new GraphClient(async () => credentials);
+
+    expect(await graph.isConfigured()).toBe(false);
+    credentials = { tenantId: "t", clientId: "c", clientSecret: "s" };
+
+    expect(await graph.isConfigured()).toBe(true);
+  });
+
+  it("reuses the cached token while the credentials are unchanged", async () => {
+    const { tokenBodies, fetchImpl } = recordingFetch();
+    const graph = new GraphClient(
+      async () => ({ tenantId: "t", clientId: "c", clientSecret: "s" }),
+      fetchImpl,
+    );
+
+    await graph.get("/users");
+    await graph.get("/users");
+
+    expect(tokenBodies).toHaveLength(1);
+  });
+
+  it("drops the cached token when the client secret is rotated", async () => {
+    const { tokenBodies, fetchImpl } = recordingFetch();
+    let clientSecret = "first-secret";
+    const graph = new GraphClient(
+      async () => ({ tenantId: "t", clientId: "c", clientSecret }),
+      fetchImpl,
+    );
+
+    await graph.get("/users");
+    clientSecret = "rotated-secret";
+    await graph.get("/users");
+
+    expect(tokenBodies).toHaveLength(2);
+    expect(tokenBodies[1]).toContain("rotated-secret");
+  });
+
+  it("drops the cached token when the tenant changes", async () => {
+    const { tokenBodies, fetchImpl } = recordingFetch();
+    let tenantId = "first-tenant";
+    const graph = new GraphClient(
+      async () => ({ tenantId, clientId: "c", clientSecret: "s" }),
+      fetchImpl,
+    );
+
+    await graph.get("/users");
+    tenantId = "second-tenant";
+    await graph.get("/users");
+
+    expect(tokenBodies).toHaveLength(2);
+  });
+});
+
 describe("GraphPeopleDirectory", () => {
   it("returns no results when Graph is not configured", async () => {
     const directory = new GraphPeopleDirectory(new GraphClient(null));

@@ -1,5 +1,15 @@
 import { createServer, type Server } from "node:http";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  DIRECTORY_CONFIG_SETTING_KEY,
+  EMAIL_CONFIG_SETTING_KEY,
+  createDefaultAuthConfig,
+  type AuthConfig,
+  type EntraCredentials,
+  type ISystemSettingsRepository,
+} from "@rbrasier/domain";
+import { RuntimeConfigStore } from "../config/runtime-config-store";
+import { probeAuthEntra } from "../health/connectivity-probes";
 import { GraphClient } from "./graph-client";
 import { GraphPeopleDirectory } from "./graph-people-directory";
 
@@ -58,6 +68,153 @@ describe("the real adapters against the real mock", () => {
   it("reports the top of the org as an error, which resolution reads as unresolved", async () => {
     const top = await client().get("/users/rosalind.whitfield%40example.com/manager");
     expect(top.error?.code).toBe("INFRA_FAILURE");
+  });
+});
+
+// What an operator actually does with the mock: leave the host overrides to the
+// environment (restart.sh --with-mocks exports them), then switch the directory
+// on and paste the mock credentials into /admin/settings. This drives that exact
+// path — a real RuntimeConfigStore over a stored settings row — rather than the
+// fixed config the tests above use, so a regression in the runtime-config wiring
+// cannot pass while the adapters still work.
+describe("the admin-configured directory against the real mock", () => {
+  const hostOverrides = () => ({
+    baseUrl: `${origin}/graph/v1.0`,
+    authority: `${origin}/entra`,
+  });
+
+  const storeOver = (rows: Record<string, string>) =>
+    new RuntimeConfigStore(
+      {
+        get: async (key: string) => ({
+          data: rows[key] ? { key, value: rows[key], updatedAt: new Date() } : null,
+        }),
+        set: async () => ({ data: undefined }),
+        list: async () => ({ data: [] }),
+        delete: async () => ({ data: undefined }),
+      } as unknown as ISystemSettingsRepository,
+      {
+        provider: "anthropic",
+        apiKeys: { anthropic: null, openai: null, mistral: null, bedrock: null },
+        storage: {
+          endpoint: "localhost",
+          port: 9000,
+          useSSL: false,
+          accessKey: "ak",
+          secretKey: "sk",
+          bucket: "wayfinder-documents",
+          region: "",
+          pathStyle: true,
+        },
+        embeddingsProvider: "local",
+      },
+    );
+
+  const clientOver = (rows: Record<string, string>) => {
+    const store = storeOver(rows);
+    return new GraphClient(async () => {
+      const credentials = await store.getDirectoryCredentials();
+      return credentials ? { ...credentials, ...hostOverrides() } : null;
+    });
+  };
+
+  const mockCredentials = {
+    tenantId: "mock-tenant",
+    clientId: "mock-client",
+    clientSecret: "mock-secret",
+  };
+
+  const enabledRow = (credentialSource: string, entra = mockCredentials) =>
+    JSON.stringify({ enabled: true, credentialSource, entra });
+
+  it("resolves people once an admin saves separate credentials", async () => {
+    const graph = clientOver({ [DIRECTORY_CONFIG_SETTING_KEY]: enabledRow("own") });
+
+    const result = await new GraphPeopleDirectory(graph).search({ query: "Lovelace", limit: 5 });
+
+    expect(result.data?.[0]).toMatchObject({ source: "entra", email: "ada@example.com" });
+  });
+
+  it("resolves people when the admin inherits the email card's app registration", async () => {
+    const graph = clientOver({
+      [DIRECTORY_CONFIG_SETTING_KEY]: enabledRow("email", {
+        tenantId: "",
+        clientId: "",
+        clientSecret: "",
+      }),
+      [EMAIL_CONFIG_SETTING_KEY]: JSON.stringify({
+        provider: "m365",
+        fromAddress: "noreply@example.com",
+        m365TenantId: mockCredentials.tenantId,
+        m365ClientId: mockCredentials.clientId,
+        m365ClientSecret: mockCredentials.clientSecret,
+      }),
+    });
+
+    const result = await new GraphPeopleDirectory(graph).search({ query: "Lovelace", limit: 5 });
+
+    expect(result.data?.[0]).toMatchObject({ source: "entra", email: "ada@example.com" });
+  });
+
+  it("stays dark while the directory is switched off, whatever is stored", async () => {
+    const graph = clientOver({
+      [DIRECTORY_CONFIG_SETTING_KEY]: JSON.stringify({
+        enabled: false,
+        credentialSource: "own",
+        entra: mockCredentials,
+      }),
+    });
+
+    expect(await graph.isConfigured()).toBe(false);
+    expect((await new GraphPeopleDirectory(graph).search({ query: "Lovelace", limit: 5 })).data).toEqual([]);
+  });
+
+  it("walks the reporting chain for an admin-configured directory", async () => {
+    const graph = clientOver({ [DIRECTORY_CONFIG_SETTING_KEY]: enabledRow("own") });
+
+    const manager = await graph.get<{ mail: string }>("/users/ada%40example.com/manager", {
+      $select: "id,mail,userPrincipalName",
+    });
+
+    expect(manager.data?.mail).toBe("grace@example.com");
+  });
+});
+
+// The Authentication card's Test, run against the mock exactly as an operator
+// runs it. It fetches the discovery document before it will attempt a grant, so
+// a mock that only served /authorize and /token failed this with HTTP 404 while
+// sign-in itself worked — the kind of gap only driving the real probe finds.
+describe("the Entra mock against the real sign-in probe", () => {
+  const authConfig = (entra: EntraCredentials): AuthConfig => ({
+    ...createDefaultAuthConfig(),
+    entraEnabled: true,
+    entra,
+  });
+
+  const mockEntra = { tenantId: "mock-tenant", clientId: "mock-client", clientSecret: "mock-secret" };
+
+  it("passes against the mock authority", async () => {
+    const result = await probeAuthEntra(authConfig(mockEntra), {
+      authority: `${origin}/entra`,
+    });
+
+    expect(result.ok, result.message).toBe(true);
+  });
+
+  it("reports the credentials accepted rather than merely reachable", async () => {
+    const result = await probeAuthEntra(authConfig(mockEntra), {
+      authority: `${origin}/entra`,
+    });
+
+    expect(result.message).toContain("credentials accepted");
+  });
+
+  it("fails against a tenant the authority does not serve", async () => {
+    const result = await probeAuthEntra(authConfig({ ...mockEntra, tenantId: "" }), {
+      authority: `${origin}/entra`,
+    });
+
+    expect(result.ok).toBe(false);
   });
 });
 

@@ -294,10 +294,11 @@ if [ "$WITH_MOCKS" -eq 1 ]; then
 EOF
 
   # Point the directory adapters at the mock Graph, and *only* that. Same
-  # reasoning as Entra above: buildPeopleDirectory treats a full set of M365_*
-  # credentials as "Graph is configured", so exporting those would switch every
-  # mocked install onto Graph behind the operator's back. These two are host
-  # overrides — inert until the credentials are set — so they are safe to export.
+  # reasoning as Entra above: a full set of M365_* credentials switches the
+  # approver directory on by itself, so exporting those would put every mocked
+  # install onto Graph behind the operator's back. These two are host overrides —
+  # inert until the directory is configured — so they are safe to export, and
+  # they are the half that cannot be set from the admin UI anyway.
   export M365_GRAPH_BASE_URL="http://localhost:$MOCKS_PORT/graph/v1.0"
   export M365_AUTHORITY="http://localhost:$MOCKS_PORT/entra"
   cat <<EOF
@@ -313,13 +314,13 @@ EOF
   mock Microsoft Graph at http://localhost:$MOCKS_PORT/graph/v1.0
   Serves the same people, so first/second-level approver resolution can be driven
   on its Graph path instead of the HR-column fallback. The host overrides were
-  exported for this run; the credentials are not, because all three together
-  switch Graph on. To use it, put these in .env (any non-empty values will do):
-    M365_TENANT_ID=mock-tenant
-    M365_CLIENT_ID=mock-client
-    M365_CLIENT_SECRET=mock-secret
-    M365_GRAPH_BASE_URL=$M365_GRAPH_BASE_URL
-    M365_AUTHORITY=$M365_AUTHORITY
+  exported for this run; the credentials are not, because they switch the
+  directory on. To use it, open /admin/settings → Approver Directory, switch
+  directory lookups on, choose "Enter separate credentials" and paste these
+  (the mock accepts any values; these just have to be non-empty):
+    Tenant ID      mock-tenant
+    Client ID      mock-client
+    Client secret  mock-secret
 EOF
 
   # Where the mock PKI proxy forwards the certificates it issues. Safe to export

@@ -22,6 +22,7 @@ import {
   STORAGE_CONFIG_SETTING_KEY,
   DEFAULT_ORGANISATION_RESOLUTION,
   createDefaultAuthConfig,
+  createDefaultDirectoryConfig,
   createDefaultSiteBannerConfig,
   parseSiteBannerConfig,
   createDefaultAboutLinksConfig,
@@ -33,8 +34,12 @@ import {
   type AiPurpose,
   type AuthConfig,
   type BedrockCredentials,
+  type DirectoryConfig,
+  type DirectoryCredentialSource,
   type DocumentGenerationConfig,
   type DocumentGenerationContextBudgetMode,
+  type EmailConfig,
+  type EmailProvider,
   type EmbeddingsConfig,
   type EntraCredentials,
   type ISystemSettingsRepository,
@@ -102,6 +107,11 @@ export interface EnvDefaults {
   embeddingsProvider: EmbeddingsProvider;
   n8n?: N8nConfig;
   entra?: EntraCredentials;
+  // The Microsoft 365 app registration (M365_*) the email transport uses, and
+  // which the approver directory inherits by default. Distinct from `entra`
+  // above, which is the sign-in registration (ENTRA_*) — a tenant may issue one
+  // for both or one for each.
+  m365?: EntraCredentials;
   // The only route by which the PKI environment enters config resolution.
   // Booleans, never the trusted-proxy addresses: the trust anchor is read where
   // it is enforced and nowhere else (ADR-042 §1). Optional so a process with no
@@ -412,6 +422,68 @@ export const buildEnvAuthConfig = (env: EnvDefaults): AuthConfig => {
 
 export const stringOr = (value: unknown, fallback: string): string =>
   typeof value === "string" && value.length > 0 ? value : fallback;
+
+// An install running on M365_* environment credentials has had a live directory
+// all along, so it reads as enabled and inheriting from email — the same
+// credentials, reached the same way. Anything less reads as off.
+export const buildEnvDirectoryConfig = (env: EnvDefaults): DirectoryConfig => {
+  const defaults = createDefaultDirectoryConfig();
+  if (!env.m365 || !isEntraConfigured(env.m365)) return defaults;
+  return { ...defaults, enabled: true };
+};
+
+const isDirectoryCredentialSource = (value: unknown): value is DirectoryCredentialSource =>
+  value === "email" || value === "auth" || value === "own";
+
+export const parseDirectoryConfig = (raw: string, fallback: DirectoryConfig): DirectoryConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    const rawEntra = isObject(parsed.entra) ? parsed.entra : {};
+    return {
+      enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : fallback.enabled,
+      credentialSource: isDirectoryCredentialSource(parsed.credentialSource)
+        ? parsed.credentialSource
+        : fallback.credentialSource,
+      entra: {
+        tenantId: stringOr(rawEntra.tenantId, fallback.entra.tenantId),
+        clientId: stringOr(rawEntra.clientId, fallback.entra.clientId),
+        clientSecret: stringOr(rawEntra.clientSecret, fallback.entra.clientSecret),
+      },
+    };
+  } catch {
+    return fallback;
+  }
+};
+
+const isEmailProvider = (value: unknown): value is EmailProvider =>
+  value === "smtp" || value === "m365";
+
+export const parseEmailConfig = (raw: string, fallback: EmailConfig): EmailConfig => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!isObject(parsed)) return fallback;
+    return {
+      provider: isEmailProvider(parsed.provider) ? parsed.provider : fallback.provider,
+      host: stringOr(parsed.host, fallback.host),
+      port: isPositiveInteger(parsed.port) ? parsed.port : fallback.port,
+      secure: typeof parsed.secure === "boolean" ? parsed.secure : fallback.secure,
+      username: stringOr(parsed.username, fallback.username),
+      password: stringOr(parsed.password, fallback.password),
+      fromAddress: stringOr(parsed.fromAddress, fallback.fromAddress),
+      // Null is a value here — it means "send with no display name" — so it is
+      // honoured rather than filled in from the fallback.
+      fromName: typeof parsed.fromName === "string" || parsed.fromName === null
+        ? (parsed.fromName as string | null)
+        : fallback.fromName,
+      m365TenantId: stringOr(parsed.m365TenantId, fallback.m365TenantId),
+      m365ClientId: stringOr(parsed.m365ClientId, fallback.m365ClientId),
+      m365ClientSecret: stringOr(parsed.m365ClientSecret, fallback.m365ClientSecret),
+    };
+  } catch {
+    return fallback;
+  }
+};
 
 export const parseAuthConfig = (raw: string, fallback: AuthConfig): AuthConfig => {
   try {

@@ -274,6 +274,24 @@ const handleAuthorizationCode = (res, tenant, form, issuer) => {
   });
 };
 
+// The subset of the real v2.0 metadata a client can act on. Every endpoint
+// points back at this mock — a document that named login.microsoftonline.com
+// would send a probe that trusted it straight at Microsoft with mock
+// credentials.
+const discoveryDocument = (issuer, tenant) => ({
+  issuer: `${issuer}/${tenant}/v2.0`,
+  authorization_endpoint: `${issuer}/${tenant}/oauth2/v2.0/authorize`,
+  token_endpoint: `${issuer}/${tenant}/oauth2/v2.0/token`,
+  jwks_uri: `${issuer}/${tenant}/discovery/v2.0/keys`,
+  response_modes_supported: ["query", "fragment", "form_post"],
+  response_types_supported: ["code", "id_token", "code id_token", "id_token token"],
+  grant_types_supported: ["authorization_code", "client_credentials", "refresh_token"],
+  scopes_supported: ["openid", "profile", "email", "offline_access"],
+  subject_types_supported: ["pairwise"],
+  id_token_signing_alg_values_supported: ["RS256"],
+  token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"],
+});
+
 const handleToken = async (req, res, tenant, issuer) => {
   const form = new URLSearchParams(await readBody(req));
   if (form.get("grant_type") === "client_credentials") {
@@ -307,6 +325,19 @@ async function handle(req, res) {
 
   if (endpoint === "oauth2/v2.0/token" && req.method === "POST") {
     await handleToken(req, res, tenant, `${url.origin}${BASE_PATH}`);
+    return;
+  }
+
+  // Real Entra serves the discovery document at both the tenant root and under
+  // /v2.0. The Authentication card's connectivity probe reads `token_endpoint`
+  // out of it before it will try a client-credentials grant, so a mock without
+  // this answers that Test with a 404 while sign-in itself works fine.
+  if (
+    (endpoint === "v2.0/.well-known/openid-configuration" ||
+      endpoint === ".well-known/openid-configuration") &&
+    req.method === "GET"
+  ) {
+    sendJson(res, 200, discoveryDocument(`${url.origin}${BASE_PATH}`, tenant));
     return;
   }
 

@@ -37,7 +37,7 @@ export class GraphReportingLineResolver implements IReportingLineResolver {
     const email = userResult.data?.email;
     if (!email) return ok(UNRESOLVED);
 
-    const managerEmail = this.graph.isConfigured()
+    const managerEmail = (await this.graph.isConfigured())
       ? await this.walkGraph(email, input.level)
       : await this.walkHr(email, input.level);
     if (!managerEmail) return ok(UNRESOLVED);

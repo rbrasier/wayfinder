@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   AI_CONFIG_SETTING_KEY,
+  AUTH_CONFIG_SETTING_KEY,
+  DIRECTORY_CONFIG_SETTING_KEY,
+  EMAIL_CONFIG_SETTING_KEY,
   SITE_BANNER_MAX_TEXT_SIZE_PT,
+  createDefaultDirectoryConfig,
   createDefaultSiteBannerConfig,
   type AiConfig,
   type ISystemSettingsRepository,
@@ -571,8 +575,10 @@ describe("RuntimeConfigStore — PKI config", () => {
   });
 });
 
-// Routes get() by key so AI config and document-generation config can be stored
-// independently in one fake repo.
+// Routes get() by key so configs that resolve across several rows — AI and
+// document generation, directory and the email/auth rows it inherits from — can
+// be stored independently in one fake repo. `values` is read on every call, so a
+// test can rewrite a row and invalidate to prove the cache reloads.
 const makeKeyedRepo = (values: Record<string, string>): ISystemSettingsRepository =>
   ({
     get: vi.fn().mockImplementation(async (key: string) => ({
@@ -709,5 +715,232 @@ describe("RuntimeConfigStore — resolveDocumentGenerationBudget", () => {
     const budget = await store.resolveDocumentGenerationBudget();
 
     expect(budget.contextBudgetChars).toBe(1_000_000);
+  });
+});
+
+describe("RuntimeConfigStore — directory config", () => {
+  const envM365 = {
+    m365: { tenantId: "env-m365-tenant", clientId: "env-m365-client", clientSecret: "env-m365-secret" },
+  };
+
+  it("defaults to disabled with no stored row and no M365 environment", async () => {
+    const store = new RuntimeConfigStore(makeKeyedRepo({}), makeEnv());
+
+    const config = await store.getDirectoryConfig();
+
+    expect(config.enabled).toBe(false);
+    expect(config.credentialSource).toBe("email");
+  });
+
+  it("reads a complete M365 environment as an enabled directory inheriting from email", async () => {
+    const store = new RuntimeConfigStore(makeKeyedRepo({}), makeEnv(envM365));
+
+    const config = await store.getDirectoryConfig();
+
+    expect(config.enabled).toBe(true);
+    expect(config.credentialSource).toBe("email");
+  });
+
+  it("lets a stored row override the environment", async () => {
+    const stored = {
+      [DIRECTORY_CONFIG_SETTING_KEY]: JSON.stringify({
+        enabled: false,
+        credentialSource: "own",
+        entra: { tenantId: "db-tenant", clientId: "db-client", clientSecret: "db-secret" },
+      }),
+    };
+    const store = new RuntimeConfigStore(makeKeyedRepo(stored), makeEnv(envM365));
+
+    const config = await store.getDirectoryConfig();
+
+    expect(config.enabled).toBe(false);
+    expect(config.credentialSource).toBe("own");
+    expect(config.entra.tenantId).toBe("db-tenant");
+  });
+
+  it("falls back to the environment defaults on a malformed row", async () => {
+    const store = new RuntimeConfigStore(
+      makeKeyedRepo({ [DIRECTORY_CONFIG_SETTING_KEY]: "not json" }),
+      makeEnv(envM365),
+    );
+
+    const config = await store.getDirectoryConfig();
+
+    expect(config.enabled).toBe(true);
+    expect(config.credentialSource).toBe("email");
+  });
+
+  it("treats an unrecognised credential source as the email default", async () => {
+    const stored = {
+      [DIRECTORY_CONFIG_SETTING_KEY]: JSON.stringify({ enabled: true, credentialSource: "ldap" }),
+    };
+    const store = new RuntimeConfigStore(makeKeyedRepo(stored), makeEnv());
+
+    expect((await store.getDirectoryConfig()).credentialSource).toBe("email");
+  });
+
+  it("caches until invalidated", async () => {
+    const repo = makeKeyedRepo({});
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getDirectoryConfig();
+    await store.getDirectoryConfig();
+    store.invalidateDirectory();
+    await store.getDirectoryConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("redacts the secret while preserving the source and tenant", () => {
+    const redacted = RuntimeConfigStore.redactDirectory({
+      enabled: true,
+      credentialSource: "own",
+      entra: { tenantId: "t", clientId: "c", clientSecret: "super-secret" },
+    });
+
+    expect(redacted).toEqual({
+      enabled: true,
+      credentialSource: "own",
+      entra: { tenantId: "t", clientId: "c", clientSecret: "set" },
+    });
+  });
+
+  it("reports an unset secret when none is stored", () => {
+    const redacted = RuntimeConfigStore.redactDirectory(createDefaultDirectoryConfig());
+
+    expect(redacted.entra.clientSecret).toBe("unset");
+  });
+});
+
+describe("RuntimeConfigStore — getDirectoryCredentials", () => {
+  const envM365 = {
+    m365: { tenantId: "env-m365-tenant", clientId: "env-m365-client", clientSecret: "env-m365-secret" },
+  };
+
+  const emailRow = JSON.stringify({
+    provider: "m365",
+    fromAddress: "noreply@example.gov",
+    m365TenantId: "email-tenant",
+    m365ClientId: "email-client",
+    m365ClientSecret: "email-secret",
+  });
+
+  const authRow = JSON.stringify({
+    emailPasswordEnabled: true,
+    entraEnabled: true,
+    entra: { tenantId: "auth-tenant", clientId: "auth-client", clientSecret: "auth-secret" },
+  });
+
+  const directoryRow = (config: Record<string, unknown>) => JSON.stringify(config);
+
+  it("resolves nothing while the directory is switched off", async () => {
+    const store = new RuntimeConfigStore(
+      makeKeyedRepo({
+        [DIRECTORY_CONFIG_SETTING_KEY]: directoryRow({ enabled: false, credentialSource: "email" }),
+        [EMAIL_CONFIG_SETTING_KEY]: emailRow,
+      }),
+      makeEnv(envM365),
+    );
+
+    expect(await store.getDirectoryCredentials()).toBeNull();
+  });
+
+  it("takes the email card's Microsoft 365 credentials when the source is email", async () => {
+    const store = new RuntimeConfigStore(
+      makeKeyedRepo({
+        [DIRECTORY_CONFIG_SETTING_KEY]: directoryRow({ enabled: true, credentialSource: "email" }),
+        [EMAIL_CONFIG_SETTING_KEY]: emailRow,
+      }),
+      makeEnv(envM365),
+    );
+
+    expect(await store.getDirectoryCredentials()).toEqual({
+      tenantId: "email-tenant",
+      clientId: "email-client",
+      clientSecret: "email-secret",
+    });
+  });
+
+  it("falls back to the M365 environment when the email card holds no app registration", async () => {
+    const store = new RuntimeConfigStore(
+      makeKeyedRepo({
+        [DIRECTORY_CONFIG_SETTING_KEY]: directoryRow({ enabled: true, credentialSource: "email" }),
+      }),
+      makeEnv(envM365),
+    );
+
+    expect(await store.getDirectoryCredentials()).toEqual(envM365.m365);
+  });
+
+  it("takes the sign-in app registration when the source is auth", async () => {
+    const store = new RuntimeConfigStore(
+      makeKeyedRepo({
+        [DIRECTORY_CONFIG_SETTING_KEY]: directoryRow({ enabled: true, credentialSource: "auth" }),
+        [AUTH_CONFIG_SETTING_KEY]: authRow,
+      }),
+      makeEnv(envM365),
+    );
+
+    expect(await store.getDirectoryCredentials()).toEqual({
+      tenantId: "auth-tenant",
+      clientId: "auth-client",
+      clientSecret: "auth-secret",
+    });
+  });
+
+  it("takes its own credentials when the source is own", async () => {
+    const store = new RuntimeConfigStore(
+      makeKeyedRepo({
+        [DIRECTORY_CONFIG_SETTING_KEY]: directoryRow({
+          enabled: true,
+          credentialSource: "own",
+          entra: { tenantId: "own-tenant", clientId: "own-client", clientSecret: "own-secret" },
+        }),
+        [EMAIL_CONFIG_SETTING_KEY]: emailRow,
+      }),
+      makeEnv(envM365),
+    );
+
+    expect(await store.getDirectoryCredentials()).toEqual({
+      tenantId: "own-tenant",
+      clientId: "own-client",
+      clientSecret: "own-secret",
+    });
+  });
+
+  it("resolves nothing when the chosen source is incomplete, without borrowing another", async () => {
+    const store = new RuntimeConfigStore(
+      makeKeyedRepo({
+        [DIRECTORY_CONFIG_SETTING_KEY]: directoryRow({ enabled: true, credentialSource: "auth" }),
+        [EMAIL_CONFIG_SETTING_KEY]: emailRow,
+      }),
+      makeEnv(envM365),
+    );
+
+    expect(await store.getDirectoryCredentials()).toBeNull();
+  });
+
+  it("picks up a rotated email secret once the email cache is invalidated", async () => {
+    const rows: Record<string, string> = {
+      [DIRECTORY_CONFIG_SETTING_KEY]: directoryRow({ enabled: true, credentialSource: "email" }),
+      [EMAIL_CONFIG_SETTING_KEY]: emailRow,
+    };
+    const store = new RuntimeConfigStore(makeKeyedRepo(rows), makeEnv());
+
+    await store.getDirectoryCredentials();
+    rows[EMAIL_CONFIG_SETTING_KEY] = JSON.stringify({
+      provider: "m365",
+      fromAddress: "noreply@example.gov",
+      m365TenantId: "email-tenant",
+      m365ClientId: "email-client",
+      m365ClientSecret: "rotated-secret",
+    });
+    store.invalidateEmail();
+
+    expect(await store.getDirectoryCredentials()).toEqual({
+      tenantId: "email-tenant",
+      clientId: "email-client",
+      clientSecret: "rotated-secret",
+    });
   });
 });
