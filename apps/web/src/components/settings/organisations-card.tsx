@@ -1,14 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { OrganisationNameFields } from "@/components/settings/organisation-name-card";
+import { resolveOrganisationsCardMode } from "@/components/settings/organisations-card-model";
 import { trpc } from "@/trpc/client";
 
-// Master switch for the organisations feature (ADR-038). Off by default: when
-// off, a single global organisation name is used in AI prompts and no membership
-// resolution runs on sign-in.
-export function OrganisationsToggleCard() {
+// Master switch for the organisations feature, sitting under the single
+// organisation name it replaces (ADR-038 + the v2.10.0 UI gate). Off by default:
+// when off, that one name is used in AI prompts and no membership resolution
+// runs on sign-in; when on, each member's own organisation is used instead.
+export function OrganisationsCard() {
   const utils = trpc.useUtils();
   const enabledQuery = trpc.organisation.isEnabled.useQuery();
   const setEnabled = trpc.organisation.setEnabled.useMutation({
@@ -20,19 +24,32 @@ export function OrganisationsToggleCard() {
   });
 
   const enabled = enabledQuery.data ?? false;
+  const mode = resolveOrganisationsCardMode(enabledQuery.data);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Organisations</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="flex items-start justify-between gap-3">
+      <CardContent className="space-y-4">
+        {mode === "single-name" ? (
+          <OrganisationNameFields />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Each member is grounded in their own organisation. Name and assign them under{" "}
+            <Link href="/admin/organisations" className="text-[#2f56d3] hover:underline">
+              Organisations
+            </Link>
+            .
+          </p>
+        )}
+
+        <div className="flex items-start justify-between gap-3 border-t border-[#f0ede8] pt-4">
           <div className="space-y-0.5">
             <Label htmlFor="organisations-enabled">Enable organisations</Label>
             <p className="text-xs text-muted-foreground">
               Group users into organisations for internal sharing and to ground the AI in each
-              member&apos;s own organisation. When off, the single organisation name below is used
+              member&apos;s own organisation. When off, the single organisation name above is used
               everywhere.
             </p>
           </div>
