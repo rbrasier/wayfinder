@@ -411,19 +411,21 @@ else
   printf '%b' "$UNSAFE_ARRAYS"
 fi
 
-# ── 21. restart.sh --with-mocks does not enable Entra ────────────────────────
+# ── 21. restart.sh --with-mocks does not enable Entra or Graph ───────────────
 # A complete set of ENTRA_* credentials switches Entra on by itself, with no DB
-# row and no admin action (ADR-025 §1, buildEnvAuthConfig). So exporting them
-# from the mocks path would silently enable Entra on every mocked install and
-# make local auth differ from a real one. The mock supplies ENTRA_AUTHORITY only
-# and prints the credentials for the admin to paste in.
-section "21. restart.sh --with-mocks does not pre-fill Entra credentials"
-ENTRA_EXPORTS=$(grep -nE '^[[:space:]]*export[[:space:]]+ENTRA_(TENANT_ID|CLIENT_ID|CLIENT_SECRET)=' restart.sh || true)
-if [ -z "$ENTRA_EXPORTS" ]; then
-  pass "restart.sh exports no Entra credentials — a mocked install starts with Entra off"
+# row and no admin action (ADR-025 §1, buildEnvAuthConfig), and a complete set of
+# M365_* credentials is what buildPeopleDirectory reads as "Graph is configured".
+# So exporting either from the mocks path would silently enable a feature on
+# every mocked install and make local behaviour differ from a real deployment.
+# The mock supplies the host overrides only — ENTRA_AUTHORITY, M365_GRAPH_BASE_URL
+# and M365_AUTHORITY — and prints the credentials for the admin to paste in.
+section "21. restart.sh --with-mocks does not pre-fill Entra or Graph credentials"
+CREDENTIAL_EXPORTS=$(grep -nE '^[[:space:]]*export[[:space:]]+(ENTRA|M365)_(TENANT_ID|CLIENT_ID|CLIENT_SECRET)=' restart.sh || true)
+if [ -z "$CREDENTIAL_EXPORTS" ]; then
+  pass "restart.sh exports no Entra or M365 credentials — a mocked install starts with both off"
 else
-  fail "restart.sh exports Entra credentials, which auto-enables Entra on a mocked install:"
-  echo "$ENTRA_EXPORTS" | sed 's/^/  /'
+  fail "restart.sh exports credentials, which auto-enables Entra or Graph on a mocked install:"
+  echo "$CREDENTIAL_EXPORTS" | sed 's/^/  /'
 fi
 
 # ── 22. the schema has a migration behind every change ───────────────────────

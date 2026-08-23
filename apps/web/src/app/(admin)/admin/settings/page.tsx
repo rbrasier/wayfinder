@@ -18,8 +18,7 @@ import { GlobalInstructionsCard } from "@/components/settings/global-instruction
 import { HrDataCard } from "@/components/settings/hr-data-card";
 import { N8nIntegrationCard } from "@/components/settings/n8n-integration-card";
 import { NotificationSettingsCard } from "@/components/settings/notification-settings-card";
-import { OrganisationNameCard } from "@/components/settings/organisation-name-card";
-import { OrganisationsToggleCard } from "@/components/settings/organisations-toggle-card";
+import { OrganisationsCard } from "@/components/settings/organisations-card";
 import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
@@ -27,12 +26,10 @@ import { ExtractionConfigCard } from "@/components/settings/extraction-config-ca
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
 import { SiteBannerCard } from "@/components/settings/site-banner-card";
 import { StorageCard } from "@/components/settings/storage-card";
-import { trpc } from "@/trpc/client";
 
 export default function AppSettingsPage() {
   const connectivity = useConnectivity();
   const [rerunSetup, setRerunSetup] = useState(false);
-  const organisationsEnabledQuery = trpc.organisation.isEnabled.useQuery();
 
   return (
     <div className="h-full overflow-auto">
@@ -68,10 +65,7 @@ export default function AppSettingsPage() {
 
           <div className="space-y-4">
             <CollapsibleSection title="General" description="Identity, access and organisations.">
-              <OrganisationsToggleCard />
-              {/* When organisations are enabled each member's own organisation is
-                  used, so the single global name is only relevant when off. */}
-              {organisationsEnabledQuery.data !== true && <OrganisationNameCard />}
+              <OrganisationsCard />
               <RegistrationToggleCard />
               <AuthMethodsCard connectivity={connectivity} />
               <AboutLinksCard />

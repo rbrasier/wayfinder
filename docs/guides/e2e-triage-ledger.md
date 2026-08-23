@@ -52,7 +52,7 @@ handled differently:
   deleted.
 - **Genuine capability gates (kept).** A skip is legitimate only when the
   environment cannot run the test — and the CI environment provides object
-  storage, the mocks server on :4001 (Entra + PKI), and mocked AI, so the gates
+  storage, the mocks server on :4001 (Entra, Graph, HR + PKI), and mocked AI, so the gates
   that actually fire are narrow:
   - `extraction_flows` off → `enhance-synthesise-summary`, `fix-synthesise-live-results`
   - real embeddings / real AI key → `fix-session-upload-not-reaching-ai` (was

@@ -98,6 +98,13 @@ const envSchema = z.object({
   M365_TENANT_ID: z.string().optional(),
   M365_CLIENT_ID: z.string().optional(),
   M365_CLIENT_SECRET: z.string().optional(),
+  // Host overrides for Microsoft Graph, env-only for the same reason
+  // ENTRA_AUTHORITY is: a directory lookup must not be repointable from a
+  // settings form. Unset, the real Microsoft hosts are used. Set both to drive
+  // the local mock Graph (restart.sh --with-mocks) — they are inert on their
+  // own, because Graph is only consulted once all three M365 credentials are set.
+  M365_GRAPH_BASE_URL: z.string().url().optional(),
+  M365_AUTHORITY: z.string().url().optional(),
   WEB_BASE_URL: z.string().url().default("http://localhost:3000"),
   // Retention sweep (scaling wall #9). Deletes rows older than the per-table
   // window from the unbounded-growth tables so their hot-path indexes stay lean.

@@ -1,6 +1,8 @@
 import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
+  DIRECTORY_CONFIG_SETTING_KEY,
+  EMAIL_CONFIG_SETTING_KEY,
   DEFAULT_SIEM_CONFIG,
   DEFAULT_USAGE_LIMITS_CONFIG,
   SIEM_CONFIG_SETTING_KEY,
@@ -22,12 +24,16 @@ import {
   createDefaultAboutLinksConfig,
   parseAboutLinksConfig,
   ABOUT_LINKS_SETTING_KEY,
+  createDefaultEmailConfig,
   isEntraConfigured,
   parseOrganisationResolution,
+  resolveDirectoryCredentials,
   type AiConfig,
   type AiPurpose,
   type AuthConfig,
   type BedrockCredentials,
+  type DirectoryConfig,
+  type EmailConfig,
   type DocumentGenerationConfig,
   type DocumentGenerationContextBudgetMode,
   type EmbeddingsConfig,
@@ -67,10 +73,13 @@ import {
   MODEL_CONTEXT_WINDOWS,
   buildEnvAiConfig,
   buildEnvAuthConfig,
+  buildEnvDirectoryConfig,
   buildEnvEmbeddingsConfig,
   parseAiConfig,
   parseAuthConfig,
+  parseDirectoryConfig,
   parseDocumentGenerationConfig,
+  parseEmailConfig,
   parseEmbeddingsConfig,
   parseExtractionConfig,
   parseN8nConfig,
@@ -104,6 +113,10 @@ export class RuntimeConfigStore {
   private embeddingsPending: Promise<EmbeddingsConfig> | null = null;
   private n8nCache: N8nConfig | null = null;
   private n8nPending: Promise<N8nConfig> | null = null;
+  private directoryCache: DirectoryConfig | null = null;
+  private directoryPending: Promise<DirectoryConfig> | null = null;
+  private emailCache: EmailConfig | null = null;
+  private emailPending: Promise<EmailConfig> | null = null;
   private authCache: AuthConfig | null = null;
   private authPending: Promise<AuthConfig> | null = null;
   private authVersion = 0;
@@ -294,6 +307,70 @@ export class RuntimeConfigStore {
     return this.authPending;
   }
 
+  // Approver directory config (ADR-018 under runtime config). Read on the
+  // people-search and reporting-line paths, so it is cached like the others; a
+  // missing/malformed row falls back to the environment, which keeps an install
+  // running on M365_* credentials working exactly as before.
+  async getDirectoryConfig(): Promise<DirectoryConfig> {
+    if (this.directoryCache) return this.directoryCache;
+    if (this.directoryPending) return this.directoryPending;
+    this.directoryPending = (async () => {
+      const fallback = buildEnvDirectoryConfig(this.envDefaults);
+      const result = await this.settingsRepo.get(DIRECTORY_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseDirectoryConfig(result.data.value, fallback)
+          : fallback;
+      this.directoryCache = config;
+      this.directoryPending = null;
+      return config;
+    })();
+    return this.directoryPending;
+  }
+
+  async getEmailConfig(): Promise<EmailConfig> {
+    if (this.emailCache) return this.emailCache;
+    if (this.emailPending) return this.emailPending;
+    this.emailPending = (async () => {
+      const fallback = createDefaultEmailConfig();
+      const result = await this.settingsRepo.get(EMAIL_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseEmailConfig(result.data.value, fallback)
+          : fallback;
+      this.emailCache = config;
+      this.emailPending = null;
+      return config;
+    })();
+    return this.emailPending;
+  }
+
+  // Which credentials the approver directory actually queries Graph with, or
+  // null when it is off or its chosen source is incomplete. The one accessor the
+  // Graph client resolves through, so "is the directory live" has a single
+  // answer per process.
+  async getDirectoryCredentials(): Promise<EntraCredentials | null> {
+    const [config, email, auth] = await Promise.all([
+      this.getDirectoryConfig(),
+      this.emailM365Credentials(),
+      this.getAuthConfig(),
+    ]);
+    return resolveDirectoryCredentials(config, { email, auth: auth.entra });
+  }
+
+  // DB first, environment as the fallback — the same precedence every other
+  // credential in this store follows.
+  private async emailM365Credentials(): Promise<EntraCredentials> {
+    const email = await this.getEmailConfig();
+    const stored: EntraCredentials = {
+      tenantId: email.m365TenantId,
+      clientId: email.m365ClientId,
+      clientSecret: email.m365ClientSecret,
+    };
+    if (isEntraConfigured(stored)) return stored;
+    return this.envDefaults.m365 ?? { tenantId: "", clientId: "", clientSecret: "" };
+  }
+
   // The single accessor for PKI's environment precondition. Every consumer —
   // the settings router, the auth-pki probe, the lockout guard — reads the gate
   // through here rather than parsing PKI_TRUSTED_PROXY_IPS for itself, so the
@@ -424,6 +501,16 @@ export class RuntimeConfigStore {
     this.n8nPending = null;
   }
 
+  invalidateDirectory(): void {
+    this.directoryCache = null;
+    this.directoryPending = null;
+  }
+
+  invalidateEmail(): void {
+    this.emailCache = null;
+    this.emailPending = null;
+  }
+
   invalidateAuth(): void {
     this.authCache = null;
     this.authPending = null;
@@ -477,6 +564,22 @@ export class RuntimeConfigStore {
 
   static redactN8n(config: N8nConfig): { baseUrl: string; apiKey: "set" | "unset" } {
     return { baseUrl: config.baseUrl, apiKey: config.apiKey ? "set" : "unset" };
+  }
+
+  static redactDirectory(config: DirectoryConfig): {
+    enabled: boolean;
+    credentialSource: DirectoryConfig["credentialSource"];
+    entra: { tenantId: string; clientId: string; clientSecret: "set" | "unset" };
+  } {
+    return {
+      enabled: config.enabled,
+      credentialSource: config.credentialSource,
+      entra: {
+        tenantId: config.entra.tenantId,
+        clientId: config.entra.clientId,
+        clientSecret: config.entra.clientSecret ? "set" : "unset",
+      },
+    };
   }
 
   static redactAuth(config: AuthConfig): {
