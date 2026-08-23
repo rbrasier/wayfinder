@@ -241,7 +241,9 @@ export const probeEmbeddingsConnectivity = async (
 };
 
 export interface GraphProbe {
-  isConfigured(): boolean;
+  // Async because the directory's credentials are runtime config, resolved per
+  // call rather than fixed at construction.
+  isConfigured(): Promise<boolean>;
   get<T>(path: string, query?: Record<string, string>): Promise<Result<T>>;
 }
 
@@ -250,7 +252,7 @@ export const probeEntraConnectivity = async (
   deps: { timeoutMs?: number } = {},
 ): Promise<ConnectivityResult> => {
   const target = "entra" as const;
-  if (!graph.isConfigured()) {
+  if (!(await graph.isConfigured())) {
     return { target, ok: false, skipped: true, message: "Microsoft Entra is not configured" };
   }
 

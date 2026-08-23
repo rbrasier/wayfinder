@@ -29,7 +29,7 @@ const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): Connectivit
     isPkiEnvConfigured: () => false,
   },
   emailSender: { isConfigured: async () => false, testConnectivity: async () => ok(true as const) },
-  graphClient: { isConfigured: () => false, get: vi.fn() },
+  graphClient: { isConfigured: async () => false, get: vi.fn() },
   embeddingsProvider: { embed: async () => ok([0.1]) },
   openaiApiKey: null,
   credentialAccounts: { countAccountsWithPassword: async () => 1 },
