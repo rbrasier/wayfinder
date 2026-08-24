@@ -54,3 +54,38 @@ describe("buildRenderData", () => {
     expect(buildRenderData([group], { recommendations: "oops" })).toEqual({ recommendations: [] });
   });
 });
+
+describe("buildRenderData — external-sourced fields", () => {
+  const externalField: TemplateField = {
+    key: "department",
+    label: "Department",
+    type: "text",
+    optionsSource: "departments",
+    optional: false,
+    raw: "Department (options-source: departments)",
+  };
+
+  it("renders the display for the field and the key for its accessor", () => {
+    const data = buildRenderData([externalField], { department: "Finance" }, {
+      department: "FIN-001",
+    });
+
+    expect(data.department).toBe("Finance");
+    expect(data.department_key).toBe("FIN-001");
+  });
+
+  it("renders an empty accessor when the source declares no key field", () => {
+    const data = buildRenderData([externalField], { department: "Finance" });
+
+    expect(data.department_key).toBe("");
+  });
+
+  it("adds no accessor entry for a field with no source", () => {
+    const data = buildRenderData(
+      [{ key: "client", label: "Client", type: "text", optional: false, raw: "Client" }],
+      { client: "Acme" },
+    );
+
+    expect("client_key" in data).toBe(false);
+  });
+});

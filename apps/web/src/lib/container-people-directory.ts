@@ -1,4 +1,5 @@
 import {
+  AiColumnMappingDetector,
   GraphClient,
   GraphPeopleDirectory,
   GraphReportingLineResolver,
@@ -7,7 +8,8 @@ import {
   UserPeopleDirectory,
   type RuntimeConfigStore,
 } from "@rbrasier/adapters";
-import type { IHrDatasetRepository, IUserRepository } from "@rbrasier/domain";
+import { ImportHrDataset, SearchPeople, SetColumnMapping } from "@rbrasier/application";
+import type { IHrDatasetRepository, ILanguageModel, IUserRepository } from "@rbrasier/domain";
 import type { ServerEnv } from "./env";
 
 interface PeopleDirectoryDependencies {
@@ -15,6 +17,7 @@ interface PeopleDirectoryDependencies {
   hrDatasets: IHrDatasetRepository;
   users: IUserRepository;
   runtimeConfig: RuntimeConfigStore;
+  languageModel: ILanguageModel;
 }
 
 // The people-directory / reporting-line wiring (approver resolution, HR import),
@@ -30,6 +33,7 @@ export const buildPeopleDirectory = ({
   hrDatasets,
   users,
   runtimeConfig,
+  languageModel,
 }: PeopleDirectoryDependencies) => {
   const graphClient = new GraphClient(async () => {
     const credentials = await runtimeConfig.getDirectoryCredentials();
@@ -40,13 +44,29 @@ export const buildPeopleDirectory = ({
       authority: env.M365_AUTHORITY,
     };
   });
+  const spreadsheetParser = new SpreadsheetParser();
+  const graphPeopleDirectory = new GraphPeopleDirectory(graphClient);
+  const hrPeopleDirectory = new HrPeopleDirectory(hrDatasets);
+  const userPeopleDirectory = new UserPeopleDirectory(users);
 
   return {
-    spreadsheetParser: new SpreadsheetParser(),
+    spreadsheetParser,
     graphClient,
-    graphPeopleDirectory: new GraphPeopleDirectory(graphClient),
-    hrPeopleDirectory: new HrPeopleDirectory(hrDatasets),
-    userPeopleDirectory: new UserPeopleDirectory(users),
+    graphPeopleDirectory,
+    hrPeopleDirectory,
+    userPeopleDirectory,
     reportingLineResolver: new GraphReportingLineResolver(graphClient, hrDatasets, users),
+    useCases: {
+      // Accounts first: they are the people who can actually act on what they
+      // are sent, and ranking makes them win a de-dupe against the same address
+      // from Entra or HR. The external directories augment the list (ADR-018).
+      searchPeople: new SearchPeople([userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory]),
+      importHrDataset: new ImportHrDataset(
+        spreadsheetParser,
+        hrDatasets,
+        new AiColumnMappingDetector(languageModel),
+      ),
+      setColumnMapping: new SetColumnMapping(hrDatasets),
+    },
   };
 };

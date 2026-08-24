@@ -43,7 +43,6 @@ import {
   GetSessionForTurn,
   GetUsageSummary,
   GrantFlowOwner,
-  ImportHrDataset,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
@@ -97,9 +96,7 @@ import {
   RunTurn,
   TurnLease,
   ScheduleNodeEvent,
-  SearchPeople,
   SendMessage,
-  SetColumnMapping,
   SetFeatureFlagRoles,
   StartSession,
   TrackUsage,
@@ -169,7 +166,6 @@ import {
   DrizzleUsageRepository,
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
-  AiColumnMappingDetector,
   CompositeConnectivityTester,
   FlowSessionGraph,
   LangGraphAgentRunner,
@@ -204,6 +200,7 @@ import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildFlowPortability } from "./container-flow-portability";
 import { buildExtractionModule } from "./container-extraction";
+import { buildLookupSources } from "./container-lookup-sources";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { entraEnvCredentials, m365EnvCredentials } from "./container-app-registrations";
 import { buildSmtpEnvConfig } from "./container-smtp";
@@ -482,9 +479,15 @@ const build = () => {
     languageModel: llm,
     sessionStepOutputs,
   });
-  const { spreadsheetParser, graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver } =
-    buildPeopleDirectory({ env, hrDatasets, users, runtimeConfig });
-
+  const { graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver, useCases: peopleUseCases } =
+    buildPeopleDirectory({ env, hrDatasets, users, runtimeConfig, languageModel: llm });
+  const lookupSources = buildLookupSources({
+    db,
+    peopleDirectories: [userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory],
+    allowLocalhost: env.NODE_ENV !== "production",
+    encryption: settingsEncryption,
+    languageModel: llm,
+  });
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const extraction = buildExtractionModule({
     db,
@@ -606,6 +609,7 @@ const build = () => {
     flowNodes,
     approvals,
     auditLogger,
+    valueSetProvider: lookupSources.valueSetProvider,
   });
   const approvalUseCases = buildApprovalUseCases({
     unitOfWork,
@@ -644,8 +648,8 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, flowTestFixtures, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, valueSetProvider: lookupSources.valueSetProvider, ...skillsAndMcp.services },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, flowTestFixtures, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, lookupSources: lookupSources.repository, ...skillsAndMcp.repos },
     useCases: {
       ...documentUseCases,
       evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
@@ -768,16 +772,8 @@ const build = () => {
       setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
       ...approvalUseCases,
-      // Accounts first: they are the people who can actually act on what they
-      // are sent, and ranking makes them win a de-dupe against the same address
-      // from Entra or HR. The external directories augment the list (ADR-018).
-      searchPeople: new SearchPeople([userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory]),
-      importHrDataset: new ImportHrDataset(
-        spreadsheetParser,
-        hrDatasets,
-        new AiColumnMappingDetector(llm),
-      ),
-      setColumnMapping: new SetColumnMapping(hrDatasets),
+      ...peopleUseCases,
+      ...lookupSources.useCases,
       ...skillsAndMcp.useCases,
     },
   };

@@ -15,6 +15,7 @@ import {
   type ISessionMessageRepository,
   type ISessionStepOutputRepository,
   type ResolvedDocumentGenerationBudget,
+  type IValueSetProvider,
   type Result,
   type SessionDocument,
   type SessionMessage,
@@ -29,7 +30,11 @@ import {
 } from "./field-resolution";
 import { gradeDocumentFields } from "./grade-document";
 import { buildRenderData } from "./render-data";
-import { buildStepOutputFields } from "./step-output-fields";
+import {
+  describeExternalFieldFlag,
+  validateExternalFields,
+} from "../session/validate-external-fields";
+import { buildStepOutputFields, type ResolvedExternalValues } from "./step-output-fields";
 import { extractStructuredFields, scalarValues } from "./structured-fields";
 
 export interface GenerateDocumentInput {
@@ -65,6 +70,9 @@ export class GenerateDocument {
     private readonly languageModel: ILanguageModel,
     private readonly sessionMessages: ISessionMessageRepository,
     private readonly sessionStepOutputs: ISessionStepOutputRepository,
+    // Optional: a deployment with no registered lookup sources needs none, and
+    // a template with no external fields never reaches it.
+    private readonly valueSetProvider?: IValueSetProvider,
   ) {}
 
   async execute(input: GenerateDocumentInput): Promise<Result<GenerateDocumentOutput>> {
@@ -90,9 +98,19 @@ export class GenerateDocument {
     if (fieldValuesResult.error) return fieldValuesResult;
     const fieldValues = fieldValuesResult.data;
 
+    // The authoritative check: every external-sourced value is re-resolved
+    // against its live source before anything is rendered or stored, because an
+    // AI-filled or free-typed value never passed through the picker (ADR-050 §6).
+    const externalResult = await this.resolveExternalFields(fields, fieldValues);
+    if (externalResult.error) return externalResult;
+    const external = externalResult.data;
+    Object.entries(external.canonicalValues).forEach(([fieldKey, canonical]) => {
+      fieldValues[fieldKey] = canonical;
+    });
+
     const generateResult = this.documentGenerator.generate({
       templateBytes: templateResult.data,
-      data: buildRenderData(fields, fieldValues),
+      data: buildRenderData(fields, fieldValues, external.valueKeys),
     });
     if (generateResult.error) return generateResult;
 
@@ -141,6 +159,7 @@ export class GenerateDocument {
       messageId: input.messageId,
       fields,
       values: fieldValues,
+      resolved: external.resolved,
     });
 
     // A grade computed by the gate is persisted as-is; otherwise grade now so
@@ -189,6 +208,61 @@ export class GenerateDocument {
 
   // Captured for reporting (end-of-step structured data). Best-effort: a failure
   // here must not fail document generation, which has already succeeded.
+  // Blocks generation when a value cannot be resolved: a document must not carry
+  // a department that does not exist. A stale set does not block — the operator's
+  // value stands, flagged (ADR-050 §5).
+  private async resolveExternalFields(
+    fields: TemplateField[],
+    values: DocumentData,
+  ): Promise<
+    Result<{
+      resolved: ResolvedExternalValues;
+      valueKeys: Record<string, string>;
+      canonicalValues: Record<string, string>;
+    }>
+  > {
+    const external = fields.filter((field) => field.optionsSource);
+    if (external.length === 0 || !this.valueSetProvider) {
+      return ok({ resolved: {}, valueKeys: {}, canonicalValues: {} });
+    }
+
+    const scalarValues: Record<string, string> = {};
+    external.forEach((field) => {
+      const value = values[field.key];
+      if (typeof value === "string") scalarValues[field.key] = value;
+    });
+
+    const outcome = await validateExternalFields(this.valueSetProvider, {
+      fields: external,
+      values: scalarValues,
+    });
+    if (outcome.error) return outcome;
+
+    if (outcome.data.blocksCompletion) {
+      const listed = outcome.data.flagged.map(describeExternalFieldFlag).join(", ");
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `These values are not in their lookup source and must be corrected before the step can complete: ${listed}.`,
+        ),
+      );
+    }
+
+    const resolved: ResolvedExternalValues = {};
+    const valueKeys: Record<string, string> = {};
+    const canonicalValues: Record<string, string> = {};
+    Object.entries(outcome.data.resolved).forEach(([fieldKey, entry]) => {
+      resolved[fieldKey] = {
+        ...(entry.valueKey ? { valueKey: entry.valueKey } : {}),
+        sourceRef: entry.sourceRef,
+      };
+      canonicalValues[fieldKey] = entry.value;
+      if (entry.valueKey) valueKeys[fieldKey] = entry.valueKey;
+    });
+
+    return ok({ resolved, valueKeys, canonicalValues });
+  }
+
   private async persistStepOutput(input: {
     sessionId: string;
     flowId: string;
@@ -196,13 +270,14 @@ export class GenerateDocument {
     messageId: string;
     fields: TemplateField[];
     values: DocumentData;
+    resolved: ResolvedExternalValues;
   }): Promise<void> {
     await this.sessionStepOutputs.create({
       sessionId: input.sessionId,
       flowId: input.flowId,
       nodeId: input.nodeId,
       messageId: input.messageId,
-      fields: buildStepOutputFields(input.fields, input.values),
+      fields: buildStepOutputFields(input.fields, input.values, input.resolved),
     });
   }
 

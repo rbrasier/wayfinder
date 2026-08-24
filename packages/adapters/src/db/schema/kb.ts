@@ -1,9 +1,11 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   customType,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -142,5 +144,55 @@ export const kb_answer_feedback = pgTable(
   (t) => ({
     by_status: index("kb_answer_feedback_status_idx").on(t.status, t.created_at),
     by_session: index("kb_answer_feedback_session_id_idx").on(t.session_id),
+  }),
+);
+
+// Registered lookup sources (ADR-050 §1). `name` is the slug template authors
+// write in `(options-source: …)`, so it is unique and stable. `credential_ref`
+// points at the encrypted secret store for the `api` kind — the secret itself is
+// never stored here and never returned to a client, matching admin_mcp_servers.
+export const kb_lookup_sources = pgTable(
+  "kb_lookup_sources",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    label: text("label").notNull(),
+    kind: text("kind", { enum: ["directory", "managed", "api"] }).notNull(),
+    config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+    display_field: text("display_field").notNull(),
+    key_field: text("key_field"),
+    // The Authorization header value for an `api` source, encrypted at rest with
+    // SettingsEncryptionService — the same key the n8n and AI credentials use.
+    credential: text("credential"),
+    cache_ttl_seconds: integer("cache_ttl_seconds").notNull().default(3600),
+    enabled: boolean("enabled").notNull().default(true),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    name_unique: unique("kb_lookup_sources_name_unique").on(t.name),
+  }),
+);
+
+// The cached value set for a source (ADR-050 §5). Exactly one version is active
+// per source: a refresh replaces every row, and an unchanged refresh keeps the
+// existing version so snapshots already written against it stay meaningful.
+export const kb_lookup_source_entries = pgTable(
+  "kb_lookup_source_entries",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    source_id: uuid("source_id")
+      .notNull()
+      .references(() => kb_lookup_sources.id, { onDelete: "cascade" }),
+    display: text("display").notNull(),
+    key: text("key"),
+    version: text("version").notNull(),
+    fetched_at: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_source: index("kb_lookup_source_entries_source_id_idx").on(t.source_id),
+    by_display: index("kb_lookup_source_entries_display_idx").on(t.source_id, t.display),
   }),
 );

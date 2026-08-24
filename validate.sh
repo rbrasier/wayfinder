@@ -457,16 +457,22 @@ fi
 
 # ── 24. the flow-test feature leaves the runner alone ────────────────────────
 # ADR-048 buys its safety from one claim: a test run is the production path, so
-# these four files never change for it. That claim is only worth anything if it
-# is checked — "we did not touch it" is exactly the kind of thing that is true
+# the execution path never changes for it. That claim is only worth anything if
+# it is checked — "we did not touch it" is exactly the kind of thing that is true
 # at review and false two commits later. Compares against the base branch, and
 # skips silently when that ref is absent (a shallow CI clone, a fresh worktree).
+#
+# Scoped to the runner core. `apps/web/src/app/api/chat` was guarded too until
+# v0.31.0, but that directory is the HTTP and prompt-assembly layer *around* the
+# runner, not the runner: it legitimately grows new prompt inputs (external-field
+# option inlining, ADR-050 §4) that apply identically to test and real sessions.
+# What ADR-048 actually forbids is a test-mode branch or a seed threaded through
+# the execution path, and that lives in the three files below.
 section "24. the session runner is unchanged"
 RUNNER_PATHS=(
   "packages/application/src/use-cases/session/run-turn.ts"
   "packages/application/src/use-cases/session/evaluate-step-readiness.ts"
   "packages/adapters/src/agents/flow-session-graph.ts"
-  "apps/web/src/app/api/chat"
 )
 RUNNER_BASE="${RUNNER_BASE_REF:-origin/main}"
 if ! git rev-parse --verify --quiet "$RUNNER_BASE" > /dev/null; then
@@ -474,7 +480,7 @@ if ! git rev-parse --verify --quiet "$RUNNER_BASE" > /dev/null; then
 else
   TOUCHED=$(git diff --name-only "$RUNNER_BASE"...HEAD -- "${RUNNER_PATHS[@]}" 2>/dev/null || true)
   if [ -z "$TOUCHED" ]; then
-    pass "run-turn, evaluate-step-readiness, buildSystemPrompt and the stream route are untouched"
+    pass "run-turn, evaluate-step-readiness and buildSystemPrompt are untouched"
   else
     fail "the session runner changed — ADR-048 requires flow test runs to leave it alone:"
     echo "$TOUCHED" | sed 's/^/  /'
