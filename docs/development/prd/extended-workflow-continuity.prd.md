@@ -89,6 +89,10 @@ The prefix is `app_`, not `core_`: `core_sessions` is the Better Auth login sess
 (`packages/adapters/src/db/schema/wayfinder.ts:150`). Session-scoped workflow state belongs
 with the latter.
 
+**The table and column below are gated on an information-architecture investigation** carried
+out before any migration is written (phase doc §6, step 4b). They are the current proposal, not a
+settled design.
+
 One generated migration (never `drizzle-kit push`). It is additive throughout — a new table,
 and a defaulted column that cannot fail on existing rows — so it declares:
 

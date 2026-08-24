@@ -1,7 +1,7 @@
 # Phase — Collaborative Schema Definition
 
 - **Status**: Awaiting review
-- **Target version**: 0.32.0  (bump: MINOR — new `app_schema_proposals` table + new feature)
+- **Target version**: 0.32.0  (bump: MINOR — new feature; **no schema change, no migration**)
 - **PRD**: `docs/development/prd/collaborative-schema-definition.prd.md`
 - **ADRs**: ADR-052 (schema proposals are drafts requiring activation)
 - **Depends on**: ADR-013 (annotation lingua franca), ADR-033 (extraction authoring config),
@@ -33,11 +33,12 @@ and reports rejects — but nothing equivalent exists for schemas. See the PRD.
 
 ## 4. Approach
 
-A proposal is a row in a new `app_schema_proposals` table, holding `ExtractionFieldDraft[]` —
-the pre-parse author type that already exists. It is never written into the flow snapshot, so no
-snapshot reader can encounter an unconfirmed field set (ADR-052). Confirmation runs the drafts
+A proposal is thread-scoped scratchpad state holding `ExtractionFieldDraft[]` — the pre-parse
+author type that already exists. It is never stored and never written into the flow snapshot, so
+no snapshot reader can encounter an unconfirmed field set (ADR-052). Confirmation runs the drafts
 through the existing `buildExtractionField` path, so a proposed field and a hand-typed field end
-up identical, and writes both the snapshot and the status change inside one unit of work.
+up identical. Because the proposal has no stored status, confirmation is a single write rather
+than a dual write, and the "schema live while its proposal still reads draft" bug cannot occur.
 
 The proposer emits the annotation language authors already write (`Label (date) (optional)`),
 reusing `parseTemplateField` rather than adding a second route to the same field model.
@@ -48,13 +49,11 @@ reusing `parseTemplateField` rather than adding a second route to the same field
 | ---- | ------------- | ----- |
 | `packages/domain/src/entities/schema-proposal.ts` | new | `SchemaProposal`, `SchemaProposalStatus`, `SchemaProposalRevision` |
 | `packages/domain/src/ports/schema-proposer.ts` | new | `ISchemaProposer`, mirroring `ISeedProposer` |
-| `packages/domain/src/ports/schema-proposal-repository.ts` | new | CRUD, Result pattern |
 | `packages/domain/src/entities/index.ts`, `ports/index.ts` | changed | Re-exports |
 | `packages/application/src/use-cases/extraction/propose-schema.ts` | new | Proposal from context + samples |
 | `packages/application/src/use-cases/extraction/refine-schema.ts` | new | One refinement turn, appends a revision |
 | `packages/application/src/use-cases/extraction/confirm-schema.ts` | new | Validate, materialise, mark confirmed |
 | `packages/application/src/use-cases/extraction/validate-schema-proposal.ts` | new | Blocking vs advisory findings |
-| `packages/adapters/src/db/schema/wayfinder.ts` | changed | `app_schema_proposals` |
 | `packages/adapters/src/ai/schema-proposer.ts` | new | `ISchemaProposer` over the language model |
 | `apps/web/src/server/routers/extraction.ts` | changed | `proposeSchema`, `refineSchema`, `confirmSchema` |
 | `apps/web/src/components/extraction/` | changed | Proposal panel, revision diff, confirm control |
@@ -66,8 +65,8 @@ reusing `parseTemplateField` rather than adding a second route to the same field
    with a blocking finding is refused; (d) `confirmed` is terminal — a second confirm is
    rejected. Then add the entity and its transitions. Pure, no dependencies.
 
-2. **Domain — proposer and repository ports.** Add `ISchemaProposer` and
-   `ISchemaProposalRepository`. Type-only.
+2. **Domain — proposer port.** Add `ISchemaProposer`. Type-only. No repository port: a proposal
+   is never stored.
 
 3. **Application — validation.** Write `validate-schema-proposal.test.ts` first: (a) a duplicate
    derived key blocks; (b) an annotation the parser rejects blocks, quoting the parser's own
@@ -83,14 +82,12 @@ reusing `parseTemplateField` rather than adding a second route to the same field
 
 5. **Application — confirm.** Tests first: (a) confirmation refuses while a blocking finding is
    open; (b) on success the drafts go through `buildExtractionField` and land in the snapshot;
-   (c) snapshot write and status change share one unit of work — a failed snapshot write leaves
-   the proposal `draft`. Then implement.
+   (c) a failed snapshot write leaves nothing behind — there is no stored proposal state to
+   become inconsistent with it. Then implement.
 
-6. **Adapters — table, migration, proposer.** Add `app_schema_proposals`; generate the migration
-   (never `drizzle-kit push`) carrying:
-   `-- data-impact: preserved — new table only; no existing row is read, altered or removed`.
-   Implement `ISchemaProposer` over the language model, verifying the SDK call shape in
-   `node_modules` rather than from memory. Respect the existing generation budget caps.
+6. **Adapters — proposer only.** Implement `ISchemaProposer` over the language model, verifying
+   the SDK call shape in `node_modules` rather than from memory. Respect the existing generation
+   budget caps. **No schema change and no migration in this phase.**
 
 7. **Web — proposal surface.** Component tests first: the panel renders current schema state,
    shows per-field change against the previous revision, and disables confirm while a blocking
@@ -125,7 +122,8 @@ Mirrors PRD §10. Restated as the build's test plan:
 - [ ] A proposal returns a complete `ExtractionFieldDraft[]` with types and instructions filled.
 - [ ] Refinement appends a revision; earlier revisions stay readable; current state is always returned.
 - [ ] Confirmation is refused while any blocking finding is open.
-- [ ] Confirmation materialises through `buildExtractionField` and is transactional.
+- [ ] Confirmation materialises through `buildExtractionField`; a failed write leaves no
+      partial state, since nothing about the proposal is stored.
 - [ ] `confirmed` is terminal; no proposal reaches a snapshot without an explicit confirm.
 - [ ] Extraction fields and conversational structured fields accept and reject the same annotations.
 
@@ -144,9 +142,10 @@ test (step 7).
 
 - **A confident wrong schema is worse than a blank editor.** Mitigated by validation before
   confirm and the mandatory confirmation step; the proposal is never authoritative.
-- **Dual write on confirm.** Snapshot write plus status change must share a unit of work, or a
-  crash leaves a live schema whose proposal still reads `draft`. Covered by step 5(c).
+- **An unconfirmed proposal dies with its thread.** Accepted deliberately (ADR-052): the state
+  is only meaningful inside the conversation that produced it. The cost is one conversation's
+  work, never data.
 - **Sample-data exposure.** The proposer reads sample document content and must respect existing
   document access checks and generation budget caps rather than opening a new path to content.
-- **Revision growth** — unbounded `revisions` jsonb on a long refinement. Open: cap, or retain in
-  full? Current position: retain, since it records what a human agreed to.
+- **Revision growth is not a risk here.** History lives as long as the thread and no longer, so
+  there is nothing to cap, expire or clean up.

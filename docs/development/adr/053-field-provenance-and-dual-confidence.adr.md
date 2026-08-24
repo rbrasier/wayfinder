@@ -145,9 +145,11 @@ upstream. A broken MCP server, or a wrong record in the system behind it, is out
 Wayfinder can see or fix, and the toggle must not be presented as covering it. The scope is
 Wayfinder's own handling, which is the only thing Wayfinder is in a position to guarantee.
 
-Within that scope, verbatim means byte-identical selection from the tool result: truncation,
-whitespace normalisation and unit conversion all make a value `processed`. Byte-identical is the
-only definition that can be checked rather than argued about, and checking it is entirely a
+Within that scope, verbatim means byte-identical selection from the tool result. Truncation,
+whitespace normalisation, unit conversion and **harmless tidying** all make a value `processed`.
+There is deliberately no "close enough" tier: the moment one exists, the guarantee stops being a
+byte comparison and becomes an argument about how much change is acceptable. Byte-identical is
+the only definition that can be checked rather than argued about, and checking it is entirely a
 matter of comparing what Wayfinder received with what it used — no assumption about the source
 is required.
 

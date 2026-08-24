@@ -47,13 +47,22 @@ parsing, which `buildExtractionField` turns into a real `ExtractionField`.
 
 ## Decision
 
-**1. A proposal is a row in a new `app_schema_proposals` table, never a write to the flow
-snapshot.**
+**1. A proposal is thread-scoped scratchpad state, not a stored record.**
 
-Separation is the point. Nothing that reads a flow snapshot can encounter an unconfirmed field
-set, because an unconfirmed field set is not in a snapshot. Confirmation is the single moment
-the proposal crosses into authoring config, and it goes through the existing
-`buildExtractionField` path like any hand-typed field.
+A proposal matters only to the conversation it is being argued out in. It is working state for
+that thread and nothing else — so it gets no table, no rows and no migration. It lives for the
+thread, and when the thread is done it is gone.
+
+Separation is still the point, and this achieves it more cheaply than a table would: nothing that
+reads a flow snapshot can encounter an unconfirmed field set, because an unconfirmed field set is
+never written anywhere durable. Confirmation is the single moment the proposal crosses into
+authoring config, and it goes through the existing `buildExtractionField` path like any
+hand-typed field. That write is the *only* durable effect the whole interaction has.
+
+The alternative considered and rejected was a persisted `app_schema_proposals` table. It would
+have bought resumability across threads at the cost of a migration, a retention question, and a
+second place where something schema-shaped lives — for state whose value expires with the
+conversation.
 
 **2. The proposal carries `ExtractionFieldDraft[]`, not `ExtractionField[]`.**
 
@@ -75,22 +84,26 @@ annotation the parser rejects, a constraint impossible for the declared type (`m
 `yesno`), a `section` or `signature` in a structured set — the last two already rejected by
 `validateStructuredFieldSet`. Findings are returned, not thrown, per the Result pattern.
 
-**5. Each refinement turn appends a revision rather than overwriting.**
+**5. Each refinement turn appends a revision rather than overwriting, within the thread.**
 
 The visible history is what makes the interaction reviewable — a human confirming a schema is
-agreeing to a specific state, and the path to it is the evidence for how it got there. Full
-history is retained rather than capped; it is the record of what a person agreed to.
+agreeing to a specific state, and seeing how it got there is what makes that agreement informed.
+The history lives as long as the thread does and no longer, so there is no retention rule to
+write and no growth to cap.
 
 ## Consequences
 
 - Every reader of a flow snapshot is unchanged. A proposal is invisible to the runner, the
   generator and the export until confirmation, which is the property that makes this safe to add.
+- **No schema change and no migration.** The phase adds behaviour and no storage.
 - Confirmation reuses `buildExtractionField`, so a proposed field and a hand-typed field are the
   same object with the same validation. There is no "AI-authored" field variant to maintain.
 - The proposer's output is text in the annotation language, which means a bad proposal is
   *readable* as a bad proposal rather than failing opaquely inside a parser.
-- Proposals accumulate. They are per-flow, per-author working state with no retention rule of
-  their own yet — noted in the PRD as an open question rather than settled here.
-- The dual-write risk is real: confirmation writes the snapshot and marks the proposal
-  confirmed. It must go through the existing unit of work so a half-applied confirmation cannot
-  leave a schema live with its proposal still marked draft.
+- Nothing accumulates. There is no retention question, no growth to cap and no cleanup job,
+  because nothing outlives the thread.
+- The cost is that a proposal cannot be picked up in a later thread. Losing an unconfirmed
+  proposal costs one conversation's work and no data, which is the trade being accepted.
+- Confirmation is a single write rather than a dual write. Because the proposal has no stored
+  status to update, there is no window in which a schema is live while its proposal still reads
+  draft — the class of bug a stored proposal would have introduced does not exist.

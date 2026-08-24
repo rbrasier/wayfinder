@@ -58,6 +58,10 @@ idiom as the existing `sessionMode()`. `confirm-step-advance` promotes `draft` �
 rail reads a persisted readiness signal rather than invoking `evaluate-step-readiness` on
 render, because that use case makes a model call.
 
+**Migrations are gated on an information-architecture investigation (step 4b).** The table and
+column below are the current proposal, not a settled design — the investigation may conclude that
+less is needed.
+
 ## 5. Key entities / files
 
 | Path | New / changed | Notes |
@@ -103,6 +107,21 @@ render, because that use case makes a model call.
    (a) capture while awaiting confirmation stores `draft`; (b) confirming promotes it to
    `final`; (c) a later turn on the same node does not rewrite a `final` output — it writes a
    new draft. Then implement.
+
+4b. **Information-architecture investigation — before any schema change is written.**
+   This phase adds a table and a column, so their shape is settled by investigation first.
+   Produce a short written finding covering:
+   - **Whether a draft warrants its own table.** ADR-051 argues it does, to keep keystroke-rate
+     writes off the contended `app_sessions` row. Confirm that against how the session row is
+     actually written today, and check no existing table already owns per-participant session
+     state that a draft belongs beside.
+   - **Whether `status` belongs on `app_session_step_outputs`**, or whether draft-versus-final is
+     already derivable from existing rows plus `awaiting_confirmation_node_id` — in which case
+     the column is redundant and should not be added.
+   - **How `node_id` on a draft relates to the session's own `current_node_id`**, so staleness is
+     expressed once rather than in two places that can disagree.
+   Bring the finding back before writing the migration. A conclusion that no column is needed is
+   a valid and welcome outcome.
 
 5. **Adapters — schema, migration, repository.** Add `app_session_drafts` and the `status`
    column; generate the migration (never `drizzle-kit push`) carrying:

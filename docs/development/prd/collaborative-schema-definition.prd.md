@@ -3,7 +3,7 @@
 - **Status**: Draft
 - **Date**: 2026-08-24
 - **Author**: rbrasier
-- **Target version**: 0.32.0  (bump: MINOR — new `app_schema_proposals` table + new feature)
+- **Target version**: 0.32.0  (bump: MINOR — new feature; **no schema change, no migration**)
 
 ## 1. Problem
 
@@ -49,10 +49,11 @@ has no equivalent.
 
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
-| `SchemaProposal` | `packages/domain/src/entities/schema-proposal.ts` | new | Draft field set + status + validation findings |
+| `SchemaProposal` | `packages/domain/src/entities/schema-proposal.ts` | new | Thread-scoped scratchpad state: draft field set + status + validation findings. Not persisted |
 | `SchemaProposalStatus` | same file | new | `"draft" \| "confirmed"` — confirmed is terminal |
 | `SchemaProposalRevision` | same file | new | One turn of refinement, for the visible history |
 | `ISchemaProposer` | `packages/domain/src/ports/schema-proposer.ts` | new | Mirrors `ISeedProposer`: propose, validate, report rejects |
+| — | — | — | **No repository port.** A proposal is never stored |
 | `ExtractionFieldDraft` | `packages/domain/src/entities/extraction-schema.ts` | existing | The proposal's output shape — already the pre-parse author type |
 | `TemplateField` | `packages/domain/src/entities/template-field.ts` | existing | Carries type, `optional`, `min`/`max`/`maxLength`/`options`, `instruction` |
 
@@ -77,15 +78,11 @@ has no equivalent.
 
 ## 8. Database changes
 
-| Table | Change | Prefix valid? |
-| ----- | ------ | ------------- |
-| `app_schema_proposals` | NEW — `id`, `flow_id`, `user_id`, `status`, `fields` jsonb, `revisions` jsonb, `findings` jsonb, `created_at`, `updated_at` | yes (`app_`) |
+**None.** A proposal is scratchpad state for the thread it is being worked out in, so it is never
+written to storage (ADR-052). The only durable effect of the whole interaction is the confirmed
+schema landing in the flow snapshot, through the path that already exists for hand-typed fields.
 
-Additive only — one new table, no existing table touched. The migration declares:
-
-```
--- data-impact: preserved — new table only; no existing row is read, altered or removed
-```
+No table, no migration, no retention rule.
 
 ## 9. Architectural decisions
 
@@ -133,6 +130,8 @@ parity gap; it does not rebuild them.
 - Proposing input/output config, not just fields.
 - Re-proposing automatically when sample documents change.
 - Sharing a proposal between authors, or concurrent editing of one proposal.
+- Resuming an unconfirmed proposal in a later thread. A proposal expires with its conversation;
+  the cost of losing one is a conversation's work and no data.
 
 ## 12. Risks / open questions
 
@@ -140,6 +139,8 @@ parity gap; it does not rebuild them.
   confirm and by the mandatory human confirmation step — the proposal is never authoritative.
 - **Sample-data leakage.** The proposer sees sample document content; it must respect the same
   budget caps as other model calls, and its input must not bypass existing document access checks.
-- **Revision growth.** A long refinement conversation grows the `revisions` jsonb. Open question:
-  cap the retained revisions, or keep the full history for audit? Current position: keep full
-  history, since it is the record of what a human agreed to.
+- **Revision growth — no longer a question.** History lives as long as the thread and no longer,
+  so there is nothing to cap, expire or clean up.
+- **An unconfirmed proposal is lost when the thread ends.** Accepted deliberately: the state is
+  only meaningful inside the conversation that produced it, and the alternative bought
+  resumability at the price of a migration and a retention rule.

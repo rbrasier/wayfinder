@@ -60,6 +60,10 @@ equivalents returning `null` where a record has no fields of that kind. This rea
 data: `aggregate_confidence` keeps its meaning as the accuracy aggregate and gains a nullable
 `aggregate_selection_confidence`, and the adapter's duplicate reduction is deleted.
 
+**Migrations are gated on an information-architecture investigation (step 6b).** The column
+shapes below are the current proposal, not a settled design — the investigation may reduce or
+relocate them.
+
 ## 5. Key entities / files
 
 | Path | New / changed | Notes |
@@ -117,6 +121,24 @@ data: `aggregate_confidence` keeps its meaning as the accuracy aggregate and gai
 6. **Application — reader migration.** Move every existing `confidence` reader onto the accessor.
    This is the silent-risk step: enumerate readers by search, not by memory, and assert each in
    its own suite that a `verbatim` row is labelled selection, not accuracy.
+
+6b. **Information-architecture investigation — before any schema change is written.**
+   This phase adds columns to two tables, so the shape is settled by investigation first rather
+   than by reaching for the nearest column. Produce a short written finding covering:
+   - **Where confidence aggregates belong.** `aggregate_confidence` is currently a denormalised
+     `real` on `app_extraction_records`, duplicating what `fields` already implies. Adding a
+     second aggregate column doubles that duplication. Establish whether both belong as columns
+     (read performance for the report grid), both belong derived from `fields`, or the split
+     belongs inside the existing jsonb — and say which readers force the answer.
+   - **Whether `verbatim_only` belongs on the server row at all**, or whether verbatim handling
+     is a property of how a *flow step* uses a connection. A server-level flag is simpler; a
+     step-level one is more precise. The existing `communicates_externally` precedent argues for
+     server-level, but precedent is not by itself a reason.
+   - **What the `admin_`/`app_` split means here**, so a governance flag does not end up
+     straddling both groups.
+   Bring the finding back before writing the migration. If it changes the shape, the schema steps
+   below change with it — that is the point of doing this first, and this step may legitimately
+   conclude that fewer columns are needed than currently planned.
 
 7. **Adapters — columns, migration, mapping.** Add `verbatim_only` mirroring
    `communicates_externally`. Add nullable `aggregate_selection_confidence` and relax
@@ -184,12 +206,10 @@ tests (steps 8–9).
   A broken MCP server or bad upstream data is outside its reach, and UI copy that implies
   otherwise is the real risk here — the enforcement itself is a narrow, checkable comparison
   between what Wayfinder received and what it used.
-- **The definition of "transform"** — narrowed by the scoping above, but still worth a look.
-  Verbatim is byte-identical selection from what Wayfinder received, so any normalisation
-  (whitespace, truncation, unit conversion) makes a value `processed`. Because the comparison is
-  entirely between what Wayfinder received and what it used, this is checkable rather than a
-  judgement call. The consequence to confirm: a value the model tidied is `processed` even when
-  the tidying was harmless.
+- **"Transform" is settled, and deliberately strict.** Verbatim is byte-identical selection from
+  what Wayfinder received. Whitespace normalisation, truncation, unit conversion **and harmless
+  tidying** all make a value `processed`. There is no "close enough" tier, because the moment one
+  exists the guarantee stops being checkable and becomes an argument.
 - **Aggregate split reaches persisted data and analytics.** Removing the single-number aggregate
   breaks `analytics.ts`, the extraction repository and two components by design, so each picks a
   scale deliberately. The migration must leave every existing record's accuracy aggregate

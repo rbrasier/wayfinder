@@ -125,6 +125,10 @@ migration declares:
 -- data-impact: preserved — defaulted boolean column; every existing connection keeps current behaviour
 ```
 
+**The column shapes below are gated on an information-architecture investigation** carried out
+before any migration is written (phase doc §6, step 6b). They are the current proposal, not a
+settled design.
+
 Provenance itself needs no migration: `app_extraction_records.fields` is already
 `jsonb().$type<ExtractionFieldResult[]>()`, and the new members are optional.
 
@@ -200,11 +204,12 @@ row:
   Wayfinder does not transform the result, and nothing about whether the source is correct or
   the MCP server is healthy. Enforcement belongs where tool results enter the prompt rather than
   in the UI, and the UI copy must describe handling, not accuracy.
-- **"Transform" needs a hard definition** — narrowed by the scoping above. Verbatim means
-  byte-identical selection from what Wayfinder received; truncation, whitespace normalisation
-  and unit conversion each make a value `processed`. Because the check compares what Wayfinder
-  received against what it used, it is decidable rather than a judgement call. The consequence
-  to confirm: a value the model tidied harmlessly is still `processed`.
+- **"Transform" is settled.** Verbatim means byte-identical selection from what Wayfinder
+  received. Truncation, whitespace normalisation and unit conversion each make a value
+  `processed` — **and so does harmless tidying**. There is no "close enough" tier: a value either
+  came through untouched or it did not. That keeps the check a byte comparison between what
+  Wayfinder received and what it used, decidable without judgement, which is the whole reason the
+  guarantee is worth anything.
 - **Aggregate split is a breaking change — decided, not open.** The single-number aggregate is
   removed rather than deprecated, so every caller (`analytics.ts`, the extraction repository,
   `result-grid.tsx`, `run-report.tsx`) must choose a scale. That breakage is deliberate: a
