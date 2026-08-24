@@ -29,7 +29,7 @@ all cache-aware and runtime-configurable. **MFA is not in this phase.**
 | adapters | migration | `core_sessions.last_active_at timestamptz` (nullable, additive) — required for idle timeout. |
 | apps/web | `server/routers/user.ts` | `user.revokeSessions` (`adminProcedure`); `settings.get/setSessionPolicy` (bounds-validated). |
 | apps/web | `app/(admin)/admin/users` | "Sign out everywhere" action. |
-| apps/web | `app/(admin)/admin/settings` | Session policy card. |
+| apps/web | `components/settings/auth-methods-card.tsx` | "Set session policies" button opening the policy modal. |
 
 ## 3. Database changes
 
@@ -151,7 +151,7 @@ creation", which is the truthful answer for an older row.
 6. Concurrency enforcer, wired into Better Auth and the PKI adapter.
 7. Container wiring; re-point `admin-recovery` and `entra-precedence`.
 8. tRPC: `user.revokeSessions`, `settings.get/setSessionPolicy`.
-9. UI: session policy card, "Sign out everywhere" action.
+9. UI: session policy modal behind the Authentication card, "Sign out everywhere" action.
 10. E2E `session-lifecycle.spec.ts` (policy group 1) — written, not run.
 
 ### Version, branch, PR

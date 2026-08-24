@@ -67,7 +67,10 @@ idle/absolute timeouts and concurrent-session limits.
 ## 7. Pages / surfaces affected
 
 - `/admin/users` (user detail) — **new** "Sign out everywhere" action.
-- `/admin/settings` — **new** Session policy card (idle, absolute, concurrency, eviction).
+- `/admin/settings` — **new** "Set session policies" button on the Authentication
+  card, opening a modal for idle, absolute, concurrency and eviction. Session
+  lifetime is part of how sign-in behaves, so it sits behind that card rather
+  than competing for space as a card of its own.
 - `packages/adapters/src/auth/session-resolver.ts` + `cached-session-resolver.ts`
   — enforce idle/absolute timeout; invalidate cache on revoke.
 - Session creation — enforce the concurrent-session limit in one shared adapter

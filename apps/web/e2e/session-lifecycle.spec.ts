@@ -74,12 +74,19 @@ test.describe('Session lifecycle: revoke a user everywhere', () => {
   });
 });
 
-test.describe('Session lifecycle: policy card', () => {
-  test('rejects an absolute timeout shorter than the idle timeout', async ({ page }) => {
+test.describe('Session lifecycle: policy dialog', () => {
+  const openPolicyDialog = async (page: import('@playwright/test').Page) => {
     await page.goto('/admin/settings');
     await openSettingsSection(page, 'General');
+    await page.getByTestId('session-policy-open').click();
+    // The dialog loads the policy on open, so wait for the field rather than
+    // racing the query.
+    await expect(page.locator('#session-policy-idle-input')).toBeVisible();
+  };
 
-    await page.getByTestId('session-policy-edit').click();
+  test('rejects an absolute timeout shorter than the idle timeout', async ({ page }) => {
+    await openPolicyDialog(page);
+
     await page.locator('#session-policy-idle-input').fill('120');
     await page.locator('#session-policy-absolute-input').fill('60');
     await page.getByTestId('session-policy-save').click();
@@ -95,25 +102,29 @@ test.describe('Session lifecycle: policy card', () => {
     await expect(page.locator('#session-policy-absolute-input')).toBeVisible();
   });
 
-  test('saves an idle and absolute timeout and shows them on the card', async ({ page }) => {
-    await page.goto('/admin/settings');
-    await openSettingsSection(page, 'General');
+  test('saves a policy and reads it back the next time the dialog opens', async ({ page }) => {
+    await openPolicyDialog(page);
 
-    await page.getByTestId('session-policy-edit').click();
     await page.locator('#session-policy-idle-input').fill('30');
     await page.locator('#session-policy-absolute-input').fill('480');
     await page.getByTestId('session-policy-save').click();
-
     await expect(page.getByText(/session policy saved/i)).toBeVisible();
-    await expect(page.getByTestId('session-policy-idle')).toContainText('30 minutes');
-    await expect(page.getByTestId('session-policy-absolute')).toContainText('480 minutes');
+
+    // Nothing on the settings page shows the policy any more, so re-opening the
+    // dialog is what proves the save round-tripped.
+    await openPolicyDialog(page);
+    await expect(page.locator('#session-policy-idle-input')).toHaveValue('30');
+    await expect(page.locator('#session-policy-absolute-input')).toHaveValue('480');
+    await page.screenshot({
+      path: 'screenshots/session-lifecycle-policy-saved.png',
+      fullPage: true,
+    });
 
     // Put it back, so a later spec in the same run is not signed out mid-test by
     // a policy this one left behind.
-    await page.getByTestId('session-policy-edit').click();
     await page.locator('#session-policy-idle-input').fill('0');
     await page.locator('#session-policy-absolute-input').fill('0');
     await page.getByTestId('session-policy-save').click();
-    await expect(page.getByTestId('session-policy-idle')).toContainText('Not enforced');
+    await expect(page.getByText(/session policy saved/i)).toBeVisible();
   });
 });

@@ -27,7 +27,7 @@ before until an admin opens the card.
 | `packages/adapters/src/auth/__tests__/session-revocation.test.ts` | Epoch isolation, the delete, and the failure path. |
 | `packages/adapters/src/auth/__tests__/session-concurrency.test.ts` | Eviction, refusal, the admin exemption, and fail-open. |
 | `packages/adapters/drizzle/0045_session_last_active.sql` | The `last_active_at` migration. |
-| `apps/web/src/components/settings/session-policy-card.tsx` | The admin settings card. |
+| `apps/web/src/components/settings/session-policy-dialog.tsx` | The policy modal, opened from the Authentication card's "Set session policies" button. |
 | `apps/web/src/lib/container-session-auth.ts` | Auth caches, the revocation registry and the session resolver, factored out of `container.ts`. |
 | `apps/web/src/server/routers/settings-secrets.ts` | `apiKeyState`, shared by the settings routers after the split. |
 | `apps/web/e2e/session-lifecycle.spec.ts` | Group 1 e2e coverage. |
@@ -36,7 +36,7 @@ before until an admin opens the card.
 
 - **domain** — `entities/runtime-config.ts` (`AuthConfig.sessionPolicy`), `entities/index.ts`, `entities/runtime-config.test.ts`.
 - **adapters** — `auth/session-resolver.ts` (timeouts + last-active stamping), `auth/cached-session-resolver.ts` (epoch-aware entries), `auth/better-auth.ts` (session-create hook), `auth/pki-cert-adapter.ts` (enforcement + registry), `auth/entra-precedence.ts` (registry bump), `auth/index.ts`, `config/runtime-config-defaults.ts` (tolerant parse), `db/schema/core.ts`, and the resolver/PKI/store tests.
-- **apps/web** — `lib/container.ts`, `server/routers/user.ts` (`revokeSessions`), `server/routers/settings.ts`, `server/routers/settings-auth.ts` (now owns the auth + policy procedures), `server/routers/settings.test.ts`, `app/(admin)/admin/settings/page.tsx`, `app/(admin)/admin/users/_content.tsx`, `app/api/auth/cert/route.test.ts`.
+- **apps/web** — `lib/container.ts`, `server/routers/user.ts` (`revokeSessions`), `server/routers/settings.ts`, `server/routers/settings-auth.ts` (now owns the auth + policy procedures), `server/routers/settings.test.ts`, `components/settings/auth-methods-card.tsx` (the "Set session policies" button), `app/(admin)/admin/settings/page.tsx`, `app/(admin)/admin/users/_content.tsx`, `app/api/auth/cert/route.test.ts`.
 - **apps/api** — `src/cli/recover-admin.ts` (constructs its own registry).
 - **root** — `VERSION`, `package.json`.
 
@@ -130,9 +130,9 @@ of the e2e policy (auth session lifecycle):
 1. An admin revokes a second signed-in user; that browser, still holding its
    cookie, is redirected to `/login` on its next navigation. This is the part
    only a browser can see — the cookie survives, the session behind it does not.
-2. The policy card rejects an absolute timeout shorter than the idle timeout and
-   keeps the dialog open.
-3. The card saves a policy, shows it on the summary, and resets it.
+2. The policy dialog rejects an absolute timeout shorter than the idle timeout
+   and stays open so the typed values are not lost.
+3. The dialog saves a policy, reads it back on re-open, and resets it.
 
 Written and typechecked, **not run** — per the skill, CI runs the suite against
 the full stack. Everything else in this phase is covered at the domain and

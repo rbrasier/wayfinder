@@ -21,7 +21,6 @@ import { NotificationSettingsCard } from "@/components/settings/notification-set
 import { OrganisationsCard } from "@/components/settings/organisations-card";
 import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
-import { SessionPolicyCard } from "@/components/settings/session-policy-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
 import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
@@ -69,7 +68,6 @@ export default function AppSettingsPage() {
               <OrganisationsCard />
               <RegistrationToggleCard />
               <AuthMethodsCard connectivity={connectivity} />
-              <SessionPolicyCard />
               <AboutLinksCard />
             </CollapsibleSection>
 
