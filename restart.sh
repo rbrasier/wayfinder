@@ -291,6 +291,28 @@ if [ "$WITH_MOCKS" -eq 1 ]; then
     Tenant ID      mock-tenant
     Client ID      mock-client
     Client secret  mock-secret
+
+  mock lookup sources at http://localhost:$MOCKS_PORT/lookup/...
+  Three value sets for external-sourced template fields, registered at
+  /admin/settings -> Lookup Sources. Paste the credential verbatim, the scheme
+  word included -- it is sent as the Authorization header as typed.
+
+    contract-types   8 entries, no credential      display name / key code
+      url            http://localhost:$MOCKS_PORT/lookup/contract-types
+      records path   (leave empty -- the body is the array)
+
+    skills           60 entries                    display skill_name / key skill_code
+      url            http://localhost:$MOCKS_PORT/lookup/skills
+      records path   data
+      credential     Bearer wf-mock-skills-2f9a1c7d
+
+    business-units   5,000 entries                 display unit_name / key unit_code
+      url            http://localhost:$MOCKS_PORT/lookup/business-units
+      records path   items
+      credential     Basic YnUtc2VydmljZTpzM2NyM3QtbW9jay1wdw==
+      pagination     offset - param offset - size param limit - size 250
+      Set the size to 250: the walk stops after 20 pages, so the default 200
+      reaches only 4,000 of the 5,000.
 EOF
 
   # Point the directory adapters at the mock Graph, and *only* that. Same
