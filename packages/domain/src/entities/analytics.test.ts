@@ -1,10 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
-  computeConfidenceLifecycle,
   computeExtractionFieldReport,
   computeFieldReport,
   computeFlowDistribution,
-  computeNodeBreakdown,
   computeOverviewMetrics,
   computeSessionActivity,
   type AnalyticsMessageRow,
@@ -20,6 +18,7 @@ const session = (overrides: Partial<AnalyticsSessionRow>): AnalyticsSessionRow =
   flowName: "Flow One",
   status: "active",
   currentNodeId: null,
+  manualEstimateMinutes: null,
   createdAt: new Date("2026-05-20T00:00:00Z"),
   updatedAt: new Date("2026-05-20T00:00:00Z"),
   ...overrides,
@@ -81,59 +80,6 @@ describe("computeFlowDistribution", () => {
 
     expect(distribution[0]).toEqual({ flowId: "f2", flowName: "Two", count: 2 });
     expect(distribution[1]).toEqual({ flowId: "f1", flowName: "One", count: 1 });
-  });
-});
-
-describe("computeConfidenceLifecycle", () => {
-  it("averages assistant confidence across normalised session positions", () => {
-    const messages: AnalyticsMessageRow[] = [
-      { sessionId: "s1", stepNodeId: "n1", role: "assistant", confidence: 20, createdAt: new Date("2026-05-20T00:00:00Z") },
-      { sessionId: "s1", stepNodeId: "n1", role: "assistant", confidence: 100, createdAt: new Date("2026-05-20T01:00:00Z") },
-    ];
-
-    const points = computeConfidenceLifecycle(messages, 10);
-
-    expect(points).toHaveLength(10);
-    expect(points[0]?.averageConfidence).toBe(20);
-    expect(points[9]?.averageConfidence).toBe(100);
-  });
-
-  it("ignores user messages and null confidences", () => {
-    const messages: AnalyticsMessageRow[] = [
-      { sessionId: "s1", stepNodeId: null, role: "user", confidence: null, createdAt: new Date() },
-    ];
-    const points = computeConfidenceLifecycle(messages, 5);
-    expect(points.every((point) => point.sampleCount === 0)).toBe(true);
-  });
-});
-
-describe("computeNodeBreakdown", () => {
-  const nodes: AnalyticsNode[] = [
-    { id: "n1", name: "Intake", colour: null },
-    { id: "n2", name: "Draft", colour: "#fff" },
-  ];
-
-  it("computes turns, completion rate and drop-off per node", () => {
-    const messages: AnalyticsMessageRow[] = [
-      { sessionId: "s1", stepNodeId: "n1", role: "user", confidence: null, createdAt: new Date("2026-05-20T00:00:00Z") },
-      { sessionId: "s1", stepNodeId: "n1", role: "assistant", confidence: 90, createdAt: new Date("2026-05-20T00:05:00Z") },
-      { sessionId: "s2", stepNodeId: "n2", role: "user", confidence: null, createdAt: new Date("2026-05-20T00:00:00Z") },
-    ];
-    const sessions = [
-      session({ id: "s1", status: "complete", currentNodeId: "n2" }),
-      session({ id: "s2", status: "abandoned", currentNodeId: "n2" }),
-    ];
-
-    const breakdown = computeNodeBreakdown(nodes, messages, sessions);
-
-    const intake = breakdown.find((row) => row.nodeId === "n1");
-    const draft = breakdown.find((row) => row.nodeId === "n2");
-    expect(intake?.sessionsVisited).toBe(1);
-    expect(intake?.averageTurns).toBe(1);
-    expect(intake?.averageConfidenceAtCompletion).toBe(90);
-    expect(intake?.completionRate).toBe(100);
-    expect(draft?.dropOff).toBe(1);
-    expect(draft?.completionRate).toBe(0);
   });
 });
 

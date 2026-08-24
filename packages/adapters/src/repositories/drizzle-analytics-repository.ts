@@ -24,6 +24,7 @@ export class DrizzleAnalyticsRepository implements IAnalyticsRepository {
           flowName: app_flows.name,
           status: app_sessions.status,
           currentNodeId: app_sessions.current_node_id,
+          manualEstimateMinutes: app_sessions.manual_estimate_minutes,
           createdAt: app_sessions.created_at,
           updatedAt: app_sessions.updated_at,
         })
@@ -62,6 +63,31 @@ export class DrizzleAnalyticsRepository implements IAnalyticsRepository {
     }
   }
 
+  // Every role, not just assistant turns: hands-on time is measured from the
+  // gaps between messages, and it is a user's reply that closes a gap.
+  async listAllMessages(range: AnalyticsTimeRange): Promise<Result<AnalyticsMessageRow[]>> {
+    try {
+      const rows = await this.db
+        .select({
+          sessionId: app_session_messages.session_id,
+          stepNodeId: app_session_messages.step_node_id,
+          role: app_session_messages.role,
+          confidence: app_session_messages.confidence,
+          createdAt: app_session_messages.created_at,
+        })
+        .from(app_session_messages)
+        .where(
+          and(
+            gte(app_session_messages.created_at, range.start),
+            lte(app_session_messages.created_at, range.end),
+          ),
+        );
+      return ok(rows);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list messages for analytics.", cause));
+    }
+  }
+
   async listSessionsByFlow(flowId: string): Promise<Result<AnalyticsSessionRow[]>> {
     try {
       const rows = await this.db
@@ -71,6 +97,7 @@ export class DrizzleAnalyticsRepository implements IAnalyticsRepository {
           flowName: app_flows.name,
           status: app_sessions.status,
           currentNodeId: app_sessions.current_node_id,
+          manualEstimateMinutes: app_sessions.manual_estimate_minutes,
           createdAt: app_sessions.created_at,
           updatedAt: app_sessions.updated_at,
         })

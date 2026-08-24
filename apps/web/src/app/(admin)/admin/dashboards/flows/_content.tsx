@@ -1,15 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -22,26 +13,23 @@ import {
 import { trpc } from "@/trpc/client";
 import { FlowSelector } from "@/components/admin/flow-selector";
 
-const AXIS_STYLE = { fontSize: 11, fill: "#736d5f" };
+// A step that loses this many sessions is worth flagging rather than leaving the
+// reader to spot it in the table.
+const PROBLEM_THRESHOLD = 10;
 
-const formatDuration = (seconds: number): string => {
-  if (seconds <= 0) return "—";
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return remainder === 0 ? `${minutes}m` : `${minutes}m ${remainder}s`;
+const CONTINUED = "#2f56d3";
+const ABANDONED = "#a8324c";
+const STALLED = "#b8651a";
+
+const formatMinutes = (minutes: number): string => {
+  if (minutes <= 0) return "—";
+  if (minutes < 60) return `${minutes}m`;
+  const whole = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${whole}h` : `${whole}h ${rest}m`;
 };
 
-const completionColour = (rate: number): string => {
-  if (rate >= 75) return "#1f6b4d";
-  if (rate >= 40) return "#d98a3a";
-  return "#a8324c";
-};
-
-const truncate = (value: string, max = 14): string =>
-  value.length > max ? `${value.slice(0, max - 1)}…` : value;
-
-export function AdminFlowDeepDive() {
+export function AdminFlowHealth() {
   const [selectedFlowId, setSelectedFlowId] = useState<string | undefined>(undefined);
   const deepDiveQuery = trpc.analytics.flowDeepDive.useQuery({ flowId: selectedFlowId });
   const data = deepDiveQuery.data;
@@ -58,122 +46,233 @@ export function AdminFlowDeepDive() {
     return (
       <div className="h-full overflow-auto">
         <div className="container py-8 text-sm text-muted-foreground">
-          No flows yet. Create a flow and run some sessions to see usage here.
+          No flows yet. Create a flow and run some sessions to see its health here.
         </div>
       </div>
     );
   }
 
   const activeFlowId = selectedFlowId ?? data.selectedFlowId ?? undefined;
-  const confidenceData = data.nodeBreakdown.map((node) => ({
-    name: truncate(node.nodeName),
-    value: node.averageConfidenceAtCompletion ?? 0,
-  }));
-  const dropOffData = data.nodeBreakdown.map((node) => ({
-    name: truncate(node.nodeName),
-    value: node.dropOff,
-  }));
+  const steps = data.stepFunnel;
+  const maxEntered = Math.max(...steps.map((step) => step.entered), 1);
+  const firstStep = steps[0];
+  const lastStep = steps[steps.length - 1];
+
+  const totalStalled = steps.reduce((sum, step) => sum + step.stalled, 0);
+  const totalAbandoned = steps.reduce((sum, step) => sum + step.abandoned, 0);
+  const worstStep = [...steps].sort(
+    (a, b) => b.abandoned + b.stalled - (a.abandoned + a.stalled),
+  )[0];
+  const worstLost = worstStep ? worstStep.abandoned + worstStep.stalled : 0;
 
   return (
     <div className="h-full overflow-auto">
       <div className="container space-y-4 py-8">
         <div>
-          <h1 className="text-lg font-semibold text-[#1c1b19]">Flow usage</h1>
+          <h1 className="text-lg font-semibold text-[#1c1b19]">Flow Health</h1>
           <p className="text-[13px] text-[#666055]">
-            Select a flow to see its node-level breakdown — drop-off, confidence and completion.
+            Where the path breaks — drop-off, abandonment and stalls, step by step.
           </p>
         </div>
 
         <FlowSelector flows={data.flows} activeFlowId={activeFlowId} onSelect={setSelectedFlowId} />
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <ChartCard title="Avg confidence at completion, per step">
-            {data.nodeBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={confidenceData} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f5f3ee" />
-                  <XAxis dataKey="name" tick={AXIS_STYLE} interval={0} />
-                  <YAxis domain={[0, 100]} tick={AXIS_STYLE} />
-                  <Tooltip />
-                  <Bar dataKey="value" name="Avg confidence" fill="#2f56d3" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <EmptyChart />
-            )}
-          </ChartCard>
+        <Card>
+          <CardHeader className="pb-1">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              The path
+              {firstStep && lastStep
+                ? ` — ${firstStep.entered} started, ${lastStep.continued} through`
+                : ""}
+            </CardTitle>
+            <p className="text-[11.5px] text-[#736d5f]">
+              Steps in graph order. Each bar shows what happened to the sessions that reached it.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-3 flex flex-wrap gap-4 text-[11.5px] text-[#5c574c]">
+              <Legend colour={CONTINUED} label="Continued" />
+              <Legend colour={ABANDONED} label="Abandoned — someone gave up" />
+              <Legend colour={STALLED} label="Stalled — open, untouched over 7 days" />
+            </div>
 
-          <ChartCard title="Drop-off volume, per step">
-            {data.nodeBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dropOffData} margin={{ top: 8, right: 12, bottom: 0, left: -16 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f5f3ee" />
-                  <XAxis dataKey="name" tick={AXIS_STYLE} interval={0} />
-                  <YAxis allowDecimals={false} tick={AXIS_STYLE} />
-                  <Tooltip />
-                  <Bar dataKey="value" name="Drop-off" fill="#a8324c" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            {steps.length === 0 ? (
+              <p className="text-[13px] text-[#666055]">No step activity recorded yet.</p>
             ) : (
-              <EmptyChart />
+              <div className="space-y-3">
+                {steps.map((step) => {
+                  const lost = step.abandoned + step.stalled;
+                  const width = (value: number) => `${(value / maxEntered) * 100}%`;
+                  return (
+                    <div key={step.nodeId}>
+                      <div className="flex items-baseline justify-between gap-3">
+                        <span className="text-[12px] font-medium text-[#1c1b19]">
+                          {step.nodeName}
+                        </span>
+                        <span className="text-[10.5px] tabular-nums text-[#736d5f]">
+                          {step.entered} in · {step.continued} continued ·{" "}
+                          {formatMinutes(step.medianMinutes)} median
+                        </span>
+                      </div>
+                      <div className="mt-1.5 flex h-3.5 items-stretch gap-[2px]">
+                        {step.continued > 0 && (
+                          <div
+                            className="rounded-sm"
+                            style={{ width: width(step.continued), backgroundColor: CONTINUED }}
+                            title={`${step.continued} continued`}
+                          />
+                        )}
+                        {step.abandoned > 0 && (
+                          <div
+                            className="rounded-sm"
+                            style={{ width: width(step.abandoned), backgroundColor: ABANDONED }}
+                            title={`${step.abandoned} abandoned`}
+                          />
+                        )}
+                        {step.stalled > 0 && (
+                          <div
+                            className="rounded-sm"
+                            style={{ width: width(step.stalled), backgroundColor: STALLED }}
+                            title={`${step.stalled} stalled`}
+                          />
+                        )}
+                        {lost > 0 && (
+                          <span
+                            className={`self-center pl-2 text-[10.5px] tabular-nums ${
+                              lost >= PROBLEM_THRESHOLD
+                                ? "font-medium text-[#b8651a]"
+                                : "text-[#736d5f]"
+                            }`}
+                          >
+                            −{lost}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-          </ChartCard>
+          </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Worst step</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {worstStep && worstLost > 0 ? (
+                <>
+                  <p className="text-base font-semibold text-[#1c1b19]">{worstStep.nodeName}</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-[#736d5f]">
+                    <span className="font-medium text-[#a8324c]">
+                      {worstLost} of {worstStep.entered}
+                    </span>{" "}
+                    leave here — {worstStep.abandoned} abandoned, {worstStep.stalled} stalled.
+                  </p>
+                </>
+              ) : (
+                <p className="text-[13px] text-[#666055]">Nothing is being lost.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Stalled right now
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold tabular-nums text-[#8a5a1d]">{totalStalled}</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-[#736d5f]">
+                Open cases untouched for more than 7 days. Still recoverable — someone can pick
+                them up.
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-1">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Abandoned</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold tabular-nums text-[#a8324c]">{totalAbandoned}</p>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-[#736d5f]">
+                Explicitly given up on. Counted apart from stalls, because the two need different
+                responses.
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         <Card>
           <CardHeader className="pb-1">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Node breakdown
+              Step breakdown
             </CardTitle>
+            <p className="text-[11.5px] text-[#736d5f]">
+              Median time, not mean — one long pause no longer moves a step&apos;s figure.
+            </p>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Step</TableHead>
-                  <TableHead className="text-right">Sessions</TableHead>
+                  <TableHead className="text-right">In</TableHead>
+                  <TableHead className="text-right">Continued</TableHead>
+                  <TableHead className="text-right">Abandoned</TableHead>
+                  <TableHead className="text-right">Stalled</TableHead>
+                  <TableHead className="text-right">Still open</TableHead>
+                  <TableHead className="text-right">Median time</TableHead>
                   <TableHead className="text-right">Avg turns</TableHead>
-                  <TableHead className="text-right">Avg time</TableHead>
-                  <TableHead className="text-right">Avg confidence</TableHead>
-                  <TableHead className="text-right">Drop-off</TableHead>
-                  <TableHead className="w-[160px]">Completion</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.nodeBreakdown.map((node) => (
-                  <TableRow key={node.nodeId}>
-                    <TableCell className="font-medium">{node.nodeName}</TableCell>
-                    <TableCell className="text-right">{node.sessionsVisited}</TableCell>
-                    <TableCell className="text-right">{node.averageTurns}</TableCell>
-                    <TableCell className="text-right">
-                      {formatDuration(node.averageDurationSeconds)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {node.averageConfidenceAtCompletion ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-right">{node.dropOff}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#f5f3ee]">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${node.completionRate}%`,
-                              backgroundColor: completionColour(node.completionRate),
-                            }}
-                          />
-                        </div>
-                        <span className="w-9 text-right text-[12px] text-[#5c574c]">
-                          {node.completionRate}%
-                        </span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {data.nodeBreakdown.length === 0 && (
+                {steps.map((step) => {
+                  const lost = step.abandoned + step.stalled;
+                  return (
+                    <TableRow
+                      key={step.nodeId}
+                      className={lost >= PROBLEM_THRESHOLD ? "bg-[#f6e9d8]" : undefined}
+                    >
+                      <TableCell className="font-medium">{step.nodeName}</TableCell>
+                      <TableCell className="text-right tabular-nums">{step.entered}</TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">
+                        {step.continued}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {step.abandoned === 0 ? (
+                          <span className="text-[#736d5f]">—</span>
+                        ) : (
+                          <span className="font-medium text-[#a8324c]">{step.abandoned}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {step.stalled === 0 ? (
+                          <span className="text-[#736d5f]">—</span>
+                        ) : (
+                          <span className="font-medium text-[#8a5a1d]">{step.stalled}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-[#736d5f]">
+                        {step.inFlight === 0 ? "—" : step.inFlight}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatMinutes(step.medianMinutes)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-[#736d5f]">
+                        {step.averageTurns}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                {steps.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-[13px] text-[#666055]">
-                      No node activity recorded for this flow yet.
+                    <TableCell colSpan={8} className="text-center text-[13px] text-[#666055]">
+                      No step activity recorded for this flow yet.
                     </TableCell>
                   </TableRow>
                 )}
@@ -186,23 +285,11 @@ export function AdminFlowDeepDive() {
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function Legend({ colour, label }: { colour: string; label: string }) {
   return (
-    <Card>
-      <CardHeader className="pb-1">
-        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="h-[260px] w-full">{children}</div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function EmptyChart() {
-  return (
-    <div className="flex h-full items-center justify-center text-[13px] text-[#666055]">
-      Not enough data yet.
-    </div>
+    <span className="inline-flex items-center gap-1.5">
+      <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: colour }} />
+      {label}
+    </span>
   );
 }

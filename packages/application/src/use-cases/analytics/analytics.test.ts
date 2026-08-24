@@ -12,10 +12,11 @@ import type {
   IFlowNodeRepository,
   IFlowRepository,
   ISessionStepOutputRepository,
+  IUsageRepository,
   Result,
   SessionStepOutput,
 } from "@rbrasier/domain";
-import { GetOverviewDashboard } from "./get-overview-dashboard";
+import { GetValueDashboard } from "./get-value-dashboard";
 import { GetFlowDeepDive } from "./get-flow-deep-dive";
 
 const now = new Date("2026-05-29T00:00:00Z");
@@ -26,6 +27,7 @@ const makeSession = (overrides: Partial<AnalyticsSessionRow>): AnalyticsSessionR
   flowName: "Flow One",
   status: "active",
   currentNodeId: null,
+  manualEstimateMinutes: null,
   createdAt: new Date("2026-05-20T00:00:00Z"),
   updatedAt: new Date("2026-05-20T00:00:00Z"),
   ...overrides,
@@ -48,6 +50,9 @@ class FakeAnalytics implements IAnalyticsRepository {
   async listAssistantMessages(): Promise<Result<AnalyticsMessageRow[]>> {
     return ok(this.messages);
   }
+  async listAllMessages(): Promise<Result<AnalyticsMessageRow[]>> {
+    return ok(this.messages);
+  }
   async listSessionsByFlow(flowId: string): Promise<Result<AnalyticsSessionRow[]>> {
     return ok(this.sessions.filter((session) => session.flowId === flowId));
   }
@@ -56,36 +61,95 @@ class FakeAnalytics implements IAnalyticsRepository {
   }
 }
 
-describe("GetOverviewDashboard", () => {
-  it("assembles metrics, activity, distribution and confidence lifecycle", async () => {
+const fakeUsage = (rows: { key: string | null; totalCostUsd: number }[] = []): IUsageRepository =>
+  ({
+    summarizeBy: async () =>
+      ok(rows.map((row) => ({ dimension: "flow" as const, ...row, eventCount: 1 }))),
+  }) as unknown as IUsageRepository;
+
+describe("GetValueDashboard", () => {
+  const estimated = (id: string, flowId: string, flowName: string, minutes: number | null) =>
+    makeSession({
+      id,
+      flowId,
+      flowName,
+      status: "complete",
+      manualEstimateMinutes: minutes,
+      createdAt: new Date("2026-05-23T00:00:00Z"),
+      updatedAt: new Date("2026-05-24T00:00:00Z"),
+    });
+
+  it("reports effort avoided in hours, with coverage and spend beside it", async () => {
     const analytics = new FakeAnalytics(
+      [estimated("a", "f1", "Flow One", 600), estimated("b", "f1", "Flow One", 600)],
       [
-        makeSession({ id: "a", createdAt: new Date("2026-05-23T00:00:00Z") }),
-        makeSession({ id: "b", flowId: "f2", flowName: "Flow Two", createdAt: new Date("2026-05-24T00:00:00Z"), status: "complete", updatedAt: new Date("2026-05-25T00:00:00Z") }),
-      ],
-      [
-        { sessionId: "a", stepNodeId: "n1", role: "assistant", confidence: 80, createdAt: new Date("2026-05-23T00:00:00Z") },
+        { sessionId: "a", stepNodeId: "n1", role: "user", confidence: null, createdAt: new Date("2026-05-23T00:00:00Z") },
+        { sessionId: "b", stepNodeId: "n1", role: "user", confidence: null, createdAt: new Date("2026-05-23T00:00:00Z") },
       ],
     );
 
-    const useCase = new GetOverviewDashboard(analytics);
-    const result = await useCase.execute({ periodDays: 30, now });
+    const result = await new GetValueDashboard(
+      analytics,
+      fakeUsage([{ key: "f1", totalCostUsd: 12.5 }]),
+    ).execute({ periodDays: 30, now });
 
     expect(result.error).toBeUndefined();
-    expect(result.data?.metrics.activeSessions.value).toBe(2);
-    expect(result.data?.flowDistribution).toHaveLength(2);
-    expect(result.data?.confidenceLifecycle).toHaveLength(10);
-    expect(result.data?.activity.length).toBeGreaterThan(0);
+    expect(result.data?.avoidedHours).toBeGreaterThan(0);
+    expect(result.data?.coveragePct).toBe(100);
+    expect(result.data?.spendUsd).toBe(12.5);
+    expect(result.data?.byFlow).toHaveLength(1);
+  });
+
+  it("never converts hours into money — spend stays a separate figure", async () => {
+    const analytics = new FakeAnalytics([estimated("a", "f1", "Flow One", 600)], []);
+
+    const result = await new GetValueDashboard(
+      analytics,
+      fakeUsage([{ key: "f1", totalCostUsd: 9.99 }]),
+    ).execute({ periodDays: 30, now });
+
+    // The two live side by side and are never combined into one number.
+    expect(result.data?.avoidedHours).toBe(10);
+    expect(result.data?.spendUsd).toBe(9.99);
+  });
+
+  it("scopes every figure to one flow when a flowId is supplied", async () => {
+    const analytics = new FakeAnalytics(
+      [estimated("a", "f1", "Flow One", 600), estimated("b", "f2", "Flow Two", 1200)],
+      [],
+    );
+
+    const result = await new GetValueDashboard(analytics, fakeUsage()).execute({
+      periodDays: 30,
+      flowId: "f2",
+      now,
+    });
+
+    expect(result.data?.flowId).toBe("f2");
+    expect(result.data?.byFlow).toHaveLength(1);
+    expect(result.data?.byFlow[0]?.flowId).toBe("f2");
+    expect(result.data?.contributingSessions).toBe(1);
+  });
+
+  it("reports a flow with no estimates as having no baseline rather than zero saving", async () => {
+    const analytics = new FakeAnalytics([estimated("a", "f1", "Flow One", null)], []);
+
+    const result = await new GetValueDashboard(analytics, fakeUsage()).execute({ now });
+
+    expect(result.data?.byFlow[0]?.baselineMinutes).toBeNull();
+    expect(result.data?.byFlow[0]?.avoidedMinutes).toBeNull();
+    expect(result.data?.coveragePct).toBe(0);
   });
 
   it("propagates a repository error", async () => {
     const failing: IAnalyticsRepository = {
       listSessions: async () => err(domainError("INFRA_FAILURE", "boom")),
       listAssistantMessages: async () => ok([]),
+      listAllMessages: async () => ok([]),
       listSessionsByFlow: async () => ok([]),
       listMessagesByFlow: async () => ok([]),
     };
-    const result = await new GetOverviewDashboard(failing).execute({ now });
+    const result = await new GetValueDashboard(failing, fakeUsage()).execute({ now });
     expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 });
@@ -171,7 +235,7 @@ describe("GetFlowDeepDive", () => {
     expect(result.error).toBeUndefined();
     expect(result.data?.selectedFlowId).toBe("f2");
     expect(result.data?.flows[0]).toEqual({ flowId: "f2", flowName: "Two", sessionCount: 2 });
-    expect(result.data?.nodeBreakdown[0]?.nodeName).toBe("Intake");
+    expect(result.data?.stepFunnel[0]?.nodeName).toBe("Intake");
     expect(result.data?.fieldReport.columns[0]?.fieldKey).toBe("fee");
     expect(result.data?.fieldReport.columns[0]?.columnKey).toBe("n1:fee");
   });
@@ -275,6 +339,6 @@ describe("GetFlowDeepDive", () => {
 
     const result = await useCase.execute({ now });
     expect(result.data?.selectedFlowId).toBeNull();
-    expect(result.data?.nodeBreakdown).toEqual([]);
+    expect(result.data?.stepFunnel).toEqual([]);
   });
 });

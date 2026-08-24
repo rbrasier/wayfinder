@@ -9,18 +9,18 @@ export default function AdminIndexPage() {
       <Link href="/admin/dashboards/overview">
         <Card className="transition-shadow hover:shadow-md">
           <CardHeader>
-            <CardTitle>Overview dashboard</CardTitle>
+            <CardTitle>Value</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Active sessions, completions and completion rate with period deltas, plus session
-            activity and AI confidence trends.
+            Estimated effort avoided in hours, per flow and overall, with AI cost alongside and
+            typical time to complete a case.
           </CardContent>
         </Card>
       </Link>
       <Link href="/admin/dashboards/insights">
         <Card className="transition-shadow hover:shadow-md">
           <CardHeader>
-            <CardTitle>Flow insights</CardTitle>
+            <CardTitle>Flow reports</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
             Reporting on captured template field values across each flow&apos;s sessions.
@@ -30,10 +30,10 @@ export default function AdminIndexPage() {
       <Link href="/admin/dashboards/flows">
         <Card className="transition-shadow hover:shadow-md">
           <CardHeader>
-            <CardTitle>Flow usage</CardTitle>
+            <CardTitle>Flow health</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Node-level breakdown per flow — drop-off, confidence and completion.
+            Where sessions leave a flow, step by step — abandoned, stalled and median time.
           </CardContent>
         </Card>
       </Link>
