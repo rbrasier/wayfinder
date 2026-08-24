@@ -28,7 +28,7 @@ export class GraphPeopleDirectory implements IPeopleDirectory {
   constructor(private readonly graph: GraphClient) {}
 
   async search(input: PeopleSearchInput): Promise<Result<Person[]>> {
-    if (!this.graph.isConfigured()) return ok([]);
+    if (!(await this.graph.isConfigured())) return ok([]);
 
     const escaped = input.query.replaceAll('"', "");
     const result = await this.graph.get<{ value: GraphUser[] }>(

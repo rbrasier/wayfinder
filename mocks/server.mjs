@@ -21,6 +21,8 @@ import { createServer } from "node:http";
 import { mock as mcpToolsStreamableHttp } from "./mcp-tools/streamable-http.mjs";
 import { mock as mcpToolsSse } from "./mcp-tools/sse.mjs";
 import { mock as entraOidc } from "./entra/oidc.mjs";
+import { mock as graphApi } from "./graph/api.mjs";
+import { mock as hrDownload } from "./hr/download.mjs";
 import { mock as pkiProxy } from "./pki/proxy.mjs";
 import { mock as lookupContractTypes } from "./lookup/contract-types.mjs";
 import { mock as lookupSkills } from "./lookup/skills.mjs";
@@ -32,6 +34,8 @@ const MOCKS = [
   mcpToolsStreamableHttp,
   mcpToolsSse,
   entraOidc,
+  graphApi,
+  hrDownload,
   pkiProxy,
   lookupContractTypes,
   lookupSkills,

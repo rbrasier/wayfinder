@@ -10,23 +10,62 @@
 //   POST /entra/:tenant/oauth2/v2.0/token          → id_token for the code
 //   GET  /entra/:tenant/discovery/v2.0/keys        → JWKS
 //
+// The same token endpoint also answers `grant_type=client_credentials`, which is
+// what GraphClient uses. That is what lets M365_AUTHORITY point here and the
+// mock Graph at /graph stand in for the real directory.
+//
+// Identities come from the shared roster, so whoever signs in here matches a row
+// in the HR upload and a user in the mock Graph.
+//
 // The provider reads the identity out of the id_token with `decodeJwt`, which
 // does not check the signature on the code flow, so the token here is signed
 // with a fixed "none"-style placeholder. That is the whole point of a mock:
 // never wire this to anything real.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { FEATURED_EMAILS, findEmployeeByEmail, roster } from "../directory/roster.mjs";
 
 const BASE_PATH = "/entra";
 
 // Cleared on restart — a dev-only store keyed by the authorization code.
 const pendingCodes = new Map();
 
-const SEEDED_IDENTITIES = [
-  { email: "ada@example.com", name: "Ada Lovelace" },
-  { email: "grace@example.com", name: "Grace Hopper" },
-  { email: "admin@example.com", name: "Wayfinder Admin" },
-];
+// Featured first, then everyone else. One list rather than two, so the
+// `mock-entra-identity` selector means "any employee" no matter where they sit.
+const pickerIdentities = () => {
+  const featured = FEATURED_EMAILS.map(findEmployeeByEmail).filter(Boolean);
+  const featuredEmails = new Set(featured.map((employee) => employee.email));
+  const rest = roster.filter((employee) => !featuredEmails.has(employee.email));
+  return [
+    ...featured.map((employee) => ({ employee, isFeatured: true })),
+    ...rest.map((employee) => ({ employee, isFeatured: false })),
+  ];
+};
+
+// Entra's `oid` is a per-tenant GUID and its `sub` a pairwise, opaque
+// identifier — neither is derived from the address, and both are stable across
+// sign-ins. Deriving them from a hash keeps that shape while surviving a mock
+// restart, so a linked account still resolves.
+const stableDigest = (seed) => createHash("sha256").update(seed).digest("hex");
+
+const objectIdFor = (tenant, email) => {
+  const digest = stableDigest(`oid|${tenant}|${email}`);
+  return [
+    digest.slice(0, 8),
+    digest.slice(8, 12),
+    digest.slice(12, 16),
+    digest.slice(16, 20),
+    digest.slice(20, 32),
+  ].join("-");
+};
+
+const subjectFor = (tenant, email) =>
+  Buffer.from(stableDigest(`sub|${tenant}|${email}`), "hex")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "")
+    .slice(0, 43);
 
 const base64url = (input) =>
   Buffer.from(input).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -40,45 +79,89 @@ const encodeIdToken = (claims) => {
 const escapeHtml = (value) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+// One shared form, one submit button per identity, each carrying its own
+// address as the submitter's name/value. A form per row would repeat the
+// redirect_uri and state 100 times and put 100 form elements on the page — and
+// it is a form nested inside a list that the parser will happily swallow if a
+// closing tag is ever missed. This shape cannot express that bug.
+// No data-search attribute: the row's own text already holds the name, address,
+// role and unit, so duplicating it into an attribute doubled the page for nothing.
+const identityRow = ({ employee, isFeatured }) => `<li${
+  isFeatured ? ' class="featured"' : ""
+}>
+      <button type="submit" name="email" value="${escapeHtml(employee.email)}" data-testid="mock-entra-identity">
+        <span class="who">${escapeHtml(employee.name)} — ${escapeHtml(employee.email)}</span>
+        <span class="role">${escapeHtml(employee.jobTitle)} · ${escapeHtml(employee.businessUnit)}</span>
+      </button>
+    </li>`;
+
 const pickerPage = (tenant, redirectUri, state) => `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Mock Entra ID — sign in</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 26rem; margin: 4rem auto; padding: 0 1rem; }
+    body { font-family: system-ui, sans-serif; max-width: 34rem; margin: 3rem auto; padding: 0 1rem; }
     h1 { font-size: 1.25rem; }
     .hint { color: #666; font-size: 0.85rem; }
     button, input { font: inherit; }
-    ul { list-style: none; padding: 0; }
-    li { margin: 0.5rem 0; }
-    li button { width: 100%; text-align: left; padding: 0.6rem 0.8rem; cursor: pointer; }
+    ul { list-style: none; padding: 0; max-height: 26rem; overflow-y: auto; border: 1px solid #ddd; border-radius: 0.4rem; }
+    li { margin: 0; border-bottom: 1px solid #eee; }
+    li.featured { background: #f6f8ff; }
+    li button { width: 100%; text-align: left; padding: 0.5rem 0.8rem; cursor: pointer; background: none; border: 0; display: block; }
+    li button:hover { background: #eef2ff; }
+    .who { display: block; }
+    .role { display: block; color: #666; font-size: 0.8rem; }
+    form.filter { margin: 1rem 0 0.5rem; }
+    form.filter input, form.custom input { width: 100%; padding: 0.5rem; box-sizing: border-box; }
     form.custom { margin-top: 1.5rem; display: flex; gap: 0.5rem; }
-    form.custom input { flex: 1; padding: 0.5rem; }
+    form.custom input { flex: 1; }
+    form.unverified { margin-top: 1rem; border-top: 1px solid #ddd; padding-top: 1rem; font-size: 0.85rem; color: #666; }
+    form.unverified input[type="email"] { width: 100%; padding: 0.5rem; box-sizing: border-box; margin-bottom: 0.4rem; }
   </style>
 </head>
 <body>
   <h1>Mock Entra ID</h1>
-  <p class="hint">Tenant <code>${escapeHtml(tenant)}</code>. Not a real identity provider.</p>
-  <ul>
-    ${SEEDED_IDENTITIES.map(
-      (identity) => `<li>
-      <form method="post">
-        <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
-        <input type="hidden" name="state" value="${escapeHtml(state)}" />
-        <input type="hidden" name="email" value="${escapeHtml(identity.email)}" />
-        <input type="hidden" name="name" value="${escapeHtml(identity.name)}" />
-        <button type="submit" data-testid="mock-entra-identity">${escapeHtml(identity.name)} — ${escapeHtml(identity.email)}</button>
-      </form>
-    </li>`,
-    ).join("\n")}
-  </ul>
+  <p class="hint">Tenant <code>${escapeHtml(tenant)}</code>. Not a real identity provider. The
+  ${roster.length} people below are the same roster the mock HR upload and the mock Graph serve —
+  the highlighted ones are one per level of the org.</p>
+  <form class="filter" onsubmit="return false">
+    <input type="search" data-testid="mock-entra-filter" placeholder="Filter by name, email, role or unit" oninput="filterIdentities(this.value)" />
+  </form>
+  <form method="post">
+    <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
+    <input type="hidden" name="state" value="${escapeHtml(state)}" />
+    <ul id="identities">
+      ${pickerIdentities().map(identityRow).join("\n")}
+    </ul>
+  </form>
   <form method="post" class="custom">
     <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
     <input type="hidden" name="state" value="${escapeHtml(state)}" />
     <input type="email" name="email" placeholder="any@address.example" required data-testid="mock-entra-email" />
     <button type="submit" data-testid="mock-entra-submit">Sign in</button>
   </form>
+  <form method="post" class="unverified">
+    <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}" />
+    <input type="hidden" name="state" value="${escapeHtml(state)}" />
+    <input type="hidden" name="unverified" value="1" />
+    <label>
+      <input type="email" name="email" placeholder="any@address.example" required data-testid="mock-entra-unverified" />
+      Sign in with an unverified email domain (sends <code>xms_edov: false</code>)
+    </label>
+    <button type="submit">Sign in unverified</button>
+  </form>
+  <script>
+    function filterIdentities(query) {
+      var needle = query.trim().toLowerCase();
+      var rows = document.getElementById("identities").children;
+      for (var index = 0; index < rows.length; index += 1) {
+        var row = rows[index];
+        if (row.searchText === undefined) row.searchText = row.textContent.toLowerCase();
+        row.hidden = needle !== "" && row.searchText.indexOf(needle) === -1;
+      }
+    }
+  </script>
 </body>
 </html>`;
 
@@ -121,7 +204,7 @@ const handleAuthorizePost = async (req, res, tenant) => {
   pendingCodes.set(code, {
     tenant,
     email: email.trim().toLowerCase(),
-    name: form.get("name")?.trim() || email.trim(),
+    unverified: form.get("unverified") === "1",
   });
 
   const location = new URL(redirectUri);
@@ -133,27 +216,51 @@ const handleAuthorizePost = async (req, res, tenant) => {
   res.end();
 };
 
-const handleToken = async (req, res, tenant) => {
-  const form = new URLSearchParams(await readBody(req));
+// GraphClient's client-credentials grant. No code, no identity — just a bearer
+// token the mock Graph does not check.
+const handleClientCredentials = (res) => {
+  sendJson(res, 200, {
+    token_type: "Bearer",
+    expires_in: 3600,
+    ext_expires_in: 3600,
+    access_token: `mock-app-token-${randomUUID()}`,
+  });
+};
+
+const handleAuthorizationCode = (res, tenant, form, issuer) => {
   const code = form.get("code");
-  const identity = code ? pendingCodes.get(code) : undefined;
-  if (!identity) {
+  const pending = code ? pendingCodes.get(code) : undefined;
+  if (!pending) {
     sendJson(res, 400, { error: "invalid_grant", error_description: "unknown or reused code" });
     return;
   }
   pendingCodes.delete(code);
 
+  // A typed address that matches nobody still signs in — the escape hatch has to
+  // keep working — it just carries no directory claims.
+  const employee = findEmployeeByEmail(pending.email);
   const issuedAt = Math.floor(Date.now() / 1000);
   const idToken = encodeIdToken({
-    iss: `mock-entra/${tenant}`,
+    // Real v2.0 issuer: https://login.microsoftonline.com/{tid}/v2.0
+    iss: `${issuer}/${tenant}/v2.0`,
     aud: form.get("client_id") ?? "mock-client",
-    sub: `mock-entra|${identity.email}`,
+    sub: subjectFor(tenant, pending.email),
+    oid: objectIdFor(tenant, pending.email),
+    ver: "2.0",
     tid: tenant,
-    name: identity.name,
-    email: identity.email,
-    preferred_username: identity.email,
-    email_verified: true,
+    name: employee?.name ?? pending.email,
+    email: pending.email,
+    preferred_username: pending.email,
+    // No `email_verified`: it is not an Entra v2.0 claim, and sending it made
+    // every local account verified and every production one not. `xms_edov` is
+    // the real signal, and it is an optional claim a tenant has to turn on — so
+    // the mock omits it unless asked, which is the stock tenant's behaviour.
+    ...(pending.unverified ? { xms_edov: false } : {}),
+    ...(employee
+      ? { jobTitle: employee.jobTitle, department: employee.businessUnit, employeeId: employee.employeeId }
+      : {}),
     iat: issuedAt,
+    nbf: issuedAt,
     exp: issuedAt + 3600,
   });
 
@@ -165,6 +272,33 @@ const handleToken = async (req, res, tenant) => {
     refresh_token: `mock-refresh-${randomUUID()}`,
     id_token: idToken,
   });
+};
+
+// The subset of the real v2.0 metadata a client can act on. Every endpoint
+// points back at this mock — a document that named login.microsoftonline.com
+// would send a probe that trusted it straight at Microsoft with mock
+// credentials.
+const discoveryDocument = (issuer, tenant) => ({
+  issuer: `${issuer}/${tenant}/v2.0`,
+  authorization_endpoint: `${issuer}/${tenant}/oauth2/v2.0/authorize`,
+  token_endpoint: `${issuer}/${tenant}/oauth2/v2.0/token`,
+  jwks_uri: `${issuer}/${tenant}/discovery/v2.0/keys`,
+  response_modes_supported: ["query", "fragment", "form_post"],
+  response_types_supported: ["code", "id_token", "code id_token", "id_token token"],
+  grant_types_supported: ["authorization_code", "client_credentials", "refresh_token"],
+  scopes_supported: ["openid", "profile", "email", "offline_access"],
+  subject_types_supported: ["pairwise"],
+  id_token_signing_alg_values_supported: ["RS256"],
+  token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"],
+});
+
+const handleToken = async (req, res, tenant, issuer) => {
+  const form = new URLSearchParams(await readBody(req));
+  if (form.get("grant_type") === "client_credentials") {
+    handleClientCredentials(res);
+    return;
+  }
+  handleAuthorizationCode(res, tenant, form, issuer);
 };
 
 async function handle(req, res) {
@@ -190,7 +324,20 @@ async function handle(req, res) {
   }
 
   if (endpoint === "oauth2/v2.0/token" && req.method === "POST") {
-    await handleToken(req, res, tenant);
+    await handleToken(req, res, tenant, `${url.origin}${BASE_PATH}`);
+    return;
+  }
+
+  // Real Entra serves the discovery document at both the tenant root and under
+  // /v2.0. The Authentication card's connectivity probe reads `token_endpoint`
+  // out of it before it will try a client-credentials grant, so a mock without
+  // this answers that Test with a 404 while sign-in itself works fine.
+  if (
+    (endpoint === "v2.0/.well-known/openid-configuration" ||
+      endpoint === ".well-known/openid-configuration") &&
+    req.method === "GET"
+  ) {
+    sendJson(res, 200, discoveryDocument(`${url.origin}${BASE_PATH}`, tenant));
     return;
   }
 
