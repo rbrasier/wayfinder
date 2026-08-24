@@ -1,0 +1,183 @@
+# Phase — Extended Workflow Continuity
+
+- **Status**: Awaiting review
+- **Target version**: 0.32.0  (bump: MINOR — new `app_session_drafts` table + additive
+  `app_session_step_outputs.status` column + new feature)
+- **PRD**: `docs/development/prd/extended-workflow-continuity.prd.md`
+- **ADRs**: ADR-051 (session drafts and step-output finalisation)
+- **Depends on**: `026-operator-confirmed-step-completion` (the confirm-to-advance boundary),
+  ADR-006 (flow/session schema), ADR-007 (session-scoped LangGraph), ADR-038 (step output types)
+
+## 1. Problem
+
+A conversational session already survives a reload — checkpoint, messages, uploads and step
+outputs are all server-side, and the client reattaches over SSE with `Last-Event-ID`
+(`apps/web/src/app/(user)/chats/[sessionId]/_content.tsx:287`). The unsent message does not:
+it is component state (`apps/web/src/components/chat/chat-composer.tsx:26`), even though the
+attachments beside it are persisted and re-fetched on mount (`chat-composer.tsx:44`).
+
+Separately, the step rail reports position but not completeness, and whether a captured step
+output is provisional is inferred from `Session.awaitingConfirmationNodeId` rather than
+recorded on the output. See the PRD for full detail.
+
+## 2. Goals
+
+- An unsent message survives reload, tab loss and a move to another device.
+- Two participants in one session keep separate unsent text.
+- A step output states on itself whether it is `draft` or `final`.
+- The rail shows completeness for the current step from an already-computed readiness signal.
+- A session resumed with a live turn lease shows a resuming state, not an idle composer.
+
+## 3. Non-goals
+
+- Reopening a completed step to amend its captured output. The `draft`/`final` state is the
+  groundwork; **no editing path ships here**, and the PRD records that acceptance criterion
+  as knowingly unmet.
+- Synthesise/extraction runs and AI-assisted flow authoring.
+- Changes to per-turn context assembly (`buildSystemPrompt` is untouched).
+
+## 4. Approach
+
+Two independent slices that share a migration.
+
+**Drafts.** A new `app_session_drafts` table, unique on `(session_id, user_id)`, written
+through a new domain port. Deliberately *not* a column on `app_sessions`: that row is guarded
+by an optimistic-concurrency `version` and a turn lease, and debounced keystroke writes must
+not contend with turns (ADR-051).
+
+**Finalisation and completeness.** An additive `status` column on `app_session_step_outputs`,
+read through a single `stepOutputStatus()` accessor that treats absent as `"final"` — the same
+idiom as the existing `sessionMode()`. `confirm-step-advance` promotes `draft` → `final`. The
+rail reads a persisted readiness signal rather than invoking `evaluate-step-readiness` on
+render, because that use case makes a model call.
+
+## 5. Key entities / files
+
+| Path | New / changed | Notes |
+| ---- | ------------- | ----- |
+| `packages/domain/src/entities/session-draft.ts` | new | `SessionDraft`, `NewSessionDraft` |
+| `packages/domain/src/ports/session-draft-repository.ts` | new | `getForParticipant` / `upsert` / `clear`, Result pattern |
+| `packages/domain/src/entities/session-step-output.ts` | changed | `StepOutputStatus`, `status?`, `stepOutputStatus()` |
+| `packages/domain/src/entities/index.ts`, `ports/index.ts` | changed | Re-exports |
+| `packages/application/src/use-cases/session/save-session-draft.ts` | new | Upsert, ownership-checked |
+| `packages/application/src/use-cases/session/clear-session-draft.ts` | new | Delete on send/clear |
+| `packages/application/src/use-cases/session/get-session.ts` | changed | Returns the caller's draft |
+| `packages/application/src/use-cases/session/confirm-step-advance.ts` | changed | Promotes `draft` → `final` |
+| `packages/adapters/src/db/schema/wayfinder.ts` | changed | `app_session_drafts`; `status` on step outputs |
+| `packages/adapters/src/db/migrations/` | new | One generated migration |
+| `packages/adapters/src/repositories/session-draft-repository.ts` | new | Drizzle implementation |
+| `apps/web/src/server/routers/session.ts` | changed | `saveDraft`, `clearDraft` |
+| `apps/web/src/components/chat/chat-composer.tsx` | changed | Rehydrate + debounced persist |
+| `apps/web/src/components/layout/app-header-model.ts` | changed | `StepState` widened |
+| `apps/web/src/components/chat/step-progress-rail.tsx` | changed | Completeness + draft treatment |
+| `apps/web/src/app/(user)/chats/[sessionId]/_content.tsx` | changed | Resuming indicator |
+
+## 6. Implementation steps (test-first per CLAUDE.md)
+
+1. **Domain — step-output status.** Write `session-step-output.test.ts` first:
+   (a) `stepOutputStatus()` returns `"final"` for a row with no `status`;
+   (b) returns the stored value when present. Then add `StepOutputStatus`, the optional
+   `status` field and the accessor. Pure types plus one accessor — no external deps.
+
+2. **Domain — draft entity and port.** Add `SessionDraft`, `NewSessionDraft` and
+   `ISessionDraftRepository`. Type-only; no test file beyond the re-export check that
+   `validate.sh` already performs.
+
+3. **Application — draft use cases.** Write `save-session-draft.test.ts` and
+   `clear-session-draft.test.ts` first, against an in-memory fake repository:
+   (a) saving upserts for `(sessionId, userId)`; (b) a second participant's save does not
+   overwrite the first's; (c) a non-participant is rejected with a `DomainError`;
+   (d) clearing removes only the caller's row; (e) clearing a non-existent draft succeeds.
+   Then implement.
+
+4. **Application — finalisation.** Add `confirm-step-advance.test.ts` cases:
+   (a) capture while awaiting confirmation stores `draft`; (b) confirming promotes it to
+   `final`; (c) a later turn on the same node does not rewrite a `final` output — it writes a
+   new draft. Then implement.
+
+5. **Adapters — schema, migration, repository.** Add `app_session_drafts` and the `status`
+   column; generate the migration (never `drizzle-kit push`) carrying:
+   `-- data-impact: preserved — new table plus a defaulted column; no existing row is altered or lost`.
+   Repository integration test asserts unique-constraint upsert behaviour and that an existing
+   step-output row reads back as `final`.
+
+6. **Web — composer continuity.** Component test first: the composer renders the persisted
+   draft on mount, and does not flash empty before it arrives. Then wire `session.saveDraft`
+   (debounced, off the turn's critical path) and `session.clearDraft` on send.
+
+7. **Web — rail completeness and resuming indicator.** Component tests first for the widened
+   `stepState()` — every existing position case unchanged, plus the new completeness and
+   `draft` cases — then the rail rendering and the `activeTurnId` resuming state.
+
+8. **Validate.** Run `./validate.sh` after each sub-component; do not proceed on a non-zero exit.
+
+## 7. Acceptance criteria
+
+Mirrors the PRD §10 checklist. Restated here as the build's test plan:
+
+- [ ] Composer text survives reload; sending clears the stored draft.
+- [ ] Participants' drafts are isolated; a draft is visible to its author on another device.
+- [ ] `stepOutputStatus()` reads absent as `"final"`; pre-existing rows are unaffected.
+- [ ] Capture-while-awaiting stores `draft`; `confirm-step-advance` promotes to `final`;
+      a `final` output is never rewritten.
+- [ ] Rail shows completeness for the current step without triggering a model call on render.
+- [ ] Resuming indicator shows while `activeTurnId` is leased and clears on SSE reattach.
+- [ ] Migration applies to a populated database with no row loss.
+
+## 8. Playwright e2e
+
+**Qualifies — group 4 (navigation state across a page load).** Draft restoration is state
+surviving a document load, which cannot be asserted in-process.
+
+- New spec `apps/web/e2e/chat-draft-continuity.spec.ts`, named for the capability per the
+  policy. No existing spec covers reload continuity in chat — `chat-composer-upload.spec.ts`
+  is group 3 (file upload) — so extending one would misname it.
+- Happy path: type into the composer, reload, assert the text is restored.
+- User-visible error path: send the message, reload, assert the composer is empty.
+- Obeys the non-negotiables: no `test.skip()` on a self-probed condition, no `isVisible()`
+  for control flow, no environment-variable gate.
+
+**Everything else stays below the browser**: the `draft`/`final` transition is
+`packages/application` (step 4), `stepOutputStatus()` is `packages/domain` (step 1), the
+unique-constraint behaviour is a `packages/adapters` integration test (step 5), and the rail's
+rendering is an `apps/web` component test (step 7).
+
+## 9. Risks / open questions
+
+- **Write volume** — debounce interval must keep the drafts table off the hot path.
+- **`StepState` widening** — every rail consumer reads `stepState()`; a missed call site
+  degrades the header silently. Keeping it the sole reader is the mitigation.
+- **Draft staleness** — a draft restored after the session advanced a step may not fit the
+  current question. Current position: restore regardless; losing text is the harm this phase
+  exists to prevent. Open for review.
+- **Completeness source** — `evaluate-step-readiness` makes a model call, so the rail must read
+  a persisted signal. Where that signal is stored is settled during step 7 and may add a
+  further additive column.
+
+---
+
+## Approved change summary (from `/new-feature`, 2026-08-24)
+
+Extended Workflow Continuity closes the last three gaps in resuming a chat session, on top of
+machinery that already survives reload. A session's unsent message is the only thing genuinely
+lost today, and it becomes per-participant server-side state so it follows the operator across
+devices. Conversational step outputs gain an explicit draft/final discriminator, making the
+existing confirm-to-advance boundary visible in the data rather than implied by a session
+column. The step rail learns to show completeness, not just position, by surfacing the
+readiness signal the application layer already computes. Acceptance criterion 4 — editing
+previously defined elements — is deliberately excluded.
+
+**Scope decisions taken at planning time:**
+
+- Surface: chat sessions only.
+- Gaps closed: unsent draft persistence; draft vs finalised separation; hardened resume and
+  progress indicator. **Not** closed: editing previously captured step outputs.
+- Prefix corrected from `core_` to `app_` during planning: `core_sessions` is the Better Auth
+  login session (`packages/adapters/src/db/schema/core.ts:50`), whereas the workflow session is
+  `app_sessions` (`wayfinder.ts:150`).
+- Two findings shrank the original scope: staged uploads already persist and re-fetch on mount,
+  so only unsent *text* is lost; and `evaluate-step-readiness` already computes the completeness
+  signal, so the work is surfacing it rather than building it.
+- Decomposition: 1) domain entity + port + step-output status; 2) application use cases +
+  `confirm-step-advance`; 3) adapters schema, migration, repository; 4) web composer draft
+  rehydration; 5) rail completeness + resuming indicator.
