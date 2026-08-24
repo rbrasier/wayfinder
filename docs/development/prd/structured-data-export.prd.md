@@ -50,6 +50,8 @@ does not record byte volume, and its `formats` array will need to name CSV.
 ## 4. Non-goals
 
 - A user-configurable CSV dialect (delimiter, quoting, encoding) — one correct dialect.
+- Neutralising, escaping or prefixing formula-like values in any format. Formulas may be
+  deliberate; only file-corrupting characters are the writer's concern.
 - Replacing XLSX. The confidence tab is a two-dimensional artefact CSV cannot represent, and
   XLSX stays the on-screen download.
 - Streaming very large exports — the existing buffer-and-store approach is retained.
@@ -100,6 +102,8 @@ so this phase generates no migration.
 
 - [ ] Values containing commas, double quotes and newlines round-trip intact (RFC 4180 quoting,
       with `""` for an embedded quote).
+- [ ] A value beginning `=`, `+`, `-` or `@` is written unchanged — not neutralised, prefixed or
+      quoted defensively — and the file still parses.
 - [ ] Exporting unchanged data twice produces byte-identical output — column order, row order and
       quoting are all deterministic.
 - [ ] CSV is subject to the same permission checks as XLSX and JSON — it is the same use case,
@@ -130,10 +134,12 @@ so this phase generates no migration.
 
 - **Silent corruption is the whole risk.** A wrongly escaped CSV still opens; the damage shows up
   in someone else's system. Escaping is tested per character class, not by eyeballing a sample.
-- **Excel and leading `=`.** A value starting `=`, `+`, `-` or `@` is interpreted as a formula by
-  spreadsheet applications. Open question: neutralise on export (safer, alters the value) or
-  emit faithfully (correct, carries a known risk)? Current position: emit faithfully and record
-  the decision, since this is a data export rather than a document.
+- **Formulas are emitted as held — decided, not open.** A value starting `=`, `+`, `-` or `@`
+  is interpreted as a formula by spreadsheet applications, and that is often deliberate; an
+  exported sheet may be *meant* to carry formulas, in CSV and more so in XLSX. Nothing is
+  neutralised. The writer intervenes only where a value would corrupt the file itself — an
+  unescaped delimiter, quote or newline — never over what a value means to the application that
+  opens it.
 - **Which sheet CSV represents.** XLSX carries a data tab and a confidence tab; CSV is a single
   table. Current position: CSV mirrors the data tab, with provenance columns from the provenance
   phase — the confidence detail stays in XLSX and JSON.

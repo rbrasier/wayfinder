@@ -84,12 +84,44 @@ read is the bug this ADR exists to prevent: the number alone no longer means any
 kind, and making the accessor the only supported path is what stops an existing caller silently
 misreading a verbatim row as an accuracy score.
 
-**3. `aggregateConfidence` stays a triage floor and says so.**
+**3. Aggregate confidence splits by scale; a single mixed-scale number is not produced.**
 
-It takes the minimum across a record's fields, which now spans two incomparable scales. Rather
-than inventing a weighting, it keeps its existing conservative behaviour and its documentation
-states plainly that it is a triage signal across mixed kinds — consistent with ADR-033, which
-already calls confidence weakly calibrated and explicitly not a gate.
+Today one function takes the minimum across a record's fields:
+
+```typescript
+export const aggregateConfidence = (record: ExtractionRecord): number =>
+  record.fields.reduce((lowest, field) => Math.min(lowest, clampConfidence(field.confidence)), 1);
+```
+
+Once two kinds exist, that minimum spans two incomparable scales — "how sure am I this is
+right" and "how sure am I I picked the right one" — and the smaller number wins regardless of
+which question it answers. That is not a conservative aggregate, it is a meaningless one.
+
+So the aggregate is computed **per kind**:
+
+```typescript
+export interface AggregateConfidence {
+  selection: number | null;
+  accuracy: number | null;
+}
+```
+
+`null` means the record has no fields of that kind, which is different from — and must not be
+rendered as — zero. `recordConfidenceBands` returns the matching `{ selection, accuracy }` band
+pair. Each scale keeps the existing conservative minimum *within* its own kind, so the triage
+behaviour operators already rely on is unchanged for every record that has one kind of field.
+
+The single-number `aggregateConfidence` and single-band `recordConfidenceBand` are removed
+rather than deprecated. Leaving them would leave a correct-looking call that silently answers
+the wrong question, which is the exact failure this decision exists to prevent.
+
+This reaches storage. `app_extraction_records.aggregate_confidence` is a persisted
+`real().notNull().default(0)` column, and the adapter computes it with its own copy of the
+reduction (`aggregateConfidenceOf` in `drizzle-extraction-run-repository.ts`, which omits the
+domain's clamp). The existing column keeps its meaning — every historical field is
+accuracy-kind, so it *is* the accuracy aggregate — and a nullable `aggregate_selection_confidence`
+joins it. The duplicate adapter implementation is deleted in favour of the domain function, so
+the two cannot drift again.
 
 **4. Derivation and source reference are recorded structurally, not in prose.**
 
@@ -100,21 +132,29 @@ absent for the ordinary case.
 
 This ADR records a derivation; it does not evaluate one. There is no formula language here.
 
-**5. `verbatimOnly` is a per-connection setting enforced where tool results enter the prompt.**
+**5. `verbatimOnly` is a Wayfinder-side guardrail, and claims nothing about the source.**
 
 It mirrors `communicatesExternally` exactly — an admin boolean, `notNull().default(false)`, so
 every existing connection keeps its current behaviour. Enforcement sits at the point where a tool
-result is folded into the turn, not in the UI: a toggle that asserts a guarantee the runtime does
-not keep is worse than no toggle.
+result is folded into the turn, not in the UI.
 
-Verbatim means byte-identical selection from the tool result. Truncation, whitespace
-normalisation and unit conversion all make a value `processed`. Drawing the line at
-byte-identical is the only definition that can be checked rather than argued about.
+**The guarantee is deliberately narrow, and stating its limit is part of the decision.** Enabling
+it means: *Wayfinder will not transform this connection's tool results — it will select from them
+or pass them through unchanged.* It does not mean the data is correct, current, or unmodified
+upstream. A broken MCP server, or a wrong record in the system behind it, is outside what
+Wayfinder can see or fix, and the toggle must not be presented as covering it. The scope is
+Wayfinder's own handling, which is the only thing Wayfinder is in a position to guarantee.
+
+Within that scope, verbatim means byte-identical selection from the tool result: truncation,
+whitespace normalisation and unit conversion all make a value `processed`. Byte-identical is the
+only definition that can be checked rather than argued about, and checking it is entirely a
+matter of comparing what Wayfinder received with what it used — no assumption about the source
+is required.
 
 ## Consequences
 
-- No migration for provenance, and no historical row changes meaning. The `verbatim_only` column
-  is the phase's only schema change.
+- No migration for provenance itself, and no historical row changes meaning. The schema changes
+  are `verbatim_only` and the aggregate columns that the per-kind split requires.
 - Every current reader of `confidence` is, strictly, reading an accuracy metric that may now
   describe a selection. Migrating them to the accessor is mandatory work in this phase, not a
   follow-up — the risk is silent, so it will not surface as a test failure on its own.
@@ -127,3 +167,10 @@ byte-identical is the only definition that can be checked rather than argued abo
 - `verbatimOnly` constrains what a flow may do with a connection, so an author who selects a
   verbatim-only tool for a step that composes prose must be refused. That refusal is a real
   authoring-time consequence, not just a runtime one.
+- The narrow scope has to survive contact with the UI. Copy that reads as "this data is
+  guaranteed accurate" would overclaim; the setting describes Wayfinder's handling and must be
+  worded that way wherever it appears.
+- Removing the single-number aggregate is a breaking change for every current caller —
+  `analytics.ts`, the extraction repository, `result-grid.tsx` and `run-report.tsx`. That breakage
+  is the point: each call site has to decide which scale it means, and the compiler now forces
+  the question.

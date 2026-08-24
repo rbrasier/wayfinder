@@ -84,10 +84,16 @@ opinion.
 a second, differently-shaped table. Emitting it as a second CSV would mean two files under one
 export key pattern; it stays in XLSX and JSON.
 
-**Formula-prefixed values are emitted faithfully.** A value beginning `=`, `+`, `-` or `@` is
-treated as a formula by spreadsheet applications. Neutralising it would alter exported data to
-defend against one consumer's behaviour, and this is a data export rather than a document. The
-value goes out as it came in, and the risk is recorded rather than silently mitigated.
+**Values are emitted exactly as held, formulas included.** A value beginning `=`, `+`, `-` or
+`@` is treated as a formula by spreadsheet applications, and that is frequently what an author
+wants — an exported sheet may deliberately carry formulas, in CSV and more so in XLSX. Wayfinder
+does not neutralise, escape or prefix them.
+
+The line is drawn at file integrity, not at content: the writer's job is to produce a file that
+opens and parses correctly, and it intervenes only where a value would otherwise **corrupt the
+file itself** — an unescaped delimiter, quote or line break breaking the record structure. What
+the value *means* to the receiving application is that application's business. A formula is
+well-formed CSV; a bare quote inside an unquoted field is not.
 
 ## Consequences
 
@@ -100,5 +106,6 @@ value goes out as it came in, and the risk is recorded rather than silently miti
   dropped sheet.
 - Fixing the dialect means a consumer needing semicolons or UTF-16 is unsupported until a
   requirement justifies it. Accepted deliberately.
-- Faithful emission of formula-prefixed values is a known, documented risk rather than a hidden
-  one, and can be revisited without changing the port.
+- Values pass through unaltered, so a deliberate formula survives the export intact. The writer
+  guarantees a well-formed file, not a particular interpretation of its contents by whatever
+  opens it.

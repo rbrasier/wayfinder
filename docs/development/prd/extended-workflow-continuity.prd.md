@@ -48,7 +48,7 @@ itself, so nothing downstream can distinguish a draft capture from a confirmed o
 
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
-| `SessionDraft` | `packages/domain/src/entities/session-draft.ts` | new | One unsent message per `(sessionId, userId)` |
+| `SessionDraft` | `packages/domain/src/entities/session-draft.ts` | new | One unsent message per `(sessionId, userId)`, scoped to the `nodeId` it was written against |
 | `ISessionDraftRepository` | `packages/domain/src/ports/session-draft-repository.ts` | new | Result pattern; `getForParticipant` / `upsert` / `clear` |
 | `SessionStepOutput` | `packages/domain/src/entities/session-step-output.ts` | existing | Gains `status?: StepOutputStatus` |
 | `StepOutputStatus` | same file | new | `"draft" \| "final"`; absent reads as `"final"` |
@@ -81,7 +81,7 @@ itself, so nothing downstream can distinguish a draft capture from a confirmed o
 
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
-| `app_session_drafts` | NEW — `id`, `session_id`, `user_id`, `body`, `created_at`, `updated_at`; unique `(session_id, user_id)` | yes (`app_`) |
+| `app_session_drafts` | NEW — `id`, `session_id`, `user_id`, `node_id`, `body`, `created_at`, `updated_at`; unique `(session_id, user_id)` | yes (`app_`) |
 | `app_session_step_outputs` | add column `status text not null default 'final'` | n/a (existing `app_` table) |
 
 The prefix is `app_`, not `core_`: `core_sessions` is the Better Auth login session
@@ -110,6 +110,8 @@ class cannot bite here; the declaration still records that judgement.
 ## 10. Acceptance criteria
 
 - [ ] Typing in the composer and reloading the page restores the exact text.
+- [ ] A draft whose `nodeId` no longer matches the session's `currentNodeId` is discarded on
+      load, not restored, and the stored row is deleted.
 - [ ] Sending a message clears the stored draft; the composer is empty after the turn.
 - [ ] Two participants in one session never see each other's unsent text.
 - [ ] A draft written on one browser is present when the same user opens the session elsewhere.
@@ -139,9 +141,10 @@ class cannot bite here; the declaration still records that judgement.
   phase doc specifies a debounce, and the write must stay off the turn's critical path.
 - **`StepState` widening.** Every rail consumer reads `stepState()`; a missed call site degrades
   the header silently rather than failing loudly. Keeping `stepState()` the sole reader is the mitigation.
-- **Draft staleness.** A draft written against one flow version is restored into a session that
-  may since have advanced a step. Open question: restore regardless, or drop the draft when
-  `currentNodeId` changed? Current position — restore regardless, because losing text is the
-  harm this phase exists to prevent.
+- **Draft staleness — decided: discard.** A draft is scoped to the step it was written against.
+  When the session has advanced past that step, the draft is deleted rather than restored,
+  because text written as a reply to one question must not be offered as an answer to another.
+  The accepted cost is that an operator who typed at length and then let the step advance loses
+  that text.
 - **Completeness cost.** `evaluate-step-readiness` runs a model call; the rail must read a
   cached/persisted signal rather than triggering evaluation on render.

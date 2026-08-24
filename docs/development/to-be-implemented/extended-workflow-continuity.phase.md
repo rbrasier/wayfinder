@@ -22,7 +22,9 @@ recorded on the output. See the PRD for full detail.
 
 ## 2. Goals
 
-- An unsent message survives reload, tab loss and a move to another device.
+- An unsent message survives reload, tab loss and a move to another device — while it is still
+  a reply to the step it was written for.
+- A draft whose step has since advanced is discarded rather than restored.
 - Two participants in one session keep separate unsent text.
 - A step output states on itself whether it is `draft` or `final`.
 - The rail shows completeness for the current step from an already-computed readiness signal.
@@ -45,6 +47,11 @@ through a new domain port. Deliberately *not* a column on `app_sessions`: that r
 by an optimistic-concurrency `version` and a turn lease, and debounced keystroke writes must
 not contend with turns (ADR-051).
 
+The row records the `nodeId` it was composed against, and a stale draft is **discarded**: on
+load, a draft whose `nodeId` no longer matches `currentNodeId` is deleted rather than
+rehydrated (ADR-051). Staleness is decided in the domain by a pure `isDraftStale()`, so the
+rule is testable without a session runner.
+
 **Finalisation and completeness.** An additive `status` column on `app_session_step_outputs`,
 read through a single `stepOutputStatus()` accessor that treats absent as `"final"` — the same
 idiom as the existing `sessionMode()`. `confirm-step-advance` promotes `draft` → `final`. The
@@ -55,7 +62,7 @@ render, because that use case makes a model call.
 
 | Path | New / changed | Notes |
 | ---- | ------------- | ----- |
-| `packages/domain/src/entities/session-draft.ts` | new | `SessionDraft`, `NewSessionDraft` |
+| `packages/domain/src/entities/session-draft.ts` | new | `SessionDraft` (carries `nodeId`), `NewSessionDraft`, `isDraftStale()` |
 | `packages/domain/src/ports/session-draft-repository.ts` | new | `getForParticipant` / `upsert` / `clear`, Result pattern |
 | `packages/domain/src/entities/session-step-output.ts` | changed | `StepOutputStatus`, `status?`, `stepOutputStatus()` |
 | `packages/domain/src/entities/index.ts`, `ports/index.ts` | changed | Re-exports |
@@ -83,12 +90,14 @@ render, because that use case makes a model call.
    `ISessionDraftRepository`. Type-only; no test file beyond the re-export check that
    `validate.sh` already performs.
 
-3. **Application — draft use cases.** Write `save-session-draft.test.ts` and
-   `clear-session-draft.test.ts` first, against an in-memory fake repository:
-   (a) saving upserts for `(sessionId, userId)`; (b) a second participant's save does not
-   overwrite the first's; (c) a non-participant is rejected with a `DomainError`;
-   (d) clearing removes only the caller's row; (e) clearing a non-existent draft succeeds.
-   Then implement.
+3. **Application — draft use cases.** Write `save-session-draft.test.ts`,
+   `load-session-draft.test.ts` and `clear-session-draft.test.ts` first, against an in-memory
+   fake repository: (a) saving upserts for `(sessionId, userId)` and stamps the current
+   `nodeId`; (b) a second participant's save does not overwrite the first's; (c) a
+   non-participant is rejected with a `DomainError`; (d) clearing removes only the caller's
+   row; (e) clearing a non-existent draft succeeds; (f) loading a draft whose `nodeId` matches
+   returns it; (g) loading a draft whose `nodeId` has been left behind returns nothing **and
+   deletes the row**, so the discard is not merely a render-time filter. Then implement.
 
 4. **Application — finalisation.** Add `confirm-step-advance.test.ts` cases:
    (a) capture while awaiting confirmation stores `draft`; (b) confirming promotes it to
@@ -116,6 +125,8 @@ render, because that use case makes a model call.
 Mirrors the PRD §10 checklist. Restated here as the build's test plan:
 
 - [ ] Composer text survives reload; sending clears the stored draft.
+- [ ] A draft written against a step the session has since left is discarded on load and its
+      row deleted — it is never rendered, and never re-appears on a later load.
 - [ ] Participants' drafts are isolated; a draft is visible to its author on another device.
 - [ ] `stepOutputStatus()` reads absent as `"final"`; pre-existing rows are unaffected.
 - [ ] Capture-while-awaiting stores `draft`; `confirm-step-advance` promotes to `final`;
@@ -133,6 +144,9 @@ surviving a document load, which cannot be asserted in-process.
   policy. No existing spec covers reload continuity in chat — `chat-composer-upload.spec.ts`
   is group 3 (file upload) — so extending one would misname it.
 - Happy path: type into the composer, reload, assert the text is restored.
+- Discard path: type into the composer, let the step advance, reload, assert the composer is
+  empty — the browser-visible half of the staleness rule, with the deletion itself asserted in
+  the application test.
 - User-visible error path: send the message, reload, assert the composer is empty.
 - Obeys the non-negotiables: no `test.skip()` on a self-probed condition, no `isVisible()`
   for control flow, no environment-variable gate.
@@ -147,9 +161,11 @@ rendering is an `apps/web` component test (step 7).
 - **Write volume** — debounce interval must keep the drafts table off the hot path.
 - **`StepState` widening** — every rail consumer reads `stepState()`; a missed call site
   degrades the header silently. Keeping it the sole reader is the mitigation.
-- **Draft staleness** — a draft restored after the session advanced a step may not fit the
-  current question. Current position: restore regardless; losing text is the harm this phase
-  exists to prevent. Open for review.
+- **Draft staleness — decided: discard.** A draft is a reply to a specific step; once the
+  session moves on, restoring it would invite the operator to send it against a question it was
+  never written for. The accepted cost is real: an operator who typed at length and then let
+  the step advance loses that text. The deletion is deliberate rather than a filter, so a stale
+  draft cannot resurface later.
 - **Completeness source** — `evaluate-step-readiness` makes a model call, so the rail must read
   a persisted signal. Where that signal is stored is settled during step 7 and may add a
   further additive column.

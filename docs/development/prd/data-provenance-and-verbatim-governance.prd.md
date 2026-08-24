@@ -53,7 +53,8 @@ The word "verbatim" appears nowhere in the codebase as a governance concept toda
 
 ## 3. Goals
 
-- An administrator can require verbatim-only processing per MCP connection.
+- An administrator can require verbatim-only processing per MCP connection, scoped to
+  Wayfinder's own handling of that connection's results.
 - A verbatim-sourced field reports selection confidence; a processed field reports accuracy
   confidence; the two are never averaged or compared.
 - Derived (calculated) fields are distinguishable from source data, carry their calculation
@@ -64,6 +65,9 @@ The word "verbatim" appears nowhere in the codebase as a governance concept toda
 ## 4. Non-goals
 
 - Retrofitting provenance onto historical extraction records — absent reads as `processed`.
+- **Any claim about the correctness of a source.** `verbatimOnly` governs what Wayfinder does
+  with a tool result. It cannot detect or compensate for a broken MCP server or bad data in the
+  system behind it, and must not be presented as if it could.
 - A calculation *engine*. This phase records a derivation and its inputs; it does not add a
   formula language or evaluate expressions.
 - Extending verbatim enforcement to non-MCP sources (uploads, RAG chunks, lookup sources).
@@ -79,6 +83,7 @@ The word "verbatim" appears nowhere in the codebase as a governance concept toda
 | `FieldSourceRef` | same file | new | Field-level source reference — document id plus locator |
 | `ExtractionFieldResult` | `packages/domain/src/entities/extraction-record.ts` | changed | Gains optional `provenance`, `sourceRef`, `derivation` |
 | `McpServer` | `packages/domain/src/entities/mcp-server.ts` | changed | Gains `verbatimOnly: boolean` |
+| `AggregateConfidence` | `packages/domain/src/entities/extraction-record.ts` | new | `{ selection: number \| null; accuracy: number \| null }` — replaces the single-number aggregate |
 
 ## 6. User stories
 
@@ -107,7 +112,7 @@ The word "verbatim" appears nowhere in the codebase as a governance concept toda
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
 | `admin_mcp_servers` | add column `verbatim_only boolean not null default false` | n/a (existing `admin_` table) |
-| `app_extraction_records` | none — provenance rides inside the existing `fields` jsonb (`$type<ExtractionFieldResult[]>`) | n/a |
+| `app_extraction_records` | provenance rides inside the existing `fields` jsonb (`$type<ExtractionFieldResult[]>`) — no change; add `aggregate_selection_confidence real` (nullable) and relax `aggregate_confidence` to nullable | n/a (existing `app_` table) |
 
 Note the prefix: MCP servers live in `admin_mcp_servers`
 (`packages/adapters/src/db/schema/admin.ts:169`), not under `app_`.
@@ -120,8 +125,20 @@ migration declares:
 -- data-impact: preserved — defaulted boolean column; every existing connection keeps current behaviour
 ```
 
-Provenance needs no migration at all: `app_extraction_records.fields` is already
+Provenance itself needs no migration: `app_extraction_records.fields` is already
 `jsonb().$type<ExtractionFieldResult[]>()`, and the new members are optional.
+
+The per-kind aggregate split does need one. `aggregate_confidence` is a persisted
+`real().notNull().default(0)` column; it keeps its exact meaning (every historical field is
+accuracy-kind, so it already *is* the accuracy aggregate) and gains a nullable
+`aggregate_selection_confidence` beside it. `aggregate_confidence` is relaxed to nullable so a
+record with no accuracy-kind fields reads as "no value of this kind" rather than as zero —
+which would render red. Both are widening changes that cannot fail on or destroy an existing
+row:
+
+```
+-- data-impact: preserved — additive nullable column plus a DROP NOT NULL; every existing row keeps its value
+```
 
 ## 9. Architectural decisions
 
@@ -134,7 +151,8 @@ Provenance needs no migration at all: `app_extraction_records.fields` is already
 
 **Requirement: Verbatim Processing Control**
 
-- [ ] A per-connection toggle enforces verbatim-only processing.
+- [ ] A per-connection toggle enforces verbatim-only processing of that connection's results
+      *within Wayfinder*, and its wording claims nothing about the source's own correctness.
 - [ ] The setting survives save and reload.
 - [ ] When enabled, no step may transform that connection's raw tool results — only select from them.
 - [ ] Changing it requires an explicit administrator confirmation.
@@ -147,6 +165,15 @@ Provenance needs no migration at all: `app_extraction_records.fields` is already
 - [ ] Visual styling differs by provenance type.
 - [ ] A source reference is reachable for every data element.
 - [ ] Every export format preserves provenance.
+
+**Aggregate confidence (follows from Provenance Differentiation)**
+
+- [ ] Aggregate confidence is reported per scale — `{ selection, accuracy }` — never as one
+      mixed-scale number.
+- [ ] `null` for a kind the record has no fields of, rendered as absent rather than as zero.
+- [ ] Each scale keeps the existing conservative minimum within its own kind.
+- [ ] The duplicate aggregate implementation in the extraction repository is removed in favour
+      of the domain function.
 
 **Requirement: Derived Field Handling**
 
@@ -169,12 +196,18 @@ Provenance needs no migration at all: `app_extraction_records.fields` is already
   assumes accuracy. Introducing selection confidence changes what the number means for some rows
   without changing its type. Mitigation: a single accessor that returns value *and* kind, made
   the only supported way to read it.
-- **`verbatimOnly` is a governance claim.** A toggle that asserts a guarantee the system does not
-  actually enforce is worse than no toggle. Enforcement must be at the point where tool results
-  enter the prompt, not merely advisory in the UI.
-- **"Transform" needs a hard definition.** Truncation, whitespace normalisation and unit
-  conversion are all arguably transformations. Open question — current position: verbatim means
-  byte-identical selection from the tool result, with any normalisation making it `processed`.
-- **`aggregateConfidence` mixes kinds.** It takes the minimum across a record's fields; once two
-  kinds exist, that minimum spans incomparable scales. Must either aggregate per kind or state
-  plainly that it is a triage floor and nothing more.
+- **`verbatimOnly` must not overclaim.** It is a Wayfinder-side guardrail: it guarantees
+  Wayfinder does not transform the result, and nothing about whether the source is correct or
+  the MCP server is healthy. Enforcement belongs where tool results enter the prompt rather than
+  in the UI, and the UI copy must describe handling, not accuracy.
+- **"Transform" needs a hard definition** — narrowed by the scoping above. Verbatim means
+  byte-identical selection from what Wayfinder received; truncation, whitespace normalisation
+  and unit conversion each make a value `processed`. Because the check compares what Wayfinder
+  received against what it used, it is decidable rather than a judgement call. The consequence
+  to confirm: a value the model tidied harmlessly is still `processed`.
+- **Aggregate split is a breaking change — decided, not open.** The single-number aggregate is
+  removed rather than deprecated, so every caller (`analytics.ts`, the extraction repository,
+  `result-grid.tsx`, `run-report.tsx`) must choose a scale. That breakage is deliberate: a
+  correct-looking call that silently answers the wrong question is the failure being prevented.
+  It reaches persisted data and the analytics report row, so it is the largest single change in
+  this phase.

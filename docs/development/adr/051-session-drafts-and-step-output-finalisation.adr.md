@@ -67,7 +67,7 @@ sees rows it cannot classify.
 ## Decision
 
 **1. An unsent message is a row in a new `app_session_drafts` table, unique on
-`(session_id, user_id)`.**
+`(session_id, user_id)`, scoped to the step it was written against.**
 
 Per-participant by construction. Server-side, so a draft follows the operator to another
 device rather than being trapped in one browser's storage. A separate table, so
@@ -78,6 +78,12 @@ critical path; sending or clearing the message deletes the row.
 `localStorage` was the cheaper option and is rejected: it fails the cross-device goal
 outright, and the codebase uses it only for view preferences
 (`apps/web/src/components/admin/field-report-section.tsx`), never for user-authored content.
+
+The row records the `nodeId` it was composed against. **A stale draft is discarded, not
+restored**: on load, a draft whose `nodeId` no longer matches the session's `currentNodeId` is
+deleted rather than rehydrated. A draft is a reply to a specific question, and once the session
+has moved past that question the text is no longer an answer to what is on screen. Restoring it
+would invite the operator to send it anyway, against a step it was never written for.
 
 **2. `SessionStepOutput` carries its own `status: "draft" | "final"`.**
 
@@ -112,9 +118,12 @@ given capture*. They answer different questions and neither is derived from the 
 - `app_session_step_outputs` gains a classifiable status, which is the groundwork for
   reopening a completed step to amend it. That editing path is explicitly **not** built here
   (see the PRD's §11); this ADR only makes the state representable.
-- A draft restored after the session advanced a step may no longer fit the current question.
-  Accepted: restoring stale text an operator can edit or delete is strictly better than
-  silently discarding work, which is the harm this ADR exists to prevent.
+- A draft is scoped to the step it was written against, so it cannot resurface against a
+  question it was never a reply to. The cost is a genuine loss: an operator who typed a long
+  message, let the step advance, and came back finds nothing. That is accepted as the lesser
+  harm — restoring text written for a question that is no longer on screen invites the operator
+  to send an answer to the wrong step, and a wrong answer sent confidently is worse than a
+  blank composer.
 - Two accessors (`stepOutputStatus`, alongside the existing `sessionMode`) now encode
   "absent means the legacy value". That idiom is deliberate and consistent — it is what lets
   additive columns ship without back-fills.

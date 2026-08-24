@@ -1,8 +1,8 @@
 # Phase — Data Provenance and Verbatim Governance
 
 - **Status**: Awaiting review
-- **Target version**: 0.32.0  (bump: MINOR — additive `admin_mcp_servers.verbatim_only` column
-  + new feature)
+- **Target version**: 0.32.0  (bump: MINOR — additive `admin_mcp_servers.verbatim_only` column,
+  aggregate-confidence columns on `app_extraction_records`, + new feature)
 - **PRD**: `docs/development/prd/data-provenance-and-verbatim-governance.prd.md`
 - **ADRs**: ADR-053 (field provenance and dual confidence)
 - **Depends on**: ADR-024 (operator correction authoritative), ADR-032 (MCP tool-loop pre-pass),
@@ -21,8 +21,10 @@ governance concept. See the PRD.
 
 ## 2. Goals
 
-- Per-connection verbatim-only enforcement, confirmed before it changes.
-- Selection confidence for verbatim fields, accuracy confidence for processed ones, never mixed.
+- Per-connection verbatim-only enforcement of *Wayfinder's own handling*, confirmed before it
+  changes, and worded so it claims nothing about the source's correctness.
+- Selection confidence for verbatim fields, accuracy confidence for processed ones, never mixed —
+  including in aggregates, which are reported per scale.
 - Derived fields distinguishable, with their method and source keys recorded.
 - Human corrections recorded as provenance rather than as maximum confidence.
 - Provenance preserved through every export format.
@@ -32,6 +34,8 @@ governance concept. See the PRD.
 - Back-filling provenance onto historical records — absent reads as `processed`.
 - A formula language or calculation engine; a derivation is recorded, not evaluated.
 - Verbatim enforcement for uploads, RAG chunks or lookup sources.
+- Detecting or compensating for a broken MCP server or bad data in the system behind it. That is
+  outside what Wayfinder can see, and the toggle must not imply otherwise.
 - Provenance on `SessionStepOutput` — extraction records only.
 
 ## 4. Approach
@@ -46,14 +50,25 @@ every existing `confidence` reader onto it is in-scope work, because the failure
 misinterpretation rather than a compile error.
 
 `verbatimOnly` mirrors `communicatesExternally` — an admin boolean defaulted `false` on
-`admin_mcp_servers` — and is enforced where tool results enter the turn, not in the UI.
+`admin_mcp_servers` — and is enforced where tool results enter the turn, not in the UI. Its scope
+is deliberately narrow: Wayfinder will not transform the result. It says nothing about whether
+the source is correct, which Wayfinder cannot know (ADR-053 §5).
+
+Aggregate confidence splits by scale. A single minimum across mixed kinds is not conservative,
+it is meaningless, so `aggregateConfidence` and `recordConfidenceBand` are replaced by per-kind
+equivalents returning `null` where a record has no fields of that kind. This reaches persisted
+data: `aggregate_confidence` keeps its meaning as the accuracy aggregate and gains a nullable
+`aggregate_selection_confidence`, and the adapter's duplicate reduction is deleted.
 
 ## 5. Key entities / files
 
 | Path | New / changed | Notes |
 | ---- | ------------- | ----- |
 | `packages/domain/src/entities/field-provenance.ts` | new | `FieldProvenance`, `ConfidenceKind`, `FieldDerivation`, `FieldSourceRef`, accessors |
-| `packages/domain/src/entities/extraction-record.ts` | changed | Optional `provenance`, `sourceRef`, `derivation`; `applyFieldEdit` stamps `human_corrected` |
+| `packages/domain/src/entities/extraction-record.ts` | changed | Optional `provenance`, `sourceRef`, `derivation`; `applyFieldEdit` stamps `human_corrected`; `AggregateConfidence`, `aggregateConfidenceByKind`, `recordConfidenceBands` replacing the single-number pair |
+| `packages/domain/src/entities/analytics.ts` | changed | Report row carries per-scale aggregates |
+| `packages/adapters/src/repositories/drizzle-extraction-run-repository.ts` | changed | Delete the duplicate `aggregateConfidenceOf`; persist both aggregates |
+| `apps/web/src/components/extraction/result-grid.tsx`, `run-report.tsx` | changed | Per-scale aggregate display |
 | `packages/domain/src/entities/mcp-server.ts` | changed | `verbatimOnly` on `McpServer`, `NewMcpServer`, `McpServerUpdate` |
 | `packages/domain/src/entities/index.ts` | changed | Re-exports |
 | `packages/application/src/use-cases/session/run-mcp-node.ts` | changed | Verbatim enforcement at tool-result ingestion |
@@ -82,8 +97,16 @@ misinterpretation rather than a compile error.
 3. **Domain — MCP verbatim flag.** Add `verbatimOnly` to the three MCP interfaces. Test:
    an existing server object with no flag reads as `false`.
 
-4. **Domain — aggregate documentation.** Update `aggregateConfidence`'s contract to state it is a
-   triage floor across mixed kinds. Test asserts existing minimum behaviour is unchanged.
+4. **Domain — per-scale aggregates.** Extend `extraction-record.test.ts` first: (a) a record of
+   only accuracy-kind fields returns that minimum as `accuracy` and `null` as `selection` —
+   byte-identical to today's number for every historical record; (b) a record of only verbatim
+   fields returns `selection` and `null` accuracy; (c) a mixed record returns each kind's own
+   minimum, and neither influences the other; (d) an empty record returns `null` for both, not
+   zero; (e) `recordConfidenceBands` maps each non-null aggregate through `confidenceBand` and
+   leaves `null` as `null`. Then implement `AggregateConfidence`,
+   `aggregateConfidenceByKind` and `recordConfidenceBands`, and **delete**
+   `aggregateConfidence`/`recordConfidenceBand` so no call site can keep asking the mixed-scale
+   question.
 
 5. **Application — verbatim enforcement.** Write `run-mcp-node.test.ts` cases first: (a) with
    `verbatimOnly` off, behaviour is byte-for-byte today's; (b) with it on, a tool result folded
@@ -95,10 +118,19 @@ misinterpretation rather than a compile error.
    This is the silent-risk step: enumerate readers by search, not by memory, and assert each in
    its own suite that a `verbatim` row is labelled selection, not accuracy.
 
-7. **Adapters — column, migration, mapping.** Add `verbatim_only` mirroring
-   `communicates_externally`; generate the migration (never `drizzle-kit push`) carrying:
-   `-- data-impact: preserved — defaulted boolean column; every existing connection keeps current behaviour`.
-   Repository test round-trips the flag and asserts an existing row reads `false`.
+7. **Adapters — columns, migration, mapping.** Add `verbatim_only` mirroring
+   `communicates_externally`. Add nullable `aggregate_selection_confidence` and relax
+   `aggregate_confidence` to nullable. **Delete `aggregateConfidenceOf`** — the adapter's private
+   copy of the reduction, which also omits the domain's clamp — and call the domain function.
+   Generate one migration (never `drizzle-kit push`) carrying:
+   `-- data-impact: preserved — defaulted boolean, additive nullable column and a DROP NOT NULL; every existing row keeps its value`.
+   Repository tests: the flag round-trips and an existing row reads `false`; an existing record's
+   persisted accuracy aggregate is unchanged by the migration; a record with no accuracy-kind
+   fields persists `null`, not `0`.
+
+7b. **Analytics and report readers.** `ExtractionFieldReportRow.aggregateConfidence` becomes
+   per-scale, and `result-grid.tsx` / `run-report.tsx` render each scale separately. Compiler
+   breakage from step 4's deletion enumerates these call sites — do not hunt for them by memory.
 
 8. **Web — admin toggle.** Component test first: the toggle requires an explicit confirmation
    before it changes, and the setting survives save and reload. Then implement alongside the
@@ -118,7 +150,10 @@ misinterpretation rather than a compile error.
 Mirrors PRD §10 across all three requirements:
 
 - [ ] Verbatim-only toggle exists per connection, persists through save/reload, and requires
-      explicit confirmation to change.
+      explicit confirmation to change; its copy describes Wayfinder's handling, not source accuracy.
+- [ ] Aggregate confidence is reported per scale, `null` where a kind is absent, with each scale
+      keeping its own conservative minimum; the single-number aggregate no longer exists.
+- [ ] An existing record's accuracy aggregate is byte-identical before and after the change.
 - [ ] When enabled, raw tool results cannot be transformed — only selected from.
 - [ ] Existing connections are unaffected (`verbatim_only` defaults `false`).
 - [ ] Verbatim fields show selection confidence; processed fields show accuracy confidence.
@@ -145,14 +180,19 @@ tests (steps 8–9).
 - **Silent breaking read.** Every existing `confidence` consumer assumes accuracy; nothing fails
   to compile when the meaning changes. Step 6 is the mitigation and must enumerate readers by
   search rather than recall.
-- **A governance claim that is not kept.** If enforcement is incomplete, `verbatimOnly` asserts a
-  guarantee the runtime does not honour — worse than not offering the toggle. Enforcement belongs
-  at tool-result ingestion.
-- **The definition of "transform".** Current position: verbatim is byte-identical selection; any
-  normalisation makes it `processed`. Open for review, since it makes unit conversion a
-  processing step.
-- **Mixed-kind aggregation.** `aggregateConfidence` spans two incomparable scales. Current
-  position: keep the conservative minimum and document it as triage only, consistent with
-  ADR-033's "not a gate".
+- **Overclaiming.** `verbatimOnly` guarantees only that Wayfinder does not transform the result.
+  A broken MCP server or bad upstream data is outside its reach, and UI copy that implies
+  otherwise is the real risk here — the enforcement itself is a narrow, checkable comparison
+  between what Wayfinder received and what it used.
+- **The definition of "transform"** — narrowed by the scoping above, but still worth a look.
+  Verbatim is byte-identical selection from what Wayfinder received, so any normalisation
+  (whitespace, truncation, unit conversion) makes a value `processed`. Because the comparison is
+  entirely between what Wayfinder received and what it used, this is checkable rather than a
+  judgement call. The consequence to confirm: a value the model tidied is `processed` even when
+  the tidying was harmless.
+- **Aggregate split reaches persisted data and analytics.** Removing the single-number aggregate
+  breaks `analytics.ts`, the extraction repository and two components by design, so each picks a
+  scale deliberately. The migration must leave every existing record's accuracy aggregate
+  untouched — asserted in step 7.
 - **Merge semantics.** `mergeFieldResults` keeps the highest confidence per key; a
   `human_corrected` value must not lose to a confident model value. Covered by step 2(d).

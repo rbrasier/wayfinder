@@ -27,6 +27,7 @@ The egress audit is already in good shape — `extraction_run.exported` records 
 ## 3. Non-goals
 
 - Configurable dialects, encodings or a BOM option.
+- Neutralising formula-like values in CSV or XLSX — formulas may be deliberate.
 - Replacing XLSX — the confidence tab is two-dimensional and stays there.
 - Streaming large exports.
 - Audit schema changes. `core_audit_log` is append-only (ADR-033) and gains no columns.
@@ -61,8 +62,9 @@ use case, CSV inherits its permission checks unchanged — there is no second ro
    case per hazard: (a) a value containing a comma is quoted; (b) an embedded double quote is
    doubled and the field quoted; (c) a value containing `CRLF` and one containing bare `LF` are
    both quoted and survive intact; (d) a value needing no quoting is emitted bare; (e) an empty
-   value and a missing key both produce an empty field; (f) a leading `=` is emitted faithfully
-   per ADR-054; (g) header row uses labels, data rows follow column order; (h) the same input
+   value and a missing key both produce an empty field; (f) a value beginning `=`, `+`, `-` or `@` is written
+   unchanged — not neutralised, prefixed or defensively quoted — and the file still parses
+   (ADR-054); (g) header row uses labels, data rows follow column order; (h) the same input
    twice produces byte-identical output. Then implement.
 
 3. **Application — third export output.** Extend `export-run-results.test.ts` first: (a) a CSV is
@@ -124,8 +126,10 @@ adapter test (step 2) — the bug can be described without saying "browser".
 
 - **Silent corruption is the whole risk.** Wrong escaping still opens; the damage appears
   downstream. Mitigated by per-character-class tests rather than sample inspection.
-- **Formula-prefixed values** (`=`, `+`, `-`, `@`) are emitted faithfully per ADR-054, a known
-  documented risk rather than a silent mitigation. Open for review.
+- **Formulas are emitted as held — decided.** An exported sheet may deliberately carry formulas,
+  so nothing is neutralised. The writer's remit is a well-formed file: it intervenes only where a
+  value would corrupt the record structure, never over how the receiving application interprets
+  a value.
 - **CSV represents the data tab only.** The confidence tab stays in XLSX and JSON; a request for
   it in CSV is a new design question by construction.
 - **Sequencing.** Step 5 depends on the provenance phase. If that slips, CSV ships without
