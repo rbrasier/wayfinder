@@ -8,3 +8,5 @@ export * from "./seed-admin";
 export * from "./seed-roles";
 export * from "./session-resolver";
 export * from "./cached-session-resolver";
+export * from "./session-concurrency";
+export * from "./session-revocation";

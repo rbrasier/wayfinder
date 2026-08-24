@@ -11,6 +11,8 @@ import {
 } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { core_sessions, core_users } from "../db/schema/core";
+import { enforceSessionConcurrency } from "./session-concurrency";
+import type { SessionRevocationRegistry } from "./session-revocation";
 import { commonNameFrom, emailAddressFrom } from "./subject-dn";
 
 export interface PkiConfig {
@@ -42,6 +44,7 @@ export class PkiCertAdapter {
     private readonly userRepository: IUserRepository,
     private readonly config: PkiConfig,
     private readonly runtimeConfig: PkiAuthConfigSource,
+    private readonly sessionRevocations: SessionRevocationRegistry,
   ) {}
 
   async authenticate(
@@ -84,6 +87,21 @@ export class PkiCertAdapter {
 
     const updateResult = await this.updateCertFields(user.id, identity);
     if (updateResult.error) return updateResult;
+
+    // Certificate sign-in mints its own rows, so Better Auth's hook never sees
+    // it; the limit is applied here or not at all (ADR-035 §3).
+    const admitted = await enforceSessionConcurrency(this.db, this.sessionRevocations, {
+      userId: user.id,
+      policy: authConfig.sessionPolicy,
+    });
+    if (!admitted) {
+      return err(
+        domainError(
+          "UNAUTHORIZED",
+          "You already have the maximum number of active sessions allowed. Sign out on another device and try again.",
+        ),
+      );
+    }
 
     return this.createSession(user.id, authConfig.pki.sessionTtlHours);
   }

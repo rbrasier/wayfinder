@@ -10,6 +10,8 @@ import {
   type User,
   type UserUpdate,
 } from "@rbrasier/domain";
+import { DEFAULT_SESSION_POLICY } from "@rbrasier/domain";
+import { createSessionRevocationRegistry } from "../session-revocation";
 import { PkiCertAdapter, type PkiConfig } from "../pki-cert-adapter";
 
 // ── in-memory user repository fake ──────────────────────────────────────────
@@ -115,6 +117,7 @@ const makeAuthConfigSource = (overrides: Partial<AuthConfig> = {}) => {
     entra: { tenantId: "", clientId: "", clientSecret: "" },
     pkiEnabled: true,
     pki: { sessionTtlHours: 8 },
+    sessionPolicy: DEFAULT_SESSION_POLICY,
     ...overrides,
   };
   return {
@@ -146,7 +149,13 @@ const makePkiAdapter = (
 ) => {
   const users = new InMemoryUsers();
   const resolvedDb = db ?? makeDbMock();
-  const adapter = new PkiCertAdapter(resolvedDb as never, users, config, authConfig);
+  const adapter = new PkiCertAdapter(
+    resolvedDb as never,
+    users,
+    config,
+    authConfig,
+    createSessionRevocationRegistry(),
+  );
   return { adapter, users, db: resolvedDb, authConfig };
 };
 
@@ -165,6 +174,7 @@ describe("PkiCertAdapter", () => {
             users,
             { trustedProxyIps: [] },
             makeAuthConfigSource(),
+            createSessionRevocationRegistry(),
           ),
       ).not.toThrow();
     });

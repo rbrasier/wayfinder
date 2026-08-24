@@ -19,6 +19,7 @@ import {
   type DirectoryConfig,
   type EntraCredentials,
 } from "./runtime-config";
+import { DEFAULT_SESSION_POLICY } from "./session-policy";
 
 describe("AuthConfig defaults", () => {
   it("enables email/password and disables Entra by default", () => {
@@ -78,6 +79,9 @@ describe("isEntraConfigured", () => {
 describe("isAtLeastOneMethodEnabled", () => {
   const blankEntra = { tenantId: "", clientId: "", clientSecret: "" };
   const pkiOff = { pkiEnabled: false, pki: { sessionTtlHours: 8 } };
+  // The lockout guard reads method flags only; the session policy just has to be
+  // present for the config to be a whole AuthConfig.
+  const sessionPolicy = DEFAULT_SESSION_POLICY;
 
   it("is true when only email/password is enabled", () => {
     const config: AuthConfig = {
@@ -85,6 +89,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entraEnabled: false,
       entra: blankEntra,
       ...pkiOff,
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, false)).toBe(true);
@@ -96,6 +101,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entraEnabled: true,
       entra: blankEntra,
       ...pkiOff,
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, false)).toBe(true);
@@ -107,6 +113,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entraEnabled: false,
       entra: blankEntra,
       ...pkiOff,
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, false)).toBe(false);
@@ -119,6 +126,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entra: blankEntra,
       pkiEnabled: true,
       pki: { sessionTtlHours: 8 },
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, true)).toBe(true);
@@ -133,6 +141,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entra: blankEntra,
       pkiEnabled: true,
       pki: { sessionTtlHours: 8 },
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, false)).toBe(false);
