@@ -19,6 +19,7 @@ import {
   SITE_BANNER_MIN_TEXT_SIZE_PT,
   STORAGE_CONFIG_SETTING_KEY,
   type SiemConfig,
+  createDefaultEmailConfig,
   isAiConfigured,
   isAtLeastOneMethodEnabled,
   isEmailConfigured,
@@ -45,6 +46,7 @@ import { DEFAULT_MODELS_FOR, RuntimeConfigStore, resolveContextWindow } from "@r
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { authSettingsProcedures } from "./settings-auth";
+import { directorySettingsProcedures } from "./settings-directory";
 import { apiKeyState } from "./settings-secrets";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
@@ -177,19 +179,7 @@ const emailConfigInputSchema = z.object({
   m365ClientSecret: z.string().nullable().optional(),
 });
 
-const DEFAULT_EMAIL_CONFIG: EmailConfig = {
-  provider: "smtp",
-  host: "",
-  port: 587,
-  secure: false,
-  username: "",
-  password: "",
-  fromAddress: "",
-  fromName: null,
-  m365TenantId: "",
-  m365ClientId: "",
-  m365ClientSecret: "",
-};
+const DEFAULT_EMAIL_CONFIG: EmailConfig = createDefaultEmailConfig();
 
 const DEFAULT_NOTIFICATION_PREFS: NotificationPreferences = {
   sessionComplete: true,
@@ -324,6 +314,8 @@ export const settingsRouter = router({
     }),
 
   ...authSettingsProcedures,
+
+  ...directorySettingsProcedures,
 
   getN8nConfig: adminProcedure.query(async ({ ctx }) => {
     const config: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();
@@ -548,6 +540,9 @@ export const settingsRouter = router({
         JSON.stringify(merged),
       );
       if (result.error) throw toTrpcError(result.error);
+      // The approver directory inherits this app registration by default, so a
+      // rotated M365 secret must reach it without a restart.
+      ctx.container.runtimeConfig.invalidateEmail();
       return { ok: true };
     }),
 

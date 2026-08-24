@@ -289,6 +289,60 @@ describe("PkiCertAdapter", () => {
       expect(result.error?.code).toBe("VALIDATION_FAILED");
     });
 
+    it("keeps a surname-first common name whole instead of truncating at the escaped comma", async () => {
+      const { adapter, users } = makePkiAdapter();
+      const result = await adapter.authenticate(
+        validHeaders({
+          "x-ssl-client-subject-dn": "CN=Ravenscroft\\, Cordelia,OU=Technology,O=Wayfinder",
+        }),
+        "10.0.0.1",
+      );
+      expect(result.error).toBeUndefined();
+      const created = [...users.store.values()].find((u) => u.email === "jane@acme.com");
+      expect(created?.name).toBe("Ravenscroft, Cordelia");
+    });
+
+    it("falls back to the subject's emailAddress attribute when there is no SAN email", async () => {
+      const { adapter, users } = makePkiAdapter();
+      const result = await adapter.authenticate(
+        validHeaders({
+          "x-ssl-client-san-email": null,
+          "x-ssl-client-subject-dn": "CN=Jane Smith,emailAddress=jane@acme.com,O=Acme",
+        }),
+        "10.0.0.1",
+      );
+      expect(result.error).toBeUndefined();
+      const created = [...users.store.values()].find((u) => u.email === "jane@acme.com");
+      expect(created?.name).toBe("Jane Smith");
+    });
+
+    it("prefers the SAN email over the subject's emailAddress attribute", async () => {
+      const { adapter, users } = makePkiAdapter();
+      const result = await adapter.authenticate(
+        validHeaders({
+          "x-ssl-client-san-email": "san@acme.com",
+          "x-ssl-client-subject-dn": "CN=Jane Smith,emailAddress=dn@acme.com,O=Acme",
+        }),
+        "10.0.0.1",
+      );
+      expect(result.error).toBeUndefined();
+      expect([...users.store.values()].some((u) => u.email === "san@acme.com")).toBe(true);
+      expect([...users.store.values()].some((u) => u.email === "dn@acme.com")).toBe(false);
+    });
+
+    it("reads a legacy oneline subject DN, which Apache and older nginx still send", async () => {
+      const { adapter, users } = makePkiAdapter();
+      const result = await adapter.authenticate(
+        validHeaders({
+          "x-ssl-client-san-email": null,
+          "x-ssl-client-subject-dn": "/C=GB/O=Acme/CN=bob@acme.com",
+        }),
+        "10.0.0.1",
+      );
+      expect(result.error).toBeUndefined();
+      expect([...users.store.values()].some((u) => u.email === "bob@acme.com")).toBe(true);
+    });
+
     it("returns VALIDATION_FAILED when Subject-DN header is missing", async () => {
       const { adapter } = makePkiAdapter();
       const result = await adapter.authenticate(

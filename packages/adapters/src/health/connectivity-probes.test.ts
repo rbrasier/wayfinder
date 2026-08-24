@@ -204,7 +204,7 @@ describe("probeEmbeddingsConnectivity", () => {
 describe("probeEntraConnectivity", () => {
   it("runs a scoped Graph call when configured", async () => {
     const graph = {
-      isConfigured: () => true,
+      isConfigured: async () => true,
       get: vi.fn().mockResolvedValue(ok({ value: [] })),
     };
     const result = await probeEntraConnectivity(graph);
@@ -214,7 +214,7 @@ describe("probeEntraConnectivity", () => {
   });
 
   it("skips when Graph is not configured", async () => {
-    const graph = { isConfigured: () => false, get: vi.fn() };
+    const graph = { isConfigured: async () => false, get: vi.fn() };
     const result = await probeEntraConnectivity(graph);
 
     expect(result.skipped).toBe(true);
@@ -223,7 +223,7 @@ describe("probeEntraConnectivity", () => {
 
   it("reports the sanitised Graph error message on failure", async () => {
     const graph = {
-      isConfigured: () => true,
+      isConfigured: async () => true,
       get: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "Graph request failed (403)."))),
     };
     const result = await probeEntraConnectivity(graph);

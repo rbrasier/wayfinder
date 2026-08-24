@@ -265,6 +265,120 @@ describe("settings router — mergeAuthConfig", () => {
   });
 });
 
+import { directoryConfigInputSchema, mergeDirectoryConfig } from "./settings-directory";
+
+const storedDirectory = {
+  enabled: true,
+  credentialSource: "own" as const,
+  entra: { tenantId: "stored-tenant", clientId: "stored-client", clientSecret: "stored-secret" },
+};
+
+describe("settings router — mergeDirectoryConfig", () => {
+  it("keeps the stored secret when the incoming secret is blank", () => {
+    const merged = mergeDirectoryConfig(
+      {
+        enabled: true,
+        credentialSource: "own",
+        entra: { tenantId: "new-tenant", clientId: "new-client", clientSecret: "" },
+      },
+      storedDirectory,
+    );
+
+    expect(merged.entra.clientSecret).toBe("stored-secret");
+    expect(merged.entra.tenantId).toBe("new-tenant");
+  });
+
+  it("treats an omitted secret the same as a blank one", () => {
+    const merged = mergeDirectoryConfig(
+      { enabled: true, credentialSource: "own", entra: { tenantId: "t", clientId: "c" } },
+      storedDirectory,
+    );
+
+    expect(merged.entra.clientSecret).toBe("stored-secret");
+  });
+
+  it("replaces the stored secret when a new one is provided", () => {
+    const merged = mergeDirectoryConfig(
+      {
+        enabled: true,
+        credentialSource: "own",
+        entra: { tenantId: "t", clientId: "c", clientSecret: "rotated-secret" },
+      },
+      storedDirectory,
+    );
+
+    expect(merged.entra.clientSecret).toBe("rotated-secret");
+  });
+
+  it("applies the incoming switch and credential source", () => {
+    const merged = mergeDirectoryConfig(
+      { enabled: false, credentialSource: "email", entra: { tenantId: "", clientId: "" } },
+      storedDirectory,
+    );
+
+    expect(merged.enabled).toBe(false);
+    expect(merged.credentialSource).toBe("email");
+  });
+
+  // Switching to an inherited source must not throw the separate credentials
+  // away: an admin who switches back should find them still there.
+  it("keeps the separate credentials when the source moves to an inherited one", () => {
+    const merged = mergeDirectoryConfig(
+      { enabled: true, credentialSource: "auth", entra: { tenantId: "", clientId: "" } },
+      storedDirectory,
+    );
+
+    expect(merged.entra).toEqual(storedDirectory.entra);
+  });
+});
+
+describe("settings router — directoryConfigInputSchema", () => {
+  it("accepts each of the three credential sources", () => {
+    for (const credentialSource of ["email", "auth", "own"]) {
+      const parsed = directoryConfigInputSchema.safeParse({
+        enabled: true,
+        credentialSource,
+        entra: { tenantId: "t", clientId: "c" },
+      });
+
+      expect(parsed.success, credentialSource).toBe(true);
+    }
+  });
+
+  it("rejects a credential source it does not know", () => {
+    const parsed = directoryConfigInputSchema.safeParse({
+      enabled: true,
+      credentialSource: "ldap",
+      entra: { tenantId: "t", clientId: "c" },
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("defaults blank credentials so a form with an inherited source still validates", () => {
+    const parsed = directoryConfigInputSchema.safeParse({
+      enabled: true,
+      credentialSource: "email",
+      entra: {},
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it("carries no base URL or authority, which stay in the environment", () => {
+    const parsed = directoryConfigInputSchema.parse({
+      enabled: true,
+      credentialSource: "own",
+      entra: { tenantId: "t", clientId: "c", clientSecret: "s" },
+      baseUrl: "https://attacker.example",
+      authority: "https://attacker.example",
+    });
+
+    expect(parsed).not.toHaveProperty("baseUrl");
+    expect(parsed).not.toHaveProperty("authority");
+  });
+});
+
 describe("settings router — session policy", () => {
   // The auth card and the session-policy card share one stored row, so saving
   // either must leave the other's fields exactly as they were.

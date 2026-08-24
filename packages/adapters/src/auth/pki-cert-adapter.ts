@@ -13,6 +13,7 @@ import type { Database } from "../db/client";
 import { core_sessions, core_users } from "../db/schema/core";
 import { enforceSessionConcurrency } from "./session-concurrency";
 import type { SessionRevocationRegistry } from "./session-revocation";
+import { commonNameFrom, emailAddressFrom } from "./subject-dn";
 
 export interface PkiConfig {
   // The trust anchor, read from PKI_TRUSTED_PROXY_IPS and enforced here — the
@@ -114,32 +115,32 @@ export class PkiCertAdapter {
       return err(domainError("VALIDATION_FAILED", "Missing required certificate headers."));
     }
 
-    const email = (sanEmail?.trim() || null) ?? this.extractEmailFromDn(subjectDn);
+    // SAN rfc822Name first, then the subject's own emailAddress attribute — a
+    // CA that issues without a SAN normally puts the address there — and only
+    // then a CN that happens to be an address.
+    const email =
+      (sanEmail?.trim() || null) ??
+      emailAddressFrom(subjectDn) ??
+      this.extractEmailFromDn(subjectDn);
     if (!email) {
       return err(
         domainError(
           "VALIDATION_FAILED",
-          "Cannot extract email from certificate: no SAN email and CN is not an email address.",
+          "Cannot extract email from certificate: no SAN email, no emailAddress in the subject, and CN is not an email address.",
         ),
       );
     }
 
-    const name = this.extractCnFromDn(subjectDn) ?? email;
+    const name = commonNameFrom(subjectDn) ?? email;
     // Certificate subject names carry whatever case the CA issued; the account
     // key must not depend on it, or the same person gets a second user row.
     return ok({ email: normaliseEmail(email), name, fingerprint, subjectDn });
   }
 
   private extractEmailFromDn(dn: string): string | null {
-    const cnMatch = dn.match(/CN=([^,]+)/i);
-    if (!cnMatch?.[1]) return null;
-    const cnValue = cnMatch[1].trim();
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cnValue) ? cnValue : null;
-  }
-
-  private extractCnFromDn(dn: string): string | null {
-    const cnMatch = dn.match(/CN=([^,]+)/i);
-    return cnMatch?.[1] ? cnMatch[1].trim() : null;
+    const commonName = commonNameFrom(dn);
+    if (!commonName) return null;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(commonName) ? commonName : null;
   }
 
   private async findOrCreateUser(identity: CertIdentity): Promise<Result<{ id: string }>> {

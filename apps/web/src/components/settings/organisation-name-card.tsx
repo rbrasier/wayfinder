@@ -11,7 +11,7 @@ import { trpc } from "@/trpc/client";
 // `onValueChange` lets the first-run wizard save the field when the admin clicks
 // Continue without having pressed Save — the settings page passes nothing and
 // keeps the Save-only behaviour.
-export function OrganisationNameCard({
+export function OrganisationNameFields({
   onValueChange,
 }: {
   onValueChange?: (value: string) => void;
@@ -41,31 +41,46 @@ export function OrganisationNameCard({
   };
 
   return (
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <Label htmlFor="org-name">Organisation name</Label>
+        <p className="text-xs text-muted-foreground">
+          Used in AI system prompts to give the assistant context about your organisation.
+        </p>
+        <Input
+          id="org-name"
+          value={value}
+          onChange={(e) => handleChange(e.target.value)}
+          placeholder="e.g. Acme Corporation"
+          disabled={orgNameQuery.isLoading}
+          // Password managers / autofill inject attributes (e.g. caret-color,
+          // fdprocessedid) onto inputs after SSR, producing a benign dev-mode
+          // hydration warning. Suppress it for this field only.
+          suppressHydrationWarning
+        />
+      </div>
+      <Button onClick={handleSave} disabled={setMutation.isPending || orgNameQuery.isLoading}>
+        {setMutation.isPending ? "Saving…" : "Save"}
+      </Button>
+    </div>
+  );
+}
+
+// The first-run wizard shows the name on its own, without the organisations
+// toggle — its deployment step already asks single-or-multiple, so a second
+// switch there would contradict the choice the admin just made.
+export function OrganisationNameCard({
+  onValueChange,
+}: {
+  onValueChange?: (value: string) => void;
+}) {
+  return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">General</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-1">
-          <Label htmlFor="org-name">Organisation name</Label>
-          <p className="text-xs text-muted-foreground">
-            Used in AI system prompts to give the assistant context about your organisation.
-          </p>
-          <Input
-            id="org-name"
-            value={value}
-            onChange={(e) => handleChange(e.target.value)}
-            placeholder="e.g. Acme Corporation"
-            disabled={orgNameQuery.isLoading}
-            // Password managers / autofill inject attributes (e.g. caret-color,
-            // fdprocessedid) onto inputs after SSR, producing a benign dev-mode
-            // hydration warning. Suppress it for this field only.
-            suppressHydrationWarning
-          />
-        </div>
-        <Button onClick={handleSave} disabled={setMutation.isPending || orgNameQuery.isLoading}>
-          {setMutation.isPending ? "Saving…" : "Save"}
-        </Button>
+      <CardContent>
+        <OrganisationNameFields onValueChange={onValueChange} />
       </CardContent>
     </Card>
   );

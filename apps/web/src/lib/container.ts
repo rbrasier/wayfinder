@@ -204,6 +204,7 @@ import { buildFlowPortability } from "./container-flow-portability";
 import { buildSessionAuth } from "./container-session-auth";
 import { buildExtractionModule } from "./container-extraction";
 import { buildPeopleDirectory } from "./container-people-directory";
+import { entraEnvCredentials, m365EnvCredentials } from "./container-app-registrations";
 import { buildSmtpEnvConfig } from "./container-smtp";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import {
@@ -330,14 +331,8 @@ const build = () => {
       pathStyle: env.MINIO_PATH_STYLE,
     },
     embeddingsProvider: env.EMBEDDINGS_PROVIDER,
-    entra:
-      env.ENTRA_TENANT_ID && env.ENTRA_CLIENT_ID && env.ENTRA_CLIENT_SECRET
-        ? {
-            tenantId: env.ENTRA_TENANT_ID,
-            clientId: env.ENTRA_CLIENT_ID,
-            clientSecret: env.ENTRA_CLIENT_SECRET,
-          }
-        : undefined,
+    entra: entraEnvCredentials(env),
+    m365: m365EnvCredentials(env),
     // Booleans only — the addresses stay out of config resolution entirely.
     pki: pkiEnv.envDefaults,
   });
@@ -482,7 +477,7 @@ const build = () => {
     sessionStepOutputs,
   });
   const { spreadsheetParser, graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver } =
-    buildPeopleDirectory({ env, hrDatasets, users });
+    buildPeopleDirectory({ env, hrDatasets, users, runtimeConfig });
 
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const extraction = buildExtractionModule({

@@ -143,6 +143,22 @@ export interface EmailConfig {
   m365ClientSecret: string;
 }
 
+export const createDefaultEmailConfig = (): EmailConfig => ({
+  provider: "smtp",
+  host: "",
+  // The submission port. 465 is implicit TLS and 25 is relay-only, so neither is
+  // a sensible starting point for an operator filling this in.
+  port: 587,
+  secure: false,
+  username: "",
+  password: "",
+  fromAddress: "",
+  fromName: null,
+  m365TenantId: "",
+  m365ClientId: "",
+  m365ClientSecret: "",
+});
+
 // Admin-controlled per-trigger notification toggles. Step-complete is governed
 // per-node in flow config, so it is intentionally absent here.
 export interface NotificationPreferences {
@@ -239,6 +255,51 @@ export const isAtLeastOneMethodEnabled = (
   envHasTrustedProxies: boolean,
 ): boolean =>
   config.emailPasswordEnabled || config.entraEnabled || isPkiUsable(config, envHasTrustedProxies);
+
+// Where the approver directory gets the Microsoft Entra app registration it
+// queries Graph with. Most tenants issue one registration and use it for
+// everything, so inheriting is the common case; a tenant that issues separate
+// registrations picks "own" and supplies its own.
+export type DirectoryCredentialSource = "email" | "auth" | "own";
+
+// Approver resolution against Microsoft Entra (ADR-018), as runtime DB state
+// rather than boot-time environment. Stored as a JSON row in
+// admin_system_settings so an admin can point the directory at a different app
+// registration without a redeploy.
+//
+// The Graph base URL and token authority are deliberately absent: unlike a
+// credential, a target host decides *where* a client secret is sent, so it stays
+// in the environment where an admin cannot repoint it (the same split ADR-042
+// draws for PKI_TRUSTED_PROXY_IPS).
+export interface DirectoryConfig {
+  enabled: boolean;
+  credentialSource: DirectoryCredentialSource;
+  // Used when credentialSource is "own"; blank otherwise.
+  entra: EntraCredentials;
+}
+
+export const createDefaultDirectoryConfig = (): DirectoryConfig => ({
+  enabled: false,
+  credentialSource: "email",
+  entra: { tenantId: "", clientId: "", clientSecret: "" },
+});
+
+// The single answer to "which credentials is the directory actually using".
+// Returns null for both "switched off" and "chosen source is incomplete", so a
+// caller cannot mistake a half-configured directory for a live one — resolution
+// then degrades to the HR upload and manual pick (ADR-018).
+//
+// The chosen source is never silently swapped for another that happens to be
+// filled in: an admin who points the directory at one app registration must not
+// have it query a different tenant behind their back.
+export const resolveDirectoryCredentials = (
+  config: DirectoryConfig,
+  sources: { email: EntraCredentials; auth: EntraCredentials },
+): EntraCredentials | null => {
+  if (!config.enabled) return null;
+  const chosen = config.credentialSource === "own" ? config.entra : sources[config.credentialSource];
+  return isEntraConfigured(chosen) ? chosen : null;
+};
 
 // Master switch for usage-limit enforcement (ADR-031). Stored as one JSON row in
 // admin_system_settings. Fresh installs default to enabled: nothing is enforced
@@ -394,6 +455,7 @@ export const EMBEDDINGS_CONFIG_SETTING_KEY = "embeddings_config";
 export const N8N_CONFIG_SETTING_KEY = "n8n_config";
 export const NOTIFICATION_PREFS_SETTING_KEY = "notification_prefs";
 export const AUTH_CONFIG_SETTING_KEY = "auth_config";
+export const DIRECTORY_CONFIG_SETTING_KEY = "directory_config";
 export const USAGE_LIMITS_CONFIG_SETTING_KEY = "usage_limits_config";
 export const ONBOARDING_STATE_SETTING_KEY = "onboarding_state";
 export const DEPLOYMENT_CONFIG_SETTING_KEY = "deployment_config";
@@ -412,6 +474,7 @@ export const SENSITIVE_SETTING_KEYS: ReadonlySet<string> = new Set([
   STORAGE_CONFIG_SETTING_KEY,
   N8N_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
+  DIRECTORY_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   SIEM_CONFIG_SETTING_KEY,
 ]);
