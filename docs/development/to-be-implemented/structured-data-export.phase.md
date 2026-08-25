@@ -84,7 +84,12 @@ use case, CSV inherits its permission checks unchanged — there is no second ro
    derivation and source reference. Sequenced after that phase; the writer itself needs no change,
    only the table the use case hands it.
 
-6. **Validate.** Run `./validate.sh` after each sub-component; do not proceed on a non-zero exit.
+6. **E2E — repair the preamble, then extend.** In `enhance-synthesise-summary.spec.ts`, replace
+   the four self-probed `test.skip()` guards and their `isVisible()` probes in `openRunScreen`
+   with real fixtures: an authenticated session, the `extraction_flows` flag on, and a run with
+   staged input documents. Only then append the CSV download case (§9). Write it; do not run it.
+
+7. **Validate.** Run `./validate.sh` after each sub-component; do not proceed on a non-zero exit.
 
 ## 7. Data Egress Audit — largely met, extended here
 
@@ -115,13 +120,34 @@ Mirrors PRD §10:
 boundary", and a CSV whose bytes are correct in storage but mis-served (wrong content type,
 truncated response) is a real and browser-only failure.
 
-- Extend the existing run-results download coverage rather than adding a file, per the policy's
-  preference for extending the spec that owns the capability.
+- **Spec to extend: `apps/web/e2e/enhance-synthesise-summary.spec.ts`.** It already owns this
+  surface — its header comment covers "the header bar, one-click Excel download, the overflow
+  menu holding JSON and document generation". No new file, per the policy's preference for
+  extending the spec that owns the capability.
 - Happy path: open the Run actions menu, choose **Download CSV**, and assert the download
   completes with CSV content type.
 - User-visible error path: an export failure surfaces an error rather than an empty file.
 - Obeys the non-negotiables: no `test.skip()` on a self-probed condition, no `isVisible()` for
   control flow, no environment-variable gate.
+- **Do not run the suite locally.** CI runs it — `.github/workflows/e2e.yml` fires on every pull
+  request, sharded, against a full stack. Review the spec by reading it.
+
+### Precondition — the spec being extended does not currently obey the non-negotiables
+
+`enhance-synthesise-summary.spec.ts` carries **four `test.skip()` guards on conditions it probes
+itself** (no authenticated session, `extraction_flows` flag off, sample run needs staged
+documents, run produced no records) and reaches three of them through `isVisible().catch(() =>
+false)` — both patterns the policy names as non-negotiable. It is the worst remaining case in the
+suite: 18 skip guards survive across 37 specs, and this spec holds 4 of them.
+
+They sit in the shared `openRunScreen` preamble, so a CSV test appended as-is inherits every one
+of them and can report green having downloaded nothing. **Repairing that preamble is in scope for
+this phase** — build the fixture the spec keeps opting out of, or the CSV coverage is illusory
+and the audit that produced these rules (#241) gets re-run on work we added.
+
+Renaming the spec to a capability name is *not* in scope. The `enhance-` prefix is ticket-shaped
+and against the policy's naming rule, but a rename touches no behaviour and belongs in whatever
+sweep addresses the other legacy `fix-`/`enhance-`/`phase-` names.
 
 **Escaping is not e2e.** Character-class correctness is a pure function and belongs in the
 adapter test (step 2) — the bug can be described without saying "browser".
