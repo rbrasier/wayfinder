@@ -51,7 +51,8 @@ use case, CSV inherits its permission checks unchanged — there is no second ro
 | `packages/adapters/src/export/csv-writer.ts` | new | RFC 4180 implementation |
 | `packages/application/src/use-cases/extraction/export-run-results.ts` | changed | Emit `results.csv`; audit metadata gains formats + byte volume |
 | `apps/web/src/server/routers/` | changed | Return the CSV key alongside the others |
-| `apps/web/src/app/(user)/synthesise/[id]/runs/[runId]/` | changed | CSV download control |
+| `apps/web/src/components/extraction/run-results.tsx` | changed | **Download CSV** item in the three-dot Run actions menu, beneath **Download JSON**; extends `ExportFormat` to `"csv"` |
+| `apps/web/src/app/api/synthesise/runs/[runId]/artifacts/[artifact]/route.ts` | changed | Serve the `export-csv` artifact alongside `export-xlsx` and `export-json` |
 | `apps/web/src/lib/container.ts` | changed | Wire `ICsvWriter` |
 
 ## 6. Implementation steps (test-first per CLAUDE.md)
@@ -74,8 +75,10 @@ use case, CSV inherits its permission checks unchanged — there is no second ro
    returns a `DomainError` and no partial export is announced. Then implement.
 
 4. **Web — download and wiring.** Wire `ICsvWriter` in the container and return the CSV key from
-   the export procedure. Component test: the CSV control appears alongside XLSX and JSON and
-   triggers the same export use case.
+   the export procedure. Add `export-csv` to the artifact route. Component test: opening the
+   three-dot Run actions menu shows **Download CSV** directly beneath **Download JSON**, and
+   choosing it triggers the same export use case as XLSX and JSON — the shared `downloading`
+   state disables the other formats while it prepares, exactly as they disable each other today.
 
 5. **Provenance columns.** Once the provenance phase lands, the CSV data table carries provenance,
    derivation and source reference. Sequenced after that phase; the writer itself needs no change,
@@ -114,7 +117,8 @@ truncated response) is a real and browser-only failure.
 
 - Extend the existing run-results download coverage rather than adding a file, per the policy's
   preference for extending the spec that owns the capability.
-- Happy path: trigger a CSV export and assert the download completes with CSV content type.
+- Happy path: open the Run actions menu, choose **Download CSV**, and assert the download
+  completes with CSV content type.
 - User-visible error path: an export failure surfaces an error rather than an empty file.
 - Obeys the non-negotiables: no `test.skip()` on a self-probed condition, no `isVisible()` for
   control flow, no environment-variable gate.

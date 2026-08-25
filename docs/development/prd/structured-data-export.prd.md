@@ -53,7 +53,7 @@ does not record byte volume, and its `formats` array will need to name CSV.
 - Neutralising, escaping or prefixing formula-like values in any format. Formulas may be
   deliberate; only file-corrupting characters are the writer's concern.
 - Replacing XLSX. The confidence tab is a two-dimensional artefact CSV cannot represent, and
-  XLSX stays the on-screen download.
+  XLSX stays the on-screen download and keeps the primary button.
 - Streaming very large exports — the existing buffer-and-store approach is retained.
 - Changing the audit schema. `core_audit_log` is append-only (ADR-033) and gains no columns;
   volume goes in the existing `metadata` jsonb.
@@ -79,8 +79,11 @@ does not record byte volume, and its `formats` array will need to name CSV.
 
 ## 7. Pages / surfaces affected
 
-- Extraction run results (`apps/web/src/app/(user)/synthesise/[id]/runs/[runId]/`) — CSV download
-  alongside the existing options.
+- Extraction run results (`apps/web/src/app/(user)/synthesise/[id]/runs/[runId]/`) — a
+  **Download CSV** item in the three-dot **Run actions** menu, directly beneath **Download JSON**
+  and above the divider (`apps/web/src/components/extraction/run-results.tsx`). **Download Excel**
+  keeps the primary button beside the menu; CSV joins JSON as a secondary format rather than
+  taking a third button of its own.
 - `apps/web/src/server/routers/` — the export procedure returns the CSV key with the others.
 - Admin audit view — CSV exports appear with format and volume, through the existing interface.
 
