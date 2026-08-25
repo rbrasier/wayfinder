@@ -115,13 +115,18 @@ The single-number `aggregateConfidence` and single-band `recordConfidenceBand` a
 rather than deprecated. Leaving them would leave a correct-looking call that silently answers
 the wrong question, which is the exact failure this decision exists to prevent.
 
-This reaches storage. `app_extraction_records.aggregate_confidence` is a persisted
-`real().notNull().default(0)` column, and the adapter computes it with its own copy of the
-reduction (`aggregateConfidenceOf` in `drizzle-extraction-run-repository.ts`, which omits the
-domain's clamp). The existing column keeps its meaning — every historical field is
-accuracy-kind, so it *is* the accuracy aggregate — and a nullable `aggregate_selection_confidence`
-joins it. The duplicate adapter implementation is deleted in favour of the domain function, so
-the two cannot drift again.
+This does **not** reach storage. `app_extraction_records.aggregate_confidence` is a persisted
+`real().notNull().default(0)` column, but the information-architecture investigation required
+before any migration (phase doc §10.1) found it to be **write-only**: one writer
+(`saveRecordFields`), no reader anywhere — `toRecord` never maps it, and every consumer
+recomputes the aggregate from `fields` in memory. So the per-kind split adds no column. Both
+aggregates are derived from `fields` in the domain, where the single aggregate already
+effectively lived, and no `aggregate_selection_confidence` is created.
+
+The existing column is left untouched and keeps its exact meaning — every historical field is
+accuracy-kind, so it *is* the accuracy aggregate. The duplicate adapter implementation
+(`aggregateConfidenceOf` in `drizzle-extraction-run-repository.ts`, which omits the domain's
+clamp) is still deleted in favour of the domain function, so the two cannot drift again.
 
 **4. Derivation and source reference are recorded structurally, not in prose.**
 
@@ -155,8 +160,9 @@ is required.
 
 ## Consequences
 
-- No migration for provenance itself, and no historical row changes meaning. The schema changes
-  are `verbatim_only` and the aggregate columns that the per-kind split requires.
+- No migration for provenance itself, and no historical row changes meaning. After the §10
+  investigation the only schema change in this phase is `verbatim_only`; the aggregate columns
+  originally proposed here are not added, because nothing reads the one that already exists.
 - Every current reader of `confidence` is, strictly, reading an accuracy metric that may now
   describe a selection. Migrating them to the accessor is mandatory work in this phase, not a
   follow-up — the risk is silent, so it will not surface as a test failure on its own.

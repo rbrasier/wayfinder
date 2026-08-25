@@ -56,13 +56,14 @@ the source is correct, which Wayfinder cannot know (ADR-053 §5).
 
 Aggregate confidence splits by scale. A single minimum across mixed kinds is not conservative,
 it is meaningless, so `aggregateConfidence` and `recordConfidenceBand` are replaced by per-kind
-equivalents returning `null` where a record has no fields of that kind. This reaches persisted
-data: `aggregate_confidence` keeps its meaning as the accuracy aggregate and gains a nullable
-`aggregate_selection_confidence`, and the adapter's duplicate reduction is deleted.
+equivalents returning `null` where a record has no fields of that kind. This does **not** reach
+persisted data: the §10 investigation found `aggregate_confidence` to be a write-only column, so
+both aggregates are derived from `fields` in the domain and no column is added. The adapter's
+duplicate reduction is still deleted.
 
-**Migrations are gated on an information-architecture investigation (step 6b).** The column
-shapes below are the current proposal, not a settled design — the investigation may reduce or
-relocate them.
+**The migration gate (step 6b) has been cleared — the finding is §10.** It reduced the plan
+from three column changes to one: `admin_mcp_servers.verbatim_only` proceeds as proposed, and
+both aggregate columns are dropped from the plan.
 
 ## 5. Key entities / files
 
@@ -71,13 +72,13 @@ relocate them.
 | `packages/domain/src/entities/field-provenance.ts` | new | `FieldProvenance`, `ConfidenceKind`, `FieldDerivation`, `FieldSourceRef`, accessors |
 | `packages/domain/src/entities/extraction-record.ts` | changed | Optional `provenance`, `sourceRef`, `derivation`; `applyFieldEdit` stamps `human_corrected`; `AggregateConfidence`, `aggregateConfidenceByKind`, `recordConfidenceBands` replacing the single-number pair |
 | `packages/domain/src/entities/analytics.ts` | changed | Report row carries per-scale aggregates |
-| `packages/adapters/src/repositories/drizzle-extraction-run-repository.ts` | changed | Delete the duplicate `aggregateConfidenceOf`; persist both aggregates |
+| `packages/adapters/src/repositories/drizzle-extraction-run-repository.ts` | changed | Delete the duplicate `aggregateConfidenceOf` and write `aggregate_confidence` through the domain function; no new column (§10.1) |
 | `apps/web/src/components/extraction/result-grid.tsx`, `run-report.tsx` | changed | Per-scale aggregate display |
 | `packages/domain/src/entities/mcp-server.ts` | changed | `verbatimOnly` on `McpServer`, `NewMcpServer`, `McpServerUpdate` |
 | `packages/domain/src/entities/index.ts` | changed | Re-exports |
 | `packages/application/src/use-cases/session/run-mcp-node.ts` | changed | Verbatim enforcement at tool-result ingestion |
 | `packages/application/src/use-cases/extraction/` | changed | Provenance threaded through extraction paths |
-| `packages/adapters/src/db/schema/admin.ts` | changed | `verbatim_only` column |
+| `packages/adapters/src/db/schema/admin.ts` | changed | `verbatim_only` column — the phase's only schema change |
 | `packages/adapters/src/db/migrations/` | new | One generated migration |
 | `apps/web/src/components/admin/` | changed | Verbatim toggle + confirmation |
 | `apps/web/src/components/extraction/`, `components/chat/confidence-bar.tsx` | changed | Provenance styling, kind-aware confidence label |
@@ -122,7 +123,8 @@ relocate them.
    This is the silent-risk step: enumerate readers by search, not by memory, and assert each in
    its own suite that a `verbatim` row is labelled selection, not accuracy.
 
-6b. **Information-architecture investigation — before any schema change is written.**
+6b. **Information-architecture investigation — before any schema change is written. ✅ Complete
+   (2026-08-25) — the finding is §10 below, and it removed both aggregate columns from the plan.**
    This phase adds columns to two tables, so the shape is settled by investigation first rather
    than by reaching for the nearest column. Produce a short written finding covering:
    - **Where confidence aggregates belong.** `aggregate_confidence` is currently a denormalised
@@ -140,15 +142,16 @@ relocate them.
    below change with it — that is the point of doing this first, and this step may legitimately
    conclude that fewer columns are needed than currently planned.
 
-7. **Adapters — columns, migration, mapping.** Add `verbatim_only` mirroring
-   `communicates_externally`. Add nullable `aggregate_selection_confidence` and relax
-   `aggregate_confidence` to nullable. **Delete `aggregateConfidenceOf`** — the adapter's private
-   copy of the reduction, which also omits the domain's clamp — and call the domain function.
-   Generate one migration (never `drizzle-kit push`) carrying:
-   `-- data-impact: preserved — defaulted boolean, additive nullable column and a DROP NOT NULL; every existing row keeps its value`.
+7. **Adapters — one column, one migration, mapping.** Add `verbatim_only` mirroring
+   `communicates_externally`. **No aggregate column is added and `aggregate_confidence` is not
+   altered** (§10.1). **Delete `aggregateConfidenceOf`** — the adapter's private copy of the
+   reduction, which also omits the domain's clamp — and have `saveRecordFields` write
+   `aggregate_confidence` through the domain's accuracy-scale function, so the column keeps its
+   exact meaning and gains the clamp it was missing. Generate one migration (never
+   `drizzle-kit push`) carrying:
+   `-- data-impact: preserved — defaulted boolean column; every existing connection keeps current behaviour`.
    Repository tests: the flag round-trips and an existing row reads `false`; an existing record's
-   persisted accuracy aggregate is unchanged by the migration; a record with no accuracy-kind
-   fields persists `null`, not `0`.
+   persisted accuracy aggregate is unchanged by the migration.
 
 7b. **Analytics and report readers.** `ExtractionFieldReportRow.aggregateConfidence` becomes
    per-scale, and `result-grid.tsx` / `run-report.tsx` render each scale separately. Compiler
@@ -216,3 +219,117 @@ tests (steps 8–9).
   untouched — asserted in step 7.
 - **Merge semantics.** `mergeFieldResults` keeps the highest confidence per key; a
   `human_corrected` value must not lose to a confident model value. Covered by step 2(d).
+
+---
+
+## 10. Information-architecture finding — step 6b (2026-08-25)
+
+Produced before any migration was drafted, as step 6b requires. **Outcome: the planned migration
+shrinks from three column changes to one.** Both aggregate columns are dropped from the plan —
+not deferred, not renamed. The `verbatim_only` flag is confirmed where ADR-053 put it.
+
+### 10.1 Where do confidence aggregates belong? — **In no column at all**
+
+`app_extraction_records.aggregate_confidence` is **write-only**. Enumerated by search, not recall:
+
+| Site | Direction |
+| ---- | --------- |
+| `drizzle-extraction-run-repository.ts:278` (`saveRecordFields`) | **write** — the only one |
+| `schema/wayfinder.ts:625`, `drizzle/0038_careful_quentin_quire.sql:22` | declaration |
+| everything else | *no read exists* |
+
+`toRecord` (`drizzle-extraction-run-repository.ts:419-426`) maps `id`, `label`, `fields` and
+`sourceDocumentIds` and nothing else — the column is never lifted into the entity, and
+`ExtractionRecord` (`entities/extraction-record.ts:43-49`) has no member to receive it. No query
+selects it, filters on it, orders by it or aggregates over it.
+
+Every consumer recomputes the value from `fields` in memory instead:
+
+- `result-grid.tsx:466` calls the domain `aggregateConfidence(record)`.
+- `run-report.tsx:56` reads `row.aggregateConfidence`, which `analytics.ts:173` computed by
+  calling the same domain function.
+
+So the read-performance justification for a denormalised column — the one argument that would
+carry it — **is not being taken by anybody**. The grid and the report already pay the reduction
+at read time, over records they have fully loaded.
+
+That settles the question the step asked. Adding `aggregate_selection_confidence` beside a column
+nobody reads would double a duplication that has never paid for itself, and would create a second
+value that can drift from `fields` in a second way. The per-kind split lives where the single
+aggregate already effectively lives: derived from `fields`, in the domain, at read time.
+
+**Conclusion.**
+
+- **No new column.** `aggregate_selection_confidence` is not added.
+- **No `DROP NOT NULL`.** `aggregate_confidence` is not touched, so no existing row is rewritten
+  and no reader changes meaning.
+- `aggregateConfidenceByKind` and `recordConfidenceBands` are pure domain functions over `fields`,
+  exactly as ADR-053 defines them. The deletion of `aggregateConfidence`/`recordConfidenceBand`
+  is unaffected — it is a code change, not a schema one.
+- The adapter's private `aggregateConfidenceOf` is still deleted (step 7). `saveRecordFields`
+  keeps writing `aggregate_confidence`, now via the domain's accuracy-scale function, so the
+  column keeps its exact current meaning and its clamp is no longer missing.
+
+**Left standing deliberately:** a write-only column is dead weight, and this finding is what
+proves it. Removing it is a `DROP COLUMN` — destructive, needing its own
+`-- data-impact: destructive, approved` declaration and its own decision. That belongs in a
+follow-up, not smuggled into a provenance phase; noted here so the evidence is not lost.
+
+### 10.2 Does `verbatim_only` belong on the server row? — **Yes, on `admin_mcp_servers`**
+
+The alternative was a step-level flag in `McpNodeConfig`, which is genuinely cheaper: node config
+is `jsonb` (`schema/wayfinder.ts:76`), so a step-level flag needs **no migration whatsoever**.
+Cost is not the deciding factor here, and three findings point the other way.
+
+**A step-level flag is not a governance control.** `verbatim_only` exists so an administrator can
+state how a connection's results are handled. If it lives on the step, any flow author can
+author around it — the guarantee then describes one step's intent rather than the organisation's
+policy for that connection.
+
+**The existing classification is enforced at import, and a step-level flag would travel.**
+`flow-import-resolve.ts:79` refuses an imported flow that references an externally-communicating
+server, and `inspect-flow-import.ts:38` surfaces the classification during resolution. Both work
+because the classification belongs to the receiving organisation's own server row. A step-level
+verbatim flag is carried inside the exported flow, so an imported flow would arrive asserting
+verbatim handling for a connection the receiving organisation has never classified.
+
+**The enforcement point already holds the server row.** `RunMcpNode` loads the server and checks
+`communicatesExternally` on it before calling the tool (`run-mcp-node.ts:75-89`). A server-level
+flag is read there for free; a step-level one would put the governance decision in a different
+object from the classification beside it.
+
+**Conclusion.** `admin_mcp_servers.verbatim_only boolean not null default false`, mirroring
+`communicates_externally` (`schema/admin.ts:175-177`) exactly, enforced in `RunMcpNode` next to
+the check that is already there. The plan is confirmed unchanged.
+
+### 10.3 What does the `admin_`/`app_` split mean here? — **No straddle; they are different things**
+
+The flag and the provenance data are not two halves of one concept.
+
+- **`verbatim_only` is a classification of a connection** — admin-configured infrastructure,
+  alongside `transport`, `url`, `credential_ref` and `communicates_externally`. `admin_`.
+- **Provenance is a property of a value** — it rides inside
+  `app_extraction_records.fields` (`$type<ExtractionFieldResult[]>`), the jsonb that already
+  carries `confidence` and `rationale`. `app_`. No column, no migration, and a historical row
+  with no provenance member reads as `processed` through the accessor.
+
+A single governance concept spread across both groups was the risk this question was written to
+catch. It does not arise: one is configuration an administrator sets, the other is data a run
+produces, and neither needs to know the other's group.
+
+### 10.4 Net effect on the planned migration
+
+| Planned before | After this finding |
+| --- | --- |
+| `admin_mcp_servers.verbatim_only` (add) | **Unchanged — proceed** |
+| `app_extraction_records.aggregate_selection_confidence` (add) | **Dropped** — no reader justifies it |
+| `app_extraction_records.aggregate_confidence` (`DROP NOT NULL`) | **Dropped** — column untouched |
+
+One migration, one defaulted boolean:
+
+```sql
+-- data-impact: preserved — defaulted boolean column; every existing connection keeps current behaviour
+```
+
+Step 7's repository assertions about the accuracy aggregate surviving the migration become
+trivially true — nothing touches those rows — but stay in the suite as a regression guard.

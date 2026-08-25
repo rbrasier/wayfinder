@@ -112,7 +112,7 @@ The word "verbatim" appears nowhere in the codebase as a governance concept toda
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
 | `admin_mcp_servers` | add column `verbatim_only boolean not null default false` | n/a (existing `admin_` table) |
-| `app_extraction_records` | provenance rides inside the existing `fields` jsonb (`$type<ExtractionFieldResult[]>`) — no change; add `aggregate_selection_confidence real` (nullable) and relax `aggregate_confidence` to nullable | n/a (existing `app_` table) |
+| `app_extraction_records` | **none** — provenance rides inside the existing `fields` jsonb (`$type<ExtractionFieldResult[]>`), and the per-kind aggregates are derived from it rather than stored (phase doc §10.1) | n/a (existing `app_` table) |
 
 Note the prefix: MCP servers live in `admin_mcp_servers`
 (`packages/adapters/src/db/schema/admin.ts:169`), not under `app_`.
@@ -125,24 +125,19 @@ migration declares:
 -- data-impact: preserved — defaulted boolean column; every existing connection keeps current behaviour
 ```
 
-**The column shapes below are gated on an information-architecture investigation** carried out
-before any migration is written (phase doc §6, step 6b). They are the current proposal, not a
-settled design.
+**The information-architecture investigation this section was gated on is complete** — phase
+doc §10, carried out before any migration was written. It removed both aggregate columns from
+the plan, so `verbatim_only` above is now the phase's only schema change.
 
 Provenance itself needs no migration: `app_extraction_records.fields` is already
 `jsonb().$type<ExtractionFieldResult[]>()`, and the new members are optional.
 
-The per-kind aggregate split does need one. `aggregate_confidence` is a persisted
-`real().notNull().default(0)` column; it keeps its exact meaning (every historical field is
-accuracy-kind, so it already *is* the accuracy aggregate) and gains a nullable
-`aggregate_selection_confidence` beside it. `aggregate_confidence` is relaxed to nullable so a
-record with no accuracy-kind fields reads as "no value of this kind" rather than as zero —
-which would render red. Both are widening changes that cannot fail on or destroy an existing
-row:
-
-```
--- data-impact: preserved — additive nullable column plus a DROP NOT NULL; every existing row keeps its value
-```
+The per-kind aggregate split needs none either. `aggregate_confidence` is a persisted
+`real().notNull().default(0)` column that **nothing reads** — one writer, no readers, never
+mapped into `ExtractionRecord`, while the grid and the report both recompute the value from
+`fields` in memory (§10.1). A second column beside an unread one would buy nothing and add a
+second way to drift, so both aggregates are derived from `fields` in the domain instead. The
+existing column is left exactly as it is.
 
 ## 9. Architectural decisions
 
