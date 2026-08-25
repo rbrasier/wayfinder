@@ -150,6 +150,31 @@ that violates it won't pass checks. The rules that matter most day to day:
 
 All checks must pass before a PR can merge.
 
+## 5. Opening a pull request
+
+Every PR body follows
+[`.github/pull_request_template.md`](.github/pull_request_template.md), which
+GitHub pre-fills for you. Four sections, in order:
+
+1. **Summary** — one paragraph on what the change does and what it means for
+   the product.
+2. **Impact** — which features it touches, and every business rule it adds,
+   alters or removes, each stated with its trigger and resulting behaviour.
+3. **UI Impact** — how a user experiences the change, in their words.
+4. **Why this change is required** — the use case being served or the problem
+   being solved.
+
+Implementation detail — files, migrations, version bump, tests — goes in the
+collapsed block at the foot, so the business framing leads.
+
+If a section genuinely does not apply, replace its content with a one-line
+reason ("No UI impact — server-side only"). Don't delete the heading and don't
+leave a bare `N/A`: the reason is what tells a reviewer you considered it.
+
+The skills in `.claude/commands/` fill this same template, so a PR opened by
+`/build`, `/enhance`, `/bugfix` or `/release` reads the same as one you open by
+hand.
+
 ## Commit style
 
 ```

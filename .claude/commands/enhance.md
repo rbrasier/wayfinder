@@ -95,5 +95,18 @@ it — and carry the approved summary into the phase doc when step 1 generates i
    - Apply the version bump
    - Run `./validate.sh`
    - Commit all changes and push the branch
-   - **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. **Build the PR body from the approved change summary**, corrected to describe what was actually implemented rather than what was planned, and add the implementation detail the summary could not know up front: migrations generated, the version bump applied, which e2e test covers the new behaviour, known limitations, and any deviation from the approved summary called out explicitly.
+   - **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally.
+   - **Write the PR body into [`.github/pull_request_template.md`](../../.github/pull_request_template.md)** — read that file and fill its sections; do not invent a structure. The approved change summary is the source, **corrected to describe what was actually implemented rather than what was planned**:
+
+     | Template section | Filled from |
+     |---|---|
+     | `## Summary` | The change summary's headline and **Goal**, as one paragraph in the user's terms |
+     | `## Impact` → Features affected | The user-facing and admin areas the enhancement touches |
+     | `## Impact` → Business rules changed | **Business rules changing**, each with its trigger and resulting behaviour |
+     | `## UI Impact` | **UI / visible behaviour**, restated as what the user experiences |
+     | `## Why this change is required` | The answer to clarifying question 1 — what becomes possible that isn't today, or what was going wrong |
+     | `<details>` implementation block | Version bump, files created and modified, migrations generated with their `-- data-impact:` line, tests written and the e2e decision (spec extended with its policy group, or "no e2e — covered at `<layer>`"), known limitations |
+
+   - **Call out every deviation** from the approved summary explicitly, in the implementation block's deviations line. "None" if there were none.
+   - A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
    - Report the PR URL, and note that the e2e suite runs there rather than locally.
