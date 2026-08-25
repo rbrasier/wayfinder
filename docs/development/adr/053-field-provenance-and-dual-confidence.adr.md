@@ -65,7 +65,7 @@ export const fieldProvenance = (result: { provenance?: FieldProvenance }): Field
 ```
 
 Every historical row was produced by the composing path, so `processed` is the value that
-preserves their meaning — the same idiom as `sessionMode` and `stepOutputStatus`. No back-fill,
+preserves their meaning — the same idiom as `sessionMode`. No back-fill,
 and because `app_extraction_records.fields` is already `jsonb().$type<ExtractionFieldResult[]>()`,
 no migration either.
 
