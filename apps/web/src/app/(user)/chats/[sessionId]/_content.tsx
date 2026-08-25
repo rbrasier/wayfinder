@@ -20,6 +20,8 @@ import { AppHeader } from "@/components/layout/app-header";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
+import { ManualEstimateModal } from "@/components/chat/manual-estimate-modal";
+import { shouldPromptForEstimate } from "@/components/chat/manual-estimate-state";
 
 const NULL_BRANCH_THRESHOLD = 3;
 
@@ -71,6 +73,16 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const isAdmin = meQuery.data?.isAdmin ?? false;
 
   const myUserId = meQuery.data?.userId ?? null;
+
+  // The manual-time estimate is asked once, when the operator's own session has
+  // finished. Skipping is remembered for the visit only — the row stays null, so
+  // a later visit can still capture it.
+  const [estimateDismissed, setEstimateDismissed] = useState(false);
+  const recordEstimateMutation = trpc.session.recordManualEstimate.useMutation({
+    onSuccess: () => {
+      void utils.session.get.invalidate({ sessionId });
+    },
+  });
   const emitTypingMutation = trpc.session.emitTyping.useMutation();
   const lastTypingEmitRef = useRef(0);
   // Live typing presence over the event bus instead of a 2 s poll (scaling wall
@@ -543,6 +555,19 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         }
         onClose={() => setOverrideOpen(false)}
         isPending={overrideMutation.isPending}
+      />
+
+      <ManualEstimateModal
+        open={shouldPromptForEstimate({
+          status: session.status,
+          isOwner: myUserId !== null && session.userId === myUserId,
+          alreadyEstimated: session.manualEstimateMinutes != null,
+          dismissed: estimateDismissed,
+        })}
+        flowName={flow.name}
+        isSaving={recordEstimateMutation.isPending}
+        onSubmit={(minutes) => recordEstimateMutation.mutate({ sessionId, minutes })}
+        onSkip={() => setEstimateDismissed(true)}
       />
     </main>
   );

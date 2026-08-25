@@ -183,6 +183,10 @@ export const app_sessions = pgTable(
     active_turn_claimed_at: timestamp("active_turn_claimed_at", { withTimezone: true }),
     // Optimistic-concurrency guard for non-lease writers (scaling wall #3).
     version: integer("version").notNull().default(1),
+    // The operator's own estimate, in minutes, of how long this case would have
+    // taken without Wayfinder. Captured once the session finishes; null when
+    // never asked or skipped. A flow's baseline is the median of these.
+    manual_estimate_minutes: integer("manual_estimate_minutes"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

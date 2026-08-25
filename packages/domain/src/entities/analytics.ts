@@ -21,6 +21,8 @@ export interface AnalyticsSessionRow {
   flowName: string;
   status: SessionStatus;
   currentNodeId: string | null;
+  // The operator's manual-time estimate in minutes; null when never given.
+  manualEstimateMinutes: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -69,26 +71,7 @@ export interface FlowDistributionSlice {
   count: number;
 }
 
-export interface ConfidenceLifecyclePoint {
-  bucket: number;
-  positionPct: number;
-  averageConfidence: number;
-  sampleCount: number;
-}
-
 // ── Flow deep-dive DTOs ──────────────────────────────────────────────────────
-
-export interface NodeBreakdownRow {
-  nodeId: string;
-  nodeName: string;
-  colour: string | null;
-  sessionsVisited: number;
-  averageTurns: number;
-  averageDurationSeconds: number;
-  averageConfidenceAtCompletion: number | null;
-  dropOff: number;
-  completionRate: number;
-}
 
 // Each column maps to a unique node+field combination, keyed as `${nodeId}:${fieldKey}`.
 export interface FieldReportColumn {
@@ -283,102 +266,6 @@ export const computeFlowDistribution = (
     }
   }
   return [...byFlow.values()].sort((a, b) => b.count - a.count);
-};
-
-export const computeConfidenceLifecycle = (
-  messages: AnalyticsMessageRow[],
-  bucketCount = 10,
-): ConfidenceLifecyclePoint[] => {
-  const bySession = new Map<string, AnalyticsMessageRow[]>();
-  for (const message of messages) {
-    if (message.role !== "assistant" || message.confidence === null) continue;
-    const list = bySession.get(message.sessionId) ?? [];
-    list.push(message);
-    bySession.set(message.sessionId, list);
-  }
-
-  const sums = new Array<number>(bucketCount).fill(0);
-  const counts = new Array<number>(bucketCount).fill(0);
-
-  for (const list of bySession.values()) {
-    const ordered = [...list].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    ordered.forEach((message, index) => {
-      const position = ordered.length === 1 ? 0 : index / (ordered.length - 1);
-      const bucket = Math.min(bucketCount - 1, Math.floor(position * bucketCount));
-      sums[bucket] = (sums[bucket] ?? 0) + (message.confidence ?? 0);
-      counts[bucket] = (counts[bucket] ?? 0) + 1;
-    });
-  }
-
-  const points: ConfidenceLifecyclePoint[] = [];
-  for (let bucket = 0; bucket < bucketCount; bucket += 1) {
-    const sampleCount = counts[bucket] ?? 0;
-    points.push({
-      bucket: bucket + 1,
-      positionPct: Math.round(((bucket + 1) / bucketCount) * 100),
-      averageConfidence: sampleCount === 0 ? 0 : Math.round((sums[bucket] ?? 0) / sampleCount),
-      sampleCount,
-    });
-  }
-  return points;
-};
-
-export const computeNodeBreakdown = (
-  nodes: AnalyticsNode[],
-  messages: AnalyticsMessageRow[],
-  sessions: AnalyticsSessionRow[],
-): NodeBreakdownRow[] => {
-  return nodes.map((node) => {
-    const nodeMessages = messages.filter((message) => message.stepNodeId === node.id);
-    const sessionIds = new Set(nodeMessages.map((message) => message.sessionId));
-    const visited = sessionIds.size;
-
-    let totalUserTurns = 0;
-    let totalDurationSeconds = 0;
-    let durationSessions = 0;
-    const completionConfidences: number[] = [];
-
-    for (const sessionId of sessionIds) {
-      const sessionMessages = nodeMessages.filter((message) => message.sessionId === sessionId);
-      totalUserTurns += sessionMessages.filter((message) => message.role === "user").length;
-
-      const times = sessionMessages.map((message) => message.createdAt.getTime());
-      if (times.length > 1) {
-        totalDurationSeconds += (Math.max(...times) - Math.min(...times)) / 1000;
-        durationSessions += 1;
-      }
-
-      const confidences = sessionMessages
-        .filter((message) => message.role === "assistant" && message.confidence !== null)
-        .map((message) => message.confidence as number);
-      if (confidences.length > 0) completionConfidences.push(Math.max(...confidences));
-    }
-
-    const stuckHere = sessions.filter(
-      (session) => session.currentNodeId === node.id && session.status !== "complete",
-    );
-    const dropOff = stuckHere.filter((session) => session.status === "abandoned").length;
-    const completionRate = visited === 0 ? 0 : ((visited - stuckHere.length) / visited) * 100;
-
-    return {
-      nodeId: node.id,
-      nodeName: node.name,
-      colour: node.colour,
-      sessionsVisited: visited,
-      averageTurns: visited === 0 ? 0 : Math.round((totalUserTurns / visited) * 10) / 10,
-      averageDurationSeconds:
-        durationSessions === 0 ? 0 : Math.round(totalDurationSeconds / durationSessions),
-      averageConfidenceAtCompletion:
-        completionConfidences.length === 0
-          ? null
-          : Math.round(
-              completionConfidences.reduce((sum, value) => sum + value, 0) /
-                completionConfidences.length,
-            ),
-      dropOff,
-      completionRate: Math.round(completionRate),
-    };
-  });
 };
 
 interface NodeForReport {
