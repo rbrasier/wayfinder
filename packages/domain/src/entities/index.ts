@@ -53,6 +53,7 @@ export * from "./reindexable-document";
 export * from "./session-step-output";
 export * from "./group-fields";
 export * from "./analytics";
+export * from "./effort";
 export * from "./field-report-view";
 export * from "./field-report-pivot";
 export * from "./system-setting";

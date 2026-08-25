@@ -1,12 +1,12 @@
 import { createServerHelpers } from "@/trpc/server";
-import { AdminOverviewDashboard } from "./_content";
+import { AdminValueDashboard } from "./_content";
 
-export default async function AdminOverviewPage() {
+export default async function AdminValuePage() {
   const { trpc, HydrateClient } = await createServerHelpers();
-  void trpc.analytics.overview.prefetch(undefined);
+  void trpc.analytics.value.prefetch({});
   return (
     <HydrateClient>
-      <AdminOverviewDashboard />
+      <AdminValueDashboard />
     </HydrateClient>
   );
 }

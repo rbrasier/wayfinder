@@ -1,12 +1,12 @@
 import { createServerHelpers } from "@/trpc/server";
-import { AdminFlowDeepDive } from "./_content";
+import { AdminFlowHealth } from "./_content";
 
-export default async function AdminFlowDeepDivePage() {
+export default async function AdminFlowHealthPage() {
   const { trpc, HydrateClient } = await createServerHelpers();
   void trpc.analytics.flowDeepDive.prefetch(undefined);
   return (
     <HydrateClient>
-      <AdminFlowDeepDive />
+      <AdminFlowHealth />
     </HydrateClient>
   );
 }

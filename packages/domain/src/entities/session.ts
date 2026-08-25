@@ -54,6 +54,11 @@ export interface Session {
   // conditional update and surfaces a CONFLICT instead of silently overwriting.
   // Optional/back-filled: absent is treated as version 1.
   version?: number;
+  // The operator's own estimate, in minutes, of how long this case would have
+  // taken without Wayfinder — captured once the session reaches a terminal
+  // state. Null when never asked or skipped; a flow's baseline is the median of
+  // these, so a null is excluded rather than counted as zero.
+  manualEstimateMinutes?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
