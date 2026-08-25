@@ -109,5 +109,18 @@ Once all sub-components pass validation, decide whether the feature needs an e2e
 - Run `./validate.sh` one final time — fix all failures before declaring done
 - State the version bump applied (MINOR / PATCH — MAJOR is reserved for the first stable release)
 - Commit all changes and push the branch
-- **Always open the pull request** via `mcp__github__create_pull_request`, against `main` — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. New features never target a `release/*` branch (see **Release Branching** in `CLAUDE.md`). **Build the PR body from the approved Step 0 change summary**, corrected to describe what was actually implemented rather than what was planned, and add the implementation detail the summary could not know up front: files created and modified, migrations generated, the version bump applied, which e2e tests cover the new functionality, known limitations, and any deviation from the approved summary called out explicitly.
+- **Always open the pull request** via `mcp__github__create_pull_request`, against `main` — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. New features never target a `release/*` branch (see **Release Branching** in `CLAUDE.md`).
+- **Write the PR body into [`.github/pull_request_template.md`](../../.github/pull_request_template.md)** — read that file and fill its sections; do not invent a structure. The approved Step 0 change summary is the source, **corrected to describe what was actually implemented rather than what was planned**:
+
+  | Template section | Filled from |
+  |---|---|
+  | `## Summary` | The Step 0 headline and **Goal**, as one paragraph in the user's terms |
+  | `## Impact` → Features affected | The user-facing and admin areas the phase touches |
+  | `## Impact` → Business rules changed | Step 0 **Business rules changing**, each with its trigger and resulting behaviour |
+  | `## UI Impact` | Step 0 **UI / visible behaviour**, restated as what the user experiences |
+  | `## Why this change is required` | The PRD and phase doc's rationale — the use case or problem the phase exists to serve |
+  | `<details>` implementation block | Version bump, files created and modified, migrations generated with their `-- data-impact:` line, tests written and the e2e decision (spec extended with its policy group, or "no e2e — covered at `<layer>`"), known limitations |
+
+- **Call out every deviation** from the approved Step 0 summary explicitly, in the implementation block's deviations line. "None" if there were none.
+- A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
 - Report the PR URL, and note that the e2e suite runs there rather than locally.

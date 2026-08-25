@@ -92,6 +92,21 @@ On a working branch off `main` (`release-prep/<next line>`):
 - Run `./validate.sh` (the version-sync check must pass)
 - Commit (`chore: open the <next line> line`), push, and open a PR against
   `main` via `mcp__github__create_pull_request`
+- **Write the PR body into
+  [`.github/pull_request_template.md`](../../.github/pull_request_template.md)**
+  — the same four sections every other PR uses. A line cut has no product
+  change, so most of them carry a reason line rather than content:
+  - `## Summary` — which line is being frozen, which branch now carries it,
+    and the new `Next release line` value
+  - `## Impact` → Features affected — "None — release-line bookkeeping".
+    Business rules changed — "None — no product code touched"
+  - `## UI Impact` — "None — no application change"
+  - `## Why this change is required` — why this line is being cut now: what
+    `main` has accumulated that warrants stabilising, and what the retiring
+    line is being closed to (critical fixes only)
+  - Implementation block — the pointer files updated (`CLAUDE.md`,
+    `AGENTS.md`, `CONTRIBUTING.md` §2, `README.md` Quickstart), the new docs
+    folder, the `versioning.md` history row, and whether `VERSION` moved
 
 ### Step 5 — Report
 
@@ -140,6 +155,11 @@ user wants a published artifact for the new line straight away.
 2. Resolve conflicts in favour of `main`'s shape while preserving what each
    fix *does* — the fix's regression tests must still pass.
 3. Run `./validate.sh` and fix all failures.
-4. Push `main` (or open a PR if `main` is protected and direct push fails).
+4. Push `main` (or open a PR if `main` is protected and direct push fails —
+   its body uses [`.github/pull_request_template.md`](../../.github/pull_request_template.md)
+   like any other, with `## Summary` naming the fixes being carried across,
+   `## Impact` and `## UI Impact` aggregating what those fixes changed on the
+   release line, and `## Why this change is required` stating that `main` must
+   not regress behind the release branch).
 5. Never merge in the other direction — `main` must not be merged into a
    release branch.

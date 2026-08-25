@@ -119,5 +119,18 @@ Most bug fixes need **no** e2e test. The Step 2 regression test is the guard tha
 - Update `VERSION` and root `package.json` `version`
 - Run `./validate.sh` one final time
 - Commit all changes and push the branch
-- **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from Step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. **Build the PR body from the approved change summary**, corrected to describe what was actually implemented rather than what was planned, and add the implementation detail the summary could not know up front: root cause as verified, the fix applied, the regression test that now guards it, which e2e test covers it, and any deviation from the approved summary called out explicitly.
+- **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from Step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally.
+- **Write the PR body into [`.github/pull_request_template.md`](../../.github/pull_request_template.md)** — read that file and fill its sections; do not invent a structure. The approved change summary is the source, **corrected to describe what was actually fixed rather than what was planned**:
+
+  | Template section | Filled from |
+  |---|---|
+  | `## Summary` | The change summary's headline — what was broken and what now happens instead, as one paragraph |
+  | `## Impact` → Features affected | The areas the bug reached, which is often wider than the areas the fix touches — say so where they differ |
+  | `## Impact` → Business rules changed | Rules the fix restores or corrects, each with its trigger and resulting behaviour. A fix that only makes code match an existing rule says so, naming the rule |
+  | `## UI Impact` | What the user stops seeing (the broken behaviour) and what they see instead |
+  | `## Why this change is required` | The bug report's symptom and the **verified** root cause — the mechanism, not the symptom restated |
+  | `<details>` implementation block | Version bump, the fix applied, files modified, migrations with their `-- data-impact:` line, the regression test that now guards it and the e2e decision, known limitations |
+
+- **Call out every deviation** from the approved summary explicitly, in the implementation block's deviations line. "None" if there were none.
+- A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
 - Report the PR URL, and note that the e2e suite runs there rather than locally.

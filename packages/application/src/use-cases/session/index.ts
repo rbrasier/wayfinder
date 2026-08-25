@@ -19,3 +19,4 @@ export * from "./apply-auto-node-result";
 export * from "./run-mcp-node";
 export * from "./override-branch";
 export * from "./confirm-step-advance";
+export * from "./record-manual-estimate";
