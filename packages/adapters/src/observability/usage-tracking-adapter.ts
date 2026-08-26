@@ -1,4 +1,5 @@
 import type {
+  CalledModel,
   GenerateObjectInput,
   GenerateTextInput,
   ILanguageModel,
@@ -80,6 +81,9 @@ const estimateCost = (model: string, usage: TokenUsage, provider: ProviderName):
   );
 };
 
+// `model` is optional only for the two direct-SDK callers that record by hand
+// (the MCP tool pre-pass and the scheduled-fire branch choice); both pass the
+// name they resolved. Port calls always supply what the adapter reported.
 export const recordTokenUsage = (
   repo: IUsageRepository,
   input: {
@@ -127,33 +131,53 @@ export class UsageTrackingAdapter implements ILanguageModel {
     return this.inner.provider;
   }
 
+  // The call's own report of what it ran on wins over the caller's input and
+  // over this decorator's boot-time provider: a purpose-routed caller names no
+  // model, and an admin can repoint the install at another provider without a
+  // redeploy. Recording either guess writes the row — and its rate — against a
+  // model that was never billed.
+  private called(resolved: CalledModel): { model: string; provider: ProviderName } {
+    return { model: resolved.model, provider: resolved.provider };
+  }
+
   async generateObject<T>(
     input: GenerateObjectInput,
-  ): Promise<Result<{ object: T; usage: TokenUsage }>> {
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>> {
     const result = await this.inner.generateObject<T>(input);
     if (!result.error) {
-      recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, result.data.usage);
+      recordTokenUsage(
+        this.usageRepo,
+        { ...input, ...this.called(result.data) },
+        result.data.usage,
+      );
     }
     return result;
   }
 
   async generateText(
     input: GenerateTextInput,
-  ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+  ): Promise<Result<{ text: string; usage: TokenUsage } & CalledModel>> {
     const result = await this.inner.generateText(input);
     if (!result.error) {
-      recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, result.data.usage);
+      recordTokenUsage(
+        this.usageRepo,
+        { ...input, ...this.called(result.data) },
+        result.data.usage,
+      );
     }
     return result;
   }
 
   async streamText(
     input: StreamTextInput,
-  ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>> {
+  ): Promise<
+    Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> } & CalledModel>
+  > {
     const result = await this.inner.streamText(input);
     if (!result.error) {
+      const called = this.called(result.data);
       void result.data.usage.then((usage) => {
-        recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, usage);
+        recordTokenUsage(this.usageRepo, { ...input, ...called }, usage);
       });
     }
     return result;
@@ -162,16 +186,19 @@ export class UsageTrackingAdapter implements ILanguageModel {
   async streamObject<T>(
     input: StreamObjectInput,
   ): Promise<
-    Result<{
-      partialObjectStream: AsyncIterable<Partial<T>>;
-      object: Promise<T>;
-      usage: Promise<TokenUsage>;
-    }>
+    Result<
+      {
+        partialObjectStream: AsyncIterable<Partial<T>>;
+        object: Promise<T>;
+        usage: Promise<TokenUsage>;
+      } & CalledModel
+    >
   > {
     const result = await this.inner.streamObject<T>(input);
     if (!result.error) {
+      const called = this.called(result.data);
       void result.data.usage.then((usage) => {
-        recordTokenUsage(this.usageRepo, { ...input, provider: this.provider }, usage);
+        recordTokenUsage(this.usageRepo, { ...input, ...called }, usage);
       });
     }
     return result;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  type CalledModel,
   domainError,
   err,
   ok,
@@ -341,14 +342,15 @@ interface FakeModelOptions {
 
 class FakeLanguageModel implements ILanguageModel {
   readonly provider = "anthropic" as const;
+  private readonly called = { provider: "anthropic" as const, model: "fake-model" };
   constructor(private readonly options: FakeModelOptions = {}) {}
 
   async generateObject<T>(
     input: GenerateObjectInput,
-  ): Promise<Result<{ object: T; usage: TokenUsage }>> {
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>> {
     if (input.purpose === "extractionFileGrouping") {
       const records = this.options.grouping ?? [];
-      return ok({ object: { records } as T, usage: ZERO_USAGE });
+      return ok({ object: { records } as T, usage: ZERO_USAGE, ...this.called });
     }
     if (input.purpose === "extractionFieldExtraction") {
       if (this.options.fieldError) return err(this.options.fieldError);
@@ -359,24 +361,26 @@ class FakeLanguageModel implements ILanguageModel {
           rationale: "stated on the cover page",
         },
       };
-      return ok({ object: object as T, usage: ZERO_USAGE });
+      return ok({ object: object as T, usage: ZERO_USAGE, ...this.called });
     }
     return err(domainError("AI_PROVIDER_FAILED", `unexpected purpose ${input.purpose}`));
   }
-  async generateText(): Promise<Result<{ text: string; usage: TokenUsage }>> {
+  async generateText(): Promise<Result<{ text: string; usage: TokenUsage } & CalledModel>> {
     return err(domainError("AI_PROVIDER_FAILED", "not used"));
   }
   async streamText(): Promise<
-    Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>
+    Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> } & CalledModel>
   > {
     return err(domainError("AI_PROVIDER_FAILED", "not used"));
   }
   async streamObject<T>(): Promise<
-    Result<{
-      partialObjectStream: AsyncIterable<Partial<T>>;
-      object: Promise<T>;
-      usage: Promise<TokenUsage>;
-    }>
+    Result<
+      {
+        partialObjectStream: AsyncIterable<Partial<T>>;
+        object: Promise<T>;
+        usage: Promise<TokenUsage>;
+      } & CalledModel
+    >
   > {
     return err(domainError("AI_PROVIDER_FAILED", "not used"));
   }

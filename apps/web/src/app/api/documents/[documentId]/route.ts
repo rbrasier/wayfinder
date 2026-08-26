@@ -135,6 +135,7 @@ export async function POST(
     messages,
     flow,
     node,
+    userId: authSession.userId,
     changeRequests,
   });
 
