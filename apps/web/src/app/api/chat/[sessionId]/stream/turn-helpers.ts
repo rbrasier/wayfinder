@@ -221,6 +221,9 @@ export async function generateDocument(
   _nodes: FlowNode[],
   messages: SessionMessage[],
   node: FlowNode,
+  // Whose budget the generation calls bill against, and who the usage rows are
+  // attributed to (ADR-026).
+  userId: string,
   // Threaded by the pre-generation evaluation gate on a pass so generation
   // reuses the already-extracted values and grade rather than recomputing them.
   precomputed?: { fieldValues?: DocumentData; grade?: DocumentGenerationConfidence },
@@ -251,6 +254,7 @@ export async function generateDocument(
       messages,
       flow,
       node,
+      userId,
       budget,
       fieldValues: precomputed?.fieldValues,
       grade: precomputed?.grade,
@@ -696,6 +700,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
           nodes,
           assistantMessages.data,
           completedNode,
+          userId,
           precomputedDocument,
         );
       } finally {

@@ -358,3 +358,33 @@ describe("EvaluateStepReadiness", () => {
     expect(result.data?.fieldValues.suppliers).toEqual([]);
   });
 });
+
+// The gate spends the document-generation model — the most expensive calls in a
+// session. Without the requesting user on every call the spend lands on an
+// unattributed row and QuotaEnforcer.check short-circuits before it looks at a
+// single budget (ADR-026).
+describe("EvaluateStepReadiness — usage attribution", () => {
+  it("carries the requesting user, flow and session on every model call it makes", async () => {
+    const languageModel = makeLanguageModel();
+
+    const useCase = new EvaluateStepReadiness(
+      languageModel,
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+    );
+
+    await useCase.execute({
+      messages,
+      flow: makeFlow(),
+      node: makeNode(),
+      userId: "user-1",
+      sessionId: "sess-1",
+    });
+
+    const calls = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.length).toBeGreaterThan(1);
+    for (const [input] of calls) {
+      expect(input).toMatchObject({ userId: "user-1", flowId: "flow-1", sessionId: "sess-1" });
+    }
+  });
+});

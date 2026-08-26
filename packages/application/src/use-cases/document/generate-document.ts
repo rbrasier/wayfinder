@@ -38,6 +38,11 @@ export interface GenerateDocumentInput {
   messages: SessionMessage[];
   flow: Flow;
   node: FlowNode;
+  // Enforcement key + dashboard attribution (ADR-026). Generation makes the
+  // most expensive model calls in a session, so without it that spend lands on
+  // an unattributed row and never reaches the user's cap. Optional so the
+  // use-case stays callable from a context with no signed-in user.
+  userId?: string | null;
   // Admin-configurable budget (ADR-027). When omitted, the v1.49.0 module
   // constants apply so behaviour is unchanged.
   budget?: ResolvedDocumentGenerationBudget;
@@ -109,6 +114,9 @@ export class GenerateDocument {
 
     const summaryResult = await this.languageModel.generateObject<{ summary: string }>({
       purpose: "chat",
+      userId: input.userId,
+      flowId: input.flow.id,
+      sessionId: input.sessionId,
       prompt: `Write a 2-sentence summary of a document with these values: ${JSON.stringify(fieldValues).slice(0, 2000)}`,
       schema: documentSummarySchema,
     });
@@ -153,6 +161,9 @@ export class GenerateDocument {
         documentData: scalarValues(fieldValues),
         contextDocs: input.flow.contextDocs,
         stepCriteria: config.doneWhen,
+        userId: input.userId,
+        flowId: input.flow.id,
+        sessionId: input.sessionId,
       });
     }
 
@@ -177,6 +188,9 @@ export class GenerateDocument {
         contextDocs: input.flow.contextDocs,
         instruction: config.aiInstruction,
         purpose: "documentGeneration",
+        userId: input.userId,
+        flowId: input.flow.id,
+        sessionId: input.sessionId,
         changeRequests: input.changeRequests,
         contextBudgetChars: input.budget?.contextBudgetChars,
         maxPromptTokens: input.budget?.maxPromptTokens,
@@ -211,11 +225,17 @@ export class GenerateDocument {
     documentData: Record<string, string>;
     contextDocs: FlowContextDoc[];
     stepCriteria: string;
+    userId?: string | null;
+    flowId: string;
+    sessionId: string;
   }): Promise<void> {
     const gradeResult = await gradeDocumentFields(this.languageModel, {
       fieldValues: input.documentData,
       contextDocs: input.contextDocs,
       stepCriteria: input.stepCriteria,
+      userId: input.userId,
+      flowId: input.flowId,
+      sessionId: input.sessionId,
     });
     if (gradeResult.error) return;
 
