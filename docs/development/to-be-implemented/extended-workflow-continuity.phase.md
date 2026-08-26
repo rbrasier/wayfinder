@@ -108,7 +108,9 @@ less is needed.
    `final`; (c) a later turn on the same node does not rewrite a `final` output — it writes a
    new draft. Then implement.
 
-4b. **Information-architecture investigation — before any schema change is written.**
+4b. **Information-architecture investigation — before any schema change is written. ✅ Complete
+   (2026-08-25) — the finding is §10 below; it confirms the planned shape and pins staleness to
+   `current_node_id`, ruling out the confirmation pointer explicitly.**
    This phase adds a table and a column, so their shape is settled by investigation first.
    Produce a short written finding covering:
    - **Whether a draft warrants its own table.** ADR-051 argues it does, to keep keystroke-rate
@@ -216,3 +218,83 @@ previously defined elements — is deliberately excluded.
 - Decomposition: 1) domain entity + port + step-output status; 2) application use cases +
   `confirm-step-advance`; 3) adapters schema, migration, repository; 4) web composer draft
   rehydration; 5) rail completeness + resuming indicator.
+
+---
+
+## 10. Information-architecture finding — step 4b (2026-08-25)
+
+Produced before any migration was drafted, as step 4b requires. Every claim below is from
+the code as it stands, cited by path and line. **Outcome: the shape ADR-051 proposed survives
+unchanged, with one comparison pinned down that the ADR left implicit.**
+
+### 10.1 Does a draft warrant its own table? — **Yes**
+
+Two independent findings, either of which is sufficient on its own.
+
+**`app_sessions` is guarded by optimistic concurrency, so a keystroke-rate write cannot go
+there.** `app_sessions.version` (`schema/wayfinder.ts:184`) is incremented by *every* non-lease
+write, and a stale expected version loses the conditional update and surfaces a `CONFLICT`
+rather than silently overwriting (`entities/session.ts:66-70`). A debounced draft save is a
+non-lease writer. Putting it on the session row means the operator's typing and the turn
+runner's own writes contend for the same version counter — the draft save either loses to the
+turn, or wins and makes the turn's write fail. The contention argument ADR-051 made on
+general grounds is confirmed by a specific mechanism.
+
+**No existing table can host it.** `app_session_participants` is the only per-participant
+session state, and it is unique on `(session_id, user_id)` — the exact key a draft needs. It is
+still the wrong home: its own comment records that the owner is deliberately *not* stored there
+(`schema/wayfinder.ts:311-314`, "the owner is not stored here — it is `app_sessions.user_id`"),
+so it holds only invited collaborators and viewers. The session owner is the most common author
+of a draft and has no row to hang one on. Adding one for the owner would change what the
+participants table means, to make a draft fit.
+
+**Conclusion.** New table `app_session_drafts`, unique on `(session_id, user_id)`, cascading on
+session delete — as planned. No column is added to `app_sessions`.
+
+### 10.2 Does `status` belong on `app_session_step_outputs`? — **Yes, it is not derivable**
+
+The alternative was to derive draft-versus-final from existing rows plus
+`app_sessions.awaiting_confirmation_node_id`. That derivation cannot be written, for two reasons.
+
+**The pointer is nulled on confirm.** `ConfirmStepAdvance` sets `awaitingConfirmationNodeId: null`
+on both its success paths (`confirm-step-advance.ts:73`, `:99`). Once a step is confirmed there is
+no trace of which node was ever awaiting it, so a historical row cannot be classified at all —
+only "the one node the session is paused on right now" is knowable.
+
+**The table holds more than one row per node.** Step outputs are inserted unconditionally —
+`create` is a bare `insert` (`drizzle-session-step-output-repository.ts:29-45`), and every call
+site persists without first looking for an existing row for that node
+(`capture-structured-output.ts:95`, `generate-document.ts:200`, `apply-auto-node-result.ts:125`,
+`decide-approval.ts:593`). `updateFields` exists but is addressed by row `id`, not by
+`(session, node)`, so it is not an upsert. A second capture on the same node therefore leaves two
+rows. `awaiting_confirmation_node_id` points at a *node*, so even while it is set it cannot tell
+those two rows apart — which is precisely what step 4(c) requires ("a later turn on the same node
+does not rewrite a `final` output — it writes a new draft").
+
+**Conclusion.** Add the additive `status` column, read through `stepOutputStatus()` with absent
+meaning `"final"`. The column is the only place the distinction can live.
+
+### 10.3 Where is staleness expressed? — **Once, in `LoadSessionDraft`, against `currentNodeId`**
+
+Staleness is `draft.nodeId !== session.currentNodeId`, evaluated in the load use case, which
+**deletes** the row and returns nothing. It is expressed nowhere else: the router returns what the
+use case returns, and the composer renders what it is given without re-checking. A second check in
+the component is the "two places that can disagree" this step was written to prevent.
+
+ADR-051 already names `currentNodeId` as the comparison. The investigation pins down what it left
+implicit: staleness must **never** be compared against `awaiting_confirmation_node_id`. A session
+paused for confirmation still has `currentNodeId` equal to that node (`entities/session.ts:51-53` — `awaitingConfirmationNodeId ===
+currentNodeId` is the paused state), so comparing against the confirmation pointer would delete a
+draft the operator is actively typing at the moment their step completes.
+
+`app_session_drafts.node_id` is therefore a *stamp of what the text was written against*, not a
+second copy of the session's position. The session row stays the single source of truth for where
+the session is.
+
+### 10.4 Net effect on the planned migration
+
+Unchanged: one new table, one additive defaulted column, one migration carrying
+`-- data-impact: preserved — new table plus a defaulted column; no existing row is altered or lost`.
+The gate did not shrink this phase. What it produced is evidence for each of the three shapes
+ADR-051 asserted, and one explicit prohibition — comparing staleness against the confirmation
+pointer — that would otherwise have been an easy thing to reach for mid-build.
