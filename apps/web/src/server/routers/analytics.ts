@@ -38,11 +38,20 @@ export const buildInsightsExportAuditPayload = (
 });
 
 export const analyticsRouter = router({
-  overview: adminProcedure
-    .input(z.object({ periodDays: z.number().int().min(1).max(365).optional() }).optional())
+  value: adminProcedure
+    .input(
+      z
+        .object({
+          periodDays: z.number().int().min(1).max(365).optional(),
+          // Scopes every figure on the Value page to a single flow.
+          flowId: z.string().uuid().optional(),
+        })
+        .optional(),
+    )
     .query(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.getOverviewDashboard.execute({
+      const result = await ctx.container.useCases.getValueDashboard.execute({
         periodDays: input?.periodDays,
+        flowId: input?.flowId,
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

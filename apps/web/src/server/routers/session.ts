@@ -8,6 +8,7 @@ import { toTrpcError } from "../trpc-errors";
 import { orderStepIds } from "@/lib/step-order";
 import { buildCompletedStepData } from "@/lib/step-data";
 import { confirmStep } from "@/lib/chat/confirm-step";
+import { MAX_ESTIMATE_MINUTES } from "@rbrasier/application";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
 
@@ -418,6 +419,26 @@ export const sessionRouter = router({
       if (result.error) throw toTrpcError(result.error);
       void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
       return result.data;
+    }),
+
+  // The operator's own estimate of how long this case would have taken without
+  // Wayfinder. Ownership and terminal-status are re-checked in the use case, so
+  // this stays a thin pass-through.
+  recordManualEstimate: authenticatedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        minutes: z.number().int().positive().max(MAX_ESTIMATE_MINUTES),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.recordManualEstimate.execute({
+        sessionId: input.sessionId,
+        userId: ctx.userId,
+        minutes: input.minutes,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { success: true };
     }),
 
   confirmStep: authenticatedProcedure

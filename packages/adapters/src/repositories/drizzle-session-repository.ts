@@ -142,6 +142,7 @@ const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   activeTurnClaimedBy: row.active_turn_claimed_by ?? null,
   activeTurnClaimedAt: row.active_turn_claimed_at ?? null,
   version: row.version,
+  manualEstimateMinutes: row.manual_estimate_minutes ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -313,6 +314,9 @@ export class DrizzleSessionRepository implements ISessionRepository {
             : {}),
           ...(patch.graphCheckpoint !== undefined ? { graph_checkpoint: patch.graphCheckpoint ?? undefined } : {}),
           ...(patch.pendingExecutions !== undefined ? { pending_executions: patch.pendingExecutions } : {}),
+          ...(patch.manualEstimateMinutes !== undefined
+            ? { manual_estimate_minutes: patch.manualEstimateMinutes }
+            : {}),
           version: sql`${app_sessions.version} + 1`,
           updated_at: new Date(),
         })
