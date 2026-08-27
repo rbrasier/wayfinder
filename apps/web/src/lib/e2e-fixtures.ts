@@ -772,6 +772,15 @@ export const teardownE2EFixtures = async (container: Container): Promise<void> =
   }
 
   if (flowIds.length > 0) {
+    // Before the flows themselves. `app_extraction_runs.flow_id` cascades from
+    // the flow, but its `flow_version_id` is ON DELETE RESTRICT against
+    // `app_flow_versions`, which cascades from the same flow — so deleting the
+    // flow fires both cascades and the version's is refused while a run still
+    // points at it. Removing the runs first makes the order irrelevant. Records
+    // and documents cascade from the run.
+    await db
+      .delete(schema.app_extraction_runs)
+      .where(inArray(schema.app_extraction_runs.flow_id, flowIds));
     await db
       .delete(schema.kb_document_chunks)
       .where(inArray(schema.kb_document_chunks.flow_id, flowIds));
