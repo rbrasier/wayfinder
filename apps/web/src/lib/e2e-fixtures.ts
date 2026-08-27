@@ -4,6 +4,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
 import { seedStorageObjects } from "./e2e-fixtures-storage";
 import { seedStructuredSession } from "./e2e-fixtures-structured";
+import { seedExtractionRun } from "./e2e-fixtures-extraction";
 
 // Deterministic fixture data seeded before the E2E suite so that specs gated on
 // "a session/flow must exist" run their real assertions instead of skipping.
@@ -81,6 +82,11 @@ export interface SeedResult {
   // One signature bound by an approval left on the default subject, and one
   // nothing signs — the two states the canvas advisory must tell apart.
   signatureWarningFlowId: string;
+  // A completed extraction run with settled documents and records, so the run
+  // screen's downloads can be driven without authoring a synthesis and staging
+  // input documents through the UI first.
+  extractionFlowId: string;
+  extractionRunId: string;
 }
 
 // A fork flow whose two mutually-exclusive branches capture the same `amount`
@@ -481,6 +487,13 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     await container.useCases.upsertFeatureFlag.execute({ key: "mcp", enabled: true }),
     "enable mcp flag",
   );
+  // Synthesise Information is behind extraction_flows (ADR-033 §7). Its specs
+  // used to skip themselves when the flag was off, which reads as a green run
+  // for a surface nobody exercised.
+  unwrap(
+    await container.useCases.upsertFeatureFlag.execute({ key: "extraction_flows", enabled: true }),
+    "enable extraction_flows flag",
+  );
 
   // Seed a library skill so the flow-editor skill picker is populated — its
   // search box only renders once the library is non-empty.
@@ -688,6 +701,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const approvalFirstFlowId = await seedApprovalFirstFlow(container, ownerUserId);
   const approvalWithdraw = await seedWithdrawableApprovalSession(container, ownerUserId);
   const signatureWarningFlowId = await seedSignatureWarningFlow(container, ownerUserId);
+  const extraction = await seedExtractionRun(container, ownerUserId);
 
   return {
     flowId: flow.id,
@@ -703,6 +717,8 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     approvalWithdrawSessionId: approvalWithdraw.sessionId,
     approvalWithdrawDraftStepName: approvalWithdraw.draftStepName,
     signatureWarningFlowId,
+    extractionFlowId: extraction.flowId,
+    extractionRunId: extraction.runId,
   };
 };
 
