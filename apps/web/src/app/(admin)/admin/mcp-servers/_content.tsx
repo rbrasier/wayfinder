@@ -18,6 +18,7 @@ import {
   VERBATIM_SCOPE_NOTE,
   verbatimBadge,
   verbatimConfirmPrompt,
+  verbatimFailureNote,
 } from "@/components/admin/verbatim-toggle-model";
 import { trpc } from "@/trpc/client";
 
@@ -41,6 +42,9 @@ export function AdminMcpServersContent() {
     label: string;
     next: boolean;
   } | null>(null);
+  // Reported beside the toggle rather than in the form's shared error line at the
+  // top of the page, which the administrator is not looking at when they press it.
+  const [verbatimError, setVerbatimError] = useState<string | null>(null);
 
   const invalidate = () => void utils.mcpServer.list.invalidate();
 
@@ -60,9 +64,12 @@ export function AdminMcpServersContent() {
   const update = trpc.mcpServer.update.useMutation({
     onSuccess: () => {
       setConfirmVerbatim(null);
+      setVerbatimError(null);
       invalidate();
     },
-    onError: (cause) => setError(cause.message),
+    // The confirm panel stays open so the change can be retried where it was
+    // started, and the badge above it still shows the setting as it really is.
+    onError: (cause) => setVerbatimError(verbatimFailureNote(cause.message)),
   });
   const disable = trpc.mcpServer.disable.useMutation({ onSuccess: invalidate });
   const enable = trpc.mcpServer.enable.useMutation({ onSuccess: invalidate });
@@ -236,9 +243,10 @@ export function AdminMcpServersContent() {
                             <div className="space-x-2">
                               <Button
                                 size="sm"
-                                onClick={() =>
-                                  update.mutate({ id: server.id, verbatimOnly: confirmVerbatim.next })
-                                }
+                                onClick={() => {
+                                  setVerbatimError(null);
+                                  update.mutate({ id: server.id, verbatimOnly: confirmVerbatim.next });
+                                }}
                                 disabled={update.isPending}
                               >
                                 {update.isPending ? "Saving…" : "Confirm"}
@@ -246,24 +254,31 @@ export function AdminMcpServersContent() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => setConfirmVerbatim(null)}
+                                onClick={() => {
+                                  setConfirmVerbatim(null);
+                                  setVerbatimError(null);
+                                }}
                                 disabled={update.isPending}
                               >
                                 Cancel
                               </Button>
                             </div>
+                            {verbatimError ? (
+                              <p className="text-xs text-destructive">{verbatimError}</p>
+                            ) : null}
                           </div>
                         ) : (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() =>
+                            onClick={() => {
+                              setVerbatimError(null);
                               setConfirmVerbatim({
                                 id: server.id,
                                 label: server.label,
                                 next: !server.verbatimOnly,
-                              })
-                            }
+                              });
+                            }}
                           >
                             {server.verbatimOnly ? "Allow rewriting" : "Require verbatim"}
                           </Button>

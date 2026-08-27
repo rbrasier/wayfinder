@@ -220,6 +220,26 @@ describe("applyFieldEdit", () => {
     expect(fieldProvenance(edited)).toBe("human_corrected");
   });
 
+  it("drops a derivation and source reference the corrected value no longer has", () => {
+    const original = record([
+      fieldResult({
+        key: "total_ex_vat",
+        value: "1200",
+        provenance: "derived",
+        derivation: { method: "unit × quantity", sourceKeys: ["unit", "quantity"] },
+        sourceRef: { documentId: "doc-1", locator: "page 4" },
+      }),
+    ]);
+
+    const edited = applyFieldEdit(original, "total_ex_vat", "1350", "Dana Ops").data!.record.fields[0]!;
+
+    // A person typed this value: it was not calculated from those fields and it
+    // is not on that page, so neither claim may survive into the UI or an export.
+    expect(edited.derivation).toBeUndefined();
+    expect(edited.sourceRef).toBeUndefined();
+    expect(fieldProvenance(edited)).toBe("human_corrected");
+  });
+
   it("returns the before/after change for the audit trail", () => {
     const original = record([fieldResult({ key: "price", value: "£10" })]);
     const result = applyFieldEdit(original, "price", "£12", "Dana Ops");

@@ -207,7 +207,7 @@ describe("RunMcpNode", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it("is byte-for-byte unchanged when the server is not verbatim-only", async () => {
+  it("does not claim verbatim handling for an ordinary connection", async () => {
     const session = makeSession();
     const result = await new RunMcpNode(
       makeSessions(session),
@@ -219,10 +219,10 @@ describe("RunMcpNode", () => {
     ).execute({ session, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
 
     expect(result.data?.data).toEqual({ output: "tool says hi" });
-    expect(result.data?.provenance).toBe("processed");
+    expect(result.data?.verbatim).toBe(false);
   });
 
-  it("marks a verbatim-only server's result verbatim and passes it through unmodified", async () => {
+  it("passes a verbatim-only server's result through unmodified and tells the caller to keep it that way", async () => {
     const session = makeSession();
     const client = makeClient({ callTool: vi.fn().mockResolvedValue(ok({ output: "  4.25 \n" })) });
 
@@ -237,7 +237,7 @@ describe("RunMcpNode", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data?.data).toEqual({ output: "  4.25 \n" });
-    expect(result.data?.provenance).toBe("verbatim");
+    expect(result.data?.verbatim).toBe(true);
   });
 
   it("refuses a verbatim-only server whose step is configured to reshape the result", async () => {

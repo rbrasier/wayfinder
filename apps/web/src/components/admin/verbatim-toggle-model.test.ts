@@ -3,6 +3,7 @@ import {
   VERBATIM_SCOPE_NOTE,
   verbatimBadge,
   verbatimConfirmPrompt,
+  verbatimFailureNote,
 } from "./verbatim-toggle-model";
 
 describe("verbatimConfirmPrompt", () => {
@@ -41,5 +42,17 @@ describe("verbatimBadge", () => {
 
   it("shows nothing for a connection with no verbatim requirement", () => {
     expect(verbatimBadge(false)).toBeNull();
+  });
+});
+
+describe("verbatimFailureNote", () => {
+  it("says the setting did not change, so a failed save is never read as applied", () => {
+    const note = verbatimFailureNote("Network error");
+    expect(note).toContain("not changed");
+    expect(note).toContain("Network error");
+  });
+
+  it("still says the setting did not change when the cause is unreported", () => {
+    expect(verbatimFailureNote(null)).toContain("not changed");
   });
 });
