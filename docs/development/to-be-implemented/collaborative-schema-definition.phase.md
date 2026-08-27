@@ -40,6 +40,12 @@ through the existing `buildExtractionField` path, so a proposed field and a hand
 up identical. Because the proposal has no stored status, confirmation is a single write rather
 than a dual write, and the "schema live while its proposal still reads draft" bug cannot occur.
 
+**The proposal's own status and revision history are in-memory thread state and nothing more.**
+`SchemaProposalStatus` exists so a second confirm cannot re-materialise a schema over a set of
+fields the author has since hand-edited — it is a guard within one conversation, never a column,
+a row or a snapshot member. No repository, no table, no migration: when the thread ends, the
+status ends with it. Read every mention of `draft` and `confirmed` below in that light.
+
 The proposer emits the annotation language authors already write (`Label (date) (optional)`),
 reusing `parseTemplateField` rather than adding a second route to the same field model.
 
@@ -47,12 +53,12 @@ reusing `parseTemplateField` rather than adding a second route to the same field
 
 | Path | New / changed | Notes |
 | ---- | ------------- | ----- |
-| `packages/domain/src/entities/schema-proposal.ts` | new | `SchemaProposal`, `SchemaProposalStatus`, `SchemaProposalRevision` |
+| `packages/domain/src/entities/schema-proposal.ts` | new | `SchemaProposal`, `SchemaProposalStatus`, `SchemaProposalRevision` — **in-memory thread state; never persisted, never written to the snapshot** |
 | `packages/domain/src/ports/schema-proposer.ts` | new | `ISchemaProposer`, mirroring `ISeedProposer` |
 | `packages/domain/src/entities/index.ts`, `ports/index.ts` | changed | Re-exports |
 | `packages/application/src/use-cases/extraction/propose-schema.ts` | new | Proposal from context + samples |
 | `packages/application/src/use-cases/extraction/refine-schema.ts` | new | One refinement turn, appends a revision |
-| `packages/application/src/use-cases/extraction/confirm-schema.ts` | new | Validate, materialise, mark confirmed |
+| `packages/application/src/use-cases/extraction/confirm-schema.ts` | new | Validate, materialise into the flow snapshot, close the in-memory proposal against a second confirm |
 | `packages/application/src/use-cases/extraction/validate-schema-proposal.ts` | new | Blocking vs advisory findings |
 | `packages/adapters/src/ai/schema-proposer.ts` | new | `ISchemaProposer` over the language model |
 | `apps/web/src/server/routers/extraction.ts` | changed | `proposeSchema`, `refineSchema`, `confirmSchema` |
@@ -60,10 +66,14 @@ reusing `parseTemplateField` rather than adding a second route to the same field
 
 ## 6. Implementation steps (test-first per CLAUDE.md)
 
-1. **Domain — proposal entity.** Write `schema-proposal.test.ts` first: (a) a new proposal is
-   `draft`; (b) appending a revision preserves earlier ones in order; (c) confirming a proposal
-   with a blocking finding is refused; (d) `confirmed` is terminal — a second confirm is
-   rejected. Then add the entity and its transitions. Pure, no dependencies.
+1. **Domain — proposal entity, held in memory.** Write `schema-proposal.test.ts` first: (a) a
+   new proposal is `draft`; (b) appending a revision preserves earlier ones in order;
+   (c) confirming a proposal with a blocking finding is refused; (d) `confirmed` is terminal — a
+   second confirm is rejected. Then add the entity and its transitions. Pure, no dependencies.
+
+   The transitions are a guard over thread-local state, not a persisted lifecycle. **Do not add a
+   repository, a table or a snapshot member for any of it** — if the build reaches for one, the
+   design has been misread (ADR-052, §4 above).
 
 2. **Domain — proposer port.** Add `ISchemaProposer`. Type-only. No repository port: a proposal
    is never stored.
@@ -124,7 +134,8 @@ Mirrors PRD §10. Restated as the build's test plan:
 - [ ] Confirmation is refused while any blocking finding is open.
 - [ ] Confirmation materialises through `buildExtractionField`; a failed write leaves no
       partial state, since nothing about the proposal is stored.
-- [ ] `confirmed` is terminal; no proposal reaches a snapshot without an explicit confirm.
+- [ ] `confirmed` is terminal within the thread; no proposal reaches a snapshot without an
+      explicit confirm, and no proposal state is persisted anywhere.
 - [ ] Extraction fields and conversational structured fields accept and reject the same annotations.
 
 ## 9. Playwright e2e

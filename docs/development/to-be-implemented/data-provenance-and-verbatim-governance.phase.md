@@ -2,7 +2,9 @@
 
 - **Status**: Awaiting review
 - **Target version**: 0.32.0  (bump: MINOR — additive `admin_mcp_servers.verbatim_only` column,
-  aggregate-confidence columns on `app_extraction_records`, + new feature)
+  + new feature. No column is added to or altered on `app_extraction_records`: the §10
+  investigation found the existing aggregate column unread, so both per-kind aggregates are
+  derived from `fields` in the domain.)
 - **PRD**: `docs/development/prd/data-provenance-and-verbatim-governance.prd.md`
 - **ADRs**: ADR-053 (field provenance and dual confidence)
 - **Depends on**: ADR-024 (operator correction authoritative), ADR-032 (MCP tool-loop pre-pass),
