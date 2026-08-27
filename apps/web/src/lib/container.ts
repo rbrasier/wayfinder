@@ -739,7 +739,7 @@ const build = () => {
       // resolution), heartbeat, release — so the stream route stops reaching
       // into the session/user repos directly for the lease.
       turnLease: new TurnLease(sessions, users),
-      publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
+      publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger, skillsAndMcp.repos.mcpServers),
       ...buildFlowPortability({ flows, flowNodes, flowEdges, objectStorage, auditLogger, skillsAndMcp }),
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),

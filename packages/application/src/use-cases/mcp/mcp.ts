@@ -25,6 +25,7 @@ export class RegisterMcpServer {
     url: string;
     transport?: McpTransport;
     communicatesExternally?: boolean;
+    verbatimOnly?: boolean;
     credentialRef?: string | null;
     createdByUserId?: string | null;
   }): Promise<Result<McpServer>> {
@@ -45,6 +46,7 @@ export class RegisterMcpServer {
       url,
       transport: input.transport,
       communicatesExternally: input.communicatesExternally,
+      verbatimOnly: input.verbatimOnly,
       credentialRef,
       createdByUserId: input.createdByUserId ?? null,
     });
@@ -59,6 +61,7 @@ export class UpdateMcpServer {
     label?: string;
     url?: string;
     communicatesExternally?: boolean;
+    verbatimOnly?: boolean;
     credentialRef?: string | null;
   }): Promise<Result<McpServer>> {
     if (input.url !== undefined && !isHttpUrl(input.url.trim())) {
@@ -77,6 +80,7 @@ export class UpdateMcpServer {
       label: input.label?.trim(),
       url: input.url?.trim(),
       communicatesExternally: input.communicatesExternally,
+      verbatimOnly: input.verbatimOnly,
       credentialRef,
     });
   }

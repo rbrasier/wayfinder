@@ -12,6 +12,8 @@ import type {
   IFlowNodeRepository,
   IFlowRepository,
   IFlowVersionRepository,
+  IMcpServerRepository,
+  McpServer,
   NewAuditLog,
   NewFlow,
   NewFlowEdge,
@@ -56,6 +58,36 @@ const makeNode = (overrides: Partial<FlowNode> = {}): FlowNode => ({
   updatedAt: new Date("2026-01-01"),
   ...overrides,
 });
+
+const makeMcpServer = (overrides: Partial<McpServer> = {}): McpServer => ({
+  id: "mcp-1",
+  label: "Rate table",
+  transport: "sse",
+  url: "https://mcp.example.com/sse",
+  credentialRef: null,
+  communicatesExternally: false,
+  verbatimOnly: false,
+  status: "active",
+  createdByUserId: null,
+  createdAt: new Date("2026-01-01"),
+  updatedAt: new Date("2026-01-01"),
+  ...overrides,
+});
+
+const makeMcpNode = (responseField: { type: string }): FlowNode =>
+  makeNode({
+    id: "node-3",
+    type: "mcp",
+    name: "Look up the rate",
+    config: {
+      instruction: "Look it up.",
+      serverId: "mcp-1",
+      toolName: "lookup",
+      responseFields: [
+        { key: "rate", label: "Rate", type: responseField.type, optional: false, raw: "Rate" },
+      ],
+    },
+  });
 
 const makeEdge = (overrides: Partial<FlowEdge> = {}): FlowEdge => ({
   id: "edge-1",
@@ -225,6 +257,14 @@ class FakeFlowVersionRepository implements IFlowVersionRepository {
   }
 }
 
+class FakeMcpServerRepository {
+  servers = new Map<string, McpServer>();
+
+  async findById(id: string): Promise<Result<McpServer | null>> {
+    return ok(this.servers.get(id) ?? null);
+  }
+}
+
 class FakeAuditLogger implements IAuditLogger {
   entries: NewAuditLog[] = [];
   async log(payload: NewAuditLog): Promise<Result<true>> {
@@ -241,6 +281,7 @@ describe("PublishFlowVersion", () => {
   let edges: FakeFlowEdgeRepository;
   let versions: FakeFlowVersionRepository;
   let audit: FakeAuditLogger;
+  let mcpServers: FakeMcpServerRepository;
   let useCase: PublishFlowVersion;
 
   beforeEach(() => {
@@ -249,11 +290,51 @@ describe("PublishFlowVersion", () => {
     edges = new FakeFlowEdgeRepository();
     versions = new FakeFlowVersionRepository();
     audit = new FakeAuditLogger();
+    mcpServers = new FakeMcpServerRepository();
     flows.flows.set("flow-1", makeFlow());
     nodes.nodes.set("node-1", makeNode());
     nodes.nodes.set("node-2", makeNode({ id: "node-2" }));
     edges.edges.set("edge-1", makeEdge());
-    useCase = new PublishFlowVersion(flows, nodes, edges, versions, audit);
+    useCase = new PublishFlowVersion(
+      flows,
+      nodes,
+      edges,
+      versions,
+      audit,
+      mcpServers as unknown as IMcpServerRepository,
+    );
+  });
+
+  it("refuses to publish a step that reshapes a verbatim-only connection's results", async () => {
+    mcpServers.servers.set("mcp-1", makeMcpServer({ verbatimOnly: true }));
+    nodes.nodes.set("node-3", makeMcpNode({ type: "currency" }));
+
+    const result = await useCase.execute({ flowId: "flow-1", publishedByUserId: "user-1" });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Look up the rate");
+    expect(result.error?.message).toContain("rate");
+    expect(versions.versions).toHaveLength(0);
+  });
+
+  it("publishes the same step when the connection is not verbatim-only", async () => {
+    mcpServers.servers.set("mcp-1", makeMcpServer({ verbatimOnly: false }));
+    nodes.nodes.set("node-3", makeMcpNode({ type: "currency" }));
+
+    const result = await useCase.execute({ flowId: "flow-1", publishedByUserId: "user-1" });
+
+    expect(result.error).toBeUndefined();
+    expect(versions.versions).toHaveLength(1);
+  });
+
+  it("publishes a verbatim-only step that passes the result through untouched", async () => {
+    mcpServers.servers.set("mcp-1", makeMcpServer({ verbatimOnly: true }));
+    nodes.nodes.set("node-3", makeMcpNode({ type: "text" }));
+
+    const result = await useCase.execute({ flowId: "flow-1", publishedByUserId: "user-1" });
+
+    expect(result.error).toBeUndefined();
+    expect(versions.versions).toHaveLength(1);
   });
 
   it("refuses to publish a flow whose imported references are still unresolved", async () => {

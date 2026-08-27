@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Download, Pencil } from "lucide-react";
-import { aggregateConfidence, confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
+import { confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
+import { aggregateConfidenceSummaries } from "./field-provenance-display";
+import { FieldRationale, ProvenanceTag } from "./field-provenance-detail";
 import {
   Dialog,
   DialogBody,
@@ -274,16 +276,8 @@ export function ResultGrid({
             <DialogTitle>Confidence rationale</DialogTitle>
           </DialogHeader>
           {rationale && (
-            <DialogBody className="gap-[8px] text-[13px]">
-              <p>
-                <span className="font-semibold">{BAND_LABEL[confidenceBand(rationale.confidence)]}</span>{" "}
-                ({Math.round(rationale.confidence * 100)}%)
-              </p>
-              <p className="text-[#5c574c]">{rationale.rationale || "No rationale provided."}</p>
-              <p className="text-[11px] text-[#736d5f]">
-                Confidence is a self-assessed triage signal, not a guarantee — always verify amber and
-                red values.
-              </p>
+            <DialogBody>
+              <FieldRationale field={rationale} documents={result.documents} />
             </DialogBody>
           )}
         </DialogContent>
@@ -462,9 +456,11 @@ function RecordDetail({
         <h4 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
           {record.label}
         </h4>
-        <span className="text-[11px] text-[#736d5f]">
-          {Math.round(aggregateConfidence(record) * 100)}% overall confidence
-        </span>
+        {aggregateConfidenceSummaries(record).map((summary) => (
+          <span key={summary.kind} className="text-[11px] text-[#736d5f]">
+            {summary.text}
+          </span>
+        ))}
       </div>
 
       {exceptionReasons.length > 0 ? (
@@ -598,6 +594,7 @@ function DetailField({
         <span className="min-w-0 break-words">
           {field.value || <span className="text-[#c9c3b5]">—</span>}
         </span>
+        <ProvenanceTag field={field} />
         {options.editing ? (
           <button
             type="button"

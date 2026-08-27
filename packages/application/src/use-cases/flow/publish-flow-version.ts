@@ -3,6 +3,7 @@ import {
   domainError,
   err,
   ok,
+  verbatimTransformViolations,
   type Flow,
   type FlowSnapshot,
   type FlowVersion,
@@ -11,7 +12,9 @@ import {
   type IFlowNodeRepository,
   type IFlowRepository,
   type IFlowVersionRepository,
+  type IMcpServerRepository,
   type FlowNode,
+  type McpNodeConfig,
   type Result,
 } from "@rbrasier/domain";
 
@@ -50,6 +53,7 @@ export class PublishFlowVersion {
     private readonly flowEdges: IFlowEdgeRepository,
     private readonly flowVersions: IFlowVersionRepository,
     private readonly auditLogger: IAuditLogger,
+    private readonly mcpServers: IMcpServerRepository,
   ) {}
 
   async execute(input: PublishFlowVersionInput): Promise<Result<FlowVersion>> {
@@ -108,7 +112,41 @@ export class PublishFlowVersion {
       );
     }
 
+    const verbatim = await this.describeVerbatimViolations(nodesResult.data);
+    if (verbatim.error) return verbatim;
+    if (verbatim.data.length > 0) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `This flow cannot be published because a step would transform results from a verbatim-only connection: ${verbatim.data.join("; ")}.`,
+        ),
+      );
+    }
+
     return ok(buildFlowSnapshot(flow, nodesResult.data, edgesResult.data));
+  }
+
+  // An administrator marks a connection verbatim-only to state that Wayfinder
+  // will not transform its results (ADR-053 §5). A step whose response fields
+  // cannot return the received bytes contradicts that, so publishing is refused
+  // here rather than left to fail at run time in front of an operator.
+  private async describeVerbatimViolations(nodes: FlowNode[]): Promise<Result<string[]>> {
+    const described: string[] = [];
+    for (const node of nodes) {
+      if (node.type !== "mcp") continue;
+      const config = node.config as unknown as McpNodeConfig;
+      if (!config.serverId) continue;
+
+      const violations = verbatimTransformViolations(config.responseFields ?? []);
+      if (violations.length === 0) continue;
+
+      const server = await this.mcpServers.findById(config.serverId);
+      if (server.error) return server;
+      if (!server.data?.verbatimOnly) continue;
+
+      described.push(`${node.name} — ${violations.join("; ")}`);
+    }
+    return ok(described);
   }
 
   private async extractionSnapshot(flowId: string): Promise<Result<FlowSnapshot>> {

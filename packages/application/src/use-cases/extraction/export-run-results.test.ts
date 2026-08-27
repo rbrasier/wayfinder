@@ -49,8 +49,22 @@ const records: ExtractionRecord[] = [
     id: "rec-1",
     label: "Acme",
     fields: [
-      { key: "supplier", value: "Acme Ltd", confidence: 0.9, rationale: "cover page" },
-      { key: "price", value: "£10", confidence: 0.4, rationale: "guessed" },
+      {
+        key: "supplier",
+        value: "Acme Ltd",
+        confidence: 0.9,
+        rationale: "cover page",
+        provenance: "verbatim",
+        sourceRef: { documentId: "doc-1", locator: "page 1" },
+      },
+      {
+        key: "price",
+        value: "£10",
+        confidence: 0.4,
+        rationale: "guessed",
+        provenance: "derived",
+        derivation: { method: "unit × quantity", sourceKeys: ["unit", "quantity"] },
+      },
     ],
     sourceDocumentIds: ["doc-1"],
   },
@@ -175,7 +189,11 @@ describe("ExportRunResults", () => {
       "field",
       "value",
       "confidence",
+      "kind",
       "band",
+      "provenance",
+      "derivation",
+      "source",
       "rationale",
     ]);
     expect(confidenceTab.rows).toEqual([
@@ -184,7 +202,11 @@ describe("ExportRunResults", () => {
         field: "Supplier",
         value: "Acme Ltd",
         confidence: "90",
+        kind: "selection",
         band: "green",
+        provenance: "verbatim",
+        derivation: "",
+        source: "doc-1 — page 1",
         rationale: "cover page",
       },
       {
@@ -192,7 +214,11 @@ describe("ExportRunResults", () => {
         field: "Price",
         value: "£10",
         confidence: "40",
+        kind: "accuracy",
         band: "red",
+        provenance: "derived",
+        derivation: "unit × quantity (from unit, quantity)",
+        source: "",
         rationale: "guessed",
       },
     ]);
@@ -208,10 +234,17 @@ describe("ExportRunResults", () => {
     const workbook = deps.getWorkbook();
     expect(workbook.sheets[0]!.rows[0]).toMatchObject({ price: "" });
     expect(workbook.sheets[1]!.rows).toHaveLength(2);
-    expect(workbook.sheets[1]!.rows[1]).toMatchObject({ field: "Price", value: "", confidence: "0" });
+    expect(workbook.sheets[1]!.rows[1]).toMatchObject({
+      field: "Price",
+      value: "",
+      confidence: "0",
+      // A field the record never carried is not a provenance claim about a value.
+      provenance: "",
+      kind: "",
+    });
   });
 
-  it("writes the full records (with rationale + sources) into the JSON artifact", async () => {
+  it("writes the full records (with rationale, provenance + sources) into the JSON artifact", async () => {
     const deps = buildDeps();
     await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
 
@@ -222,6 +255,12 @@ describe("ExportRunResults", () => {
       value: "Acme Ltd",
       confidence: 0.9,
       rationale: "cover page",
+      provenance: "verbatim",
+      sourceRef: { documentId: "doc-1", locator: "page 1" },
+    });
+    expect(payload.records[0].fields[1].derivation).toEqual({
+      method: "unit × quantity",
+      sourceKeys: ["unit", "quantity"],
     });
     expect(payload.records[0].sourceDocumentIds).toEqual(["doc-1"]);
   });
@@ -249,13 +288,52 @@ describe("ExportRunResults", () => {
     expect(csvEntry.data.toString("utf8")).toBe("csv-bytes");
   });
 
-  it("hands the CSV writer the data sheet's columns and rows, not the confidence sheet's", async () => {
+  it("opens the CSV with the data sheet's value columns and row order", async () => {
     const deps = buildDeps();
     await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
 
     const dataTab = deps.getWorkbook().sheets[0]!;
-    expect(deps.getCsvTable().columns).toEqual(dataTab.columns);
-    expect(deps.getCsvTable().rows).toEqual(dataTab.rows);
+    const table = deps.getCsvTable();
+    expect(table.columns.slice(0, dataTab.columns.length)).toEqual(dataTab.columns);
+    expect(table.rows.map((row) => row.record)).toEqual(dataTab.rows.map((row) => row.record));
+    for (const column of dataTab.columns) {
+      expect(table.rows[0]![column.key]).toBe(dataTab.rows[0]![column.key]);
+    }
+  });
+
+  it("carries provenance for every field, so a copied value is distinguishable from a composed one", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const table = deps.getCsvTable();
+    expect(table.columns.map((column) => column.key)).toContain("supplier__provenance");
+    expect(table.rows[0]!.supplier__provenance).toBe("verbatim");
+    expect(table.rows[0]!.price__provenance).toBe("derived");
+  });
+
+  it("carries a derived field's method and a field's source reference", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const table = deps.getCsvTable();
+    expect(table.rows[0]!.price__derivation).toBe("unit × quantity (from unit, quantity)");
+    expect(table.rows[0]!.supplier__source).toBe("doc-1 — page 1");
+  });
+
+  it("omits a derivation or source column for a field no record recorded one on", async () => {
+    const deps = buildDeps();
+    deps.runs.listRecords.mockResolvedValueOnce(
+      ok([
+        {
+          ...records[0]!,
+          fields: [{ key: "supplier", value: "Acme Ltd", confidence: 0.9, rationale: "" }],
+        },
+      ]),
+    );
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const keys = deps.getCsvTable().columns.map((column) => column.key);
+    expect(keys).toEqual(["record", "supplier", "price", "supplier__provenance", "price__provenance"]);
   });
 
   it("keeps confidence and rationale out of the CSV", async () => {
@@ -263,7 +341,6 @@ describe("ExportRunResults", () => {
     await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
 
     const keys = deps.getCsvTable().columns.map((column) => column.key);
-    expect(keys).toEqual(["record", "supplier", "price"]);
     expect(keys.some((key) => key.includes("confidence"))).toBe(false);
     expect(keys.some((key) => key.includes("rationale"))).toBe(false);
   });

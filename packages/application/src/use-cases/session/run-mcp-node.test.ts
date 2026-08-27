@@ -99,6 +99,7 @@ const activeServer: McpServer = {
   url: "https://mcp.example.com/sse",
   credentialRef: null,
   communicatesExternally: false,
+  verbatimOnly: false,
   status: "active",
   createdByUserId: null,
   createdAt: new Date(),
@@ -204,6 +205,62 @@ describe("RunMcpNode", () => {
     ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("is byte-for-byte unchanged when the server is not verbatim-only", async () => {
+    const session = makeSession();
+    const result = await new RunMcpNode(
+      makeSessions(session),
+      makeLanguageModel(),
+      makeServers(activeServer),
+      makeClient(),
+      makeStepOutputs(),
+      clock,
+    ).execute({ session, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+
+    expect(result.data?.data).toEqual({ output: "tool says hi" });
+    expect(result.data?.provenance).toBe("processed");
+  });
+
+  it("marks a verbatim-only server's result verbatim and passes it through unmodified", async () => {
+    const session = makeSession();
+    const client = makeClient({ callTool: vi.fn().mockResolvedValue(ok({ output: "  4.25 \n" })) });
+
+    const result = await new RunMcpNode(
+      makeSessions(session),
+      makeLanguageModel(),
+      makeServers({ ...activeServer, verbatimOnly: true }),
+      client,
+      makeStepOutputs(),
+      clock,
+    ).execute({ session, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.data).toEqual({ output: "  4.25 \n" });
+    expect(result.data?.provenance).toBe("verbatim");
+  });
+
+  it("refuses a verbatim-only server whose step is configured to reshape the result", async () => {
+    const session = makeSession();
+    const client = makeClient();
+    const config = {
+      ...baseConfig,
+      responseFields: [{ key: "rate", label: "Rate", type: "currency", optional: false, raw: "Rate" }],
+    };
+
+    const result = await new RunMcpNode(
+      makeSessions(session),
+      makeLanguageModel(),
+      makeServers({ ...activeServer, verbatimOnly: true }),
+      client,
+      makeStepOutputs(),
+      clock,
+    ).execute({ session, flow: makeFlow(), node: makeNode(config), messages: makeMessages(), userId: "user-1" });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("rate");
+    // Refused before the tool is reached — nothing is called and nothing pends.
+    expect(client.callTool).not.toHaveBeenCalled();
   });
 
   it("propagates a tool-call failure", async () => {

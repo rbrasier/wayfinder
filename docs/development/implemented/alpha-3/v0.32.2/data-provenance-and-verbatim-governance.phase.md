@@ -1,8 +1,10 @@
 # Phase — Data Provenance and Verbatim Governance
 
-- **Status**: Awaiting review
+- **Status**: Implemented (2026-08-27, v0.32.0)
 - **Target version**: 0.32.0  (bump: MINOR — additive `admin_mcp_servers.verbatim_only` column,
-  aggregate-confidence columns on `app_extraction_records`, + new feature)
+  + new feature. No column is added to or altered on `app_extraction_records`: the §10
+  investigation found the existing aggregate column unread, so both per-kind aggregates are
+  derived from `fields` in the domain.)
 - **PRD**: `docs/development/prd/data-provenance-and-verbatim-governance.prd.md`
 - **ADRs**: ADR-053 (field provenance and dual confidence)
 - **Depends on**: ADR-024 (operator correction authoritative), ADR-032 (MCP tool-loop pre-pass),
@@ -333,3 +335,89 @@ One migration, one defaulted boolean:
 
 Step 7's repository assertions about the accuracy aggregate surviving the migration become
 trivially true — nothing touches those rows — but stay in the suite as a regression guard.
+
+---
+
+## 11. Approved build summary (2026-08-27)
+
+Approved at the `/build` gate. Scope is the whole phase (§6 steps 1–11), including
+step 10's CSV columns — the provenance, derivation and source-reference columns
+the Structured Export thread deferred to this phase.
+
+**No version bump.** 0.32.0 was applied once by the Structured Export build in the
+same PR; later threads do not re-bump.
+
+### Goal
+
+Provenance becomes an explicit property of every extracted field — `verbatim`,
+`processed`, `derived` or `human_corrected` — with absent reading as `processed`,
+so no historical row changes meaning. Confidence stops being one number: its
+*kind* is derived from provenance, never stored, so a copied value reports
+selection confidence and a composed one reports accuracy, and the two are never
+averaged. An administrator can require verbatim-only handling per MCP connection,
+enforced where tool results enter a turn and refused at publish time for a step
+that would reshape them.
+
+### Business rules changing
+
+- A field with no `provenance` member reads as `processed`/`accuracy`; `verbatim`
+  is the only provenance mapping to `selection` confidence.
+- `applyFieldEdit` stamps `human_corrected` alongside `confidence: 1`;
+  `mergeFieldResults` never lets a confident model value overwrite a
+  `human_corrected` one.
+- Aggregate confidence is reported per scale — `{ selection, accuracy }`, `null`
+  where a kind is absent — and each scale keeps its own conservative minimum.
+- When a connection is `verbatimOnly`, publishing a flow whose MCP step coerces
+  that tool's result is refused; `RunMcpNode` refuses the same config at run time
+  as a backstop.
+- Verbatim means byte-identical: a trimmed, truncated or reshaped value is
+  `processed`, with no "close enough" tier.
+
+### UI / visible behaviour
+
+- Result grid: each value carries a provenance marker; the rationale dialog names
+  the confidence kind ("selection" / "accuracy") instead of assuming accuracy.
+- Record detail shows per-scale overall confidence, with an absent scale rendered
+  as absent rather than 0%.
+- Derived fields are visually distinct and expose their method and source field
+  keys; a field-level source reference is reachable where recorded.
+- MCP admin: a verbatim-only checkbox beside the external-communication
+  classification, requiring an explicit confirm before it changes, worded as
+  Wayfinder's handling.
+- Field report rows band on the accuracy scale, falling back to selection where a
+  record has no accuracy fields.
+
+### Data & types
+
+- New `field-provenance.ts`: `FieldProvenance`, `ConfidenceKind`,
+  `FieldDerivation`, `FieldSourceRef`, `fieldProvenance()`, `confidenceKind()`,
+  `fieldConfidence()`.
+- `ExtractionFieldResult` gains optional `provenance`, `sourceRef`, `derivation`.
+- `AggregateConfidence` / `ConfidenceBands` with `aggregateConfidenceByKind()` and
+  `recordConfidenceBands()`; `aggregateConfidence` and `recordConfidenceBand` deleted.
+- `McpServer`, `NewMcpServer`, `McpServerUpdate` gain `verbatimOnly`.
+- `ExtractionFieldReportRow.aggregateConfidence` becomes `AggregateConfidence`.
+
+### Database & migration impact
+
+- `admin_mcp_servers` — add `verbatim_only boolean not null default false`. One
+  generated migration carrying
+  `-- data-impact: preserved — defaulted boolean column; every existing connection keeps current behaviour`.
+- `app_extraction_records` — no change (§10.1).
+
+### Tests
+
+Test file before each implementation file, at the layer that owns the logic. **No
+e2e** — §8 stands: no group in `e2e-test-policy.md` applies, and coverage sits at
+domain, application, adapter and web-model layers.
+
+### Build order
+
+1. Domain — provenance types and accessors
+2. Domain — field result, correction, merge
+3. Domain — per-scale aggregates (delete the single-number pair)
+4. Domain — MCP `verbatimOnly` + verbatim handling rules
+5. Application — verbatim enforcement (publish gate + run backstop)
+6. Application — reader migration: analytics, exports (CSV step 10)
+7. Adapters — column, migration, mappings
+8. Web — admin toggle, provenance display, container wiring
