@@ -1,6 +1,7 @@
 "use client";
 
-import { confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
+import type { ConfidenceBand, ExtractionFieldReportRow } from "@rbrasier/domain";
+import { reportBandSource } from "./field-provenance-display";
 import { trpc } from "@/trpc/client";
 import { RUN_POLL_INTERVAL_MS } from "./run-progress";
 
@@ -19,6 +20,20 @@ const BAND_DOT: Record<ConfidenceBand, string> = {
   amber: "bg-[#d99a2b]",
   green: "bg-[#2f9e6b]",
 };
+
+// One dot per row, so it reports the scale that carries the review risk. A
+// record with no fields has no band to report — nothing is drawn rather than a
+// red dot claiming the record is untrustworthy.
+function RecordBandDot({ aggregate }: { aggregate: ExtractionFieldReportRow["aggregateConfidence"] }) {
+  const source = reportBandSource(aggregate);
+  if (!source) return null;
+  return (
+    <span
+      title={`Lowest ${source.kind} confidence on this record`}
+      className={`inline-block h-[9px] w-[9px] rounded-full ${BAND_DOT[source.band]}`}
+    />
+  );
+}
 
 export function RunReport({ runId, live = false }: RunReportProps) {
   const reportQuery = trpc.extraction.runReport.useQuery(
@@ -52,9 +67,7 @@ export function RunReport({ runId, live = false }: RunReportProps) {
               <tr key={row.recordId} className="border-b border-[#f5f3ee]">
                 <td className="px-[12px] py-[8px] font-medium text-[#3d382f]">
                   <span className="flex items-center gap-[6px]">
-                    <span
-                      className={`inline-block h-[9px] w-[9px] rounded-full ${BAND_DOT[confidenceBand(row.aggregateConfidence)]}`}
-                    />
+                    <RecordBandDot aggregate={row.aggregateConfidence} />
                     {row.label}
                   </span>
                 </td>

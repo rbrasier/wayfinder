@@ -34,6 +34,7 @@ export const mcpServerRouter = router({
         url: z.string().min(1),
         transport: z.enum(["sse", "streamable-http"]).optional(),
         communicatesExternally: z.boolean().optional(),
+        verbatimOnly: z.boolean().optional(),
         credentialRef: z.string().nullable().optional(),
       }),
     )
@@ -44,6 +45,7 @@ export const mcpServerRouter = router({
         url: input.url,
         transport: input.transport,
         communicatesExternally: input.communicatesExternally,
+        verbatimOnly: input.verbatimOnly,
         credentialRef: input.credentialRef ?? null,
         createdByUserId: ctx.userId,
       });
@@ -58,6 +60,7 @@ export const mcpServerRouter = router({
         label: z.string().min(1).optional(),
         url: z.string().min(1).optional(),
         communicatesExternally: z.boolean().optional(),
+        verbatimOnly: z.boolean().optional(),
         credentialRef: z.string().nullable().optional(),
       }),
     )

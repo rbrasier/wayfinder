@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { buildClaimPendingStatement } from "./drizzle-extraction-run-repository";
+import type { ExtractionFieldResult } from "@rbrasier/domain";
+import {
+  buildClaimPendingStatement,
+  persistedAggregateConfidence,
+} from "./drizzle-extraction-run-repository";
 
 // The claim runs against a live DB, so here we lock in the generated SQL shape:
 // a bounded, oldest-first, single-batch UPDATE that atomically leases pending
@@ -34,5 +38,45 @@ describe("buildClaimPendingStatement", () => {
     // The bounded id set is chosen in a nested select before the update.
     expect(text.indexOf("select")).toBeGreaterThan(text.indexOf("update"));
     expect(text).toContain("returning");
+  });
+});
+
+// The column is the accuracy aggregate and nothing else: every historical field
+// is accuracy-kind, so what it already holds keeps its exact meaning. It is
+// written through the domain function so the adapter cannot drift from it again
+// (ADR-053 §3).
+describe("persistedAggregateConfidence", () => {
+  const field = (overrides: Partial<ExtractionFieldResult> = {}): ExtractionFieldResult => ({
+    key: "price",
+    value: "£10",
+    confidence: 0.9,
+    rationale: "",
+    ...overrides,
+  });
+
+  it("writes the weakest field's confidence for an all-accuracy record, as it always has", () => {
+    expect(
+      persistedAggregateConfidence([field({ confidence: 0.9 }), field({ key: "term", confidence: 0.4 })]),
+    ).toBe(0.4);
+  });
+
+  it("writes zero for a record with no fields", () => {
+    expect(persistedAggregateConfidence([])).toBe(0);
+  });
+
+  it("clamps a confidence outside [0, 1] — the clamp the adapter's own copy omitted", () => {
+    expect(persistedAggregateConfidence([field({ confidence: 1.4 })])).toBe(1);
+  });
+
+  it("leaves selection-scale fields out, so the column never mixes two questions", () => {
+    const fields = [
+      field({ key: "rate", confidence: 0.2, provenance: "verbatim" }),
+      field({ key: "summary", confidence: 0.7 }),
+    ];
+    expect(persistedAggregateConfidence(fields)).toBe(0.7);
+  });
+
+  it("writes zero for a record whose fields are all selection-scale", () => {
+    expect(persistedAggregateConfidence([field({ confidence: 0.6, provenance: "verbatim" })])).toBe(0);
   });
 });

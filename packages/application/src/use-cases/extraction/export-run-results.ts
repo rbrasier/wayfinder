@@ -1,7 +1,9 @@
 import {
   confidenceBand,
+  fieldConfidence,
   ok,
   type ExtractionField,
+  type ExtractionFieldResult,
   type ExtractionRecord,
   type CsvTable,
   type IAuditLogger,
@@ -35,14 +37,31 @@ const exportKey = (runId: string, extension: string): string =>
 
 const percent = (confidence: number): string => String(Math.round(confidence * 100));
 
+// Provenance metadata is written as one companion column per field, suffixed so
+// it can never collide with a schema field key of the same name.
+const PROVENANCE_SUFFIX = "__provenance";
+const DERIVATION_SUFFIX = "__derivation";
+const SOURCE_SUFFIX = "__source";
+
+const describeDerivation = (result: ExtractionFieldResult | undefined): string => {
+  if (!result?.derivation) return "";
+  const { method, sourceKeys } = result.derivation;
+  return sourceKeys.length > 0 ? `${method} (from ${sourceKeys.join(", ")})` : method;
+};
+
+const describeSourceRef = (result: ExtractionFieldResult | undefined): string =>
+  result?.sourceRef ? `${result.sourceRef.documentId} — ${result.sourceRef.locator}` : "";
+
 // Writes the full records × fields set to XLSX, JSON and CSV in object storage
 // (phase §2.2). The XLSX is the on-screen download and carries two tabs: the
 // extracted values on their own (the sheet an operator pastes into a report) and
 // the confidence/rationale metadata behind them. The JSON is the full-fidelity
 // machine copy (rationale + source links). The CSV mirrors the data tab alone —
 // the confidence tab is a second, differently-shaped table CSV cannot represent
-// (ADR-054). All three overwrite the run's single export slot, so the latest
-// export is always the download target.
+// (ADR-054), plus the provenance columns the workbook keeps on that second tab —
+// as the single-table format it has nowhere else to put them (ADR-053). All
+// three overwrite the run's single export slot, so the latest export is always
+// the download target.
 export class ExportRunResults {
   constructor(
     private readonly runs: IExtractionRunRepository,
@@ -72,7 +91,7 @@ export class ExportRunResults {
 
     // The CSV is written before anything is stored, so a writer failure leaves
     // the run's previous export untouched rather than half-replaced.
-    const csv = this.csvWriter.write(this.dataTable(dataSheet));
+    const csv = this.csvWriter.write(this.dataTable(dataSheet, schema.data.fields, records));
     if (csv.error) return csv;
 
     const xlsxKey = exportKey(input.runId, "xlsx");
@@ -112,10 +131,57 @@ export class ExportRunResults {
     return ok({ xlsxKey, jsonKey, csvKey, recordCount: records.length });
   }
 
-  // The CSV carries the data tab exactly as the workbook does, so the two
-  // downloads of the same run never disagree about columns or row order.
-  private dataTable(sheet: SpreadsheetSheet): CsvTable {
-    return { columns: sheet.columns, rows: sheet.rows };
+  // The CSV opens with the data tab exactly as the workbook writes it, so the two
+  // downloads of the same run never disagree about values or row order, then
+  // appends the provenance the workbook carries on its confidence tab. A
+  // derivation or source column is written only where some record actually
+  // recorded one, so a run with no derived fields is not padded with empty
+  // columns — the same data still exports byte-identically every time.
+  private dataTable(
+    sheet: SpreadsheetSheet,
+    fields: ExtractionField[],
+    records: ExtractionRecord[],
+  ): CsvTable {
+    const columns: SpreadsheetColumn[] = [...sheet.columns];
+    const resultsByKey = records.map((record) => new Map(record.fields.map((field) => [field.key, field])));
+
+    const has = (key: string, predicate: (result: ExtractionFieldResult) => boolean): boolean =>
+      resultsByKey.some((byKey) => {
+        const result = byKey.get(key);
+        return result !== undefined && predicate(result);
+      });
+
+    const derived: string[] = [];
+    const sourced: string[] = [];
+    for (const field of fields) {
+      const key = field.field.key;
+      columns.push({ key: `${key}${PROVENANCE_SUFFIX}`, label: `${field.field.label} — provenance` });
+      if (has(key, (result) => result.derivation !== undefined)) derived.push(key);
+      if (has(key, (result) => result.sourceRef !== undefined)) sourced.push(key);
+    }
+    for (const key of derived) {
+      const label = fields.find((field) => field.field.key === key)!.field.label;
+      columns.push({ key: `${key}${DERIVATION_SUFFIX}`, label: `${label} — derivation` });
+    }
+    for (const key of sourced) {
+      const label = fields.find((field) => field.field.key === key)!.field.label;
+      columns.push({ key: `${key}${SOURCE_SUFFIX}`, label: `${label} — source` });
+    }
+
+    const rows = sheet.rows.map((row, index) => {
+      const byKey = resultsByKey[index]!;
+      const values: Record<string, string> = { ...row };
+      for (const field of fields) {
+        const key = field.field.key;
+        const result = byKey.get(key);
+        values[`${key}${PROVENANCE_SUFFIX}`] = result ? fieldConfidence(result).provenance : "";
+      }
+      for (const key of derived) values[`${key}${DERIVATION_SUFFIX}`] = describeDerivation(byKey.get(key));
+      for (const key of sourced) values[`${key}${SOURCE_SUFFIX}`] = describeSourceRef(byKey.get(key));
+      return values;
+    });
+
+    return { columns, rows };
   }
 
   // Tab 1: the extracted values and nothing else, so the sheet can be pasted
@@ -138,17 +204,22 @@ export class ExportRunResults {
     return { name: "Extracted data", columns, rows };
   }
 
-  // Tab 2: the confidence metadata, one row per record × field. Long form rather
-  // than mirroring tab 1's width because rationale is a sentence or two per cell.
-  // The band is written alongside the percentage so the sheet can be filtered
-  // without re-deriving the thresholds in Excel.
+  // Tab 2: the confidence and provenance metadata, one row per record × field.
+  // Long form rather than mirroring tab 1's width because rationale is a
+  // sentence or two per cell. The band is written alongside the percentage so the
+  // sheet can be filtered without re-deriving the thresholds in Excel, and the
+  // kind beside it so a reader knows which question the percentage answers.
   private confidenceSheet(fields: ExtractionField[], records: ExtractionRecord[]): SpreadsheetSheet {
     const columns: SpreadsheetColumn[] = [
       { key: "record", label: "Record" },
       { key: "field", label: "Field" },
       { key: "value", label: "Value" },
       { key: "confidence", label: "Confidence %" },
+      { key: "kind", label: "Confidence of" },
       { key: "band", label: "Band" },
+      { key: "provenance", label: "Provenance" },
+      { key: "derivation", label: "Derivation" },
+      { key: "source", label: "Source reference" },
       { key: "rationale", label: "Rationale" },
     ];
 
@@ -158,12 +229,19 @@ export class ExportRunResults {
       for (const field of fields) {
         const result = byKey.get(field.field.key);
         const confidence = result?.confidence ?? 0;
+        // A field the record never carried has no provenance to report — an
+        // empty cell, not a claim that the absent value was composed.
+        const read = result ? fieldConfidence(result) : null;
         rows.push({
           record: record.label,
           field: field.field.label,
           value: result?.value ?? "",
           confidence: percent(confidence),
+          kind: read?.kind ?? "",
           band: confidenceBand(confidence),
+          provenance: read?.provenance ?? "",
+          derivation: describeDerivation(result),
+          source: describeSourceRef(result),
           rationale: result?.rationale ?? "",
         });
       }
