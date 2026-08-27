@@ -13,7 +13,7 @@ import {
   type Session,
   type SessionUpdate,
 } from "@rbrasier/domain";
-import { coerceStructuredFields } from "../document/structured-fields";
+import { coerceStructuredFields, coerceVerbatimFields } from "../document/structured-fields";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";
 
@@ -24,6 +24,10 @@ export interface ApplyAutoNodeResultInput {
   status: NodeExecutionOutput["status"];
   data: Record<string, unknown>;
   message?: string;
+  // Set by the MCP dispatch when the step ran a verbatim-only connection
+  // (ADR-053 §5). The ordinary coercion trims, which is itself a
+  // transformation, so the guarantee has to reach as far as the write.
+  verbatim?: boolean;
 }
 
 export interface ApplyAutoNodeResultOutput {
@@ -120,7 +124,9 @@ export class ApplyAutoNodeResult {
 
     const config = nodeResult.data.config as unknown as AutoNodeConfig;
     const responseFields = config.responseFields ?? [];
-    const fields = coerceStructuredFields(responseFields, input.data);
+    const fields = input.verbatim
+      ? coerceVerbatimFields(responseFields, input.data)
+      : coerceStructuredFields(responseFields, input.data);
 
     await this.sessionStepOutputs.create({
       sessionId: input.sessionId,

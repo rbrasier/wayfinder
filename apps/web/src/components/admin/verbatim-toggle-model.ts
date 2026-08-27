@@ -22,3 +22,12 @@ export const verbatimConfirmPrompt = (label: string, turningOn: boolean): string
 
 export const verbatimBadge = (verbatimOnly: boolean): string | null =>
   verbatimOnly ? "Verbatim only" : null;
+
+// A governance flag that silently failed to save is worse than one that never
+// existed: the administrator walks away believing the connection is governed.
+// The failure is reported beside the control that was pressed, and states the
+// outcome rather than only the cause.
+export const verbatimFailureNote = (cause: string | null): string =>
+  cause
+    ? `The setting has not changed — ${cause}`
+    : "The setting has not changed. Try again.";

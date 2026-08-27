@@ -1,10 +1,8 @@
 import {
-  classifyToolValueProvenance,
   domainError,
   err,
   ok,
   verbatimTransformViolations,
-  type FieldProvenance,
   type Flow,
   type FlowNode,
   type ILanguageModel,
@@ -36,11 +34,11 @@ export interface RunMcpNodeOutput {
   // The tool result is exposed under the `output` key, so a response field with
   // key `output` captures it (ADR-032). Synchronous — always "completed" on success.
   data: Record<string, unknown>;
-  // How the value handed on relates to what the tool returned (ADR-053 §5).
-  // `verbatim` only where the connection is verbatim-only and the bytes match
-  // what the client returned; a non-verbatim connection reports `processed`
-  // because nothing has promised otherwise.
-  provenance: FieldProvenance;
+  // The connection is one an administrator marked verbatim-only, so the caller
+  // must persist `output` as the bytes it arrived as (ADR-053 §5). Carried on the
+  // result rather than re-read downstream: this is the only place that already
+  // holds the server row.
+  verbatim: boolean;
 }
 
 export interface RunMcpNodeClock {
@@ -151,9 +149,7 @@ export class RunMcpNode {
       correlationId,
       status: "completed",
       data: { output: called.data.output },
-      provenance: serverResult.data.verbatimOnly
-        ? classifyToolValueProvenance(called.data.output, called.data.output)
-        : "processed",
+      verbatim: serverResult.data.verbatimOnly,
     });
   }
 

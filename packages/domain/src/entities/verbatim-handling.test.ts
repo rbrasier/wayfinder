@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  classifyToolValueProvenance,
-  verbatimTransformViolations,
-} from "./verbatim-handling";
+import { verbatimTransformViolations } from "./verbatim-handling";
 import type { TemplateField } from "./template-field";
 
 const field = (overrides: Partial<TemplateField> = {}): TemplateField => ({
@@ -12,38 +9,6 @@ const field = (overrides: Partial<TemplateField> = {}): TemplateField => ({
   optional: false,
   raw: "{{output}}",
   ...overrides,
-});
-
-describe("classifyToolValueProvenance", () => {
-  const received = "  AC-100 \n";
-
-  it("calls a value verbatim when it is byte-identical to what was received", () => {
-    expect(classifyToolValueProvenance(received, received)).toBe("verbatim");
-  });
-
-  it("calls whitespace-normalised output processed", () => {
-    expect(classifyToolValueProvenance(received, received.trim())).toBe("processed");
-  });
-
-  it("calls truncated output processed", () => {
-    expect(classifyToolValueProvenance(received, received.slice(0, 4))).toBe("processed");
-  });
-
-  it("calls a byte-identical scalar selected from a JSON result verbatim", () => {
-    const json = JSON.stringify({ rate: "4.25", meta: { code: "AC-100" } });
-    expect(classifyToolValueProvenance(json, "4.25")).toBe("verbatim");
-    expect(classifyToolValueProvenance(json, "AC-100")).toBe("verbatim");
-  });
-
-  it("calls a reworded value processed even when the source was JSON", () => {
-    const json = JSON.stringify({ rate: "4.25" });
-    expect(classifyToolValueProvenance(json, "4.25%")).toBe("processed");
-  });
-
-  it("calls a value assembled from two JSON leaves processed", () => {
-    const json = JSON.stringify({ first: "Ada", last: "Lovelace" });
-    expect(classifyToolValueProvenance(json, "Ada Lovelace")).toBe("processed");
-  });
 });
 
 describe("verbatimTransformViolations", () => {

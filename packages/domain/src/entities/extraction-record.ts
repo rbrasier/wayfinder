@@ -184,17 +184,21 @@ export const applyFieldEdit = (
   }
 
   const editorNote = editorLabel.trim().length > 0 ? ` by ${editorLabel.trim()}` : "";
-  const fields = record.fields.map((field) =>
-    field.key === fieldKey
-      ? {
-          ...field,
-          value: newValue,
-          confidence: 1,
-          rationale: `Manually corrected${editorNote}.`,
-          provenance: "human_corrected" as const,
-        }
-      : field,
-  );
+  const fields = record.fields.map((field) => {
+    if (field.key !== fieldKey) return field;
+    // The derivation and source reference described the value that was there
+    // before. A person has replaced it, so neither still describes anything —
+    // keeping them would have the UI and every export claim a calculation and a
+    // locator for a value that has neither.
+    const { derivation: _derivation, sourceRef: _sourceRef, ...retained } = field;
+    return {
+      ...retained,
+      value: newValue,
+      confidence: 1,
+      rationale: `Manually corrected${editorNote}.`,
+      provenance: "human_corrected" as const,
+    };
+  });
 
   return ok({
     record: { ...record, fields },

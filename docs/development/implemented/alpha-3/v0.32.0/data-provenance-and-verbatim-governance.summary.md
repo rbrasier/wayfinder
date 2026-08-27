@@ -50,31 +50,36 @@ and each had to choose a scale deliberately.
 
 `applyFieldEdit` still stamps `confidence: 1`, but now alongside
 `human_corrected`, so a person's decision stops being indistinguishable from
-maximum model confidence. `mergeFieldResults` gained the matching rule: a
-`human_corrected` value is never displaced by a model value, which a bare
-`confidence >` comparison would have allowed since both carry `1`.
+maximum model confidence. It also drops any `derivation` and `sourceRef` the
+field carried: those described the value that was there before, and a corrected
+value was not calculated from those inputs and is not at that locator — keeping
+them would have the rationale dialog and every export claim otherwise.
+`mergeFieldResults` gained the matching rule: a `human_corrected` value is never
+displaced by a model value, which a bare `confidence >` comparison would have
+allowed since both carry `1`.
 
 ### Verbatim-only handling, enforced twice
 
 `verbatimOnly` mirrors `communicatesExternally` exactly — an admin boolean on
 `admin_mcp_servers`, `notNull().default(false)`.
 
-`verbatim-handling.ts` makes the guarantee checkable rather than arguable:
+The guarantee is enforced by construction rather than asserted after the fact,
+across three points:
 
-- `classifyToolValueProvenance(received, used)` calls a value `verbatim` only when
-  it is byte-identical to the flattened tool result or to a scalar leaf inside it
-  when that result is JSON. Selecting one value out of a structured result is
-  therefore verbatim; truncation, whitespace normalisation and assembling two
-  leaves into one string are all `processed`. There is no "close enough" tier.
-- `verbatimTransformViolations(responseFields)` names the response fields that
-  cannot return the received bytes — anything not `text`/`narrative`, and anything
-  constrained to a fixed option list.
-
-Enforcement sits in two places, mirroring how the classification beside it works:
-`PublishFlowVersion` refuses to publish a flow whose MCP step would reshape a
-verbatim-only connection's results, and `RunMcpNode` refuses the same config as a
-runtime backstop *before* the tool is called, so a governed source is never even
-queried by a step that would then rewrite its answer.
+- `verbatimTransformViolations(responseFields)` (domain) names the response fields
+  that cannot return the received bytes — anything not `text`/`narrative`, and
+  anything constrained to a fixed option list.
+- `PublishFlowVersion` refuses to publish a flow whose MCP step declares such a
+  field against a verbatim-only connection, and `RunMcpNode` refuses the same
+  config as a runtime backstop *before* the tool is called, so a governed source
+  is never even queried by a step that would then rewrite its answer.
+- `RunMcpNode` returns `verbatim: true` for such a connection, and
+  `ApplyAutoNodeResult` then writes the result through `coerceVerbatimFields`
+  instead of `coerceStructuredFields`. This is the part that makes the promise
+  real: the ordinary coercion calls `String(raw).trim()` before it does anything
+  else, and a trim is a transformation — a tool returning `"  4.25 \n"` would
+  otherwise have been stored as `"4.25"` under a flag that says Wayfinder does not
+  transform this connection's results.
 
 ### Provenance survives every export
 
@@ -102,7 +107,10 @@ accuracy-kind field and falls back to selection for an entirely-verbatim record.
 
 The MCP admin screen gains the verbatim toggle beside the external-communication
 classification, with a staged two-step confirmation in **both** directions —
-turning the guarantee off is the change most worth pausing over.
+turning the guarantee off is the change most worth pausing over. A failed save
+reports beside that control, saying the setting has *not* changed: a governance
+flag that silently failed to save is worse than one that never existed, because
+the administrator walks away believing the connection is governed.
 
 ## Files created
 
@@ -119,6 +127,8 @@ turning the guarantee off is the change most worth pausing over.
 **domain** — `entities/extraction-record.ts` (+ test), `entities/mcp-server.ts`,
 `entities/analytics.ts` (+ test), `entities/index.ts`
 **application** — `use-cases/session/run-mcp-node.ts` (+ test),
+`use-cases/session/apply-auto-node-result.ts` (+ test),
+`use-cases/document/structured-fields.ts` (+ test),
 `use-cases/flow/publish-flow-version.ts`, `use-cases/flow/flow-version.test.ts`,
 `use-cases/extraction/export-run-results.ts` (+ test), `use-cases/mcp/mcp.ts` (+ test),
 `use-cases/analytics/get-extraction-run-report.test.ts`
@@ -126,6 +136,7 @@ turning the guarantee off is the change most worth pausing over.
 `repositories/drizzle-extraction-run-repository.ts` (+ test),
 `drizzle/meta/_journal.json`
 **apps/web** — `app/(admin)/admin/mcp-servers/_content.tsx`,
+`app/api/chat/[sessionId]/stream/mcp-turn-helpers.ts`,
 `server/routers/mcp-server.ts`, `lib/container.ts`,
 `components/extraction/result-grid.tsx`, `components/extraction/result-grid-model.ts`,
 `components/extraction/run-report.tsx`
@@ -150,14 +161,16 @@ which routes through the domain function and so gains the clamp the copy omitted
 
 ## Tests
 
-`./validate.sh` — **25 checks, 0 failures, 3,764 tests**, up from 3,693.
+`./validate.sh` — **25 checks, 0 failures, 3,768 tests**, up from 3,693.
 
-New coverage: 8 provenance-accessor cases and 12 verbatim-handling cases in the
-domain, 12 more on `extraction-record` (per-scale aggregates, correction
-stamping, the merge rule, floor-preserves-provenance), 2 on the analytics report
-row, 3 verbatim cases on `RunMcpNode`, 3 on `PublishFlowVersion`, 2 on the MCP
-use cases, 5 on the export use case, 3 on the MCP repository mapping, 5 on the
-persisted aggregate, and 24 on the two web model modules.
+New coverage: 8 provenance-accessor cases and 6 verbatim-handling cases in the
+domain, 13 more on `extraction-record` (per-scale aggregates, correction
+stamping and its cleared derivation, the merge rule,
+floor-preserves-provenance), 2 on the analytics report row, 3 verbatim cases on
+`RunMcpNode`, 2 on `ApplyAutoNodeResult`, 5 on `coerceVerbatimFields`, 3 on
+`PublishFlowVersion`, 2 on the MCP use cases, 5 on the export use case, 3 on the
+MCP repository mapping, 5 on the persisted aggregate, and 26 on the two web
+model modules.
 
 ## E2E
 
@@ -192,10 +205,33 @@ and toggle copy and provenance display in `apps/web` model tests.
 4. **`PublishFlowVersion` gained a required `IMcpServerRepository`** rather than
    an optional one, so the compiler forces the wiring. Container wiring was
    updated to pass `skillsAndMcp.repos.mcpServers`.
+   
 5. **The CSV stops mirroring the data tab exactly.** It opens with the same value
    columns and row order, then appends provenance — as the single-table format it
    has nowhere else to put what the workbook keeps on its second tab. Structured
    Export §6.5 anticipated this ("only the table the use case hands it").
+
+## QA pass (2026-08-27)
+
+A review of the first push found four defects, all fixed before the branch was
+folded in. Two were the same underlying mistake — annotating a guarantee instead
+of enforcing it:
+
+1. **The verbatim guarantee did not survive persistence.** `coerceValue` trims,
+   so a verbatim-only result arrived at storage already normalised. Fixed by
+   `coerceVerbatimFields` and threading `verbatim` from `RunMcpNode` through
+   `dispatchMcpNode` to `ApplyAutoNodeResult`.
+2. **`RunMcpNodeOutput.provenance` was dead**, and computed by comparing a value
+   with itself. Replaced with `verbatim: boolean`, which the dispatch now
+   consumes. `classifyToolValueProvenance` went with it: once the guarantee is
+   structural, a classifier with no caller is dead code.
+3. **`applyFieldEdit` kept a stale `derivation`/`sourceRef`** on a corrected
+   value, so the UI and exports claimed a calculation and a page locator that no
+   longer described it. Both are now cleared.
+4. **A failed verbatim toggle reported into the register-form's error line**,
+   far from the control, leaving the confirm panel open with no local feedback.
+   The failure now shows beside the toggle and states that the setting has not
+   changed.
 
 ## Known limitations
 
