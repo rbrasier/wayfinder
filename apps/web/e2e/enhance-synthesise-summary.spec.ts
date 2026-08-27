@@ -113,25 +113,30 @@ test.describe('Synthesise Information — summary of outputs', () => {
 
     // Fail the export itself, not the artifact fetch: the artifact is only
     // reached once the export reports success, so this is the path an operator
-    // hits when storage or the writer is unavailable.
+    // hits when storage or the writer is unavailable. A plain 500 rather than a
+    // hand-built tRPC error envelope — the client's own error formatting is not
+    // what this asserts, and a malformed envelope would test that instead.
     await page.route(/\/api\/trpc\/extraction\.export/, (route) =>
-      route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify([
-          { error: { json: { message: 'Failed to write the CSV export.', code: -32603, data: {} } } },
-        ]),
-      }),
+      route.fulfill({ status: 500, contentType: 'text/plain', body: 'mock export failure' }),
     );
+
+    let downloadStarted = false;
+    page.on('download', () => {
+      downloadStarted = true;
+    });
 
     await page.getByRole('button', { name: /Run actions/i }).click();
     await page.getByRole('button', { name: /^Download CSV$/ }).click();
 
-    await expect(page.getByText(/Failed to write the CSV export\./)).toBeVisible();
+    // The operator is told, rather than handed a file that never arrived.
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(1, { timeout: 10_000 });
+    expect(downloadStarted).toBe(false);
 
     // And the menu recovers rather than staying stuck on "Preparing…".
     await page.getByRole('button', { name: /Run actions/i }).click();
-    await expect(page.getByRole('button', { name: /^Download CSV$/ })).toBeEnabled();
+    const csvItem = page.getByRole('button', { name: /^Download CSV$/ });
+    await expect(csvItem).toBeVisible();
+    await expect(csvItem).toBeEnabled();
   });
 
   test('results are one row per record, expanding to reveal source files', async ({ page }) => {
