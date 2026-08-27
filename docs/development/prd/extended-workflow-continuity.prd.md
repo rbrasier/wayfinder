@@ -89,9 +89,14 @@ The prefix is `app_`, not `core_`: `core_sessions` is the Better Auth login sess
 (`packages/adapters/src/db/schema/wayfinder.ts:150`). Session-scoped workflow state belongs
 with the latter.
 
-**The table and column below are gated on an information-architecture investigation** carried
-out before any migration is written (phase doc §6, step 4b). They are the current proposal, not a
-settled design.
+**The information-architecture investigation these were gated on is complete** — phase doc §10,
+written before any migration was drafted (step 4b). It confirmed the shape above unchanged, with
+evidence for each part: `app_sessions` carries an optimistic-concurrency `version` bumped by every
+non-lease write, so a debounced draft save cannot live there; `app_session_participants`
+deliberately excludes the owner, so it cannot host one either; and draft-versus-final is not
+derivable, because the confirmation pointer is nulled on confirm and step outputs are inserted
+unconditionally, so two rows can share a node. Staleness is compared against `current_node_id`,
+never `awaiting_confirmation_node_id`.
 
 One generated migration (never `drizzle-kit push`). It is additive throughout — a new table,
 and a defaulted column that cannot fail on existing rows — so it declares:
