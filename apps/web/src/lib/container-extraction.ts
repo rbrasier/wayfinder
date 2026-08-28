@@ -1,6 +1,7 @@
 import {
   AdvanceBatchRuns,
   CancelRun,
+  ConfirmSchemaProposal,
   ContinueRun,
   CreateExtractionFlow,
   EditRecordField,
@@ -13,6 +14,8 @@ import {
   ListExtractionFlowsForUser,
   MarkRunComplete,
   ProcessExtractionTask,
+  ProposeSchema,
+  RefineSchemaProposal,
   RemoveDraftDocument,
   RetryFailed,
   RunSampleExtraction,
@@ -21,6 +24,7 @@ import {
   UploadDraftDocuments,
 } from "@rbrasier/application";
 import {
+  AiSchemaProposer,
   DrizzleExtractionDraftRepository,
   DrizzleExtractionRunRepository,
   XlsxWriter,
@@ -71,6 +75,10 @@ export const buildExtractionModule = ({
   const extractionDrafts = new DrizzleExtractionDraftRepository(db);
   const archiveExtractor = new ZipIngestor();
   const spreadsheetWriter = new XlsxWriter();
+  const schemaProposer = new AiSchemaProposer(languageModel);
+  // One instance, shared: confirming a proposal materialises through the same
+  // save a hand-typed schema takes (ADR-052), so there is one write path.
+  const saveExtractionSchema = new SaveExtractionSchema(flows, flowVersions);
   const processExtractionTask = new ProcessExtractionTask(
     extractionRuns,
     objectStorage,
@@ -86,7 +94,10 @@ export const buildExtractionModule = ({
       uploadDraftDocuments: new UploadDraftDocuments(extractionDrafts, objectStorage, archiveExtractor),
       listDraftDocuments: new ListDraftDocuments(extractionDrafts),
       removeDraftDocument: new RemoveDraftDocument(extractionDrafts, objectStorage),
-      saveExtractionSchema: new SaveExtractionSchema(flows, flowVersions),
+      saveExtractionSchema,
+      proposeSchema: new ProposeSchema(schemaProposer, documentExtractor),
+      refineSchemaProposal: new RefineSchemaProposal(schemaProposer, documentExtractor),
+      confirmSchemaProposal: new ConfirmSchemaProposal(saveExtractionSchema),
       getExtractionSchema: new GetExtractionSchema(flowVersions),
       listExtractionFlows: new ListExtractionFlows(flows),
       listExtractionFlowsForUser: new ListExtractionFlowsForUser(flows),

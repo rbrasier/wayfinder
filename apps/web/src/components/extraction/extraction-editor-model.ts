@@ -1,4 +1,5 @@
 import {
+  buildExtractionField,
   deriveFieldKey,
   parseTemplateField,
   templateFieldToLine,
@@ -139,6 +140,28 @@ export const schemaToFieldModels = (
   return schema.fields.map((field) =>
     templateFieldToModel(field.field, { instruction: field.instruction, locked }),
   );
+};
+
+// Confirmed proposal drafts, as editor rows. The drafts go through the same
+// `buildExtractionField` parse the save does, so a proposed field arrives in the
+// editor exactly as a hand-typed one would. A draft that will not parse is
+// skipped rather than seeded as a broken row: confirmation already refuses a
+// proposal carrying one, so this only guards against a caller that skipped it.
+export const proposalDraftsToFieldModels = (
+  drafts: ExtractionFieldDraft[],
+): ExtractionFieldModel[] => {
+  const models: ExtractionFieldModel[] = [];
+  for (const draft of drafts) {
+    const built = buildExtractionField(draft);
+    if (built.error) continue;
+    models.push(
+      templateFieldToModel(built.data.field, {
+        instruction: built.data.instruction,
+        locked: false,
+      }),
+    );
+  }
+  return models.length > 0 ? models : [emptyExtractionField()];
 };
 
 export type OutputMode = "structured" | "template";

@@ -23,11 +23,14 @@ import { trpc } from "@/trpc/client";
 import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
 import { UploadTree, type UploadedFile } from "./upload-tree";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
+import { SchemaProposalCard } from "./schema-proposal-card";
+import { readFileAsBase64 } from "@/lib/read-file-base64";
 import { FocusCard, Segmented, Switch } from "./editor-cards-controls";
 import {
   deriveOutputMode,
   emptyExtractionField,
   extractionFieldToDraft,
+  proposalDraftsToFieldModels,
   schemaToFieldModels,
   templateFieldToModel,
   type ExtractionFieldModel,
@@ -36,18 +39,6 @@ import {
 
 type Cardinality = "one_per_file" | "many_per_record";
 type FocusedCard = "input" | "output";
-
-const readFileAsBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Strip the "data:<mime>;base64," prefix.
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
 
 export function EditorCards({
   flowId,
@@ -302,6 +293,10 @@ export function EditorCards({
     </Button>
   );
 
+  // Confirming a proposal writes the whole schema, so the card needs the input
+  // and output config exactly as Save would send it.
+  const schemaInput = buildSchemaInput();
+
   const outputHeaderActions = (
     <div className="flex items-center gap-1.5">
       <button
@@ -465,7 +460,15 @@ export function EditorCards({
                     />
 
                     {outputMode === "structured" ? (
-                      <ExtractionFieldEditor fields={manualFields} onChange={setManualFields} />
+                      <div className="space-y-3">
+                        <SchemaProposalCard
+                          flowId={flowId}
+                          input={schemaInput.input}
+                          output={schemaInput.output}
+                          onConfirmed={(fields) => setManualFields(proposalDraftsToFieldModels(fields))}
+                        />
+                        <ExtractionFieldEditor fields={manualFields} onChange={setManualFields} />
+                      </div>
                     ) : (
                       <div className="space-y-3">
                         <p className="rounded-[9px] border border-[#c3cef2] bg-[#eaeefb] px-3 py-2 text-[12px] text-[#2f56d3]">

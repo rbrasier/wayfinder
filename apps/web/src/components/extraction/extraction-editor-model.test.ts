@@ -5,6 +5,7 @@ import {
   emptyExtractionField,
   extractionFieldToAnnotation,
   extractionFieldToDraft,
+  proposalDraftsToFieldModels,
   schemaSeedKey,
   schemaToFieldModels,
   templateFieldToModel,
@@ -138,5 +139,58 @@ describe("schemaSeedKey", () => {
 
   it("is stable once the query has settled, so a background refetch does not reset the form", () => {
     expect(schemaSeedKey(null, false)).toBe(schemaSeedKey(null, false));
+  });
+});
+
+describe("proposalDraftsToFieldModels", () => {
+  it("brings confirmed drafts in as unlocked editor rows carrying their type and instruction", () => {
+    const models = proposalDraftsToFieldModels([
+      {
+        label: "Contract Value",
+        annotation: "Contract Value (currency)",
+        instruction: "The total contract value.",
+        doneWhen: null,
+      },
+    ]);
+
+    expect(models).toEqual([
+      expect.objectContaining({
+        label: "Contract Value",
+        type: "currency",
+        instruction: "The total contract value.",
+        locked: false,
+      }),
+    ]);
+  });
+
+  it("maps an options field to the editor's select type", () => {
+    const models = proposalDraftsToFieldModels([
+      {
+        label: "Status",
+        annotation: "Status (options: Draft, Final)",
+        instruction: "The bid status.",
+        doneWhen: null,
+      },
+    ]);
+
+    expect(models[0]).toMatchObject({ type: "select", options: ["Draft", "Final"] });
+  });
+
+  it("skips a draft that will not parse rather than seeding a broken row", () => {
+    const models = proposalDraftsToFieldModels([
+      { label: "Good", annotation: "Good (text)", instruction: "Pull it.", doneWhen: null },
+      { label: "Bad", annotation: "Bad (colour)", instruction: "Pull it.", doneWhen: null },
+    ]);
+
+    expect(models.map((model) => model.label)).toEqual(["Good"]);
+  });
+
+  it("falls back to one blank row when nothing parses, so the editor still renders", () => {
+    const models = proposalDraftsToFieldModels([
+      { label: "Bad", annotation: "Bad (colour)", instruction: "Pull it.", doneWhen: null },
+    ]);
+
+    expect(models).toHaveLength(1);
+    expect(models[0]!.label).toBe("");
   });
 });
