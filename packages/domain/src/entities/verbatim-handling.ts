@@ -21,13 +21,21 @@ import type { TemplateField } from "./template-field";
 // Only `text` and `narrative` hand back the characters they received.
 const PASS_THROUGH_TYPES = new Set(["text", "narrative"]);
 
+// Whether a field can return the characters it was given at all. Everything else
+// reshapes its value by definition — a number strips currency symbols and
+// separators, a date reformats, yes/no substitutes a canonical word, and an
+// options field maps whatever it read to a listed value — so a value on such a
+// field was composed even when its characters happen to occur in the source.
+export const returnsSourceBytes = (field: TemplateField): boolean =>
+  PASS_THROUGH_TYPES.has(field.type) && (field.options?.length ?? 0) === 0;
+
 // Authoring-time check: which of a step's response fields cannot return what the
 // tool sent. A verbatim-only connection whose step declares such a field is
 // refused rather than run, because the step is configured to transform a result
 // the administrator required be used as-is.
 export const verbatimTransformViolations = (responseFields: TemplateField[]): string[] =>
   responseFields
-    .filter((field) => !PASS_THROUGH_TYPES.has(field.type) || (field.options?.length ?? 0) > 0)
+    .filter((field) => !returnsSourceBytes(field))
     .map((field) => {
       const reason =
         (field.options?.length ?? 0) > 0
@@ -36,16 +44,21 @@ export const verbatimTransformViolations = (responseFields: TemplateField[]): st
       return `response field "${field.key}" ${reason}, so it cannot return the tool result unchanged`;
     });
 
-// The extraction-side counterpart to the guarantee above (ADR-053 §1). A value
-// the model returned that occurs byte-identically in one of the record's source
-// texts was selected from the document; anything else was composed over it and
-// stays `processed`. Substring containment is the whole test — no trimming, no
-// case folding, no whitespace collapsing — because each of those is precisely
-// the transformation that makes a value processed rather than copied.
+// The extraction-side counterpart to the guarantee above (ADR-053 §1): whether a
+// value the model returned occurs byte-identically in one of the record's source
+// texts. No trimming, no case folding, no whitespace collapsing — each of those
+// is precisely the transformation that makes a value processed rather than
+// copied.
 //
-// A blank value is never verbatim: the empty string occurs inside every text,
-// so containment alone would report a field that was never filled as copied
-// from the document.
+// Containment is **necessary but not sufficient**. A caller must also establish
+// that the field could have returned source bytes at all
+// (`returnsSourceBytes`), because a short reshaped value collides with ordinary
+// prose constantly — "No" occurs inside "Notice", and an options value inside
+// any heading that happens to use the word.
+//
+// A blank value is never verbatim: the empty string occurs inside every text, so
+// containment alone would report a field that was never filled as copied from
+// the document.
 export const isVerbatimIn = (value: string, sourceTexts: string[]): boolean => {
   if (value.length === 0) return false;
   return sourceTexts.some((text) => text.includes(value));

@@ -75,6 +75,7 @@ const buildDeps = () => {
   const runs = {
     getRun: vi.fn(async (): Promise<Result<ExtractionRun>> => ok(run)),
     listRecords: vi.fn(async (): Promise<Result<ExtractionRecord[]>> => ok(records)),
+    listDocuments: vi.fn(async () => ok([{ id: "doc-1", filename: "bid.pdf" }])),
   };
   const flowVersions = {
     getById: vi.fn(async (): Promise<Result<FlowVersion | null>> =>
@@ -206,7 +207,7 @@ describe("ExportRunResults", () => {
         band: "green",
         provenance: "verbatim",
         derivation: "",
-        source: "doc-1 — page 1",
+        source: "bid.pdf — page 1",
         rationale: "cover page",
       },
       {
@@ -317,6 +318,18 @@ describe("ExportRunResults", () => {
 
     const table = deps.getCsvTable();
     expect(table.rows[0]!.price__derivation).toBe("unit × quantity (from unit, quantity)");
+    expect(table.rows[0]!.supplier__source).toBe("bid.pdf — page 1");
+  });
+
+  it("falls back to the document id when the run's document listing cannot be read", async () => {
+    // A reference to a document since removed is still evidence, so the locator
+    // is kept rather than dropped with the name.
+    const deps = buildDeps();
+    deps.runs.listDocuments.mockResolvedValueOnce(err(domainError("DB_ERROR", "gone")));
+
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const table = deps.getCsvTable();
     expect(table.rows[0]!.supplier__source).toBe("doc-1 — page 1");
   });
 

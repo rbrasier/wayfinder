@@ -49,8 +49,19 @@ const describeDerivation = (result: ExtractionFieldResult | undefined): string =
   return sourceKeys.length > 0 ? `${method} (from ${sourceKeys.join(", ")})` : method;
 };
 
-const describeSourceRef = (result: ExtractionFieldResult | undefined): string =>
-  result?.sourceRef ? `${result.sourceRef.documentId} — ${result.sourceRef.locator}` : "";
+// The stored reference addresses a document by id, which is what makes it
+// followable in the product; an export is read outside it, so the id is resolved
+// to the filename the reader recognises. An id with no matching document falls
+// back to the id rather than dropping the locator — a reference to a document
+// since removed is still evidence.
+const describeSourceRef = (
+  result: ExtractionFieldResult | undefined,
+  filenamesByDocumentId: Map<string, string>,
+): string => {
+  if (!result?.sourceRef) return "";
+  const { documentId, locator } = result.sourceRef;
+  return `${filenamesByDocumentId.get(documentId) ?? documentId} — ${locator}`;
+};
 
 // Writes the full records × fields set to XLSX, JSON and CSV in object storage
 // (phase §2.2). The XLSX is the on-screen download and carries two tabs: the
@@ -83,15 +94,25 @@ export class ExportRunResults {
     if (recordsResult.error) return recordsResult;
     const records = recordsResult.data;
 
+    // Source references address documents by id; an export is read outside the
+    // product, so the ids are resolved to filenames. A document listing failure
+    // is not an export failure — the references fall back to their ids.
+    const documents = await this.runs.listDocuments(input.runId);
+    const filenamesByDocumentId = new Map(
+      (documents.error ? [] : documents.data).map((document) => [document.id, document.filename]),
+    );
+
     const dataSheet = this.dataSheet(schema.data.fields, records);
     const workbook = this.spreadsheetWriter.write({
-      sheets: [dataSheet, this.confidenceSheet(schema.data.fields, records)],
+      sheets: [dataSheet, this.confidenceSheet(schema.data.fields, records, filenamesByDocumentId)],
     });
     if (workbook.error) return workbook;
 
     // The CSV is written before anything is stored, so a writer failure leaves
     // the run's previous export untouched rather than half-replaced.
-    const csv = this.csvWriter.write(this.dataTable(dataSheet, schema.data.fields, records));
+    const csv = this.csvWriter.write(
+      this.dataTable(dataSheet, schema.data.fields, records, filenamesByDocumentId),
+    );
     if (csv.error) return csv;
 
     const xlsxKey = exportKey(input.runId, "xlsx");
@@ -141,6 +162,7 @@ export class ExportRunResults {
     sheet: SpreadsheetSheet,
     fields: ExtractionField[],
     records: ExtractionRecord[],
+    filenamesByDocumentId: Map<string, string>,
   ): CsvTable {
     const columns: SpreadsheetColumn[] = [...sheet.columns];
     const resultsByKey = records.map((record) => new Map(record.fields.map((field) => [field.key, field])));
@@ -177,7 +199,9 @@ export class ExportRunResults {
         values[`${key}${PROVENANCE_SUFFIX}`] = result ? fieldConfidence(result).provenance : "";
       }
       for (const key of derived) values[`${key}${DERIVATION_SUFFIX}`] = describeDerivation(byKey.get(key));
-      for (const key of sourced) values[`${key}${SOURCE_SUFFIX}`] = describeSourceRef(byKey.get(key));
+      for (const key of sourced) {
+        values[`${key}${SOURCE_SUFFIX}`] = describeSourceRef(byKey.get(key), filenamesByDocumentId);
+      }
       return values;
     });
 
@@ -209,7 +233,11 @@ export class ExportRunResults {
   // sentence or two per cell. The band is written alongside the percentage so the
   // sheet can be filtered without re-deriving the thresholds in Excel, and the
   // kind beside it so a reader knows which question the percentage answers.
-  private confidenceSheet(fields: ExtractionField[], records: ExtractionRecord[]): SpreadsheetSheet {
+  private confidenceSheet(
+    fields: ExtractionField[],
+    records: ExtractionRecord[],
+    filenamesByDocumentId: Map<string, string>,
+  ): SpreadsheetSheet {
     const columns: SpreadsheetColumn[] = [
       { key: "record", label: "Record" },
       { key: "field", label: "Field" },
@@ -241,7 +269,7 @@ export class ExportRunResults {
           band: confidenceBand(confidence),
           provenance: read?.provenance ?? "",
           derivation: describeDerivation(result),
-          source: describeSourceRef(result),
+          source: describeSourceRef(result, filenamesByDocumentId),
           rationale: result?.rationale ?? "",
         });
       }

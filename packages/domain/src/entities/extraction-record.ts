@@ -125,13 +125,39 @@ export const applyConfidenceFloor = (
 
 // Under many-per-record a record draws on several documents, each extracted on
 // its own worker task (phase §5). Their field results are merged into the one
-// record by keeping, per field key, the value with the highest confidence — the
-// best-supported answer wins, and a later low-confidence document never
-// overwrites an earlier confident one. Incoming keys not yet present are added.
+// record by keeping, per field key, the best-supported answer. Incoming keys not
+// yet present are added.
 //
-// A human correction is the exception: it is authoritative (ADR-024), and it
-// carries `confidence: 1`, so a model value that is also fully confident would
-// otherwise displace it on a bare `>` comparison.
+// Three rules, in order, because a bare `confidence >` comparison is wrong twice
+// over:
+//
+// 1. A human correction is authoritative (ADR-024) and carries `confidence: 1`,
+//    so an equally-confident model value would otherwise displace it.
+// 2. A copied value and a composed one carry confidences on different scales —
+//    "did I pick the right one" against "is this right at all" — and ADR-053 §3
+//    forbids ranking one against the other. Grounding arbitrates instead: a
+//    value present byte-identically in a source document beats one composed over
+//    it. The cost is stated plainly: a modestly-confident copy now beats a
+//    highly-confident composition. That is the trade ADR-053 already makes, and
+//    a copy only reaches this point having cleared `applyConfidenceFloor`.
+// 3. Within one scale the higher confidence wins, exactly as before — so a
+//    record whose fields are all of one kind merges as it always did.
+const outranks = (
+  candidate: ExtractionFieldResult,
+  incumbent: ExtractionFieldResult,
+): boolean => {
+  const candidateProvenance = fieldProvenance(candidate);
+  const incumbentProvenance = fieldProvenance(incumbent);
+  if (candidateProvenance === "human_corrected") return true;
+  if (incumbentProvenance === "human_corrected") return false;
+
+  const candidateKind = confidenceKind(candidateProvenance);
+  const incumbentKind = confidenceKind(incumbentProvenance);
+  if (candidateKind !== incumbentKind) return candidateKind === "selection";
+
+  return candidate.confidence > incumbent.confidence;
+};
+
 export const mergeFieldResults = (
   existing: ExtractionFieldResult[],
   incoming: ExtractionFieldResult[],
@@ -139,16 +165,7 @@ export const mergeFieldResults = (
   const merged = new Map(existing.map((field) => [field.key, field]));
   for (const field of incoming) {
     const current = merged.get(field.key);
-    if (!current) {
-      merged.set(field.key, field);
-      continue;
-    }
-    if (fieldProvenance(current) === "human_corrected" && fieldProvenance(field) !== "human_corrected") {
-      continue;
-    }
-    if (fieldProvenance(field) === "human_corrected" || field.confidence > current.confidence) {
-      merged.set(field.key, field);
-    }
+    if (!current || outranks(field, current)) merged.set(field.key, field);
   }
   return [...merged.values()];
 };

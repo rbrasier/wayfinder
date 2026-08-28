@@ -96,14 +96,30 @@ describe("validateSchemaProposal", () => {
     expect(blockingMessages([])).toHaveLength(1);
   });
 
-  it("advises on a narrative field, which composes rather than copies", () => {
+  it("blocks a narrative field, which the extraction editor cannot show", () => {
+    // The editor offers no narrative type, so confirming one would seed the
+    // editor as Text and the next Save would rewrite the schema to match —
+    // losing the type without telling anyone.
     const findings = validateSchemaProposal([
       draft({ label: "Summary", annotation: "Summary (narrative)" }),
     ]);
 
-    const advisory = findings.find((finding) => finding.severity === "advisory");
-    expect(advisory?.fieldLabel).toBe("Summary");
-    // Advisory, never blocking — a composed summary is a legitimate field.
+    const blocking = findings.find((finding) => finding.severity === "blocking");
+    expect(blocking?.fieldLabel).toBe("Summary");
+    expect(blocking?.message).toContain("narrative");
+  });
+
+  it("accepts every type the extraction editor can show", () => {
+    const findings = validateSchemaProposal([
+      draft({ label: "Name", annotation: "Name (text)" }),
+      draft({ label: "Signed On", annotation: "Signed On (date)" }),
+      draft({ label: "Value", annotation: "Value (currency)" }),
+      draft({ label: "Headcount", annotation: "Headcount (number)" }),
+      draft({ label: "Contact", annotation: "Contact (email)" }),
+      draft({ label: "Renewed", annotation: "Renewed (yesno)" }),
+      draft({ label: "Status", annotation: "Status (options: Draft, Final)" }),
+    ]);
+
     expect(findings.filter((finding) => finding.severity === "blocking")).toEqual([]);
   });
 

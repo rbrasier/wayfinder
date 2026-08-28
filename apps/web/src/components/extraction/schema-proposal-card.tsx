@@ -50,6 +50,7 @@ export function SchemaProposalCard({
   const [documents, setDocuments] = useState<SampleDocument[]>([]);
   const [view, setView] = useState<ProposalView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const utils = trpc.useUtils();
 
   const failWith = (message: string) => setError(message);
 
@@ -76,6 +77,10 @@ export function SchemaProposalCard({
       const confirmed = view;
       setView(confirmed ? { ...confirmed, proposal: data.proposal } : null);
       if (confirmed) onConfirmed(confirmed.fields);
+      // Confirmation writes the schema draft, exactly as Save does, so the
+      // cached schema is stale from here. Without this a later refetch flips the
+      // editor's seed key and remounts it, discarding edits made since.
+      void utils.extraction.getSchema.invalidate({ flowId });
     },
     onError: (mutationError) => failWith(mutationError.message),
   });
