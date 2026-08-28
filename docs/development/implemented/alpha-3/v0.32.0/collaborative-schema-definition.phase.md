@@ -1,6 +1,6 @@
 # Phase — Collaborative Schema Definition
 
-- **Status**: Awaiting review
+- **Status**: Implemented (2026-08-28, v0.32.0)
 - **Target version**: 0.32.0  (bump: MINOR — new feature; **no schema change, no migration**)
 - **PRD**: `docs/development/prd/collaborative-schema-definition.prd.md`
 - **ADRs**: ADR-052 (schema proposals are drafts requiring activation)
