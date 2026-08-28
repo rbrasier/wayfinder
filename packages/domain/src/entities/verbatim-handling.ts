@@ -35,3 +35,18 @@ export const verbatimTransformViolations = (responseFields: TemplateField[]): st
           : `is a "${field.type}" field`;
       return `response field "${field.key}" ${reason}, so it cannot return the tool result unchanged`;
     });
+
+// The extraction-side counterpart to the guarantee above (ADR-053 §1). A value
+// the model returned that occurs byte-identically in one of the record's source
+// texts was selected from the document; anything else was composed over it and
+// stays `processed`. Substring containment is the whole test — no trimming, no
+// case folding, no whitespace collapsing — because each of those is precisely
+// the transformation that makes a value processed rather than copied.
+//
+// A blank value is never verbatim: the empty string occurs inside every text,
+// so containment alone would report a field that was never filled as copied
+// from the document.
+export const isVerbatimIn = (value: string, sourceTexts: string[]): boolean => {
+  if (value.length === 0) return false;
+  return sourceTexts.some((text) => text.includes(value));
+};

@@ -43,14 +43,23 @@ describe("extractDocumentFields", () => {
     const result = await extractDocumentFields(model, {
       fields: [supplierName, contractValue],
       recordLabel: "Acme response",
-      documentTexts: [{ filename: "acme.pdf", text: "Acme Ltd proposes $1,200." }],
+      documentTexts: [{ documentId: "doc-acme", filename: "acme.pdf", text: "Acme Ltd proposes $1,200." }],
       contextDocs: [],
       instruction: "Read each supplier response.",
     });
 
     expect(result.error).toBeUndefined();
     expect(result.data).toEqual([
-      { key: "supplier_name", value: "Acme Ltd", confidence: 0.9, rationale: "Cover page." },
+      // "Acme Ltd" occurs byte-identically in the source text, so it was
+      // selected rather than composed; "$1,200.00" was reformatted from
+      // "$1,200." and is therefore processed, which absence already says.
+      {
+        key: "supplier_name",
+        value: "Acme Ltd",
+        confidence: 0.9,
+        rationale: "Cover page.",
+        provenance: "verbatim",
+      },
       { key: "contract_value", value: "$1,200.00", confidence: 0.6, rationale: "Pricing sheet." },
     ]);
   });
@@ -63,7 +72,7 @@ describe("extractDocumentFields", () => {
     await extractDocumentFields(model, {
       fields: [supplierName],
       recordLabel: "Acme response",
-      documentTexts: [{ filename: "acme.pdf", text: "Acme Ltd" }],
+      documentTexts: [{ documentId: "doc-acme", filename: "acme.pdf", text: "Acme Ltd" }],
       contextDocs: [],
       instruction: "Read carefully.",
     });
@@ -88,7 +97,7 @@ describe("extractDocumentFields", () => {
     await extractDocumentFields(model, {
       fields: [supplierName, contractValue],
       recordLabel: "Acme",
-      documentTexts: [{ filename: "a.pdf", text: "Acme $5" }],
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme $5" }],
       contextDocs: [],
       instruction: "",
     });
@@ -108,7 +117,7 @@ describe("extractDocumentFields", () => {
     const result = await extractDocumentFields(model, {
       fields: [supplierName, contractValue],
       recordLabel: "Acme",
-      documentTexts: [{ filename: "a.pdf", text: "Acme Ltd" }],
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme Ltd" }],
       contextDocs: [],
       instruction: "",
     });
@@ -126,7 +135,7 @@ describe("extractDocumentFields", () => {
     const result = await extractDocumentFields(model, {
       fields: [supplierName, contractValue],
       recordLabel: "Acme",
-      documentTexts: [{ filename: "a.pdf", text: "Acme" }],
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme" }],
       contextDocs: [],
       instruction: "",
     });
@@ -147,7 +156,7 @@ describe("extractDocumentFields", () => {
     const result = await extractDocumentFields(model, {
       fields: [supplierName],
       recordLabel: "Acme",
-      documentTexts: [{ filename: "a.pdf", text: "Acme" }],
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme" }],
       contextDocs: [],
       instruction: "",
     });
@@ -161,7 +170,7 @@ describe("extractDocumentFields", () => {
     const result = await extractDocumentFields(model, {
       fields: [supplierName, contractValue],
       recordLabel: "Scan",
-      documentTexts: [{ filename: "scan.pdf", text: "   " }],
+      documentTexts: [{ documentId: "doc-scan", filename: "scan.pdf", text: "   " }],
       contextDocs: [],
       instruction: "",
     });
@@ -172,6 +181,189 @@ describe("extractDocumentFields", () => {
       { key: "supplier_name", value: "", confidence: 0, rationale: UNREADABLE_RATIONALE },
       { key: "contract_value", value: "", confidence: 0, rationale: UNREADABLE_RATIONALE },
     ]);
+  });
+
+  it("marks a value verbatim only when it occurs byte-identically in a source text", async () => {
+    const model = makeModel({
+      supplier_name: { value: "Acme Ltd", confidence: 90, rationale: "Cover page." },
+      contract_value: { value: "$1,200.00", confidence: 90, rationale: "Reformatted." },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName, contractValue],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme Ltd — 1200 dollars" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.provenance).toBe("verbatim");
+    // Composed stays unstamped: absence already reads as `processed`, so writing
+    // it would add a member to every composed row to say what its omission says.
+    expect(result.data![1]!.provenance).toBeUndefined();
+  });
+
+  it("finds a verbatim value in any of a multi-document record's texts", async () => {
+    const model = makeModel({
+      supplier_name: { value: "Beta Holdings", confidence: 90, rationale: "Schedule 2." },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Beta",
+      documentTexts: [
+        { documentId: "doc-a", filename: "cover.pdf", text: "Covering letter" },
+        { documentId: "doc-b", filename: "schedule.pdf", text: "Party: Beta Holdings" },
+      ],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.provenance).toBe("verbatim");
+  });
+
+  it("does not mark a value the confidence floor discarded as verbatim", async () => {
+    // The blanked value is no longer in the document, and an empty string
+    // occurs in every text — stamping it would claim a copy of nothing.
+    const model = makeModel({
+      supplier_name: { value: "Acme Ltd", confidence: 5, rationale: "a guess" },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.value).toBe("");
+    expect(result.data![0]!.provenance).toBeUndefined();
+  });
+
+  it("resolves a reported source reference to the document id it names", async () => {
+    const model = makeModel({
+      supplier_name: {
+        value: "Acme Ltd",
+        confidence: 90,
+        rationale: "Cover page.",
+        sourceRef: { document: "acme.pdf", locator: "page 1, header" },
+      },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-acme", filename: "acme.pdf", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.sourceRef).toEqual({
+      documentId: "doc-acme",
+      locator: "page 1, header",
+    });
+  });
+
+  it("leaves the source reference absent when the model omits it, rather than failing or emptying it", async () => {
+    const model = makeModel({
+      supplier_name: { value: "Acme Ltd", confidence: 90, rationale: "Cover page." },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-acme", filename: "acme.pdf", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data![0]).not.toHaveProperty("sourceRef");
+  });
+
+  it("drops a source reference naming a document outside the record", async () => {
+    // Nothing can open a locator against a document this record never had, so
+    // the reference is dropped rather than stored against a guessed id.
+    const model = makeModel({
+      supplier_name: {
+        value: "Acme Ltd",
+        confidence: 90,
+        rationale: "Cover page.",
+        sourceRef: { document: "somewhere-else.pdf", locator: "page 4" },
+      },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-acme", filename: "acme.pdf", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]).not.toHaveProperty("sourceRef");
+  });
+
+  it("drops a source reference whose locator is blank", async () => {
+    const model = makeModel({
+      supplier_name: {
+        value: "Acme Ltd",
+        confidence: 90,
+        rationale: "Cover page.",
+        sourceRef: { document: "acme.pdf", locator: "   " },
+      },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-acme", filename: "acme.pdf", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]).not.toHaveProperty("sourceRef");
+  });
+
+  it("drops a source reference on a value the confidence floor discarded", async () => {
+    const model = makeModel({
+      supplier_name: {
+        value: "Acme Ltd",
+        confidence: 5,
+        rationale: "a guess",
+        sourceRef: { document: "acme.pdf", locator: "page 1" },
+      },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-acme", filename: "acme.pdf", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.value).toBe("");
+    expect(result.data![0]).not.toHaveProperty("sourceRef");
+  });
+
+  it("asks for a source reference in the system prompt and states it is optional", async () => {
+    const model = makeModel({
+      supplier_name: { value: "Acme", confidence: 80, rationale: "x" },
+    });
+
+    await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    const call = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.system).toContain("sourceRef");
+    expect(call.system).toContain("Omit");
   });
 
   it("propagates a model error", async () => {
@@ -186,7 +378,7 @@ describe("extractDocumentFields", () => {
     const result = await extractDocumentFields(model, {
       fields: [supplierName],
       recordLabel: "Acme",
-      documentTexts: [{ filename: "a.pdf", text: "Acme Ltd" }],
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme Ltd" }],
       contextDocs: [],
       instruction: "",
     });
