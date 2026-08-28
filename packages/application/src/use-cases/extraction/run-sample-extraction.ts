@@ -148,6 +148,7 @@ export class RunSampleExtraction {
 
     for (const [index, group] of groups.entries()) {
       const documentTexts = group.fileIds.map((fileId) => ({
+        documentId: fileId,
         filename: documentById.get(fileId)?.filename ?? fileId,
         text: textById.get(fileId) ?? "",
       }));

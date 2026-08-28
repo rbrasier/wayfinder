@@ -233,15 +233,75 @@ of enforcing it:
    The failure now shows beside the toggle and states that the setting has not
    changed.
 
+## Provenance producers closed (2026-08-28)
+
+The phase shipped with one producer — `RunMcpNode` classifying its own tool
+output — so every extraction field rendered "Composed", the selection confidence
+scale was unreachable, and the CSV's `__source` column was never emitted. Two of
+the three gaps are now closed in the extraction path itself.
+
+**`verbatim` on extraction records.** `extractDocumentFields` already held the
+source texts it sent to the model, so a returned value can be checked against
+them. `isVerbatimIn` (domain, beside the MCP verbatim rules) reports whether a
+value occurs byte-identically in one of the record's source texts. That is the
+whole test: no trimming, no case folding, no whitespace collapsing, because each
+of those is exactly the transformation that makes a value processed rather than
+copied, and a "close enough" tier would turn the guarantee into an argument —
+the same reasoning ADR-053 §5 applies to MCP results. A blank value is never
+verbatim, since the empty string occurs inside every text. This is what makes
+selection confidence, the "Copied" tag and the per-scale aggregate reachable for
+the first time.
+
+Only `verbatim` is stamped. `processed` stays unwritten, because absence already
+reads as `processed` through `fieldProvenance` — writing it would add a member to
+every composed row to say what its omission says.
+
+**`sourceRef` on extraction records.** `extractionFieldResultSchema` gains an
+optional `sourceRef: { document, locator }`, and the extraction rules ask for it
+where the model can point at a place in the source. The model names the document
+by filename; `extractDocumentFields` resolves that to the real document id, which
+is what every reader already expects and what `sourceRefSummary` maps back to a
+filename on screen. `RecordDocumentText` gained a **required** `documentId` so the
+compiler forces both call sites to supply a real one — a locator resolved against
+a guessed id would point the reader at the wrong document.
+
+Absent stays absent. A model that omits the reference, gives a blank locator, or
+names a document this record never had produces no `sourceRef` at all, rather
+than an empty ref that would render as a link to nowhere and export as a locator
+no auditor can follow. Omitting it never fails the extraction.
+
+**Both are attached after the confidence floor, never before.** The floor blanks
+a value it discards, and neither a verbatim claim nor a locator describes a
+blank — the same defect shape as the stale `derivation`/`sourceRef` on a
+corrected value that the QA pass above found and fixed.
+
+Nothing is back-filled: historical rows keep reading as `processed` with no
+source reference, which is what they were.
+
 ## Known limitations
 
-- **Nothing produces `verbatim`, `derived` or `sourceRef` data yet.** This phase
-  builds the vocabulary, the enforcement and every reader; the extraction paths
-  that would stamp them are a separate change. `RunMcpNode` classifies its own
-  output, which is the one producer here.
+- **`verbatim` and `sourceRef` are now produced; `derived` is not.** This phase
+  built the vocabulary, the enforcement and every reader, and `RunMcpNode`
+  classifying its own output was its only producer. The extraction path has since
+  gained two: an extracted value occurring byte-identically in a source text is
+  stamped `verbatim` (which is what makes selection confidence, the "Copied" tag
+  and the per-scale aggregate reachable at all), and a field-level `sourceRef` is
+  recorded wherever the model can point at a place in the source.
+- **Derived Field Handling is not delivered.** It has been removed from the phase
+  doc's *Covers requirements* line. `FieldDerivation`, the "Calculated" tag,
+  `derivationSummary` and the `__derivation` export columns are all here and all
+  correct — but `ExtractionField` is `{ field, instruction, doneWhen }`, so no
+  author can declare that a field is computed from other fields, and no `derived`
+  value can exist. Unlike verbatim this cannot be closed by classifying model
+  output: whether a value was calculated from other fields is authoring intent,
+  not a property of the returned bytes. The type and the columns are deliberately
+  kept — correct and unused, not wrong. Phase doc §12 and the *Calculated
+  Extraction Fields* phase doc under `docs/development/to-be-implemented/` carry
+  the detail.
 - **`aggregate_confidence` remains a write-only column.** §10.1 proves it, and
   removing it is a `DROP COLUMN` needing its own `-- data-impact: destructive,
   approved` declaration and its own decision. Noted, deliberately not smuggled in.
 - **Criterion "derived fields carry a confidence metric appropriate to their kind"**
-  is met by treating `derived` as accuracy-kind (ADR-053 §2). A distinct
-  derivation-confidence scale was not introduced.
+  is *decided* by treating `derived` as accuracy-kind (ADR-053 §2) — a distinct
+  derivation-confidence scale was not introduced — but it is not demonstrable,
+  because no derived field can be authored. See the limitation above.

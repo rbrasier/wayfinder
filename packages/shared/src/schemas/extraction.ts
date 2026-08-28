@@ -23,6 +23,26 @@ export const extractionFieldResultSchema = z.object({
     .describe(
       "Brief justification: where in the documents the value came from, or why it is uncertain or missing.",
     ),
+  // Optional by design (ADR-053 §1): a model that cannot point at a specific
+  // place must still return the field. A missing reference is not an extraction
+  // failure, and it is never filled in with a placeholder.
+  sourceRef: z
+    .object({
+      document: z
+        .string()
+        .describe(
+          "The source document the value was read from, named exactly as it appears in the record source documents.",
+        ),
+      locator: z
+        .string()
+        .describe(
+          "Where inside that document the value sits — a page number, a section heading, a table cell reference or a line.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Where this value was read from. Omit it entirely when you cannot point to a specific place; never invent one.",
+    ),
 });
 
 // The per-record extraction result: a record keyed by the schema's field keys.
