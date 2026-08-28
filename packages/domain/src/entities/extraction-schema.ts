@@ -2,6 +2,7 @@ import { domainError } from "../errors/domain-error";
 import { err, ok } from "../result";
 import type { Result } from "../result";
 import type { FlowContextDoc } from "./flow";
+import { validateStructuredFieldSet } from "./node-output";
 import { parseTemplateField, type TemplateField } from "./template-field";
 
 // Two documents/three is the synchronous sample size (phase §8); the full batch
@@ -159,6 +160,14 @@ export const parseExtractionSchema = (draft: ExtractionSchemaDraft): Result<Extr
     seenKeys.add(key);
     fields.push(built.data);
   }
+
+  // The same rejection the conversational structured path applies, called rather
+  // than re-implemented: a `section` is a document include/omit directive and a
+  // `signature` is an approval slot, and neither means anything for a value
+  // pulled out of a source document. Sharing the function is what stops the two
+  // routes to this field model drifting apart (ADR-038 §5, ADR-043 §2).
+  const structured = validateStructuredFieldSet(fields.map((field) => field.field));
+  if (structured.error) return structured;
 
   const input = validateInputConfig(draft.input);
   if (input.error) return input;

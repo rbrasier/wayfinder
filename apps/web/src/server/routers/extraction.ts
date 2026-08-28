@@ -92,21 +92,25 @@ const contextDocSchema = z.object({
   extractionStatus: z.enum(["pending", "complete", "failed", "unsupported"]),
 });
 
+const inputConfigSchema = z.object({
+  cardinality: z.enum(["one_per_file", "many_per_record"]),
+  selectionCriteria: z.string().nullable(),
+  guidance: z.string(),
+});
+
+const outputConfigSchema = z.object({
+  format: z.enum(["docx", "xlsx"]),
+  outputTemplate: contextDocSchema.nullable(),
+  instruction: z.string(),
+  generateSummary: z.boolean(),
+  summaryTemplate: contextDocSchema.nullable(),
+  contextDocs: z.array(contextDocSchema),
+});
+
 const schemaInput: z.ZodType<ExtractionSchemaDraft> = z.object({
   fields: z.array(fieldDraftSchema),
-  input: z.object({
-    cardinality: z.enum(["one_per_file", "many_per_record"]),
-    selectionCriteria: z.string().nullable(),
-    guidance: z.string(),
-  }),
-  output: z.object({
-    format: z.enum(["docx", "xlsx"]),
-    outputTemplate: contextDocSchema.nullable(),
-    instruction: z.string(),
-    generateSummary: z.boolean(),
-    summaryTemplate: contextDocSchema.nullable(),
-    contextDocs: z.array(contextDocSchema),
-  }),
+  input: inputConfigSchema,
+  output: outputConfigSchema,
 });
 
 const sampleDocumentSchema = z.object({
@@ -115,6 +119,51 @@ const sampleDocumentSchema = z.object({
   mimeType: z.string().min(1),
   contentBase64: z.string(),
 });
+
+// The proposal travels with every request because it is thread-local state the
+// client holds — there is no repository to load it from, and adding one would
+// mean the design had been misread (ADR-052 §1).
+const proposalSchema = z.object({
+  status: z.enum(["draft", "confirmed"]),
+  revisions: z
+    .array(
+      z.object({
+        fields: z.array(fieldDraftSchema),
+        request: z.string(),
+        note: z.string(),
+      }),
+    )
+    .min(1),
+});
+
+// The sample buffers the client sends, in the shape the extraction use cases
+// take. Shared by the sample run and the schema proposer so both read the same
+// documents the same way.
+const toSampleDocuments = (
+  documents: z.infer<typeof sampleDocumentSchema>[],
+): { id: string; filename: string; treePath: string; mimeType: string; buffer: Buffer }[] =>
+  documents.map((document, index) => ({
+    id: `doc-${index + 1}`,
+    filename: document.filename,
+    treePath: document.treePath,
+    mimeType: document.mimeType,
+    buffer: Buffer.from(document.contentBase64, "base64"),
+  }));
+
+const proposalContextSchema = z.object({
+  flowId: z.string().uuid(),
+  intent: z.string().min(1),
+  documents: z.array(sampleDocumentSchema),
+});
+
+// The flow's own name, read server-side rather than taken from the client: it
+// goes into the proposer's prompt, and a display string the caller supplies is
+// not the flow's name.
+const flowNameOf = async (container: Container, flowId: string): Promise<string> => {
+  const canvas = await container.useCases.getFlowCanvas.execute(flowId);
+  if (canvas.error || !canvas.data) return "";
+  return canvas.data.flow.name;
+};
 
 const batchFileSchema = z.object({
   filename: z.string().min(1),
@@ -340,6 +389,78 @@ export const extractionRouter = router({
       };
     }),
 
+  // The AI drafts a field set from the author's stated intent and the sample
+  // documents. Author-gated and re-checked through the shared flow-edit guard:
+  // the proposer reads no document content the caller could not already read.
+  proposeSchema: authorProcedure
+    .input(proposalContextSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
+      }
+      const result = await ctx.container.useCases.proposeSchema.execute({
+        flowName: await flowNameOf(ctx.container, input.flowId),
+        intent: input.intent,
+        documents: toSampleDocuments(input.documents),
+        userId: ctx.userId,
+        flowId: input.flowId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // One refinement turn. The proposal comes back from the client and returns
+  // amended; nothing about it is stored between calls.
+  refineSchema: authorProcedure
+    .input(
+      proposalContextSchema.extend({
+        proposal: proposalSchema,
+        instruction: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
+      }
+      const result = await ctx.container.useCases.refineSchemaProposal.execute({
+        flowName: await flowNameOf(ctx.container, input.flowId),
+        intent: input.intent,
+        documents: toSampleDocuments(input.documents),
+        proposal: input.proposal,
+        instruction: input.instruction,
+        userId: ctx.userId,
+        flowId: input.flowId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // The single moment a proposal crosses into authoring config. It goes through
+  // the ordinary schema save, so a proposed field and a hand-typed field are the
+  // same object with the same validation.
+  confirmSchema: authorProcedure
+    .input(
+      z.object({
+        flowId: z.string().uuid(),
+        proposal: proposalSchema,
+        input: inputConfigSchema,
+        output: outputConfigSchema,
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
+      }
+      const result = await ctx.container.useCases.confirmSchemaProposal.execute({
+        flowId: input.flowId,
+        proposal: input.proposal,
+        input: input.input,
+        output: input.output,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   publish: authorProcedure.input(flowIdInput).mutation(async ({ ctx, input }) => {
     if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot publish this flow." });
@@ -370,17 +491,9 @@ export const extractionRouter = router({
         });
       }
 
-      const documents = input.documents.map((document, index) => ({
-        id: `doc-${index + 1}`,
-        filename: document.filename,
-        treePath: document.treePath,
-        mimeType: document.mimeType,
-        buffer: Buffer.from(document.contentBase64, "base64"),
-      }));
-
       const result = await ctx.container.useCases.runSampleExtraction.execute({
         schema: schemaResult.data,
-        documents,
+        documents: toSampleDocuments(input.documents),
         userId: ctx.userId,
         flowId: input.flowId,
       });
