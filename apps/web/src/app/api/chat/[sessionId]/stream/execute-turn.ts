@@ -259,6 +259,8 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
           messages: [...messagesWithNew, { role: "assistant" as const, content: aiPayload.response }],
           flow,
           node: currentNode,
+          userId,
+          sessionId: session.id,
           budget,
           changeRequests,
         })

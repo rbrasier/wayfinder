@@ -9,6 +9,7 @@
  */
 
 import {
+  type CalledModel,
   domainError,
   err,
   isSessionDiscarded,
@@ -255,8 +256,10 @@ export const usage: TokenUsage = {
 export class StubLanguageModel implements ILanguageModel {
   readonly provider = "openai" as const;
   constructor(private readonly object: Record<string, string>) {}
-  async generateObject<T>(_input: GenerateObjectInput): Promise<Result<{ object: T; usage: TokenUsage }>> {
-    return ok({ object: this.object as T, usage });
+  async generateObject<T>(
+    _input: GenerateObjectInput,
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>> {
+    return ok({ object: this.object as T, usage, provider: this.provider, model: "stub-model" });
   }
   async streamText(): Promise<never> {
     throw new Error("unused");

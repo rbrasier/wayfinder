@@ -34,6 +34,12 @@ export interface EvaluateStepReadinessInput {
   messages: readonly Pick<SessionMessage, "role" | "content">[];
   flow: Flow;
   node: FlowNode;
+  // Enforcement key + dashboard attribution (ADR-026). The gate spends the
+  // document-generation model, so without these its cost lands on an
+  // unattributed row and is never checked against the user's cap. Optional so
+  // the use-case stays callable from a context with no signed-in user.
+  userId?: string | null;
+  sessionId?: string | null;
   // Admin-configurable budget (ADR-027); shared with document generation so the
   // gate's extraction matches what generation would do.
   budget?: ResolvedDocumentGenerationBudget;
@@ -86,6 +92,9 @@ export class EvaluateStepReadiness {
         contextDocs: input.flow.contextDocs,
         instruction: config.aiInstruction,
         purpose: "documentGeneration",
+        userId: input.userId,
+        flowId: input.flow.id,
+        sessionId: input.sessionId,
         changeRequests: input.changeRequests,
         contextBudgetChars: input.budget?.contextBudgetChars,
         maxPromptTokens: input.budget?.maxPromptTokens,
@@ -108,6 +117,9 @@ export class EvaluateStepReadiness {
       fieldValues: scalarValues(fieldValues),
       contextDocs: input.flow.contextDocs,
       stepCriteria: config.doneWhen,
+      userId: input.userId,
+      flowId: input.flow.id,
+      sessionId: input.sessionId,
     });
     if (gradeResult.error) return gradeResult;
 

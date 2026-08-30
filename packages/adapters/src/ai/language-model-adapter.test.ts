@@ -631,3 +631,111 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
   });
 });
+
+// Usage is recorded by a decorator wrapped around this adapter, which sees only
+// the caller's input — and a caller that routes by purpose passes no model. The
+// adapter is the only component that knows what the call resolved to, so every
+// result has to carry it.
+describe("LanguageModelAdapter — surfaces the model and provider the call ran on", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("reports the purpose-resolved model on generateObject", async () => {
+    vi.mocked(generateObject).mockResolvedValue({
+      object: {},
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateObject({ purpose: "documentGeneration", schema });
+
+    expect(result.data?.model).toBe("gpt-4o");
+    expect(result.data?.provider).toBe("openai");
+  });
+
+  it("reports the purpose-resolved model on generateText", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "hi",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateText({ purpose: "documentGeneration" });
+
+    expect(result.data?.model).toBe("gpt-4o");
+  });
+
+  it("reports the purpose-resolved model on streamText", async () => {
+    async function* chunks() {
+      yield "hello";
+    }
+    vi.mocked(streamText).mockReturnValue({
+      textStream: chunks(),
+      usage: Promise.resolve({ promptTokens: 1, completionTokens: 1 }),
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.streamText({ purpose: "documentGeneration" });
+
+    expect(result.data?.model).toBe("gpt-4o");
+  });
+
+  it("reports the purpose-resolved model on streamObject", async () => {
+    async function* partials() {
+      yield { step: 1 };
+    }
+    vi.mocked(streamObject).mockReturnValue({
+      partialObjectStream: partials(),
+      object: Promise.resolve({ step: 1 }),
+      usage: Promise.resolve({ promptTokens: 1, completionTokens: 1 }),
+      providerMetadata: Promise.resolve(undefined),
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.streamObject({ purpose: "documentGeneration", schema });
+
+    expect(result.data?.model).toBe("gpt-4o");
+  });
+
+  it("reports an explicit model override rather than the purpose default", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "hi",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateText({ purpose: "chat", model: "gpt-4o" });
+
+    expect(result.data?.model).toBe("gpt-4o");
+  });
+
+  // The adapter's constructor provider is the boot-time one; an admin can point
+  // the install at a different provider without a redeploy, and the call — and
+  // so the usage row and its rate table — must follow the runtime config.
+  it("reports the runtime provider, not the one it was constructed with", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "hi",
+      usage: { promptTokens: 1, completionTokens: 1 },
+      experimental_providerMetadata: undefined,
+    } as never);
+    const anthropicConfig: AiConfig = {
+      provider: "anthropic",
+      apiKeys: { anthropic: "sk-ant-test", openai: null, mistral: null, bedrock: null },
+      models: {
+        chat: "claude-sonnet-4-6",
+        documentGeneration: "claude-opus-5",
+        branching: "claude-sonnet-4-6",
+      },
+    };
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(anthropicConfig));
+
+    const result = await adapter.generateText({ purpose: "documentGeneration" });
+
+    expect(result.data?.provider).toBe("anthropic");
+    expect(result.data?.model).toBe("claude-opus-5");
+  });
+});

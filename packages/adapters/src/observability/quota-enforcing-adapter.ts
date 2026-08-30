@@ -6,6 +6,7 @@ import {
   ok,
   resolveEffectiveBudget,
   type Budget,
+  type CalledModel,
   type BudgetPeriod,
   type GenerateObjectInput,
   type GenerateTextInput,
@@ -157,7 +158,7 @@ export class QuotaEnforcingLanguageModel implements ILanguageModel {
 
   async generateObject<T>(
     input: GenerateObjectInput,
-  ): Promise<Result<{ object: T; usage: TokenUsage }>> {
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>> {
     const check = await this.enforcer.check(input.userId);
     if (check.error) return err(check.error);
     return this.inner.generateObject<T>(input);
@@ -165,7 +166,7 @@ export class QuotaEnforcingLanguageModel implements ILanguageModel {
 
   async generateText(
     input: GenerateTextInput,
-  ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+  ): Promise<Result<{ text: string; usage: TokenUsage } & CalledModel>> {
     const check = await this.enforcer.check(input.userId);
     if (check.error) return err(check.error);
     return this.inner.generateText(input);
@@ -173,7 +174,9 @@ export class QuotaEnforcingLanguageModel implements ILanguageModel {
 
   async streamText(
     input: StreamTextInput,
-  ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>> {
+  ): Promise<
+    Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> } & CalledModel>
+  > {
     const check = await this.enforcer.check(input.userId);
     if (check.error) return err(check.error);
     return this.inner.streamText(input);
@@ -182,11 +185,13 @@ export class QuotaEnforcingLanguageModel implements ILanguageModel {
   async streamObject<T>(
     input: StreamObjectInput,
   ): Promise<
-    Result<{
-      partialObjectStream: AsyncIterable<Partial<T>>;
-      object: Promise<T>;
-      usage: Promise<TokenUsage>;
-    }>
+    Result<
+      {
+        partialObjectStream: AsyncIterable<Partial<T>>;
+        object: Promise<T>;
+        usage: Promise<TokenUsage>;
+      } & CalledModel
+    >
   > {
     const check = await this.enforcer.check(input.userId);
     if (check.error) return err(check.error);
