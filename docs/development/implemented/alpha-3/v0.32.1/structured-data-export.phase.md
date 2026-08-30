@@ -1,7 +1,7 @@
 # Phase — Structured Data Export (CSV) and Egress Audit
 
 - **Status**: Awaiting review
-- **Target version**: 0.32.0  (bump: MINOR — new export format; **no schema change, no migration**)
+- **Target version**: 0.32.1  (bump: PATCH on the 0.32 line — new export format; **no schema change, no migration**)
 - **PRD**: `docs/development/prd/structured-data-export.prd.md`
 - **ADRs**: ADR-054 (CSV is its own writer port)
 - **Depends on**: ADR-033 (run exports, append-only audit log); the existing
@@ -249,8 +249,9 @@ is required.
 
 ### Version, branch & PR target
 
-- **MINOR — 0.31.0 → 0.32.0**, applied once here as the first build thread on the
-  0.32.0 line.
+- **PATCH — 0.31.0 → 0.32.1**, opening the 0.32 line. This phase was split out of
+  PR #257 so it can merge on its own; 0.32.0 is skipped because that number was
+  already published under the combined PR.
 - Built on `claude/pr-257-scope-planning-vey5hv`, then merged into
   `claude/extended-workflow-continuity-docs` so PR #257 accumulates. No new PR;
   #257 stays draft.

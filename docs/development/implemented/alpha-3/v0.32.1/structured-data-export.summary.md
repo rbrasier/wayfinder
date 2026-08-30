@@ -1,6 +1,6 @@
 # Implementation Summary — Structured Data Export (CSV) and Egress Audit
 
-- **Version**: 0.32.0 (bump: **MINOR** — new export format and audit metadata; no schema change)
+- **Version**: 0.32.1 (bump: **PATCH** on the 0.32 line — new export format and audit metadata; no schema change)
 - **Phase doc**: `structured-data-export.phase.md` (this folder)
 - **PRD**: `docs/development/prd/structured-data-export.prd.md`
 - **ADR**: ADR-054 — CSV is its own writer port, not a mode of the spreadsheet writer
@@ -59,7 +59,7 @@ CSV joins JSON as a secondary format rather than taking a third button.
 | `apps/web/src/lib/e2e-fixtures.ts` | `extraction_flows` flag on; two new `SeedResult` ids |
 | `apps/web/e2e/helpers/seed.ts` | Two new fixture keys |
 | `apps/web/e2e/enhance-synthesise-summary.spec.ts` | Preamble repaired; two CSV tests added |
-| `VERSION`, `package.json` | 0.31.0 → 0.32.0 |
+| `VERSION`, `package.json` | 0.31.0 → 0.32.1 |
 
 The `export` tRPC procedure returns `result.data` wholesale, so `csvKey` reaches
 the client with no router change — one file fewer than the phase doc anticipated.
