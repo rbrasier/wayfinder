@@ -241,6 +241,103 @@ describe("extractDocumentFields", () => {
     expect(result.data![0]!.provenance).toBeUndefined();
   });
 
+  it("does not mark a reshaped type verbatim just because its characters occur in the text", async () => {
+    // "No" occurs inside "Notice" and a currency value inside ordinary prose.
+    // A yesno, date, number or currency field reformats what it read by
+    // definition, so containment there is coincidence, not selection.
+    const renewed: ExtractionField = {
+      field: { key: "renewed", label: "Renewed", type: "yesno", optional: false, raw: "Renewed (yesno)" },
+      instruction: "Whether the contract renews.",
+      doneWhen: null,
+    };
+    const model = makeModel({
+      renewed: { value: "No", confidence: 90, rationale: "Notice clause." },
+      contract_value: { value: "$1,200.00", confidence: 90, rationale: "Pricing." },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [renewed, contractValue],
+      recordLabel: "Acme",
+      documentTexts: [
+        { documentId: "doc-a", filename: "a.pdf", text: "Notice period applies. $1,200.00 total." },
+      ],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.provenance).toBeUndefined();
+    expect(result.data![1]!.provenance).toBeUndefined();
+  });
+
+  it("does not mark an options-restricted field verbatim, since its value is mapped to the list", async () => {
+    const status: ExtractionField = {
+      field: {
+        key: "status",
+        label: "Status",
+        type: "text",
+        options: ["Draft", "Final"],
+        optional: false,
+        raw: "Status (options: Draft, Final)",
+      },
+      instruction: "The bid status.",
+      doneWhen: null,
+    };
+    const model = makeModel({ status: { value: "Draft", confidence: 90, rationale: "Heading." } });
+
+    const result = await extractDocumentFields(model, {
+      fields: [status],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Draft agreement" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.provenance).toBeUndefined();
+  });
+
+  it("does not mark a whitespace-only value verbatim", async () => {
+    // The floor leaves a blank value alone, so the verbatim check has to use the
+    // same definition of blank the floor does.
+    const model = makeModel({ supplier_name: { value: "   ", confidence: 90, rationale: "x" } });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme Ltd trading" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.provenance).toBeUndefined();
+  });
+
+  it("labels two same-named documents distinctly so a source reference reaches the right one", async () => {
+    const model = makeModel({
+      supplier_name: {
+        value: "Beta Ltd",
+        confidence: 90,
+        rationale: "Second invoice.",
+        sourceRef: { document: "invoice.pdf (2)", locator: "page 1" },
+      },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Pair",
+      documentTexts: [
+        { documentId: "doc-a", filename: "invoice.pdf", text: "Acme Ltd" },
+        { documentId: "doc-b", filename: "invoice.pdf", text: "Beta Ltd" },
+      ],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    const call = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.prompt).toContain("[invoice.pdf]");
+    expect(call.prompt).toContain("[invoice.pdf (2)]");
+    expect(result.data![0]!.sourceRef).toEqual({ documentId: "doc-b", locator: "page 1" });
+  });
+
   it("resolves a reported source reference to the document id it names", async () => {
     const model = makeModel({
       supplier_name: {

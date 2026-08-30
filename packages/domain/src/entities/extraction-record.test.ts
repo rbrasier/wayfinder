@@ -201,6 +201,90 @@ describe("mergeFieldResults", () => {
     const merged = mergeFieldResults(existing, incoming);
     expect(merged.map((field) => field.key).sort()).toEqual(["delivery", "price"]);
   });
+
+  it("prefers a copied value over a composed one rather than ranking two scales against each other", () => {
+    // Selection confidence and accuracy confidence answer different questions
+    // (ADR-053 §3), so the numbers cannot arbitrate. Grounding does: the value
+    // present byte-identically in a source document wins, even at a lower number.
+    const existing = [
+      { key: "supplier", value: "Acme Limited", confidence: 0.95, rationale: "composed" },
+    ];
+    const incoming = [
+      {
+        key: "supplier",
+        value: "Acme Ltd",
+        confidence: 0.6,
+        rationale: "copied",
+        provenance: "verbatim" as const,
+      },
+    ];
+
+    expect(mergeFieldResults(existing, incoming)[0]!.value).toBe("Acme Ltd");
+  });
+
+  it("keeps a copied incumbent against a more confident composed challenger", () => {
+    const existing = [
+      {
+        key: "supplier",
+        value: "Acme Ltd",
+        confidence: 0.6,
+        rationale: "copied",
+        provenance: "verbatim" as const,
+      },
+    ];
+    const incoming = [
+      { key: "supplier", value: "Acme Limited", confidence: 0.95, rationale: "composed" },
+    ];
+
+    expect(mergeFieldResults(existing, incoming)[0]!.value).toBe("Acme Ltd");
+  });
+
+  it("ranks two copied values against each other on their shared scale", () => {
+    const existing = [
+      {
+        key: "supplier",
+        value: "Acme Ltd",
+        confidence: 0.6,
+        rationale: "a",
+        provenance: "verbatim" as const,
+      },
+    ];
+    const incoming = [
+      {
+        key: "supplier",
+        value: "Acme Ltd, Bristol",
+        confidence: 0.9,
+        rationale: "b",
+        provenance: "verbatim" as const,
+      },
+    ];
+
+    expect(mergeFieldResults(existing, incoming)[0]!.value).toBe("Acme Ltd, Bristol");
+  });
+
+  it("keeps a human correction against a copied value, which outranks everything", () => {
+    const existing = [
+      {
+        key: "supplier",
+        value: "Acme (UK) Ltd",
+        confidence: 1,
+        rationale: "corrected",
+        provenance: "human_corrected" as const,
+      },
+    ];
+    const incoming = [
+      {
+        key: "supplier",
+        value: "Acme Ltd",
+        confidence: 1,
+        rationale: "copied",
+        provenance: "verbatim" as const,
+      },
+    ];
+
+    expect(mergeFieldResults(existing, incoming)[0]!.value).toBe("Acme (UK) Ltd");
+  });
+
 });
 
 describe("applyFieldEdit", () => {

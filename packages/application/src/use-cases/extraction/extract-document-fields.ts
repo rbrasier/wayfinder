@@ -2,6 +2,7 @@ import {
   applyConfidenceFloor,
   isVerbatimIn,
   ok,
+  returnsSourceBytes,
   type ExtractionField,
   type ExtractionFieldResult,
   type FieldSourceRef,
@@ -55,17 +56,26 @@ const unreadableResults = (fields: ExtractionField[]): ExtractionFieldResult[] =
     rationale: UNREADABLE_RATIONALE,
   }));
 
-// First occurrence wins, so a record carrying two files of the same name
-// resolves to the one the prompt listed first rather than to whichever the map
-// happened to keep.
-const documentIdsByFilename = (documentTexts: RecordDocumentText[]): Map<string, string> => {
-  const byFilename = new Map<string, string>();
+// The label each document is given in the prompt, unique within the record. Two
+// files of the same name are a routine shape here — one invoice per supplier
+// folder — and the model can only name a document by the label it was shown, so
+// a duplicate label would send every reference to whichever one came first.
+const documentLabels = (documentTexts: RecordDocumentText[]): Map<string, string> => {
+  const labelByDocumentId = new Map<string, string>();
+  const used = new Set<string>();
   for (const document of documentTexts) {
-    if (byFilename.has(document.filename)) continue;
-    byFilename.set(document.filename, document.documentId);
+    let label = document.filename;
+    for (let suffix = 2; used.has(label); suffix += 1) {
+      label = `${document.filename} (${suffix})`;
+    }
+    used.add(label);
+    labelByDocumentId.set(document.documentId, label);
   }
-  return byFilename;
+  return labelByDocumentId;
 };
+
+const invert = (labelByDocumentId: Map<string, string>): Map<string, string> =>
+  new Map([...labelByDocumentId].map(([documentId, label]) => [label, documentId]));
 
 // Absent stays absent. A model that omits the reference, points at a document
 // this record never had, or gives a blank locator produces no `sourceRef` at
@@ -73,12 +83,12 @@ const documentIdsByFilename = (documentTexts: RecordDocumentText[]): Map<string,
 // the auditor cannot follow.
 const resolveSourceRef = (
   reported: ExtractionFieldResultData["sourceRef"],
-  documentIdByFilename: Map<string, string>,
+  documentIdByLabel: Map<string, string>,
 ): FieldSourceRef | undefined => {
   if (!reported) return undefined;
   const locator = reported.locator.trim();
   if (locator.length === 0) return undefined;
-  const documentId = documentIdByFilename.get(reported.document.trim());
+  const documentId = documentIdByLabel.get(reported.document.trim());
   if (!documentId) return undefined;
   return { documentId, locator };
 };
@@ -93,19 +103,34 @@ const resolveSourceRef = (
 // was a producer for the other value.
 const annotateProvenance = (
   result: ExtractionFieldResult,
+  field: ExtractionField,
   sourceTexts: string[],
   sourceRef: FieldSourceRef | undefined,
 ): ExtractionFieldResult => {
-  if (result.value.length === 0) return result;
+  // Blank is the floor's own definition of blank, so a whitespace-only value the
+  // floor left alone is not stamped either.
+  if (result.value.trim().length === 0) return result;
+
   const annotated: ExtractionFieldResult = { ...result };
-  if (isVerbatimIn(result.value, sourceTexts)) annotated.provenance = "verbatim";
+  // The field must be able to return source bytes before containment means
+  // anything: a date, a number or an options value is reshaped by definition, so
+  // its characters turning up in the text is coincidence, not selection.
+  if (returnsSourceBytes(field.field) && isVerbatimIn(result.value, sourceTexts)) {
+    annotated.provenance = "verbatim";
+  }
   if (sourceRef) annotated.sourceRef = sourceRef;
   return annotated;
 };
 
-const buildDocumentsSection = (documentTexts: RecordDocumentText[]): string =>
+const buildDocumentsSection = (
+  documentTexts: RecordDocumentText[],
+  labelByDocumentId: Map<string, string>,
+): string =>
   documentTexts
-    .map((document) => `\n[${document.filename}]\n${document.text}`)
+    .map(
+      (document) =>
+        `\n[${labelByDocumentId.get(document.documentId) ?? document.filename}]\n${document.text}`,
+    )
     .join("\n");
 
 // Extracts one record's fields against the schema (phase §8). Empty-text records
@@ -121,12 +146,13 @@ export const extractDocumentFields = async (
   if (!hasReadableText) return ok(unreadableResults(input.fields));
 
   const keys = input.fields.map((field) => field.field.key);
+  const labelByDocumentId = documentLabels(input.documentTexts);
 
   const prompt = [
     `Extract the fields for the record "${input.recordLabel}".`,
     `Return a JSON object whose keys are exactly: ${JSON.stringify(keys)}.`,
     `For each key return { value, confidence (0-100), rationale }, plus sourceRef when you can point to where the value came from, following the extraction rules and field formats in your instructions.`,
-    `\nRecord source documents:\n${buildDocumentsSection(input.documentTexts)}`,
+    `\nRecord source documents:\n${buildDocumentsSection(input.documentTexts, labelByDocumentId)}`,
   ].join("\n");
 
   const system = buildExtractionSystemPrompt({
@@ -149,7 +175,7 @@ export const extractDocumentFields = async (
 
   const object = result.data.object;
   const sourceTexts = input.documentTexts.map((document) => document.text);
-  const documentIdByFilename = documentIdsByFilename(input.documentTexts);
+  const documentIdByLabel = invert(labelByDocumentId);
 
   const results = input.fields.map((field): ExtractionFieldResult => {
     const scored = object[field.field.key];
@@ -169,8 +195,9 @@ export const extractDocumentFields = async (
     });
     return annotateProvenance(
       floored,
+      field,
       sourceTexts,
-      resolveSourceRef(scored.sourceRef, documentIdByFilename),
+      resolveSourceRef(scored.sourceRef, documentIdByLabel),
     );
   });
 
