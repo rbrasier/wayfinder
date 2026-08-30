@@ -1,7 +1,7 @@
 # Phase — Data Provenance and Verbatim Governance
 
-- **Status**: Implemented (2026-08-27, v0.32.0)
-- **Target version**: 0.32.0  (bump: MINOR — additive `admin_mcp_servers.verbatim_only` column,
+- **Status**: Implemented (2026-08-27, v0.32.2)
+- **Target version**: 0.32.2  (bump: PATCH on the 0.32 line — additive `admin_mcp_servers.verbatim_only` column,
   + new feature. No column is added to or altered on `app_extraction_records`: the §10
   investigation found the existing aggregate column unread, so both per-kind aggregates are
   derived from `fields` in the domain.)
@@ -354,8 +354,11 @@ Approved at the `/build` gate. Scope is the whole phase (§6 steps 1–11), incl
 step 10's CSV columns — the provenance, derivation and source-reference columns
 the Structured Export thread deferred to this phase.
 
-**No version bump.** 0.32.0 was applied once by the Structured Export build in the
-same PR; later threads do not re-bump.
+**PATCH — 0.32.1 → 0.32.2.** This phase was split out of PR #257 so it can be
+reviewed and merged on its own, so it now carries its own bump rather than
+riding the Structured Export thread's. It builds on the export work at 0.32.1,
+which must land first — the CSV provenance columns extend the table that phase
+introduced.
 
 ### Goal
 

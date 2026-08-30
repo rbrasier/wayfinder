@@ -1,7 +1,7 @@
 # Implementation Summary — Data Provenance and Verbatim Governance
 
-- **Version**: 0.32.0 — **no bump applied**. The Structured Export thread already
-  moved 0.31.0 → 0.32.0 in this PR, and one PR ships one version.
+- **Version**: 0.32.2 (bump: **PATCH** on the 0.32 line). Split out of PR #257 into
+  its own PR, stacked on the Structured Export split at 0.32.1.
 - **Phase doc**: `data-provenance-and-verbatim-governance.phase.md` (this folder)
 - **PRD**: `docs/development/prd/data-provenance-and-verbatim-governance.prd.md`
 - **ADR**: ADR-053 — provenance belongs to the field result, and confidence has two meanings
