@@ -1,169 +1,218 @@
-# PRD — Extended Workflow Continuity
+# PRD — Document Composition
 
-> **⚠️ Held — the problem statement below is under challenge.**
-> Review of PR #257 established that the requirement this document was written
-> against is not the one the product needs. What is written here describes
-> *composer-text persistence across a page reload*; the stated requirement is
-> *an AI building a document across multiple model calls, larger than one
-> output window can produce*. Nothing here has been adjusted toward the new
-> reading — re-deriving is the job, not patching. See the tracking PR for the
-> confirmation question put to @johntooth.
+> **Rewritten in full.** This PRD previously described a different problem —
+> an unsent chat message lost on reload. That reading was withdrawn on
+> PR #262 after review on PR #257 established that the entity model it
+> produced (`SessionDraft` / `app_session_drafts`) does not survive contact
+> with the real requirement. Nothing from the old reading carries forward
+> except §10 of the phase doc (the write-contention finding, which was never
+> really about drafts). This rewrite reflects the reframed problem statement
+> proposed in reply on PR #262, pending @rbrasier's confirmation.
 
-
-- **Status**: Draft
-- **Date**: 2026-08-24
-- **Author**: rbrasier
-- **Target version**: 0.32.0  (bump: MINOR — new `app_session_drafts` table plus an additive
-  `app_session_step_outputs.status` column, and new operator-visible behaviour)
+- **Status**: Draft — pending confirmation from @rbrasier on PR #262 that the
+  reframed problem statement is correct
+- **Date**: 2026-08-30
+- **Author**: johntooth (rewritten via `/new-feature` once PR #257/#262
+  review established the original problem statement was wrong at the root)
+- **Target version**: 0.33.0 (bump: MINOR — two new `app_` tables, new admin
+  config fields, new feature surface)
 
 ## 1. Problem
 
-An operator part-way through a conversational session can lose work by doing nothing more
-than reloading the page. The session itself survives — messages, uploads, checkpoint and
-step outputs are all persisted server-side — but the message being typed is held only in
-React state, so a refresh, a crashed tab, or a switch to another device discards it.
+A single LLM call has a fixed output ceiling. When a generated document
+needs to be larger or more detailed than one call can produce, that ceiling
+shows up two ways: the document has more *sections* than one call's output
+window can hold (breadth), or a section is present but under-covered because
+the model ran out of room before treating it properly (depth).
 
-Two smaller continuity gaps sit alongside it. The step rail reports *position* but not
-*completeness*, so an operator cannot tell whether the current step is nearly done or barely
-started. And whether a step's captured data is provisional or committed is implied by a
-column on the session (`awaiting_confirmation_node_id`) rather than recorded on the output
-itself, so nothing downstream can distinguish a draft capture from a confirmed one.
+Today, `GenerateDocument` already splits work across calls on the *input*
+side — it batches template fields and extracts each batch with a separate
+model call to stay under context limits
+(`packages/application/src/use-cases/document/generate-document.ts:173-186`).
+But the document itself is rendered deterministically, in one shot, from
+already-resolved field values — `documentGenerator.generate()`
+(`generate-document.ts:93-97`). There is no path anywhere in the codebase for
+an LLM to write free-form document content across more than one call. This
+PRD adds that path.
 
 ## 2. Users / Personas
 
-- **Operator** (procurement officer, HR manager, ops lead) — runs a multi-step
-  AI-guided session over hours or days, across reloads and devices. Needs to return
-  to exactly the state they left.
-- **Flow author** — reviews how far a session progressed and how complete each step is
-  when diagnosing a flow that stalls.
+- **Operator** (procurement officer, HR manager, ops lead) — runs a
+  document-generation flow and needs the finished document to be larger or
+  more detailed than one model call could produce, without personally
+  triggering every incremental step.
+- **Flow author** — decides how a document's plan is structured and how much
+  human checkpointing the flow requires, appropriate to what it produces.
+- **Admin** — sets a deployment-wide floor on how much checkpointing is
+  required, and tunes how the composition loop is orchestrated (how much
+  context each call sees, how many attempts a section gets).
 
 ## 3. Goals
 
-- An operator who reloads mid-compose finds their unsent message still in the composer.
-- An unsent message follows the operator across devices, not just across reloads in one browser.
-- The step rail shows completeness for the current step, not just complete/current/pending.
-- A step output records on itself whether it is `draft` or `final`.
-- A session resumed while a turn is still leased shows a resuming state instead of an idle composer.
+- A document plan (ordered sections, each with a target depth) is agreed
+  before composition starts, and is small enough for a human to read in full
+  regardless of the finished document's size.
+- Once approved, the AI composes the document across as many model calls and
+  sessions as the plan requires, without a human triggering each pass.
+- Every segment states how it was produced (`FieldProvenance`, reused from
+  ADR-053), so the operator can tell a model-authored section from a
+  mechanically populated one.
+- An admin or flow designer can set how often the process checkpoints for
+  human confirmation — from every segment to fully autonomous.
+- Regardless of the checkpoint setting, an operator viewing a composition
+  always sees how many segments were written and how many model calls it
+  took. Autonomy is never silent.
 
 ## 4. Non-goals
 
-- **Editing previously defined elements during refinement.** Deliberately excluded from this
-  phase (see §11); the acceptance criterion covering it is not satisfied here.
-- Synthesise / extraction runs (`/synthesise/[id]/runs/[runId]`) — chat sessions only.
-- AI-assisted flow authoring at `/flows/[id]/config`.
-- Any change to how the AI rebuilds context per turn — `buildSystemPrompt` already reassembles
-  gathered context, uploads, retrieved chunks and skills on every turn and is left untouched.
+- **Editing a finalized segment's content by hand.** Future work; the
+  `status` model on a segment is groundwork for it, but no editing path
+  ships here.
+- **Chat-transcript / composer-draft continuity** (an unsent message
+  persisting across reload). If that problem still exists, it needs its own
+  PRD — folding it back into this one is exactly the scope-mixing that
+  produced the wrong entity model the first time.
+- **Any change to the extraction-flow batch engine** (ADR-033). Composition
+  is a session-scoped sibling, not a replacement — see §9 and §11.
+- **Locator-resolved ("verbatim") segments against an external retrieval
+  source.** No such source is integrated yet; see §11.
+- **A fuller statistical-sampling review surface** (weighted sampling,
+  aggregate dashboards) — phase 2, not this PRD.
 
 ## 5. Key entities
 
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
-| `SessionDraft` | `packages/domain/src/entities/session-draft.ts` | new | One unsent message per `(sessionId, userId)`, scoped to the `nodeId` it was written against |
-| `ISessionDraftRepository` | `packages/domain/src/ports/session-draft-repository.ts` | new | Result pattern; `getForParticipant` / `upsert` / `clear` |
-| `SessionStepOutput` | `packages/domain/src/entities/session-step-output.ts` | existing | Gains `status?: StepOutputStatus` |
-| `StepOutputStatus` | same file | new | `"draft" \| "final"`; absent reads as `"final"` |
-| `StepState` | `apps/web/src/components/layout/app-header-model.ts` | existing | Widened to carry completeness alongside position |
+| `DocumentComposition` | `packages/domain/src/entities/document-composition.ts` | new | Plan, resolved checkpoint granularity, status, model-call count |
+| `DocumentPlanSection` | same file | new | `key`, `title`, `targetDepth` |
+| `CompositionSegment` | same file | new | One unit of composed content; carries provenance |
+| `CompositionCheckpointGranularity` | same file | new | `"per_segment" \| "per_milestone" \| "end_of_run" \| "autonomous"`, closed set |
+| `FieldProvenance` / `FieldSourceRef` / `FieldConfidence` | `packages/domain/src/entities/field-provenance.ts` | existing, reused | ADR-053; unchanged by this PRD |
+| `DocumentGenerationConfig` | `packages/domain/src/entities/runtime-config.ts` | existing, extended | Gains 3 orchestration fields — §9 |
+| `IDocumentCompositionRepository` | `packages/domain/src/ports/document-composition-repository.ts` | new | Result pattern |
 
 ## 6. User stories
 
-1. As an operator, I can type a long reply, get called away, close the tab, and return to
-   find my text still in the composer, so that I never retype work.
-2. As an operator, I can start composing on my laptop and finish on another machine, so that
-   my draft is not trapped in one browser.
-3. As an operator, I can see how complete the current step is, so that I know whether to keep
-   going or move on.
-4. As an operator, I can tell which steps hold provisional data and which are committed, so
-   that I trust what the workflow has captured.
-5. As an operator returning while the AI is still mid-turn, I see that it is picking up where
-   it left off rather than an idle composer that invites a duplicate send.
+1. As an operator, I approve a document plan once, then the AI composes the
+   document across as many calls and sessions as it takes, without me
+   triggering each pass.
+2. As an operator, I can see how each part of the document was produced —
+   written by the AI, or filled in mechanically.
+3. As an operator, even when nothing required my confirmation, I can see how
+   much happened — how many segments, how many model calls.
+4. As an admin, I can require a stricter minimum checkpoint cadence across
+   the deployment than an individual flow author configured.
+5. As a flow author, I can choose how often my flow's composition
+   checkpoints, appropriate to what the flow produces.
 
 ## 7. Pages / surfaces affected
 
-- `/chats/[sessionId]` — composer rehydrates the unsent draft; rail gains completeness;
-  resuming indicator while `activeTurnId` is leased.
-- tRPC: `session.saveDraft` (added), `session.clearDraft` (added), `session.get` (returns the
-  caller's draft and per-step completeness).
-- `apps/web/src/components/chat/chat-composer.tsx` — draft rehydration and debounced persistence.
-- `apps/web/src/components/chat/step-progress-rail.tsx` and
-  `apps/web/src/components/layout/app-header-model.ts` — completeness rendering.
+- Flow editor — the document-generation node's config gains a
+  checkpoint-granularity selector.
+- Chat session — a plan-approval step before composition starts; segment
+  rendering with inline provenance; checkpoint confirmation prompts; a
+  persistent composition-summary banner.
+- Admin settings — `DocumentGenerationConfig`'s UI gains the 3 orchestration
+  fields; a new `minimumCheckpointGranularity` setting.
+- tRPC: new router/procedures for starting a composition, approving a plan,
+  resolving a checkpoint, and reading composition state.
 
 ## 8. Database changes
 
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
-| `app_session_drafts` | NEW — `id`, `session_id`, `user_id`, `node_id`, `body`, `created_at`, `updated_at`; unique `(session_id, user_id)` | yes (`app_`) |
-| `app_session_step_outputs` | add column `status text not null default 'final'` | n/a (existing `app_` table) |
+| `app_document_compositions` | NEW — `id`, `session_id`, `node_id`, `plan jsonb`, `checkpoint_granularity text`, `status text`, `model_call_count integer default 0`, `created_at`, `updated_at` | yes (`app_`) |
+| `app_document_composition_segments` | NEW — `id`, `composition_id`, `order int`, `plan_section_key text`, `status text`, `content text`, `provenance text`, `source_ref jsonb` nullable, `confidence real` nullable, `qa_sampled boolean default false`, `qa_review_status text` nullable, `revision_count int default 0`, `created_at`, `updated_at` | yes (`app_`) |
 
-The prefix is `app_`, not `core_`: `core_sessions` is the Better Auth login session
-(`packages/adapters/src/db/schema/core.ts:50`), while the workflow session is `app_sessions`
-(`packages/adapters/src/db/schema/wayfinder.ts:150`). Session-scoped workflow state belongs
-with the latter.
-
-**The information-architecture investigation these were gated on is complete** — phase doc §10,
-written before any migration was drafted (step 4b). It confirmed the shape above unchanged, with
-evidence for each part: `app_sessions` carries an optimistic-concurrency `version` bumped by every
-non-lease write, so a debounced draft save cannot live there; `app_session_participants`
-deliberately excludes the owner, so it cannot host one either; and draft-versus-final is not
-derivable, because the confirmation pointer is nulled on confirm and step outputs are inserted
-unconditionally, so two rows can share a node. Staleness is compared against `current_node_id`,
-never `awaiting_confirmation_node_id`.
-
-One generated migration (never `drizzle-kit push`). It is additive throughout — a new table,
-and a defaulted column that cannot fail on existing rows — so it declares:
+One generated migration, additive only:
 
 ```
--- data-impact: preserved — new table plus a defaulted column; no existing row is altered or lost
+-- data-impact: preserved — new tables only; no existing row is read, altered, or lost
 ```
 
-The unique constraint is on a brand-new, empty table, so the `ADD CONSTRAINT … UNIQUE` hazard
-class cannot bite here; the declaration still records that judgement.
+No prior migration for `app_session_drafts` was ever generated (the old
+ADR-051 was never built), so there is nothing to retract or reconcile.
+
+Segments are stored as **rows**, not nested inside the composition's JSONB,
+specifically so a review surface can filter, count, and sample with plain
+SQL (`WHERE qa_sampled = false ORDER BY random() LIMIT N`, `GROUP BY
+status`) without loading full segment content — §10's acceptance criteria
+reflect this directly.
+
+Separately, `DocumentGenerationConfig` (an existing admin settings row, not
+a table) gains `compositionSegmentContextScope`, `compositionRecentSegmentsWindow`,
+`compositionMaxTurnsPerSegment`. No migration needed — it's a JSON row read
+through a tolerant parser with safe defaults, the same mechanism
+`fieldBatchSize` and `contextBudgetMode` already use
+(`runtime-config.ts:102-114`).
 
 ## 9. Architectural decisions
 
-- **New:** ADR-051 — session drafts are per-participant rows, and step-output finalisation is
-  recorded on the output rather than inferred from the session.
-- **Assumes:** `026-operator-confirmed-step-completion` (the confirm-to-advance boundary this
-  promotes a draft across), ADR-006 (flow/session schema), ADR-007 (session-scoped LangGraph),
-  ADR-038 (step output types).
+- **New**: ADR-051 (rewritten) — `DocumentComposition` as a general-purpose
+  entity, checkpoint-granularity governance, and why orchestration limits
+  extend `DocumentGenerationConfig` rather than the spend-quota system.
+- **Assumes**: ADR-053 (`FieldProvenance` / `FieldSourceRef` reuse), ADR-038
+  (`generate_document` output type), ADR-033 (extraction flows — explicit
+  non-overlap).
+- **Supersedes**: the prior "Proposed" content of ADR-051 (session drafts and
+  step-output finalisation) in full.
 
 ## 10. Acceptance criteria
 
-- [ ] Typing in the composer and reloading the page restores the exact text.
-- [ ] A draft whose `nodeId` no longer matches the session's `currentNodeId` is discarded on
-      load, not restored, and the stored row is deleted.
-- [ ] Sending a message clears the stored draft; the composer is empty after the turn.
-- [ ] Two participants in one session never see each other's unsent text.
-- [ ] A draft written on one browser is present when the same user opens the session elsewhere.
-- [ ] `stepOutputStatus()` returns `"final"` for a row written before this phase.
-- [ ] A step output captured while `awaitingConfirmationNodeId` is set is stored as `draft`.
-- [ ] `confirm-step-advance` promotes that output to `final`, and a `final` output is never
-      rewritten by a later turn on the same node.
-- [ ] The rail shows completeness for the current step, sourced from `EvaluateStepReadinessOutput`.
-- [ ] Loading a session with `activeTurnId` leased shows the resuming indicator, which clears
-      once the SSE stream reattaches.
-- [ ] The migration applies to a database holding existing sessions and step outputs with no
-      row loss.
+- [ ] A plan with N sections and per-section target depth requires exactly
+      one human confirmation to start, not N.
+- [ ] `ComposeNextSegment` selects the next incomplete-or-under-depth segment
+      without human input, honouring the resolved checkpoint granularity.
+- [ ] `clampCheckpointGranularity` always resolves to the stricter of the
+      admin floor and the flow-authored value; a deployment with no admin
+      setting behaves exactly as before (the floor defaults to `autonomous`).
+- [ ] Every segment carries a `provenance` value before it can be marked
+      `final`; a segment with no provenance is rejected, not defaulted.
+- [ ] The composition summary (segment count, model-call count, provenance
+      mix) renders without loading segment content, and is present at every
+      checkpoint-granularity setting including `autonomous`.
+- [ ] A `final` segment is never rewritten by a later pass; a revision
+      creates a new attempt and increments `revisionCount`.
+- [ ] The migration applies to a database with existing sessions and step
+      outputs, with no row loss.
+- [ ] `GenerateDocument`'s existing single-shot behaviour is unchanged by the
+      `DocumentGenerationConfig` extension — the new fields default to
+      values that do not alter today's output.
 
 ## 11. Out of scope / future work
 
-- **Modifying previously defined elements during refinement** — reopening a completed step to
-  amend its captured `SessionStepOutput`. The `draft`/`final` discriminator added here is the
-  groundwork for it, but no editing path ships in this phase, and the corresponding acceptance
-  criterion is knowingly unmet.
-- Extending continuity to synthesise/extraction runs and to AI-assisted flow authoring.
-- Surfacing draft state to other participants (presence / "someone is typing" beyond the
-  existing typing indicator).
+- `ISourceRetrievalPort` and any concrete retrieval adapter, for
+  locator-resolved (`verbatim`) segments against an external source —
+  nothing here blocks adding it later; `FieldProvenance` already reserves
+  the value.
+- The fuller statistical-sampling review surface (weighted sampling,
+  aggregate dashboards across large compositions) — the mandatory summary
+  banner is the phase-1 floor.
+- Manual editing of a finalized segment.
+- Per-flow override of the orchestration limits in `DocumentGenerationConfig`
+  — stays a global admin setting unless a real need for per-flow tuning
+  appears.
+- A second consumer of the `DocumentComposition` shape beyond document
+  generation — the shape is kept generic on purpose, but nothing here builds
+  a second consumer speculatively.
 
 ## 12. Risks / open questions
 
-- **Write volume.** Persisting on every keystroke would make the drafts table a hot path; the
-  phase doc specifies a debounce, and the write must stay off the turn's critical path.
-- **`StepState` widening.** Every rail consumer reads `stepState()`; a missed call site degrades
-  the header silently rather than failing loudly. Keeping `stepState()` the sole reader is the mitigation.
-- **Draft staleness — decided: discard.** A draft is scoped to the step it was written against.
-  When the session has advanced past that step, the draft is deleted rather than restored,
-  because text written as a reply to one question must not be offered as an answer to another.
-  The accepted cost is that an operator who typed at length and then let the step advance loses
-  that text.
-- **Completeness cost.** `evaluate-step-readiness` runs a model call; the rail must read a
-  cached/persisted signal rather than triggering evaluation on render.
+- **Checkpoint-granularity clamping is new logic with no precedent in this
+  codebase** — checked against the spend-quota resolution model (ADR-026,
+  user/role/global, most-specific-wins) and the MCP-tool-allowlist model
+  (admin permits a set, author filters within it); neither fits an ordinal
+  dial. Needs solid test coverage, since a bug here could silently under- or
+  over-gate a composition.
+- **Segments-as-rows is a departure from this schema's usual
+  one-row-per-entity pattern** — accepted because the QA-query patterns this
+  is designed for need it.
+- **`DocumentGenerationConfig` is already consumed by `GenerateDocument`** —
+  the new fields must default to values that don't change existing
+  single-shot generation behaviour; needs an explicit test asserting that.
+- **Milestone interval for `per_milestone`** is not fixed in this PRD (every
+  N segments? every X% of plan?) — left as a build-time parameter; doesn't
+  change the architecture either way.
+- **This whole PRD is contingent on @rbrasier confirming the reframed
+  problem statement on PR #262** — if the reframing is rejected, this needs
+  re-deriving again, per the PR's own stated process.

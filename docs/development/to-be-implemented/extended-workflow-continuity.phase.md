@@ -1,310 +1,276 @@
-# Phase — Extended Workflow Continuity
+# Phase — Document Composition
 
-> **⚠️ Held — the problem statement below is under challenge.**
-> Review of PR #257 established that the requirement this document was written
-> against is not the one the product needs. What is written here describes
-> *composer-text persistence across a page reload*; the stated requirement is
-> *an AI building a document across multiple model calls, larger than one
-> output window can produce*. Nothing here has been adjusted toward the new
-> reading — re-deriving is the job, not patching. See the tracking PR for the
-> confirmation question put to @johntooth.
+> **Rewritten in full.** Replaces the prior "Extended Workflow Continuity"
+> phase doc (session drafts, step-output finalisation), which described a
+> problem PR #262 withdrew. Nothing from the prior version carries forward
+> except §10 below, preserved because its argument was never really about
+> drafts.
 
-
-- **Status**: Awaiting review
-- **Target version**: 0.32.0  (bump: MINOR — new `app_session_drafts` table + additive
-  `app_session_step_outputs.status` column + new feature)
+- **Status**: Awaiting review — pending confirmation from @rbrasier on
+  PR #262 that the reframed problem statement is correct
+- **Target version**: 0.33.0 (bump: MINOR — two new `app_` tables, additive
+  `DocumentGenerationConfig` fields, new feature)
 - **PRD**: `docs/development/prd/extended-workflow-continuity.prd.md`
-- **ADRs**: ADR-051 (session drafts and step-output finalisation)
-- **Depends on**: `026-operator-confirmed-step-completion` (the confirm-to-advance boundary),
-  ADR-006 (flow/session schema), ADR-007 (session-scoped LangGraph), ADR-038 (step output types)
+- **ADRs**: ADR-051 (rewritten — document composition, checkpoint
+  granularity, orchestration limits)
+- **Depends on**: ADR-053 (field provenance and dual confidence), ADR-038
+  (`generate_document` output type), ADR-033 (extraction flows — explicit
+  non-overlap, §9 below)
 
 ## 1. Problem
 
-A conversational session already survives a reload — checkpoint, messages, uploads and step
-outputs are all server-side, and the client reattaches over SSE with `Last-Event-ID`
-(`apps/web/src/app/(user)/chats/[sessionId]/_content.tsx:287`). The unsent message does not:
-it is component state (`apps/web/src/components/chat/chat-composer.tsx:26`), even though the
-attachments beside it are persisted and re-fetched on mount (`chat-composer.tsx:44`).
-
-Separately, the step rail reports position but not completeness, and whether a captured step
-output is provisional is inferred from `Session.awaitingConfirmationNodeId` rather than
-recorded on the output. See the PRD for full detail.
+A single LLM call has a fixed output ceiling. A document that needs to be
+larger or more detailed than one call can produce hits that two ways: more
+*sections* than one call's output window holds, or a section present but
+under-covered because the model ran out of room before treating it properly.
+`GenerateDocument` already batches work across calls on the input side
+(`generate-document.ts:173-186`) but assembles the document itself
+deterministically, in one call (`generate-document.ts:93-97`). See the PRD
+and ADR-051 for full detail on why this is new capability, not a fix.
 
 ## 2. Goals
 
-- An unsent message survives reload, tab loss and a move to another device — while it is still
-  a reply to the step it was written for.
-- A draft whose step has since advanced is discarded rather than restored.
-- Two participants in one session keep separate unsent text.
-- A step output states on itself whether it is `draft` or `final`.
-- The rail shows completeness for the current step from an already-computed readiness signal.
-- A session resumed with a live turn lease shows a resuming state, not an idle composer.
+- A document plan (ordered sections with a target depth) is approved once,
+  before composition starts.
+- The AI composes the document autonomously against that plan, across as
+  many model calls and sessions as needed.
+- Every segment records how it was produced (`FieldProvenance`, reused from
+  ADR-053).
+- Checkpoint cadence (how often a human confirms progress) is configurable,
+  clamped between an admin floor and a flow-authored value.
+- A composition summary (segments, model calls, provenance mix) is always
+  visible, regardless of checkpoint cadence.
 
 ## 3. Non-goals
 
-- Reopening a completed step to amend its captured output. The `draft`/`final` state is the
-  groundwork; **no editing path ships here**, and the PRD records that acceptance criterion
-  as knowingly unmet.
-- Synthesise/extraction runs and AI-assisted flow authoring.
-- Changes to per-turn context assembly (`buildSystemPrompt` is untouched).
+- Editing a finalized segment's content by hand.
+- Chat-transcript / composer-draft continuity — a separate problem, a
+  separate PRD if it's still real.
+- Changes to the extraction-flow batch engine (ADR-033) — see §9.
+- Locator-resolved (`verbatim`) segments against an external source — no
+  such source is integrated; see §9's deferred list.
+- The fuller statistical-sampling review surface — phase 2.
 
 ## 4. Approach
 
-Two independent slices that share a migration.
+Three independent slices sharing one migration.
 
-**Drafts.** A new `app_session_drafts` table, unique on `(session_id, user_id)`, written
-through a new domain port. Deliberately *not* a column on `app_sessions`: that row is guarded
-by an optimistic-concurrency `version` and a turn lease, and debounced keystroke writes must
-not contend with turns (ADR-051).
+**Composition state.** `DocumentComposition` and `CompositionSegment`
+(`packages/domain/src/entities/document-composition.ts`, new) track an
+ordered plan and its segments. A segment's `provenance`, `sourceRef`, and
+`confidence` reuse `FieldProvenance` / `FieldSourceRef` / `FieldConfidence`
+from `field-provenance.ts` unchanged — no second taxonomy (ADR-051 Decision
+2). In this phase, `provenance` is only ever `"processed"` or `"derived"`;
+`"verbatim"` stays unreachable until a retrieval source exists (ADR-051
+Decision 5, deferred).
 
-The row records the `nodeId` it was composed against, and a stale draft is **discarded**: on
-load, a draft whose `nodeId` no longer matches `currentNodeId` is deleted rather than
-rehydrated (ADR-051). Staleness is decided in the domain by a pure `isDraftStale()`, so the
-rule is testable without a session runner.
+**Checkpoint granularity.** `CompositionCheckpointGranularity` is a closed,
+ordered type set by the flow author on the node, clamped against a new
+admin-level floor (`minimumCheckpointGranularity`, defaulting to
+`"autonomous"`) via a pure function, `clampCheckpointGranularity`, resolved
+once at composition start and stored as the resolved value (ADR-051 Decision
+3). This is new governance logic with no precedent elsewhere in the
+codebase — the spend-quota cascade and the MCP-tool-allowlist pattern were
+both checked and neither fits an ordinal dial.
 
-**Finalisation and completeness.** An additive `status` column on `app_session_step_outputs`,
-read through a single `stepOutputStatus()` accessor that treats absent as `"final"` — the same
-idiom as the existing `sessionMode()`. `confirm-step-advance` promotes `draft` → `final`. The
-rail reads a persisted readiness signal rather than invoking `evaluate-step-readiness` on
-render, because that use case makes a model call.
+**Orchestration limits.** `DocumentGenerationConfig`
+(`packages/domain/src/entities/runtime-config.ts`, existing, extended) gains
+`compositionSegmentContextScope`, `compositionRecentSegmentsWindow`, and
+`compositionMaxTurnsPerSegment` — global admin settings governing how much
+context a segment-composing call sees and how many attempts a segment gets.
+Explicitly **not** a cost mechanism (ADR-051 Decision 4); spend/quota
+protection continues to apply automatically and separately via the
+`ILanguageModel` decorator chain.
 
-**Migrations are gated on an information-architecture investigation (step 4b).** The table and
-column below are the current proposal, not a settled design — the investigation may conclude that
-less is needed.
+**Migration is additive and does not depend on any information-architecture
+investigation** — unlike the prior version of this phase doc, there is no
+existing table shape to weigh against; `app_session_drafts` was never built,
+so this is a green-field schema decision, not a migration of live data.
 
 ## 5. Key entities / files
 
 | Path | New / changed | Notes |
-| ---- | ------------- | ----- |
-| `packages/domain/src/entities/session-draft.ts` | new | `SessionDraft` (carries `nodeId`), `NewSessionDraft`, `isDraftStale()` |
-| `packages/domain/src/ports/session-draft-repository.ts` | new | `getForParticipant` / `upsert` / `clear`, Result pattern |
-| `packages/domain/src/entities/session-step-output.ts` | changed | `StepOutputStatus`, `status?`, `stepOutputStatus()` |
-| `packages/domain/src/entities/index.ts`, `ports/index.ts` | changed | Re-exports |
-| `packages/application/src/use-cases/session/save-session-draft.ts` | new | Upsert, ownership-checked |
-| `packages/application/src/use-cases/session/clear-session-draft.ts` | new | Delete on send/clear |
-| `packages/application/src/use-cases/session/get-session.ts` | changed | Returns the caller's draft |
-| `packages/application/src/use-cases/session/confirm-step-advance.ts` | changed | Promotes `draft` → `final` |
-| `packages/adapters/src/db/schema/wayfinder.ts` | changed | `app_session_drafts`; `status` on step outputs |
-| `packages/adapters/src/db/migrations/` | new | One generated migration |
-| `packages/adapters/src/repositories/session-draft-repository.ts` | new | Drizzle implementation |
-| `apps/web/src/server/routers/session.ts` | changed | `saveDraft`, `clearDraft` |
-| `apps/web/src/components/chat/chat-composer.tsx` | changed | Rehydrate + debounced persist |
-| `apps/web/src/components/layout/app-header-model.ts` | changed | `StepState` widened |
-| `apps/web/src/components/chat/step-progress-rail.tsx` | changed | Completeness + draft treatment |
-| `apps/web/src/app/(user)/chats/[sessionId]/_content.tsx` | changed | Resuming indicator |
+| ---- | -------------- | ----- |
+| `packages/domain/src/entities/document-composition.ts` | new | `DocumentComposition`, `DocumentPlanSection`, `CompositionSegment`, `CompositionCheckpointGranularity`, `clampCheckpointGranularity`, `isCheckpointDue`, `isCompositionComplete` |
+| `packages/domain/src/entities/runtime-config.ts` | changed | `DocumentGenerationConfig` gains 3 fields; new `minimumCheckpointGranularity` setting + parser |
+| `packages/domain/src/entities/index.ts` | changed | Re-exports |
+| `packages/domain/src/ports/document-composition-repository.ts` | new | `IDocumentCompositionRepository` — Result pattern |
+| `packages/domain/src/ports/index.ts` | changed | Re-export |
+| `packages/application/src/use-cases/document/start-document-composition.ts` | new | Creates from an approved plan; resolves and stores clamped granularity |
+| `packages/application/src/use-cases/document/compose-next-segment.ts` | new | Core loop step |
+| `packages/application/src/use-cases/document/evaluate-composition-completeness.ts` | new | Wraps `isCompositionComplete` |
+| `packages/application/src/use-cases/document/index.ts` | changed | Re-exports |
+| `packages/adapters/src/db/schema/wayfinder.ts` | changed | `app_document_compositions`, `app_document_composition_segments` |
+| `packages/adapters/drizzle/` | new | One generated migration |
+| `packages/adapters/src/repositories/document-composition-repository.ts` | new | Drizzle implementation |
+| `apps/web/src/server/routers/document-composition.ts` | new | Start composition, approve plan, resolve checkpoint, read state |
+| `apps/web/src/components/chat/composition-plan-approval.tsx` | new | Plan-approval card in the message feed |
+| `apps/web/src/components/chat/composition-segment-view.tsx` | new | Segment rendering, reusing `ProvenanceTag` / `FieldRationale` (`apps/web/src/components/extraction/field-provenance-detail.tsx`) |
+| `apps/web/src/components/chat/composition-checkpoint-prompt.tsx` | new | Blocking confirmation, shown when due |
+| `apps/web/src/components/chat/composition-summary-banner.tsx` | new | The mandatory, always-visible summary |
+| `apps/web/src/components/flows/document-generation-node-config.tsx` | changed (or nearest existing node-config surface) | Checkpoint-granularity selector |
+| `apps/web/src/app/(admin)/admin/settings/` | changed | `DocumentGenerationConfig` UI gains 3 fields; new `minimumCheckpointGranularity` control |
 
 ## 6. Implementation steps (test-first per CLAUDE.md)
 
-1. **Domain — step-output status.** Write `session-step-output.test.ts` first:
-   (a) `stepOutputStatus()` returns `"final"` for a row with no `status`;
-   (b) returns the stored value when present. Then add `StepOutputStatus`, the optional
-   `status` field and the accessor. Pure types plus one accessor — no external deps.
+1. **Domain — composition entities and pure functions.** Write
+   `document-composition.test.ts` first:
+   (a) `clampCheckpointGranularity` returns the stricter of two values in
+   every ordering, including equal values;
+   (b) `isCheckpointDue` fires correctly for each granularity given a
+   segment count since the last checkpoint;
+   (c) `isCompositionComplete` is true only when every planned section is at
+   or past its target depth.
+   Then implement. Pure types and functions, zero dependencies.
 
-2. **Domain — draft entity and port.** Add `SessionDraft`, `NewSessionDraft` and
-   `ISessionDraftRepository`. Type-only; no test file beyond the re-export check that
-   `validate.sh` already performs.
+2. **Domain — `DocumentGenerationConfig` extension.** Write/extend
+   `runtime-config.test.ts`: the 3 new fields parse with safe defaults from
+   an absent or partial settings row, and `resolveDocumentGenerationBudget`-
+   equivalent resolution for the new fields does not alter any existing
+   assertion for `fieldBatchSize` / `contextBudgetMode`. Then implement,
+   confirming no existing test changes meaning.
 
-3. **Application — draft use cases.** Write `save-session-draft.test.ts`,
-   `load-session-draft.test.ts` and `clear-session-draft.test.ts` first, against an in-memory
-   fake repository: (a) saving upserts for `(sessionId, userId)` and stamps the current
-   `nodeId`; (b) a second participant's save does not overwrite the first's; (c) a
-   non-participant is rejected with a `DomainError`; (d) clearing removes only the caller's
-   row; (e) clearing a non-existent draft succeeds; (f) loading a draft whose `nodeId` matches
-   returns it; (g) loading a draft whose `nodeId` has been left behind returns nothing **and
-   deletes the row**, so the discard is not merely a render-time filter. Then implement.
+3. **Application — start and compose.** Write
+   `start-document-composition.test.ts` and `compose-next-segment.test.ts`
+   first, against an in-memory fake repository:
+   (a) starting a composition resolves and stores the clamped granularity,
+   not the raw authored value;
+   (b) an admin floor of `"per_segment"` overrides a flow-authored
+   `"autonomous"`, and the reverse never happens;
+   (c) `ComposeNextSegment` selects the next `"pending"` or under-depth
+   segment, never a `"final"` one;
+   (d) a segment is written only with a `provenance` set — an attempt to
+   persist one without it is rejected;
+   (e) `modelCallCount` increments exactly once per model call, not per
+   segment-write attempt;
+   (f) a `"final"` segment is never overwritten by a later call — a revision
+   creates a new attempt and increments `revisionCount`.
+   Then implement.
 
-4. **Application — finalisation.** Add `confirm-step-advance.test.ts` cases:
-   (a) capture while awaiting confirmation stores `draft`; (b) confirming promotes it to
-   `final`; (c) a later turn on the same node does not rewrite a `final` output — it writes a
-   new draft. Then implement.
+4. **Application — completeness.** `evaluate-composition-completeness.test.ts`:
+   wraps `isCompositionComplete`; a composition with all sections at target
+   depth is complete, one with any section under depth is not.
 
-4b. **Information-architecture investigation — before any schema change is written. ✅ Complete
-   (2026-08-25) — the finding is §10 below; it confirms the planned shape and pins staleness to
-   `current_node_id`, ruling out the confirmation pointer explicitly.**
-   This phase adds a table and a column, so their shape is settled by investigation first.
-   Produce a short written finding covering:
-   - **Whether a draft warrants its own table.** ADR-051 argues it does, to keep keystroke-rate
-     writes off the contended `app_sessions` row. Confirm that against how the session row is
-     actually written today, and check no existing table already owns per-participant session
-     state that a draft belongs beside.
-   - **Whether `status` belongs on `app_session_step_outputs`**, or whether draft-versus-final is
-     already derivable from existing rows plus `awaiting_confirmation_node_id` — in which case
-     the column is redundant and should not be added.
-   - **How `node_id` on a draft relates to the session's own `current_node_id`**, so staleness is
-     expressed once rather than in two places that can disagree.
-   Bring the finding back before writing the migration. A conclusion that no column is needed is
-   a valid and welcome outcome.
+5. **Adapters — schema, migration, repository.** Add
+   `app_document_compositions` and `app_document_composition_segments`;
+   generate the migration (never `drizzle-kit push`), carrying
+   `-- data-impact: preserved — new tables only; no existing row is read,
+   altered, or lost`. Repository integration tests assert segment rows are
+   independently queryable (`GROUP BY status`, a sampling query) without
+   loading composition-level JSONB.
 
-5. **Adapters — schema, migration, repository.** Add `app_session_drafts` and the `status`
-   column; generate the migration (never `drizzle-kit push`) carrying:
-   `-- data-impact: preserved — new table plus a defaulted column; no existing row is altered or lost`.
-   Repository integration test asserts unique-constraint upsert behaviour and that an existing
-   step-output row reads back as `final`.
+6. **Web — plan approval and composition rendering.** Component test first:
+   the plan-approval card renders a plan and blocks on confirmation; segment
+   rendering shows the correct `ProvenanceTag` per `provenance` value,
+   reusing the existing component rather than a new one. Then wire the tRPC
+   procedures.
 
-6. **Web — composer continuity.** Component test first: the composer renders the persisted
-   draft on mount, and does not flash empty before it arrives. Then wire `session.saveDraft`
-   (debounced, off the turn's critical path) and `session.clearDraft` on send.
+7. **Web — checkpoint prompt and summary banner.** Component tests first:
+   the checkpoint prompt renders only when `isCheckpointDue`, and blocks
+   composition until resolved; the summary banner renders at every
+   granularity setting including `"autonomous"`, and cannot be hidden by any
+   prop or setting. Then wire rendering.
 
-7. **Web — rail completeness and resuming indicator.** Component tests first for the widened
-   `stepState()` — every existing position case unchanged, plus the new completeness and
-   `draft` cases — then the rail rendering and the `activeTurnId` resuming state.
+8. **Web — flow editor and admin settings.** Component tests first for the
+   node-config checkpoint-granularity selector and the admin settings
+   controls for the 3 new `DocumentGenerationConfig` fields and the new
+   `minimumCheckpointGranularity` setting. Then wire.
 
-8. **Validate.** Run `./validate.sh` after each sub-component; do not proceed on a non-zero exit.
+9. **Validate.** Run `./validate.sh` after each sub-component; do not
+   proceed on a non-zero exit.
 
 ## 7. Acceptance criteria
 
-Mirrors the PRD §10 checklist. Restated here as the build's test plan:
+Mirrors the PRD §10 checklist, restated as the build's test plan:
 
-- [ ] Composer text survives reload; sending clears the stored draft.
-- [ ] A draft written against a step the session has since left is discarded on load and its
-      row deleted — it is never rendered, and never re-appears on a later load.
-- [ ] Participants' drafts are isolated; a draft is visible to its author on another device.
-- [ ] `stepOutputStatus()` reads absent as `"final"`; pre-existing rows are unaffected.
-- [ ] Capture-while-awaiting stores `draft`; `confirm-step-advance` promotes to `final`;
-      a `final` output is never rewritten.
-- [ ] Rail shows completeness for the current step without triggering a model call on render.
-- [ ] Resuming indicator shows while `activeTurnId` is leased and clears on SSE reattach.
-- [ ] Migration applies to a populated database with no row loss.
+- [ ] A plan requires exactly one human confirmation to start, regardless of
+      section count.
+- [ ] `ComposeNextSegment` runs without human input except where the
+      resolved granularity requires a checkpoint.
+- [ ] `clampCheckpointGranularity` always yields the stricter value; a
+      deployment with no admin setting behaves exactly as before (default
+      floor `"autonomous"`).
+- [ ] A segment with no `provenance` is rejected at write time, never
+      defaulted.
+- [ ] The summary banner renders at every checkpoint-granularity setting,
+      without loading segment content.
+- [ ] A `"final"` segment is never rewritten; a revision writes a new
+      attempt and increments `revisionCount`.
+- [ ] The migration applies to a populated database with no row loss.
+- [ ] `GenerateDocument`'s existing single-shot output is byte-identical
+      before and after the `DocumentGenerationConfig` extension, given the
+      new fields' defaults.
 
 ## 8. Playwright e2e
 
-**Qualifies — group 4 (navigation state across a page load).** Draft restoration is state
-surviving a document load, which cannot be asserted in-process.
+**Qualifies — group 4 (navigation state across a page load), for the
+resume case only.** Composition state surviving a reload/resume is the
+browser-visible half of state that cannot be asserted in-process; the
+composition/checkpoint/provenance logic itself belongs below the browser.
 
-- New spec `apps/web/e2e/chat-draft-continuity.spec.ts`, named for the capability per the
-  policy. No existing spec covers reload continuity in chat — `chat-composer-upload.spec.ts`
-  is group 3 (file upload) — so extending one would misname it.
-- Happy path: type into the composer, reload, assert the text is restored.
-- Discard path: type into the composer, let the step advance, reload, assert the composer is
-  empty — the browser-visible half of the staleness rule, with the deletion itself asserted in
-  the application test.
-- User-visible error path: send the message, reload, assert the composer is empty.
-- Obeys the non-negotiables: no `test.skip()` on a self-probed condition, no `isVisible()`
-  for control flow, no environment-variable gate.
+- New spec `apps/web/e2e/document-composition-continuity.spec.ts`.
+- Happy path: approve a plan, let composition run to a checkpoint, confirm
+  it, reload, assert the composition resumes from the stored state rather
+  than restarting.
+- Checkpoint path: with granularity `"per_segment"`, assert the UI blocks on
+  the first segment and does not proceed until confirmed.
+- Autonomous path: with granularity `"autonomous"`, assert the summary
+  banner is present and accurate after composition completes with no
+  confirmation prompts shown.
+- Obeys the non-negotiables: no `test.skip()` on a self-probed condition, no
+  `isVisible()` for control flow.
 
-**Everything else stays below the browser**: the `draft`/`final` transition is
-`packages/application` (step 4), `stepOutputStatus()` is `packages/domain` (step 1), the
-unique-constraint behaviour is a `packages/adapters` integration test (step 5), and the rail's
-rendering is an `apps/web` component test (step 7).
+**Everything else stays below the browser**: `clampCheckpointGranularity`
+and the other pure functions are `packages/domain` (step 1), the
+compose/checkpoint transitions are `packages/application` (steps 3–4), the
+segment-row query behaviour is a `packages/adapters` integration test (step
+5), and card/banner rendering is `apps/web` component tests (steps 6–8).
 
-## 9. Risks / open questions
+## 9. Explicitly deferred / out of scope
 
-- **Write volume** — debounce interval must keep the drafts table off the hot path.
-- **`StepState` widening** — every rail consumer reads `stepState()`; a missed call site
-  degrades the header silently. Keeping it the sole reader is the mitigation.
-- **Draft staleness — decided: discard.** A draft is a reply to a specific step; once the
-  session moves on, restoring it would invite the operator to send it against a question it was
-  never written for. The accepted cost is real: an operator who typed at length and then let
-  the step advance loses that text. The deletion is deliberate rather than a filter, so a stale
-  draft cannot resurface later.
-- **Completeness source** — `evaluate-step-readiness` makes a model call, so the rail must read
-  a persisted signal. Where that signal is stored is settled during step 7 and may add a
-  further additive column.
+- `ISourceRetrievalPort` and any concrete retrieval adapter — no source is
+  integrated yet; `"verbatim"` provenance stays unreachable until one is.
+- The fuller statistical-sampling review surface (weighted sampling,
+  aggregate dashboards) — phase 2.
+- Manual editing of a finalized segment.
+- Per-flow override of the orchestration limits in `DocumentGenerationConfig`.
+- Handing a composition off to the extraction-flow batch engine (ADR-033)
+  for very large documents — composition stays session-scoped regardless of
+  scale. The batch engine is *N documents, 1 schema, 1 row each*; this is
+  *1 document, N sections* — different shape, not merged.
+- A second consumer of the `DocumentComposition` shape beyond document
+  generation.
 
----
+## 10. Risks / open questions
 
-## Approved change summary (from `/new-feature`, 2026-08-24)
-
-Extended Workflow Continuity closes the last three gaps in resuming a chat session, on top of
-machinery that already survives reload. A session's unsent message is the only thing genuinely
-lost today, and it becomes per-participant server-side state so it follows the operator across
-devices. Conversational step outputs gain an explicit draft/final discriminator, making the
-existing confirm-to-advance boundary visible in the data rather than implied by a session
-column. The step rail learns to show completeness, not just position, by surfacing the
-readiness signal the application layer already computes. Acceptance criterion 4 — editing
-previously defined elements — is deliberately excluded.
-
-**Scope decisions taken at planning time:**
-
-- Surface: chat sessions only.
-- Gaps closed: unsent draft persistence; draft vs finalised separation; hardened resume and
-  progress indicator. **Not** closed: editing previously captured step outputs.
-- Prefix corrected from `core_` to `app_` during planning: `core_sessions` is the Better Auth
-  login session (`packages/adapters/src/db/schema/core.ts:50`), whereas the workflow session is
-  `app_sessions` (`wayfinder.ts:150`).
-- Two findings shrank the original scope: staged uploads already persist and re-fetch on mount,
-  so only unsent *text* is lost; and `evaluate-step-readiness` already computes the completeness
-  signal, so the work is surfacing it rather than building it.
-- Decomposition: 1) domain entity + port + step-output status; 2) application use cases +
-  `confirm-step-advance`; 3) adapters schema, migration, repository; 4) web composer draft
-  rehydration; 5) rail completeness + resuming indicator.
+- **Checkpoint-granularity clamping and the orchestration-limit extension
+  are both new mechanisms with no existing precedent** — see ADR-051
+  Decisions 3–4 for what was checked and rejected. Both need dedicated test
+  coverage rather than inherited coverage from an existing pattern.
+- **Segments-as-rows** is a departure from this schema's usual
+  one-row-per-entity shape, accepted for the QA-query patterns it enables.
+- **`DocumentGenerationConfig` regression risk** — the extension must not
+  alter `GenerateDocument`'s existing behaviour; step 2's test explicitly
+  covers this.
+- **Milestone interval for `"per_milestone"`** is not fixed by this phase
+  doc (every N segments vs. every X% of plan) — a build-time parameter
+  decided during implementation, not an architectural question.
+- **Contingent on confirmation** — this entire phase doc assumes @rbrasier
+  confirms the reframed problem statement on PR #262. If not, it needs
+  re-deriving again.
 
 ---
 
-## 10. Information-architecture finding — step 4b (2026-08-25)
+## 10.5 Information-architecture note carried from the prior phase doc
 
-Produced before any migration was drafted, as step 4b requires. Every claim below is from
-the code as it stands, cited by path and line. **Outcome: the shape ADR-051 proposed survives
-unchanged, with one comparison pinned down that the ADR left implicit.**
-
-### 10.1 Does a draft warrant its own table? — **Yes**
-
-Two independent findings, either of which is sufficient on its own.
-
-**`app_sessions` is guarded by optimistic concurrency, so a keystroke-rate write cannot go
-there.** `app_sessions.version` (`schema/wayfinder.ts:184`) is incremented by *every* non-lease
-write, and a stale expected version loses the conditional update and surfaces a `CONFLICT`
-rather than silently overwriting (`entities/session.ts:66-70`). A debounced draft save is a
-non-lease writer. Putting it on the session row means the operator's typing and the turn
-runner's own writes contend for the same version counter — the draft save either loses to the
-turn, or wins and makes the turn's write fail. The contention argument ADR-051 made on
-general grounds is confirmed by a specific mechanism.
-
-**No existing table can host it.** `app_session_participants` is the only per-participant
-session state, and it is unique on `(session_id, user_id)` — the exact key a draft needs. It is
-still the wrong home: its own comment records that the owner is deliberately *not* stored there
-(`schema/wayfinder.ts:311-314`, "the owner is not stored here — it is `app_sessions.user_id`"),
-so it holds only invited collaborators and viewers. The session owner is the most common author
-of a draft and has no row to hang one on. Adding one for the owner would change what the
-participants table means, to make a draft fit.
-
-**Conclusion.** New table `app_session_drafts`, unique on `(session_id, user_id)`, cascading on
-session delete — as planned. No column is added to `app_sessions`.
-
-### 10.2 Does `status` belong on `app_session_step_outputs`? — **Yes, it is not derivable**
-
-The alternative was to derive draft-versus-final from existing rows plus
-`app_sessions.awaiting_confirmation_node_id`. That derivation cannot be written, for two reasons.
-
-**The pointer is nulled on confirm.** `ConfirmStepAdvance` sets `awaitingConfirmationNodeId: null`
-on both its success paths (`confirm-step-advance.ts:73`, `:99`). Once a step is confirmed there is
-no trace of which node was ever awaiting it, so a historical row cannot be classified at all —
-only "the one node the session is paused on right now" is knowable.
-
-**The table holds more than one row per node.** Step outputs are inserted unconditionally —
-`create` is a bare `insert` (`drizzle-session-step-output-repository.ts:29-45`), and every call
-site persists without first looking for an existing row for that node
-(`capture-structured-output.ts:95`, `generate-document.ts:200`, `apply-auto-node-result.ts:125`,
-`decide-approval.ts:593`). `updateFields` exists but is addressed by row `id`, not by
-`(session, node)`, so it is not an upsert. A second capture on the same node therefore leaves two
-rows. `awaiting_confirmation_node_id` points at a *node*, so even while it is set it cannot tell
-those two rows apart — which is precisely what step 4(c) requires ("a later turn on the same node
-does not rewrite a `final` output — it writes a new draft").
-
-**Conclusion.** Add the additive `status` column, read through `stepOutputStatus()` with absent
-meaning `"final"`. The column is the only place the distinction can live.
-
-### 10.3 Where is staleness expressed? — **Once, in `LoadSessionDraft`, against `currentNodeId`**
-
-Staleness is `draft.nodeId !== session.currentNodeId`, evaluated in the load use case, which
-**deletes** the row and returns nothing. It is expressed nowhere else: the router returns what the
-use case returns, and the composer renders what it is given without re-checking. A second check in
-the component is the "two places that can disagree" this step was written to prevent.
-
-ADR-051 already names `currentNodeId` as the comparison. The investigation pins down what it left
-implicit: staleness must **never** be compared against `awaiting_confirmation_node_id`. A session
-paused for confirmation still has `currentNodeId` equal to that node (`entities/session.ts:51-53` — `awaitingConfirmationNodeId ===
-currentNodeId` is the paused state), so comparing against the confirmation pointer would delete a
-draft the operator is actively typing at the moment their step completes.
-
-`app_session_drafts.node_id` is therefore a *stamp of what the text was written against*, not a
-second copy of the session's position. The session row stays the single source of truth for where
-the session is.
-
-### 10.4 Net effect on the planned migration
-
-Unchanged: one new table, one additive defaulted column, one migration carrying
-`-- data-impact: preserved — new table plus a defaulted column; no existing row is altered or lost`.
-The gate did not shrink this phase. What it produced is evidence for each of the three shapes
-ADR-051 asserted, and one explicit prohibition — comparing staleness against the confirmation
-pointer — that would otherwise have been an easy thing to reach for mid-build.
+The prior version's §10 finding (2026-08-25) established, against the old
+`app_session_drafts` proposal, that a debounced per-participant write cannot
+live on `app_sessions` because of its optimistic-concurrency `version`
+column, and that draft-versus-final status could not be derived from
+`awaiting_confirmation_node_id` because that pointer is nulled on confirm.
+Neither finding applies directly to `DocumentComposition` — this phase
+doesn't touch `app_sessions` or step-output finalisation at all — but the
+underlying caution (don't let a hot-write concept share a row with a
+version-guarded or lease-guarded one) is why `app_document_compositions` and
+its segments are their own tables rather than columns grafted onto anything
+existing.
