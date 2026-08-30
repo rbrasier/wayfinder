@@ -1,7 +1,7 @@
 # ADR-053 — Provenance Belongs to the Field Result, and Confidence Has Two Meanings
 
 - **Status**: Proposed (scoped by `data-provenance-and-verbatim-governance.prd.md`)
-- **Date**: 2026-08-24
+- **Date**: 2026-08-24 (amended 2026-08-30 — §1, `verbatim` is verified rather than inferred)
 - **Builds on**: ADR-024 (operator correction is authoritative), ADR-032 (MCP tool-loop pre-pass
   and its captured tool-call records), ADR-033 (extraction records, confidence and rationale)
 
@@ -68,6 +68,58 @@ Every historical row was produced by the composing path, so `processed` is the v
 preserves their meaning — the same idiom as `sessionMode`. No back-fill,
 and because `app_extraction_records.fields` is already `jsonb().$type<ExtractionFieldResult[]>()`,
 no migration either.
+
+### Amendment (0.32.3) — `verbatim` is a verified claim, not an inferred one
+
+The first implementation inferred `verbatim` from substring containment: if the value occurred
+byte-identically anywhere in any of the record's source texts, and the field could return source
+bytes at all, it was stamped copied.
+
+Containment does not distinguish selection from coincidence. A short composed value — `N/A`,
+`None`, a surname — occurs incidentally in any long document, and the consequences of the
+mislabel are not cosmetic:
+
+- a copied value is scored on the **selection** scale (§2), so the field silently leaves the
+  accuracy pool that §3's per-kind minimum is computed over, and a record's triage band can
+  improve because of a coincidence;
+- a copied value takes precedence in **merge arbitration** (§3, `outranks`), so an incidental
+  match could displace a better-supported composed answer outright, at any confidence.
+
+No length floor closes this. A reference code `A7` is legitimately copied at two characters; a
+surname is eight and still incidental. The defect is not the threshold, it is that the code was
+*inferring* a claim the model never made.
+
+So the model now makes the claim and the code verifies it. `sourceRef` gains a required `quote` —
+the exact characters the model copied — and `verifyVerbatim` replaces `isVerbatimIn`. All four
+must hold:
+
+1. the field can return source bytes at all (`returnsSourceBytes`, unchanged);
+2. the quote occurs byte-identically in the document the model **named** — not in any of the
+   record's documents, in that one;
+3. the value occurs inside that quote;
+4. that occurrence is word-bounded, so `No` inside `Notice` is not a match.
+
+Steps 2 and 3 stay byte comparisons — no trimming, no case folding, no whitespace collapsing,
+each of which is the transformation that makes a value processed rather than copied. Step 4
+permits a quote carrying surrounding context, which is the single concession: a model quoting
+`Supplier: Acme Ltd (reg. 4482)` for the value `Acme Ltd` has still copied it.
+
+A model that composed a value does not claim to have quoted it, so the coincidence never arises.
+A claim that fails verification is refused **silently**: the value is left unstamped, which
+already reads as `processed`, and the `sourceRef` is still attached if it resolved — the locator
+may well be right even where the quote was mis-transcribed.
+
+`outranks` is unchanged. Cross-scale precedence now means "a *verified* copy beats a
+composition", because `verbatim` itself means verified.
+
+The stored `FieldSourceRef.quote` is optional, matching the `provenance?` idiom above: rows
+written before this amendment carry a reference with no quote, and a reference the model returns
+now always has one. Still no migration — `fields` remains `jsonb`.
+
+**The cost, stated plainly:** `Copied` stamps drop materially. Any value the model does not
+explicitly quote is `Composed`, including values it genuinely copied but did not reference. That
+is the correct direction for a governance signal — a label that over-claims is worse than one
+that under-claims — but it is a visible change in what operators see.
 
 **2. Confidence kind is derived from provenance, never set independently.**
 
@@ -166,6 +218,10 @@ is required.
 - Every current reader of `confidence` is, strictly, reading an accuracy metric that may now
   describe a selection. Migrating them to the accessor is mandatory work in this phase, not a
   follow-up — the risk is silent, so it will not surface as a test failure on its own.
+- `verbatim` is only ever produced by a model claim this code verified (see the 0.32.3
+  amendment to §1). Nothing infers it from the value alone, so a coincidence cannot reach the
+  selection scale, the per-kind aggregate, or merge precedence. The cost is fewer `Copied`
+  stamps, including on values genuinely copied but never quoted.
 - Operator correction becomes machine-readable provenance. `applyFieldEdit` still stamps
   `confidence: 1`, but now alongside `human_corrected`, so the UI can stop presenting a person's
   decision as a model score.

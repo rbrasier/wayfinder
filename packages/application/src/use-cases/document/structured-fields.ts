@@ -290,3 +290,24 @@ export const coerceStructuredFields = (
     options: field.options,
     value: coerceValue(field, data[field.key]),
   }));
+
+// The verbatim-only path (ADR-053 §5). `coerceValue` trims before it does
+// anything else, and a trim is a transformation — so routing a verbatim-only
+// connection's result through it would quietly break the guarantee an
+// administrator set. Here the received string is stored exactly as it arrived.
+// The publish and run gates have already refused any field type that would need
+// reformatting, so there is nothing left to coerce.
+export const coerceVerbatimFields = (
+  responseFields: TemplateField[],
+  data: Record<string, unknown>,
+): StepOutputField[] =>
+  responseFields.map((field) => {
+    const raw = data[field.key];
+    return {
+      key: field.key,
+      label: field.label,
+      type: field.type,
+      options: field.options,
+      value: typeof raw === "string" ? raw : "",
+    };
+  });

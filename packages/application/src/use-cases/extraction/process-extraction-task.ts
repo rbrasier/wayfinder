@@ -79,7 +79,7 @@ export class ProcessExtractionTask {
     const fields = await extractDocumentFields(this.languageModel, {
       fields: schema.fields,
       recordLabel: document.filename,
-      documentTexts: [{ filename: document.filename, text }],
+      documentTexts: [{ documentId: document.id, filename: document.filename, text }],
       contextDocs: schema.output.contextDocs,
       instruction: schema.input.guidance,
     });

@@ -4,7 +4,11 @@ import type { StepOutputField } from "./session-step-output";
 import type { TemplateFieldType } from "./template-field";
 import { computeForkSiblingGroups, type FlowGraphEdge } from "./flow-graph";
 import type { FlowNodeType } from "./flow-node";
-import { aggregateConfidence, type ExtractionRecord } from "./extraction-record";
+import {
+  aggregateConfidenceByKind,
+  type AggregateConfidence,
+  type ExtractionRecord,
+} from "./extraction-record";
 
 export const parseNumeric = (value: string): number | null => {
   const cleaned = value.replace(/[^0-9.\-]/g, "");
@@ -127,7 +131,10 @@ export interface ExtractionFieldReportColumn {
 export interface ExtractionFieldReportRow {
   recordId: string;
   label: string;
-  aggregateConfidence: number;
+  // Per scale (ADR-053 §3), so a report never bands a selection metric as though
+  // it answered the accuracy question. `null` means the record has no fields of
+  // that kind — absent, not zero.
+  aggregateConfidence: AggregateConfidence;
   values: Record<string, string>;
 }
 
@@ -153,7 +160,7 @@ export const computeExtractionFieldReport = (
     return {
       recordId: record.id,
       label: record.label,
-      aggregateConfidence: aggregateConfidence(record),
+      aggregateConfidence: aggregateConfidenceByKind(record),
       values,
     };
   });

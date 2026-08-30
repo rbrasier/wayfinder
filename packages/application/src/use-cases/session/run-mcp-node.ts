@@ -2,6 +2,7 @@ import {
   domainError,
   err,
   ok,
+  verbatimTransformViolations,
   type Flow,
   type FlowNode,
   type ILanguageModel,
@@ -33,6 +34,11 @@ export interface RunMcpNodeOutput {
   // The tool result is exposed under the `output` key, so a response field with
   // key `output` captures it (ADR-032). Synchronous — always "completed" on success.
   data: Record<string, unknown>;
+  // The connection is one an administrator marked verbatim-only, so the caller
+  // must persist `output` as the bytes it arrived as (ADR-053 §5). Carried on the
+  // result rather than re-read downstream: this is the only place that already
+  // holds the server row.
+  verbatim: boolean;
 }
 
 export interface RunMcpNodeClock {
@@ -87,6 +93,21 @@ export class RunMcpNode {
         domainError("VALIDATION_FAILED", "This MCP server communicates outside Wayfinder and cannot run in a flow."),
       );
     }
+    // Backstop for the publish-time gate: a verbatim-only connection may not be
+    // run by a step whose response fields cannot return what the tool sent.
+    // Refused before the call so a governed source is never even queried by a
+    // step that would then reshape its answer.
+    if (serverResult.data.verbatimOnly) {
+      const violations = verbatimTransformViolations(config.responseFields ?? []);
+      if (violations.length > 0) {
+        return err(
+          domainError(
+            "VALIDATION_FAILED",
+            `This MCP server is set to verbatim-only handling, so this step cannot transform its results: ${violations.join("; ")}.`,
+          ),
+        );
+      }
+    }
 
     const priorOutputs = await this.sessionStepOutputs.listBySession(input.session.id);
     const fieldsResult = await resolveFieldValues(this.languageModel, {
@@ -128,6 +149,7 @@ export class RunMcpNode {
       correlationId,
       status: "completed",
       data: { output: called.data.output },
+      verbatim: serverResult.data.verbatimOnly,
     });
   }
 
