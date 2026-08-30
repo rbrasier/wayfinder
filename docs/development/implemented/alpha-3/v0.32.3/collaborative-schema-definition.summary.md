@@ -1,7 +1,8 @@
 # Implementation Summary — Collaborative Schema Definition
 
-- **Version**: 0.32.0 — **no bump applied**. The Structured Export thread already
-  moved 0.31.0 → 0.32.0 in this PR, and one PR ships one version.
+- **Version**: 0.32.3 (bump: **PATCH** on the 0.32 line). Split out of PR #257 into
+  its own PR. This phase shares no code with the export or provenance splits, so
+  it can merge in any order relative to them; the number assumes it merges last.
 - **Phase doc**: `collaborative-schema-definition.phase.md` (this folder)
 - **PRD**: `docs/development/prd/collaborative-schema-definition.prd.md`
 - **ADR**: ADR-052 — a schema proposal is a draft artefact requiring explicit activation
@@ -173,7 +174,7 @@ the panel's render and disabled-confirm decisions in an `apps/web` model test.
 
 1. **No component tests** (§6 step 7, §9). The repo has no `.test.tsx` files and
    neither jsdom nor testing-library is configured. Followed the convention the
-   other two v0.32.0 threads set: the pure decisions — per-field change against
+   other two 0.32 threads set: the pure decisions — per-field change against
    the previous revision, the confirm control's disabled state and its stated
    reason, finding order, revision numbering — are extracted to
    `schema-proposal-model.ts` and unit-tested, with the markup left thin.
