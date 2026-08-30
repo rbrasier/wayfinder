@@ -54,16 +54,37 @@ const constraintFindings = (
   return findings;
 };
 
+// Types the extraction field editor can represent. `parseExtractionSchema`
+// accepts more than this — `narrative` and `group` are valid for a conversational
+// structured field — but the editor offers neither, and `templateFieldToModel`
+// falls a type it cannot show back to `text`. Confirming one would put a field
+// in the editor as Text and the next Save would rewrite the stored schema to
+// match, losing the type silently. A proposal must only propose what the author
+// can then edit, so this blocks rather than advises.
+const EDITABLE_TYPES = new Set<TemplateFieldType>([
+  "text",
+  "date",
+  "currency",
+  "number",
+  "email",
+  "yesno",
+]);
+
+const editorFindings = (
+  label: string,
+  field: ExtractionField["field"],
+): SchemaProposalFinding[] => {
+  if (EDITABLE_TYPES.has(field.type)) return [];
+  return [
+    blocking(
+      label,
+      `"${label}" is a "${field.type}" field, which the extraction field editor cannot show. Propose a text field instead — a narrative would also be composed rather than copied, so it could never be reported as verbatim.`,
+    ),
+  ];
+};
+
 const adviceFindings = (label: string, field: ExtractionField["field"]): SchemaProposalFinding[] => {
   const findings: SchemaProposalFinding[] = [];
-  if (field.type === "narrative") {
-    findings.push(
-      advisory(
-        label,
-        `"${label}" is a narrative field, so the AI composes its prose rather than copying it from the source. It can never be reported as verbatim.`,
-      ),
-    );
-  }
   if (field.options?.length === 1) {
     findings.push(
       advisory(
@@ -112,6 +133,7 @@ export const validateSchemaProposal = (
     seenKeys.add(key);
     built.push(field.data);
     findings.push(...constraintFindings(label, field.data.field));
+    findings.push(...editorFindings(label, field.data.field));
     findings.push(...adviceFindings(label, field.data.field));
   }
 
