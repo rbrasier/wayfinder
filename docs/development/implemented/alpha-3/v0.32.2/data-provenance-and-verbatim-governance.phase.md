@@ -1,6 +1,8 @@
 # Phase — Data Provenance and Verbatim Governance
 
-- **Status**: Implemented (2026-08-27, v0.32.2)
+- **Status**: Implemented (2026-08-27, v0.32.2); amended 2026-08-30 at v0.32.3 — the verbatim
+  stamp is now a verified model claim rather than an inference from substring containment
+  (ADR-053 §1 amendment)
 - **Target version**: 0.32.2  (bump: PATCH on the 0.32 line — additive `admin_mcp_servers.verbatim_only` column,
   + new feature. No column is added to or altered on `app_extraction_records`: the §10
   investigation found the existing aggregate column unread, so both per-kind aggregates are
@@ -188,10 +190,15 @@ Mirrors PRD §10 across all three requirements:
 - [ ] Existing connections are unaffected (`verbatim_only` defaults `false`).
 - [ ] Verbatim fields show selection confidence; processed fields show accuracy confidence.
 - [ ] Provenance types are visually distinct; source references reachable for every element.
-- [x] Verbatim fields are produced: an extracted value occurring byte-identically in a source
-      text is stamped `verbatim`, which is what makes selection confidence reachable.
+- [x] Verbatim fields are produced: a value the model reports copying is stamped `verbatim` once
+      the quote it gave verifies against the document it named, which is what makes selection
+      confidence reachable. *(Amended at 0.32.3. As delivered here the stamp was inferred from
+      substring containment in any of the record's texts, which could not tell selection from
+      coincidence — see ADR-053 §1's amendment and the implementation summary.)*
 - [x] A field-level source reference is produced where the model can point at one, and stays
-      absent — never an empty ref — where it cannot.
+      absent — never an empty ref — where it cannot. *(At 0.32.3 the reference also carries the
+      exact quote the value was copied from, which is what the verbatim stamp is verified
+      against.)*
 - [ ] ~~Derived fields are distinct, carry their method and source keys, and stay distinguishable
       in every export.~~ **Not delivered.** The readers, the export columns and the type are
       here and correct; no authoring path can declare a calculated field, so no `derived` value

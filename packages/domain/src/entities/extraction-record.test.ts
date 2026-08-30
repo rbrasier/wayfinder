@@ -239,6 +239,22 @@ describe("mergeFieldResults", () => {
     expect(mergeFieldResults(existing, incoming)[0]!.value).toBe("Acme Ltd");
   });
 
+  it("gives that precedence only to a verified copy, not to an incidental substring match", () => {
+    // The regression this guards: `verbatim` used to be inferred from substring
+    // containment, so a composed "N/A" occurring incidentally in a long document
+    // was stamped copied and took precedence here over a well-supported answer.
+    // Extraction now refuses the claim unless the model's quote verifies, so the
+    // value arrives unstamped and confidence arbitrates within the one scale.
+    const existing = [
+      { key: "supplier", value: "Acme Limited", confidence: 0.95, rationale: "composed" },
+    ];
+    const incoming = [
+      { key: "supplier", value: "N/A", confidence: 0.6, rationale: "no supplier named" },
+    ];
+
+    expect(mergeFieldResults(existing, incoming)[0]!.value).toBe("Acme Limited");
+  });
+
   it("ranks two copied values against each other on their shared scale", () => {
     const existing = [
       {

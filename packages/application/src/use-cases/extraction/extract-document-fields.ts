@@ -1,8 +1,7 @@
 import {
   applyConfidenceFloor,
-  isVerbatimIn,
   ok,
-  returnsSourceBytes,
+  verifyVerbatim,
   type ExtractionField,
   type ExtractionFieldResult,
   type FieldSourceRef,
@@ -81,6 +80,10 @@ const invert = (labelByDocumentId: Map<string, string>): Map<string, string> =>
 // this record never had, or gives a blank locator produces no `sourceRef` at
 // all — an empty ref would render as a link to nowhere and export as a locator
 // the auditor cannot follow.
+//
+// The quote is stored exactly as reported, never trimmed: it is the evidence a
+// `verbatim` stamp rests on, and tidying it would make the stored evidence
+// something other than what was checked.
 const resolveSourceRef = (
   reported: ExtractionFieldResultData["sourceRef"],
   documentIdByLabel: Map<string, string>,
@@ -90,12 +93,20 @@ const resolveSourceRef = (
   if (locator.length === 0) return undefined;
   const documentId = documentIdByLabel.get(reported.document.trim());
   if (!documentId) return undefined;
-  return { documentId, locator };
+  return { documentId, locator, quote: reported.quote };
 };
 
 // Provenance and source reference are attached after the confidence floor has
 // run, never before: the floor blanks a value it discards, and neither a
 // verbatim claim nor a locator describes a blank (ADR-053 §1).
+//
+// `verbatim` is a claim the model made and this code verified, not an inference
+// drawn from the value alone. The model must have returned a source reference
+// that resolved to a document on this record, and `verifyVerbatim` must accept
+// the quote against *that* document's text. A claim that fails is refused
+// silently — the value is left unstamped, which already reads as `processed` —
+// while the reference itself is kept, because the locator may well be right even
+// where the quote was mis-transcribed.
 //
 // Only `verbatim` is stamped. `processed` is what absence already means, so
 // writing it would add a member to every composed row to say what its omission
@@ -104,7 +115,7 @@ const resolveSourceRef = (
 const annotateProvenance = (
   result: ExtractionFieldResult,
   field: ExtractionField,
-  sourceTexts: string[],
+  textByDocumentId: Map<string, string>,
   sourceRef: FieldSourceRef | undefined,
 ): ExtractionFieldResult => {
   // Blank is the floor's own definition of blank, so a whitespace-only value the
@@ -112,12 +123,15 @@ const annotateProvenance = (
   if (result.value.trim().length === 0) return result;
 
   const annotated: ExtractionFieldResult = { ...result };
-  // The field must be able to return source bytes before containment means
-  // anything: a date, a number or an options value is reshaped by definition, so
-  // its characters turning up in the text is coincidence, not selection.
-  if (returnsSourceBytes(field.field) && isVerbatimIn(result.value, sourceTexts)) {
-    annotated.provenance = "verbatim";
-  }
+  const verified =
+    sourceRef !== undefined &&
+    verifyVerbatim({
+      value: result.value,
+      quote: sourceRef.quote ?? "",
+      documentText: textByDocumentId.get(sourceRef.documentId) ?? "",
+      field: field.field,
+    });
+  if (verified) annotated.provenance = "verbatim";
   if (sourceRef) annotated.sourceRef = sourceRef;
   return annotated;
 };
@@ -174,7 +188,12 @@ export const extractDocumentFields = async (
   if (result.error) return result;
 
   const object = result.data.object;
-  const sourceTexts = input.documentTexts.map((document) => document.text);
+  // Keyed by id rather than flattened: a quote is verified against the document
+  // the model named, since one that verifies against a different document of the
+  // record establishes nothing about where this value came from.
+  const textByDocumentId = new Map(
+    input.documentTexts.map((document) => [document.documentId, document.text]),
+  );
   const documentIdByLabel = invert(labelByDocumentId);
 
   const results = input.fields.map((field): ExtractionFieldResult => {
@@ -196,7 +215,7 @@ export const extractDocumentFields = async (
     return annotateProvenance(
       floored,
       field,
-      sourceTexts,
+      textByDocumentId,
       resolveSourceRef(scored.sourceRef, documentIdByLabel),
     );
   });

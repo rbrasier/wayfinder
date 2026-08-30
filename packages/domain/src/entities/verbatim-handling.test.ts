@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isVerbatimIn, verbatimTransformViolations } from "./verbatim-handling";
+import { verbatimTransformViolations, verifyVerbatim } from "./verbatim-handling";
 import type { TemplateField } from "./template-field";
 
 const field = (overrides: Partial<TemplateField> = {}): TemplateField => ({
@@ -49,38 +49,85 @@ describe("verbatimTransformViolations", () => {
   });
 });
 
-describe("isVerbatimIn", () => {
-  it("treats a value occurring byte-identically in a source text as verbatim", () => {
-    expect(isVerbatimIn("Acme Ltd", ["Supplied by Acme Ltd of Bristol."])).toBe(true);
+describe("verifyVerbatim", () => {
+  const quotedFrom = (documentText: string, quote: string, value: string) =>
+    verifyVerbatim({ value, quote, documentText, field: field() });
+
+  it("verifies a value the model quoted from the named document", () => {
+    expect(quotedFrom("Supplied by Acme Ltd of Bristol.", "by Acme Ltd of", "Acme Ltd")).toBe(true);
   });
 
-  it("finds the value in any of the record's source texts, not only the first", () => {
-    expect(isVerbatimIn("42 Mill Road", ["cover page", "Address: 42 Mill Road"])).toBe(true);
+  it("verifies a quote that is exactly the value", () => {
+    expect(quotedFrom("Address: 42 Mill Road", "42 Mill Road", "42 Mill Road")).toBe(true);
   });
 
-  it("does not treat a reformatted value as verbatim", () => {
-    // The model was asked to reformat into the field's required format, so this
-    // is exactly the composing path — the characters were never in the source.
-    expect(isVerbatimIn("10-08-2026", ["dated 10 August 2026"])).toBe(false);
+  it("refuses a value the model composed but which occurs incidentally in the document", () => {
+    // The defect this function exists to close: "N/A" turns up inside any long
+    // document, and containment alone stamped it Copied — which then won merge
+    // arbitration outright against a better-supported composed answer.
+    const documentText = "The N/A designation applies to sections 4 and 9.";
+    expect(verifyVerbatim({ value: "N/A", quote: "", documentText, field: field() })).toBe(false);
   });
 
-  it("does not accept a value that differs only by surrounding whitespace", () => {
-    // Trimming is a transformation. Allowing it is the first "close enough"
-    // tier, after which the guarantee stops being a byte comparison.
-    expect(isVerbatimIn("Acme Ltd ", ["Acme Ltd"])).toBe(false);
+  it("refuses a quote that does not occur in the named document", () => {
+    // The model pointed at a document it did not read the value from. The value
+    // may still be right, but nothing here verifies that, so it is composed.
+    expect(quotedFrom("Supplied by Acme Ltd.", "Supplied by Beta Ltd", "Beta Ltd")).toBe(false);
+  });
+
+  it("refuses a value that does not occur inside its own quote", () => {
+    expect(quotedFrom("Invoice total 4,820.00 GBP", "Invoice total 4,820.00 GBP", "4820")).toBe(
+      false,
+    );
+  });
+
+  it("refuses a value that occurs in the quote only inside a longer word", () => {
+    // Word-bounded containment: "No" inside "Notice" is not a selection.
+    expect(quotedFrom("Notice of termination", "Notice of termination", "No")).toBe(false);
+  });
+
+  it("accepts a value bounded by punctuation rather than whitespace", () => {
+    expect(quotedFrom("Ref: (A7) applies", "Ref: (A7) applies", "A7")).toBe(true);
   });
 
   it("does not accept a value that differs only by case", () => {
-    expect(isVerbatimIn("ACME LTD", ["Acme Ltd"])).toBe(false);
+    expect(quotedFrom("Supplied by Acme Ltd.", "Supplied by Acme Ltd.", "ACME LTD")).toBe(false);
   });
 
-  it("never treats a blank value as verbatim", () => {
-    // The empty string occurs in every text, so containment alone would report
-    // a value that was never selected at all as copied from the document.
-    expect(isVerbatimIn("", ["Acme Ltd"])).toBe(false);
+  it("does not accept a quote that differs from the document only by whitespace", () => {
+    // Trimming is a transformation. Allowing it is the first "close enough"
+    // tier, after which the guarantee stops being a byte comparison.
+    expect(quotedFrom("Supplied by  Acme Ltd.", "Supplied by Acme Ltd.", "Acme Ltd")).toBe(false);
   });
 
-  it("is false when the record has no source texts", () => {
-    expect(isVerbatimIn("Acme Ltd", [])).toBe(false);
+  it("never verifies a blank value", () => {
+    expect(quotedFrom("Acme Ltd", "Acme Ltd", "")).toBe(false);
+  });
+
+  it("never verifies a blank quote", () => {
+    // The empty string occurs in every document, so a blank quote would verify
+    // against anything.
+    expect(quotedFrom("Acme Ltd", "", "Acme Ltd")).toBe(false);
+  });
+
+  it("refuses a field that cannot return source bytes even when the quote verifies", () => {
+    // A date, a number or an options value is reshaped by definition, so its
+    // characters appearing in the quote is coincidence, not selection.
+    expect(
+      verifyVerbatim({
+        value: "10-08-2026",
+        quote: "dated 10-08-2026",
+        documentText: "Signed, dated 10-08-2026.",
+        field: field({ type: "date" }),
+      }),
+    ).toBe(false);
+    expect(
+      verifyVerbatim({
+        value: "Open",
+        quote: "status Open",
+        documentText: "Current status Open at review.",
+        field: field({ options: ["Open", "Closed"] }),
+      }),
+    ).toBe(false);
   });
 });

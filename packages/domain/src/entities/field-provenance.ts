@@ -31,9 +31,16 @@ export interface FieldDerivation {
 // Field-level source reference, where `ExtractionRecord.sourceDocumentIds` only
 // reaches record level. `locator` is whatever identifies the position inside the
 // document — a page, a cell reference, a heading.
+//
+// `quote` is the text the model reported copying, kept alongside the locator as
+// the evidence for a `verbatim` stamp: without it the stamp cannot be audited
+// after the fact. Optional only because rows written before the claim was
+// verified (ADR-053 §1, amended) carry a reference with no quote — a reference
+// the model returns now always has one.
 export interface FieldSourceRef {
   documentId: string;
   locator: string;
+  quote?: string;
 }
 
 // The provenance-bearing shape every accessor here reads. Structural rather than
