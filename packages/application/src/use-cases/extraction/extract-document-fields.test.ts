@@ -36,7 +36,12 @@ const makeModel = (object: ExtractionResultData): ILanguageModel =>
 describe("extractDocumentFields", () => {
   it("returns one scored result per schema field, in schema order, normalising confidence to 0..1", async () => {
     const model = makeModel({
-      supplier_name: { value: "Acme Ltd", confidence: 90, rationale: "Cover page." },
+      supplier_name: {
+        value: "Acme Ltd",
+        confidence: 90,
+        rationale: "Cover page.",
+        sourceRef: { document: "acme.pdf", locator: "page 1", quote: "Acme Ltd proposes" },
+      },
       contract_value: { value: "$1,200.00", confidence: 60, rationale: "Pricing sheet." },
     });
 
@@ -50,15 +55,17 @@ describe("extractDocumentFields", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data).toEqual([
-      // "Acme Ltd" occurs byte-identically in the source text, so it was
-      // selected rather than composed; "$1,200.00" was reformatted from
-      // "$1,200." and is therefore processed, which absence already says.
+      // The model quoted "Acme Ltd proposes" from acme.pdf and the quote
+      // verifies against that document's text, so the value was selected rather
+      // than composed; "$1,200.00" was reformatted from "$1,200." and claims no
+      // quote, so it is processed — which absence already says.
       {
         key: "supplier_name",
         value: "Acme Ltd",
         confidence: 0.9,
         rationale: "Cover page.",
         provenance: "verbatim",
+        sourceRef: { documentId: "doc-acme", locator: "page 1", quote: "Acme Ltd proposes" },
       },
       { key: "contract_value", value: "$1,200.00", confidence: 0.6, rationale: "Pricing sheet." },
     ]);
@@ -183,9 +190,14 @@ describe("extractDocumentFields", () => {
     ]);
   });
 
-  it("marks a value verbatim only when it occurs byte-identically in a source text", async () => {
+  it("stamps verbatim when the model's quote verifies against the document it named", async () => {
     const model = makeModel({
-      supplier_name: { value: "Acme Ltd", confidence: 90, rationale: "Cover page." },
+      supplier_name: {
+        value: "Acme Ltd",
+        confidence: 90,
+        rationale: "Cover page.",
+        sourceRef: { document: "a.pdf", locator: "page 1", quote: "Acme Ltd — 1200 dollars" },
+      },
       contract_value: { value: "$1,200.00", confidence: 90, rationale: "Reformatted." },
     });
 
@@ -203,9 +215,37 @@ describe("extractDocumentFields", () => {
     expect(result.data![1]!.provenance).toBeUndefined();
   });
 
-  it("finds a verbatim value in any of a multi-document record's texts", async () => {
+  it("does not stamp verbatim on a composed value that happens to occur in the document", async () => {
+    // The defect this contract closes. Before, containment alone stamped this
+    // Copied, which put it on the selection scale and won merge arbitration
+    // outright — so a coincidence could displace a better-supported answer.
     const model = makeModel({
-      supplier_name: { value: "Beta Holdings", confidence: 90, rationale: "Schedule 2." },
+      supplier_name: { value: "N/A", confidence: 90, rationale: "No supplier is named." },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [
+        { documentId: "doc-a", filename: "a.pdf", text: "The N/A designation applies to part 4." },
+      ],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.provenance).toBeUndefined();
+  });
+
+  it("verifies the quote against the named document rather than any of the record's texts", async () => {
+    // The quote is real, but it is in the other document. Nothing here
+    // establishes the value came from the one the model pointed at.
+    const model = makeModel({
+      supplier_name: {
+        value: "Beta Holdings",
+        confidence: 90,
+        rationale: "Schedule 2.",
+        sourceRef: { document: "cover.pdf", locator: "page 1", quote: "Party: Beta Holdings" },
+      },
     });
 
     const result = await extractDocumentFields(model, {
@@ -219,14 +259,68 @@ describe("extractDocumentFields", () => {
       instruction: "",
     });
 
-    expect(result.data![0]!.provenance).toBe("verbatim");
+    expect(result.data![0]!.provenance).toBeUndefined();
+  });
+
+  it("keeps a resolved source reference on a value whose quote failed to verify", async () => {
+    // The claim is refused silently: the locator may well be right even where
+    // the quote was mis-transcribed, so the reference is still worth showing.
+    const model = makeModel({
+      supplier_name: {
+        value: "Acme Ltd",
+        confidence: 90,
+        rationale: "Cover page.",
+        sourceRef: { document: "a.pdf", locator: "page 1", quote: "Supplied by Acme Ltd" },
+      },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Acme Ltd of Bristol" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.provenance).toBeUndefined();
+    expect(result.data![0]!.sourceRef).toEqual({
+      documentId: "doc-a",
+      locator: "page 1",
+      quote: "Supplied by Acme Ltd",
+    });
+  });
+
+  it("does not stamp verbatim when the value occurs in its quote only inside a longer word", async () => {
+    const model = makeModel({
+      supplier_name: {
+        value: "No",
+        confidence: 90,
+        rationale: "Notice clause.",
+        sourceRef: { document: "a.pdf", locator: "clause 4", quote: "Notice of termination" },
+      },
+    });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.pdf", text: "Notice of termination" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    expect(result.data![0]!.provenance).toBeUndefined();
   });
 
   it("does not mark a value the confidence floor discarded as verbatim", async () => {
-    // The blanked value is no longer in the document, and an empty string
-    // occurs in every text — stamping it would claim a copy of nothing.
+    // The blanked value is no longer in the document, so stamping it would
+    // claim a copy of nothing.
     const model = makeModel({
-      supplier_name: { value: "Acme Ltd", confidence: 5, rationale: "a guess" },
+      supplier_name: {
+        value: "Acme Ltd",
+        confidence: 5,
+        rationale: "a guess",
+        sourceRef: { document: "a.pdf", locator: "page 1", quote: "Acme Ltd" },
+      },
     });
 
     const result = await extractDocumentFields(model, {
@@ -241,25 +335,38 @@ describe("extractDocumentFields", () => {
     expect(result.data![0]!.provenance).toBeUndefined();
   });
 
-  it("does not mark a reshaped type verbatim just because its characters occur in the text", async () => {
-    // "No" occurs inside "Notice" and a currency value inside ordinary prose.
+  it("does not mark a reshaped type verbatim even when its quote verifies", async () => {
     // A yesno, date, number or currency field reformats what it read by
-    // definition, so containment there is coincidence, not selection.
+    // definition, so the characters appearing in the quote is coincidence.
     const renewed: ExtractionField = {
       field: { key: "renewed", label: "Renewed", type: "yesno", optional: false, raw: "Renewed (yesno)" },
       instruction: "Whether the contract renews.",
       doneWhen: null,
     };
     const model = makeModel({
-      renewed: { value: "No", confidence: 90, rationale: "Notice clause." },
-      contract_value: { value: "$1,200.00", confidence: 90, rationale: "Pricing." },
+      renewed: {
+        value: "No",
+        confidence: 90,
+        rationale: "Notice clause.",
+        sourceRef: { document: "a.pdf", locator: "clause 4", quote: "No renewal applies." },
+      },
+      contract_value: {
+        value: "$1,200.00",
+        confidence: 90,
+        rationale: "Pricing.",
+        sourceRef: { document: "a.pdf", locator: "page 2", quote: "$1,200.00 total." },
+      },
     });
 
     const result = await extractDocumentFields(model, {
       fields: [renewed, contractValue],
       recordLabel: "Acme",
       documentTexts: [
-        { documentId: "doc-a", filename: "a.pdf", text: "Notice period applies. $1,200.00 total." },
+        {
+          documentId: "doc-a",
+          filename: "a.pdf",
+          text: "No renewal applies. Notice period applies. $1,200.00 total.",
+        },
       ],
       contextDocs: [],
       instruction: "",
@@ -282,7 +389,14 @@ describe("extractDocumentFields", () => {
       instruction: "The bid status.",
       doneWhen: null,
     };
-    const model = makeModel({ status: { value: "Draft", confidence: 90, rationale: "Heading." } });
+    const model = makeModel({
+      status: {
+        value: "Draft",
+        confidence: 90,
+        rationale: "Heading.",
+        sourceRef: { document: "a.pdf", locator: "heading", quote: "Draft agreement" },
+      },
+    });
 
     const result = await extractDocumentFields(model, {
       fields: [status],
@@ -298,7 +412,14 @@ describe("extractDocumentFields", () => {
   it("does not mark a whitespace-only value verbatim", async () => {
     // The floor leaves a blank value alone, so the verbatim check has to use the
     // same definition of blank the floor does.
-    const model = makeModel({ supplier_name: { value: "   ", confidence: 90, rationale: "x" } });
+    const model = makeModel({
+      supplier_name: {
+        value: "   ",
+        confidence: 90,
+        rationale: "x",
+        sourceRef: { document: "a.pdf", locator: "page 1", quote: "Acme Ltd trading" },
+      },
+    });
 
     const result = await extractDocumentFields(model, {
       fields: [supplierName],
@@ -317,7 +438,7 @@ describe("extractDocumentFields", () => {
         value: "Beta Ltd",
         confidence: 90,
         rationale: "Second invoice.",
-        sourceRef: { document: "invoice.pdf (2)", locator: "page 1" },
+        sourceRef: { document: "invoice.pdf (2)", locator: "page 1", quote: "Beta Ltd" },
       },
     });
 
@@ -335,7 +456,11 @@ describe("extractDocumentFields", () => {
     const call = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(call.prompt).toContain("[invoice.pdf]");
     expect(call.prompt).toContain("[invoice.pdf (2)]");
-    expect(result.data![0]!.sourceRef).toEqual({ documentId: "doc-b", locator: "page 1" });
+    expect(result.data![0]!.sourceRef).toEqual({
+      documentId: "doc-b",
+      locator: "page 1",
+      quote: "Beta Ltd",
+    });
   });
 
   it("resolves a reported source reference to the document id it names", async () => {
@@ -344,7 +469,7 @@ describe("extractDocumentFields", () => {
         value: "Acme Ltd",
         confidence: 90,
         rationale: "Cover page.",
-        sourceRef: { document: "acme.pdf", locator: "page 1, header" },
+        sourceRef: { document: "acme.pdf", locator: "page 1, header", quote: "Acme Ltd" },
       },
     });
 
@@ -359,6 +484,7 @@ describe("extractDocumentFields", () => {
     expect(result.data![0]!.sourceRef).toEqual({
       documentId: "doc-acme",
       locator: "page 1, header",
+      quote: "Acme Ltd",
     });
   });
 
@@ -387,7 +513,7 @@ describe("extractDocumentFields", () => {
         value: "Acme Ltd",
         confidence: 90,
         rationale: "Cover page.",
-        sourceRef: { document: "somewhere-else.pdf", locator: "page 4" },
+        sourceRef: { document: "somewhere-else.pdf", locator: "page 4", quote: "Acme Ltd" },
       },
     });
 
@@ -408,7 +534,7 @@ describe("extractDocumentFields", () => {
         value: "Acme Ltd",
         confidence: 90,
         rationale: "Cover page.",
-        sourceRef: { document: "acme.pdf", locator: "   " },
+        sourceRef: { document: "acme.pdf", locator: "   ", quote: "Acme Ltd" },
       },
     });
 
@@ -429,7 +555,7 @@ describe("extractDocumentFields", () => {
         value: "Acme Ltd",
         confidence: 5,
         rationale: "a guess",
-        sourceRef: { document: "acme.pdf", locator: "page 1" },
+        sourceRef: { document: "acme.pdf", locator: "page 1", quote: "Acme Ltd" },
       },
     });
 

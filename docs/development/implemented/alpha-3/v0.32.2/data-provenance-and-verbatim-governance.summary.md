@@ -6,6 +6,10 @@
 - **PRD**: `docs/development/prd/data-provenance-and-verbatim-governance.prd.md`
 - **ADR**: ADR-053 — provenance belongs to the field result, and confidence has two meanings
 - **Landed via**: PR #257 (the AI orchestration and Excel export line), which stays draft
+- **Superseded in part by 0.32.3**: the verbatim stamp described below was
+  inferred from substring containment. It is now a model claim this code
+  verifies against a quote — see *Amended in 0.32.3* below and the ADR-053 §1
+  amendment.
 - **Scope built**: the whole phase, §6 steps 1–11, including step 10's export
   columns — the provenance, derivation and source-reference columns the
   Structured Export thread deferred to this phase.
@@ -283,10 +287,12 @@ source reference, which is what they were.
 - **`verbatim` and `sourceRef` are now produced; `derived` is not.** This phase
   built the vocabulary, the enforcement and every reader, and `RunMcpNode`
   classifying its own output was its only producer. The extraction path has since
-  gained two: an extracted value occurring byte-identically in a source text is
-  stamped `verbatim` (which is what makes selection confidence, the "Copied" tag
-  and the per-scale aggregate reachable at all), and a field-level `sourceRef` is
-  recorded wherever the model can point at a place in the source.
+  gained two: a value the model reports copying is stamped `verbatim` once the
+  quote it gave is verified against the document it named (which is what makes
+  selection confidence, the "Copied" tag and the per-scale aggregate reachable at
+  all), and a field-level `sourceRef` is recorded wherever the model can point at
+  a place in the source. **As shipped at 0.32.2 the stamp was inferred from
+  substring containment instead; 0.32.3 replaced that — see below.**
 - **Derived Field Handling is not delivered.** It has been removed from the phase
   doc's *Covers requirements* line. `FieldDerivation`, the "Calculated" tag,
   `derivationSummary` and the `__derivation` export columns are all here and all
@@ -305,3 +311,43 @@ source reference, which is what they were.
   is *decided* by treating `derived` as accuracy-kind (ADR-053 §2) — a distinct
   derivation-confidence scale was not introduced — but it is not demonstrable,
   because no derived field can be authored. See the limitation above.
+
+## Amended in 0.32.3 — the verbatim stamp is verified, not inferred
+
+As shipped here, `isVerbatimIn` stamped `verbatim` whenever the value occurred
+byte-identically anywhere in any of the record's source texts and the field could
+return source bytes (`returnsSourceBytes`). Gating on the field type removed the
+worst false positives — a date, a number, an options value — but containment
+alone cannot tell selection from coincidence: a short composed value (`N/A`,
+`None`, a surname) occurs incidentally in any long document.
+
+That was not only a mislabel. A copied value is scored on the selection scale, so
+a falsely-stamped field leaves the accuracy pool the per-kind minimum is computed
+over and can lift a record's triage band; and a copied value takes precedence in
+`outranks`, so an incidental match could displace a better-supported composed
+answer at any confidence. The `sourceRef` locator was a separate model claim and
+was never cross-checked against the value.
+
+0.32.3 makes the stamp a **verified claim**:
+
+- `sourceRef` gains a required `quote` — the exact characters the model copied.
+  It stays optional as a whole; a model that composed a value omits the reference.
+- `verifyVerbatim` replaces `isVerbatimIn`. It stamps only when the field can
+  return source bytes, the quote occurs byte-identically in the document the model
+  **named**, the value occurs inside that quote, and that occurrence is
+  word-bounded (so `No` inside `Notice` is not a match).
+- Verification runs against a `Map` keyed by document id rather than a flattened
+  list of texts, so a quote that verifies against a *different* document of the
+  record establishes nothing and is refused.
+- A failed claim is refused silently: the value is left unstamped (`processed`),
+  and the resolved `sourceRef` is still attached — the locator may be right even
+  where the quote was mis-transcribed.
+- `outranks` is unchanged. Cross-scale precedence now means "a verified copy beats
+  a composition", because `verbatim` itself means verified.
+- `FieldSourceRef.quote` is optional in the stored shape, matching the
+  `provenance?` idiom: rows written before the amendment have no quote. No
+  migration — `fields` is still `jsonb`.
+
+The cost is stated in the ADR and repeated here: `Copied` stamps drop materially,
+including on values genuinely copied but never quoted. A governance label that
+over-claims is worse than one that under-claims.
