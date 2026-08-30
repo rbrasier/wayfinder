@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { err, ok, type IUsageRepository, type TokenUsage } from "@rbrasier/domain";
-import { recordTokenUsage } from "./usage-tracking-adapter";
+import {
+  err,
+  ok,
+  type ILanguageModel,
+  type IUsageRepository,
+  type ProviderName,
+  type TokenUsage,
+} from "@rbrasier/domain";
+import { recordTokenUsage, UsageTrackingAdapter } from "./usage-tracking-adapter";
 
 const createMockRepo = (
   createImpl?: IUsageRepository["create"],
@@ -239,5 +246,90 @@ describe("estimateCost via recordTokenUsage", () => {
     const call = createFn.mock.calls[0]![0];
     expect(call.flowId).toBeNull();
     expect(call.sessionId).toBeNull();
+  });
+});
+
+// The model a call runs on is resolved inside LanguageModelAdapter, from the
+// runtime config's per-purpose map — a caller that routes by purpose passes no
+// model at all. The decorator must therefore record what the inner adapter
+// reports it used, not a default inferred from the caller's input.
+describe("UsageTrackingAdapter — records the model the call actually ran on", () => {
+  const innerModel = (
+    resolved: { model: string; provider: ProviderName },
+  ): ILanguageModel => ({
+    provider: "anthropic",
+    generateObject: vi.fn().mockResolvedValue(ok({ object: {}, usage: baseUsage, ...resolved })),
+    generateText: vi.fn().mockResolvedValue(ok({ text: "hi", usage: baseUsage, ...resolved })),
+    streamText: vi.fn().mockResolvedValue(
+      ok({ textStream: (async function* () { yield "hi"; })(), usage: Promise.resolve(baseUsage), ...resolved }),
+    ),
+    streamObject: vi.fn().mockResolvedValue(
+      ok({
+        partialObjectStream: (async function* () { yield {}; })(),
+        object: Promise.resolve({}),
+        usage: Promise.resolve(baseUsage),
+        ...resolved,
+      }),
+    ),
+  });
+
+  const recordedBy = async (
+    call: (llm: ILanguageModel) => Promise<unknown>,
+    resolved: { model: string; provider: ProviderName } = {
+      model: "claude-opus-5",
+      provider: "anthropic",
+    },
+  ): Promise<Record<string, unknown>> => {
+    const createFn = vi.fn().mockResolvedValue(ok({ id: "usage-1" }));
+    await call(new UsageTrackingAdapter(innerModel(resolved), createMockRepo(createFn)));
+    await vi.waitFor(() => {
+      expect(createFn).toHaveBeenCalled();
+    });
+    return createFn.mock.calls[0]![0] as Record<string, unknown>;
+  };
+
+  it("records the resolved document-generation model, not the provider default", async () => {
+    const row = await recordedBy((llm) =>
+      llm.generateObject({ purpose: "documentGeneration", schema: {} as never }),
+    );
+
+    expect(row.model).toBe("claude-opus-5");
+  });
+
+  it("prices the resolved model, so opus tokens are not billed at the default rate", async () => {
+    const opus = await recordedBy(
+      (llm) => llm.generateObject({ purpose: "documentGeneration", schema: {} as never }),
+      { model: "claude-opus-5", provider: "anthropic" },
+    );
+    const sonnet = await recordedBy(
+      (llm) => llm.generateObject({ purpose: "documentGeneration", schema: {} as never }),
+      { model: "claude-sonnet-5", provider: "anthropic" },
+    );
+
+    expect(opus.costUsd as number).toBeGreaterThan(sonnet.costUsd as number);
+  });
+
+  it("records the provider the call ran on after an admin switches provider at runtime", async () => {
+    const row = await recordedBy(
+      (llm) => llm.generateText({ purpose: "chat" }),
+      { model: "gpt-4o", provider: "openai" },
+    );
+
+    expect(row.provider).toBe("openai");
+    expect(row.model).toBe("gpt-4o");
+  });
+
+  it("records the resolved model on a streamed text call", async () => {
+    const row = await recordedBy((llm) => llm.streamText({ purpose: "documentGeneration" }));
+
+    expect(row.model).toBe("claude-opus-5");
+  });
+
+  it("records the resolved model on a streamed object call", async () => {
+    const row = await recordedBy((llm) =>
+      llm.streamObject({ purpose: "documentGeneration", schema: {} as never }),
+    );
+
+    expect(row.model).toBe("claude-opus-5");
   });
 });

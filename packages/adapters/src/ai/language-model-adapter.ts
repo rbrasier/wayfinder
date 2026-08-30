@@ -4,6 +4,7 @@ import {
   ok,
   type AiConfig,
   type AiPurpose,
+  type CalledModel,
   type GenerateObjectInput,
   type GenerateTextInput,
   type IErrorLogger,
@@ -99,7 +100,7 @@ export class LanguageModelAdapter implements ILanguageModel {
 
   async generateObject<T>(
     input: GenerateObjectInput,
-  ): Promise<Result<{ object: T; usage: TokenUsage }>> {
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>> {
     let provider: ProviderName | undefined;
     let model: string | undefined;
     try {
@@ -122,6 +123,8 @@ export class LanguageModelAdapter implements ILanguageModel {
       );
       return ok({
         object: result.object as T,
+        provider: resolved.provider,
+        model: resolved.model,
         usage: {
           promptTokens: result.usage.promptTokens,
           completionTokens: result.usage.completionTokens,
@@ -137,7 +140,7 @@ export class LanguageModelAdapter implements ILanguageModel {
 
   async generateText(
     input: GenerateTextInput,
-  ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+  ): Promise<Result<{ text: string; usage: TokenUsage } & CalledModel>> {
     let provider: ProviderName | undefined;
     let model: string | undefined;
     try {
@@ -159,6 +162,8 @@ export class LanguageModelAdapter implements ILanguageModel {
       );
       return ok({
         text: result.text,
+        provider: resolved.provider,
+        model: resolved.model,
         usage: {
           promptTokens: result.usage.promptTokens,
           completionTokens: result.usage.completionTokens,
@@ -174,7 +179,9 @@ export class LanguageModelAdapter implements ILanguageModel {
 
   async streamText(
     input: StreamTextInput,
-  ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>> {
+  ): Promise<
+    Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> } & CalledModel>
+  > {
     let provider: ProviderName | undefined;
     let model: string | undefined;
     try {
@@ -196,7 +203,12 @@ export class LanguageModelAdapter implements ILanguageModel {
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       }));
-      return ok({ textStream: result.textStream, usage });
+      return ok({
+        textStream: result.textStream,
+        provider: resolved.provider,
+        model: resolved.model,
+        usage,
+      });
     } catch (cause) {
       this.logAiCallFailure("streamText", provider, model, cause);
       return err(domainError("AI_PROVIDER_FAILED", "streamText failed.", cause));
@@ -206,11 +218,13 @@ export class LanguageModelAdapter implements ILanguageModel {
   async streamObject<T>(
     input: StreamObjectInput,
   ): Promise<
-    Result<{
-      partialObjectStream: AsyncIterable<Partial<T>>;
-      object: Promise<T>;
-      usage: Promise<TokenUsage>;
-    }>
+    Result<
+      {
+        partialObjectStream: AsyncIterable<Partial<T>>;
+        object: Promise<T>;
+        usage: Promise<TokenUsage>;
+      } & CalledModel
+    >
   > {
     let provider: ProviderName | undefined;
     let model: string | undefined;
@@ -247,6 +261,8 @@ export class LanguageModelAdapter implements ILanguageModel {
       return ok({
         partialObjectStream: result.partialObjectStream as AsyncIterable<Partial<T>>,
         object: result.object as Promise<T>,
+        provider: resolved.provider,
+        model: resolved.model,
         usage,
       });
     } catch (cause) {

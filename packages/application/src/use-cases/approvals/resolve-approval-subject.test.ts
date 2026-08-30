@@ -256,6 +256,20 @@ describe("ResolveApprovalSubject — custom case", () => {
     expect(prompt.prompt).toContain("Acme Ltd");
   });
 
+  // Without the requesting user the summary lands on an unattributed usage row
+  // and QuotaEnforcer.check returns before it looks at a budget (ADR-026).
+  it("bills the summary to the user who requested the approval", async () => {
+    const { useCase, languageModel } = build({ nodes: customNodes });
+
+    await useCase.execute({ approvalId: "approval-1" });
+
+    expect(languageModel.generateText.mock.calls[0]![0]).toMatchObject({
+      userId: "user-1",
+      flowId: "flow-1",
+      sessionId: "sess-1",
+    });
+  });
+
   it("caches the summary on the pending approval so a second read does not recompute it", async () => {
     const { useCase, languageModel } = build({ nodes: customNodes });
 
