@@ -3,7 +3,9 @@ import {
   ok,
   type ExtractionField,
   type ExtractionRecord,
+  type CsvTable,
   type IAuditLogger,
+  type ICsvWriter,
   type IExtractionRunRepository,
   type IFlowVersionRepository,
   type IObjectStorage,
@@ -22,6 +24,7 @@ export interface ExportRunResultsInput {
 export interface ExportRunResultsOutput {
   xlsxKey: string;
   jsonKey: string;
+  csvKey: string;
   recordCount: number;
 }
 
@@ -32,17 +35,20 @@ const exportKey = (runId: string, extension: string): string =>
 
 const percent = (confidence: number): string => String(Math.round(confidence * 100));
 
-// Writes the full records × fields set to XLSX and JSON in object storage
+// Writes the full records × fields set to XLSX, JSON and CSV in object storage
 // (phase §2.2). The XLSX is the on-screen download and carries two tabs: the
 // extracted values on their own (the sheet an operator pastes into a report) and
 // the confidence/rationale metadata behind them. The JSON is the full-fidelity
-// machine copy (rationale + source links). Both overwrite the run's single
-// export slot, so the latest export is always the download target.
+// machine copy (rationale + source links). The CSV mirrors the data tab alone —
+// the confidence tab is a second, differently-shaped table CSV cannot represent
+// (ADR-054). All three overwrite the run's single export slot, so the latest
+// export is always the download target.
 export class ExportRunResults {
   constructor(
     private readonly runs: IExtractionRunRepository,
     private readonly flowVersions: IFlowVersionRepository,
     private readonly spreadsheetWriter: ISpreadsheetWriter,
+    private readonly csvWriter: ICsvWriter,
     private readonly storage: IObjectStorage,
     private readonly auditLogger: IAuditLogger,
   ) {}
@@ -58,10 +64,16 @@ export class ExportRunResults {
     if (recordsResult.error) return recordsResult;
     const records = recordsResult.data;
 
+    const dataSheet = this.dataSheet(schema.data.fields, records);
     const workbook = this.spreadsheetWriter.write({
-      sheets: [this.dataSheet(schema.data.fields, records), this.confidenceSheet(schema.data.fields, records)],
+      sheets: [dataSheet, this.confidenceSheet(schema.data.fields, records)],
     });
     if (workbook.error) return workbook;
+
+    // The CSV is written before anything is stored, so a writer failure leaves
+    // the run's previous export untouched rather than half-replaced.
+    const csv = this.csvWriter.write(this.dataTable(dataSheet));
+    if (csv.error) return csv;
 
     const xlsxKey = exportKey(input.runId, "xlsx");
     const storeXlsx = await this.storage.put(xlsxKey, workbook.data.bytes, XLSX_MIME);
@@ -75,15 +87,35 @@ export class ExportRunResults {
     const storeJson = await this.storage.put(jsonKey, json, "application/json");
     if (storeJson.error) return storeJson;
 
+    const csvKey = exportKey(input.runId, "csv");
+    const storeCsv = await this.storage.put(csvKey, csv.data.bytes, "text/csv");
+    if (storeCsv.error) return storeCsv;
+
     await this.auditLogger.log({
       actorId: input.userId,
       action: "extraction_run.exported",
       resourceType: "extraction_run",
       resourceId: input.runId,
-      metadata: { recordCount: records.length, formats: ["xlsx", "json"] },
+      metadata: {
+        recordCount: records.length,
+        formats: ["xlsx", "json", "csv"],
+        // Per format rather than one total: an auditor asking how much data left
+        // as CSV cannot answer it from a combined number.
+        bytes: {
+          xlsx: workbook.data.bytes.length,
+          json: json.length,
+          csv: csv.data.bytes.length,
+        },
+      },
     });
 
-    return ok({ xlsxKey, jsonKey, recordCount: records.length });
+    return ok({ xlsxKey, jsonKey, csvKey, recordCount: records.length });
+  }
+
+  // The CSV carries the data tab exactly as the workbook does, so the two
+  // downloads of the same run never disagree about columns or row order.
+  private dataTable(sheet: SpreadsheetSheet): CsvTable {
+    return { columns: sheet.columns, rows: sheet.rows };
   }
 
   // Tab 1: the extracted values and nothing else, so the sheet can be pasted

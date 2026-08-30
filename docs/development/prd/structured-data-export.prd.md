@@ -113,6 +113,11 @@ so this phase generates no migration.
       not a separate route.
 - [ ] The file follows the established pattern: `extraction-runs/{runId}/exports/results.csv`.
 - [ ] A CSV export writes a data-egress audit event naming the CSV format.
+- [ ] The CSV download is covered end-to-end, and that coverage is real: the spec it extends
+      (`enhance-synthesise-summary.spec.ts`) currently carries four `test.skip()` guards on
+      conditions it probes itself, three reached through `isVisible()`, in the shared
+      `openRunScreen` preamble. **Repairing that preamble is in scope**, because a CSV case
+      appended as-is inherits every guard and can report green having downloaded nothing.
 
 **Requirement: Data Egress Audit — largely met, extended here**
 
@@ -132,6 +137,9 @@ so this phase generates no migration.
 - A CSV rendering of the confidence tab as a second file.
 - Streaming exports for very large runs.
 - Extending CSV to other export surfaces (insights, flow archives).
+- Renaming `enhance-synthesise-summary.spec.ts` to a capability name. The `enhance-` prefix is
+  ticket-shaped and against the e2e policy's naming rule, but a rename touches no behaviour and
+  belongs in whatever sweep addresses the other legacy `fix-`/`enhance-`/`phase-` names.
 
 ## 12. Risks / open questions
 

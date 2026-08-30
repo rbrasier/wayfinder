@@ -21,6 +21,7 @@ import {
   UploadDraftDocuments,
 } from "@rbrasier/application";
 import {
+  CsvWriter,
   DrizzleExtractionDraftRepository,
   DrizzleExtractionRunRepository,
   XlsxWriter,
@@ -71,6 +72,7 @@ export const buildExtractionModule = ({
   const extractionDrafts = new DrizzleExtractionDraftRepository(db);
   const archiveExtractor = new ZipIngestor();
   const spreadsheetWriter = new XlsxWriter();
+  const csvWriter = new CsvWriter();
   const processExtractionTask = new ProcessExtractionTask(
     extractionRuns,
     objectStorage,
@@ -110,6 +112,7 @@ export const buildExtractionModule = ({
         extractionRuns,
         flowVersions,
         spreadsheetWriter,
+        csvWriter,
         objectStorage,
         auditLogger,
       ),
