@@ -25,6 +25,7 @@ import {
 } from "@rbrasier/application";
 import {
   AiSchemaProposer,
+  CsvWriter,
   DrizzleExtractionDraftRepository,
   DrizzleExtractionRunRepository,
   XlsxWriter,
@@ -75,6 +76,7 @@ export const buildExtractionModule = ({
   const extractionDrafts = new DrizzleExtractionDraftRepository(db);
   const archiveExtractor = new ZipIngestor();
   const spreadsheetWriter = new XlsxWriter();
+  const csvWriter = new CsvWriter();
   const schemaProposer = new AiSchemaProposer(languageModel);
   // One instance, shared: confirming a proposal materialises through the same
   // save a hand-typed schema takes (ADR-052), so there is one write path.
@@ -121,6 +123,7 @@ export const buildExtractionModule = ({
         extractionRuns,
         flowVersions,
         spreadsheetWriter,
+        csvWriter,
         objectStorage,
         auditLogger,
       ),

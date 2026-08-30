@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  domainError,
+  err,
   ok,
   type ExtractionRecord,
   type ExtractionRun,
   type ExtractionSchema,
   type FlowVersion,
   type Result,
+  type CsvTable,
   type WriteSpreadsheetInput,
 } from "@rbrasier/domain";
 import { ExportRunResults } from "./export-run-results";
@@ -54,7 +57,7 @@ const records: ExtractionRecord[] = [
 ];
 
 const buildDeps = () => {
-  const stored: Array<{ key: string; data: Buffer }> = [];
+  const stored: Array<{ key: string; data: Buffer; mime: string }> = [];
   const runs = {
     getRun: vi.fn(async (): Promise<Result<ExtractionRun>> => ok(run)),
     listRecords: vi.fn(async (): Promise<Result<ExtractionRecord[]>> => ok(records)),
@@ -78,9 +81,16 @@ const buildDeps = () => {
       return ok({ bytes: Buffer.from("xlsx-bytes") });
     }),
   };
+  let lastCsvTable: CsvTable | null = null;
+  const csvWriter = {
+    write: vi.fn((input: CsvTable) => {
+      lastCsvTable = input;
+      return ok({ bytes: Buffer.from("csv-bytes") });
+    }),
+  };
   const storage = {
-    put: vi.fn(async (key: string, data: Buffer) => {
-      stored.push({ key, data });
+    put: vi.fn(async (key: string, data: Buffer, mime: string) => {
+      stored.push({ key, data, mime });
       return ok({ key });
     }),
   };
@@ -91,13 +101,16 @@ const buildDeps = () => {
     runs,
     flowVersions,
     spreadsheetWriter,
+    csvWriter,
     storage,
     auditLogger,
     getWorkbook: () => lastWorkbook!,
+    getCsvTable: () => lastCsvTable!,
     useCase: new ExportRunResults(
       runs as never,
       flowVersions as never,
       spreadsheetWriter as never,
+      csvWriter as never,
       storage as never,
       auditLogger as never,
     ),
@@ -105,7 +118,7 @@ const buildDeps = () => {
 };
 
 describe("ExportRunResults", () => {
-  it("stores an XLSX and a JSON artifact and returns their keys", async () => {
+  it("stores an XLSX, a JSON and a CSV artifact and returns their keys", async () => {
     const deps = buildDeps();
     const result = await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
 
@@ -113,9 +126,11 @@ describe("ExportRunResults", () => {
     expect(result.data).toEqual({
       xlsxKey: "extraction-runs/run-1/exports/results.xlsx",
       jsonKey: "extraction-runs/run-1/exports/results.json",
+      csvKey: "extraction-runs/run-1/exports/results.csv",
       recordCount: 1,
     });
     expect(deps.stored.map((entry) => entry.key).sort()).toEqual([
+      "extraction-runs/run-1/exports/results.csv",
       "extraction-runs/run-1/exports/results.json",
       "extraction-runs/run-1/exports/results.xlsx",
     ]);
@@ -223,5 +238,95 @@ describe("ExportRunResults", () => {
         resourceId: "run-1",
       }),
     );
+  });
+  it("writes the CSV to the run's export key with a text/csv content type", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const csvEntry = deps.stored.find((entry) => entry.key.endsWith(".csv"))!;
+    expect(csvEntry.key).toBe("extraction-runs/run-1/exports/results.csv");
+    expect(csvEntry.mime).toBe("text/csv");
+    expect(csvEntry.data.toString("utf8")).toBe("csv-bytes");
+  });
+
+  it("hands the CSV writer the data sheet's columns and rows, not the confidence sheet's", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const dataTab = deps.getWorkbook().sheets[0]!;
+    expect(deps.getCsvTable().columns).toEqual(dataTab.columns);
+    expect(deps.getCsvTable().rows).toEqual(dataTab.rows);
+  });
+
+  it("keeps confidence and rationale out of the CSV", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const keys = deps.getCsvTable().columns.map((column) => column.key);
+    expect(keys).toEqual(["record", "supplier", "price"]);
+    expect(keys.some((key) => key.includes("confidence"))).toBe(false);
+    expect(keys.some((key) => key.includes("rationale"))).toBe(false);
+  });
+
+  it("names CSV in the audit event's formats", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    expect(deps.auditLogger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ formats: ["xlsx", "json", "csv"] }),
+      }),
+    );
+  });
+
+  // One number across three formats would be ambiguous, so volume is recorded
+  // per format — an auditor asking "how much left as CSV" gets an answer.
+  it("records byte volume per format in the audit event", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const entry = deps.auditLogger.log.mock.calls[0]![0] as {
+      metadata: { bytes: Record<string, number>; recordCount: number };
+    };
+    const stored = new Map(deps.stored.map((item) => [item.key.split(".").pop()!, item.data.length]));
+    expect(entry.metadata.bytes).toEqual({
+      xlsx: stored.get("xlsx"),
+      json: stored.get("json"),
+      csv: stored.get("csv"),
+    });
+    expect(entry.metadata.recordCount).toBe(1);
+  });
+
+  it("returns a DomainError and announces no export when the CSV writer fails", async () => {
+    const deps = buildDeps();
+    deps.csvWriter.write.mockReturnValueOnce(
+      err(domainError("INFRA_FAILURE", "Failed to write the CSV export.")),
+    );
+
+    const result = await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    expect(result.data).toBeUndefined();
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+    expect(deps.stored).toEqual([]);
+    expect(deps.auditLogger.log).not.toHaveBeenCalled();
+  });
+
+  it("returns a DomainError and announces no export when storing the CSV fails", async () => {
+    const deps = buildDeps();
+    deps.storage.put.mockImplementationOnce(async (key: string, data: Buffer, mime: string) => {
+      deps.stored.push({ key, data, mime });
+      return ok({ key });
+    });
+    deps.storage.put.mockImplementationOnce(async (key: string, data: Buffer, mime: string) => {
+      deps.stored.push({ key, data, mime });
+      return ok({ key });
+    });
+    deps.storage.put.mockResolvedValueOnce(err(domainError("INFRA_FAILURE", "Storage is unavailable.")));
+
+    const result = await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    expect(result.data).toBeUndefined();
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+    expect(deps.auditLogger.log).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 # Phase — Collaborative Schema Definition
 
-- **Status**: Implemented (2026-08-28, v0.32.3)
-- **Target version**: 0.32.3  (bump: PATCH on the 0.32 line — new feature; **no schema change, no migration**)
+- **Status**: Implemented (2026-08-28, v0.32.4)
+- **Target version**: 0.32.4  (bump: PATCH on the 0.32 line — new feature; **no schema change, no migration**)
 - **PRD**: `docs/development/prd/collaborative-schema-definition.prd.md`
 - **ADRs**: ADR-052 (schema proposals are drafts requiring activation)
 - **Depends on**: ADR-013 (annotation lingua franca), ADR-033 (extraction authoring config),

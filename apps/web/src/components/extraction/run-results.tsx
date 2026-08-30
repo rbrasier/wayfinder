@@ -12,6 +12,7 @@ import { ResultGrid, type SampleResult } from "./result-grid";
 import { SummaryPreview } from "./summary-preview";
 import { RunReport } from "./run-report";
 import { isLiveRun } from "./run-tick-state";
+import { EXPORT_MENU_FORMATS, exportArtifact, exportLabel, type ExportFormat } from "./export-format";
 
 // The finished review surface for a run (phase §4): the run header with its
 // downloads, live progress, the summary, records with confidence and source
@@ -21,8 +22,6 @@ export interface RunResultsProps {
   flowId: string;
   runId: string;
 }
-
-type ExportFormat = "xlsx" | "json";
 
 const artifactHref = (runId: string, artifact: string): string =>
   `/api/synthesise/runs/${runId}/artifacts/${artifact}`;
@@ -106,7 +105,7 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
       const format = downloading;
       setDownloading(null);
       if (!format) return;
-      window.location.href = artifactHref(runId, format === "xlsx" ? "export-xlsx" : "export-json");
+      window.location.href = artifactHref(runId, exportArtifact(format));
     },
     onError: (error) => {
       setDownloading(null);
@@ -181,14 +180,17 @@ export function RunResults({ flowId, runId }: RunResultsProps) {
             </Button>
             {menuOpen && (
               <div className="absolute right-0 top-full z-50 mt-1 w-52 rounded-[9px] border border-[#e7e3db] bg-white py-1 shadow-md">
-                <button
-                  type="button"
-                  disabled={downloading !== null}
-                  className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee] disabled:text-[#c9c3b5]"
-                  onClick={() => startDownload("json")}
-                >
-                  {downloading === "json" ? "Preparing…" : "Download JSON"}
-                </button>
+                {EXPORT_MENU_FORMATS.map((entry) => (
+                  <button
+                    key={entry.format}
+                    type="button"
+                    disabled={downloading !== null}
+                    className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee] disabled:text-[#c9c3b5]"
+                    onClick={() => startDownload(entry.format)}
+                  >
+                    {exportLabel(entry, downloading)}
+                  </button>
+                ))}
                 <div className="my-1 border-t border-[#e7e3db]" />
                 <button
                   type="button"

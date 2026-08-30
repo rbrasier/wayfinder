@@ -1,6 +1,6 @@
 # Implementation Summary — Collaborative Schema Definition
 
-- **Version**: 0.32.3 (bump: **PATCH** on the 0.32 line). Split out of PR #257 into
+- **Version**: 0.32.4 (bump: **PATCH** on the 0.32 line). Split out of PR #257 into
   its own PR. This phase shares no code with the export or provenance splits, so
   it can merge in any order relative to them; the number assumes it merges last.
 - **Phase doc**: `collaborative-schema-definition.phase.md` (this folder)
