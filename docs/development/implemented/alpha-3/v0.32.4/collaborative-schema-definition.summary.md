@@ -315,9 +315,7 @@ toggle, and therefore its way back to structured. Flip the constant to restore i
 
 ### Tests
 
-`./validate.sh` — **24 of 25 checks, 3,923 tests**, up from 3,883. The one failure
-is `jsondiffpatch` GHSA-j4fx-xxwh-2485, a transitive advisory that fails
-identically on the branch before these changes; it is not this revision's.
+`./validate.sh` — **25 checks, 0 failures, 3,923 tests**, up from 3,883.
 
 New coverage: 1 domain case on `currentProposalOutputInstruction`, 4 application
 cases (drafted instructions surfaced, samples-only proposal, the
@@ -336,3 +334,26 @@ nothing-to-read refusal), 2 adapter cases on the drafted instruction, 4 on
 - **Not exercised against a running app.** The container has no Docker daemon, so
   Postgres, Redis and MinIO could not be started and the screen was verified by
   typecheck, lint, the a11y pass and the unit suites rather than by eye.
+
+### Dependency audit — `jsondiffpatch` pinned past GHSA-j4fx-xxwh-2485
+
+Not this revision's doing — it was already red on the branch — but the audit gate
+has to be green to merge, so it is closed here rather than waived.
+
+`jsondiffpatch` reaches the tree only through `ai@4.3.19`, which pins it to
+exactly `0.6.0`; GHSA-j4fx-xxwh-2485 (high, prototype pollution in the patch APIs)
+is fixed in `0.7.6`. A root `pnpm.overrides` entry of `">=0.7.6 <0.8"` carries
+every consumer to the patched release.
+
+The upgrade is safe to force: `lib/index.js` exports exactly the same seven names
+in 0.6.0 and 0.7.6 (`DiffPatcher`, `dateReviver`, `create`, `diff`, `patch`,
+`unpatch`, `reverse`, `clone`), and the package's `type`, `main`, `exports` map
+and `engines` are unchanged — only its own internal dependencies moved
+(`chalk` + `diff-match-patch` → `@dmsnell/diff-match-patch`). `ai` calls just
+`diff`, `patch` and `clone`, all still present, and only from `ai/rsc`, which this
+repo does not import at all.
+
+The same pin also closes the moderate `GHSA-33vc-wfww-vjfv` (XSS in the HTML
+formatter, patched `>=0.7.2`). Remove the override once `ai` itself depends on a
+patched `jsondiffpatch`. No entry was added to `ALLOWED_ADVISORIES` — the gate is
+closed, not held open.

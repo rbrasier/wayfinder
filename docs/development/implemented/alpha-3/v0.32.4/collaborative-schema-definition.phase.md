@@ -248,3 +248,10 @@ a fork, once, when the output card first opens.
   sits above the two buttons and does not compete with them.
 - **`editor-cards.tsx` was split.** The overlay wiring pushed it past the
   700-line warn ratchet, so its two modals moved to `editor-cards-dialogs.tsx`.
+- **The dependency audit gate was closed, not waived.** `jsondiffpatch` was red on
+  the branch before this revision (GHSA-j4fx-xxwh-2485, high). It arrives only via
+  `ai@4.3.19`'s exact `0.6.0` pin, so a root `pnpm.overrides` entry of
+  `">=0.7.6 <0.8"` carries it to the patched release; the module's export surface
+  and module shape are identical across the two versions, and `ai` touches it only
+  from `ai/rsc`, which this repo never imports. `ALLOWED_ADVISORIES` stays empty.
+  See the implementation summary for the full reasoning.
