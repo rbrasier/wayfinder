@@ -1,4 +1,9 @@
-import type { ExtractionDocumentStatus } from "@rbrasier/domain";
+import type {
+  ExtractionDocumentStatus,
+  FieldDerivation,
+  FieldProvenance,
+  FieldSourceRef,
+} from "@rbrasier/domain";
 
 export interface ResultDocument {
   id: string;
@@ -13,6 +18,12 @@ export interface ResultFieldValue {
   value: string;
   confidence: number;
   rationale: string;
+  // Mirrors the optional members of the domain's ExtractionFieldResult. Absent
+  // reads as `processed` through the domain accessor, so a record extracted
+  // before ADR-053 renders exactly as it does today.
+  provenance?: FieldProvenance;
+  sourceRef?: FieldSourceRef;
+  derivation?: FieldDerivation;
 }
 
 export interface ResultRecord {

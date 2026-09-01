@@ -831,11 +831,23 @@ describe("computeExtractionFieldReport", () => {
     expect(report.rows[1]!.values.price).toBe("");
   });
 
-  it("carries each record's aggregate (weakest-field) confidence for RAG banding", () => {
+  it("carries each record's aggregate confidence per scale for RAG banding", () => {
     const report = computeExtractionFieldReport(
       [{ key: "price", label: "Price", type: "currency" }],
       [record("r1", [{ key: "price", value: "£10", confidence: 0.3, rationale: "" }])],
     );
-    expect(report.rows[0]!.aggregateConfidence).toBe(0.3);
+    expect(report.rows[0]!.aggregateConfidence).toEqual({ selection: null, accuracy: 0.3 });
+  });
+
+  it("keeps a verbatim record's selection confidence off the accuracy scale", () => {
+    const report = computeExtractionFieldReport(
+      [{ key: "rate", label: "Rate", type: "text" }],
+      [
+        record("r1", [
+          { key: "rate", value: "4.25", confidence: 0.6, rationale: "", provenance: "verbatim" },
+        ]),
+      ],
+    );
+    expect(report.rows[0]!.aggregateConfidence).toEqual({ selection: 0.6, accuracy: null });
   });
 });

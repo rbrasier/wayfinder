@@ -2,6 +2,7 @@ import {
   domainError,
   err,
   ok,
+  type CalledModel,
   type GenerateObjectInput,
   type GenerateTextInput,
   type ILanguageModel,
@@ -144,6 +145,11 @@ interface ScriptCall {
   readonly sessionId?: string | null;
 }
 
+// No provider was called, so no real model name would be honest. The caller's
+// own override is reported when it gave one; otherwise this marker keeps E2E
+// usage rows distinguishable from billed traffic.
+const SCRIPTED_MODEL = "scripted-model";
+
 export class ScriptedLanguageModel implements ILanguageModel {
   readonly provider: ProviderName = "anthropic";
 
@@ -187,39 +193,54 @@ export class ScriptedLanguageModel implements ILanguageModel {
     this.requested.delete(sessionId);
   }
 
+  private called(model: string | undefined): CalledModel {
+    return { provider: this.provider, model: model ?? SCRIPTED_MODEL };
+  }
+
   async generateObject<T>(
     input: GenerateObjectInput,
-  ): Promise<Result<{ object: T; usage: TokenUsage }>> {
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>> {
     const resolved = this.resolveObject(input, input.schema);
     if (resolved.error) return err(resolved.error);
     return ok({
       object: resolved.data as T,
+      ...this.called(input.model),
       usage: usageFor(JSON.stringify(resolved.data)),
     });
   }
 
-  async generateText(input: GenerateTextInput): Promise<Result<{ text: string; usage: TokenUsage }>> {
+  async generateText(
+    input: GenerateTextInput,
+  ): Promise<Result<{ text: string; usage: TokenUsage } & CalledModel>> {
     const entry = this.next(input);
     if (entry?.failWith) return err(providerFailure(entry.failWith));
     const text = entry?.text ?? DEFAULT_TEXT;
-    return ok({ text, usage: usageFor(text) });
+    return ok({ text, ...this.called(input.model), usage: usageFor(text) });
   }
 
   async streamText(
     input: StreamTextInput,
-  ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>> {
+  ): Promise<
+    Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> } & CalledModel>
+  > {
     const entry = this.next(input);
     if (entry?.failWith) return err(providerFailure(entry.failWith));
     const text = entry?.text ?? DEFAULT_TEXT;
-    return ok({ textStream: chunksOf(text), usage: Promise.resolve(usageFor(text)) });
+    return ok({
+      textStream: chunksOf(text),
+      ...this.called(input.model),
+      usage: Promise.resolve(usageFor(text)),
+    });
   }
 
   async streamObject<T>(input: StreamObjectInput): Promise<
-    Result<{
-      partialObjectStream: AsyncIterable<Partial<T>>;
-      object: Promise<T>;
-      usage: Promise<TokenUsage>;
-    }>
+    Result<
+      {
+        partialObjectStream: AsyncIterable<Partial<T>>;
+        object: Promise<T>;
+        usage: Promise<TokenUsage>;
+      } & CalledModel
+    >
   > {
     const resolved = this.resolveObject(input, input.schema);
     if (resolved.error) {
@@ -235,6 +256,7 @@ export class ScriptedLanguageModel implements ILanguageModel {
     return ok({
       partialObjectStream: growingPartials<T>(object, response),
       object: Promise.resolve(object as T),
+      ...this.called(input.model),
       usage: Promise.resolve(usageFor(JSON.stringify(object))),
     });
   }

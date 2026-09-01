@@ -71,6 +71,9 @@ ${buildFieldConstraintsText(templateFields)}
   - For each field return { value, confidence (0-100), rationale }. Set confidence to how sure you are the value is correct and grounded in the source; use an empty value and confidence 0 when the information is genuinely absent.
   - Required fields must be filled only when the information is present in the source. If a required field is genuinely absent, still leave it blank rather than guessing — a blank required field is a signal for a human to review, an invented one is a hallucination.
   - Return an entry for every field key, even when the value is blank.
+  - When you copied a value straight out of a document, also return sourceRef: { document, locator, quote } — "document" named exactly as it appears in the record source documents, "locator" the position inside it (a page number, a section heading, a table cell reference or a line), and "quote" the exact characters you copied it from, reproduced byte for byte: same spelling, case, spacing and punctuation. The quote must contain the value and must appear in that document verbatim; a short surrounding phrase is fine, a paraphrase is not.
+  - Omit sourceRef entirely when you composed, reformatted or reworded the value rather than copying it, and when you cannot point to a specific place. It is optional and never worth inventing — a quote that does not match the document is treated as no quote at all.
+  - Do not paraphrase a value you could copy. Where the source already carries the value in the required format, return those exact characters — an unnecessary rewording loses the record that the value was read rather than composed.
 </extraction_rules>`;
 
   const contextBlock = buildContextDocsSection(input.contextDocs);

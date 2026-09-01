@@ -167,6 +167,7 @@ export class ResolveApprovalSubject {
     const gathered = this.gatheredText(outputs);
     const result = await this.languageModel.generateText({
       purpose: "branching",
+      userId: approval.requestedByUserId,
       sessionId: approval.sessionId,
       flowId: approval.flowId,
       system:

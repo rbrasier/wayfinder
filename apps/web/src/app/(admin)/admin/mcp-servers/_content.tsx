@@ -14,6 +14,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  VERBATIM_SCOPE_NOTE,
+  verbatimBadge,
+  verbatimConfirmPrompt,
+  verbatimFailureNote,
+} from "@/components/admin/verbatim-toggle-model";
 import { trpc } from "@/trpc/client";
 
 export function AdminMcpServersContent() {
@@ -24,10 +30,21 @@ export function AdminMcpServersContent() {
   const [url, setUrl] = useState("");
   const [transport, setTransport] = useState<"sse" | "streamable-http">("sse");
   const [communicatesExternally, setCommunicatesExternally] = useState(false);
+  const [verbatimOnly, setVerbatimOnly] = useState(false);
   const [credentialRef, setCredentialRef] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // A governance guarantee must never change by a stray click, so the toggle
+  // stages the intended value and a second, explicit action commits it.
+  const [confirmVerbatim, setConfirmVerbatim] = useState<{
+    id: string;
+    label: string;
+    next: boolean;
+  } | null>(null);
+  // Reported beside the toggle rather than in the form's shared error line at the
+  // top of the page, which the administrator is not looking at when they press it.
+  const [verbatimError, setVerbatimError] = useState<string | null>(null);
 
   const invalidate = () => void utils.mcpServer.list.invalidate();
 
@@ -37,11 +54,22 @@ export function AdminMcpServersContent() {
       setUrl("");
       setTransport("sse");
       setCommunicatesExternally(false);
+      setVerbatimOnly(false);
       setCredentialRef("");
       setError(null);
       invalidate();
     },
     onError: (cause) => setError(cause.message),
+  });
+  const update = trpc.mcpServer.update.useMutation({
+    onSuccess: () => {
+      setConfirmVerbatim(null);
+      setVerbatimError(null);
+      invalidate();
+    },
+    // The confirm panel stays open so the change can be retried where it was
+    // started, and the badge above it still shows the setting as it really is.
+    onError: (cause) => setVerbatimError(verbatimFailureNote(cause.message)),
   });
   const disable = trpc.mcpServer.disable.useMutation({ onSuccess: invalidate });
   const enable = trpc.mcpServer.enable.useMutation({ onSuccess: invalidate });
@@ -69,6 +97,7 @@ export function AdminMcpServersContent() {
       url,
       transport,
       communicatesExternally,
+      verbatimOnly,
       credentialRef: credentialRef.trim() ? credentialRef.trim() : null,
     });
   };
@@ -147,6 +176,18 @@ export function AdminMcpServersContent() {
                 integrations; those are registered here but not yet selectable in flows.
               </p>
             </div>
+            <div className="space-y-1">
+              <label htmlFor="mcp-verbatim" className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  id="mcp-verbatim"
+                  type="checkbox"
+                  checked={verbatimOnly}
+                  onChange={(event) => setVerbatimOnly(event.target.checked)}
+                />
+                Use this connection's results verbatim
+              </label>
+              <p className="pl-6 text-xs text-muted-foreground">{VERBATIM_SCOPE_NOTE}</p>
+            </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <Button onClick={submit} disabled={register.isPending || !label.trim() || !url.trim()}>
               {register.isPending ? "Registering…" : "Register server"}
@@ -169,6 +210,7 @@ export function AdminMcpServersContent() {
                     <TableHead>URL</TableHead>
                     <TableHead>Transport</TableHead>
                     <TableHead>Scope</TableHead>
+                    <TableHead>Handling</TableHead>
                     <TableHead>Credential</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -186,6 +228,61 @@ export function AdminMcpServersContent() {
                         <Badge variant={server.communicatesExternally ? "outline" : "default"}>
                           {server.communicatesExternally ? "External" : "Internal"}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="space-y-1">
+                        {verbatimBadge(server.verbatimOnly) ? (
+                          <Badge variant="default">{verbatimBadge(server.verbatimOnly)}</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Standard</span>
+                        )}
+                        {confirmVerbatim?.id === server.id ? (
+                          <div className="space-y-1">
+                            <p className="text-xs text-muted-foreground">
+                              {verbatimConfirmPrompt(confirmVerbatim.label, confirmVerbatim.next)}
+                            </p>
+                            <div className="space-x-2">
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setVerbatimError(null);
+                                  update.mutate({ id: server.id, verbatimOnly: confirmVerbatim.next });
+                                }}
+                                disabled={update.isPending}
+                              >
+                                {update.isPending ? "Saving…" : "Confirm"}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setConfirmVerbatim(null);
+                                  setVerbatimError(null);
+                                }}
+                                disabled={update.isPending}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                            {verbatimError ? (
+                              <p className="text-xs text-destructive">{verbatimError}</p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setVerbatimError(null);
+                              setConfirmVerbatim({
+                                id: server.id,
+                                label: server.label,
+                                next: !server.verbatimOnly,
+                              });
+                            }}
+                          >
+                            {server.verbatimOnly ? "Allow rewriting" : "Require verbatim"}
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-xs text-muted-foreground">
                         {server.credentialRef ?? "—"}

@@ -1,6 +1,15 @@
 import { domainError } from "../errors/domain-error";
 import { err, ok } from "../result";
 import type { Result } from "../result";
+import {
+  clampConfidence,
+  confidenceKind,
+  fieldProvenance,
+  type ConfidenceKind,
+  type FieldDerivation,
+  type FieldProvenance,
+  type FieldSourceRef,
+} from "./field-provenance";
 
 // Red/Amber/Green triage bands for extraction confidence. Confidence is a
 // weakly-calibrated self-assessment (phase §5), so bands are a triage signal,
@@ -18,8 +27,6 @@ export const GREEN_THRESHOLD = 0.8;
 // here; it is the single source of truth for the "only extract real data" guard.
 export const EXTRACTION_CONFIDENCE_FLOOR = 0.25;
 
-const clampConfidence = (confidence: number): number => Math.min(1, Math.max(0, confidence));
-
 export const confidenceBand = (confidence: number): ConfidenceBand => {
   const value = clampConfidence(confidence);
   if (value < AMBER_THRESHOLD) return "red";
@@ -36,6 +43,16 @@ export interface ExtractionFieldResult {
   value: string;
   confidence: number;
   rationale: string;
+  // How the value came to exist (ADR-053). Optional, and absent reads as
+  // `processed` through `fieldProvenance` — every historical row was produced by
+  // the composing path, so nothing changes meaning and nothing is back-filled.
+  provenance?: FieldProvenance;
+  // Where the value was read from, at field level. `ExtractionRecord.sourceDocumentIds`
+  // only reaches record level.
+  sourceRef?: FieldSourceRef;
+  // Present on a `derived` value: the documented method and the field keys it
+  // read. Recorded, never evaluated (ADR-053 §4).
+  derivation?: FieldDerivation;
 }
 
 // One output record — the unit the schema is filled for and reviewed. Its
@@ -48,18 +65,46 @@ export interface ExtractionRecord {
   sourceDocumentIds: string[];
 }
 
-// A record is only as reliable as its least-confident field, so the aggregate
-// is the minimum — the most conservative triage signal. Empty → 0 (red).
-export const aggregateConfidence = (record: ExtractionRecord): number => {
-  if (record.fields.length === 0) return 0;
-  return record.fields.reduce(
-    (lowest, field) => Math.min(lowest, clampConfidence(field.confidence)),
-    1,
-  );
+// Aggregates split by scale (ADR-053 §3). A single minimum across both kinds
+// would let "how sure am I I picked the right one" win over "how sure am I this
+// is right" purely by being the smaller number — not a conservative aggregate,
+// a meaningless one. `null` means the record has no fields of that kind, which
+// is different from — and must never be rendered as — zero.
+export interface AggregateConfidence {
+  selection: number | null;
+  accuracy: number | null;
+}
+
+export interface ConfidenceBands {
+  selection: ConfidenceBand | null;
+  accuracy: ConfidenceBand | null;
+}
+
+// Reads `fields` alone, so the adapter can aggregate the fields it is about to
+// persist without assembling a whole record.
+type FieldBearing = { fields: ExtractionFieldResult[] };
+
+// Within one kind the aggregate keeps the existing conservative minimum — a
+// record is only as reliable as its least-confident field — so triage behaviour
+// is unchanged for every record whose fields are all of one kind.
+const lowestOfKind = (fields: ExtractionFieldResult[], kind: ConfidenceKind): number | null => {
+  const ofKind = fields.filter((field) => confidenceKind(fieldProvenance(field)) === kind);
+  if (ofKind.length === 0) return null;
+  return ofKind.reduce((lowest, field) => Math.min(lowest, clampConfidence(field.confidence)), 1);
 };
 
-export const recordConfidenceBand = (record: ExtractionRecord): ConfidenceBand =>
-  confidenceBand(aggregateConfidence(record));
+export const aggregateConfidenceByKind = (record: FieldBearing): AggregateConfidence => ({
+  selection: lowestOfKind(record.fields, "selection"),
+  accuracy: lowestOfKind(record.fields, "accuracy"),
+});
+
+export const recordConfidenceBands = (record: FieldBearing): ConfidenceBands => {
+  const aggregate = aggregateConfidenceByKind(record);
+  return {
+    selection: aggregate.selection === null ? null : confidenceBand(aggregate.selection),
+    accuracy: aggregate.accuracy === null ? null : confidenceBand(aggregate.accuracy),
+  };
+};
 
 // Guards against the model surfacing an ungrounded guess as a real value. A
 // field whose confidence falls below the floor is treated as absent — its value
@@ -80,9 +125,39 @@ export const applyConfidenceFloor = (
 
 // Under many-per-record a record draws on several documents, each extracted on
 // its own worker task (phase §5). Their field results are merged into the one
-// record by keeping, per field key, the value with the highest confidence — the
-// best-supported answer wins, and a later low-confidence document never
-// overwrites an earlier confident one. Incoming keys not yet present are added.
+// record by keeping, per field key, the best-supported answer. Incoming keys not
+// yet present are added.
+//
+// Three rules, in order, because a bare `confidence >` comparison is wrong twice
+// over:
+//
+// 1. A human correction is authoritative (ADR-024) and carries `confidence: 1`,
+//    so an equally-confident model value would otherwise displace it.
+// 2. A copied value and a composed one carry confidences on different scales —
+//    "did I pick the right one" against "is this right at all" — and ADR-053 §3
+//    forbids ranking one against the other. Grounding arbitrates instead: a
+//    value present byte-identically in a source document beats one composed over
+//    it. The cost is stated plainly: a modestly-confident copy now beats a
+//    highly-confident composition. That is the trade ADR-053 already makes, and
+//    a copy only reaches this point having cleared `applyConfidenceFloor`.
+// 3. Within one scale the higher confidence wins, exactly as before — so a
+//    record whose fields are all of one kind merges as it always did.
+const outranks = (
+  candidate: ExtractionFieldResult,
+  incumbent: ExtractionFieldResult,
+): boolean => {
+  const candidateProvenance = fieldProvenance(candidate);
+  const incumbentProvenance = fieldProvenance(incumbent);
+  if (candidateProvenance === "human_corrected") return true;
+  if (incumbentProvenance === "human_corrected") return false;
+
+  const candidateKind = confidenceKind(candidateProvenance);
+  const incumbentKind = confidenceKind(incumbentProvenance);
+  if (candidateKind !== incumbentKind) return candidateKind === "selection";
+
+  return candidate.confidence > incumbent.confidence;
+};
+
 export const mergeFieldResults = (
   existing: ExtractionFieldResult[],
   incoming: ExtractionFieldResult[],
@@ -90,9 +165,7 @@ export const mergeFieldResults = (
   const merged = new Map(existing.map((field) => [field.key, field]));
   for (const field of incoming) {
     const current = merged.get(field.key);
-    if (!current || field.confidence > current.confidence) {
-      merged.set(field.key, field);
-    }
+    if (!current || outranks(field, current)) merged.set(field.key, field);
   }
   return [...merged.values()];
 };
@@ -112,8 +185,10 @@ export interface FieldEditResult {
 
 // Applies an operator's per-field correction (phase §2.4, ADR-024). The human
 // edit is authoritative: no AI re-run, the field is stamped fully confident and
-// its rationale records who corrected it. Returns a new record (pure) plus the
-// before/after change for the audit trail.
+// its rationale records who corrected it. The `human_corrected` provenance is
+// what makes that decision machine-readable — before ADR-053 the rationale
+// string carried it as prose that nothing could filter, style or export on.
+// Returns a new record (pure) plus the before/after change for the audit trail.
 export const applyFieldEdit = (
   record: ExtractionRecord,
   fieldKey: string,
@@ -126,11 +201,21 @@ export const applyFieldEdit = (
   }
 
   const editorNote = editorLabel.trim().length > 0 ? ` by ${editorLabel.trim()}` : "";
-  const fields = record.fields.map((field) =>
-    field.key === fieldKey
-      ? { ...field, value: newValue, confidence: 1, rationale: `Manually corrected${editorNote}.` }
-      : field,
-  );
+  const fields = record.fields.map((field) => {
+    if (field.key !== fieldKey) return field;
+    // The derivation and source reference described the value that was there
+    // before. A person has replaced it, so neither still describes anything —
+    // keeping them would have the UI and every export claim a calculation and a
+    // locator for a value that has neither.
+    const { derivation: _derivation, sourceRef: _sourceRef, ...retained } = field;
+    return {
+      ...retained,
+      value: newValue,
+      confidence: 1,
+      rationale: `Manually corrected${editorNote}.`,
+      provenance: "human_corrected" as const,
+    };
+  });
 
   return ok({
     record: { ...record, fields },

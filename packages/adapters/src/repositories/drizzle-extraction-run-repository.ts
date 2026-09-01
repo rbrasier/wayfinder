@@ -1,4 +1,5 @@
 import {
+  aggregateConfidenceByKind,
   domainError,
   err,
   ok,
@@ -55,8 +56,13 @@ const toDocument = (row: DocumentRow): ExtractionDocument => ({
   error: row.error,
 });
 
-const aggregateConfidenceOf = (fields: ExtractionFieldResult[]): number =>
-  fields.length === 0 ? 0 : fields.reduce((lowest, field) => Math.min(lowest, field.confidence), 1);
+// The persisted column is the accuracy aggregate: every field written before
+// ADR-053 was accuracy-kind, so the value it already holds keeps its exact
+// meaning. Written through the domain function rather than a private copy of the
+// reduction — the copy this replaces also omitted the domain's clamp. A record
+// with no accuracy-kind fields writes 0, as an empty record always has.
+export const persistedAggregateConfidence = (fields: ExtractionFieldResult[]): number =>
+  aggregateConfidenceByKind({ fields }).accuracy ?? 0;
 
 // Atomic claim (ADR-019 / ADR-033 §6): one UPDATE marks a bounded batch of a
 // run's pending documents `extracting` and bumps their attempt count, selecting
@@ -275,7 +281,7 @@ export class DrizzleExtractionRunRepository implements IExtractionRunRepository 
         .update(app_extraction_records)
         .set({
           fields,
-          aggregate_confidence: aggregateConfidenceOf(fields),
+          aggregate_confidence: persistedAggregateConfidence(fields),
           status: "complete",
           updated_at: new Date(),
         })

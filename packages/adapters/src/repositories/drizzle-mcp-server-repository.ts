@@ -14,13 +14,16 @@ import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { admin_mcp_servers } from "../db/schema/admin";
 
-const toEntity = (row: typeof admin_mcp_servers.$inferSelect): McpServer => ({
+export type McpServerRow = typeof admin_mcp_servers.$inferSelect;
+
+export const toMcpServerEntity = (row: McpServerRow): McpServer => ({
   id: row.id,
   label: row.label,
   transport: row.transport,
   url: row.url,
   credentialRef: row.credential_ref,
   communicatesExternally: row.communicates_externally,
+  verbatimOnly: row.verbatim_only,
   status: row.status,
   createdByUserId: row.created_by_user_id,
   createdAt: row.created_at,
@@ -40,11 +43,12 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           url: input.url,
           credential_ref: input.credentialRef ?? null,
           communicates_externally: input.communicatesExternally ?? false,
+          verbatim_only: input.verbatimOnly ?? false,
           created_by_user_id: input.createdByUserId ?? null,
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Insert returned no row."));
-      return ok(toEntity(row));
+      return ok(toMcpServerEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to create MCP server.", cause));
     }
@@ -68,12 +72,13 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
             patch.credentialRef === undefined ? current.credential_ref : patch.credentialRef,
           communicates_externally:
             patch.communicatesExternally ?? current.communicates_externally,
+          verbatim_only: patch.verbatimOnly ?? current.verbatim_only,
           updated_at: new Date(),
         })
         .where(eq(admin_mcp_servers.id, id))
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Update returned no row."));
-      return ok(toEntity(row));
+      return ok(toMcpServerEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update MCP server.", cause));
     }
@@ -86,7 +91,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .from(admin_mcp_servers)
         .where(eq(admin_mcp_servers.id, id))
         .limit(1);
-      return ok(row ? toEntity(row) : null);
+      return ok(row ? toMcpServerEntity(row) : null);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to find MCP server.", cause));
     }
@@ -101,7 +106,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
             .from(admin_mcp_servers)
             .where(eq(admin_mcp_servers.status, "active"))
             .orderBy(desc(admin_mcp_servers.updated_at));
-      return ok(rows.map(toEntity));
+      return ok(rows.map(toMcpServerEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list MCP servers.", cause));
     }
@@ -115,7 +120,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .where(eq(admin_mcp_servers.id, id))
         .returning();
       if (!row) return err(domainError("NOT_FOUND", "MCP server not found."));
-      return ok(toEntity(row));
+      return ok(toMcpServerEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update MCP server status.", cause));
     }

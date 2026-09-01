@@ -69,7 +69,7 @@ describe("GetExtractionRunReport", () => {
     expect(result.data!.report.rows[0]).toMatchObject({
       recordId: "rec-1",
       values: { supplier: "Acme Ltd", price: "£10" },
-      aggregateConfidence: 0.3,
+      aggregateConfidence: { selection: null, accuracy: 0.3 },
     });
   });
 });

@@ -23,6 +23,36 @@ export const extractionFieldResultSchema = z.object({
     .describe(
       "Brief justification: where in the documents the value came from, or why it is uncertain or missing.",
     ),
+  // Optional by design (ADR-053 §1): a model that cannot point at a specific
+  // place must still return the field. A missing reference is not an extraction
+  // failure, and it is never filled in with a placeholder.
+  //
+  // `quote` is required *inside* the reference, so "I can point at this" and
+  // "here is what I copied" are the same act. A reference without a quote could
+  // never be verified, and a half-claim would only be re-interpreted downstream
+  // as the containment guess this schema exists to replace.
+  sourceRef: z
+    .object({
+      document: z
+        .string()
+        .describe(
+          "The source document the value was read from, named exactly as it appears in the record source documents.",
+        ),
+      locator: z
+        .string()
+        .describe(
+          "Where inside that document the value sits — a page number, a section heading, a table cell reference or a line.",
+        ),
+      quote: z
+        .string()
+        .describe(
+          "The exact characters copied from that document, reproduced byte for byte — same spelling, case, spacing and punctuation. It must contain the value and must appear in the document verbatim. Return a short surrounding phrase rather than paraphrasing, and omit the whole sourceRef if you composed or reformatted the value rather than copying it.",
+        ),
+    })
+    .optional()
+    .describe(
+      "Where this value was read from, and the exact text it was copied from. Omit it entirely when you cannot point to a specific place, or when you composed or reformatted the value rather than copying it; never invent one.",
+    ),
 });
 
 // The per-record extraction result: a record keyed by the schema's field keys.

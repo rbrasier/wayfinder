@@ -1,14 +1,20 @@
 # Phase — Data Provenance and Verbatim Governance
 
-- **Status**: Awaiting review
-- **Target version**: 0.32.0  (bump: MINOR — additive `admin_mcp_servers.verbatim_only` column,
-  aggregate-confidence columns on `app_extraction_records`, + new feature)
+- **Status**: Implemented (2026-08-27, v0.32.2); amended 2026-08-30 at v0.32.3 — the verbatim
+  stamp is now a verified model claim rather than an inference from substring containment
+  (ADR-053 §1 amendment)
+- **Target version**: 0.32.2  (bump: PATCH on the 0.32 line — additive `admin_mcp_servers.verbatim_only` column,
+  + new feature. No column is added to or altered on `app_extraction_records`: the §10
+  investigation found the existing aggregate column unread, so both per-kind aggregates are
+  derived from `fields` in the domain.)
 - **PRD**: `docs/development/prd/data-provenance-and-verbatim-governance.prd.md`
 - **ADRs**: ADR-053 (field provenance and dual confidence)
 - **Depends on**: ADR-024 (operator correction authoritative), ADR-032 (MCP tool-loop pre-pass),
   ADR-033 (extraction records, confidence and rationale)
-- **Covers requirements**: Verbatim Processing Control; Provenance Differentiation;
-  Derived Field Handling
+- **Covers requirements**: Verbatim Processing Control; Provenance Differentiation
+- **Does not cover**: Derived Field Handling — see §12. The `derived` vocabulary, the
+  `FieldDerivation` type and every reader ship here, but nothing can author a calculated
+  field, so the requirement is not delivered by this phase.
 
 ## 1. Problem
 
@@ -25,7 +31,8 @@ governance concept. See the PRD.
   changes, and worded so it claims nothing about the source's correctness.
 - Selection confidence for verbatim fields, accuracy confidence for processed ones, never mixed —
   including in aggregates, which are reported per scale.
-- Derived fields distinguishable, with their method and source keys recorded.
+- Derived fields distinguishable *where one exists*, with their method and source keys
+  recorded. No authoring path produces one — see §12.
 - Human corrections recorded as provenance rather than as maximum confidence.
 - Provenance preserved through every export format.
 
@@ -183,8 +190,20 @@ Mirrors PRD §10 across all three requirements:
 - [ ] Existing connections are unaffected (`verbatim_only` defaults `false`).
 - [ ] Verbatim fields show selection confidence; processed fields show accuracy confidence.
 - [ ] Provenance types are visually distinct; source references reachable for every element.
-- [ ] Derived fields are distinct, carry their method and source keys, and stay distinguishable
-      in every export.
+- [x] Verbatim fields are produced: a value the model reports copying is stamped `verbatim` once
+      the quote it gave verifies against the document it named, which is what makes selection
+      confidence reachable. *(Amended at 0.32.3. As delivered here the stamp was inferred from
+      substring containment in any of the record's texts, which could not tell selection from
+      coincidence — see ADR-053 §1's amendment and the implementation summary.)*
+- [x] A field-level source reference is produced where the model can point at one, and stays
+      absent — never an empty ref — where it cannot. *(At 0.32.3 the reference also carries the
+      exact quote the value was copied from, which is what the verbatim stamp is verified
+      against.)*
+- [ ] ~~Derived fields are distinct, carry their method and source keys, and stay distinguishable
+      in every export.~~ **Not delivered.** The readers, the export columns and the type are
+      here and correct; no authoring path can declare a calculated field, so no `derived` value
+      can exist to render. See §12, and the *Calculated Extraction Fields* phase doc
+      under `docs/development/to-be-implemented/`.
 - [ ] A historical record with no provenance reads as `processed`/`accuracy` and renders as it
       does today.
 
@@ -333,3 +352,123 @@ One migration, one defaulted boolean:
 
 Step 7's repository assertions about the accuracy aggregate surviving the migration become
 trivially true — nothing touches those rows — but stay in the suite as a regression guard.
+
+---
+
+## 11. Approved build summary (2026-08-27)
+
+Approved at the `/build` gate. Scope is the whole phase (§6 steps 1–11), including
+step 10's CSV columns — the provenance, derivation and source-reference columns
+the Structured Export thread deferred to this phase.
+
+**PATCH — 0.32.1 → 0.32.2.** This phase was split out of PR #257 so it can be
+reviewed and merged on its own, so it now carries its own bump rather than
+riding the Structured Export thread's. It builds on the export work at 0.32.1,
+which must land first — the CSV provenance columns extend the table that phase
+introduced.
+
+### Goal
+
+Provenance becomes an explicit property of every extracted field — `verbatim`,
+`processed`, `derived` or `human_corrected` — with absent reading as `processed`,
+so no historical row changes meaning. Confidence stops being one number: its
+*kind* is derived from provenance, never stored, so a copied value reports
+selection confidence and a composed one reports accuracy, and the two are never
+averaged. An administrator can require verbatim-only handling per MCP connection,
+enforced where tool results enter a turn and refused at publish time for a step
+that would reshape them.
+
+### Business rules changing
+
+- A field with no `provenance` member reads as `processed`/`accuracy`; `verbatim`
+  is the only provenance mapping to `selection` confidence.
+- `applyFieldEdit` stamps `human_corrected` alongside `confidence: 1`;
+  `mergeFieldResults` never lets a confident model value overwrite a
+  `human_corrected` one.
+- Aggregate confidence is reported per scale — `{ selection, accuracy }`, `null`
+  where a kind is absent — and each scale keeps its own conservative minimum.
+- When a connection is `verbatimOnly`, publishing a flow whose MCP step coerces
+  that tool's result is refused; `RunMcpNode` refuses the same config at run time
+  as a backstop.
+- Verbatim means byte-identical: a trimmed, truncated or reshaped value is
+  `processed`, with no "close enough" tier.
+
+### UI / visible behaviour
+
+- Result grid: each value carries a provenance marker; the rationale dialog names
+  the confidence kind ("selection" / "accuracy") instead of assuming accuracy.
+- Record detail shows per-scale overall confidence, with an absent scale rendered
+  as absent rather than 0%.
+- Derived fields are visually distinct and expose their method and source field
+  keys **wherever one is recorded** — no authoring path records one, so this
+  rendering is unreachable in the product today (§12).
+- A field-level source reference is reachable where recorded, and extraction now
+  records one whenever the model can point at a place in the source.
+- MCP admin: a verbatim-only checkbox beside the external-communication
+  classification, requiring an explicit confirm before it changes, worded as
+  Wayfinder's handling.
+- Field report rows band on the accuracy scale, falling back to selection where a
+  record has no accuracy fields.
+
+### Data & types
+
+- New `field-provenance.ts`: `FieldProvenance`, `ConfidenceKind`,
+  `FieldDerivation`, `FieldSourceRef`, `fieldProvenance()`, `confidenceKind()`,
+  `fieldConfidence()`.
+- `ExtractionFieldResult` gains optional `provenance`, `sourceRef`, `derivation`.
+- `AggregateConfidence` / `ConfidenceBands` with `aggregateConfidenceByKind()` and
+  `recordConfidenceBands()`; `aggregateConfidence` and `recordConfidenceBand` deleted.
+- `McpServer`, `NewMcpServer`, `McpServerUpdate` gain `verbatimOnly`.
+- `ExtractionFieldReportRow.aggregateConfidence` becomes `AggregateConfidence`.
+
+### Database & migration impact
+
+- `admin_mcp_servers` — add `verbatim_only boolean not null default false`. One
+  generated migration carrying
+  `-- data-impact: preserved — defaulted boolean column; every existing connection keeps current behaviour`.
+- `app_extraction_records` — no change (§10.1).
+
+### Tests
+
+Test file before each implementation file, at the layer that owns the logic. **No
+e2e** — §8 stands: no group in `e2e-test-policy.md` applies, and coverage sits at
+domain, application, adapter and web-model layers.
+
+### Build order
+
+1. Domain — provenance types and accessors
+2. Domain — field result, correction, merge
+3. Domain — per-scale aggregates (delete the single-number pair)
+4. Domain — MCP `verbatimOnly` + verbatim handling rules
+5. Application — verbatim enforcement (publish gate + run backstop)
+6. Application — reader migration: analytics, exports (CSV step 10)
+7. Adapters — column, migration, mappings
+8. Web — admin toggle, provenance display, container wiring
+
+## 12. Derived Field Handling — not delivered by this phase (2026-08-28)
+
+The requirement was listed on the *Covers requirements* line when this phase was planned. It
+should not have been, and the line has been corrected. What the phase actually shipped for
+`derived` is everything except the one thing that would make it visible.
+
+**What is here and correct:** `FieldProvenance` includes `derived`; `FieldDerivation`
+(`{ method, sourceKeys }`) is defined and carried on `ExtractionFieldResult`; `confidenceKind`
+routes `derived` to the accuracy scale; the result grid tags such a value "Calculated";
+`derivationSummary` renders its method and inputs; `applyFieldEdit` clears a derivation a person
+has overwritten; JSON, XLSX and the CSV `__derivation` column all export it.
+
+**What is missing:** an author cannot declare that a field is calculated. `ExtractionField` is
+`{ field, instruction, doneWhen }` — a label, an annotation and a plain-English instruction.
+There is no member on which an author could say "this field is computed from those fields", and
+the extraction prompt has nothing to tell the model about one. So no `derived` value can be
+produced, and every reader above is waiting on a producer that does not exist.
+
+Unlike `verbatim`, this **cannot** be closed by classifying model output. Verbatim is decidable
+from the returned bytes — the value is either in the source text or it is not. Whether a value
+was *calculated from other fields* is an authoring intent, not a property of the result; a
+classifier guessing at it would be inventing the audit trail the requirement exists to provide.
+
+The type and the export columns are **deliberately kept**. They are correct and unused, not
+wrong, and deleting them would mean rebuilding identical readers when the authoring path lands.
+That path is specified by the *Calculated Extraction Fields* phase doc under
+`docs/development/to-be-implemented/`.

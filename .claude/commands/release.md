@@ -131,10 +131,31 @@ user wants a published artifact for the new line straight away.
    git push origin v$(cat VERSION)
    ```
 
-4. Offer to create a GitHub Release for the tag, summarising changes since
-   the previous tag on the branch (`git log <previous-tag>..HEAD --oneline`).
-   Because the version no longer encodes the stage, title the release
-   `vX.Y.Z — <line>` (e.g. `v0.19.4 — alpha-2`).
+4. **Create a GitHub Release for the tag** — always, not as an offer. A pushed
+   tag with no Release is a build nobody can read the changelog for.
+
+   Summarise changes since the previous tag on the branch
+   (`git log <previous-tag>..HEAD --oneline --no-merges`), grouping into
+   **Features** and **Fixes** and folding pure test/CI churn into a single line
+   rather than listing every commit. Because the version no longer encodes the
+   stage, title the release `vX.Y.Z — <line>` (e.g. `v0.19.4 — alpha-2`).
+
+   Match the established body shape (see the previous release with
+   `gh release view <previous-tag>`): a lead line naming the release line, the
+   image reference, the digest, the `docker pull` command, `## Highlights`
+   (Features / Fixes), an `## Upgrading` line pointing at `upgrading.md`, and a
+   `**Full changelog:**` compare link. Then create it:
+
+   ```bash
+   gh release create v$(cat VERSION) --title "v$(cat VERSION) — <line>" \
+     --notes-file <notes> --latest
+   ```
+
+   Pass `--latest` only when the tag is on a release line (it moves the "Latest"
+   badge, mirroring how a release-line tag moves the `latest` image). For a tag
+   on `main` or a throwaway pre-release, use `--latest=false`. If the digest is
+   not yet known because the image has not finished publishing, create the
+   Release now and leave the digest line to be filled once `/publish` reports it.
 
 5. **Offer to publish the container image**, then hand off to **`/publish`**.
 

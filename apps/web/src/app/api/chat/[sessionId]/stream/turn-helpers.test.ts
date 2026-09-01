@@ -293,6 +293,7 @@ describe("generateDocument wrapper", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
     );
 
     expect(updateDocumentStatus).toHaveBeenCalledWith("msg-1", "failed");
@@ -320,6 +321,7 @@ describe("generateDocument wrapper", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
     );
 
     expect(updateDocumentStatus).toHaveBeenCalledWith("msg-2", "failed");
@@ -348,6 +350,7 @@ describe("generateDocument wrapper", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
     );
 
     expect(execute).toHaveBeenCalledWith(expect.objectContaining({ budget }));
@@ -397,6 +400,7 @@ describe("generateDocument wrapper", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
     );
 
     expect(execute).toHaveBeenCalledWith(
@@ -434,6 +438,7 @@ describe("generateDocument wrapper", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
       { fieldValues: { project_title: "Reused" } },
     );
 
@@ -463,6 +468,7 @@ describe("generateDocument wrapper", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
     );
 
     expect(updateDocumentStatus).not.toHaveBeenCalled();
@@ -490,6 +496,7 @@ describe("generateDocument return value", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
     );
 
     expect(result).toBe(false);
@@ -511,6 +518,7 @@ describe("generateDocument return value", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
     );
 
     expect(result).toBe(false);
@@ -535,6 +543,7 @@ describe("generateDocument return value", () => {
       [],
       [],
       makeNode({ config: { outputType: "generate_document", documentTemplatePath: "x" } as unknown as FlowNode["config"] }),
+      "user-1",
     );
 
     expect(result).toBe(true);
