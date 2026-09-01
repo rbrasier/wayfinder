@@ -35,6 +35,7 @@ export * from "./session-event-bus";
 export * from "./session-upload-repository";
 export * from "./session-step-output-repository";
 export * from "./flow-test-fixture-repository";
+export * from "./schema-proposer";
 export * from "./seed-proposer";
 export * from "./analytics-repository";
 export * from "./session-agent";

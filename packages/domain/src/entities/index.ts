@@ -30,6 +30,7 @@ export * from "./flow-import-resolve";
 export * from "./flow-import-rewrite";
 export * from "./extraction-schema";
 export * from "./extraction-draft-document";
+export * from "./schema-proposal";
 export * from "./field-provenance";
 export * from "./verbatim-handling";
 export * from "./extraction-record";

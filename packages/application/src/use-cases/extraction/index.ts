@@ -14,3 +14,5 @@ export * from "./export-run-results";
 export * from "./generate-run-documents";
 export * from "./edit-record-field";
 export * from "./mark-run-complete";
+export * from "./validate-schema-proposal";
+export * from "./schema-proposals";

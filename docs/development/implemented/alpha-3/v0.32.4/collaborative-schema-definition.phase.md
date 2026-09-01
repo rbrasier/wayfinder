@@ -1,7 +1,7 @@
 # Phase — Collaborative Schema Definition
 
-- **Status**: Awaiting review
-- **Target version**: 0.32.0  (bump: MINOR — new feature; **no schema change, no migration**)
+- **Status**: Implemented (2026-08-28, v0.32.4); **revised 2026-09-01, see §11**
+- **Target version**: 0.32.4  (bump: PATCH on the 0.32 line — new feature; **no schema change, no migration**)
 - **PRD**: `docs/development/prd/collaborative-schema-definition.prd.md`
 - **ADRs**: ADR-052 (schema proposals are drafts requiring activation)
 - **Depends on**: ADR-013 (annotation lingua franca), ADR-033 (extraction authoring config),
@@ -40,6 +40,12 @@ through the existing `buildExtractionField` path, so a proposed field and a hand
 up identical. Because the proposal has no stored status, confirmation is a single write rather
 than a dual write, and the "schema live while its proposal still reads draft" bug cannot occur.
 
+**The proposal's own status and revision history are in-memory thread state and nothing more.**
+`SchemaProposalStatus` exists so a second confirm cannot re-materialise a schema over a set of
+fields the author has since hand-edited — it is a guard within one conversation, never a column,
+a row or a snapshot member. No repository, no table, no migration: when the thread ends, the
+status ends with it. Read every mention of `draft` and `confirmed` below in that light.
+
 The proposer emits the annotation language authors already write (`Label (date) (optional)`),
 reusing `parseTemplateField` rather than adding a second route to the same field model.
 
@@ -47,12 +53,12 @@ reusing `parseTemplateField` rather than adding a second route to the same field
 
 | Path | New / changed | Notes |
 | ---- | ------------- | ----- |
-| `packages/domain/src/entities/schema-proposal.ts` | new | `SchemaProposal`, `SchemaProposalStatus`, `SchemaProposalRevision` |
+| `packages/domain/src/entities/schema-proposal.ts` | new | `SchemaProposal`, `SchemaProposalStatus`, `SchemaProposalRevision` — **in-memory thread state; never persisted, never written to the snapshot** |
 | `packages/domain/src/ports/schema-proposer.ts` | new | `ISchemaProposer`, mirroring `ISeedProposer` |
 | `packages/domain/src/entities/index.ts`, `ports/index.ts` | changed | Re-exports |
 | `packages/application/src/use-cases/extraction/propose-schema.ts` | new | Proposal from context + samples |
 | `packages/application/src/use-cases/extraction/refine-schema.ts` | new | One refinement turn, appends a revision |
-| `packages/application/src/use-cases/extraction/confirm-schema.ts` | new | Validate, materialise, mark confirmed |
+| `packages/application/src/use-cases/extraction/confirm-schema.ts` | new | Validate, materialise into the flow snapshot, close the in-memory proposal against a second confirm |
 | `packages/application/src/use-cases/extraction/validate-schema-proposal.ts` | new | Blocking vs advisory findings |
 | `packages/adapters/src/ai/schema-proposer.ts` | new | `ISchemaProposer` over the language model |
 | `apps/web/src/server/routers/extraction.ts` | changed | `proposeSchema`, `refineSchema`, `confirmSchema` |
@@ -60,10 +66,14 @@ reusing `parseTemplateField` rather than adding a second route to the same field
 
 ## 6. Implementation steps (test-first per CLAUDE.md)
 
-1. **Domain — proposal entity.** Write `schema-proposal.test.ts` first: (a) a new proposal is
-   `draft`; (b) appending a revision preserves earlier ones in order; (c) confirming a proposal
-   with a blocking finding is refused; (d) `confirmed` is terminal — a second confirm is
-   rejected. Then add the entity and its transitions. Pure, no dependencies.
+1. **Domain — proposal entity, held in memory.** Write `schema-proposal.test.ts` first: (a) a
+   new proposal is `draft`; (b) appending a revision preserves earlier ones in order;
+   (c) confirming a proposal with a blocking finding is refused; (d) `confirmed` is terminal — a
+   second confirm is rejected. Then add the entity and its transitions. Pure, no dependencies.
+
+   The transitions are a guard over thread-local state, not a persisted lifecycle. **Do not add a
+   repository, a table or a snapshot member for any of it** — if the build reaches for one, the
+   design has been misread (ADR-052, §4 above).
 
 2. **Domain — proposer port.** Add `ISchemaProposer`. Type-only. No repository port: a proposal
    is never stored.
@@ -124,7 +134,8 @@ Mirrors PRD §10. Restated as the build's test plan:
 - [ ] Confirmation is refused while any blocking finding is open.
 - [ ] Confirmation materialises through `buildExtractionField`; a failed write leaves no
       partial state, since nothing about the proposal is stored.
-- [ ] `confirmed` is terminal; no proposal reaches a snapshot without an explicit confirm.
+- [ ] `confirmed` is terminal within the thread; no proposal reaches a snapshot without an
+      explicit confirm, and no proposal state is persisted anywhere.
 - [ ] Extraction fields and conversational structured fields accept and reject the same annotations.
 
 ## 9. Playwright e2e
@@ -149,3 +160,98 @@ test (step 7).
   document access checks and generation budget caps rather than opening a new path to content.
 - **Revision growth is not a risk here.** History lives as long as the thread and no longer, so
   there is nothing to cap, expire or clean up.
+
+## 11. Revision — 2026-09-01: the generator becomes the way in
+
+**Version: unchanged at 0.32.4.** The phase has not shipped — it is still the
+unmerged `claude/split-schema-definition` line — so this is a revision of work in
+flight, not a new release. No schema change and no migration; ADR-052 is
+untouched.
+
+### Why
+
+§6 step 7 put the proposal surface *inside* the output card, above the field
+editor: an author already looking at a blank field list saw a paragraph of prose,
+a bare `<input type="file">` and a Draft button, and had to work out for
+themselves that the AI route existed and was worth taking. The interaction was
+right and the placement was wrong. The proposal is a **fork in how the schema
+gets defined**, not a widget beside the thing it defines — so it is now asked as
+a fork, once, when the output card first opens.
+
+### What changed
+
+1. **The output card opens on a two-way choice.** A full-card overlay offers
+   *Build from an existing output document or sample* and *Configure manually*.
+   It is offered once per editor mount; either choice dismisses it, and neither
+   writes anything. A secondary **Generate from sample** control beside the
+   *Fields to extract* heading reopens it whenever the author wants it back.
+
+2. **The sample upload leads.** Choosing the AI route shows an upload drop zone
+   in the app's own dashed-border style, prominent and above the text box, with
+   the intent text now an **optional** instruction field beneath it. Handing over
+   the document you already produce *is* the statement of what you need to
+   capture, so requiring prose alongside it was a second ask for the same thing.
+   `ProposeSchema` now refuses only the case that leaves the proposer nothing to
+   read — no intent **and** no documents.
+
+3. **Drafting has a face of its own.** A schema proposal is a long model call;
+   a frozen form reads as a hang, so drafting renders as its own step.
+
+4. **The review step shows fields, types and drafted output instructions**, then
+   **Back** (secondary) and **Continue** (primary). Continue confirms — the same
+   single write ADR-052 §3 describes — and lands the author in the structured
+   output editor with the fields and the output instructions pre-filled.
+
+5. **The proposer drafts the output instructions too.** New:
+   `SchemaProposalOutput.outputInstruction`, carried per revision on
+   `SchemaProposalRevision` so it travels with the field set it was written for,
+   and surfaced on `SchemaProposalView`. It is only answerable once the fields are
+   known, so it is drafted in the same call rather than a second one that would
+   be proposing a layout for a field set it had not seen.
+
+6. **Template output is hidden pending the trial.** The generator is being
+   trialled as the supersession of template-derived output — an author who uploads
+   the document they already produce gets the same result without the template
+   plumbing. Nothing is removed: the mode, the parser, the derived field editor and
+   every stored template still work, and a flow already on a template keeps its
+   toggle. Only the way to *newly choose* template output is withheld
+   (`TEMPLATE_OUTPUT_SELECTABLE` in `editor-cards.tsx`), so nobody starts down a
+   path that may not survive the trial. Flip the constant to restore it.
+
+7. **The focus overlays name their step** — "Step 1: Configure Input" and
+   "Step 2: Configure Output" — so the two cards read as a sequence rather than
+   two independent panels.
+
+### Files
+
+- New: `apps/web/src/components/extraction/schema-generator-overlay.tsx`,
+  `apps/web/src/components/extraction/editor-cards-dialogs.tsx`
+- Removed: `apps/web/src/components/extraction/schema-proposal-card.tsx` —
+  superseded by the overlay
+- Reworked: `schema-proposal-panel.tsx` (now the review step),
+  `editor-cards.tsx`, `editor-cards-controls.tsx`, `extraction-field-editor.tsx`
+- Changed for the drafted output instructions: `schema-proposal.ts`,
+  `schema-proposer.ts`, `schema-proposals.ts`, `ai-schema-proposer.ts`,
+  `extraction-schema-proposal.ts`
+
+### Judgement calls worth flagging
+
+- **The offer is per mount, not per flow.** There is no stored "has been offered"
+  flag — that would be proposal state in a database, which ADR-052 §1 forbids in
+  spirit if not in letter. So an author reopening a synthesis that already has
+  fields is offered the fork again. One click on *Configure manually* dismisses
+  it and nothing is lost, but it is a real cost and a per-user preference would
+  be the way to remove it.
+- **Redraft was kept on the review step.** The spec named only Back and Continue.
+  Refinement is the argue-with-it half of ADR-052 and the whole reason revisions
+  exist; dropping it would have left `refineSchema` unreachable from the UI. It
+  sits above the two buttons and does not compete with them.
+- **`editor-cards.tsx` was split.** The overlay wiring pushed it past the
+  700-line warn ratchet, so its two modals moved to `editor-cards-dialogs.tsx`.
+- **The dependency audit gate was closed, not waived.** `jsondiffpatch` was red on
+  the branch before this revision (GHSA-j4fx-xxwh-2485, high). It arrives only via
+  `ai@4.3.19`'s exact `0.6.0` pin, so a root `pnpm.overrides` entry of
+  `">=0.7.6 <0.8"` carries it to the patched release; the module's export surface
+  and module shape are identical across the two versions, and `ai` touches it only
+  from `ai/rsc`, which this repo never imports. `ALLOWED_ADVISORIES` stays empty.
+  See the implementation summary for the full reasoning.

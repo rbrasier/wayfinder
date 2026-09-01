@@ -5,6 +5,14 @@ import { Label } from "@/components/ui/label";
 
 type FocusedCard = "input" | "output";
 
+// The overlay names the card by the step it is in the authoring sequence:
+// configure the input, then the output. Both the visible text and the button's
+// accessible name use it, so they never say different things.
+const STEP_LABEL: Record<FocusedCard, string> = {
+  input: "Step 1: Configure Input",
+  output: "Step 2: Configure Output",
+};
+
 // A large card that either holds focus (enlarged, raised, overlapping its
 // sibling) or sits behind a frosted overlay inviting the author to configure it.
 export function FocusCard({
@@ -13,6 +21,7 @@ export function FocusCard({
   focused,
   onFocus,
   headerAction,
+  overlay,
   children,
 }: {
   side: FocusedCard;
@@ -20,6 +29,10 @@ export function FocusCard({
   focused: boolean;
   onFocus: () => void;
   headerAction?: ReactNode;
+  // Covers the whole card, header included, while the author answers something
+  // that decides what the card should show. Rendered above the frosted
+  // configure prompt so the two can never both be reaching for the same click.
+  overlay?: ReactNode;
   children: ReactNode;
 }) {
   const overlapClass = focused
@@ -45,16 +58,16 @@ export function FocusCard({
       {!focused && (
         <button
           type="button"
-          aria-label={`Configure ${side}`}
+          aria-label={STEP_LABEL[side]}
           onClick={onFocus}
           className="absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-[14px] bg-white/55 text-center backdrop-blur-[3px] transition-colors hover:bg-white/40"
         >
-          <span className="text-[14px] font-semibold text-[#1c1b19]">
-            Configure {side === "input" ? "input" : "output"}
-          </span>
+          <span className="text-[14px] font-semibold text-[#1c1b19]">{STEP_LABEL[side]}</span>
           <span className="text-[12px] text-[#666055]">Click here to configure</span>
         </button>
       )}
+
+      {focused && overlay}
     </section>
   );
 }
