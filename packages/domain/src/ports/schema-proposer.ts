@@ -27,6 +27,11 @@ export interface SchemaProposalRequest {
 
 export interface SchemaProposalOutput {
   fields: ExtractionFieldDraft[];
+  // How the records these fields produce should be laid out. Drafted in the same
+  // call as the fields because it is only answerable once they are known — asking
+  // for it separately would mean proposing a layout for a field set the proposer
+  // has not seen.
+  outputInstruction: string;
   // The proposer's own account of what it changed, shown against the previous
   // revision so a reviewer can see the argument rather than only its result.
   note: string;

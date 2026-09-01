@@ -2,6 +2,7 @@ import {
   appendProposalRevision,
   confirmProposal,
   currentProposalFields,
+  currentProposalOutputInstruction,
   domainError,
   err,
   ok,
@@ -67,18 +68,32 @@ const documentCapError = () =>
     ),
   );
 
+// What an opening proposal asks for when the author stated no intent — they
+// handed over a sample and expect the schema to be read out of it. Recorded as
+// the revision's request too, so the history says what was actually asked.
+const OPENING_FROM_SAMPLES =
+  "Propose the field set the sample documents support, and the output instructions for it.";
+
 // Every read returns the current state alongside its findings, so the panel can
 // always render what stands rather than having to ask again after a turn that
 // produced problems.
 export interface SchemaProposalView {
   proposal: SchemaProposal;
   fields: ExtractionFieldDraft[];
+  // The drafted output instructions for the current revision, surfaced beside
+  // the fields so the caller never has to walk the revision list to find them.
+  outputInstruction: string;
   findings: SchemaProposalFinding[];
 }
 
 const viewOf = (proposal: SchemaProposal): SchemaProposalView => {
   const fields = currentProposalFields(proposal);
-  return { proposal, fields, findings: validateSchemaProposal(fields) };
+  return {
+    proposal,
+    fields,
+    outputInstruction: currentProposalOutputInstruction(proposal),
+    findings: validateSchemaProposal(fields),
+  };
 };
 
 // The opening proposal. A proposer that emits an unparseable annotation produces
@@ -92,13 +107,24 @@ export class ProposeSchema {
 
   async execute(context: SchemaProposalContext): Promise<Result<SchemaProposalView>> {
     if (tooManyDocuments(context.documents)) return documentCapError();
+    // Sample documents and a stated intent are each enough on their own — the
+    // author can hand over an existing output document and say nothing about it.
+    // Neither one leaves the proposer nothing to read.
+    if (context.intent.trim().length === 0 && context.documents.length === 0) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          "Add a sample document or say what you need to capture before drafting a schema.",
+        ),
+      );
+    }
 
     const proposed = await this.proposer.propose({
       flowName: context.flowName,
       intent: context.intent,
       samples: await extractSamples(this.documentExtractor, context.documents),
       currentFields: [],
-      instruction: context.intent,
+      instruction: context.intent.trim() || OPENING_FROM_SAMPLES,
       userId: context.userId,
       flowId: context.flowId,
     });
@@ -108,7 +134,8 @@ export class ProposeSchema {
       viewOf(
         startSchemaProposal({
           fields: proposed.data.fields,
-          request: context.intent,
+          outputInstruction: proposed.data.outputInstruction,
+          request: context.intent.trim() || OPENING_FROM_SAMPLES,
           note: proposed.data.note,
         }),
       ),
@@ -146,6 +173,7 @@ export class RefineSchemaProposal {
 
     const refined = appendProposalRevision(input.proposal, {
       fields: proposed.data.fields,
+      outputInstruction: proposed.data.outputInstruction,
       request: input.instruction,
       note: proposed.data.note,
     });

@@ -20,16 +20,23 @@ const draft = (label: string, annotation = `${label} (text)`): ExtractionFieldDr
   doneWhen: null,
 });
 
+const proposerOutput = (output: Partial<SchemaProposalOutput>): SchemaProposalOutput => ({
+  fields: [],
+  outputInstruction: "One row per supplier.",
+  note: "",
+  ...output,
+});
+
 const fakeProposer = (
-  ...outputs: SchemaProposalOutput[]
+  ...outputs: Partial<SchemaProposalOutput>[]
 ): ISchemaProposer & { requests: SchemaProposalRequest[] } => {
   const requests: SchemaProposalRequest[] = [];
-  const queue = [...outputs];
+  const queue = outputs.map(proposerOutput);
   return {
     requests,
     propose: vi.fn(async (request: SchemaProposalRequest) => {
       requests.push(request);
-      return ok(queue.shift() ?? { fields: [], note: "" });
+      return ok(queue.shift() ?? proposerOutput({}));
     }),
   };
 };
@@ -39,7 +46,12 @@ const failingProposer = (): ISchemaProposer => ({
 });
 
 const proposalOf = (fields: ExtractionFieldDraft[]): SchemaProposal =>
-  startSchemaProposal({ fields, request: "Draft a schema", note: "Opening set." });
+  startSchemaProposal({
+    fields,
+    outputInstruction: "One row per supplier.",
+    request: "Draft a schema",
+    note: "Opening set.",
+  });
 
 const extractor = (text = "Acme Ltd — £1,200"): IDocumentExtractor => ({
   extract: vi.fn(async () => ok(text)),
@@ -139,6 +151,42 @@ describe("ProposeSchema", () => {
     const result = await new ProposeSchema(failingProposer(), extractor()).execute(context);
 
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+
+  it("surfaces the drafted output instructions beside the fields", async () => {
+    const proposer = fakeProposer({
+      fields: [draft("Supplier")],
+      outputInstruction: "One row per supplier, sorted by contract value.",
+    });
+
+    const result = await new ProposeSchema(proposer, extractor()).execute(context);
+
+    expect(result.data!.outputInstruction).toBe("One row per supplier, sorted by contract value.");
+  });
+
+  it("proposes from samples alone when the author stated no intent", async () => {
+    const proposer = fakeProposer({ fields: [draft("Supplier")] });
+
+    const result = await new ProposeSchema(proposer, extractor()).execute({
+      ...context,
+      intent: "   ",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(proposer.requests[0]!.instruction).toContain("the sample documents support");
+  });
+
+  it("refuses a proposal with neither an intent nor a sample to read", async () => {
+    const proposer = fakeProposer({ fields: [draft("Supplier")] });
+
+    const result = await new ProposeSchema(proposer, extractor()).execute({
+      ...context,
+      intent: "",
+      documents: [],
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(proposer.propose).not.toHaveBeenCalled();
   });
 });
 

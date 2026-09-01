@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ExtractionFieldDraft, SchemaProposalFinding } from "@rbrasier/domain";
 import {
   confirmState,
+  draftState,
   fieldChanges,
   orderedFindings,
   revisionEntries,
@@ -145,5 +146,32 @@ describe("revisionEntries", () => {
 
     expect(entries).toHaveLength(1);
     expect(entries[0]!.isCurrent).toBe(true);
+  });
+});
+
+describe("draftState", () => {
+  it("is available on a sample alone, with no intent stated", () => {
+    expect(draftState("", 1, false)).toEqual({ disabled: false, reason: null });
+  });
+
+  it("is available on a stated intent alone, with no sample", () => {
+    expect(draftState("Compare supplier bids", 0, false)).toEqual({
+      disabled: false,
+      reason: null,
+    });
+  });
+
+  it("says why it is unavailable when there is nothing to read", () => {
+    const state = draftState("   ", 0, false);
+
+    expect(state.disabled).toBe(true);
+    expect(state.reason).toContain("Add a sample document");
+  });
+
+  it("is unavailable while busy, with no reason to state", () => {
+    expect(draftState("Compare supplier bids", 1, true)).toEqual({
+      disabled: true,
+      reason: null,
+    });
   });
 });

@@ -64,11 +64,13 @@ async function createSynthesis(page: Page, name: string): Promise<boolean> {
 /**
  * The editor's two cards trade focus through a frosted overlay button; the
  * unfocused card is `pointer-events-none`, so anything clickable has to be
- * brought forward first.
+ * brought forward first. The output card then offers the schema generator the
+ * first time it opens — on every mount, since the offer is not persisted — and
+ * the manual choice dismisses it and leaves the field editor showing.
  */
 async function focusOutputCard(page: Page): Promise<void> {
-  const overlay = page.getByRole('button', { name: /Configure output/i });
-  if (await overlay.isVisible().catch(() => false)) await overlay.click();
+  await page.getByRole('button', { name: /Configure Output/i }).click();
+  await page.getByRole('button', { name: /Configure manually/i }).click();
   await expect(page.getByLabel('Field 1 label')).toBeVisible();
 }
 

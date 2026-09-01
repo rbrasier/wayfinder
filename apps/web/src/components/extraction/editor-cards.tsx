@@ -7,23 +7,13 @@ import { ChevronLeft, Eye, MoreHorizontal, Upload } from "lucide-react";
 import { shouldPreviewByDefault, type ExtractionSchema, type FlowContextDoc } from "@rbrasier/domain";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
-import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
+import { DeleteSynthesisDialog, SystemPromptDialog } from "./editor-cards-dialogs";
 import { UploadTree, type UploadedFile } from "./upload-tree";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
-import { SchemaProposalCard } from "./schema-proposal-card";
+import { SchemaGeneratorOverlay } from "./schema-generator-overlay";
 import { readFileAsBase64 } from "@/lib/read-file-base64";
 import { FocusCard, Segmented, Switch } from "./editor-cards-controls";
 import {
@@ -40,6 +30,14 @@ import {
 type Cardinality = "one_per_file" | "many_per_record";
 type FocusedCard = "input" | "output";
 
+// Template output is being trialled for supersession by the schema generator —
+// an author who hands over the document they already produce gets the same
+// result without the template plumbing. The mode itself stays: a saved template
+// still loads, still parses and still runs, and nothing about it is removed
+// until the trial says the generator covers the ground. Only the way to newly
+// choose it is withheld, so nobody starts down a path that may not survive.
+const TEMPLATE_OUTPUT_SELECTABLE = false;
+
 export function EditorCards({
   flowId,
   initialSchema,
@@ -55,6 +53,19 @@ export function EditorCards({
   const initialMode = deriveOutputMode(initialSchema);
 
   const [focused, setFocused] = useState<FocusedCard>("input");
+
+  // The schema generator is offered once, the first time the output card opens.
+  // Either choice answers it for the rest of the session; "Generate from sample"
+  // beside the field list is the way back to it.
+  const [generatorOffered, setGeneratorOffered] = useState(false);
+  const [generatorOpen, setGeneratorOpen] = useState(false);
+
+  const focusOutput = (): void => {
+    setFocused("output");
+    if (generatorOffered) return;
+    setGeneratorOffered(true);
+    setGeneratorOpen(true);
+  };
 
   // Input config.
   const [guidance, setGuidance] = useState(initialSchema?.input.guidance ?? "");
@@ -203,6 +214,8 @@ export function EditorCards({
   });
 
   const canSave = outputMode === "structured" || outputTemplate !== null;
+
+  const templateModeSelectable = TEMPLATE_OUTPUT_SELECTABLE || outputMode === "template";
 
   const handleSave = (): void => {
     if (!canSave) {
@@ -445,30 +458,62 @@ export function EditorCards({
                   side="output"
                   title="Output — records"
                   focused={focused === "output"}
-                  onFocus={() => setFocused("output")}
+                  onFocus={focusOutput}
                   headerAction={outputHeaderActions}
+                  overlay={
+                    generatorOpen ? (
+                      <SchemaGeneratorOverlay
+                        flowId={flowId}
+                        input={schemaInput.input}
+                        output={schemaInput.output}
+                        onConfigureManually={() => {
+                          setOutputMode("structured");
+                          setGeneratorOpen(false);
+                        }}
+                        onConfirmed={(fields, draftedInstruction) => {
+                          setManualFields(proposalDraftsToFieldModels(fields));
+                          // A blank draft leaves what the author already wrote
+                          // alone; overwriting it with nothing is not a draft.
+                          if (draftedInstruction) setOutputInstruction(draftedInstruction);
+                          setOutputMode("structured");
+                          setGeneratorOpen(false);
+                        }}
+                      />
+                    ) : null
+                  }
                 >
                   <div className="space-y-4">
-                    <Segmented
-                      label="Output"
-                      value={outputMode}
-                      onChange={(value) => setOutputMode(value as OutputMode)}
-                      options={[
-                        { value: "structured", label: "Structured output" },
-                        { value: "template", label: "Template" },
-                      ]}
-                    />
+                    {/* The mode toggle only appears for a flow already on a
+                        template: while the generator is being trialled there is
+                        no way to newly choose template output, but a flow that
+                        has one keeps its way back to structured. */}
+                    {templateModeSelectable && (
+                      <Segmented
+                        label="Output"
+                        value={outputMode}
+                        onChange={(value) => setOutputMode(value as OutputMode)}
+                        options={[
+                          { value: "structured", label: "Structured output" },
+                          { value: "template", label: "Template" },
+                        ]}
+                      />
+                    )}
 
                     {outputMode === "structured" ? (
-                      <div className="space-y-3">
-                        <SchemaProposalCard
-                          flowId={flowId}
-                          input={schemaInput.input}
-                          output={schemaInput.output}
-                          onConfirmed={(fields) => setManualFields(proposalDraftsToFieldModels(fields))}
-                        />
-                        <ExtractionFieldEditor fields={manualFields} onChange={setManualFields} />
-                      </div>
+                      <ExtractionFieldEditor
+                        fields={manualFields}
+                        onChange={setManualFields}
+                        headerAction={
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => setGeneratorOpen(true)}
+                          >
+                            Generate from sample
+                          </Button>
+                        }
+                      />
                     ) : (
                       <div className="space-y-3">
                         <p className="rounded-[9px] border border-[#c3cef2] bg-[#eaeefb] px-3 py-2 text-[12px] text-[#2f56d3]">
@@ -631,61 +676,20 @@ export function EditorCards({
         </div>
       </div>
 
-      <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Extraction system prompt</DialogTitle>
-            <DialogCloseButton />
-          </DialogHeader>
-          <DialogBody className="max-h-[70vh] overflow-hidden">
-            {promptLoading ? (
-              <p className="text-[13px] text-[#736d5f]">Building…</p>
-            ) : promptError ? (
-              <p className="text-[13px] text-[#a8324c]">{promptError}</p>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <p className="text-[12px] text-[#666055]">
-                    System prompt given to the AI for each document extraction (read-only)
-                  </p>
-                  <CopyButton text={systemPrompt ?? ""} />
-                </div>
-                <pre className="max-h-[56vh] flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3 font-mono text-[12px] leading-[1.6] text-[#1c1b19]">
-                  {systemPrompt}
-                </pre>
-              </>
-            )}
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
+      <SystemPromptDialog
+        open={promptOpen}
+        onOpenChange={setPromptOpen}
+        loading={promptLoading}
+        error={promptError}
+        systemPrompt={systemPrompt}
+      />
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete this synthesis?</DialogTitle>
-            <DialogCloseButton />
-          </DialogHeader>
-          <DialogBody>
-            <DialogDescription>
-              This removes the synthesis and its schema. Past runs are retained but it can no longer be
-              edited or run. This cannot be undone.
-            </DialogDescription>
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate({ flowId })}
-            >
-              {deleteMutation.isPending ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteSynthesisDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        deleting={deleteMutation.isPending}
+        onDelete={() => deleteMutation.mutate({ flowId })}
+      />
     </div>
   );
 }

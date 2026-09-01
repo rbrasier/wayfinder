@@ -21,6 +21,7 @@ const proposalSchema = z.object({
     .array(
       z.object({
         fields: z.array(fieldDraftSchema),
+        outputInstruction: z.string(),
         request: z.string(),
         note: z.string(),
       }),
@@ -28,9 +29,12 @@ const proposalSchema = z.object({
     .min(1),
 });
 
+// The intent may be blank: an author who hands over a sample output document has
+// already said what they need to capture. `ProposeSchema` refuses the one case
+// that leaves the proposer nothing to read — no intent and no documents either.
 const proposalContextSchema = z.object({
   flowId: z.string().uuid(),
-  intent: z.string().min(1),
+  intent: z.string(),
   documents: z.array(sampleDocumentSchema),
 });
 

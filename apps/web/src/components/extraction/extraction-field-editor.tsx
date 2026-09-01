@@ -15,7 +15,7 @@ import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
   EXTRACTION_TYPE_OPTIONS,
   emptyExtractionField,
@@ -30,9 +30,17 @@ interface ExtractionFieldEditorProps {
   // editable here — only per-field instructions and settings are. The add/remove
   // affordances are hidden so the field set stays in step with the template.
   derived?: boolean;
+  // A control shown against the group's heading — the way back to the schema
+  // generator once its overlay has been dismissed.
+  headerAction?: ReactNode;
 }
 
-export function ExtractionFieldEditor({ fields, onChange, derived = false }: ExtractionFieldEditorProps) {
+export function ExtractionFieldEditor({
+  fields,
+  onChange,
+  derived = false,
+  headerAction,
+}: ExtractionFieldEditorProps) {
   const [configIndex, setConfigIndex] = useState<number | null>(null);
 
   const update = (index: number, patch: Partial<ExtractionFieldModel>) =>
@@ -63,7 +71,10 @@ export function ExtractionFieldEditor({ fields, onChange, derived = false }: Ext
 
   return (
     <div className="space-y-1">
-      <FieldGroupLabel id="extraction-fields-label">Fields to extract</FieldGroupLabel>
+      <div className="flex items-start justify-between gap-2">
+        <FieldGroupLabel id="extraction-fields-label">Fields to extract</FieldGroupLabel>
+        {headerAction}
+      </div>
       <p className="text-[12px] text-[#666055]">
         {derived
           ? "These come from your template. Pick a type and use the cog to add an instruction telling the AI what to pull for each one."

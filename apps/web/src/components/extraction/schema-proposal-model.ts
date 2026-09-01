@@ -83,6 +83,22 @@ export const confirmState = (
   };
 };
 
+// Drafting needs something to read: a sample document, a stated intent, or both.
+// The reason is stated rather than left to a dead-looking button, the same way
+// `confirmState` states its own.
+export const draftState = (
+  intent: string,
+  documentCount: number,
+  busy: boolean,
+): ConfirmState => {
+  if (busy) return { disabled: true, reason: null };
+  if (documentCount > 0 || intent.trim().length > 0) return { disabled: false, reason: null };
+  return {
+    disabled: true,
+    reason: "Add a sample document, or describe what you need to capture.",
+  };
+};
+
 // Blocking findings first: they are the ones standing between the author and a
 // confirm, and an advisory read first invites scrolling past the one that matters.
 export const orderedFindings = (findings: SchemaProposalFinding[]): SchemaProposalFinding[] => [

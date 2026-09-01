@@ -102,6 +102,26 @@ describe("AiSchemaProposer", () => {
     expect(result.data!.fields).toEqual([]);
   });
 
+  it("returns the drafted output instructions, trimmed", async () => {
+    const model = makeModel({
+      note: "",
+      outputInstruction: "  One row per supplier, sorted by contract value.  ",
+      fields: [],
+    });
+
+    const result = await new AiSchemaProposer(model).propose(request);
+
+    expect(result.data!.outputInstruction).toBe("One row per supplier, sorted by contract value.");
+  });
+
+  it("falls a missing or non-string output instruction back to empty", async () => {
+    const model = makeModel({ note: "", outputInstruction: 42, fields: [] });
+
+    const result = await new AiSchemaProposer(model).propose(request);
+
+    expect(result.data!.outputInstruction).toBe("");
+  });
+
   it("puts the sample text and the author's intent in the prompt", async () => {
     const model = makeModel({ note: "", fields: [] });
 

@@ -16,6 +16,10 @@ export type SchemaProposalStatus = "draft" | "confirmed";
 // field set arrived at its current state rather than only what it now says.
 export interface SchemaProposalRevision {
   fields: ExtractionFieldDraft[];
+  // How the records built from these fields should be laid out — the output
+  // instructions, not what to pull. Held per revision so it travels with the
+  // field set it was written for rather than drifting from it.
+  outputInstruction: string;
   request: string;
   note: string;
 }
@@ -48,6 +52,9 @@ export const startSchemaProposal = (opening: SchemaProposalRevision): SchemaProp
 // always has an answer.
 export const currentProposalFields = (proposal: SchemaProposal): ExtractionFieldDraft[] =>
   proposal.revisions[proposal.revisions.length - 1]?.fields ?? [];
+
+export const currentProposalOutputInstruction = (proposal: SchemaProposal): string =>
+  proposal.revisions[proposal.revisions.length - 1]?.outputInstruction ?? "";
 
 // Refinement appends rather than overwrites, so the history that makes the
 // interaction reviewable stays readable (ADR-052 §5).

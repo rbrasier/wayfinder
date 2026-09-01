@@ -1,6 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import type { ExtractionFieldDraft, SchemaProposal, SchemaProposalFinding } from "@rbrasier/domain";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { FieldGroupLabel } from "@/components/ui/field-group-label";
+import { proposalFieldSummaries } from "./extraction-editor-model";
 import {
   confirmState,
   fieldChanges,
@@ -20,7 +25,7 @@ function ChangeTag({ change }: { change: FieldChange }) {
   const style = CHANGE_STYLE[change];
   return (
     <span
-      className={`shrink-0 rounded-[4px] border px-[4px] py-[1px] text-[10px] font-semibold ${style.className}`}
+      className={`shrink-0 rounded-[4px] border px-[5px] py-[1px] text-[10px] font-semibold ${style.className}`}
     >
       {style.label}
     </span>
@@ -30,13 +35,13 @@ function ChangeTag({ change }: { change: FieldChange }) {
 function Findings({ findings }: { findings: SchemaProposalFinding[] }) {
   if (findings.length === 0) return null;
   return (
-    <ul className="flex flex-col gap-[6px]">
+    <ul className="space-y-1.5">
       {orderedFindings(findings).map((finding, index) => (
         <li
           key={`${finding.severity}-${finding.fieldLabel ?? "set"}-${index}`}
-          className={`rounded-[8px] border px-[10px] py-[8px] text-[12px] ${
+          className={`rounded-[9px] border px-3 py-2 text-[12px] ${
             finding.severity === "blocking"
-              ? "border-[#e9c8c4] bg-[#fdf2f1] text-[#8c3a32]"
+              ? "border-[#f3ccd6] bg-[#f9e8eb] text-[#a8324c]"
               : "border-[#e6d9b0] bg-[#fbf7ea] text-[#7a6320]"
           }`}
         >
@@ -51,65 +56,105 @@ function Findings({ findings }: { findings: SchemaProposalFinding[] }) {
 export interface SchemaProposalPanelProps {
   proposal: SchemaProposal;
   fields: ExtractionFieldDraft[];
+  outputInstruction: string;
   findings: SchemaProposalFinding[];
   busy: boolean;
-  onConfirm: () => void;
+  refining: boolean;
+  onRefine: (instruction: string) => void;
+  onBack: () => void;
+  onContinue: () => void;
 }
 
-// The proposal surface: what the schema currently says, how it changed in the
-// last turn, what is wrong with it, and how it got here. Every decision it makes
-// lives in `schema-proposal-model.ts` and is unit-tested there.
+// The review step: what the AI drafted, what is wrong with it, and the two ways
+// out — back to redraft, or continue into the field editor with it. Every
+// decision it makes lives in `schema-proposal-model.ts` and is unit-tested there.
 export function SchemaProposalPanel({
   proposal,
   fields,
+  outputInstruction,
   findings,
   busy,
-  onConfirm,
+  refining,
+  onRefine,
+  onBack,
+  onContinue,
 }: SchemaProposalPanelProps) {
+  const [instruction, setInstruction] = useState("");
+
+  const summaries = proposalFieldSummaries(fields);
   const previous = proposal.revisions[proposal.revisions.length - 2]?.fields ?? [];
-  const rows = fieldChanges(fields, previous);
-  const confirm = confirmState(proposal.status, findings, busy);
+  // On the opening draft every field is new, so the tag says nothing. It earns
+  // its place only once there is a previous revision to have changed from.
+  const showChanges = proposal.revisions.length > 1;
+  const changeByLabel = new Map(
+    fieldChanges(fields, previous).map((row) => [row.label, row.change] as const),
+  );
+  const continueState = confirmState(proposal.status, findings, busy);
 
   return (
-    <section className="flex flex-col gap-[12px] rounded-[10px] border border-[#e7e3db] bg-white p-[16px]">
-      <h3 className="text-[14px] font-semibold">Proposed fields</h3>
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <FieldGroupLabel>Fields drafted</FieldGroupLabel>
+        <ul className="space-y-1.5">
+          {summaries.map((summary) => (
+            <li
+              key={summary.label}
+              className="flex items-start gap-2 rounded-[9px] border border-[#e7e3db] bg-white px-3 py-2"
+            >
+              <span className="min-w-0 flex-1 space-y-0.5">
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[13px] font-medium text-[#1c1b19]">{summary.label}</span>
+                  {summary.optional && (
+                    <span className="text-[11px] text-[#736d5f]">Optional</span>
+                  )}
+                  {showChanges && <ChangeTag change={changeByLabel.get(summary.label) ?? "unchanged"} />}
+                </span>
+                <span className="block text-[12px] text-[#666055]">{summary.instruction}</span>
+              </span>
+              <span className="shrink-0 rounded-[6px] border border-[#e7e3db] bg-[#faf9f7] px-2 py-0.5 text-[11px] font-medium text-[#5c574c]">
+                {summary.typeLabel}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
-      <ul className="flex flex-col gap-[6px]">
-        {rows.map((row) => (
-          <li
-            key={`${row.change}-${row.label}`}
-            className="flex items-start gap-[8px] rounded-[8px] border border-[#e7e3db] px-[10px] py-[8px]"
-          >
-            <ChangeTag change={row.change} />
-            <span className="flex flex-col gap-[2px]">
-              <span className="text-[13px] font-medium">{row.annotation}</span>
-              <span className="text-[12px] text-[#6d6a63]">{row.instruction}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
+      {outputInstruction && (
+        <div className="space-y-1.5">
+          <FieldGroupLabel>Output instructions drafted</FieldGroupLabel>
+          <p className="rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[12px] text-[#5c574c]">
+            {outputInstruction}
+          </p>
+        </div>
+      )}
 
       <Findings findings={findings} />
 
-      <div className="flex items-center gap-[10px]">
-        <button
-          type="button"
-          onClick={onConfirm}
-          disabled={confirm.disabled}
-          className="rounded-[8px] bg-[#1f1d1a] px-[12px] py-[7px] text-[13px] font-medium text-white disabled:opacity-50"
-        >
-          {busy ? "Working…" : "Confirm these fields"}
-        </button>
-        {/* Beside the control, never in a page-level error line: a disabled
-            button with no stated reason is the failure mode this avoids. */}
-        {confirm.reason ? (
-          <span className="text-[12px] text-[#6d6a63]">{confirm.reason}</span>
-        ) : null}
-      </div>
+      {proposal.status === "draft" && (
+        <div className="flex items-center gap-2">
+          <Input
+            value={instruction}
+            onChange={(event) => setInstruction(event.target.value)}
+            placeholder="What should change? e.g. add the warranty period"
+            aria-label="What should change about this draft?"
+          />
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy || instruction.trim().length === 0}
+            onClick={() => {
+              onRefine(instruction.trim());
+              setInstruction("");
+            }}
+          >
+            {refining ? "Redrafting…" : "Redraft"}
+          </Button>
+        </div>
+      )}
 
-      <details className="text-[12px] text-[#6d6a63]">
-        <summary className="cursor-pointer">How this schema got here</summary>
-        <ol className="mt-[8px] flex flex-col gap-[6px]">
+      <details className="text-[12px] text-[#666055]">
+        <summary className="cursor-pointer">How this draft got here</summary>
+        <ol className="mt-2 space-y-1.5">
           {revisionEntries(proposal.revisions).map((entry) => (
             <li key={entry.index}>
               <strong>{entry.index}.</strong> {entry.request}
@@ -119,6 +164,20 @@ export function SchemaProposalPanel({
           ))}
         </ol>
       </details>
-    </section>
+
+      <div className="flex items-center justify-end gap-2">
+        {/* Beside the control, never in a page-level error line: a disabled
+            button with no stated reason is the failure mode this avoids. */}
+        {continueState.reason && (
+          <span className="mr-auto text-[12px] text-[#666055]">{continueState.reason}</span>
+        )}
+        <Button type="button" variant="secondary" onClick={onBack} disabled={busy}>
+          Back
+        </Button>
+        <Button type="button" onClick={onContinue} disabled={continueState.disabled}>
+          {busy ? "Working…" : "Continue"}
+        </Button>
+      </div>
+    </div>
   );
 }

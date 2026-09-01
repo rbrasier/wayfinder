@@ -164,6 +164,44 @@ export const proposalDraftsToFieldModels = (
   return models.length > 0 ? models : [emptyExtractionField()];
 };
 
+// One drafted field as the review step reads it: the name, the type in the same
+// words the field editor's type picker uses, and what the AI will pull for it.
+export interface ProposedFieldSummary {
+  label: string;
+  typeLabel: string;
+  instruction: string;
+  optional: boolean;
+}
+
+const TYPE_LABELS = new Map(
+  EXTRACTION_TYPE_OPTIONS.map((option) => [option.value, option.label] as const),
+);
+
+// The drafted field set as a plain list, for the author to read before it
+// becomes their schema. A draft the field model rejects is skipped rather than
+// shown: confirmation already refuses a proposal carrying one, and listing it as
+// Text would name a type it does not have.
+export const proposalFieldSummaries = (
+  drafts: ExtractionFieldDraft[],
+): ProposedFieldSummary[] => {
+  const summaries: ProposedFieldSummary[] = [];
+  for (const draft of drafts) {
+    const built = buildExtractionField(draft);
+    if (built.error) continue;
+    const model = templateFieldToModel(built.data.field, {
+      instruction: built.data.instruction,
+      locked: false,
+    });
+    summaries.push({
+      label: model.label,
+      typeLabel: TYPE_LABELS.get(model.type) ?? "Text",
+      instruction: model.instruction,
+      optional: model.optional,
+    });
+  }
+  return summaries;
+};
+
 export type OutputMode = "structured" | "template";
 
 // Structured vs template is expressed purely by whether an output template is

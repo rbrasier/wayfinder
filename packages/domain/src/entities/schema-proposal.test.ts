@@ -3,6 +3,7 @@ import {
   appendProposalRevision,
   confirmProposal,
   currentProposalFields,
+  currentProposalOutputInstruction,
   hasBlockingFinding,
   startSchemaProposal,
   type SchemaProposalFinding,
@@ -21,7 +22,8 @@ const revision = (
   fields: ExtractionFieldDraft[],
   request = "Draft a schema",
   note = "Proposed a starting set.",
-): SchemaProposalRevision => ({ fields, request, note });
+  outputInstruction = "One row per supplier.",
+): SchemaProposalRevision => ({ fields, outputInstruction, request, note });
 
 const blocking: SchemaProposalFinding = {
   severity: "blocking",
@@ -50,6 +52,23 @@ describe("startSchemaProposal", () => {
       "Supplier",
       "Value",
     ]);
+  });
+});
+
+describe("currentProposalOutputInstruction", () => {
+  it("reads the newest revision's drafted output instructions", () => {
+    const first = startSchemaProposal(
+      revision([draft("Supplier")], "Draft a schema", "Opened.", "One row per file."),
+    );
+    const second = appendProposalRevision(
+      first,
+      revision([draft("Supplier")], "Add the value", "Added.", "One row per supplier, by value."),
+    );
+
+    expect(currentProposalOutputInstruction(first)).toBe("One row per file.");
+    expect(currentProposalOutputInstruction(second.data!)).toBe(
+      "One row per supplier, by value.",
+    );
   });
 });
 

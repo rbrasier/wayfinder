@@ -19,6 +19,11 @@ const proposalSchema = z.object({
   note: z
     .string()
     .describe("One or two sentences saying what you proposed or changed, and why."),
+  outputInstruction: z
+    .string()
+    .describe(
+      "One or two sentences telling the extractor how to lay the records out — granularity, ordering, and anything that applies across every record. Not what to pull for any single field.",
+    ),
   fields: z.array(
     z.object({
       label: z.string().describe("The field's human-readable name, e.g. \"Contract Value\"."),
@@ -56,6 +61,7 @@ const SYSTEM_PROMPT = [
   "Give every field a plain-English instruction saying what to pull and where to look for it.",
   "Propose fields the sample documents actually support — a field nothing in the source can fill is worse than a missing one.",
   "Give each field a distinct name: names are lowercased and snake-cased into keys, so \"Supplier Name\" and \"supplier name\" collide.",
+  "Also draft the output instructions: how the records built from these fields should be laid out — granularity, ordering, and anything that applies across every record.",
 ].join(" ");
 
 const truncate = (text: string): string =>
@@ -115,6 +121,7 @@ export class AiSchemaProposer implements ISchemaProposer {
 
     const result = await this.languageModel.generateObject<{
       note?: unknown;
+      outputInstruction?: unknown;
       fields?: unknown;
     }>({
       purpose: "schema-proposal",
@@ -130,6 +137,8 @@ export class AiSchemaProposer implements ISchemaProposer {
     const proposed = Array.isArray(object?.fields) ? (object.fields as ProposedField[]) : [];
     return ok({
       fields: sanitiseFields(proposed),
+      outputInstruction:
+        typeof object?.outputInstruction === "string" ? object.outputInstruction.trim() : "",
       note: typeof object?.note === "string" ? object.note : "",
     });
   }

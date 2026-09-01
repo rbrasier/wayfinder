@@ -123,7 +123,8 @@ criterion.
 - `packages/adapters/src/ai/ai-schema-proposer.ts` (+ test)
 - `apps/web/src/components/extraction/schema-proposal-model.ts` (+ test)
 - `apps/web/src/components/extraction/schema-proposal-panel.tsx`
-- `apps/web/src/components/extraction/schema-proposal-card.tsx`
+- `apps/web/src/components/extraction/schema-generator-overlay.tsx` (revision — see below)
+- `apps/web/src/components/extraction/editor-cards-dialogs.tsx` (revision — see below)
 - `apps/web/src/server/routers/extraction-schema-proposal.ts`
 - `apps/web/src/server/routers/extraction-shared.ts`
 - `apps/web/src/lib/read-file-base64.ts`
@@ -247,3 +248,91 @@ rather than enforced.
   The staged documents live server-side and the proposal path takes buffers, the
   same shape the sample run takes. Reading the staged set directly is a later
   convenience, not a capability gap.
+
+---
+
+## Revision — 2026-09-01: the generator becomes the way in
+
+**Version unchanged at 0.32.4.** This line has not merged, so the revision lands
+in the same PR as the work it revises. No schema change, no migration, ADR-052
+untouched. Phase doc §11 carries the full rationale; this is what a reader of the
+code needs to know.
+
+### The proposal moved from a widget to a fork
+
+It used to render as a card *above* the field editor: prose, a bare
+`<input type="file">` and a Draft button, competing for attention with the empty
+field list beneath it. It is now a full-card overlay asked once, when the output
+card first opens: **Build from an existing output document or sample** or
+**Configure manually**. Either choice dismisses it and neither writes anything.
+A secondary **Generate from sample** control beside the *Fields to extract*
+heading brings it back.
+
+The AI route now leads with the upload — a dashed drop zone in the same style as
+the input card's — and demotes the intent text to an optional instruction field
+beneath it. Handing over the document you already produce *is* the statement of
+what you need to capture. `ProposeSchema` refuses only the case with nothing to
+read at all: no intent **and** no documents. The router's `intent` dropped its
+`.min(1)` accordingly; the domain owns the rule now, not the wire schema.
+
+Drafting is its own step rather than a disabled form. The review step then lists
+each drafted field with the type named in the same words the type picker uses,
+shows the drafted output instructions, and offers **Back** and **Continue**.
+Continue is the confirm — still the single write of ADR-052 §3 — and it merges the
+drafted output instructions into the output config so they land in that one write
+rather than waiting for a Save the author may never make.
+
+### The proposer drafts output instructions
+
+`SchemaProposalOutput.outputInstruction` is new, carried per revision on
+`SchemaProposalRevision` (so it travels with the field set it was written for)
+and surfaced on `SchemaProposalView`. It is drafted in the same model call as the
+fields because it is only answerable once they are known — a second call would be
+proposing a layout for a field set it had not seen. A non-string or missing value
+falls back to empty, and an empty draft leaves whatever the author already wrote
+alone.
+
+### Template output is hidden, not removed
+
+The generator is being trialled as the supersession of template-derived output.
+Nothing about templates is deleted — the mode, the parser, the derived field
+editor and every stored template still work — but `TEMPLATE_OUTPUT_SELECTABLE`
+(`editor-cards.tsx`) withholds the way to *newly* choose it, so nobody starts down
+a path that may not survive the trial. A flow already on a template keeps its
+toggle, and therefore its way back to structured. Flip the constant to restore it.
+
+### Smaller changes
+
+- The focus overlays now read **Step 1: Configure Input** and **Step 2: Configure
+  Output**, in both the visible text and the button's accessible name.
+- `editor-cards.tsx` crossed the 700-line warn ratchet, so its two modals moved to
+  `editor-cards-dialogs.tsx` (697 lines after).
+- `schema-proposal-card.tsx` was deleted — the overlay supersedes it — and
+  `schema-proposal-panel.tsx` was reworked into the review step.
+- `fix-synthesise-live-results.spec.ts`'s `focusOutputCard` helper now dismisses
+  the generator with *Configure manually*, and no longer branches on
+  `isVisible()` — the click is deterministic on a fresh mount.
+
+### Tests
+
+`./validate.sh` — **24 of 25 checks, 3,923 tests**, up from 3,883. The one failure
+is `jsondiffpatch` GHSA-j4fx-xxwh-2485, a transitive advisory that fails
+identically on the branch before these changes; it is not this revision's.
+
+New coverage: 1 domain case on `currentProposalOutputInstruction`, 4 application
+cases (drafted instructions surfaced, samples-only proposal, the
+nothing-to-read refusal), 2 adapter cases on the drafted instruction, 4 on
+`proposalFieldSummaries` and 4 on `draftState`.
+
+### Known limitations of the revision
+
+- **The fork is offered per editor mount, not per flow.** There is no stored
+  "already offered" flag, because that would be proposal state in a database.
+  So reopening a synthesis that already has fields offers the fork again; one
+  click dismisses it. A per-user preference would be the way to remove the cost.
+- **Redraft was kept on the review step** even though the brief named only Back
+  and Continue. Refinement is the argue-with-it half of ADR-052, and dropping it
+  would have left `refineSchema` unreachable from the UI.
+- **Not exercised against a running app.** The container has no Docker daemon, so
+  Postgres, Redis and MinIO could not be started and the screen was verified by
+  typecheck, lint, the a11y pass and the unit suites rather than by eye.

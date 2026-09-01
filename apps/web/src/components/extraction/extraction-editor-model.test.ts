@@ -6,6 +6,7 @@ import {
   extractionFieldToAnnotation,
   extractionFieldToDraft,
   proposalDraftsToFieldModels,
+  proposalFieldSummaries,
   schemaSeedKey,
   schemaToFieldModels,
   templateFieldToModel,
@@ -192,5 +193,69 @@ describe("proposalDraftsToFieldModels", () => {
 
     expect(models).toHaveLength(1);
     expect(models[0]!.label).toBe("");
+  });
+});
+
+describe("proposalFieldSummaries", () => {
+  it("names each drafted field and its type in the words the type picker uses", () => {
+    const summaries = proposalFieldSummaries([
+      {
+        label: "Contract Value",
+        annotation: "Contract Value (currency)",
+        instruction: "The total contract value.",
+        doneWhen: null,
+      },
+      {
+        label: "Signed On",
+        annotation: "Signed On (date) (optional)",
+        instruction: "The date the contract was signed.",
+        doneWhen: null,
+      },
+    ]);
+
+    expect(summaries).toEqual([
+      {
+        label: "Contract Value",
+        typeLabel: "Currency",
+        instruction: "The total contract value.",
+        optional: false,
+      },
+      {
+        label: "Signed On",
+        typeLabel: "Date",
+        instruction: "The date the contract was signed.",
+        optional: true,
+      },
+    ]);
+  });
+
+  it("names an options field by the editor's select type", () => {
+    const summaries = proposalFieldSummaries([
+      {
+        label: "Status",
+        annotation: "Status (multi-options: Draft, Final)",
+        instruction: "The bid status.",
+        doneWhen: null,
+      },
+    ]);
+
+    expect(summaries[0]!.typeLabel).toBe("Multi-select");
+  });
+
+  it("skips a draft that will not parse rather than naming a type it does not have", () => {
+    const summaries = proposalFieldSummaries([
+      { label: "Good", annotation: "Good (text)", instruction: "Pull it.", doneWhen: null },
+      { label: "Bad", annotation: "Bad (colour)", instruction: "Pull it.", doneWhen: null },
+    ]);
+
+    expect(summaries.map((summary) => summary.label)).toEqual(["Good"]);
+  });
+
+  it("returns nothing at all when nothing parses, rather than a blank row", () => {
+    const summaries = proposalFieldSummaries([
+      { label: "Bad", annotation: "Bad (colour)", instruction: "Pull it.", doneWhen: null },
+    ]);
+
+    expect(summaries).toEqual([]);
   });
 });
