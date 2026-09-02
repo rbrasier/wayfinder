@@ -46,6 +46,12 @@ const toEntity = (row: typeof app_session_approvals.$inferSelect): Approval => (
   comment: row.comment ?? null,
   requestMessage: row.request_message ?? null,
   recordSnapshot: (row.record_snapshot as Record<string, unknown> | null) ?? null,
+  offSystemApprovedOn: row.off_system_approved_on ?? null,
+  offSystemEvidenceFilename: row.off_system_evidence_filename ?? null,
+  offSystemEvidenceMimeType: row.off_system_evidence_mime_type ?? null,
+  offSystemEvidenceSizeBytes: row.off_system_evidence_size_bytes ?? null,
+  offSystemEvidenceStoragePath: row.off_system_evidence_storage_path ?? null,
+  offSystemNominatedByUserId: row.off_system_nominated_by_user_id ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -264,6 +270,23 @@ export const approvalPatchToColumns = (patch: ApprovalUpdate): Record<string, un
       ...(patch.comment !== undefined ? { comment: patch.comment } : {}),
       ...(patch.requestMessage !== undefined ? { request_message: patch.requestMessage } : {}),
       ...(patch.recordSnapshot !== undefined ? { record_snapshot: patch.recordSnapshot } : {}),
+      ...(patch.offSystemApprovedOn !== undefined
+        ? { off_system_approved_on: patch.offSystemApprovedOn }
+        : {}),
+      // The evidence is one fact in five columns, so it is written and cleared
+      // as a unit — a patch that set the path but left a stale filename behind
+      // would describe a file that is not there.
+      ...(patch.offSystemEvidence !== undefined
+        ? {
+            off_system_evidence_filename: patch.offSystemEvidence?.filename ?? null,
+            off_system_evidence_mime_type: patch.offSystemEvidence?.mimeType ?? null,
+            off_system_evidence_size_bytes: patch.offSystemEvidence?.sizeBytes ?? null,
+            off_system_evidence_storage_path: patch.offSystemEvidence?.storagePath ?? null,
+          }
+        : {}),
+      ...(patch.offSystemNominatedByUserId !== undefined
+        ? { off_system_nominated_by_user_id: patch.offSystemNominatedByUserId }
+        : {}),
       updated_at: new Date(),
   };
 };

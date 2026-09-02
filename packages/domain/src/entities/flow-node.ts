@@ -31,6 +31,11 @@ export interface ApprovalNodeConfig {
   // Absent resolves to the nearest prior editable step. Read through
   // `changesRequestedTargetOf`, never directly.
   changesRequestedTarget?: ChangesRequestedTarget;
+  // Whether someone may record that this approval happened outside Wayfinder
+  // (ADR-055 §4). Absent means allowed, so every approval node authored before
+  // the setting existed gains the capability unedited. Read through
+  // `offSystemApprovalAllowed`, never directly.
+  allowOffSystemApproval?: boolean;
 }
 
 export interface ConversationalNodeConfig {

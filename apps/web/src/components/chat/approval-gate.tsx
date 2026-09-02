@@ -20,6 +20,9 @@ interface ApprovalGateProps {
   viewerUserId: string | null;
   sessionOwnerUserId: string | null;
   viewerIsAdmin: boolean;
+  // Read from the approval node's config (ADR-055 §4). Absent means allowed, so
+  // a step authored before the setting existed still offers the action.
+  offSystemAllowed?: boolean;
 }
 
 // Operator-facing gate shown when a session is parked on an approval node. The
@@ -37,6 +40,7 @@ export function ApprovalGate({
   viewerUserId,
   sessionOwnerUserId,
   viewerIsAdmin,
+  offSystemAllowed = true,
 }: ApprovalGateProps) {
   // When email cannot be delivered the operator must notify the approver by hand,
   // so the confirm action only records the approver and surfaces manual options.
@@ -64,6 +68,7 @@ export function ApprovalGate({
           viewerUserId={viewerUserId}
           sessionOwnerUserId={sessionOwnerUserId}
           viewerIsAdmin={viewerIsAdmin}
+          offSystemAllowed={offSystemAllowed}
         />
       </div>
     </div>

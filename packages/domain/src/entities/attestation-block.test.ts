@@ -18,6 +18,7 @@ const input = (overrides: Partial<AttestationInput> = {}): AttestationInput => (
   decidedAt: new Date("2026-08-01T14:32:11.204Z"),
   comment: "Within delegated authority.",
   subjectDescription: "the output of the step \"Prepare instrument\"",
+  offSystemApprovedOn: null,
   ...overrides,
 });
 
@@ -141,5 +142,62 @@ describe("buildAttestationBlock", () => {
 
     expect(block).not.toContain("qualified");
     expect(block).not.toContain("digitally signed");
+  });
+});
+
+describe("buildAttestationBlock — recorded off system", () => {
+  const offSystem = () => input({ offSystemApprovedOn: "2026-07-28" });
+
+  it("says on the decision line that the approval was recorded off system", () => {
+    const block = buildAttestationBlock(offSystem(), sha256Hex);
+
+    expect(block.text).toContain("Approved (recorded off system)");
+  });
+
+  it("still opens by naming the approver, who is who approved", () => {
+    const block = buildAttestationBlock(offSystem(), sha256Hex);
+
+    expect(block.text).toContain("Approved by:");
+    expect(block.text).toContain("Jane Doe (jane.doe@example.com)");
+  });
+
+  it("shows the date the approval happened, not the moment it was recorded", () => {
+    const block = buildAttestationBlock(offSystem(), sha256Hex);
+
+    expect(block.text).toContain("28-07-2026");
+    expect(block.text).not.toContain("01-08-2026");
+  });
+
+  it("shows no clock time, because only a date was ever confirmed", () => {
+    const block = buildAttestationBlock(offSystem(), sha256Hex);
+
+    expect(block.text).not.toContain("UTC");
+    expect(block.text).not.toContain("14:32");
+  });
+
+  it("still carries a verification code", () => {
+    const block = buildAttestationBlock(offSystem(), sha256Hex);
+
+    expect(block.verificationCode).toMatch(/^[0-9A-F]{12}$/);
+    expect(block.text).toContain(`WF-${block.verificationCode}`);
+  });
+
+  it("binds the approval date into the code, so two dates cannot share one", () => {
+    const first = buildAttestationBlock(offSystem(), sha256Hex);
+    const second = buildAttestationBlock(input({ offSystemApprovedOn: "2026-07-29" }), sha256Hex);
+
+    expect(first.verificationCode).not.toBe(second.verificationCode);
+  });
+
+  it("leaves an in-system block's code exactly as it was before this existed", () => {
+    // The off-system date joins the canonical string only when it is set. An
+    // in-system approval decided after this feature shipped must still produce
+    // the code it would have produced before it, or two identical decisions
+    // months apart would verify differently.
+    const inSystem = buildAttestationBlock(input({ offSystemApprovedOn: null }), sha256Hex);
+
+    expect(inSystem.verificationCode).toBe("138E648F1D5F");
+    expect(inSystem.text).toContain("01-08-2026 14:32 UTC");
+    expect(inSystem.text).not.toContain("off system");
   });
 });

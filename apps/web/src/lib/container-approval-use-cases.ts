@@ -6,6 +6,7 @@ import {
   ListApprovals,
   ListApprovalsWithContext,
   LoadPendingApproval,
+  RecordOffSystemApproval,
   ResolveApprovalSubject,
   ReassignApproval,
   ResolveDecisionNotifyTargets,
@@ -16,6 +17,7 @@ import {
 import type {
   IApprovalRepository,
   IAuditLogger,
+  IClock,
   IDocumentChunkRepository,
   IDocumentGenerator,
   IEmbeddingsProvider,
@@ -51,6 +53,7 @@ export interface ApprovalUseCaseDeps {
   embeddings: IEmbeddingsProvider;
   documentChunks: IDocumentChunkRepository;
   sha256Hex: Sha256Hex;
+  clock: IClock;
   updateDocumentFields: UpdateDocumentFields;
   notifyOnApprovalRequested: ConstructorParameters<typeof ConfirmAndSend>[2];
   notifyOnApprovalDecided: ConstructorParameters<typeof DecideApproval>[6];
@@ -81,9 +84,38 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
     deps.objectStorage,
   );
 
+  // Shared with the off-system path, which delegates the decision itself rather
+  // than duplicating the commit, advance, projection, signature and
+  // notification (ADR-055 §2).
+  const decideApproval = new DecideApproval(
+    deps.unitOfWork,
+    deps.approvals,
+    deps.sessions,
+    deps.flowEdges,
+    deps.sessionStepOutputs,
+    deps.auditLogger,
+    deps.notifyOnApprovalDecided,
+    deps.sessionMessages,
+    deps.users,
+    deps.flowNodes,
+    deps.sha256Hex,
+    resolveApprovalSubject,
+    applyApprovalSignature,
+  );
+
   return {
     resolveApprovalSubject,
     applyApprovalSignature,
+    decideApproval,
+    recordOffSystemApproval: new RecordOffSystemApproval(
+      deps.approvals,
+      deps.sessions,
+      deps.flowNodes,
+      deps.objectStorage,
+      deps.auditLogger,
+      decideApproval,
+      deps.clock,
+    ),
     approverEditSubjectFields: new ApproverEditSubjectFields(
       deps.approvals,
       deps.users,
@@ -105,21 +137,6 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.approvals,
       deps.auditLogger,
       deps.notifyOnApprovalRequested,
-    ),
-    decideApproval: new DecideApproval(
-      deps.unitOfWork,
-      deps.approvals,
-      deps.sessions,
-      deps.flowEdges,
-      deps.sessionStepOutputs,
-      deps.auditLogger,
-      deps.notifyOnApprovalDecided,
-      deps.sessionMessages,
-      deps.users,
-      deps.flowNodes,
-      deps.sha256Hex,
-      resolveApprovalSubject,
-      applyApprovalSignature,
     ),
     withdrawApproval: new WithdrawApproval(
       deps.unitOfWork,

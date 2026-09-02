@@ -17,6 +17,7 @@ const built = (overrides: Partial<Parameters<typeof buildApprovalDecisionMessage
     comment: null,
     routedBack: false,
     routingError: null,
+    offSystemApprovedOn: null,
     ...overrides,
   });
 
@@ -101,5 +102,29 @@ describe("decisionVerbPhrase", () => {
     // A domain wording change must degrade to the old sentence, never to a
     // blank or a wrong verb.
     expect(decisionVerbPhrase("Something new happened.")).toBe("Something new happened.");
+  });
+});
+
+describe("an approval recorded off system", () => {
+  it("still parses back into the approver, their email and the moment recorded", () => {
+    const parsed = parseApprovalDecisionMessage(built({ offSystemApprovedOn: "2026-08-14" }));
+
+    expect(parsed?.approverName).toBe("Rosa Okafor");
+    expect(parsed?.approverEmail).toBe("rosa.okafor@example.com");
+    expect(parsed?.decidedAt.toISOString()).toBe(decidedAt.toISOString());
+  });
+
+  it("reads as a verb phrase after the approver's name, date and all", () => {
+    const parsed = parseApprovalDecisionMessage(built({ offSystemApprovedOn: "2026-08-14" }));
+
+    expect(decisionVerbPhrase(parsed!.outcome)).toBe(
+      "granted approval off system (approved on 14-08-2026).",
+    );
+  });
+
+  it("leaves an ordinary approval's verb phrase alone", () => {
+    const parsed = parseApprovalDecisionMessage(built());
+
+    expect(decisionVerbPhrase(parsed!.outcome)).toBe("granted approval.");
   });
 });

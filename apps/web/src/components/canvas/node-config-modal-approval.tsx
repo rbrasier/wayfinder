@@ -237,6 +237,36 @@ export function NodeConfigModalApprovalAdvanced({
         )}
       </div>
 
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-0.5">
+          <Label htmlFor="approval-allow-off-system">
+            Allow recording approval that happened off system
+          </Label>
+          <p className={HINT_CLASS}>
+            Lets the chat record that the approver already approved elsewhere, against an uploaded
+            file and the date it happened. The signature still names the approver and says on its
+            face that it was recorded off system.
+          </p>
+        </div>
+        <button
+          id="approval-allow-off-system"
+          type="button"
+          role="switch"
+          data-approval-allow-off-system
+          aria-checked={values.allowOffSystemApproval}
+          onClick={() => set("allowOffSystemApproval", !values.allowOffSystemApproval)}
+          className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+            values.allowOffSystemApproval ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              values.allowOffSystemApproval ? "translate-x-4" : "translate-x-0.5"
+            }`}
+          />
+        </button>
+      </div>
+
       <div className="space-y-1">
         <Label htmlFor="approval-instructions">Instructions (optional)</Label>
         <Textarea

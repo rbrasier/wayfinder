@@ -19,7 +19,17 @@ export interface ApprovalDecisionMessageInput {
   // Set when a change request could not resolve a step to return to. The
   // decision still stands and the session is held, not cancelled (ADR-044 §3).
   routingError: string | null;
+  // The calendar date an off-system approval happened, as `YYYY-MM-DD`
+  // (ADR-055). Null for a decision the system witnessed itself.
+  offSystemApprovedOn: string | null;
 }
+
+// DD-MM-YYYY, matching how the same date reads in the signature block, so the
+// thread and the document never appear to name two different days.
+const readableDate = (approvedOn: string): string => {
+  const [year, month, day] = approvedOn.split("-");
+  return year && month && day ? `${day}-${month}-${year}` : approvedOn;
+};
 
 const outcomeLine = (status: ApprovalStatus, routedBack: boolean): string => {
   const outcome: Record<ApprovalStatus, string> = {
@@ -52,7 +62,10 @@ const attributionLine = (input: ApprovalDecisionMessageInput): string => {
 };
 
 export const buildApprovalDecisionMessage = (input: ApprovalDecisionMessageInput): string => {
-  const parts = [`${outcomeLine(input.status, input.routedBack)}\n${attributionLine(input)}`];
+  const outcome = input.offSystemApprovedOn
+    ? `Approval granted — recorded off system (approved on ${readableDate(input.offSystemApprovedOn)}).`
+    : outcomeLine(input.status, input.routedBack);
+  const parts = [`${outcome}\n${attributionLine(input)}`];
   if (input.comment) parts.push(`Comment: ${input.comment}`);
   if (input.routingError) parts.push(input.routingError);
   return parts.join("\n\n");

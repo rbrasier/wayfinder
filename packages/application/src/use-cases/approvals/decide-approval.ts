@@ -25,6 +25,7 @@ import {
   type ISessionStepOutputRepository,
   type IUnitOfWork,
   type IUserRepository,
+  type OffSystemApprovalEvidence,
   type Result,
   type Sha256Hex,
   type StepOutputField,
@@ -42,6 +43,19 @@ import {
 import type { ResolveApprovalSubject } from "./resolve-approval-subject";
 import { loneSignatureSlot } from "./signature-slot";
 
+// A decision that happened outside Wayfinder, being recorded by someone other
+// than the approver (ADR-055). Its presence is what switches the four
+// behaviours below: who is authorised, who is recorded as deciding, whether the
+// approver-edit scan runs, and what is frozen.
+export interface OffSystemNomination {
+  // Who is entering it. Authorised as the nominator, never as the decider.
+  nominatedByUserId: string;
+  // The calendar date the approval happened, as `YYYY-MM-DD`. Validated by
+  // `RecordOffSystemApproval` against the session it belongs to.
+  approvedOn: string;
+  evidence: OffSystemApprovalEvidence;
+}
+
 export interface DecideApprovalInput {
   approvalId: string;
   decidedByUserId: string;
@@ -53,6 +67,10 @@ export interface DecideApprovalInput {
   routeBack?: boolean;
   // The tRPC layer sets this for admins so they can act on behalf of an approver.
   isAdmin?: boolean;
+  // Set only by `RecordOffSystemApproval`. Never reachable from the ordinary
+  // decide mutation, whose input schema has no such field — and even if it
+  // were, the authorisation branch below is the gate, not the caller.
+  offSystem?: OffSystemNomination;
 }
 
 export interface DecideApprovalOutput {
@@ -173,7 +191,10 @@ export class DecideApproval {
     const subject = await this.resolveSubject(approval);
     // Likewise resolved once and threaded through, so the frozen record and the
     // message in the thread can never name the approver differently.
-    const approver = await this.approverIdentity(input.decidedByUserId);
+    const approver = await this.approverIdentity(
+      this.recordedDeciderId(approval, input),
+      input.offSystem ? approval.approverEmail : null,
+    );
     const edits = await this.approverEdits(approval, input, subject.nodeId);
     const status = derivedStatus(input.decision, edits.length > 0);
     const recordSnapshot = await this.buildRecord({
@@ -205,9 +226,28 @@ export class DecideApproval {
       action: "approval.decided",
       resourceType: "approval",
       resourceId: approval.id,
-      metadata: { decision: input.decision, comment: input.comment ?? null },
+      metadata: {
+        decision: input.decision,
+        comment: input.comment ?? null,
+        // Present only on a nomination, so the decision trail shows how the
+        // approval arrived without every ordinary entry carrying empty keys.
+        ...(input.offSystem
+          ? {
+              offSystemApprovedOn: input.offSystem.approvedOn,
+              offSystemNominatedByUserId: input.offSystem.nominatedByUserId,
+              offSystemEvidenceFilename: input.offSystem.evidence.filename,
+            }
+          : {}),
+      },
     });
-    await this.recordDecisionMessage(decided, approver, decidedAt, routedBack, routingError);
+    await this.recordDecisionMessage(
+      decided,
+      approver,
+      decidedAt,
+      routedBack,
+      routingError,
+      input.offSystem?.nominatedByUserId ?? null,
+    );
     await this.writeSignature(decided);
     this.notify(decided, input.decision, routedBack);
 
@@ -266,6 +306,16 @@ export class DecideApproval {
         editsMade: editedFieldKeys.length > 0,
         ...(editedFieldKeys.length > 0 ? { editedFieldKeys } : {}),
         ...(subject.signatureFieldKey ? { signatureFieldKey: subject.signatureFieldKey } : {}),
+        ...(input.offSystem
+          ? {
+              offSystemApprovedOn: input.offSystem.approvedOn,
+              offSystemEvidenceFilename: input.offSystem.evidence.filename,
+              // Kept beside `decided_at`, which is the same instant here but
+              // will not stay so if the two ever diverge. The document shows
+              // when it was approved; the record shows when the system learned.
+              recordedAt: decidedAt,
+            }
+          : {}),
       }),
     };
 
@@ -285,6 +335,7 @@ export class DecideApproval {
         decidedAt,
         comment: input.comment ?? null,
         subjectDescription: subject.description,
+        offSystemApprovedOn: input.offSystem?.approvedOn ?? null,
       },
       this.sha256Hex,
     );
@@ -306,6 +357,11 @@ export class DecideApproval {
     input: DecideApprovalInput,
     subjectNodeId: string | null,
   ): Promise<string[]> {
+    // A nomination's edits belong to the nominator, not the approver. Deriving
+    // the status here would attribute someone else's changes to the person
+    // whose name goes on the signature — the exact misattribution ADR-045
+    // exists to prevent (ADR-055 §5).
+    if (input.offSystem) return [];
     if (input.decision !== "approved" || !this.messages || !subjectNodeId) return [];
 
     const messages = await this.messages.listBySession(approval.sessionId);
@@ -334,12 +390,28 @@ export class DecideApproval {
     return result.error ? [] : result.data;
   }
 
+  // Who the row will name as having decided. Ordinarily the caller; on an
+  // off-system nomination the *assigned approver*, because they are who
+  // approved — null when the assignment is still email-only and no account has
+  // claimed it (ADR-055 §2).
+  private recordedDeciderId(approval: Approval, input: DecideApprovalInput): string | null {
+    return input.offSystem ? approval.approverUserId : input.decidedByUserId;
+  }
+
   // Copied in, never joined at read time: a later rename, an email change or a
   // deleted account must not alter what the record says was true (ADR-040 §5).
-  private async approverIdentity(userId: string): Promise<ApproverIdentity> {
-    if (!this.users) return { name: null, email: null, role: null };
+  //
+  // An off-system nomination with no account behind the assignment still has an
+  // address, and a block reading "Unknown approver" over a filed memo would be
+  // worse than one naming the address the request was sent to.
+  private async approverIdentity(
+    userId: string | null,
+    fallbackEmail: string | null,
+  ): Promise<ApproverIdentity> {
+    const unknown: ApproverIdentity = { name: null, email: fallbackEmail, role: null };
+    if (!userId || !this.users) return unknown;
     const result = await this.users.findById(userId);
-    if (result.error || !result.data) return { name: null, email: null, role: null };
+    if (result.error || !result.data) return unknown;
     return {
       name: result.data.name,
       email: result.data.email,
@@ -387,10 +459,20 @@ export class DecideApproval {
       // Everything downstream still branches on `input.decision`, which keeps
       // its three values, so nothing about advancement changes.
       status,
-      decidedByUserId: input.decidedByUserId,
+      decidedByUserId: this.recordedDeciderId(approval, input),
       decidedAt,
       comment: input.comment ?? null,
       recordSnapshot,
+      // Written in the same guarded patch as the decision, so a nomination that
+      // loses the race to a real decider leaves no evidence columns behind on a
+      // row somebody else decided (ADR-055 §1).
+      ...(input.offSystem
+        ? {
+            offSystemApprovedOn: input.offSystem.approvedOn,
+            offSystemEvidence: input.offSystem.evidence,
+            offSystemNominatedByUserId: input.offSystem.nominatedByUserId,
+          }
+        : {}),
     });
     if (updated.error) return updated;
     if (!updated.data) {
@@ -408,16 +490,36 @@ export class DecideApproval {
   // assignment matches on id; an email-only assignment (ADR-018, before the
   // recipient has claimed an account) matches on the decider's account email.
   // With no assignment there is no one to match, so only an admin may decide.
+  //
+  // An off-system nomination is authorised on a different question entirely —
+  // it is checked here rather than in the calling use case so that supplying
+  // `offSystem` can never be a way past a gate (ADR-055 §3).
   private async isAuthorisedDecider(
     approval: Approval,
     input: DecideApprovalInput,
   ): Promise<boolean> {
     if (input.isAdmin) return true;
+    if (input.offSystem) return this.isAuthorisedNominator(approval, input.offSystem);
     if (approval.approverUserId) return approval.approverUserId === input.decidedByUserId;
     if (approval.approverEmail) {
       return this.deciderEmailMatches(input.decidedByUserId, approval.approverEmail);
     }
     return false;
+  }
+
+  // The session owner or the person who raised the request. On a chained
+  // approval the requester is the *previous approver*, who nominated this signer
+  // and holds the correspondence; the owner is whoever is watching the chat
+  // stall. The assigned approver is deliberately absent: someone present enough
+  // to press a button should press Approve, which records a stronger fact.
+  private async isAuthorisedNominator(
+    approval: Approval,
+    offSystem: OffSystemNomination,
+  ): Promise<boolean> {
+    if (offSystem.nominatedByUserId === approval.requestedByUserId) return true;
+    const found = await this.sessions.findById(approval.sessionId);
+    if (found.error || !found.data) return false;
+    return found.data.userId === offSystem.nominatedByUserId;
   }
 
   private async deciderEmailMatches(userId: string, approverEmail: string): Promise<boolean> {
@@ -447,6 +549,10 @@ export class DecideApproval {
     decidedAt: Date,
     routedBack: boolean,
     routingError?: string,
+    // Set on a nomination. The message is posted as the person who actually
+    // typed it, while its text still attributes the decision to the approver —
+    // the thread should not show the approver writing something they did not.
+    nominatedByUserId: string | null = null,
   ): Promise<void> {
     if (!this.messages) return;
     const content = buildApprovalDecisionMessage({
@@ -457,13 +563,14 @@ export class DecideApproval {
       comment: approval.comment,
       routedBack,
       routingError: routingError ?? null,
+      offSystemApprovedOn: approval.offSystemApprovedOn,
     });
     try {
       await this.messages.create({
         sessionId: approval.sessionId,
         role: "user",
         content,
-        senderUserId: approval.decidedByUserId,
+        senderUserId: nominatedByUserId ?? approval.decidedByUserId,
         stepNodeId: approval.nodeId,
       });
     } catch {

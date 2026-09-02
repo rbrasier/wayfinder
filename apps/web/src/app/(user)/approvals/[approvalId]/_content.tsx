@@ -6,6 +6,8 @@ import type { SessionStatus } from "@rbrasier/domain";
 import {
   ApprovalSubject,
   ApproverStage,
+  OffSystemChip,
+  OffSystemEvidence,
   OutcomeChip,
   PreviousStep,
 } from "@/components/approvals/approval-parts";
@@ -71,6 +73,7 @@ export function ApprovalDetailContent({ approvalId }: { approvalId: string }) {
           {approval.approvalStepName}
         </h1>
         <OutcomeChip approval={approval} />
+        <OffSystemChip approval={approval} />
       </header>
 
       <div className="flex-1 overflow-auto">
@@ -87,7 +90,10 @@ export function ApprovalDetailContent({ approvalId }: { approvalId: string }) {
               Decision
             </h2>
             <Row label="Outcome">
-              <OutcomeChip approval={approval} />
+              <span className="flex items-center gap-1.5">
+                <OutcomeChip approval={approval} />
+                <OffSystemChip approval={approval} />
+              </span>
             </Row>
             {approval.decidedByName && <Row label="Decided by">{approval.decidedByName}</Row>}
             {decidedAt && <Row label="Decided at">{new Date(decidedAt).toLocaleString()}</Row>}
@@ -100,6 +106,11 @@ export function ApprovalDetailContent({ approvalId }: { approvalId: string }) {
                 <span className="text-[#666055]">None given.</span>
               )}
             </Row>
+            {approval.approval.offSystemApprovedOn && (
+              <div className="mt-3 border-t border-[#f0ece4] pt-3">
+                <OffSystemEvidence approval={approval} />
+              </div>
+            )}
           </section>
 
           {/* Read-only: the editing right lasts only while the approval is

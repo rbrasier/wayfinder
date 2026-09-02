@@ -622,6 +622,7 @@ const build = () => {
     embeddings,
     documentChunks,
     sha256Hex,
+    clock,
     updateDocumentFields: documentUseCases.updateDocumentFields,
     notifyOnApprovalRequested,
     notifyOnApprovalDecided,

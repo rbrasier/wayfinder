@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PencilLine } from "lucide-react";
+import { Paperclip, PencilLine } from "lucide-react";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "@/server/router";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,51 @@ export function OutcomeChip({ approval }: { approval: ApprovalContext }) {
     >
       {outcome.label}
     </span>
+  );
+}
+
+// Marks a decision the system was told about rather than witnessed (ADR-055).
+// Shown beside the outcome rather than instead of it: it was still an approval,
+// and how it arrived is a second fact about it.
+export function OffSystemChip({ approval }: { approval: ApprovalContext }) {
+  if (!approval.approval.offSystemApprovedOn) return null;
+
+  return (
+    <span
+      data-approval-off-system-chip
+      title={`Approved on ${approval.approval.offSystemApprovedOn}, recorded in Wayfinder afterwards.`}
+      className="shrink-0 rounded-full bg-[#f0ebe1] px-2 py-0.5 text-[11px] font-semibold text-[#5c574c]"
+    >
+      Off system
+    </span>
+  );
+}
+
+// The date the approval happened and the file filed as proof, on the surfaces
+// that show a decision in full. The link is a plain anchor rather than a fetch:
+// the route streams the bytes as an attachment, and the browser is better at
+// saving a file than any handler here would be.
+export function OffSystemEvidence({ approval }: { approval: ApprovalContext }) {
+  const approvedOn = approval.approval.offSystemApprovedOn;
+  if (!approvedOn) return null;
+
+  const filename = approval.approval.offSystemEvidenceFilename;
+  return (
+    <div className="space-y-1" data-approval-off-system-evidence>
+      <p className="text-[13px] text-[#1c1b19]">
+        Recorded off system — approved on <span className="font-medium">{approvedOn}</span>.
+      </p>
+      {filename && (
+        <a
+          href={`/api/approvals/${approval.approval.id}/evidence`}
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[#1f6b4d] underline underline-offset-2"
+          data-approval-evidence-link
+        >
+          <Paperclip className="h-3.5 w-3.5" />
+          {filename}
+        </a>
+      )}
+    </div>
   );
 }
 

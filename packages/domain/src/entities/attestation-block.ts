@@ -23,6 +23,10 @@ export interface AttestationInput {
   readonly decidedAt: Date;
   readonly comment: string | null;
   readonly subjectDescription: string | null;
+  // Set when the decision was recorded off system (ADR-055 §6): the calendar
+  // date the approval actually happened, as `YYYY-MM-DD`. Null for every
+  // decision the system witnessed itself, which is the ordinary case.
+  readonly offSystemApprovedOn: string | null;
 }
 
 export interface AttestationBlock {
@@ -68,6 +72,30 @@ const pad = (value: number): string => String(value).padStart(2, "0");
 const formatDecidedAt = (decidedAt: Date): string =>
   `${pad(decidedAt.getUTCDate())}-${pad(decidedAt.getUTCMonth() + 1)}-${decidedAt.getUTCFullYear()} ${pad(decidedAt.getUTCHours())}:${pad(decidedAt.getUTCMinutes())} UTC`;
 
+// DD-MM-YYYY with no clock time, for an approval the system did not witness.
+// The evidence names a day; rendering a time beside it would assert a precision
+// nobody confirmed, and rendering the moment it was *typed in* would put the
+// wrong day on the document whenever the two straddle midnight.
+const formatApprovedOn = (approvedOn: string): string => {
+  const [year, month, day] = approvedOn.split("-");
+  return year && month && day ? `${day}-${month}-${year}` : approvedOn;
+};
+
+// The date row, and what it means. Off system, this is when the approver
+// approved; in system, when the system recorded them doing it.
+const dateRow = (input: AttestationInput): string =>
+  input.offSystemApprovedOn
+    ? formatApprovedOn(input.offSystemApprovedOn)
+    : formatDecidedAt(input.decidedAt);
+
+// The decision row. An off-system approval is still an approval, so the label
+// stands and the provenance is carried beside it — on the line a reader takes in
+// first, rather than in a footnote they may never reach (ADR-055 §6).
+const decisionRow = (input: AttestationInput): string =>
+  input.offSystemApprovedOn
+    ? `${decisionLabel(input.decision)} (recorded off system)`
+    : decisionLabel(input.decision);
+
 // Reuses `canonicalAuditString` rather than serialising independently, so the
 // code in the document and the hash in the audit chain can never drift apart.
 const canonicalAttestation = (input: AttestationInput): string =>
@@ -86,6 +114,11 @@ const canonicalAttestation = (input: AttestationInput): string =>
       decision: input.decision,
       comment: input.comment,
       subjectDescription: input.subjectDescription,
+      // Present only when it is set, so an in-system approval's canonical string
+      // stays byte-identical to the one this produced before off-system
+      // recording existed. A key added unconditionally would give two identical
+      // decisions months apart two different verification codes.
+      ...(input.offSystemApprovedOn ? { offSystemApprovedOn: input.offSystemApprovedOn } : {}),
     },
   });
 
@@ -105,8 +138,8 @@ export const buildAttestationBlock = (
 
   const rows: [string, string][] = [[BY_LABEL[input.decision], identity]];
   if (input.approverRole) rows.push(["Role:", input.approverRole]);
-  rows.push(["Decision:", decisionLabel(input.decision)]);
-  rows.push(["Date:", formatDecidedAt(input.decidedAt)]);
+  rows.push(["Decision:", decisionRow(input)]);
+  rows.push(["Date:", dateRow(input)]);
   if (input.comment) rows.push(["Comment:", input.comment]);
   rows.push(["Verification:", `WF-${verificationCode}`]);
 

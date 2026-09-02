@@ -74,6 +74,10 @@ export interface NodeConfigValues {
   // Where a change request returns the session (ADR-044 §1). Empty means the
   // nearest prior editable step.
   changesRequestedTargetNodeId: string;
+  // Whether someone may record that this approval happened outside Wayfinder
+  // (ADR-055 §4). True by default, and stored only when turned off — absent in
+  // the config means allowed.
+  allowOffSystemApproval: boolean;
   notifyOnComplete: boolean;
 }
 
@@ -125,5 +129,6 @@ export const DEFAULT_VALUES: NodeConfigValues = {
   approvalSubjectInstruction: "",
   signatureFieldKey: "",
   changesRequestedTargetNodeId: "",
+  allowOffSystemApproval: true,
   notifyOnComplete: false,
 };

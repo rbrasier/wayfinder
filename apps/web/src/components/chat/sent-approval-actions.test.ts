@@ -8,6 +8,7 @@ const own = {
   requestedByUserId: "operator-1",
   isAdmin: false,
   inChat: true,
+  offSystemAllowed: true,
 };
 
 // The chained shape: approval B's row was raised by approver A, who nominated
@@ -78,5 +79,70 @@ describe("sentApprovalActions", () => {
 
     expect(actions.canUpdateApprover).toBe(false);
     expect(actions.canWithdraw).toBe(false);
+  });
+});
+
+describe("canNominateOffSystem", () => {
+  it("offers it to the chat's owner, who is the one watching the request stall", () => {
+    expect(sentApprovalActions(own).canNominateOffSystem).toBe(true);
+  });
+
+  it("offers it to the previous approver who raised a chained request", () => {
+    // They nominated this signer and are the one holding the correspondence,
+    // even though the chat is not theirs.
+    const actions = sentApprovalActions({
+      ...chained,
+      viewerUserId: "approver-a",
+      sessionOwnerUserId: "operator-1",
+    });
+
+    expect(actions.canNominateOffSystem).toBe(true);
+  });
+
+  it("offers it to an admin who neither owns the chat nor raised the request", () => {
+    const actions = sentApprovalActions({
+      ...chained,
+      viewerUserId: "admin-9",
+      isAdmin: true,
+    });
+
+    expect(actions.canNominateOffSystem).toBe(true);
+  });
+
+  it("withholds it from a participant who is neither owner nor requester", () => {
+    const actions = sentApprovalActions({
+      ...chained,
+      viewerUserId: "bystander-1",
+      sessionOwnerUserId: "operator-1",
+    });
+
+    expect(actions.canNominateOffSystem).toBe(false);
+  });
+
+  it("withholds it when the approval step's author turned it off", () => {
+    expect(sentApprovalActions({ ...own, offSystemAllowed: false }).canNominateOffSystem).toBe(
+      false,
+    );
+  });
+
+  it("withholds it from an admin too when the step forbids it", () => {
+    const actions = sentApprovalActions({
+      ...own,
+      viewerUserId: "admin-9",
+      isAdmin: true,
+      offSystemAllowed: false,
+    });
+
+    expect(actions.canNominateOffSystem).toBe(false);
+  });
+
+  it("withholds it in the approver's decision modal, which is not where it belongs", () => {
+    expect(sentApprovalActions({ ...own, inChat: false }).canNominateOffSystem).toBe(false);
+  });
+
+  it("withholds it from a signed-out viewer", () => {
+    const actions = sentApprovalActions({ ...own, viewerUserId: null });
+
+    expect(actions.canNominateOffSystem).toBe(false);
   });
 });

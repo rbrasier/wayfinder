@@ -81,6 +81,7 @@ export * from "./approval-reassignment-message";
 export * from "./approver-edit-message";
 export * from "./approval-lock";
 export * from "./approval-record";
+export * from "./off-system-approval";
 export * from "./taken-path";
 export * from "./attestation-block";
 export * from "./person";
