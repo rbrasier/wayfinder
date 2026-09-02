@@ -96,12 +96,28 @@ them by construction, which is what this fix does.
   single-edge steps ignored, a parked-on fork ignored, most-recent-first order,
   and a fork worked twice reporting its second branch.
 
-`./validate.sh` — 23 passed, 1 failed. The single failure is
-`high or critical vulnerabilities found`, which is **pre-existing and unrelated**:
-transitive advisories in `jsondiffpatch`, `browserslist` and `fast-uri`. Verified
-by stashing this change and re-running `./scripts/audit-check.sh` on the
-untouched base branch, which fails identically. No dependency or lockfile change
-is part of this fix.
+`./validate.sh` — **24 passed, 0 failed**.
+
+The first run was 23/1: `high or critical vulnerabilities found`, seven high
+advisories across three transitive packages. That failure was **pre-existing**,
+not caused by this change — verified by stashing the fix and re-running
+`./scripts/audit-check.sh` on the untouched base branch, which failed
+identically. It is nonetheless resolved here rather than left red, in a separate
+commit that touches no application code:
+
+| Package | Pin | Advisories |
+|---|---|---|
+| `fast-uri` | `>=3.1.5` → `>=3.1.6` (resolves 3.1.7) | 2× SSRF, 2× host confusion |
+| `browserslist` | new `>=4.28.7` (resolves 4.28.8) | unbounded memory growth; crash / prototype write |
+| `jsondiffpatch` | new `>=0.7.6` | prototype pollution in the patch APIs |
+
+Pinned rather than allowlisted: `scripts/audit-check.sh` states that an
+allowlist entry is a security gate held open and asks for the list to stay
+empty. `jsondiffpatch` is the only non-patch bump — `ai@4.3.19` pins it at
+exactly `0.6.0`, but it is reached only from `ai/rsc`, which this codebase never
+imports, so the vulnerable surface was already unreachable; `0.7.6` still
+exports `diff`, `patch` and `clone` as functions, the three symbols `ai/rsc`
+binds.
 
 ## E2E decision
 
