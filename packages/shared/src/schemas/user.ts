@@ -30,6 +30,15 @@ export const deleteUserInputSchema = z.object({
   id: z.string().uuid(),
 });
 
+// Admin-initiated reset of another user's password. The 8-character floor
+// mirrors MINIMUM_PASSWORD_LENGTH in the domain, which is what actually
+// enforces it — this schema rejects the obvious case at the edge so a doomed
+// request never reaches the hasher.
+export const resetUserPasswordInputSchema = z.object({
+  id: z.string().uuid(),
+  password: z.string().min(8),
+});
+
 export const listUsersInputSchema = z.object({
   limit: z.number().int().min(1).max(200).optional(),
   offset: z.number().int().min(0).optional(),
@@ -40,3 +49,4 @@ export type UpdateUserInput = z.infer<typeof updateUserInputSchema>;
 export type UpdateProfileInput = z.infer<typeof updateProfileInputSchema>;
 export type DeleteUserInput = z.infer<typeof deleteUserInputSchema>;
 export type ListUsersInput = z.infer<typeof listUsersInputSchema>;
+export type ResetUserPasswordInput = z.infer<typeof resetUserPasswordInputSchema>;

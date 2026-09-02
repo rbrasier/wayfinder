@@ -2,6 +2,7 @@ import {
   createUserInputSchema,
   deleteUserInputSchema,
   listUsersInputSchema,
+  resetUserPasswordInputSchema,
   updateProfileInputSchema,
   updateUserInputSchema,
 } from "@rbrasier/shared";
@@ -54,6 +55,18 @@ export const userRouter = router({
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
+
+  resetPassword: adminProcedure
+    .input(resetUserPasswordInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.resetUserPassword.execute({
+        actorId: ctx.userId,
+        userId: input.id,
+        password: input.password,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { sessionsRevoked: result.data.sessionsRevoked };
+    }),
 
   delete: adminProcedure.input(deleteUserInputSchema).mutation(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.deleteUser.execute(input.id);

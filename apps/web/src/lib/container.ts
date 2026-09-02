@@ -23,6 +23,7 @@ import {
   DeleteFlowEdge,
   DeleteFlowNode,
   DeleteUser,
+  ResetUserPassword,
   EvaluateStepReadiness,
   CreateBudget,
   UpdateBudget,
@@ -186,6 +187,7 @@ import {
   sha256Hex,
   TtlCache,
   createAuth,
+  BetterAuthPasswordResetter,
   createCachedSessionResolver,
   createDatabase,
   createNodeExecutors,
@@ -568,6 +570,11 @@ const build = () => {
     return authInstance;
   };
 
+  // Administrator-initiated password reset (not the break-glass CLI path):
+  // hashes through the live Better Auth instance so a config change that
+  // rebuilds it cannot leave resets writing a stale hash format.
+  const passwordResetter = new BetterAuthPasswordResetter({ database: db, getAuth });
+
   const getEffectivePermissions = new GetEffectivePermissions(roles, userRoles);
   const resolveEffectivePermissions = createCachedPermissionResolver(
     (userId, isAdmin) => getEffectivePermissions.execute(userId, isAdmin),
@@ -647,6 +654,7 @@ const build = () => {
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),
+      resetUserPassword: new ResetUserPassword(users, passwordResetter, auditLogger),
       listUsers: new ListUsers(users),
       logError: new LogError(errorLogger),
       listErrors: new ListErrors(errorLogs),
