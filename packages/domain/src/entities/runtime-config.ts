@@ -241,6 +241,17 @@ export const isEntraConfigured = (entra: EntraCredentials): boolean =>
 export const isPkiUsable = (config: AuthConfig, envHasTrustedProxies: boolean): boolean =>
   config.pkiEnabled && envHasTrustedProxies;
 
+// Whether a user can reset their own password from the sign-in screen. Both
+// halves are required: without a transport the emailed link can never arrive,
+// and without password sign-in the restored credential could not be used. An
+// install missing either must not show the entry point at all, rather than
+// accept an address and silently do nothing (the reset endpoint itself is only
+// mounted when a sender is wired, so the two stay in step).
+export const isSelfServicePasswordResetAvailable = (
+  config: Pick<AuthConfig, "emailPasswordEnabled">,
+  emailConfigured: boolean,
+): boolean => config.emailPasswordEnabled && emailConfigured;
+
 // Guards the lockout invariant: an admin must never disable every method.
 // envHasTrustedProxies is required rather than defaulted on purpose — a caller
 // that forgets it should be a compile error, because that caller is precisely

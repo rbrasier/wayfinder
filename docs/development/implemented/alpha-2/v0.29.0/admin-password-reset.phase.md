@@ -1,7 +1,7 @@
-# Phase — Admin Password Reset (and Self-Service Change Verification)
+# Phase — Password Reset: Administrator-Initiated and Self-Service
 
-- **Status**: Implemented (v0.28.12)
-- **Target version**: 0.28.12  (bump: PATCH — fills a gap in existing user management; no schema change, no migration)
+- **Status**: Implemented (v0.29.0)
+- **Target version**: 0.29.0  (bump: MINOR — adds self-service password reset, a new user-facing capability; no schema change, no migration)
 - **Base branch**: `release/alpha-2`
 - **Depends on**: `BetterAuthAdminRecovery` (`packages/adapters/src/auth/admin-recovery.ts`) for the credential-write technique, `Auth.$context.password.hash` (`packages/adapters/src/auth/better-auth.ts`), the admin users page (`apps/web/src/app/(admin)/admin/users/_content.tsx`)
 
@@ -105,9 +105,9 @@ written through unchanged.
    `Dialog`/`DialogHeader`/`DialogBody`/`DialogFooter`/`DialogCloseButton`, two
    password inputs, inline `text-destructive` error, `sonner` toast on success.
    Add the button to the actions cell beside Edit and Delete.
-7. **Version + validate.** Bump `VERSION` and `package.json#version` to `0.28.12`.
+7. **Version + validate.** Bump `VERSION` and `package.json#version` to `0.29.0`.
    Run `./validate.sh`; fix every failure. Move this doc to
-   `docs/development/implemented/alpha-2/v0.28.12/` with a summary.
+   `docs/development/implemented/alpha-2/v0.29.0/` with a summary.
 
 ## 7. Acceptance criteria
 
@@ -128,7 +128,7 @@ written through unchanged.
       behaviour.
 - [ ] Architecture intact: domain dependency-free, Result at every boundary, no
       migration.
-- [ ] `VERSION` = `package.json#version` = `0.28.12`; `./validate.sh` passes.
+- [ ] `VERSION` = `package.json#version` = `0.29.0`; `./validate.sh` passes.
 
 ## 8. E2E decision
 
@@ -155,7 +155,7 @@ tested as a pure module in the manner of `sidebar-model.ts`.
 
 ---
 
-## 10. Implementation summary (v0.28.12)
+## 10. Implementation summary (v0.29.0)
 
 Delivered as planned. An administrator can now reset any user's password from
 `/admin/users` without shell or database access to the deployment.
@@ -243,3 +243,119 @@ a pure module in `apps/web`.
   weak password. Same floor the self-service form applies.
 - `user.create` still creates no credential row, so a newly added user needs a
   reset before they can sign in with a password.
+
+---
+
+## 11. Second round (v0.29.0) — self-service reset and the sign-in flash
+
+Three further changes on the same branch, after the base branch moved on.
+
+### Merge with `release/alpha-2`
+
+`origin/release/alpha-2` had advanced to `f7d12aa`, and had itself shipped
+**0.28.12** for the flow-fork-recovery fix. The merge was textually clean but
+carried a real collision: both lines claimed the same version. Resolved by
+moving this work up — to `0.29.0`, since it now adds a new user-facing
+capability rather than only filling an administrative gap.
+
+The base branch also brought `50dc6be`, which pins `jsondiffpatch`,
+`browserslist` and `fast-uri` to patched releases. That clears the one
+`validate.sh` failure recorded in §10: **all 24 checks now pass.**
+
+### Self-service password reset (email-gated)
+
+A user who has forgotten their password can now reset it themselves, but only
+where a reset can actually complete: the entry point requires **both**
+email/password sign-in and a configured mail transport.
+
+| Layer | File | Role |
+|-------|------|------|
+| domain | `packages/domain/src/entities/runtime-config.ts` | `isSelfServicePasswordResetAvailable` — the two-part gate |
+| application | `.../notifications/templates.ts` | `buildPasswordResetEmail` |
+| application | `.../notifications/send-password-reset-email.ts` | `SendPasswordResetEmail` — refuses when unconfigured |
+| adapters | `packages/adapters/src/auth/better-auth.ts` | `sendPasswordResetEmail` option, `PASSWORD_RESET_TOKEN_TTL_SECONDS`, `revokeSessionsOnPasswordReset` |
+| web | `src/lib/container-auth.ts` | `buildAuthRuntime` — the auth half of the container |
+| web | `src/server/routers/settings.ts` | `passwordReset` on `enabledAuthMethods` |
+| web | `src/lib/password-reset.ts` | the redirect path and query params both ends agree on |
+| web | `src/app/(auth)/login/forgot-password-modal.tsx` | request the link |
+| web | `src/app/(auth)/reset-password/` | set the new password |
+
+The flow is Better Auth's own, verified in `better-auth@1.6.25`
+(`dist/api/routes/password.mjs`): `POST /request-password-reset` mints a
+single-use token into `core_verification_tokens`, emails a link, and
+`GET /reset-password/:token` validates it before redirecting to
+`/reset-password?token=…` — or `?error=INVALID_TOKEN` for a stale link, which
+the page renders as a dead-link message rather than failing on submit. Tokens
+last one hour. `revokeSessionsOnPasswordReset` ends every live session, matching
+the administrator-initiated reset.
+
+Two decisions worth recording:
+
+1. **The sender is wired unconditionally, not only when email is configured.**
+   Better Auth only mounts the reset endpoint when a sender is present, so
+   binding that to email settings looked right — but the auth instance is
+   rebuilt on *auth*-config changes alone. An admin who configured email would
+   have had a dead reset endpoint until the next restart. The sender refuses at
+   send time instead, and the sign-in screen hides the link on the same live
+   check, so an unconfigured install still offers nothing.
+2. **The request form always reports the same outcome.** Whether or not the
+   address has an account, the modal shows the same acknowledgement. Anything
+   else would make it a way of testing which addresses are registered.
+
+### Sign-in options no longer pop in
+
+`/login` was entirely client-rendered and asked for `enabledAuthMethods` from
+the browser, so the first paint used the query's fallbacks — password on,
+Microsoft and certificate off — and the other buttons appeared once the request
+came back.
+
+The page is now a server component (`page.tsx`) that prefetches
+`settings.enabledAuthMethods` and `bootstrap.adminExists` and hydrates the
+client form (`login-form.tsx`), so the first paint already carries the right set
+of buttons. `runtimeConfig.getAuthConfig()` is cached in-process, so this costs
+no extra database work per request.
+
+### Decomposition forced by the size ceiling
+
+Wiring the reset sender pushed `container.ts` to 809 lines, past the 800-line
+hard fail. The auth half moved to `buildAuthRuntime` in the existing
+`container-auth.ts`, following the `buildOnboarding` / `buildDocumentUseCases`
+pattern already in the file. `container.ts` is now 777 lines.
+
+### Tests
+
+18 further tests, each written before its implementation:
+
+- `packages/domain/src/entities/runtime-config.test.ts` — 4 tests on the gate:
+  true only when both halves hold, false for each half alone, false for neither.
+- `.../notifications/templates.test.ts` — 6 tests: named and unnamed greeting,
+  stated expiry, the "you need do nothing" line, no bare token outside the link,
+  HTML escaping.
+- `.../notifications/send-password-reset-email.test.ts` — 4 tests: sends to the
+  requesting address, refuses when unconfigured, propagates a transport failure,
+  no "null" for a nameless account.
+
+Full suite green: 3,390 tests. `./validate.sh` passes all 24 checks.
+
+### E2E
+
+**Still no new spec.** The sign-in prefetch is a rendering-timing fix behind
+existing specs (`phase-entra-login-auth-methods.spec.ts` and
+`auth-username-password.spec.ts`), which use auto-waiting assertions and so pass
+unchanged — faster, if anything. The reset flow's logic sits in the domain gate,
+the template and the sender, all covered above; the parts a browser would add
+are Better Auth's own endpoints.
+
+### Deviations and open points
+
+1. **Branch policy tension.** `CLAUDE.md` says release branches take bug fixes
+   and enhancements but never new features, and self-service password reset is
+   arguably a new feature rather than an enhancement of existing sign-in. It was
+   built on `release/alpha-2` because that is where this branch already sat and
+   where the request placed it. Retargeting the PR to `main` is a one-click
+   change if that reading is preferred.
+2. **A flaky test observed once.** `apps/web/src/server/approval-status-lint.test.ts`
+   failed on one full-suite run and passed on every run since, alone and in the
+   full suite. It spawns ESLint programmatically and was starved while seven
+   packages ran concurrently under turbo. Unrelated to this diff, which touches
+   neither approval status nor the ESLint config. Recorded rather than fixed.

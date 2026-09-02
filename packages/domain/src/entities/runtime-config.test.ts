@@ -10,6 +10,7 @@ import {
   isAtLeastOneMethodEnabled,
   isEntraConfigured,
   isPkiUsable,
+  isSelfServicePasswordResetAvailable,
   isSiemConfigured,
   parseDeploymentConfig,
   parseOnboardingState,
@@ -39,6 +40,33 @@ describe("AuthConfig defaults", () => {
 
     expect(config.pkiEnabled).toBe(false);
     expect(config.pki.sessionTtlHours).toBe(DEFAULT_PKI_SESSION_TTL_HOURS);
+  });
+});
+
+describe("isSelfServicePasswordResetAvailable", () => {
+  const config = (emailPasswordEnabled: boolean): AuthConfig => ({
+    ...createDefaultAuthConfig(),
+    emailPasswordEnabled,
+  });
+
+  it("is true only when password sign-in is on and email can actually be sent", () => {
+    expect(isSelfServicePasswordResetAvailable(config(true), true)).toBe(true);
+  });
+
+  // Without a transport the reset link has no way to reach the user, so the
+  // entry point must stay hidden rather than accept an address and do nothing.
+  it("is false when password sign-in is on but no email transport is configured", () => {
+    expect(isSelfServicePasswordResetAvailable(config(true), false)).toBe(false);
+  });
+
+  // Resetting a password nobody can sign in with would hand back a useless
+  // credential on an Entra- or certificate-only install.
+  it("is false when email is configured but password sign-in is off", () => {
+    expect(isSelfServicePasswordResetAvailable(config(false), true)).toBe(false);
+  });
+
+  it("is false when neither is available", () => {
+    expect(isSelfServicePasswordResetAvailable(config(false), false)).toBe(false);
   });
 });
 
