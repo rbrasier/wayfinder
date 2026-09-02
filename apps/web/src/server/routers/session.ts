@@ -421,6 +421,41 @@ export const sessionRouter = router({
       return result.data;
     }),
 
+  // Sends the chat back to a fork it already passed and down a different branch.
+  // Distinct from `overrideBranch`, which can only pick a branch leaving the node
+  // the session is parked on. The resolved definition is passed through so the
+  // fork is validated against the flow version the operator was shown (ADR-015),
+  // not the live rows.
+  rewindToFork: authenticatedProcedure
+    .input(
+      z.object({
+        sessionId: z.string().uuid(),
+        forkNodeId: z.string().uuid(),
+        targetNodeId: z.string().uuid(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
+      if (sessionResult.error) throw toTrpcError(sessionResult.error);
+      if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
+      // Owner or admin only — this rejects read-only shared participants, the
+      // same authorisation `confirmStep` applies.
+      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
+      }
+
+      const result = await ctx.container.useCases.rewindToFork.execute({
+        sessionId: input.sessionId,
+        forkNodeId: input.forkNodeId,
+        targetNodeId: input.targetNodeId,
+        nodes: sessionResult.data.nodes,
+        edges: sessionResult.data.edges,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      void ctx.container.services.sessionEvents.publish(input.sessionId, { type: "session.updated" });
+      return result.data;
+    }),
+
   // The operator's own estimate of how long this case would have taken without
   // Wayfinder. Ownership and terminal-status are re-checked in the use case, so
   // this stays a thin pass-through.

@@ -39,6 +39,7 @@ export * from "./template-annotation-validation";
 export * from "./parse-flexible-date";
 export * from "./flow-edge";
 export * from "./flow-graph";
+export * from "./fork-rewind";
 export * from "./branch-rule";
 export * from "./session";
 export * from "./session-participant";
