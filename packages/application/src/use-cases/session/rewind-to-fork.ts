@@ -136,9 +136,9 @@ export class RewindToFork {
       sessionId: input.sessionId,
       role: "system",
       content:
-        `Went back to "${nameOf(input.nodes, input.forkNodeId)}" and switched from ` +
+        `We've gone back to "${nameOf(input.nodes, input.forkNodeId)}" and switched from ` +
         `"${nameOf(input.nodes, fromNodeId)}" to "${nameOf(input.nodes, input.targetNodeId)}". ` +
-        "Everything gathered so far still applies.",
+        "Everything gathered so far still applies — just let me know how you'd like to proceed.",
       stepNodeId: input.targetNodeId,
     });
   }
