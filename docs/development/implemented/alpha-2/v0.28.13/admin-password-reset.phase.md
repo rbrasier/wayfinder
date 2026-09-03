@@ -1,7 +1,7 @@
 # Phase — Password Reset: Administrator-Initiated and Self-Service
 
-- **Status**: Implemented (v0.29.0)
-- **Target version**: 0.29.0  (bump: MINOR — adds self-service password reset, a new user-facing capability; no schema change, no migration)
+- **Status**: Implemented (v0.28.13)
+- **Target version**: 0.28.13  (bump: PATCH, at the maintainer's direction — see §11; no schema change, no migration)
 - **Base branch**: `release/alpha-2`
 - **Depends on**: `BetterAuthAdminRecovery` (`packages/adapters/src/auth/admin-recovery.ts`) for the credential-write technique, `Auth.$context.password.hash` (`packages/adapters/src/auth/better-auth.ts`), the admin users page (`apps/web/src/app/(admin)/admin/users/_content.tsx`)
 
@@ -105,9 +105,9 @@ written through unchanged.
    `Dialog`/`DialogHeader`/`DialogBody`/`DialogFooter`/`DialogCloseButton`, two
    password inputs, inline `text-destructive` error, `sonner` toast on success.
    Add the button to the actions cell beside Edit and Delete.
-7. **Version + validate.** Bump `VERSION` and `package.json#version` to `0.29.0`.
+7. **Version + validate.** Bump `VERSION` and `package.json#version` to `0.28.13`.
    Run `./validate.sh`; fix every failure. Move this doc to
-   `docs/development/implemented/alpha-2/v0.29.0/` with a summary.
+   `docs/development/implemented/alpha-2/v0.28.13/` with a summary.
 
 ## 7. Acceptance criteria
 
@@ -128,7 +128,7 @@ written through unchanged.
       behaviour.
 - [ ] Architecture intact: domain dependency-free, Result at every boundary, no
       migration.
-- [ ] `VERSION` = `package.json#version` = `0.29.0`; `./validate.sh` passes.
+- [ ] `VERSION` = `package.json#version` = `0.28.13`; `./validate.sh` passes.
 
 ## 8. E2E decision
 
@@ -155,7 +155,7 @@ tested as a pure module in the manner of `sidebar-model.ts`.
 
 ---
 
-## 10. Implementation summary (v0.29.0)
+## 10. Implementation summary (v0.28.13)
 
 Delivered as planned. An administrator can now reset any user's password from
 `/admin/users` without shell or database access to the deployment.
@@ -246,7 +246,7 @@ a pure module in `apps/web`.
 
 ---
 
-## 11. Second round (v0.29.0) — self-service reset and the sign-in flash
+## 11. Second round (v0.28.13) — self-service reset and the sign-in flash
 
 Three further changes on the same branch, after the base branch moved on.
 
@@ -255,12 +255,24 @@ Three further changes on the same branch, after the base branch moved on.
 `origin/release/alpha-2` had advanced to `f7d12aa`, and had itself shipped
 **0.28.12** for the flow-fork-recovery fix. The merge was textually clean but
 carried a real collision: both lines claimed the same version. Resolved by
-moving this work up — to `0.29.0`, since it now adds a new user-facing
-capability rather than only filling an administrative gap.
+moving this work up to the next free patch on the line, `0.28.13`.
 
 The base branch also brought `50dc6be`, which pins `jsondiffpatch`,
 `browserslist` and `fast-uri` to patched releases. That clears the one
 `validate.sh` failure recorded in §10: **all 24 checks now pass.**
+
+### Version: PATCH, by decision
+
+The versioning table in `CLAUDE.md` lists "new feature" under MINOR, and
+self-service password reset adds a user-facing capability that did not exist
+before, so MINOR was proposed. The maintainer directed PATCH instead, and this
+ships as **0.28.13**.
+
+The reading that supports it: nothing here is a new feature *area*. Email and
+password sign-in, password change, and the credential store all already existed;
+this completes the password-management story around them and changes no schema.
+Recorded plainly so the next person reading the version history knows the call
+was deliberate rather than an oversight.
 
 ### Self-service password reset (email-gated)
 
@@ -348,12 +360,12 @@ are Better Auth's own endpoints.
 
 ### Deviations and open points
 
-1. **Branch policy tension.** `CLAUDE.md` says release branches take bug fixes
-   and enhancements but never new features, and self-service password reset is
-   arguably a new feature rather than an enhancement of existing sign-in. It was
-   built on `release/alpha-2` because that is where this branch already sat and
-   where the request placed it. Retargeting the PR to `main` is a one-click
-   change if that reading is preferred.
+1. **Branch policy.** `CLAUDE.md` says release branches take bug fixes and
+   enhancements but never new features. Whether self-service reset counts as a
+   new feature or an enhancement of existing sign-in is the same question the
+   version bump turned on; the maintainer settled both the same way, treating it
+   as an enhancement, so `release/alpha-2` is the right line and the PATCH bump
+   is consistent with it.
 2. **A flaky test observed once.** `apps/web/src/server/approval-status-lint.test.ts`
    failed on one full-suite run and passed on every run since, alone and in the
    full suite. It spawns ESLint programmatically and was starved while seven
