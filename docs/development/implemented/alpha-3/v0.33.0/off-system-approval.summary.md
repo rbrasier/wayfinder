@@ -134,7 +134,27 @@ until evidence is attached (the visible error path), and recording advances the
 session and files the evidence for download. Serial, with the mutating test
 last. Authorisation, date rules, record contents and block rendering are covered
 at the layers above and are deliberately not re-tested through the browser.
-Written, not run — CI runs the suite.
+
+The spec failed on its first CI run and was fixed against a full local stack
+(Postgres + s3rver + Chromium, per `/e2e-cc-web`). Three defects, all in the
+test rather than the product — the recorded row was read back directly from
+Postgres and every column was correct:
+
+1. **`waitForLoadState('networkidle')` on the chat page.** The chat holds an
+   open EventSource for session events, so the network never goes idle there and
+   the wait could only ever time out. Removed; every assertion auto-waits on the
+   element it is about.
+2. **Clicking the queue row to reach the decision page.** The queue refetches on
+   mount and again on the tab switch, so the row could be replaced under a click
+   that had already resolved its target, leaving the test on the list it started
+   from — which is exactly what CI caught. The row is a plain link, so the spec
+   now follows its `href`.
+3. **Default timeouts against cold route compilation.** CI serves the app from
+   `next dev`, and this spec is the first to reach the chat, the approvals queue
+   and a decision page, plus a brand-new API route. Every first-touch assertion
+   now uses the house `ROUTE_COMPILE_TIMEOUT` pattern.
+
+Verified green locally after the fix; CI runs it on the PR.
 
 A seed fixture (`seedOffSystemApprovalSession`) was added with its own flow
 rather than reusing the withdrawable one, because recording advances the session
@@ -163,6 +183,9 @@ order it runs in.
 4. **The decision-path tests went in `decide-approval-off-system.test.ts`**
    rather than extending `decide-approval.test.ts`, which is at 1588 lines
    against validate.sh's 1600-line test ceiling.
+5. **`pnpm.overrides` and the lockfile were touched** to clear dependency
+   advisories that were already failing on this branch's base. Outside the
+   phase's planned scope, and inside it once the whole gate had to be green.
 
 ## Known limitations
 
@@ -178,7 +201,13 @@ order it runs in.
 - **Approval only.** No off-system rejection or change request.
 - **No cross-session report.** The record keys (`<step_key>.off_system_approved_on`,
   `.off_system_evidence`, `.recorded_at`) exist for one, but no surface was built.
-- **Pre-existing, unrelated:** `./scripts/audit-check.sh` reports three high
-  advisories (jsondiffpatch GHSA-j4fx-xxwh-2485, browserslist GHSA-c83g-rgw3-j3cx
-  and GHSA-73wf-gq98-2v4g). They reproduce on a clean tree at this commit's base
-  and are untouched by this phase. Every other validate.sh check passes.
+- **Dependency advisories, fixed rather than waived.** `audit-check.sh` was
+  already failing on this branch's base with high advisories in three transitive
+  packages, and a fourth surfaced while the branch was open. All are now cleared
+  by extending the existing `pnpm.overrides`, so the allowlist stays empty and no
+  security gate is held open: `jsondiffpatch >=0.7.6` (GHSA-j4fx-xxwh-2485,
+  prototype pollution, reached through the Vercel AI SDK), `browserslist >=4.28.7`
+  (GHSA-c83g-rgw3-j3cx and GHSA-73wf-gq98-2v4g, reached through autoprefixer),
+  and `fast-uri` raised from `>=3.1.5` to `>=3.1.6` (GHSA-5jgf-p345-68v8 and
+  three others, reached through the MCP SDK's ajv). `validate.sh` now passes all
+  25 checks with none failing.
