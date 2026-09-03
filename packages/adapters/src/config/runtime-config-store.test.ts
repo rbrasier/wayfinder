@@ -5,6 +5,7 @@ import {
   DIRECTORY_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   SITE_BANNER_MAX_TEXT_SIZE_PT,
+  createDefaultChatDisclaimerConfig,
   createDefaultDirectoryConfig,
   createDefaultSiteBannerConfig,
   type AiConfig,
@@ -328,6 +329,70 @@ describe("RuntimeConfigStore.getSiteBannerConfig", () => {
 
     await store.getSiteBannerConfig();
     await store.getSiteBannerConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("RuntimeConfigStore.getChatDisclaimerConfig", () => {
+  it("returns the modal-off default when no value is stored", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getChatDisclaimerConfig();
+
+    expect(config).toEqual(createDefaultChatDisclaimerConfig());
+  });
+
+  it("parses a stored configuration", async () => {
+    const stored = JSON.stringify({
+      composerText: "Check every answer.",
+      modalMode: "every_session",
+      modalText: "Verify all output before relying on it.",
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getChatDisclaimerConfig();
+
+    expect(config).toEqual({
+      composerText: "Check every answer.",
+      modalMode: "every_session",
+      modalText: "Verify all output before relying on it.",
+    });
+  });
+
+  it("falls back to the off mode for an unrecognised stored mode", async () => {
+    const store = new RuntimeConfigStore(makeRepo(JSON.stringify({ modalMode: "always" })), makeEnv());
+
+    const config = await store.getChatDisclaimerConfig();
+
+    expect(config.modalMode).toBe("off");
+  });
+
+  it("falls back to defaults for an unparseable row", async () => {
+    const store = new RuntimeConfigStore(makeRepo("{ not json"), makeEnv());
+
+    const config = await store.getChatDisclaimerConfig();
+
+    expect(config).toEqual(createDefaultChatDisclaimerConfig());
+  });
+
+  it("re-reads after invalidateChatDisclaimer", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getChatDisclaimerConfig();
+    store.invalidateChatDisclaimer();
+    await store.getChatDisclaimerConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("caches the config so repeated reads do not hit the repository", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getChatDisclaimerConfig();
+    await store.getChatDisclaimerConfig();
 
     expect(repo.get).toHaveBeenCalledTimes(1);
   });
