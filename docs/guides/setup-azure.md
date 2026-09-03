@@ -50,7 +50,7 @@ the n8n callback webhook (`/v1/webhooks`), if you use it.
 Wayfinder publishes a container image, so there is nothing to build:
 
 ```
-ghcr.io/rbrasier/wayfinder:0.28.11
+ghcr.io/rbrasier/wayfinder:0.28.13
 ```
 
 It is public — no registry credential and no pull secret on the Container App.
@@ -70,8 +70,8 @@ ACR=wayfinderacr
 az group create --name "$RG" --location uksouth
 az acr create --resource-group "$RG" --name "$ACR" --sku Basic
 az acr import --name "$ACR" \
-  --source ghcr.io/rbrasier/wayfinder:0.28.11 \
-  --image wayfinder:0.28.11
+  --source ghcr.io/rbrasier/wayfinder:0.28.13 \
+  --image wayfinder:0.28.13
 ```
 
 `az acr import` copies registry-to-registry — no local Docker, and nothing
@@ -219,7 +219,7 @@ something several replicas race to do during a rolling update:
 az containerapp job create \
   --name wayfinder-migrate --resource-group "$RG" --environment wayfinder-env \
   --trigger-type Manual --replica-timeout 600 \
-  --image ghcr.io/rbrasier/wayfinder:0.28.11 \
+  --image ghcr.io/rbrasier/wayfinder:0.28.13 \
   --command migrate
 ```
 
