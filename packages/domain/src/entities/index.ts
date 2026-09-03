@@ -61,6 +61,7 @@ export * from "./system-setting";
 export * from "./runtime-config";
 export * from "./site-banner";
 export * from "./about-links";
+export * from "./chat-disclaimer";
 export * from "./notification-log";
 export * from "./retention-policy";
 export * from "./approval";

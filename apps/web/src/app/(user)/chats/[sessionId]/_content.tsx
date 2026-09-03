@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";
 import { ChatComposer } from "@/components/chat/chat-composer";
+import { ChatDisclaimerModal } from "@/components/chat/chat-disclaimer-modal";
 import { ApprovalGate } from "@/components/chat/approval-gate";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { toBranchOptions } from "@/lib/chat/branch-options";
@@ -587,6 +588,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         onClose={() => setRewindOpen(false)}
         isPending={rewindMutation.isPending}
       />
+
+      {myUserId && <ChatDisclaimerModal sessionId={sessionId} userId={myUserId} />}
 
       <BranchOverrideModal
         open={overrideOpen}
