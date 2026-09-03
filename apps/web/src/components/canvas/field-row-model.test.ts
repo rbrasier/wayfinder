@@ -5,6 +5,8 @@ import {
   lineToModel,
   linesToModels,
   modelToLine,
+  STRUCTURED_TYPE_OPTIONS,
+  TEMPLATE_TYPE_OPTIONS,
   withType,
   type FieldModel,
 } from "./field-row-model";
@@ -250,5 +252,69 @@ describe("linesToModels", () => {
       "text",
       "date",
     ]);
+  });
+});
+
+describe("type options", () => {
+  const values = (options: { value: string }[]) => options.map((option) => option.value);
+
+  // ADR-038 §5 hides `section` from the structured editor because an
+  // include/omit-this-part-of-the-document decision has no meaning with no
+  // document. It says nothing about narrative, and narrative prose composed
+  // into the record is meaningful whether or not a document is rendered.
+  it("offers narrative in a structured step", () => {
+    expect(values(STRUCTURED_TYPE_OPTIONS)).toContain("narrative");
+  });
+
+  // ADR-043 §2: no document, no signature.
+  it("does not offer a signature in a structured step", () => {
+    expect(values(STRUCTURED_TYPE_OPTIONS)).not.toContain("signature");
+  });
+
+  it("offers both narrative and signature in a template step", () => {
+    expect(values(TEMPLATE_TYPE_OPTIONS)).toEqual(
+      expect.arrayContaining(["narrative", "signature"]),
+    );
+  });
+
+  it("lists each type once", () => {
+    for (const options of [STRUCTURED_TYPE_OPTIONS, TEMPLATE_TYPE_OPTIONS]) {
+      expect(new Set(values(options)).size).toBe(options.length);
+    }
+  });
+
+  it("offers the same scalar types to both editors", () => {
+    const structured = values(STRUCTURED_TYPE_OPTIONS);
+    const template = values(TEMPLATE_TYPE_OPTIONS).filter((value) => value !== "signature");
+    expect(structured).toEqual(template);
+  });
+});
+
+describe("narrative guidance round-trip", () => {
+  it("serialises a brief the same way a .docx tag carries it", () => {
+    const line = modelToLine(
+      model({ label: "Scope", type: "narrative", instruction: "What is in and out of scope" }),
+    );
+    expect(line).toBe('Scope (narrative: "What is in and out of scope")');
+  });
+
+  it("reads its own serialised brief back unchanged", () => {
+    const brief = "Cover the background, the options considered, and the recommendation";
+    const line = modelToLine(model({ label: "Background", type: "narrative", instruction: brief }));
+    expect(lineToModel(line)).toMatchObject({ type: "narrative", instruction: brief });
+  });
+
+  it("serialises a narrative with no brief as a bare (narrative)", () => {
+    expect(modelToLine(model({ label: "Scope", type: "narrative" }))).toBe("Scope (narrative)");
+  });
+
+  it("carries an existing brief onto a switch to narrative", () => {
+    const changed = withType(model({ type: "text", instruction: "Two paragraphs" }), "narrative");
+    expect(changed.instruction).toBe("Two paragraphs");
+  });
+
+  it("drops the brief when switching away from narrative", () => {
+    const changed = withType(model({ type: "narrative", instruction: "Two paragraphs" }), "text");
+    expect(changed.instruction).toBeUndefined();
   });
 });

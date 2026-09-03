@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
+import type { HelpVariant } from "./template-tags-help-content";
 import { parseFieldLines } from "./template-field-editor";
 import { N8nExtractionInfoDialog } from "./n8n-extraction-info-dialog";
 import { SkillPickerModal } from "./skill-picker-modal";
@@ -139,6 +140,7 @@ export function NodeConfigModal({
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpVariant, setHelpVariant] = useState<HelpVariant>("template");
   const [infoVariant, setInfoVariant] = useState<"inputs" | "outputs">("inputs");
   const [infoOpen, setInfoOpen] = useState(false);
   const [skillPickerOpen, setSkillPickerOpen] = useState(false);
@@ -562,7 +564,10 @@ export function NodeConfigModal({
                       }
                       uploadError={uploadError}
                       setUploadError={setUploadError}
-                      onOpenHelpDialog={() => setHelpDialogOpen(true)}
+                      onOpenHelpDialog={(variant) => {
+                        setHelpVariant(variant);
+                        setHelpDialogOpen(true);
+                      }}
                       skillsEnabled={skillsEnabled}
                       mcpEnabled={mcpEnabled}
                       skillsById={skillsById}
@@ -679,6 +684,7 @@ export function NodeConfigModal({
       />
       <TemplateTagsHelpDialog
         open={helpDialogOpen}
+        variant={helpVariant}
         onClose={() => setHelpDialogOpen(false)}
       />
       <N8nExtractionInfoDialog
