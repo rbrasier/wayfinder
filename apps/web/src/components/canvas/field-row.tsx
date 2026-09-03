@@ -181,15 +181,19 @@ export function FieldConfigModal({
 
           {model.type === "narrative" && (
             <div className="space-y-1">
-              <Label htmlFor="field-instruction">What the AI should write</Label>
+              <Label htmlFor="field-instruction">What this field is for</Label>
               <textarea
                 id="field-instruction"
                 rows={3}
                 value={model.instruction ?? ""}
                 onChange={(event) => onChange({ instruction: event.target.value })}
-                placeholder="e.g. Summarise the background to this procurement in two paragraphs"
+                placeholder="e.g. The background to this procurement — what prompted it, what has been tried, and why it matters now"
                 className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
               />
+              <p className="text-[12px] text-[#666055]">
+                The AI uses this to explain to the person what the field needs, ask for anything
+                missing, and write up their answer. Say what it should cover, not how to phrase it.
+              </p>
             </div>
           )}
 
