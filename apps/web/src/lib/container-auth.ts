@@ -1,5 +1,15 @@
 import { isIP } from "node:net";
-import type { AuthMethod, PkiEnvDefaults, RuntimeConfigStore } from "@rbrasier/adapters";
+import {
+  BetterAuthPasswordResetter,
+  createAuth,
+  type Auth,
+  type AuthMethod,
+  type Database,
+  type PkiEnvDefaults,
+  type RuntimeConfigStore,
+} from "@rbrasier/adapters";
+import { SendPasswordResetEmail } from "@rbrasier/application";
+import type { IEmailSender } from "@rbrasier/domain";
 
 interface PkiEnv {
   AUTH_METHOD: string;
@@ -105,4 +115,76 @@ export const resolveAuthMethod = (authMethod: string): AuthMethod => {
     default:
       return { type: "email-password" as const };
   }
+};
+
+export interface AuthRuntimeDependencies {
+  readonly db: Database;
+  readonly runtimeConfig: RuntimeConfigStore;
+  readonly emailSender: IEmailSender;
+  readonly authMethod: AuthMethod;
+  readonly secret: string;
+  readonly baseURL: string;
+  readonly adminSeedEmail: string | undefined;
+  readonly entraAuthority: string | undefined;
+}
+
+export interface AuthRuntime {
+  readonly getAuth: () => Promise<Auth>;
+  readonly passwordResetter: BetterAuthPasswordResetter;
+  readonly sendPasswordResetEmail: SendPasswordResetEmail;
+}
+
+/**
+ * Builds the auth half of the container: the lazily-rebuilt Better Auth
+ * instance and the two password paths that hang off it.
+ *
+ * Lives here rather than inline in `container.ts` to keep that file under the
+ * source-size ceiling, and because everything in it shares one concern —
+ * resolving the current auth configuration.
+ */
+export const buildAuthRuntime = (dependencies: AuthRuntimeDependencies): AuthRuntime => {
+  const sendPasswordResetEmail = new SendPasswordResetEmail(dependencies.emailSender);
+
+  // The instance reflects the runtime auth config, so it is built lazily and
+  // rebuilt whenever the config is invalidated (ADR-025). The auth route
+  // resolves the current instance per request — a settings change applies on the
+  // next request with no process restart.
+  let authInstance: Auth | null = null;
+  let builtAuthVersion = -1;
+
+  const buildAuth = async (): Promise<Auth> => {
+    const authConfig = await dependencies.runtimeConfig.getAuthConfig();
+    return createAuth(dependencies.db, {
+      secret: dependencies.secret,
+      baseURL: dependencies.baseURL,
+      adminSeedEmail: dependencies.adminSeedEmail,
+      authMethod: dependencies.authMethod,
+      authConfig,
+      entraAuthority: dependencies.entraAuthority,
+      // Errors are swallowed on purpose: Better Auth answers a reset request
+      // with the same "if this address exists" message either way, so letting a
+      // bounce surface here would turn the form into an address oracle. The
+      // failed send is already recorded by the sender.
+      sendPasswordResetEmail: async (request) => {
+        await sendPasswordResetEmail.execute(request);
+      },
+    });
+  };
+
+  const getAuth = async (): Promise<Auth> => {
+    const version = dependencies.runtimeConfig.getAuthVersion();
+    if (authInstance && builtAuthVersion === version) return authInstance;
+    authInstance = await buildAuth();
+    builtAuthVersion = version;
+    return authInstance;
+  };
+
+  return {
+    getAuth,
+    // Administrator-initiated reset (not the break-glass CLI path): hashes
+    // through the live instance, so a config change that rebuilds it cannot
+    // leave resets writing a stale hash format.
+    passwordResetter: new BetterAuthPasswordResetter({ database: dependencies.db, getAuth }),
+    sendPasswordResetEmail,
+  };
 };

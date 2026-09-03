@@ -24,6 +24,7 @@ import {
   isAiConfigured,
   isAtLeastOneMethodEnabled,
   isPkiUsable,
+  isSelfServicePasswordResetAvailable,
   isEmailConfigured,
   isEntraConfigured,
   isN8nConfigured,
@@ -375,10 +376,14 @@ export const settingsRouter = router({
   // Public so the unauthenticated /login page can render the right controls.
   enabledAuthMethods: publicProcedure.query(async ({ ctx }) => {
     const config = await ctx.container.runtimeConfig.getAuthConfig();
+    // Read live rather than from the cached auth instance: an admin who has just
+    // configured email should get the "Forgot password?" link without a restart.
+    const emailConfigured = await ctx.container.services.emailSender.isConfigured();
     return {
       emailPassword: config.emailPasswordEnabled,
       entra: config.entraEnabled && isEntraConfigured(config.entra),
       pki: isPkiUsable(config, ctx.container.runtimeConfig.isPkiEnvConfigured()),
+      passwordReset: isSelfServicePasswordResetAvailable(config, emailConfigured),
     };
   }),
 

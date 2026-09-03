@@ -21,6 +21,7 @@ export * from "./mcp/index";
 export * from "./create-user";
 export * from "./update-user";
 export * from "./delete-user";
+export * from "./reset-user-password";
 export * from "./list-users";
 export * from "./log-error";
 export * from "./list-errors";

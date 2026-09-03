@@ -14,6 +14,13 @@ export type AuthMethod =
   | { readonly type: "google-oauth" }
   | { readonly type: "other" };
 
+export interface PasswordResetEmailRequest {
+  readonly email: string;
+  readonly recipientName: string | null;
+  readonly resetUrl: string;
+  readonly expiryMinutes: number;
+}
+
 export interface CreateAuthOptions {
   readonly secret: string;
   readonly baseURL: string;
@@ -21,7 +28,18 @@ export interface CreateAuthOptions {
   readonly authMethod: AuthMethod;
   readonly authConfig: AuthMethodsConfig;
   readonly entraAuthority?: string;
+  // Wired whenever the app can send mail *in principle*, not only when email is
+  // currently configured: this instance is rebuilt on auth-config changes alone,
+  // so binding the endpoint's existence to email settings would leave reset dead
+  // until a restart after an admin fills them in. The sender itself refuses when
+  // no transport is configured, and the sign-in screen hides the entry point on
+  // the same live check, so an unconfigured install still offers nothing.
+  readonly sendPasswordResetEmail?: (request: PasswordResetEmailRequest) => Promise<void>;
 }
+
+// One hour. Long enough to survive a mail queue and a distracted user, short
+// enough that a link left in an inbox stops working the same day.
+export const PASSWORD_RESET_TOKEN_TTL_SECONDS = 60 * 60;
 
 export interface MicrosoftProviderOptions {
   readonly clientId: string;
@@ -173,6 +191,25 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
       enabled: emailPasswordEnabled,
       autoSignIn: true,
       requireEmailVerification: false,
+      // A reset means the old password is no longer trusted, so every live
+      // session goes with it — the same stance the admin-initiated reset takes.
+      revokeSessionsOnPasswordReset: true,
+      ...(config.sendPasswordResetEmail
+        ? {
+            resetPasswordTokenExpiresIn: PASSWORD_RESET_TOKEN_TTL_SECONDS,
+            sendResetPassword: async (request: {
+              user: { email: string; name?: string | null };
+              url: string;
+            }) => {
+              await config.sendPasswordResetEmail?.({
+                email: request.user.email,
+                recipientName: request.user.name ?? null,
+                resetUrl: request.url,
+                expiryMinutes: PASSWORD_RESET_TOKEN_TTL_SECONDS / 60,
+              });
+            },
+          }
+        : {}),
     },
     databaseHooks: {
       account: {

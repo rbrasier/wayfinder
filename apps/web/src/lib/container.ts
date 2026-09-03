@@ -23,6 +23,7 @@ import {
   DeleteFlowEdge,
   DeleteFlowNode,
   DeleteUser,
+  ResetUserPassword,
   EvaluateStepReadiness,
   CreateBudget,
   UpdateBudget,
@@ -186,7 +187,6 @@ import {
   SystemClock,
   sha256Hex,
   TtlCache,
-  createAuth,
   createCachedSessionResolver,
   createDatabase,
   createNodeExecutors,
@@ -208,6 +208,7 @@ import { buildSmtpEnvConfig } from "./container-smtp";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import {
   resolveAuthMethod,
+  buildAuthRuntime,
   resolvePkiEnv,
   warnOnLegacyAuthMethodContradiction,
   warnOnRejectedProxyEntries,
@@ -542,32 +543,16 @@ const build = () => {
     runtimeConfig,
   );
 
-  // The Better Auth instance reflects the runtime auth config, so it is built
-  // lazily and rebuilt whenever the config is invalidated (ADR-025). The auth
-  // route resolves the current instance per request — a settings change applies
-  // on the next request with no process restart.
-  let authInstance: ReturnType<typeof createAuth> | null = null;
-  let builtAuthVersion = -1;
-
-  const buildAuth = async () => {
-    const authConfig = await runtimeConfig.getAuthConfig();
-    return createAuth(db, {
-      secret: env.BETTER_AUTH_SECRET,
-      baseURL: env.BETTER_AUTH_URL,
-      adminSeedEmail: env.ADMIN_SEED_EMAIL,
-      authMethod,
-      authConfig,
-      entraAuthority: env.ENTRA_AUTHORITY,
-    });
-  };
-
-  const getAuth = async () => {
-    const version = runtimeConfig.getAuthVersion();
-    if (authInstance && builtAuthVersion === version) return authInstance;
-    authInstance = await buildAuth();
-    builtAuthVersion = version;
-    return authInstance;
-  };
+  const { getAuth, passwordResetter, sendPasswordResetEmail } = buildAuthRuntime({
+    db,
+    runtimeConfig,
+    emailSender,
+    authMethod,
+    secret: env.BETTER_AUTH_SECRET,
+    baseURL: env.BETTER_AUTH_URL,
+    adminSeedEmail: env.ADMIN_SEED_EMAIL,
+    entraAuthority: env.ENTRA_AUTHORITY,
+  });
 
   const getEffectivePermissions = new GetEffectivePermissions(roles, userRoles);
   const resolveEffectivePermissions = createCachedPermissionResolver(
@@ -648,6 +633,8 @@ const build = () => {
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),
+      resetUserPassword: new ResetUserPassword(users, passwordResetter, auditLogger),
+      sendPasswordResetEmail,
       listUsers: new ListUsers(users),
       logError: new LogError(errorLogger),
       listErrors: new ListErrors(errorLogs),
