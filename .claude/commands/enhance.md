@@ -11,7 +11,9 @@ Ask all of these via `AskUserQuestion` before proceeding:
 1. What's changing, and why?
 2. Which entities or use cases are affected?
 3. Are DB changes needed?
-4. Is this a MINOR or PATCH bump?
+4. Is this a MINOR or PATCH bump? **A change targeting a release branch
+   (`release/*`) is always a PATCH** — MINOR bumps only ever land on `main`.
+   Only ask this question when the target is `main`; otherwise it's PATCH.
 5. Which release does this target? Default is the current release branch (see
    **Release Branching** in `CLAUDE.md`); choose `main` only if it extends
    unreleased work. If the change is really a new feature, stop and route to
@@ -40,7 +42,7 @@ sections.
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
 | Tests | The test files written before each sub-component, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
-| Version, branch & PR target | MINOR or PATCH and the resulting version, the `enhance/<slug>` branch name, the base branch, and the branch the PR opens against |
+| Version, branch & PR target | The bump and resulting version — PATCH when the base branch is a `release/*` branch, MINOR or PATCH only when the base is `main` — the `enhance/<slug>` branch name, the base branch, and the branch the PR opens against |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
 
@@ -92,7 +94,7 @@ it — and carry the approved summary into the phase doc when step 1 generates i
      `Next release line` value when the base branch is `main`, the current release branch's own
      name otherwise (see `docs/guides/versioning.md`)
    - Write implementation summary (include which e2e test covers the change)
-   - Apply the version bump
+   - Apply the version bump (PATCH when the base branch is a `release/*` branch)
    - Run `./validate.sh`
    - Commit all changes and push the branch
    - **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally.
