@@ -61,5 +61,14 @@ const VERB_PHRASE: Record<string, string> = {
     "rejected approval — the request was closed.",
 };
 
-export const decisionVerbPhrase = (outcome: string): string =>
-  VERB_PHRASE[outcome.trim()] ?? outcome;
+// The off-system line carries a date, so it cannot be a key in the map above.
+// Matched rather than listed, and matched first, so the feed reads as a verb
+// phrase after the approver's name like every other outcome does.
+const OFF_SYSTEM_OUTCOME = /^Approval granted — recorded off system \(approved on (.+)\)\.$/;
+
+export const decisionVerbPhrase = (outcome: string): string => {
+  const trimmed = outcome.trim();
+  const offSystem = OFF_SYSTEM_OUTCOME.exec(trimmed);
+  if (offSystem) return `granted approval off system (approved on ${offSystem[1]}).`;
+  return VERB_PHRASE[trimmed] ?? outcome;
+};

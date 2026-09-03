@@ -31,6 +31,16 @@ const makeContainer = (): Container =>
         ),
       },
       resolveDecisionNotifyTargets: { execute: vi.fn().mockResolvedValue(ok([])) },
+      recordOffSystemApproval: {
+        execute: vi.fn().mockResolvedValue(
+          ok({
+            approval: { id: approvalId, sessionId: "sess-1" },
+            advanced: true,
+            newNodeId: null,
+            sessionCompleted: false,
+          }),
+        ),
+      },
     },
   }) as unknown as Container;
 
@@ -72,6 +82,74 @@ describe("approval.decide", () => {
       caller.approval.decide({
         approvalId,
         decision: "approved_with_edits" as never,
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe("approval.recordOffSystem", () => {
+  const validInput = {
+    approvalId,
+    approvedOn: "2026-08-14",
+    evidenceFilename: "signed-memo.pdf",
+    evidenceMimeType: "application/pdf",
+    evidenceContentBase64: Buffer.from("a scan", "utf8").toString("base64"),
+  };
+
+  it("records the caller as the nominator, never as the approver", async () => {
+    const container = makeContainer();
+    const caller = createCaller(contextWith(container));
+
+    await caller.approval.recordOffSystem(validInput);
+
+    const call = vi.mocked(container.useCases.recordOffSystemApproval.execute).mock.calls[0]![0];
+    expect(call.nominatedByUserId).toBe("user-1");
+    expect(call).not.toHaveProperty("decidedByUserId");
+  });
+
+  it("decodes the evidence into bytes for the use case", async () => {
+    const container = makeContainer();
+    const caller = createCaller(contextWith(container));
+
+    await caller.approval.recordOffSystem(validInput);
+
+    const call = vi.mocked(container.useCases.recordOffSystemApproval.execute).mock.calls[0]![0];
+    expect(call.evidence.bytes.toString("utf8")).toBe("a scan");
+    expect(call.evidence.filename).toBe("signed-memo.pdf");
+  });
+
+  it("tells open chats the session changed", async () => {
+    publish.mockClear();
+    const caller = createCaller(contextWith(makeContainer()));
+
+    await caller.approval.recordOffSystem(validInput);
+
+    expect(publish).toHaveBeenCalledWith("sess-1", { type: "session.updated" });
+  });
+
+  it("rejects a date that is not a calendar date", async () => {
+    const caller = createCaller(contextWith(makeContainer()));
+
+    await expect(
+      caller.approval.recordOffSystem({ ...validInput, approvedOn: "14/08/2026" }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects a nomination with no evidence attached", async () => {
+    const caller = createCaller(contextWith(makeContainer()));
+
+    await expect(
+      caller.approval.recordOffSystem({ ...validInput, evidenceContentBase64: "" }),
+    ).rejects.toThrow();
+  });
+
+  it("rejects evidence larger than the payload ceiling", async () => {
+    const caller = createCaller(contextWith(makeContainer()));
+
+    await expect(
+      caller.approval.recordOffSystem({
+        ...validInput,
+        evidenceContentBase64: "A".repeat(15 * 1024 * 1024),
       }),
     ).rejects.toThrow();
   });

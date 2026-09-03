@@ -31,6 +31,10 @@ export const approvalConfigFromValues = (
     ...(approvalSubject ? { approvalSubject } : {}),
     ...(values.signatureFieldKey ? { signatureFieldKey: values.signatureFieldKey } : {}),
     ...(changesRequestedTarget ? { changesRequestedTarget } : {}),
+    // Written only when refused. Absent means allowed at runtime, so storing
+    // `true` would be storing the default — and a node that never opened this
+    // modal would then differ from one that did.
+    ...(values.allowOffSystemApproval ? {} : { allowOffSystemApproval: false }),
     notifyOnComplete: values.notifyOnComplete,
   };
 };
@@ -44,6 +48,7 @@ export const approvalValuesFromConfig = (
   | "approvalSubjectInstruction"
   | "signatureFieldKey"
   | "changesRequestedTargetNodeId"
+  | "allowOffSystemApproval"
 > => {
   const subject = encodeApprovalSubject(config.approvalSubject as ApprovalSubject | undefined);
   return {
@@ -54,5 +59,9 @@ export const approvalValuesFromConfig = (
     changesRequestedTargetNodeId: encodeChangesRequestedTarget(
       config.changesRequestedTarget as ChangesRequestedTarget | undefined,
     ),
+    // Mirrors `offSystemApprovalAllowed` in the domain: anything but an explicit
+    // `false` is allowed, so the box opens checked on a node authored before the
+    // setting existed.
+    allowOffSystemApproval: config.allowOffSystemApproval !== false,
   };
 };

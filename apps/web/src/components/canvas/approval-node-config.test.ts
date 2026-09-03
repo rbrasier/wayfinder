@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PriorStepField } from "@rbrasier/domain";
+import { approvalConfigFromValues, approvalValuesFromConfig } from "./approval-config-mapping";
+import { DEFAULT_VALUES, type NodeConfigValues } from "./node-config-values";
 import {
   approvalAdvancedDefaultOpen,
   approvalSubjectChoice,
@@ -317,5 +319,47 @@ describe("noEditablePredecessorWarning", () => {
 
   it("stays quiet when the author named a target explicitly", () => {
     expect(noEditablePredecessorWarning([step("enrich", "auto")], "node-enrich")).toBeNull();
+  });
+});
+
+describe("allowOffSystemApproval round-trip", () => {
+  const values = (overrides: Partial<NodeConfigValues> = {}): NodeConfigValues => ({
+    ...DEFAULT_VALUES,
+    type: "approval",
+    ...overrides,
+  });
+
+  it("opens checked for a node authored before the setting existed", () => {
+    expect(approvalValuesFromConfig({}).allowOffSystemApproval).toBe(true);
+  });
+
+  it("opens checked when the stored config says it is allowed", () => {
+    expect(approvalValuesFromConfig({ allowOffSystemApproval: true }).allowOffSystemApproval).toBe(
+      true,
+    );
+  });
+
+  it("opens unchecked when the author turned it off", () => {
+    expect(approvalValuesFromConfig({ allowOffSystemApproval: false }).allowOffSystemApproval).toBe(
+      false,
+    );
+  });
+
+  it("stores nothing when the box is left checked, so the node keeps its default", () => {
+    const config = approvalConfigFromValues(values({ allowOffSystemApproval: true }));
+
+    expect(config).not.toHaveProperty("allowOffSystemApproval");
+  });
+
+  it("stores the refusal explicitly, because absent means allowed", () => {
+    const config = approvalConfigFromValues(values({ allowOffSystemApproval: false }));
+
+    expect(config.allowOffSystemApproval).toBe(false);
+  });
+
+  it("survives a round-trip through the stored config", () => {
+    const stored = approvalConfigFromValues(values({ allowOffSystemApproval: false }));
+
+    expect(approvalValuesFromConfig(stored).allowOffSystemApproval).toBe(false);
   });
 });

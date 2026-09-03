@@ -102,3 +102,57 @@ describe("approvalPatchToColumns", () => {
     expect(columns).not.toHaveProperty("decided_by_user_id");
   });
 });
+
+describe("approvalPatchToColumns — off-system nomination", () => {
+  it("writes the approval date, the evidence and the nominator as their own columns", () => {
+    const columns = approvalPatchToColumns({
+      status: "approved",
+      decidedByUserId: "user-approver",
+      decidedAt: new Date("2026-08-20T14:00:00.000Z"),
+      offSystemApprovedOn: "2026-08-14",
+      offSystemEvidence: {
+        filename: "signed-memo.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 48213,
+        storagePath: "approval-evidence/appr-1/2026-08-20-signed-memo.pdf",
+      },
+      offSystemNominatedByUserId: "user-operator",
+    });
+
+    expect(columns["off_system_approved_on"]).toBe("2026-08-14");
+    expect(columns["off_system_evidence_filename"]).toBe("signed-memo.pdf");
+    expect(columns["off_system_evidence_mime_type"]).toBe("application/pdf");
+    expect(columns["off_system_evidence_size_bytes"]).toBe(48213);
+    expect(columns["off_system_evidence_storage_path"]).toBe(
+      "approval-evidence/appr-1/2026-08-20-signed-memo.pdf",
+    );
+    expect(columns["off_system_nominated_by_user_id"]).toBe("user-operator");
+  });
+
+  it("records the approver as the decider, not the person who entered it", () => {
+    const columns = approvalPatchToColumns({
+      decidedByUserId: "user-approver",
+      offSystemNominatedByUserId: "user-operator",
+    });
+
+    expect(columns["decided_by_user_id"]).toBe("user-approver");
+    expect(columns["off_system_nominated_by_user_id"]).toBe("user-operator");
+  });
+
+  it("leaves every off-system column alone on an ordinary decision", () => {
+    const columns = approvalPatchToColumns({ status: "approved", comment: "Fine by me." });
+
+    expect(columns).not.toHaveProperty("off_system_approved_on");
+    expect(columns).not.toHaveProperty("off_system_evidence_filename");
+    expect(columns).not.toHaveProperty("off_system_nominated_by_user_id");
+  });
+
+  it("clears all five evidence columns when the patch nulls the evidence", () => {
+    const columns = approvalPatchToColumns({ offSystemEvidence: null });
+
+    expect(columns["off_system_evidence_filename"]).toBeNull();
+    expect(columns["off_system_evidence_mime_type"]).toBeNull();
+    expect(columns["off_system_evidence_size_bytes"]).toBeNull();
+    expect(columns["off_system_evidence_storage_path"]).toBeNull();
+  });
+});

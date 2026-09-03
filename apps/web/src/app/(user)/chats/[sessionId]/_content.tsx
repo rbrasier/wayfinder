@@ -526,6 +526,10 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             viewerUserId={myUserId}
             sessionOwnerUserId={session.userId}
             viewerIsAdmin={isAdmin}
+            offSystemAllowed={
+              (currentNode.config as { allowOffSystemApproval?: boolean })
+                .allowOffSystemApproval !== false
+            }
           />
         )}
 

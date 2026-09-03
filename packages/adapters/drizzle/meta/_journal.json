@@ -337,6 +337,13 @@
       "when": 1787828841462,
       "tag": "0047_verbatim_only",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1788349726721,
+      "tag": "0048_hard_nocturne",
+      "breakpoints": true
     }
   ]
 }

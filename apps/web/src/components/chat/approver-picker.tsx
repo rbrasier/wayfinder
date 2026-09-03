@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Copy, Info, Loader2, Mail, Stamp, Undo2, UserPen } from "lucide-react";
+import { Copy, Info, Loader2, Mail, Stamp, Undo2, UserPen, FileCheck2 } from "lucide-react";
 import { toast } from "sonner";
 import type { ApproverSource } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import {
   type SetupNotice,
 } from "./approval-gate-state";
 import { sentApprovalActions } from "./sent-approval-actions";
+import { OffSystemApprovalDialog } from "./off-system-approval-dialog";
 
 export interface ApproverPickerProps {
   sessionId: string;
@@ -43,6 +44,9 @@ export interface ApproverPickerProps {
   viewerUserId?: string | null;
   sessionOwnerUserId?: string | null;
   viewerIsAdmin?: boolean;
+  // Whether this approval step accepts an approval recorded off system
+  // (ADR-055 §4). Absent means allowed, matching the runtime default.
+  offSystemAllowed?: boolean;
 }
 
 interface ChosenApprover {
@@ -74,6 +78,7 @@ export function ApproverPicker({
   viewerUserId = null,
   sessionOwnerUserId = null,
   viewerIsAdmin = false,
+  offSystemAllowed = true,
 }: ApproverPickerProps) {
   const utils = trpc.useUtils();
   const [chosen, setChosen] = useState<ChosenApprover | null>(null);
@@ -82,6 +87,7 @@ export function ApproverPicker({
   const [query, setQuery] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
   const [confirmingWithdrawal, setConfirmingWithdrawal] = useState(false);
+  const [nominatingOffSystem, setNominatingOffSystem] = useState(false);
   const [withdrawalReason, setWithdrawalReason] = useState("");
   // Set while the operator is changing who a sent request is with. Reuses the
   // same search UI as the initial pick, so there is one way to choose a person.
@@ -228,11 +234,24 @@ export function ApproverPicker({
     requestedByUserId,
     isAdmin: viewerIsAdmin,
     inChat,
+    offSystemAllowed,
   });
 
   // Taking the request back. The session returns to the nearest prior chat step,
   // so the whole page has to re-read: `session.get` drives the gate, the
   // composer's disabled state and the step rail alike.
+  // Recording an approval that happened elsewhere. Same refresh as a decision:
+  // the session has moved on, so the gate, the composer and the step rail all
+  // have to re-read.
+  const closeOffSystem = () => setNominatingOffSystem(false);
+  const refreshAfterOffSystem = async () => {
+    await Promise.all([
+      utils.approval.forNode.invalidate({ sessionId, nodeId }),
+      utils.session.get.invalidate({ sessionId }),
+    ]);
+    onSent?.();
+  };
+
   const withdraw = trpc.approval.withdraw.useMutation({
     onSuccess: async (result) => {
       setConfirmingWithdrawal(false);
@@ -425,6 +444,17 @@ export function ApproverPicker({
               {/* Two steps, not one: withdrawing moves the chat back a step and
                   tells the approver it happened, which is too much to trigger on
                   a stray click next to "Copy approval link". */}
+              {actions.canNominateOffSystem && approvalId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setNominatingOffSystem(true)}
+                  data-approval-off-system
+                >
+                  <FileCheck2 className="h-4 w-4" />
+                  Approved off system
+                </Button>
+              )}
               {actions.canWithdraw && (
                 <Button
                   size="sm"
@@ -546,6 +576,16 @@ export function ApproverPicker({
               </Button>
             </div>
           </div>
+        )}
+
+        {approvalId && (
+          <OffSystemApprovalDialog
+            open={nominatingOffSystem}
+            approvalId={approvalId}
+            approverLabel={sentTo ?? sentToEmail ?? "the assigned approver"}
+            onClose={closeOffSystem}
+            onRecorded={refreshAfterOffSystem}
+          />
         )}
       </div>
     );

@@ -4,6 +4,11 @@ import type { Container } from "@/lib/container";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
+// 10 MB of evidence, expressed as the base64 that carries it — a scan or a
+// photographed page fits comfortably, and a payload larger than this is a
+// mistake rather than proof of an approval.
+const OFF_SYSTEM_EVIDENCE_BASE64_LIMIT = Math.ceil((10 * 1024 * 1024 * 4) / 3);
+
 export interface NextApprovalStep {
   nodeId: string;
   nodeName: string;
@@ -217,6 +222,46 @@ export const approvalRouter = router({
         nextApproval,
         notifyTargets: notify.error ? [] : notify.data,
       };
+    }),
+
+  // Records that the assigned approver approved outside Wayfinder (ADR-055).
+  // Distinct from `decide` because it authorises a different person on a
+  // different question: the nominator, who is not the approver.
+  //
+  // The evidence rides the mutation as base64, matching how the extraction
+  // router takes an uploaded template, so the panel keeps one code path for the
+  // decision, the cache invalidation and the session event.
+  recordOffSystem: authenticatedProcedure
+    .input(
+      z.object({
+        approvalId: z.string().uuid(),
+        // The calendar date the approval happened. Validated against the
+        // session it belongs to in the use case, not here.
+        approvedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the date as YYYY-MM-DD."),
+        comment: z.string().max(2000).nullish(),
+        evidenceFilename: z.string().min(1).max(255),
+        evidenceMimeType: z.string().min(1).max(255),
+        evidenceContentBase64: z.string().min(1).max(OFF_SYSTEM_EVIDENCE_BASE64_LIMIT),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.recordOffSystemApproval.execute({
+        approvalId: input.approvalId,
+        nominatedByUserId: ctx.userId,
+        approvedOn: input.approvedOn,
+        comment: input.comment ?? null,
+        evidence: {
+          filename: input.evidenceFilename,
+          mimeType: input.evidenceMimeType,
+          bytes: Buffer.from(input.evidenceContentBase64, "base64"),
+        },
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      publishSessionUpdated(ctx, result.data.approval.sessionId);
+
+      const nextApproval = await resolveNextApproval(ctx.container, result.data.newNodeId);
+      return { ...result.data, nextApproval };
     }),
 
   // Enriched with the context the approver needs to decide: chat name, who

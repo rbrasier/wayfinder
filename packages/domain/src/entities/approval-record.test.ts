@@ -164,3 +164,47 @@ describe("buildApprovalRecord", () => {
     expect(merged["finance_review.approver_name"]).toBe("Sam Patel");
   });
 });
+
+describe("buildApprovalRecord — recorded off system", () => {
+  const base = {
+    stepKey: "manager_review",
+    decision: "approved" as const,
+    approverName: "Jane Doe",
+    approverEmail: "jane.doe@example.com",
+    decidedAt: new Date("2026-08-20T14:00:00.000Z"),
+    comment: null,
+  };
+
+  it("freezes the approval date, the evidence filename and when it was entered", () => {
+    const record = buildApprovalRecord({
+      ...base,
+      offSystemApprovedOn: "2026-08-14",
+      offSystemEvidenceFilename: "signed-memo.pdf",
+      recordedAt: new Date("2026-08-20T14:00:00.000Z"),
+    });
+
+    expect(record["manager_review.off_system_approved_on"]).toBe("2026-08-14");
+    expect(record["manager_review.off_system_evidence"]).toBe("signed-memo.pdf");
+    expect(record["manager_review.recorded_at"]).toBe("2026-08-20T14:00:00.000Z");
+  });
+
+  it("keeps decided_at as the moment the decision committed, alongside the approval date", () => {
+    const record = buildApprovalRecord({
+      ...base,
+      offSystemApprovedOn: "2026-08-14",
+      offSystemEvidenceFilename: "signed-memo.pdf",
+      recordedAt: new Date("2026-08-20T14:00:00.000Z"),
+    });
+
+    expect(record["manager_review.decided_at"]).toBe("2026-08-20T14:00:00.000Z");
+    expect(record["manager_review.off_system_approved_on"]).toBe("2026-08-14");
+  });
+
+  it("writes none of the off-system keys for an ordinary decision", () => {
+    const record = buildApprovalRecord(base);
+
+    expect(record).not.toHaveProperty("manager_review.off_system_approved_on");
+    expect(record).not.toHaveProperty("manager_review.off_system_evidence");
+    expect(record).not.toHaveProperty("manager_review.recorded_at");
+  });
+});
