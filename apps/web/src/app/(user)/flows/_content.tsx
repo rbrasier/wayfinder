@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,8 @@ import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { ShareFlowDialog } from "@/components/flow/share-flow-dialog";
 import { AppHeader } from "@/components/layout/app-header";
+import { NEW_FLOW_CALLOUT_ID, NewFlowStepCallout } from "@/components/tour/new-flow-step-callout";
+import { parseTourStage, TOUR_PARAM, withTourStage } from "@/components/tour/tour-stage";
 import { usePermissions } from "@/lib/use-permissions";
 import { trpc } from "@/trpc/client";
 
@@ -27,6 +29,10 @@ export function UserFlowsContent() {
   const permissions = usePermissions();
   const canCreate = permissions.has("workflow:create_own");
   const flowsQuery = trpc.flow.listMine.useQuery();
+  // The welcome tour arrives here with the dialog already asked for, and hands
+  // the person on to the canvas with the explainer stage set (ADR-056 §2).
+  const searchParams = useSearchParams();
+  const guidedByTour = parseTourStage(searchParams.get(TOUR_PARAM)) === "new-flow";
 
   // A new flow is empty, so the only useful next step is laying out its steps —
   // go straight to the canvas rather than back to the list.
@@ -35,7 +41,8 @@ export function UserFlowsContent() {
       void utils.flow.listMine.invalidate();
       setCreating(false);
       toast.success("Flow created");
-      router.push(`/flows/${flow.id}/config`);
+      const canvasPath = `/flows/${flow.id}/config`;
+      router.push(guidedByTour ? withTourStage(canvasPath, "flow-explainer") : canvasPath);
     },
   });
 
@@ -47,7 +54,7 @@ export function UserFlowsContent() {
     },
   });
 
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(guidedByTour);
   const [editing, setEditing] = useState<EditState | null>(null);
   const [sharing, setSharing] = useState<{ flowId: string; name: string } | null>(null);
 
@@ -58,6 +65,13 @@ export function UserFlowsContent() {
       description: values.description || null,
       icon: values.icon || null,
     });
+  };
+
+  const closeCreate = () => {
+    setCreating(false);
+    // Backing out of the guided dialog ends this leg of the tour; the person can
+    // still create a flow normally, without the callout.
+    if (guidedByTour) router.replace("/flows");
   };
 
   const handleEdit = (values: FlowMetadataValues) => {
@@ -170,7 +184,9 @@ export function UserFlowsContent() {
             mode="create"
             isSaving={createMutation.isPending}
             onSubmit={handleCreate}
-            onClose={() => setCreating(false)}
+            onClose={closeCreate}
+            guide={guidedByTour && canCreate ? <NewFlowStepCallout /> : undefined}
+            guideId={NEW_FLOW_CALLOUT_ID}
           />
 
           <FlowMetadataDialog

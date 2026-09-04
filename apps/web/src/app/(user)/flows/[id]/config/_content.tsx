@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -37,18 +37,13 @@ import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal"
 import { VersionHistoryDialog } from "@/components/canvas/version-history-dialog";
 import { STEP_TYPE_ACCENT } from "@/components/canvas/node-styles";
 import { defaultConfigForType } from "@/components/canvas/node-defaults";
-import {
-  scheduledConfigFromValues,
-  scheduledValuesFromConfig,
-} from "@/components/canvas/scheduled-node-config";
-import {
-  approvalConfigFromValues,
-  approvalValuesFromConfig,
-} from "@/components/canvas/approval-config-mapping";
+import { scheduledConfigFromValues } from "@/components/canvas/scheduled-node-config";
+import { approvalConfigFromValues } from "@/components/canvas/approval-config-mapping";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
+import { FlowExplainerCarousel } from "@/components/tour/flow-explainer-carousel";
+import { parseTourStage, TOUR_PARAM } from "@/components/tour/tour-stage";
 import { trpc } from "@/trpc/client";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
-import { normaliseOutputType } from "@rbrasier/domain";
 import type {
   FieldValueSource,
   FlowContextDoc,
@@ -67,6 +62,7 @@ import { BranchRuleModal } from "@/components/canvas/branch-rule-modal";
 import { FlowConfigHeader } from "./_flow-config-header";
 import { useBranchRules } from "./_use-branch-rules";
 import { usePriorStepViews } from "./_use-prior-step-views";
+import { configValuesForNode } from "./_node-config-values";
 
 // What the template endpoints return on success. Shared by the direct upload and
 // the guided annotation modal so both apply the result identically.
@@ -125,6 +121,19 @@ function CanvasInner({ flowId }: { flowId: string }) {
     position: { x: number; y: number };
   } | null>(null);
   const [flowMenuOpen, setFlowMenuOpen] = useState(false);
+  // The welcome tour lands here with the explainer stage set (ADR-056 §2); the
+  // carousel also replays from the flow menu and the empty-canvas link. Its
+  // closing call to action points at the first-step button until that is used.
+  const searchParams = useSearchParams();
+  const [explainerOpen, setExplainerOpen] = useState(
+    parseTourStage(searchParams.get(TOUR_PARAM)) === "flow-explainer",
+  );
+  const [highlightFirstStep, setHighlightFirstStep] = useState(false);
+  const closeExplainer = (pointAtFirstStep: boolean) => {
+    setExplainerOpen(false);
+    if (searchParams.has(TOUR_PARAM)) router.replace(`/flows/${flowId}/config`);
+    setHighlightFirstStep(pointAtFirstStep);
+  };
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const flowMenuRef = useRef<HTMLDivElement>(null);
@@ -564,67 +573,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   }
 
   const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
-  const editingData = editingNode?.data as
-    | (ConversationalNodeData & { config?: Record<string, unknown> })
-    | undefined;
-  const editingConfig = (editingData?.config ?? {}) as Record<string, unknown>;
-  const initialConfigValues: Partial<NodeConfigValues> | undefined = editingData
-    ? {
-        name: editingData.name,
-        colour: editingData.colour ?? "#6366f1",
-        type:
-          editingNode?.type === "autoNode"
-            ? "auto"
-            : editingNode?.type === "scheduledNode"
-              ? "scheduled"
-              : editingNode?.type === "approvalNode"
-                ? "approval"
-                : editingNode?.type === "mcpNode"
-                  ? "mcp"
-                  : "conversational",
-        approverSource:
-          (editingConfig.approverSource as
-            | "first_level_supervisor"
-            | "second_level_supervisor"
-            | "dynamic"
-            | undefined) ?? "first_level_supervisor",
-        roleHint: (editingConfig.roleHint as string | null) ?? "",
-        approvalInstructions: (editingConfig.instructions as string | null) ?? "",
-        ...approvalValuesFromConfig(editingConfig),
-        aiInstruction: (editingConfig.aiInstruction as string | null) ?? editingData.aiInstruction ?? "",
-        doneWhen: (editingConfig.doneWhen as string | null) ?? "",
-        neverDone: Boolean(editingConfig.neverDone),
-        outputType: normaliseOutputType(editingConfig.outputType as string | null | undefined),
-        structuredFields: readFields(editingConfig.structuredFields),
-        documentTemplatePath: (editingConfig.documentTemplatePath as string | null) ?? null,
-        documentTemplateFilename: (editingConfig.documentTemplateFilename as string | null) ?? null,
-        documentTemplateContent: (editingConfig.documentTemplateContent as string | null) ?? null,
-        documentTemplateFormat: (editingConfig.documentTemplateFormat as "docx" | "xlsx" | null | undefined) ?? null,
-        spreadsheetTemplateMode: (editingConfig.spreadsheetTemplateMode as "tags" | "header" | null | undefined) ?? null,
-        allowManualEdit: (editingConfig.allowManualEdit as boolean | undefined) ?? true,
-        requireConfirmation: Boolean(editingConfig.requireConfirmation),
-        skillRefs: (editingConfig.skillRefs as string[] | undefined) ?? [],
-        allowedMcpToolRefs:
-          (editingConfig.allowedMcpToolRefs as NodeConfigValues["allowedMcpToolRefs"] | undefined) ??
-          [],
-        instruction: (editingConfig.instruction as string | null) ?? "",
-        executor: (editingConfig.executor as "n8n" | "mock" | undefined) ?? "n8n",
-        workflowId: (editingConfig.workflowId as string | null) ?? null,
-        webhookUrl: (editingConfig.webhookUrl as string | null) ?? "",
-        mcpServerId: (editingConfig.serverId as string | null) ?? "",
-        mcpToolName: (editingConfig.toolName as string | null) ?? "",
-        requestFields: readFields(editingConfig.requestFields),
-        requestFieldValues:
-          (editingConfig.requestFieldValues as Record<string, FieldValueSource> | undefined) ?? {},
-        responseFields: readFields(editingConfig.responseFields),
-        customRequestFieldKeys:
-          (editingConfig.customRequestFieldKeys as string[] | undefined) ?? [],
-        notifyOnComplete:
-          (editingConfig.notifyOnComplete as boolean | undefined) ??
-          (editingNode?.type === "scheduledNode"),
-        ...scheduledValuesFromConfig(editingConfig),
-      }
-    : undefined;
+  const initialConfigValues = configValuesForNode(editingNode);
 
   return (
     <div className="flex h-full flex-col">
@@ -645,6 +594,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setFlowMenuOpen={setFlowMenuOpen}
         flowMenuRef={flowMenuRef}
         onAddStep={handleAddStep}
+        onShowExplainer={() => setExplainerOpen(true)}
         updateFlowMutation={updateFlowMutation}
         refetchVersionStatus={() => void versionStatusQuery.refetch()}
         setEditingMetadata={setEditingMetadata}
@@ -661,9 +611,21 @@ function CanvasInner({ flowId }: { flowId: string }) {
         onConnectEnd={onConnectEnd}
         onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
-        onAddStep={handleAddStep}
+        onAddStep={() => {
+          setHighlightFirstStep(false);
+          handleAddStep();
+        }}
         onAddNextStep={handleAddNextStep}
+        onShowExplainer={() => setExplainerOpen(true)}
+        highlightFirstStep={highlightFirstStep}
         staleReferences={staleReferences}
+      />
+
+      <FlowExplainerCarousel
+        open={explainerOpen}
+        hasSteps={rfNodes.length > 0}
+        onClose={() => closeExplainer(false)}
+        onFinish={() => closeExplainer(rfNodes.length === 0)}
       />
 
       <BranchRuleModal

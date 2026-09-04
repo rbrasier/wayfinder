@@ -20,6 +20,7 @@ export * from "./skill/index";
 export * from "./mcp/index";
 export * from "./create-user";
 export * from "./update-user";
+export * from "./set-welcome-tour-completed";
 export * from "./delete-user";
 export * from "./reset-user-password";
 export * from "./list-users";
