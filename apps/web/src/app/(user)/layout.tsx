@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
 import { OrganisationSignInGate } from "@/components/organisation/organisation-sign-in-gate";
 import { SidebarProvider } from "@/components/sidebar-context";
+import { WelcomeTourGate } from "@/components/tour/welcome-tour-gate";
 import { createServerHelpers } from "@/trpc/server";
 import { getContainer } from "@/lib/container";
 
@@ -39,6 +40,7 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
             {children}
           </div>
           <OrganisationSignInGate />
+          <WelcomeTourGate />
         </div>
       </HydrateClient>
     </SidebarProvider>

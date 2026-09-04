@@ -50,6 +50,7 @@ export function FlowConfigHeader({
   setFlowMenuOpen,
   flowMenuRef,
   onAddStep,
+  onShowExplainer,
   updateFlowMutation,
   refetchVersionStatus,
   setEditingMetadata,
@@ -72,6 +73,7 @@ export function FlowConfigHeader({
   setFlowMenuOpen: Dispatch<SetStateAction<boolean>>;
   flowMenuRef: RefObject<HTMLDivElement | null>;
   onAddStep: () => void;
+  onShowExplainer: () => void;
   updateFlowMutation: UpdateFlowMutation;
   refetchVersionStatus: () => void;
   setEditingMetadata: Dispatch<SetStateAction<boolean>>;
@@ -288,6 +290,16 @@ export function FlowConfigHeader({
                 }}
               >
                 Version history
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
+                onClick={() => {
+                  setFlowMenuOpen(false);
+                  onShowExplainer();
+                }}
+              >
+                How flows work
               </button>
               <div className="my-1 border-t border-[#e7e3db]" />
               <button

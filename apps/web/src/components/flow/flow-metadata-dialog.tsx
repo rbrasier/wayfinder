@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -32,6 +32,10 @@ interface FlowMetadataDialogProps {
   isSaving?: boolean;
   onSubmit: (values: FlowMetadataValues) => void;
   onClose: () => void;
+  // An explainer rendered beside the dialog, positioned relative to it, so a
+  // tour can annotate the form without the form knowing about the tour.
+  guide?: ReactNode;
+  guideId?: string;
 }
 
 const emptyValues: FlowMetadataValues = {
@@ -48,6 +52,8 @@ export function FlowMetadataDialog({
   isSaving = false,
   onSubmit,
   onClose,
+  guide,
+  guideId,
 }: FlowMetadataDialogProps) {
   const [values, setValues] = useState<FlowMetadataValues>({ ...emptyValues, ...initialValues });
 
@@ -71,7 +77,14 @@ export function FlowMetadataDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
+      {/* A guide hangs outside the dialog's box, so clipping moves from the
+          content to an inner wrapper that keeps the rounded corners. */}
+      <DialogContent
+        className={guide ? "overflow-visible" : undefined}
+        aria-describedby={guide ? guideId : undefined}
+      >
+        {guide}
+        <div className={guide ? "overflow-hidden rounded-[18px]" : undefined}>
         <DialogHeader>
           <DialogTitle>{mode === "create" ? "New Flow" : "Edit Flow"}</DialogTitle>
           <DialogCloseButton />
@@ -140,6 +153,7 @@ export function FlowMetadataDialog({
             {isSaving ? "Saving…" : mode === "create" ? "Create flow" : "Save changes"}
           </Button>
         </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

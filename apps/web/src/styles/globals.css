@@ -259,3 +259,133 @@
     opacity: 1;
   }
 }
+
+/* Welcome tour (ADR-056). The explainer illustrations are sequenced in JS and
+   transition between beats; these keyframes cover the few effects a transition
+   cannot express — a line drawing, text typing, a bar filling, a pointer
+   asking for attention. Reduced motion holds every one at its finished state. */
+@keyframes wf-tour-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes wf-tour-snap {
+  from {
+    transform: scale(0.5);
+    opacity: 0.3;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes wf-tour-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes wf-tour-type {
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes wf-tour-progress {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+@keyframes wf-tour-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(47, 86, 211, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 14px rgba(47, 86, 211, 0);
+  }
+}
+
+@keyframes wf-tour-bob {
+  0%,
+  100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, -6px);
+  }
+}
+
+.wf-tour-callout {
+  animation: wf-tour-fade-in 0.4s ease-out both;
+}
+
+.wf-tour-connector {
+  stroke-dashoffset: var(--wf-dash, 60);
+  animation: wf-tour-draw 0.6s ease-out 0.35s forwards;
+}
+
+.wf-tour-connector-end {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wf-tour-snap 0.35s ease-out 0.9s both;
+}
+
+.wf-tour-type {
+  clip-path: inset(0 100% 0 0);
+}
+
+.wf-tour-type.is-on {
+  animation: wf-tour-type 1.5s steps(34, end) forwards;
+}
+
+.wf-tour-progress {
+  width: 0;
+  animation: wf-tour-progress 1.1s ease-in-out forwards;
+}
+
+.wf-tour-pulse {
+  animation: wf-tour-pulse 1.6s ease-out infinite;
+}
+
+.wf-tour-pointer {
+  animation: wf-tour-bob 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-tour-stage * {
+    transition: none !important;
+  }
+  .wf-tour-callout,
+  .wf-tour-pulse,
+  .wf-tour-pointer {
+    animation: none;
+  }
+  .wf-tour-connector {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .wf-tour-connector-end {
+    animation: none;
+  }
+  .wf-tour-type,
+  .wf-tour-type.is-on {
+    animation: none;
+    clip-path: inset(0 0 0 0);
+  }
+  .wf-tour-progress {
+    animation: none;
+    width: 100%;
+  }
+}
