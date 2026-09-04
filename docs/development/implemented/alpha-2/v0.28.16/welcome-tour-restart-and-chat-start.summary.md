@@ -157,6 +157,21 @@ is kept, because the wait itself was never the problem, but anything that
 *clicks* after a navigation now first waits for the sidebar's account button,
 which is driven by a client `user.me` query and so proves hydration.
 
+**The actual root cause, found on the third look.** The remaining flakiness was
+never "CI is a bit slow". `.github/workflows/e2e.yml` serves the app with
+`pnpm --filter @wayfinder/web dev`, so Next compiles each route on its first
+request. This spec is the first in the suite to visit `/flows`, `/settings` and
+the flow config canvas — the heaviest route in the app — so each of its
+hand-offs can pay a cold compile before the App Router changes the URL. That is
+why every failure was on the first attempt and every retry passed: the retry
+found the routes warm. It also explains the original 30s `/settings` timeout,
+which had looked like an unrelated symptom.
+
+The navigation allowance is sized to that (45s per hand-off), and each test is
+given the 120s budget the 45s default in `playwright.config.ts` cannot cover for
+three cold navigations plus a mutation — the same allowance
+`fix-entra-admin-recovery.spec.ts` already makes for its own slow path.
+
 Separately, the CI console log carried a Radix warning — *Missing `Description`
 or `aria-describedby` for {DialogContent}* — from the welcome modal, which had a
 title but no description. It now has an `sr-only` one naming the two halves

@@ -13,12 +13,18 @@ import { test, expect } from './helpers/base';
 
 const TOUR_EMAIL = 'welcome-tour@example.com';
 
-// Every hand-off in this journey lands on a server-rendered page, and the App
-// Router only changes the URL once that page's RSC payload arrives — /flows and
-// the config canvas both prefetch on the server. Under a loaded CI runner that
-// regularly passes Playwright's 5s expect default, which is what made this spec
-// flaky rather than anything in the tour itself.
-const NAV_TIMEOUT = 20_000;
+// CI serves the app with `next dev` (.github/workflows/e2e.yml), so every route
+// is compiled on its first request. This spec is the first to visit /flows, the
+// flow config canvas — the heaviest route in the app — and /settings, so each of
+// its hand-offs can pay a cold compile on top of a server render before the App
+// Router changes the URL. That, not anything in the tour, is what made this spec
+// flaky: the first attempt paid the compile and the retry found the route warm.
+const NAV_TIMEOUT = 45_000;
+
+// Three cold navigations and a mutation do not fit the 45s default from
+// playwright.config.ts. Matches the allowance fix-entra-admin-recovery.spec.ts
+// already makes for its own slow path.
+const COLD_ROUTE_BUDGET = 120_000;
 
 // `load` waits on every subresource and has timed out at 30s here under CI load.
 // Each step after a navigation is a retrying assertion, so the document being
@@ -52,6 +58,7 @@ test.describe('Welcome tour', () => {
   test('walks a first-time user from the welcome modal to the flow explainer across two page loads', async ({
     page,
   }) => {
+    test.setTimeout(COLD_ROUTE_BUDGET);
     await page.goto('/chats', untilDom);
     const welcome = page.getByTestId('welcome-tour');
     await expect(welcome).toBeVisible();
@@ -106,6 +113,7 @@ test.describe('Welcome tour', () => {
   test('skipping the tour keeps it hidden after a reload, and Settings brings it back', async ({
     page,
   }) => {
+    test.setTimeout(COLD_ROUTE_BUDGET);
     await page.goto('/chats', untilDom);
     const welcome = page.getByTestId('welcome-tour');
     await expect(welcome).toBeVisible();
@@ -137,6 +145,7 @@ test.describe('Welcome tour', () => {
   // the first silently showed nothing. Restarting twice without a reload is the
   // reproduction, so this spec never touches page.reload() between the rounds.
   test('restarts from Settings repeatedly within one page load', async ({ page }) => {
+    test.setTimeout(COLD_ROUTE_BUDGET);
     await page.goto('/chats', untilDom);
     await expect(page.getByTestId('welcome-tour')).toBeVisible();
 
