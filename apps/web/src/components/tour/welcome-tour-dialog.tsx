@@ -12,8 +12,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const WELCOME_DESCRIPTION_ID = "welcome-tour-description";
-
 interface WelcomeTourDialogProps {
   publishedFlows: Flow[];
   canCreateFlows: boolean;
@@ -36,20 +34,17 @@ export function WelcomeTourDialog({
 }: WelcomeTourDialogProps) {
   return (
     <Dialog open onOpenChange={(open) => !open && onSkip()}>
-      <DialogContent
-        className="max-w-3xl"
-        data-testid="welcome-tour"
-        aria-describedby={WELCOME_DESCRIPTION_ID}
-      >
+      <DialogContent className="max-w-3xl" data-testid="welcome-tour">
         <DialogHeader>
           <div>
             <div className="mb-[3px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
               Welcome to Wayfinder
             </div>
             <DialogTitle>What would you like to do first?</DialogTitle>
-            {/* Names the two halves for a screen reader before it reaches them,
-                and satisfies the description Radix expects on a dialog. */}
-            <DialogDescription id={WELCOME_DESCRIPTION_ID} className="sr-only">
+            {/* Names the two halves for a screen reader before it reaches them.
+                Radix wires its own id onto this and looks that id up, so it must
+                not carry one of ours or the dialog still reports as undescribed. */}
+            <DialogDescription className="sr-only">
               Wayfinder does two things: run a guided chat that produces a document, or build
               the flow that guides it. Choose one to get started, or skip and explore on your own.
             </DialogDescription>

@@ -22,7 +22,9 @@ const NAV_TIMEOUT = 20_000;
 
 // `load` waits on every subresource and has timed out at 30s here under CI load.
 // Each step after a navigation is a retrying assertion, so the document being
-// parsed is a sufficient starting point.
+// parsed is a sufficient starting point — but anything that *clicks* must first
+// wait for a client-rendered element, or it races hydration and the click is
+// swallowed.
 const untilDom = { waitUntil: 'domcontentloaded' } as const;
 
 test.describe('Welcome tour', () => {
@@ -119,6 +121,11 @@ test.describe('Welcome tour', () => {
     await expect(page.getByTestId('welcome-tour')).toHaveCount(0);
 
     await page.goto('/settings', untilDom);
+    // The restart button is server-rendered, so it is clickable before React
+    // has hydrated — and a click that lands then is swallowed, with no handler
+    // attached yet. The sidebar's account button comes from a client
+    // `user.me` query, so waiting for it proves hydration has happened.
+    await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible();
     await page.getByRole('button', { name: 'Restart the welcome tour' }).click();
     await expect(page).toHaveURL(/\/chats$/, { timeout: NAV_TIMEOUT });
     await expect(page.getByTestId('welcome-tour')).toBeVisible();

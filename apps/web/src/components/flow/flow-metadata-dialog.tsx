@@ -33,9 +33,10 @@ interface FlowMetadataDialogProps {
   onSubmit: (values: FlowMetadataValues) => void;
   onClose: () => void;
   // An explainer rendered beside the dialog, positioned relative to it, so a
-  // tour can annotate the form without the form knowing about the tour.
+  // tour can annotate the form without the form knowing about the tour. It
+  // renders inside the dialog, so assistive technology reaches it as part of
+  // the dialog's own content.
   guide?: ReactNode;
-  guideId?: string;
 }
 
 const emptyValues: FlowMetadataValues = {
@@ -53,7 +54,6 @@ export function FlowMetadataDialog({
   onSubmit,
   onClose,
   guide,
-  guideId,
 }: FlowMetadataDialogProps) {
   const [values, setValues] = useState<FlowMetadataValues>({ ...emptyValues, ...initialValues });
 
@@ -79,10 +79,7 @@ export function FlowMetadataDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       {/* A guide hangs outside the dialog's box, so clipping moves from the
           content to an inner wrapper that keeps the rounded corners. */}
-      <DialogContent
-        className={guide ? "overflow-visible" : undefined}
-        aria-describedby={guide ? guideId : undefined}
-      >
+      <DialogContent className={guide ? "overflow-visible" : undefined}>
         {guide}
         <div className={guide ? "overflow-hidden rounded-[18px]" : undefined}>
         <DialogHeader>

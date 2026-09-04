@@ -148,10 +148,29 @@ only once `user.me` resolves — the same query the gate reads — so the absenc
 now asserted at a point where the gate demonstrably had the data to show
 something, rather than possibly before it.
 
+**A correction to the above.** Switching `page.goto('/settings')` to
+`domcontentloaded` traded one problem for a worse one: the restart button is
+server-rendered, so Playwright could click it before React had hydrated, and the
+click was swallowed with no handler attached. The next run failed outright —
+the URL sat on `/settings` for the full 20s across 39 retries. `domcontentloaded`
+is kept, because the wait itself was never the problem, but anything that
+*clicks* after a navigation now first waits for the sidebar's account button,
+which is driven by a client `user.me` query and so proves hydration.
+
 Separately, the CI console log carried a Radix warning — *Missing `Description`
 or `aria-describedby` for {DialogContent}* — from the welcome modal, which had a
 title but no description. It now has an `sr-only` one naming the two halves
 before a screen reader reaches them. No visual change.
+
+The first attempt at that gave the description an id of our own and pointed
+`aria-describedby` at it, and the warning survived. Reading
+`@radix-ui/react-dialog` settles why: `DescriptionWarning` looks up **its own**
+generated `descriptionId` with `document.getElementById`, so supplying a
+different id defeats the check rather than satisfying it. The description now
+carries no id and Radix wires its own. The same mistake had been made on
+`FlowMetadataDialog`'s `guide` slot, whose `aria-describedby` is removed for the
+same reason — the callout renders inside the dialog, so assistive technology
+reaches it as part of the dialog's content without it.
 
 ## Known limitations
 

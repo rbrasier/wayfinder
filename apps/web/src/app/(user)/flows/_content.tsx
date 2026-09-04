@@ -15,7 +15,7 @@ import { ShareFlowDialog } from "@/components/flow/share-flow-dialog";
 import { AppHeader } from "@/components/layout/app-header";
 import { BusyOverlay } from "@/components/ui/busy-overlay";
 import { useNavigationBusy } from "@/lib/use-navigation-busy";
-import { NEW_FLOW_CALLOUT_ID, NewFlowStepCallout } from "@/components/tour/new-flow-step-callout";
+import { NewFlowStepCallout } from "@/components/tour/new-flow-step-callout";
 import { parseTourStage, TOUR_PARAM, withTourStage } from "@/components/tour/tour-stage";
 import { usePermissions } from "@/lib/use-permissions";
 import { trpc } from "@/trpc/client";
@@ -199,7 +199,6 @@ export function UserFlowsContent() {
             onSubmit={handleCreate}
             onClose={closeCreate}
             guide={guidedByTour && canCreate ? <NewFlowStepCallout /> : undefined}
-            guideId={NEW_FLOW_CALLOUT_ID}
           />
 
           <FlowMetadataDialog
