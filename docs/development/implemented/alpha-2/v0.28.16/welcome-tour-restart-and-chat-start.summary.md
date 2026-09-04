@@ -101,6 +101,31 @@ test would have to race. They were verified by rendering the overlay over the
 welcome modal, and the new canvas skeleton, in a headless-Chromium harness
 instead.
 
+## CI: a pre-existing e2e trap, fixed in passing
+
+The first CI run on this branch failed shard 1/3 with two failed and four flaky
+chat specs. None of them is this change's: they never touch the New Chat modal
+or any other surface here, and all reach a chat by `page.goto('/chats/<id>')`.
+Every failure carried the same signature — `waitForLoadState('networkidle')`
+timing out after 30s.
+
+That is a trap this repo has already written down. From
+`docs/development/e2e-triage-handover.md` §4: *"`networkidle` cannot fire on a
+session page. An open SSE connection means the network is never idle; the wait
+can only burn the test timeout."* The same wait had already been removed from
+other specs for exactly this reason; these five files still carried it.
+
+Rather than re-run and hope, the known fix is ported here: all 13 session-page
+`networkidle` waits are replaced with a wait for the chat composer, which is
+what "the session page is ready" actually means. That includes five sites in
+`chat-transparency.spec.ts` and `chat.spec.ts` that happened to pass this run —
+leaving them armed would just move the red to a different shard next time.
+
+Two of the sites gain strength from the change rather than merely losing a bad
+wait: the "no JS errors on the session page" checks in `chat.spec.ts` and
+`chat-confidence.spec.ts` previously counted console errors after a wait that
+could not settle, and now count them after the page is genuinely interactive.
+
 ## Known limitations
 
 - The overlay covers the viewport, so a slow `session.create` blocks the whole
