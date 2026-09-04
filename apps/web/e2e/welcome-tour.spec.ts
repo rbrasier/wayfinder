@@ -101,4 +101,29 @@ test.describe('Welcome tour', () => {
     await expect(page).toHaveURL(/\/chats$/);
     await expect(page.getByTestId('welcome-tour')).toBeVisible();
   });
+
+  // Regression: the gate once held a "dismissed here" flag in React state. It
+  // lives in the (user) layout, which stays mounted across client-side
+  // navigation, so the flag outlived the tour it closed and every restart after
+  // the first silently showed nothing. Restarting twice without a reload is the
+  // reproduction, so this spec never touches page.reload() between the rounds.
+  test('restarts from Settings repeatedly within one page load', async ({ page }) => {
+    await page.goto('/chats');
+    await expect(page.getByTestId('welcome-tour')).toBeVisible();
+
+    for (let round = 0; round < 3; round += 1) {
+      await page.getByTestId('welcome-tour').getByRole('button', { name: 'Skip for now' }).click();
+      await expect(page.getByTestId('welcome-tour')).toBeHidden();
+
+      // Client-side navigation on purpose: page.goto would reload the document
+      // and remount the layout, which is exactly what used to mask this bug.
+      await page.getByRole('button', { name: 'Account menu' }).click();
+      await page.getByRole('menuitem', { name: 'Settings' }).click();
+      await expect(page).toHaveURL(/\/settings$/);
+      await page.getByRole('button', { name: 'Restart the welcome tour' }).click();
+
+      await expect(page).toHaveURL(/\/chats$/);
+      await expect(page.getByTestId('welcome-tour')).toBeVisible();
+    }
+  });
 });
