@@ -126,6 +126,33 @@ wait: the "no JS errors on the session page" checks in `chat.spec.ts` and
 `chat-confidence.spec.ts` previously counted console errors after a wait that
 could not settle, and now count them after the page is genuinely interactive.
 
+### Follow-up: the tour spec's own flakiness
+
+The run that went green (#816: 134 passed, 0 failed) still listed both
+`welcome-tour.spec.ts` tests as flaky — passing only on retry. Left alone that
+is the beginning of a spec nobody trusts, so both causes were fixed rather than
+accepted.
+
+- `expect(page).toHaveURL(/\/flows\?tour=new-flow$/)` failed with the URL still
+  at `/chats` after 14 retries. Every hand-off in this journey lands on a
+  server-rendered page, and the App Router only changes the URL once that page's
+  RSC payload arrives — so under a loaded runner the wait exceeded Playwright's
+  5s expect default. The URL assertions now carry an explicit `NAV_TIMEOUT`.
+- `page.goto('/settings')` timed out at 30s `waiting until "load"`. Document
+  navigations in this spec now wait for `domcontentloaded`; every step after one
+  is a retrying assertion, so a parsed document is a sufficient starting point.
+
+The two "the tour does not come back" assertions were also re-anchored, from the
+server-rendered page heading to the sidebar's account button. That button renders
+only once `user.me` resolves — the same query the gate reads — so the absence is
+now asserted at a point where the gate demonstrably had the data to show
+something, rather than possibly before it.
+
+Separately, the CI console log carried a Radix warning — *Missing `Description`
+or `aria-describedby` for {DialogContent}* — from the welcome modal, which had a
+title but no description. It now has an `sr-only` one naming the two halves
+before a screen reader reaches them. No visual change.
+
 ## Known limitations
 
 - The overlay covers the viewport, so a slow `session.create` blocks the whole
