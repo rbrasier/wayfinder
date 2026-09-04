@@ -1,4 +1,4 @@
-# Bug Fix Summary — Welcome Tour Restart and Chat-Start Feedback (v0.28.16)
+# Bug Fix Summary — Welcome Tour Restart, and Feedback When Opening a Chat or Flow (v0.28.16)
 
 - **Version**: 0.28.16 — **PATCH** (two UI defects, no schema impact)
 - **Base branch**: `release/alpha-2`
@@ -49,6 +49,27 @@ the navigation it was raised for, including in the gate, which survives the
 navigation. Chosen over the alternative of navigating first: the session id does
 not exist until the server answers, so there is nowhere to navigate to.
 
+## Bug 3 — opening a flow config looked like nothing had happened
+
+**Symptom.** The same complaint as bug 2, reported separately against the flow
+config canvas: clicking "Configure Flow", or saving a new flow, left the list on
+screen with no sign the click had registered.
+
+**Root cause (verified).** Two causes, one shared with bug 2 and one its own.
+Creating a flow ends in a `router.push` from a button, so `NavigationProgress`
+never starts — identical to the chat case. But `/flows/[id]/config` also has **no
+`loading.tsx`**, where `/chats/[sessionId]` has one. Without that Suspense
+boundary the App Router holds the previous page on screen for the whole of a
+heavy server render, so even the "Configure Flow" anchor — which does start the
+top bar — showed nothing else changing.
+
+**Fix.** Both halves. `BusyOverlay` now covers all four routes into the canvas:
+create and "Configure Flow" on the user list, and the same pair on the admin
+list, which had the identical gap. And the route gains a `loading.tsx` — a
+canvas-shaped skeleton mirroring the chat route's — so every other way in is
+covered too: a typed URL, back/forward, and the `/admin/flows/[id]` redirect,
+none of which pass through a click the overlay could hook.
+
 ## Files changed
 
 | File | Change |
@@ -58,6 +79,9 @@ not exist until the server answers, so there is nowhere to navigate to.
 | `apps/web/src/components/tour/welcome-tour-gate.tsx` | Optimistic cache write replaces the `dismissed` flag; overlay rendered outside the `show` guard, since choosing a path closes the dialog while the wait runs on. |
 | `apps/web/src/components/tour/tour-stage.ts` (+ test) | `shouldShowWelcomeTour` drops its `dismissed` input. |
 | `apps/web/src/components/chat/new-chat-modal.tsx` | Same overlay on the pre-existing modal. |
+| `apps/web/src/app/(user)/flows/[id]/config/loading.tsx` *(new)* | Canvas-shaped skeleton, so the route stops holding the previous page during its server render. |
+| `apps/web/src/app/(user)/flows/_content.tsx` | Overlay on create and on "Configure Flow". |
+| `apps/web/src/app/(admin)/admin/flows/_content.tsx` | The same two, which had the identical gap. |
 | `apps/web/e2e/welcome-tour.spec.ts` | The regression guard. |
 | `VERSION`, `package.json` | 0.28.15 → 0.28.16. |
 
@@ -70,11 +94,12 @@ test: a `page.goto` between rounds would reload the document and remount the
 layout, which is exactly what masked the bug in manual testing. Policy group 4
 (navigation state across a page load).
 
-Bug 2 has no automated test. The defect is "the waiting state was invisible",
-which is a rendering fact with no assertion below the browser and no natural
-Playwright hook — the overlay's lifetime is bounded by a navigation the test
-would have to race. It was verified by rendering the overlay over the welcome
-modal in a headless-Chromium harness instead.
+Bugs 2 and 3 have no automated test. The defect is "the waiting state was
+invisible", which is a rendering fact with no assertion below the browser and no
+natural Playwright hook — the overlay's lifetime is bounded by a navigation the
+test would have to race. They were verified by rendering the overlay over the
+welcome modal, and the new canvas skeleton, in a headless-Chromium harness
+instead.
 
 ## Known limitations
 
