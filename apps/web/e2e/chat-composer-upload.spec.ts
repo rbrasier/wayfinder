@@ -18,7 +18,11 @@ test.describe('Chat: Composer file upload', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    // A session page holds an open SSE stream, so the network is never idle and
+    // waitForLoadState('networkidle') can only burn the timeout (see
+    // docs/development/e2e-triage-handover.md §4). Wait for the composer, which is
+    // what "the session page is ready" actually means.
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
     await page.screenshot({ path: 'screenshots/chat-composer-upload.png', fullPage: true });
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
@@ -62,7 +66,7 @@ test.describe('Chat: Composer file upload', () => {
     });
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     const attachButton = page.getByRole('button', { name: /attach a file for context/i });
     await expect(attachButton).toBeVisible();

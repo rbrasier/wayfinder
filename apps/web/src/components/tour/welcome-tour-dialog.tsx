@@ -6,6 +6,7 @@ import {
   Dialog,
   DialogBody,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -40,6 +41,13 @@ export function WelcomeTourDialog({
               Welcome to Wayfinder
             </div>
             <DialogTitle>What would you like to do first?</DialogTitle>
+            {/* Names the two halves for a screen reader before it reaches them.
+                Radix wires its own id onto this and looks that id up, so it must
+                not carry one of ours or the dialog still reports as undescribed. */}
+            <DialogDescription className="sr-only">
+              Wayfinder does two things: run a guided chat that produces a document, or build
+              the flow that guides it. Choose one to get started, or skip and explore on your own.
+            </DialogDescription>
           </div>
         </DialogHeader>
 

@@ -2,12 +2,9 @@
 // (above it on narrow screens, to its left on wide ones) and is tethered to it
 // by a drawn connector, so the explanation reads as being about *that* form.
 // Decorative connector only — the text carries the instruction.
-export const NEW_FLOW_CALLOUT_ID = "new-flow-step-callout";
-
 export function NewFlowStepCallout() {
   return (
     <aside
-      id={NEW_FLOW_CALLOUT_ID}
       data-testid="new-flow-step-callout"
       className="wf-tour-callout absolute inset-x-0 bottom-[calc(100%+40px)] lg:inset-x-auto lg:bottom-auto lg:right-[calc(100%+64px)] lg:top-0 lg:w-[300px]"
     >

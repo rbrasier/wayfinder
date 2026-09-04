@@ -13,7 +13,9 @@ import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { ShareFlowDialog } from "@/components/flow/share-flow-dialog";
 import { AppHeader } from "@/components/layout/app-header";
-import { NEW_FLOW_CALLOUT_ID, NewFlowStepCallout } from "@/components/tour/new-flow-step-callout";
+import { BusyOverlay } from "@/components/ui/busy-overlay";
+import { useNavigationBusy } from "@/lib/use-navigation-busy";
+import { NewFlowStepCallout } from "@/components/tour/new-flow-step-callout";
 import { parseTourStage, TOUR_PARAM, withTourStage } from "@/components/tour/tour-stage";
 import { usePermissions } from "@/lib/use-permissions";
 import { trpc } from "@/trpc/client";
@@ -33,6 +35,9 @@ export function UserFlowsContent() {
   // the person on to the canvas with the explainer stage set (ADR-056 §2).
   const searchParams = useSearchParams();
   const guidedByTour = parseTourStage(searchParams.get(TOUR_PARAM)) === "new-flow";
+  // The config canvas is a heavy, server-rendered page with no loading skeleton
+  // of its own, so without this the list sits there looking unclicked.
+  const busy = useNavigationBusy();
 
   // A new flow is empty, so the only useful next step is laying out its steps —
   // go straight to the canvas rather than back to the list.
@@ -43,6 +48,10 @@ export function UserFlowsContent() {
       toast.success("Flow created");
       const canvasPath = `/flows/${flow.id}/config`;
       router.push(guidedByTour ? withTourStage(canvasPath, "flow-explainer") : canvasPath);
+    },
+    onError: (error) => {
+      busy.stop();
+      toast.error(error.message);
     },
   });
 
@@ -59,6 +68,7 @@ export function UserFlowsContent() {
   const [sharing, setSharing] = useState<{ flowId: string; name: string } | null>(null);
 
   const handleCreate = (values: FlowMetadataValues) => {
+    busy.start();
     void createMutation.mutateAsync({
       name: values.name,
       expertRole: values.expertRole,
@@ -87,6 +97,7 @@ export function UserFlowsContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {busy.busy && <BusyOverlay label="Opening the flow builder…" />}
       <AppHeader
         title="Flows"
         actions={
@@ -169,7 +180,9 @@ export function UserFlowsContent() {
                           </Button>
                         )}
                         <Button size="sm" asChild>
-                          <Link href={`/flows/${flow.id}/config`}>Configure Flow</Link>
+                          <Link href={`/flows/${flow.id}/config`} onClick={busy.start}>
+                            Configure Flow
+                          </Link>
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -186,7 +199,6 @@ export function UserFlowsContent() {
             onSubmit={handleCreate}
             onClose={closeCreate}
             guide={guidedByTour && canCreate ? <NewFlowStepCallout /> : undefined}
-            guideId={NEW_FLOW_CALLOUT_ID}
           />
 
           <FlowMetadataDialog

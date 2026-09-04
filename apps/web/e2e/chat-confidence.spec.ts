@@ -21,7 +21,11 @@ test.describe('Chat: Step Rail', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    // A session page holds an open SSE stream, so the network is never idle and
+    // waitForLoadState('networkidle') can only burn the timeout (see
+    // docs/development/e2e-triage-handover.md §4). Wait for the composer, which is
+    // what "the session page is ready" actually means.
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     await page.screenshot({ path: 'screenshots/chat-step-rail.png', fullPage: true });
 
@@ -33,7 +37,7 @@ test.describe('Chat: Step Rail', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     // StepProgressRail renders a horizontal list of step indicators.
     // Each step has a number or check icon and a label below it.
@@ -61,7 +65,7 @@ test.describe('Chat: Confidence', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     await expect(input).toBeVisible();
@@ -88,7 +92,7 @@ test.describe('Chat: Confidence', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     await expect(input).toBeVisible();
@@ -142,7 +146,7 @@ test.describe('Chat: Document Generation', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     // DocumentCard renders with download/regenerate controls
     const documentCard = page.locator([

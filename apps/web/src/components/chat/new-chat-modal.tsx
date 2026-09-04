@@ -13,6 +13,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { BusyOverlay } from "@/components/ui/busy-overlay";
+import { useNavigationBusy } from "@/lib/use-navigation-busy";
 import { trpc } from "@/trpc/client";
 
 interface NewChatModalProps {
@@ -24,21 +26,31 @@ interface NewChatModalProps {
 export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProps) {
   const router = useRouter();
   const utils = trpc.useUtils();
+  // Creating the session and then loading its page are two waits back to back,
+  // and neither is covered by anything the person can see: the top navigation
+  // bar only starts on anchor clicks, so a router.push from these cards shows
+  // nothing at all. Hold a blocking overlay across both.
+  const busy = useNavigationBusy();
 
   const createMutation = trpc.session.create.useMutation({
     onSuccess: (session) => {
       void utils.session.list.invalidate();
-      onClose();
-      toast.success("Chat started");
       router.push(`/chats/${session.id}`);
+    },
+    onError: (error) => {
+      busy.stop();
+      toast.error(error.message);
     },
   });
 
   const handleStart = (flowId: string) => {
+    busy.start();
     createMutation.mutate({ flowId });
   };
 
   return (
+    <>
+      {busy.busy && <BusyOverlay label="Starting your chat…" />}
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
@@ -102,5 +114,6 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

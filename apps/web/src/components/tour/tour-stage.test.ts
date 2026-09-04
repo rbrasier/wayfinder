@@ -29,7 +29,6 @@ describe("shouldShowWelcomeTour", () => {
     welcomeTourPending: true,
     organisationSignInStatus: "assigned",
     organisationPromptDismissed: false,
-    dismissed: false,
   };
 
   it("shows for a user whose tour is still pending", () => {
@@ -62,7 +61,14 @@ describe("shouldShowWelcomeTour", () => {
     ).toBe(true);
   });
 
-  it("stays hidden for the rest of the page once dismissed, even before the server confirms", () => {
-    expect(shouldShowWelcomeTour({ ...ready, dismissed: true })).toBe(false);
+  // The regression this rule exists to prevent: a "dismissed here" flag would
+  // survive client-side navigation in the layout that hosts the gate, so a
+  // restart from Settings would raise `welcomeTourPending` and still show
+  // nothing. Completion is read from the server state alone.
+  it("shows again whenever the tour is pending, however many times it was closed before", () => {
+    expect(shouldShowWelcomeTour({ ...ready, welcomeTourPending: false })).toBe(false);
+    expect(shouldShowWelcomeTour(ready)).toBe(true);
+    expect(shouldShowWelcomeTour({ ...ready, welcomeTourPending: false })).toBe(false);
+    expect(shouldShowWelcomeTour(ready)).toBe(true);
   });
 });
