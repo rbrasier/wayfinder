@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useSignInPrompts } from "@/components/layout/sign-in-prompts";
 import { trpc } from "@/trpc/client";
 import { NominationDialog } from "./nomination-dialog";
 
@@ -9,21 +9,23 @@ import { NominationDialog } from "./nomination-dialog";
 // self_nomination — or an email-domain miss set to nominate — surfaces a prompt
 // to create or join. Dismissible ("Not now") so a user is never hard-locked.
 export function OrganisationSignInGate() {
-  const [dismissed, setDismissed] = useState(false);
+  // Shared rather than local: the welcome tour waits behind this prompt and
+  // cannot see a dismissal in the server state (see SignInPromptsProvider).
+  const { organisationPromptDismissed, dismissOrganisationPrompt } = useSignInPrompts();
   const signInState = trpc.organisation.signInState.useQuery(undefined, {
     // Resolution depends only on the stored user + config, so one check per mount
     // is enough; refetching on focus would re-open a dismissed prompt.
     refetchOnWindowFocus: false,
   });
 
-  if (dismissed) return null;
+  if (organisationPromptDismissed) return null;
   if (signInState.data?.status !== "nominate") return null;
 
   return (
     <NominationDialog
       mode={signInState.data.mode}
       joinable={signInState.data.joinable}
-      onDone={() => setDismissed(true)}
+      onDone={dismissOrganisationPrompt}
     />
   );
 }

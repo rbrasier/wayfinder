@@ -25,7 +25,12 @@ describe("withTourStage", () => {
 });
 
 describe("shouldShowWelcomeTour", () => {
-  const ready = { welcomeTourPending: true, organisationSignInStatus: "assigned", dismissed: false };
+  const ready = {
+    welcomeTourPending: true,
+    organisationSignInStatus: "assigned",
+    organisationPromptDismissed: false,
+    dismissed: false,
+  };
 
   it("shows for a user whose tour is still pending", () => {
     expect(shouldShowWelcomeTour(ready)).toBe(true);
@@ -42,6 +47,19 @@ describe("shouldShowWelcomeTour", () => {
 
   it("yields to the organisation nomination prompt rather than stacking on it", () => {
     expect(shouldShowWelcomeTour({ ...ready, organisationSignInStatus: "nominate" })).toBe(false);
+  });
+
+  // "Not now" closes the nomination dialog without writing anything, so
+  // signInState reports "nominate" for good on a user who never picks an
+  // organisation. Waiting on the status alone would hide the tour forever.
+  it("shows once the nomination prompt is dismissed, even though the status stays nominate", () => {
+    expect(
+      shouldShowWelcomeTour({
+        ...ready,
+        organisationSignInStatus: "nominate",
+        organisationPromptDismissed: true,
+      }),
+    ).toBe(true);
   });
 
   it("stays hidden for the rest of the page once dismissed, even before the server confirms", () => {

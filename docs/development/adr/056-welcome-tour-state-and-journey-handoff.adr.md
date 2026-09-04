@@ -66,10 +66,18 @@ the beat model is a pure function with tests. The existing drag-to-join demo
 
 ### 4. The welcome gate yields to the organisation gate
 
-Both are mounted in the `(user)` layout. While `organisation.signInState` is
-`nominate`, the welcome gate renders nothing; when the nomination dialog
-resolves it invalidates that query and the welcome modal follows. Two stacked
-modals on a first sign-in is the outcome this avoids.
+Both are mounted in the `(user)` layout, inside `SignInPromptsProvider`. Two
+stacked modals on a first sign-in is the outcome this avoids.
+
+Yielding is on *whether the nomination dialog is on screen*, not on the raw
+`organisation.signInState`. The two differ: confirming a choice invalidates
+that query and the status changes, but "Not now" closes the dialog without
+writing anything, and `signInState` is derived from the stored user and config,
+so it reports `nominate` again on every later page load. A gate waiting on the
+status alone would hide the tour permanently from anyone who declines — and the
+prompt is deliberately declinable (ADR-038 §4). The provider therefore holds
+the dismissal, both gates read it, and the tour shows as soon as the dialog
+closes by either route.
 
 ### 5. Test users are toured by default
 

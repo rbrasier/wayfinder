@@ -58,7 +58,9 @@ final frame.
 | `app/api/auth/test-session/route.ts` | Stamp the tour complete unless `tour: "pending"`. |
 | `app/(user)/layout.tsx` | Mount `WelcomeTourGate`. |
 | `components/tour/tour-stage.ts` (+test) | `TOUR_PARAM`, `parseTourStage`, `withTourStage`, `shouldShowWelcomeTour`. |
-| `components/tour/welcome-tour-gate.tsx` *(new)* | Reads `user.me` and `organisation.signInState`; shows the dialog; completes on any exit. |
+| `components/tour/welcome-tour-gate.tsx` *(new)* | Reads `user.me`, `organisation.signInState` and the shared prompt dismissal; shows the dialog; completes on any exit. |
+| `components/layout/sign-in-prompts.tsx` *(new)* | `SignInPromptsProvider` — holds the nomination prompt's dismissal so the tour can follow it whichever way that dialog closes (ADR-056 §4). |
+| `components/organisation/organisation-sign-in-gate.tsx` | Its local `dismissed` state lifts into that provider. |
 | `components/tour/welcome-tour-dialog.tsx` *(new)* | The split modal: chat types (published flows) and "Build a flow". |
 | `components/tour/new-flow-step-callout.tsx` *(new)* | The Step 1 explainer tethered to the New Flow dialog. |
 | `components/flow/flow-metadata-dialog.tsx` | Optional `guide` slot rendered beside the dialog content. |

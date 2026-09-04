@@ -32,6 +32,7 @@ Accounts that exist when the migration runs are backfilled as toured.
 | `apps/web/src/components/tour/flow-explainer-cards.ts` (+ test) | The six cards' copy and carousel navigation. |
 | `apps/web/src/components/tour/tour-beat-model.ts` (+ test), `use-tour-beat.ts` | Beat sequencing for the illustrations; reduced motion pins to the final beat. |
 | `apps/web/src/components/tour/welcome-tour-gate.tsx`, `welcome-tour-dialog.tsx` | The gate in the `(user)` layout and the split modal. |
+| `apps/web/src/components/layout/sign-in-prompts.tsx` | `SignInPromptsProvider` — the shared dismissal that lets the tour follow the organisation nomination prompt whichever way it closes. |
 | `apps/web/src/components/tour/new-flow-step-callout.tsx` | The Step 1 explainer beside the New Flow dialog. |
 | `apps/web/src/components/tour/flow-explainer-carousel.tsx` | Arrows, dots, keyboard navigation, hand-off CTA. |
 | `apps/web/src/components/tour/explainer-animations/*.tsx` | Shared stage helpers and one illustration per card. |
@@ -43,7 +44,7 @@ Accounts that exist when the migration runs are backfilled as toured.
 - **domain** — `entities/user.ts` (`welcomeTourCompletedAt` on `User` and `UserUpdate`).
 - **application** — `use-cases/index.ts`; the organisation test fixtures gained the new field.
 - **adapters** — `db/schema/core.ts`, `repositories/drizzle-user-repository.ts`, `auth/__tests__/admin-recovery.test.ts`.
-- **apps/web** — `server/routers/user.ts` (`welcomeTourPending`, `completeWelcomeTour`, `restartWelcomeTour`), `lib/container.ts`, `app/api/auth/test-session/route.ts` (stamps test users as toured unless `tour: "pending"`), `app/(user)/layout.tsx`, `app/(user)/flows/_content.tsx`, `app/(user)/flows/[id]/config/_content.tsx`, `app/(user)/flows/[id]/config/_flow-config-header.tsx`, `components/flow/flow-metadata-dialog.tsx` (`guide` slot), `components/canvas/flow-canvas-viewport.tsx`, `app/(user)/settings/page.tsx`, `styles/globals.css`.
+- **apps/web** — `components/organisation/organisation-sign-in-gate.tsx` (its local dismissal lifts into `SignInPromptsProvider`), `server/routers/user.ts` (`welcomeTourPending`, `completeWelcomeTour`, `restartWelcomeTour`), `lib/container.ts`, `app/api/auth/test-session/route.ts` (stamps test users as toured unless `tour: "pending"`), `app/(user)/layout.tsx`, `app/(user)/flows/_content.tsx`, `app/(user)/flows/[id]/config/_content.tsx`, `app/(user)/flows/[id]/config/_flow-config-header.tsx`, `components/flow/flow-metadata-dialog.tsx` (`guide` slot), `components/canvas/flow-canvas-viewport.tsx`, `app/(user)/settings/page.tsx`, `styles/globals.css`.
 - **root** — `VERSION`, `package.json`.
 
 ## Migrations

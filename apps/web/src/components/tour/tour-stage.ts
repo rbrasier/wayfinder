@@ -17,10 +17,16 @@ export const withTourStage = (path: string, stage: TourStage): string =>
 export const shouldShowWelcomeTour = (input: {
   welcomeTourPending: boolean | undefined;
   organisationSignInStatus: string | undefined;
+  organisationPromptDismissed: boolean;
   dismissed: boolean;
 }): boolean => {
   if (input.dismissed) return false;
   if (input.welcomeTourPending !== true) return false;
   if (input.organisationSignInStatus === undefined) return false;
-  return input.organisationSignInStatus !== "nominate";
+  // Yield only while the nomination dialog is actually on screen. Its "Not now"
+  // writes nothing, so signInState stays "nominate" for good on a user who
+  // never picks an organisation — waiting on the status alone would hide the
+  // tour from them permanently.
+  if (input.organisationSignInStatus !== "nominate") return true;
+  return input.organisationPromptDismissed;
 };

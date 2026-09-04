@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { useSignInPrompts } from "@/components/layout/sign-in-prompts";
 import { usePermissions } from "@/lib/use-permissions";
 import { trpc } from "@/trpc/client";
 import { shouldShowWelcomeTour, withTourStage } from "./tour-stage";
@@ -14,6 +15,7 @@ export function WelcomeTourGate() {
   const router = useRouter();
   const utils = trpc.useUtils();
   const permissions = usePermissions();
+  const { organisationPromptDismissed } = useSignInPrompts();
   const [dismissed, setDismissed] = useState(false);
 
   const meQuery = trpc.user.me.useQuery();
@@ -37,6 +39,7 @@ export function WelcomeTourGate() {
   const show = shouldShowWelcomeTour({
     welcomeTourPending: meQuery.data?.welcomeTourPending,
     organisationSignInStatus: signInState.data?.status,
+    organisationPromptDismissed,
     dismissed,
   });
   if (!show) return null;

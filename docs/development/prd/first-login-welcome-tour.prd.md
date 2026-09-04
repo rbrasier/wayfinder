@@ -114,6 +114,8 @@ part that would have made sense to them.
 
 - [ ] A user whose `welcome_tour_completed_at` is null sees the welcome modal
       on a `(user)` page; a user with a timestamp does not.
+- [ ] The modal follows the organisation nomination dialog whichever way that
+      closes — confirmed or dismissed with "Not now".
 - [ ] The modal lists every flow `session.listPublishedFlows` returns; clicking
       one creates a session and navigates to it; the tour is marked complete.
 - [ ] "Build a flow" marks the tour complete and navigates to
@@ -144,7 +146,9 @@ part that would have made sense to them.
 
 ## 12. Risks / open questions
 
-- The modal must never stack on the organisation nomination dialog; the gate
-  yields while `organisation.signInState` is `nominate`.
+- The modal must never stack on the organisation nomination dialog. The gate
+  yields while that dialog is on screen — tracked as a shared dismissal rather
+  than read off `organisation.signInState`, which keeps reporting `nominate`
+  after a "Not now" and would otherwise suppress the tour for good.
 - The animations are the largest piece of UI; they are decorative and hidden
   from assistive technology, with the card copy carrying the whole lesson.

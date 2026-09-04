@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
 import { OrganisationSignInGate } from "@/components/organisation/organisation-sign-in-gate";
+import { SignInPromptsProvider } from "@/components/layout/sign-in-prompts";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { WelcomeTourGate } from "@/components/tour/welcome-tour-gate";
 import { createServerHelpers } from "@/trpc/server";
@@ -39,8 +40,10 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
           <div className="flex flex-1 flex-col overflow-hidden bg-[#faf9f7]">
             {children}
           </div>
-          <OrganisationSignInGate />
-          <WelcomeTourGate />
+          <SignInPromptsProvider>
+            <OrganisationSignInGate />
+            <WelcomeTourGate />
+          </SignInPromptsProvider>
         </div>
       </HydrateClient>
     </SidebarProvider>
