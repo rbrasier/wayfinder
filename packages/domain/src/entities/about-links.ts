@@ -33,7 +33,15 @@ export interface AboutLinksConfig {
 
 export const ABOUT_LINKS_SETTING_KEY = "about_links_config";
 
-export const DEFAULT_ISSUE_TRACKER_URL = "https://github.com/rbrasier/wayfinder/issues";
+// An admin may put this anywhere in a link URL; it is expanded to the running
+// app version at render time. Left literal in stored URLs so it stays editable.
+export const ABOUT_LINK_VERSION_PLACEHOLDER = "{version}";
+
+// Opens GitHub's new-issue form with the reporter's build already in the body,
+// so a report names the version it came from without the reporter having to know
+// it. The body is percent-encoded: %0A is a newline.
+export const DEFAULT_ISSUE_TRACKER_URL =
+  "https://github.com/rbrasier/wayfinder/issues/new?body=%0A%0A---%0AWayfinder%20version:%20{version}";
 
 // A fresh install still needs a route to report a bug, so one entry ships by
 // default. It stays off the help menu — the About modal is where it lives.
@@ -63,6 +71,12 @@ export const normaliseAboutLinkUrl = (value: unknown): string => {
   if (lowered.startsWith("mailto:")) return trimmed;
   return "";
 };
+
+// The placeholder normally sits inside a query string, so the substituted value
+// is percent-encoded — a version with a space or an ampersand would otherwise
+// truncate or split the parameter it lands in.
+export const expandAboutLinkUrl = (url: string, version: string): string =>
+  url.split(ABOUT_LINK_VERSION_PLACEHOLDER).join(encodeURIComponent(version));
 
 export const normaliseAboutLinkIcon = (value: unknown): AboutLinkIcon => {
   if (typeof value !== "string") return "link";
