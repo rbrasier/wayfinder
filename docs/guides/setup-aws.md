@@ -274,6 +274,12 @@ the `SMTP_*` and `M365_*` variables in [`.env.example`](../../.env.example).
 
 ## Alternatives
 
+- **AWS Lambda** removes the always-on web and worker compute entirely, which
+  suits pilots and low-duty-cycle tenants where a 24/7 Fargate pair is poor
+  value. It is a hybrid rather than fully serverless — one small always-on
+  service remains for the session event stream — and it requires a hosted
+  embeddings provider. See [`setup-aws-lambda.md`](setup-aws-lambda.md). The
+  container path documented above remains the tested reference deployment.
 - **App Runner** builds from source and manages TLS and scaling for you, which is
   closer to the Railway experience. It reads a single `apprunner.yaml` at the repo
   root, so running both `web` and `api` from one repo means either a container

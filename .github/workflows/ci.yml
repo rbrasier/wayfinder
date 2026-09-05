@@ -180,11 +180,64 @@ jobs:
           exit 1
 
       - name: Assert the api started its workers
-        run: docker compose -f docker-compose.prod.yml logs api | grep -q "scheduler heartbeat started"
+        # This is the regression guard for the startWorkers extraction: the api
+        # process must still listen and start the same workers with the same log
+        # lines (ADR-056). Retention is opt-in (RETENTION_ENABLED), so it is
+        # correctly absent here — asserting it would assert a non-default.
+        run: |
+          set -o pipefail
+          LOGS=$(docker compose -f docker-compose.prod.yml logs api)
+          echo "$LOGS"
+          echo "$LOGS" | grep -q "listening on" || { echo "api never listened"; exit 1; }
+          echo "$LOGS" | grep -q "scheduler heartbeat started" || { echo "scheduler did not start"; exit 1; }
+          echo "$LOGS" | grep -q "extraction worker started" || { echo "extraction worker did not start"; exit 1; }
 
       - name: Tear down
         if: always()
         run: docker compose -f docker-compose.prod.yml down -v
+
+  deploy-lambda:
+    name: Lambda deployment target
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # deploy/lambda is outside the pnpm workspace (ADR-056 §2), so it needs
+      # both trees: its own dependencies, and the workspace whose source the
+      # handlers import.
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install deploy/lambda dependencies
+        working-directory: deploy/lambda
+        run: npm ci --legacy-peer-deps
+
+      # The reason this job exists. Handlers import container.ts through
+      # relative paths, so a change there that breaks them fails here rather
+      # than at deploy time.
+      - name: Typecheck
+        working-directory: deploy/lambda
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: deploy/lambda
+        run: npm run lint
+
+      - name: Test
+        working-directory: deploy/lambda
+        run: npm test
+
+      # This lockfile is invisible to scripts/audit-check.sh, which scans the
+      # workspace only.
+      - name: Dependency audit
+        working-directory: deploy/lambda
+        run: npm run audit
 
   security:
     name: Security scan

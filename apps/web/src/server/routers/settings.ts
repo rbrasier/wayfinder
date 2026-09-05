@@ -42,12 +42,21 @@ import {
   EMBEDDINGS_DIMENSION,
   EMBEDDINGS_PROVIDERS,
 } from "@rbrasier/shared";
-import { DEFAULT_MODELS_FOR, RuntimeConfigStore, resolveContextWindow } from "@rbrasier/adapters";
+import {
+  DEFAULT_MODELS_FOR,
+  RuntimeConfigStore,
+  isLocalEmbeddingsAvailable,
+  resolveContextWindow,
+} from "@rbrasier/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { authSettingsProcedures } from "./settings-auth";
 import { directorySettingsProcedures } from "./settings-directory";
 import { apiKeyState } from "./settings-secrets";
+import {
+  embeddingsProviderOptions,
+  embeddingsProviderUnavailableReason,
+} from "./settings-embeddings";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
 const providerSchema = z.enum(["anthropic", "openai", "mistral", "bedrock"]);
@@ -262,6 +271,7 @@ const bedrockState = (value: BedrockCredentials | null) => ({
   secretAccessKey: apiKeyState(value?.secretAccessKey ?? null),
 });
 
+
 export const settingsRouter = router({
   get: adminProcedure
     .input(z.object({ key: z.string().min(1) }))
@@ -379,12 +389,27 @@ export const settingsRouter = router({
 
   getEmbeddingsConfig: adminProcedure.query(async ({ ctx }) => {
     const config = await ctx.container.runtimeConfig.getEmbeddingsConfig();
-    return { ...config, dimension: EMBEDDINGS_DIMENSION };
+    return {
+      ...config,
+      dimension: EMBEDDINGS_DIMENSION,
+      providers: embeddingsProviderOptions(isLocalEmbeddingsAvailable()),
+    };
   }),
 
   setEmbeddingsConfig: adminProcedure
     .input(z.object({ provider: z.enum(EMBEDDINGS_PROVIDERS) }))
     .mutation(async ({ ctx, input }) => {
+      // A disabled control in the UI is a courtesy; this is the guard. A
+      // deployment packaged without a provider cannot serve it whatever the
+      // stored setting says (ADR-056 §4).
+      const unavailableReason = embeddingsProviderUnavailableReason(
+        input.provider,
+        isLocalEmbeddingsAvailable(),
+      );
+      if (unavailableReason) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: unavailableReason });
+      }
+
       // Model is derived from the provider; switching providers requires
       // re-indexing existing documents (ADR-017 Decision 3).
       const config = { provider: input.provider, model: EMBEDDINGS_DEFAULT_MODELS[input.provider] };

@@ -5,6 +5,11 @@ import {
   extractionConfigInputSchema,
   mergeApiKeys,
 } from "./settings";
+import {
+  UNAVAILABLE_LOCAL_EMBEDDINGS_REASON,
+  embeddingsProviderOptions,
+  embeddingsProviderUnavailableReason,
+} from "./settings-embeddings";
 
 const stored: AiConfig["apiKeys"] = {
   anthropic: "sk-stored-anthropic",
@@ -444,5 +449,43 @@ describe("settings router — session policy", () => {
     expect(sessionPolicyViolations(parsed)).toEqual([
       "The absolute timeout must be at least as long as the idle timeout.",
     ]);
+  });
+});
+
+describe("settings router — embeddings provider availability", () => {
+  it("offers both providers when the local runtime is present", () => {
+    const options = embeddingsProviderOptions(true);
+
+    expect(options).toEqual([
+      { provider: "local", available: true, unavailableReason: null },
+      { provider: "openai", available: true, unavailableReason: null },
+    ]);
+  });
+
+  it("marks local unavailable, with a reason, when the runtime was never packaged", () => {
+    const options = embeddingsProviderOptions(false);
+
+    expect(options).toContainEqual({
+      provider: "local",
+      available: false,
+      unavailableReason: UNAVAILABLE_LOCAL_EMBEDDINGS_REASON,
+    });
+  });
+
+  it("never marks a hosted provider unavailable on account of the local runtime", () => {
+    const options = embeddingsProviderOptions(false);
+
+    expect(options).toContainEqual({ provider: "openai", available: true, unavailableReason: null });
+  });
+
+  it("gives no reason to reject a provider that can be loaded", () => {
+    expect(embeddingsProviderUnavailableReason("local", true)).toBeNull();
+    expect(embeddingsProviderUnavailableReason("openai", false)).toBeNull();
+  });
+
+  it("gives a reason to reject local when the runtime is absent", () => {
+    expect(embeddingsProviderUnavailableReason("local", false)).toBe(
+      UNAVAILABLE_LOCAL_EMBEDDINGS_REASON,
+    );
   });
 });

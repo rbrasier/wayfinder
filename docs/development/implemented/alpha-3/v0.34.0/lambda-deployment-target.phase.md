@@ -15,7 +15,7 @@
     hard prerequisite, and ADR-056 §4 refines its Decision 1 (§7.5 below)
   - ADR-047 (migrations as an explicit command) — migrations are already a
     discrete invocation, so they port unchanged
-  - [`scaling-new-infrastructure.phase.md`](./scaling-new-infrastructure.phase.md) —
+  - the *Scaling With New Infrastructure* phase doc —
     overlaps on the shared-service question and contains two statements this
     phase must correct (§10)
 
@@ -31,8 +31,8 @@ Two constraints define the phase:
 
 1. **No restructuring.** The framework's existing seams already support this. No
    new ports, no new adapters, no schema change, and no change to how any
-   existing process starts. Four small, enumerated changes happen inside the
-   existing tree (§5) — three of them fixing gaps that are latent today.
+   existing process starts. Three small, enumerated changes happen inside the
+   existing tree (§5); two of them fix gaps that are latent today.
 2. **No effect on other providers.** The Docker Compose, ECS Fargate, Azure
    Container Apps and Railway paths must behave identically before and after.
    This is enforced by placement (§4.1) and by CI (§13), not by discipline.
@@ -42,11 +42,12 @@ target and never becomes the canonical one (ADR-056 §1).
 
 > **Revised from the first draft.** That draft claimed "nothing in `packages/*`
 > changes, and exactly one behaviour-neutral extraction happens in `apps/api`".
-> Review found three further changes that the phase actually requires — the
-> embeddings capability guard, the admin control that depends on it, and the
-> on-upload extraction invocation. They are now in scope and enumerated rather
-> than discovered at build time. **"No restructuring" survives; "nothing
-> changes" did not.**
+> Review found two further changes that the phase actually requires — the
+> embeddings capability guard and the admin control that depends on it — and a
+> third, on-upload extraction, which `/build` pre-flight then found was
+> **already implemented** (§5.4). They are enumerated in §5 rather than
+> discovered mid-build. **"No restructuring" survives; "nothing changes" did
+> not.**
 
 ---
 
@@ -55,7 +56,7 @@ target and never becomes the canonical one (ADR-056 §1).
 **In scope:**
 
 - A `deploy/lambda/` package containing Lambda entrypoints and a CDK stack
-- Four changes inside the existing tree (§5)
+- Three changes inside the existing tree (§5)
 - ADR-056, recording the second-topology decision
 - An installation guide, an update runbook, and a CI job for `deploy/lambda`
 
@@ -64,7 +65,7 @@ target and never becomes the canonical one (ADR-056 §1).
 - Replacing the Postgres `LISTEN`/`NOTIFY` session event bus with a managed push
   service. Named as a possible follow-on in §7.1; not planned here.
 - Promoting `TtlCache` and `IRateLimiter` to Redis — that work belongs to
-  [`scaling-new-infrastructure.phase.md`](./scaling-new-infrastructure.phase.md).
+  the *Scaling With New Infrastructure* phase doc.
 - Local / air-gapped embeddings on Lambda (§7.5).
 - Azure Functions, GCP Cloud Run Functions, and multi-region deployment.
 
@@ -133,7 +134,7 @@ consequences for **every other provider** (ADR-056 §2):
   *dependency tree* never shipped — but "zero blast radius by construction" is
   only true once this line exists. It is one line, and `.dockerignore` is not on
   the frozen-file list in §13.
-- **A CI job for `deploy/lambda` is required** (§12 step 7), because an
+- **A CI job for `deploy/lambda` is required** (§12 step 9), because an
   out-of-workspace package that nothing typechecks is exactly how handlers drift
   away from `container.ts`. It must run the **dependency audit** too:
   `validate.sh` §11 and `ci.yml`'s security job both scan the workspace via
@@ -151,15 +152,24 @@ a slight overstatement.
 deploy/lambda/
   package.json            # own dependencies, own lockfile; not a workspace member
   handlers/
-    web.ts                # Next.js, via OpenNext
+    container.ts          # one api container per execution environment
     api.ts                # buildApp(container), via an Express→Lambda adapter
-    tick-extraction.ts    # ExtractionWorker.tick(), plus on-demand invocation
+    tick.ts               # shared: register the job once, then tick
+    tick-extraction.ts    # ExtractionWorker.tick()
     tick-retention.ts     # RetentionWorker.tick()
     migrate.ts            # the ADR-047 migrate command, one-shot
   infra/                  # CDK stack: functions, EventBridge rules, RDS Proxy,
                           # S3, Function URL, CloudFront, secrets wiring
   README.md               # points at docs/guides/setup-aws-lambda.md
 ```
+
+**There is no `web.ts`.** The draft listed one. OpenNext does not take a handler
+entry file — it builds the Next.js app from a stock `next build` and emits its
+own server bundle at `apps/web/.open-next/server-functions/default/index.mjs`,
+which the CDK stack packages directly. Verified against `@opennextjs/aws@3.10.4`
+in `node_modules`. That the build is stock is exactly why OpenNext was chosen
+over the Lambda Web Adapter, whose `output: "standalone"` requirement would
+change the web build for every provider.
 
 Every handler imports the existing containers and use-cases. None of them
 reimplements framework behaviour; a handler that needs to do so is a signal the
@@ -191,7 +201,7 @@ build time rather than assumed.
 
 ## 5. Changes inside the existing tree
 
-Four, enumerated. Each states what it costs the other deployment paths.
+Three, enumerated. Each states what it costs the other deployment paths.
 
 ### 5.1 Extract the api start path — `apps/api/src/workers.ts`
 
@@ -240,18 +250,27 @@ and shows why. `setEmbeddingsConfig` rejects a provider that cannot be loaded
 *Cost to other providers: none.* Where both providers load, the control behaves
 exactly as it does today.
 
-### 5.4 Invoke extraction on upload, not only on the schedule — `apps/web`
+### 5.4 ~~Invoke extraction on upload~~ — **already implemented; no change needed**
 
-Per §7.4. `ExtractionWorker`'s 5s tick exists because an operator is watching a
-progress bar; EventBridge's floor is 60s. The upload path signals the extraction
-handler directly so the `x of y` counter still moves.
+The first draft, and the `/doc-review` revision after it, both listed this as a
+change to build. **Pre-flight reading found it already shipped.**
 
-*Cost to other providers: this is the one change that adds a code path
-containers do not exercise.* It is therefore wired as a no-op when no invoker is
-configured, so the container path continues to rely on the 5s tick alone and
-loads nothing new. The review flagged this as the change that makes §1's
-"no restructuring" claim conditional; keeping the default path untouched is what
-keeps it true.
+`apps/web/src/components/extraction/run-progress.tsx:61` already drives
+`trpc.extraction.tick` in a loop while a run is live, and the tRPC procedure
+(`apps/web/src/server/routers/extraction.ts:576`) carries a comment naming this
+exact case:
+
+> The batch engine is a poller in `apps/api`, so without this a run makes no
+> progress until the next sweep — **and none at all if that process is not
+> running**. The run screen drives it while the run is live; document claiming
+> is `FOR UPDATE SKIP LOCKED`, so this never double-processes against the worker.
+
+That is the Lambda mitigation, built for a different reason and already in
+production. An operator watching the progress bar advances the run at browser
+speed regardless of what the background engine is doing.
+
+**The phase therefore makes three in-tree changes, not four**, and §1's "no
+restructuring" constraint holds more strongly than the revision claimed.
 
 ---
 
@@ -308,25 +327,29 @@ because it is DB-backed.
 
 The same applies to the `LlmCallGovernor` concurrency semaphore, which stops
 bounding total in-flight model calls — the same per-instance math
-`scaling-new-infrastructure.phase.md` item 7 already documents.
+the *Scaling With New Infrastructure* phase doc item 7 already documents.
 
 ### 7.3 Cache hit rates fall
 
 The auth and permission `TtlCache` layers barely warm across cold instances,
 raising per-request DB reads. This is the same pressure
-`scaling-new-infrastructure.phase.md` addresses with Redis; Lambda encounters it
+the *Scaling With New Infrastructure* phase doc addresses with Redis; Lambda encounters it
 earlier. Sizing guidance in the guide must account for it.
 
-### 7.4 Extraction tick cadence
+### 7.4 Extraction tick cadence — already mitigated
 
 `ExtractionWorker`'s default is a 5s tick (`extraction-worker.ts:14`), chosen
-because an operator is watching a progress bar. EventBridge's floor is 60s, so on
-the schedule alone the `x of y` counter visibly slows.
+because an operator is watching a progress bar. EventBridge's floor is 60s, so
+the *background* cadence is 12x slower on Lambda.
 
-**Mitigation is in scope** (§5.4): the upload path invokes the extraction handler
-directly, so the counter moves at upload speed and the 60s rule is the backstop
-for anything missed. Step Functions and SQS are alternatives the guide may
-mention but this phase does not build.
+**This does not reach the operator**, because the run screen already drives the
+batch engine itself (§5.4). The 60s EventBridge rule is the backstop for runs
+that outlive the browser session; the interactive path is unaffected. Step
+Functions and SQS remain alternatives the guide may mention but this phase does
+not build.
+
+The guide must still state the background cadence, because a run left unattended
+drains 12x slower on Lambda than on a container.
 
 ### 7.5 Hosted embeddings only, enforced rather than documented
 
@@ -413,7 +436,7 @@ Container Apps". It gains a **Lambda** section covering:
 
 ## 10. Docs this phase must correct
 
-[`scaling-new-infrastructure.phase.md`](./scaling-new-infrastructure.phase.md)
+the *Scaling With New Infrastructure* phase doc
 states at `:104` that `apps/api` runs as "a **separate always-on service** —
 never serverless, the scheduler is a long-lived polling loop", and repeats it at
 `:135` ("keep off serverless").
@@ -458,15 +481,13 @@ stating rather than leaving implicit.
    handler last because it is the one with real packaging risk
 8. CDK stack, including RDS Proxy, the `DATABASE_LISTEN_URL` split, and the
    EventBridge Scheduler rule against the existing tick endpoint
-9. The on-upload extraction invocation (§5.4), once there is a deployed handler
-   to invoke
-10. A CI job for `deploy/lambda` — typecheck, lint, tests **and dependency
+9. A CI job for `deploy/lambda` — typecheck, lint, tests **and dependency
     audit**. **Required, not optional** (§4.1)
-11. Extend `ci.yml`'s `compose-smoke` job to assert all three worker log lines,
+10. Extend `ci.yml`'s `compose-smoke` job to assert all three worker log lines,
     not only `scheduler heartbeat started` (§13)
-12. `setup-aws-lambda.md`, the `upgrading.md` section, the `setup-aws.md`
+11. `setup-aws-lambda.md`, the `upgrading.md` section, the `setup-aws.md`
     cross-link, and the §10 corrections
-13. `./validate.sh` and fix all failures
+12. `./validate.sh` and fix all failures
 
 ---
 
@@ -474,7 +495,7 @@ stating rather than leaving implicit.
 
 - [ ] `./validate.sh` passes
 - [ ] The container image builds unchanged, and `docker compose -f docker-compose.prod.yml up -d` brings up web, api and migrate exactly as before
-- [ ] `git diff` shows no change to `Dockerfile`, `docker-entrypoint.sh`, `docker-compose.prod.yml`, `pnpm-workspace.yaml`, `turbo.json`, `next.config.ts`, `esbuild.config.mjs`, `restart.sh` or `scripts/`. Changes under `packages/` and `apps/web` are limited to the four enumerated in §5 — **nothing else**
+- [ ] `git diff` shows no change to `Dockerfile`, `docker-entrypoint.sh`, `docker-compose.prod.yml`, `pnpm-workspace.yaml`, `turbo.json`, `next.config.ts`, `esbuild.config.mjs`, `restart.sh` or `scripts/`. Changes under `packages/` and `apps/web` are limited to the three enumerated in §5 — **nothing else**
 - [ ] `.dockerignore` excludes `deploy`, and `docker build` produces an image containing no `deploy/` path
 - [ ] `apps/api` starts identically: server listening, three workers running, same log lines — **proven by `ci.yml`'s `compose-smoke` job**, extended to assert the retention and extraction startup lines alongside the existing `scheduler heartbeat started` grep (`ci.yml:183`)
 - [ ] With both providers loadable, `/admin/settings` embeddings behaviour is byte-for-byte unchanged; with `local` unloadable, the option is disabled in the UI **and** `setEmbeddingsConfig` rejects it server-side, both covered by tests
@@ -483,7 +504,7 @@ stating rather than leaving implicit.
 - [ ] The CI job for `deploy/lambda` fails when a handler is broken against a `container.ts` change, and runs the dependency audit over its own lockfile
 - [ ] `setup-aws-lambda.md` and the `upgrading.md` Lambda section exist and state every §7 constraint
 - [ ] ADR-056 exists and is referenced from this doc
-- [ ] `scaling-new-infrastructure.phase.md:104` and `:135` are corrected
+- [ ] the *Scaling With New Infrastructure* phase doc's two "never serverless" statements are corrected
 
 ---
 
@@ -492,12 +513,12 @@ stating rather than leaving implicit.
 | Risk | Mitigation |
 |---|---|
 | **SSE economics surprise operators** | The guide states the concurrency cost explicitly; the hybrid keeps it on always-on compute where it is predictable |
-| **Silent drift** — `deploy/lambda` is outside the workspace, so nothing typechecks it against `container.ts` | The CI job at step 10 is a required deliverable, not a nice-to-have |
+| **Silent drift** — `deploy/lambda` is outside the workspace, so nothing typechecks it against `container.ts` | The CI job at step 9 is a required deliverable, not a nice-to-have |
 | **Unaudited dependency surface** — an out-of-workspace lockfile carrying CDK and OpenNext is invisible to `scripts/audit-check.sh` | The same CI job runs the audit over `deploy/lambda`'s own lockfile |
 | **Lambda source leaking into the published image** — `Dockerfile:25` is `COPY . .`, so placement alone does not keep it out | `deploy` added to `.dockerignore`, asserted in §13 |
 | **Connection exhaustion under load** — fails at load, not at deploy | RDS Proxy plus the `DATABASE_LISTEN_URL` split, and a load check before sign-off |
 | **`pdf-parse` packaging** — it reads its own package files at runtime and is `external` in both existing builds | Prove it resolves inside the Lambda artefact during step 7, not after deployment |
-| **The four in-tree changes creep into five** | §5 enumerates them with their cost to other providers; §13 freezes everything else. A fifth change is a signal to stop and re-review, not to widen the diff |
+| **The three in-tree changes creep into four** | §5 enumerates them with their cost to other providers; §13 freezes everything else. A fourth change is a signal to stop and re-review, not to widen the diff |
 | **Doc rot** — a fourth provider guide is a fourth thing to keep true | The guide states the container path is the tested reference; Lambda is additive (ADR-056 §1) |
 
 **Open questions resolved by `/doc-review` (2026-09-05):**
@@ -505,9 +526,9 @@ stating rather than leaving implicit.
 1. *Is the always-on SSE service acceptable?* **Yes** — booked as §7.1 and
    ADR-056 §3, with the explicit rule that no guide may call this
    "serverless Wayfinder".
-2. *Should on-demand extraction invocation be in this phase?* **Yes** — §5.4,
-   wired as a no-op where no invoker is configured so the container path is
-   untouched.
+2. *Should on-demand extraction invocation be in this phase?* **Moot** — it is
+   already implemented (§5.4). `run-progress.tsx` has driven the batch engine
+   from the run screen since ADR-033 shipped.
 3. *Does `deploy/lambda` warrant an ADR?* **Yes** — ADR-056. A PRD was
    considered and declined: `container-distribution.prd.md` set the precedent,
    but that phase changed how every deployment works, while this one is additive
@@ -531,3 +552,98 @@ runtime provider switching, an acceptance criterion asserting behaviour that doe
 not exist, and a missing decision record. All four are resolved above; the
 "exactly one change" framing in §1 was the casualty, and the doc is more honest
 for losing it.
+
+---
+
+## 16. Approved change summary (`/build`, 2026-09-05)
+
+Wayfinder gains an AWS Lambda deployment target: a `deploy/lambda/` package
+outside the pnpm workspace holding Lambda entrypoints and a CDK stack, plus an
+installation guide and update runbook. The container image stays the reference
+deployment and is provably unaffected. Three small changes land inside the
+existing tree — extracting the `apps/api` start path so a handler can import the
+container without booting a server, and making the embeddings provider's
+*availability* a discovered fact rather than an assumed one. No schema change,
+no new ports, no new adapters.
+
+**Pre-flight correction:** §5.4 was found already implemented and is struck out
+above. Four in-tree changes became three.
+
+### Goal
+
+- An AWS option with no always-on web or worker compute, for pilots and
+  low-duty-cycle tenants where a 24/7 Fargate pair is poor value
+- The Docker Compose, ECS, Azure and Railway paths behave identically before and
+  after, proven in CI rather than asserted
+
+### Business rules changing
+
+- When the active embeddings provider cannot be loaded by the running artefact,
+  `embed()` returns a named `INFRA_FAILURE` rather than an opaque
+  module-not-found surfaced from a lazy import
+- When `local` is unloadable, `setEmbeddingsConfig` rejects it server-side and
+  `/admin/settings` disables the option. Where both providers load, behaviour is
+  unchanged
+
+### UI / visible behaviour
+
+- `/admin/settings` → RAG embeddings card: the `local` option is disabled, with
+  the reason shown, where the artefact cannot load it
+
+### Data & types
+
+- No domain entities change. `getEmbeddingsConfig` gains an availability field
+  on its return shape
+
+### Files & packages touched
+
+- **adapters** — `ai/local-embeddings-adapter.ts` (probe),
+  `ai/embeddings-adapter.ts` (guard), plus tests
+- **apps/api** — new `src/workers.ts`; `src/index.ts` reduced to a call; test
+- **apps/web** — `server/routers/settings.ts`,
+  `components/settings/rag-embeddings-card.tsx`, plus tests
+- **deploy/lambda** — new, outside the workspace
+- **root** — `.dockerignore`, `.github/workflows/ci.yml`, guides, `VERSION`,
+  `package.json`
+
+### Database & migration impact
+
+- None. No table, no migration, no `-- data-impact:` line
+
+### Tests
+
+- A test file before each implementation file, per sub-component
+- **No e2e.** No part of this phase falls into the six groups in
+  `e2e-test-policy.md`: the admin control is a component test, the guard an
+  adapter test, the api bootstrap a unit test. Group 6 (smoke) is already
+  carried by `ci.yml`'s `compose-smoke` job, which this phase extends
+
+### Version, branch & PR target
+
+- **MINOR → 0.34.0.** Branch `claude/lambda-deployment-target-phase-dmbgwa`
+  (the session's designated branch, in place of `feature/<slug>`); PR against
+  `main`
+
+### Risks
+
+- The CDK stack and OpenNext packaging cannot be verified in this environment —
+  no AWS account, no deploy. The implementation summary states exactly what is
+  and is not proven
+- `deploy/lambda` is outside the workspace, so only its own CI job catches drift
+
+### Out of scope
+
+- Replacing the `LISTEN`/`NOTIFY` bus, Redis promotion, air-gapped embeddings on
+  Lambda
+
+### Decomposition
+
+1. `apps/api` start-path extraction
+2. Embeddings capability probe and fail-fast guard
+3. Admin control that reads the probe
+4. `deploy/lambda` scaffold and the `.dockerignore` line
+5. Handlers
+6. CDK stack
+7. CI job and the `compose-smoke` extension
+8. Guides, the §10 corrections, and the §5.4 correction
+9. Version bump, doc move, implementation summary, PR
