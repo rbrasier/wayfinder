@@ -18,6 +18,7 @@ new WayfinderLambdaStack(app, process.env.WAYFINDER_STACK_NAME ?? "Wayfinder", {
   vpcId: required("WAYFINDER_VPC_ID"),
   databaseSecretArn: required("WAYFINDER_DATABASE_SECRET_ARN"),
   databaseInstanceIdentifier: required("WAYFINDER_DATABASE_INSTANCE_ID"),
+  databaseEndpointAddress: required("WAYFINDER_DATABASE_ENDPOINT"),
   databaseListenUrlSecretArn: required("WAYFINDER_DATABASE_LISTEN_URL_SECRET_ARN"),
   documentsBucketName: required("WAYFINDER_DOCUMENTS_BUCKET"),
   applicationSecretArn: required("WAYFINDER_APPLICATION_SECRET_ARN"),

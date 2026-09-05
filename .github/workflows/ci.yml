@@ -199,6 +199,25 @@ jobs:
   deploy-lambda:
     name: Lambda deployment target
     runs-on: ubuntu-latest
+
+    # Postgres only. The api container constructs the storage adapter but never
+    # calls initialise(), and postgres.js connects lazily, so nothing here
+    # reaches MinIO — one service container instead of two.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wayfinder_lambda
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
 
@@ -207,6 +226,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          # The validate job populates this store; restoring it here is the
+          # difference between a warm install and a cold one.
+          cache: pnpm
 
       # deploy/lambda is outside the pnpm workspace (ADR-056 §2), so it needs
       # both trees: its own dependencies, and the workspace whose source the
@@ -218,9 +240,9 @@ jobs:
         working-directory: deploy/lambda
         run: npm ci --legacy-peer-deps
 
-      # The reason this job exists. Handlers import container.ts through
-      # relative paths, so a change there that breaks them fails here rather
-      # than at deploy time.
+      # Cheapest checks first. Typecheck is the reason this job exists: handlers
+      # import container.ts through relative paths, so a change there that breaks
+      # them fails here rather than at deploy time.
       - name: Typecheck
         working-directory: deploy/lambda
         run: npm run typecheck
@@ -229,9 +251,21 @@ jobs:
         working-directory: deploy/lambda
         run: npm run lint
 
+      # Unit tests plus the CDK synth assertions. Synth bundles every handler
+      # with esbuild, so this also proves the deployment artefact builds.
       - name: Test
         working-directory: deploy/lambda
         run: npm test
+
+      # The handlers against a real database. No separate migration step: the
+      # migrate handler is the schema setup, so the deployment's own migration
+      # path is what prepares the database — the ordering a real deploy uses.
+      - name: Integration tests
+        working-directory: deploy/lambda
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_lambda
+          SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+        run: npm run test:integration
 
       # This lockfile is invisible to scripts/audit-check.sh, which scans the
       # workspace only.

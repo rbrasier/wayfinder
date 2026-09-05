@@ -57,18 +57,52 @@ the web build for every provider.
 npm install            # own lockfile; do not run pnpm here
 npm run typecheck      # the drift check
 npm run lint
-npm test
+npm test               # unit tests + CDK synth assertions
 npm run audit          # this lockfile is invisible to scripts/audit-check.sh
 
 npm run build:web      # OpenNext build — required before deploy
 npx cdk deploy         # see the guide for the environment it expects
 ```
 
-## What is not verified here
+Integration tests need a live Postgres with pgvector and are a separate script,
+so a bare `npm test` stays infrastructure-free:
 
-The CDK stack and the OpenNext packaging have been typechecked and linted, and
-every AWS construct used was verified against `node_modules`. **They have not
-been deployed.** `pdf-parse` resolution inside the bundle, cold-start times and
-the CloudFront behaviours are proven by a real deployment, not by this
-directory's checks. The container path remains the tested reference deployment
-(ADR-056 §1).
+```bash
+docker run --rm -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=wayfinder_lambda pgvector/pgvector:pg16
+
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/wayfinder_lambda \
+  npm run test:integration
+```
+
+They do not skip themselves when the database is missing — they fail, which is
+the point. There is no separate migration step: the migrate handler *is* the
+schema setup, so the deployment's own migration path is what prepares the
+database.
+
+## What the checks prove, and what they do not
+
+**Proven here, on every pull request:**
+
+- The handlers compile against the current `container.ts` — the drift check.
+- The stack synthesises, and its shape is asserted: response streaming on the
+  web Function URL, the RDS Proxy, hosted embeddings pinned on every function,
+  `MINIO_PATH_STYLE=false`, the schedule expressions, the scheduler's API
+  destination, and the CloudFront behaviours.
+- **Every handler bundles.** Synth runs esbuild over all four, so a dependency
+  that cannot be bundled fails the build rather than the deployment.
+- The handlers run against a real Postgres: the migrate handler applies the full
+  schema and is idempotent, both tick handlers register their job and record a
+  run in `job_registry`, and the api handler answers a Function URL request
+  through Express.
+
+**Not proven here — a real deployment is the only way:**
+
+- `pdf-parse` reads its own package files at *runtime*. Synth proves it bundles;
+  only an invocation proves it resolves.
+- Cold-start latency, and whether response streaming survives CloudFront
+  end-to-end.
+- RDS Proxy behaviour under concurrency, and the connection budget.
+- That the always-on SSE service is routed correctly.
+
+The container path remains the tested reference deployment (ADR-056 §1).

@@ -21,7 +21,7 @@ import type { Construct } from "constructs";
 const here = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = join(here, "..", "..", "..");
 const handlersDirectory = join(here, "..", "handlers");
-const openNextOutput = join(repositoryRoot, "apps", "web", ".open-next");
+const defaultOpenNextOutput = join(repositoryRoot, "apps", "web", ".open-next");
 
 // The framework's own packages are TypeScript source resolved through a
 // workspace, so they must be bundled, never marked external. onnxruntime-node is
@@ -30,6 +30,8 @@ const openNextOutput = join(repositoryRoot, "apps", "web", ".open-next");
 // unavailable here by construction — which the running app detects and reports.
 const EXCLUDED_FROM_BUNDLE = ["@huggingface/transformers", "onnxruntime-node"];
 
+const DATABASE_PORT = 5432;
+
 export interface WayfinderLambdaStackProps extends StackProps {
   /** Existing VPC the database lives in. Created outside this stack. */
   readonly vpcId: string;
@@ -37,6 +39,8 @@ export interface WayfinderLambdaStackProps extends StackProps {
   readonly databaseSecretArn: string;
   /** The RDS instance identifier to place behind the proxy. */
   readonly databaseInstanceIdentifier: string;
+  /** The RDS instance's endpoint hostname, used to import it as a proxy target. */
+  readonly databaseEndpointAddress: string;
   /**
    * Direct (non-proxy) connection string. The session event bus holds a
    * Postgres LISTEN, which needs session mode — RDS Proxy does not provide it
@@ -51,11 +55,18 @@ export interface WayfinderLambdaStackProps extends StackProps {
   readonly schedulerTickSecretArn: string;
   /** Public origin of the deployment, e.g. https://wayfinder.example.com. */
   readonly publicBaseUrl: string;
+  /**
+   * Where `npm run build:web` left OpenNext's output. Overridable so a synth
+   * test can point at a fixture instead of requiring a full Next.js build.
+   */
+  readonly openNextOutputDirectory?: string;
 }
 
 export class WayfinderLambdaStack extends Stack {
   constructor(scope: Construct, id: string, props: WayfinderLambdaStackProps) {
     super(scope, id, props);
+
+    const openNextOutput = props.openNextOutputDirectory ?? defaultOpenNextOutput;
 
     const vpc = ec2.Vpc.fromLookup(this, "Vpc", { vpcId: props.vpcId });
     const databaseSecret = secretsmanager.Secret.fromSecretCompleteArn(
@@ -86,9 +97,14 @@ export class WayfinderLambdaStack extends Stack {
       proxyTarget: rds.ProxyTarget.fromInstance(
         rds.DatabaseInstance.fromDatabaseInstanceAttributes(this, "Database", {
           instanceIdentifier: props.databaseInstanceIdentifier,
-          instanceEndpointAddress: databaseSecret.secretValueFromJson("host").unsafeUnwrap(),
-          port: 5432,
+          instanceEndpointAddress: props.databaseEndpointAddress,
+          port: DATABASE_PORT,
           securityGroups: [lambdaSecurityGroup],
+          // Required for an imported instance to be usable as a proxy target:
+          // without it, synth fails with CouldNotDetermineEngineForProxyTarget.
+          engine: rds.DatabaseInstanceEngine.postgres({
+            version: rds.PostgresEngineVersion.VER_16,
+          }),
         }),
       ),
       secrets: [databaseSecret],
@@ -99,7 +115,7 @@ export class WayfinderLambdaStack extends Stack {
 
     const sharedEnvironment: Record<string, string> = {
       NODE_ENV: "production",
-      DATABASE_URL: `postgresql://${databaseProxy.endpoint}:5432/wayfinder?sslmode=require`,
+      DATABASE_URL: `postgresql://${databaseProxy.endpoint}:${DATABASE_PORT}/wayfinder?sslmode=require`,
       MINIO_BUCKET: props.documentsBucketName,
       MINIO_REGION: this.region,
       // Native S3 signs virtual-hosted style; path style is a MinIO-ism.
