@@ -132,6 +132,68 @@ jobs:
           tags: ghcr.io/rbrasier/wayfinder:ci
           cache-from: type=gha
 
+      # The published image is the artefact ECS, Azure Container Apps, Railway
+      # and EC2 all consume, with the same three entrypoint commands. So these
+      # assertions are not "the compose path" — they cover every container
+      # deployment at once, and each one pins a decision an ADR called out as
+      # the risky part.
+      - name: Assert the image honours its distribution contract
+        run: |
+          set -euo pipefail
+          IMAGE=ghcr.io/rbrasier/wayfinder:ci
+
+          # ADR-047's own Consequences call this "the main thing to get right in
+          # review": the correct production value is the opposite of the default,
+          # and an image that forgot it silently migrates on boot again.
+          ACTUAL=$(docker run --rm --entrypoint printenv "$IMAGE" RUN_MIGRATIONS_ON_START)
+          [ "$ACTUAL" = "false" ] || { echo "RUN_MIGRATIONS_ON_START is '$ACTUAL', expected 'false'"; exit 1; }
+
+          # ADR-046 §4 / ADR-041: the image carries code, never a deployment's
+          # configuration.
+          if docker run --rm --entrypoint sh "$IMAGE" -c 'ls -a /app/.env 2>/dev/null'; then
+            echo "the image contains a .env"; exit 1
+          fi
+
+          # ADR-056 §2: deploy/lambda is excluded from the build context, so a
+          # second deployment topology cannot bloat the image every other
+          # provider pulls.
+          if docker run --rm --entrypoint sh "$IMAGE" -c 'ls -d /app/deploy 2>/dev/null'; then
+            echo "the image contains deploy/"; exit 1
+          fi
+
+          # ADR-046: next.config.ts reads the repo-root VERSION at build time to
+          # stamp NEXT_PUBLIC_APP_VERSION, so the build context must contain it.
+          # A .dockerignore change that excluded it would break the About modal
+          # silently, since the build falls back rather than failing.
+          EXPECTED=$(cat VERSION)
+          STAMPED=$(docker run --rm --entrypoint cat "$IMAGE" /app/VERSION)
+          [ "$STAMPED" = "$EXPECTED" ] || { echo "image VERSION is '$STAMPED', repo says '$EXPECTED'"; exit 1; }
+
+          # The three documented entrypoint commands. `migrate` is exercised by
+          # the stack below; these two prove the dispatch itself, since every
+          # container guide tells an operator to pass one of them.
+          docker run --rm --entrypoint sh "$IMAGE" -c 'test -f /app/apps/api/dist/cli/migrate.js' \
+            || { echo "the migrate entrypoint target is missing"; exit 1; }
+          docker run --rm "$IMAGE" bash -c 'echo passthrough-works' | grep -q passthrough-works \
+            || { echo "the entrypoint no longer execs an unknown command verbatim"; exit 1; }
+
+      # ADR-047 §3: no runtime path may reach drizzle-kit. That is the claim the
+      # whole ADR rests on, and it is what unblocks pruning dev dependencies.
+      # Comments are excluded — migrate-if-configured.sh names drizzle-kit in a
+      # comment explaining that it deliberately does not call it — matching the
+      # convention validate.sh section 23 already uses.
+      - name: Assert no runtime path reaches drizzle-kit
+        run: |
+          set -euo pipefail
+          HITS=$(docker run --rm --entrypoint sh ghcr.io/rbrasier/wayfinder:ci -c \
+            'grep -rn "drizzle-kit" /app/scripts /app/apps/api/package.json /app/apps/web/package.json 2>/dev/null' \
+            | grep -vE "^[^:]+:[0-9]+:[[:space:]]*#" || true)
+          if [ -n "$HITS" ]; then
+            echo "a runtime path still references drizzle-kit:"
+            echo "$HITS"
+            exit 1
+          fi
+
       - name: Bring the stack up
         # Deliberately not `--wait`: the migrate service runs to completion and
         # exits, which `--wait` treats as a service that failed to stay up. The

@@ -152,6 +152,62 @@ Measured locally: typecheck 12.5s, lint 2.9s, unit + synth 8.7s, integration
 
 Integration tests never skip themselves when the database is absent; they fail.
 
+## Testing the other deployment paths
+
+The Lambda work exposed an asymmetry: it is the only deployment with
+infrastructure as code in the repo, so it is the only one with a template to
+assert against. ECS, Azure Container Apps, Railway and EC2 are prose guides over
+one shared artefact — the published image and its three entrypoint commands.
+That makes the image the place to test them, and `compose-smoke` the job that
+covers all four at once.
+
+**Six assertions added to `compose-smoke`**, each pinning a decision an ADR named
+as the risky part and none of which had a test:
+
+| Assertion | Decision it pins |
+|---|---|
+| `RUN_MIGRATIONS_ON_START=false` in the image | ADR-047 Consequences: *"the main thing to get right in review"* — its correct production value is the opposite of its default |
+| No `.env` in the image | ADR-046 §4 / ADR-041 |
+| No `deploy/` in the image | ADR-056 §2, and this phase's own acceptance criterion, previously unasserted |
+| `/app/VERSION` matches the repo's `VERSION` | ADR-046: the build context must contain it or the About modal silently reports the wrong version |
+| The `migrate` entrypoint target exists, and an unknown command still execs verbatim | `docker-entrypoint.sh`'s documented contract, which every container guide tells operators to use |
+| No non-comment runtime path references `drizzle-kit` | ADR-047 §3, the claim the whole ADR rests on |
+
+**`validate.sh` section 25 — deployment guide env coverage.** Prose guides have no
+template to synthesise, so the static analogue is drift: every variable the zod
+schemas require must appear in every `setup-*.md`. Delegated to
+`scripts/check-guide-env-coverage.mjs`, mirroring how section 11 delegates to
+`scripts/audit-check.sh`. It finds nothing today — three required variables
+(`DATABASE_URL`, `BETTER_AUTH_SECRET`, `SETTINGS_ENCRYPTION_KEY`), all documented
+in all five guides. Its value is that adding a required variable can no longer
+silently invalidate five guides at once. A `setup-*.md` that is neither listed as
+a deployment guide nor explicitly excluded also fails, so a new provider forces
+the decision rather than defaulting to uncovered.
+
+Two bugs were caught while building these, both by probing rather than by
+reading:
+
+- The checker's first version used `$` under the `m` flag as its entry
+  terminator. `$` matches end-of-line there, so every multi-line schema entry was
+  truncated to its first token and lost the `.optional()` below it — eight
+  variables were falsely reported as required.
+- Its guide match used `includes()`, so a guide mentioning
+  `SETTINGS_ENCRYPTION_KEY_RENAMED` counted as documenting
+  `SETTINGS_ENCRYPTION_KEY`. A deliberate negative test — rename a variable in a
+  guide and confirm the check fails — did not fail, which is how it was found.
+  Now bounded by non-identifier characters on both sides.
+
+The `drizzle-kit` assertion would also have failed on its first CI run:
+`scripts/migrate-if-configured.sh:27` names drizzle-kit in a comment explaining
+that it deliberately does not call it. Comments are now excluded, matching the
+convention `validate.sh` section 23 already used.
+
+**Not run here.** The six image assertions need Docker, which this environment
+does not have. Their shell is syntax-checked and every premise was verified
+against the repo — the Dockerfile line, both `.dockerignore` entries, the
+entrypoint's paths, and the drizzle-kit grep simulated against the real tree —
+but CI is the first place they execute.
+
 ## Known limitations
 
 - **The CDK stack and OpenNext packaging still have not been deployed.** Tier 1
