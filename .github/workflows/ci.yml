@@ -132,6 +132,68 @@ jobs:
           tags: ghcr.io/rbrasier/wayfinder:ci
           cache-from: type=gha
 
+      # The published image is the artefact ECS, Azure Container Apps, Railway
+      # and EC2 all consume, with the same three entrypoint commands. So these
+      # assertions are not "the compose path" — they cover every container
+      # deployment at once, and each one pins a decision an ADR called out as
+      # the risky part.
+      - name: Assert the image honours its distribution contract
+        run: |
+          set -euo pipefail
+          IMAGE=ghcr.io/rbrasier/wayfinder:ci
+
+          # ADR-047's own Consequences call this "the main thing to get right in
+          # review": the correct production value is the opposite of the default,
+          # and an image that forgot it silently migrates on boot again.
+          ACTUAL=$(docker run --rm --entrypoint printenv "$IMAGE" RUN_MIGRATIONS_ON_START)
+          [ "$ACTUAL" = "false" ] || { echo "RUN_MIGRATIONS_ON_START is '$ACTUAL', expected 'false'"; exit 1; }
+
+          # ADR-046 §4 / ADR-041: the image carries code, never a deployment's
+          # configuration.
+          if docker run --rm --entrypoint sh "$IMAGE" -c 'ls -a /app/.env 2>/dev/null'; then
+            echo "the image contains a .env"; exit 1
+          fi
+
+          # ADR-056 §2: deploy/lambda is excluded from the build context, so a
+          # second deployment topology cannot bloat the image every other
+          # provider pulls.
+          if docker run --rm --entrypoint sh "$IMAGE" -c 'ls -d /app/deploy 2>/dev/null'; then
+            echo "the image contains deploy/"; exit 1
+          fi
+
+          # ADR-046: next.config.ts reads the repo-root VERSION at build time to
+          # stamp NEXT_PUBLIC_APP_VERSION, so the build context must contain it.
+          # A .dockerignore change that excluded it would break the About modal
+          # silently, since the build falls back rather than failing.
+          EXPECTED=$(cat VERSION)
+          STAMPED=$(docker run --rm --entrypoint cat "$IMAGE" /app/VERSION)
+          [ "$STAMPED" = "$EXPECTED" ] || { echo "image VERSION is '$STAMPED', repo says '$EXPECTED'"; exit 1; }
+
+          # The three documented entrypoint commands. `migrate` is exercised by
+          # the stack below; these two prove the dispatch itself, since every
+          # container guide tells an operator to pass one of them.
+          docker run --rm --entrypoint sh "$IMAGE" -c 'test -f /app/apps/api/dist/cli/migrate.js' \
+            || { echo "the migrate entrypoint target is missing"; exit 1; }
+          docker run --rm "$IMAGE" bash -c 'echo passthrough-works' | grep -q passthrough-works \
+            || { echo "the entrypoint no longer execs an unknown command verbatim"; exit 1; }
+
+      # ADR-047 §3: no runtime path may reach drizzle-kit. That is the claim the
+      # whole ADR rests on, and it is what unblocks pruning dev dependencies.
+      # Comments are excluded — migrate-if-configured.sh names drizzle-kit in a
+      # comment explaining that it deliberately does not call it — matching the
+      # convention validate.sh section 23 already uses.
+      - name: Assert no runtime path reaches drizzle-kit
+        run: |
+          set -euo pipefail
+          HITS=$(docker run --rm --entrypoint sh ghcr.io/rbrasier/wayfinder:ci -c \
+            'grep -rn "drizzle-kit" /app/scripts /app/apps/api/package.json /app/apps/web/package.json 2>/dev/null' \
+            | grep -vE "^[^:]+:[0-9]+:[[:space:]]*#" || true)
+          if [ -n "$HITS" ]; then
+            echo "a runtime path still references drizzle-kit:"
+            echo "$HITS"
+            exit 1
+          fi
+
       - name: Bring the stack up
         # Deliberately not `--wait`: the migrate service runs to completion and
         # exits, which `--wait` treats as a service that failed to stay up. The
@@ -180,11 +242,98 @@ jobs:
           exit 1
 
       - name: Assert the api started its workers
-        run: docker compose -f docker-compose.prod.yml logs api | grep -q "scheduler heartbeat started"
+        # This is the regression guard for the startWorkers extraction: the api
+        # process must still listen and start the same workers with the same log
+        # lines (ADR-056). Retention is opt-in (RETENTION_ENABLED), so it is
+        # correctly absent here — asserting it would assert a non-default.
+        run: |
+          set -o pipefail
+          LOGS=$(docker compose -f docker-compose.prod.yml logs api)
+          echo "$LOGS"
+          echo "$LOGS" | grep -q "listening on" || { echo "api never listened"; exit 1; }
+          echo "$LOGS" | grep -q "scheduler heartbeat started" || { echo "scheduler did not start"; exit 1; }
+          echo "$LOGS" | grep -q "extraction worker started" || { echo "extraction worker did not start"; exit 1; }
 
       - name: Tear down
         if: always()
         run: docker compose -f docker-compose.prod.yml down -v
+
+  deploy-lambda:
+    name: Lambda deployment target
+    runs-on: ubuntu-latest
+
+    # Postgres only. The api container constructs the storage adapter but never
+    # calls initialise(), and postgres.js connects lazily, so nothing here
+    # reaches MinIO — one service container instead of two.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: wayfinder_lambda
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          # The validate job populates this store; restoring it here is the
+          # difference between a warm install and a cold one.
+          cache: pnpm
+
+      # deploy/lambda is outside the pnpm workspace (ADR-056 §2), so it needs
+      # both trees: its own dependencies, and the workspace whose source the
+      # handlers import.
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install deploy/lambda dependencies
+        working-directory: deploy/lambda
+        run: npm ci --legacy-peer-deps
+
+      # Cheapest checks first. Typecheck is the reason this job exists: handlers
+      # import container.ts through relative paths, so a change there that breaks
+      # them fails here rather than at deploy time.
+      - name: Typecheck
+        working-directory: deploy/lambda
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: deploy/lambda
+        run: npm run lint
+
+      # Unit tests plus the CDK synth assertions. Synth bundles every handler
+      # with esbuild, so this also proves the deployment artefact builds.
+      - name: Test
+        working-directory: deploy/lambda
+        run: npm test
+
+      # The handlers against a real database. No separate migration step: the
+      # migrate handler is the schema setup, so the deployment's own migration
+      # path is what prepares the database — the ordering a real deploy uses.
+      - name: Integration tests
+        working-directory: deploy/lambda
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/wayfinder_lambda
+          SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+        run: npm run test:integration
+
+      # This lockfile is invisible to scripts/audit-check.sh, which scans the
+      # workspace only.
+      - name: Dependency audit
+        working-directory: deploy/lambda
+        run: npm run audit
 
   security:
     name: Security scan

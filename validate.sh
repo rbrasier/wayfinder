@@ -484,6 +484,19 @@ fi
 
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo
+# ── 25. every deployment guide documents every required env var ──────────────
+# Adding a required variable to a zod schema is a one-line change that silently
+# invalidates five deployment guides at once, and nobody finds out until an
+# operator hits a startup crash the docs never mentioned. Delegated to a script
+# so the parsing lives somewhere it can be read and fixed.
+section "25. deployment guides document every required environment variable"
+if GUIDE_ENV_OUTPUT=$(node scripts/check-guide-env-coverage.mjs 2>&1); then
+  pass "$GUIDE_ENV_OUTPUT"
+else
+  fail "deployment guides are out of step with the environment schemas:"
+  echo "$GUIDE_ENV_OUTPUT" | sed 's/^/  /'
+fi
+
 echo "──────────────────────────────────────────"
 echo "Passed: $PASS"
 echo "Failed: $FAIL"

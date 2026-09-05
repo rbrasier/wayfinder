@@ -8,6 +8,11 @@ import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogFooter, Dia
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import { ConnectivityTest, type ConnectivityController } from "./connectivity";
+import {
+  isProviderSelectable,
+  providerSelectionBlockedReason,
+  storedProviderWarning,
+} from "./embeddings-provider-state";
 
 type EmbeddingsProviderChoice = "local" | "openai";
 
@@ -63,6 +68,10 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
     saveMutation.mutate({ provider });
   };
 
+  const selectionBlockedReason = providerSelectionBlockedReason(config?.providers, provider);
+  const canSave = isProviderSelectable(config?.providers, provider);
+  const storedWarning = config ? storedProviderWarning(config.providers, config.provider) : null;
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -87,6 +96,15 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
                   config.provider}
               </span>
             </div>
+            {storedWarning ? (
+              <p
+                data-testid="embeddings-stored-provider-warning"
+                className="rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-900"
+              >
+                {storedWarning} Retrieval will fail until a hosted provider is selected and
+                documents are re-indexed.
+              </p>
+            ) : null}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Model</span>
               <span className="font-mono text-xs">{config.model}</span>
@@ -156,10 +174,27 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
                 onChange={(e) => setProvider(e.target.value as EmbeddingsProviderChoice)}
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="local">Local (in-process)</option>
-                <option value="openai">OpenAI</option>
+                {(config?.providers ?? []).map((option) => (
+                  <option
+                    key={option.provider}
+                    value={option.provider}
+                    disabled={!option.available}
+                  >
+                    {EMBEDDINGS_PROVIDER_LABEL[option.provider as EmbeddingsProviderChoice] ??
+                      option.provider}
+                    {option.available ? "" : " — unavailable"}
+                  </option>
+                ))}
               </select>
             </div>
+            {selectionBlockedReason ? (
+              <p
+                data-testid="embeddings-provider-blocked"
+                className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900"
+              >
+                {selectionBlockedReason}
+              </p>
+            ) : null}
             <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
               Changing the provider changes how documents are embedded. Existing chunks stay embedded
               with the previous model and will not match queries until each document is re-uploaded or
@@ -170,7 +205,7 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+            <Button onClick={handleSave} disabled={saveMutation.isPending || !canSave}>
               {saveMutation.isPending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>

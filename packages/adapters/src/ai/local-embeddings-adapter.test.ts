@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { LocalEmbeddingsAdapter, type FeatureExtractorFactory } from "./local-embeddings-adapter";
+import {
+  LocalEmbeddingsAdapter,
+  isLocalEmbeddingsAvailable,
+  type FeatureExtractorFactory,
+} from "./local-embeddings-adapter";
 
 const vector = Array.from({ length: 384 }, (_, index) => index / 384);
 
@@ -60,5 +64,35 @@ describe("LocalEmbeddingsAdapter", () => {
     const result = await adapter.embed("hello");
 
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+});
+
+describe("isLocalEmbeddingsAvailable", () => {
+  it("is true when both the pipeline package and the native runtime resolve", () => {
+    const resolve = vi.fn();
+
+    expect(isLocalEmbeddingsAvailable(resolve)).toBe(true);
+    expect(resolve).toHaveBeenCalledWith("@huggingface/transformers");
+    expect(resolve).toHaveBeenCalledWith("onnxruntime-node");
+  });
+
+  it("is false when the native runtime is missing, as in a Lambda zip", () => {
+    const resolve = (specifier: string) => {
+      if (specifier === "onnxruntime-node") throw new Error("Cannot find module");
+    };
+
+    expect(isLocalEmbeddingsAvailable(resolve)).toBe(false);
+  });
+
+  it("is false when the pipeline package itself is missing", () => {
+    const resolve = () => {
+      throw new Error("Cannot find module");
+    };
+
+    expect(isLocalEmbeddingsAvailable(resolve)).toBe(false);
+  });
+
+  it("resolves through Node by default, so a workspace install reports true", () => {
+    expect(isLocalEmbeddingsAvailable()).toBe(true);
   });
 });

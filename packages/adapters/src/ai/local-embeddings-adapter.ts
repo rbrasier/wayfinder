@@ -1,4 +1,29 @@
+import { createRequire } from "node:module";
 import { domainError, err, ok, type IEmbeddingsProvider, type Result } from "@rbrasier/domain";
+
+// Whether this artefact can run the local provider at all. A Lambda zip ships
+// without onnxruntime-node so that cold starts stay sane (ADR-056 §4), which
+// makes availability a property of the build rather than of configuration.
+// Resolution, not execution: the pipeline itself stays behind the lazy import
+// below, and the native runtime is checked because it is the half that is
+// actually dropped. Never sniff the platform — a container built without the
+// embeddings path is the same fact arrived at differently.
+const LOCAL_EMBEDDINGS_PACKAGES = ["@huggingface/transformers", "onnxruntime-node"];
+
+const requireFromAdapters = createRequire(import.meta.url);
+
+export type ModuleResolver = (specifier: string) => void;
+
+export const isLocalEmbeddingsAvailable = (
+  resolve: ModuleResolver = (specifier) => void requireFromAdapters.resolve(specifier),
+): boolean => {
+  try {
+    for (const specifier of LOCAL_EMBEDDINGS_PACKAGES) resolve(specifier);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export interface FeatureExtractionOptions {
   pooling: "mean";

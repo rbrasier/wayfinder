@@ -10,8 +10,13 @@ import { embed, type EmbeddingModel } from "ai";
 import {
   LocalEmbeddingsAdapter,
   createTransformersExtractorFactory,
+  isLocalEmbeddingsAvailable,
   type LocalModelEnvOptions,
 } from "./local-embeddings-adapter";
+
+// Re-exported deliberately: the admin settings router needs the probe to decide
+// which providers it may offer, and this module is what `ai/index` publishes.
+export { isLocalEmbeddingsAvailable } from "./local-embeddings-adapter";
 
 export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
 
@@ -48,6 +53,10 @@ export type EmbeddingsAdapterBuilders = Record<
   (model: string) => IEmbeddingsProvider
 >;
 
+// Whether the running artefact can load each provider at all. A provider with no
+// entry is treated as available, so wiring that predates ADR-056 is unaffected.
+export type EmbeddingsAvailabilityChecks = Partial<Record<EmbeddingsProvider, () => boolean>>;
+
 // Resolves the active embedding provider per call from runtime config so the
 // /admin/settings choice takes effect without a restart. Each underlying adapter
 // is built once and cached by provider+model (ADR-017 Decision 1).
@@ -57,6 +66,7 @@ export class DispatchingEmbeddingsAdapter implements IEmbeddingsProvider {
   constructor(
     private readonly getConfig: () => Promise<EmbeddingsConfig>,
     private readonly builders: EmbeddingsAdapterBuilders,
+    private readonly availability: EmbeddingsAvailabilityChecks = {},
   ) {}
 
   async embed(text: string): Promise<Result<number[]>> {
@@ -64,6 +74,19 @@ export class DispatchingEmbeddingsAdapter implements IEmbeddingsProvider {
     const provider = isEmbeddingsProvider(config.provider)
       ? config.provider
       : EMBEDDINGS_DEFAULT_PROVIDER;
+
+    // Without this the failure is a module-not-found thrown from a lazy import
+    // deep inside the pipeline, which reads as a bug rather than as a
+    // deployment that was never packaged for this provider (ADR-056 §4).
+    if (this.availability[provider]?.() === false) {
+      return err(
+        domainError(
+          "INFRA_FAILURE",
+          `The "${provider}" embedding provider is not available in this deployment. Select a hosted provider such as "openai" in Admin → Settings, then re-index.`,
+        ),
+      );
+    }
+
     const key = `${provider}:${config.model}`;
     let adapter = this.cache.get(key);
     if (!adapter) {
@@ -84,8 +107,12 @@ export const createEmbeddingsProvider = (
   getConfig: () => Promise<EmbeddingsConfig>,
   deps: EmbeddingsProviderDeps,
 ): IEmbeddingsProvider =>
-  new DispatchingEmbeddingsAdapter(getConfig, {
-    local: (model) =>
-      new LocalEmbeddingsAdapter(model, createTransformersExtractorFactory(deps.localEnvOptions)),
-    openai: (model) => createOpenAIEmbeddingsAdapter(deps.openaiApiKey, model),
-  });
+  new DispatchingEmbeddingsAdapter(
+    getConfig,
+    {
+      local: (model) =>
+        new LocalEmbeddingsAdapter(model, createTransformersExtractorFactory(deps.localEnvOptions)),
+      openai: (model) => createOpenAIEmbeddingsAdapter(deps.openaiApiKey, model),
+    },
+    { local: () => isLocalEmbeddingsAvailable() },
+  );

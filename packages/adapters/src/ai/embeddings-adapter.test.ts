@@ -109,3 +109,71 @@ describe("DispatchingEmbeddingsAdapter", () => {
     expect(local.embed).toHaveBeenCalledWith("hello");
   });
 });
+
+describe("DispatchingEmbeddingsAdapter availability guard", () => {
+  const builders = (local: ReturnType<typeof stubProvider>): EmbeddingsAdapterBuilders => ({
+    local: () => local,
+    openai: () => stubProvider("openai"),
+  });
+
+  it("fails fast with an INFRA_FAILURE when the configured provider cannot be loaded", async () => {
+    const local = stubProvider("local");
+    const config: EmbeddingsConfig = { provider: "local", model: "all-MiniLM-L6-v2" };
+    const adapter = new DispatchingEmbeddingsAdapter(async () => config, builders(local), {
+      local: () => false,
+    });
+
+    const result = await adapter.embed("hello");
+
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+    expect(result.error?.message).toContain("local");
+    expect(local.embed).not.toHaveBeenCalled();
+  });
+
+  it("names re-indexing as the remedy so the message is actionable", async () => {
+    const config: EmbeddingsConfig = { provider: "local", model: "all-MiniLM-L6-v2" };
+    const adapter = new DispatchingEmbeddingsAdapter(async () => config, builders(stubProvider("local")), {
+      local: () => false,
+    });
+
+    const result = await adapter.embed("hello");
+
+    expect(result.error?.message).toContain("openai");
+  });
+
+  it("dispatches normally when the provider is available", async () => {
+    const local = stubProvider("local");
+    const config: EmbeddingsConfig = { provider: "local", model: "all-MiniLM-L6-v2" };
+    const adapter = new DispatchingEmbeddingsAdapter(async () => config, builders(local), {
+      local: () => true,
+    });
+
+    await adapter.embed("hello");
+
+    expect(local.embed).toHaveBeenCalledWith("hello");
+  });
+
+  it("leaves a provider with no declared check available, so existing wiring is unaffected", async () => {
+    const local = stubProvider("local");
+    const config: EmbeddingsConfig = { provider: "local", model: "all-MiniLM-L6-v2" };
+    const adapter = new DispatchingEmbeddingsAdapter(async () => config, builders(local), {});
+
+    await adapter.embed("hello");
+
+    expect(local.embed).toHaveBeenCalledWith("hello");
+  });
+
+  it("does not block a provider whose sibling is unavailable", async () => {
+    const openai = stubProvider("openai");
+    const config: EmbeddingsConfig = { provider: "openai", model: "text-embedding-3-small" };
+    const adapter = new DispatchingEmbeddingsAdapter(
+      async () => config,
+      { local: () => stubProvider("local"), openai: () => openai },
+      { local: () => false },
+    );
+
+    await adapter.embed("hello");
+
+    expect(openai.embed).toHaveBeenCalledWith("hello");
+  });
+});
