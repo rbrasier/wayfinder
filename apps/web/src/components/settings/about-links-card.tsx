@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { ABOUT_LINK_ICONS, type AboutLink, type AboutLinkIcon } from "@rbrasier/domain";
+import {
+  ABOUT_LINK_ICONS,
+  ABOUT_LINK_VERSION_PLACEHOLDER,
+  DEFAULT_ISSUE_TRACKER_URL,
+  type AboutLink,
+  type AboutLinkIcon,
+} from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -69,7 +75,11 @@ export function AboutLinksCard() {
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Links shown as buttons at the bottom of the About modal. Tick &ldquo;Help menu&rdquo; to
-          also list one under the help (?) button in the top right.
+          also list one under the help (?) button in the top right. A URL may contain{" "}
+          <code className="rounded-[4px] bg-[#f0ede7] px-1 py-0.5 font-mono text-xs">
+            {ABOUT_LINK_VERSION_PLACEHOLDER}
+          </code>
+          , which is replaced with the running app version when the link is opened.
         </p>
 
         {links.length === 0 && (
@@ -110,7 +120,7 @@ export function AboutLinksCard() {
                   aria-label={`Link URL ${index + 1}`}
                   value={link.url}
                   onChange={(event) => updateLink(index, { url: event.target.value })}
-                  placeholder="https://github.com/rbrasier/wayfinder/issues"
+                  placeholder={DEFAULT_ISSUE_TRACKER_URL}
                 />
 
                 <div className="flex flex-wrap items-center gap-4">

@@ -26,6 +26,7 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   organisationId: null,
   emailVerified: true,
   isAdmin: false,
+  welcomeTourCompletedAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,

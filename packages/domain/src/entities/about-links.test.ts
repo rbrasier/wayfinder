@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ABOUT_LINK_ICONS,
+  ABOUT_LINK_VERSION_PLACEHOLDER,
   createDefaultAboutLinksConfig,
+  expandAboutLinkUrl,
   helpMenuAboutLinks,
   normaliseAboutLinkIcon,
   normaliseAboutLinkUrl,
@@ -17,11 +19,45 @@ describe("createDefaultAboutLinksConfig", () => {
     expect(config.links).toEqual([
       {
         label: "Report an issue",
-        url: "https://github.com/rbrasier/wayfinder/issues",
+        url: "https://github.com/rbrasier/wayfinder/issues/new?body=%0A%0A---%0AWayfinder%20version:%20{version}",
         icon: "github",
         showInHelpMenu: false,
       },
     ]);
+  });
+
+  // The whole point of the default: a filed issue names the build it came from.
+  it("expands to a new-issue URL carrying the running version in the body", () => {
+    const reportAnIssue = createDefaultAboutLinksConfig().links[0]!;
+
+    expect(expandAboutLinkUrl(reportAnIssue.url, "0.21.3")).toBe(
+      "https://github.com/rbrasier/wayfinder/issues/new?body=%0A%0A---%0AWayfinder%20version:%200.21.3",
+    );
+  });
+});
+
+describe("expandAboutLinkUrl", () => {
+  it("replaces every occurrence of the version placeholder", () => {
+    expect(
+      expandAboutLinkUrl(
+        `https://example.com/{version}?body=v{version}`,
+        "1.2.3",
+      ),
+    ).toBe("https://example.com/1.2.3?body=v1.2.3");
+  });
+
+  it("leaves a URL without the placeholder untouched", () => {
+    expect(expandAboutLinkUrl("https://example.com/issues", "1.2.3")).toBe(
+      "https://example.com/issues",
+    );
+  });
+
+  // The placeholder usually sits inside a query string, so the substituted value
+  // has to be percent-encoded or an odd version string would break the URL.
+  it("percent-encodes the version it substitutes", () => {
+    expect(expandAboutLinkUrl(`https://example.com/?b=${ABOUT_LINK_VERSION_PLACEHOLDER}`, "1.0 beta&x")).toBe(
+      "https://example.com/?b=1.0%20beta%26x",
+    );
   });
 });
 

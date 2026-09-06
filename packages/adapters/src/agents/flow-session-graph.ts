@@ -151,6 +151,15 @@ First explain your reasoning, then give the chosen node id. Return only: { "rati
   }
 }
 
+// A narrative field inverts the default "capture what the user said": the model
+// writes the prose itself. Its brief is already in the constraints line, but
+// without this the model has no direction to *use* it in conversation — so it
+// asks for the bare field name and composes from a one-line answer.
+const buildNarrativeDirective = (templateFields: TemplateField[]): string => {
+  if (!templateFields.some((field) => field.type === "narrative")) return "";
+  return `\n  Some fields are narrative prose. Where one carries a brief, treat the brief as what the finished prose must cover: explain what it needs to cover in your own words, ask for whatever is still missing, and never read the brief out verbatim. When you have enough, compose the prose yourself rather than pasting back what the user said — they are giving you the material, not the wording.\n`;
+};
+
 const buildFieldFormatsBlock = (templateFields: TemplateField[]): string => {
   const indented = buildFieldConstraintsText(templateFields)
     .split("\n")
@@ -160,7 +169,7 @@ const buildFieldFormatsBlock = (templateFields: TemplateField[]): string => {
   This step captures fields with required formats. When the user gives you information for a field, silently reformat it into the required format yourself whenever you reasonably can — for example, turn "next Tuesday" or "3rd of June" into DD-MM-YYYY, or "twelve hundred dollars" into $1,200.00. Only ask the user to clarify when you genuinely cannot determine or format a value. For (options) fields, map what the user says to the closest listed value; if none clearly fits, ask them to choose.
 
   Dates are always day-first: in DD-MM-YYYY the first number is the day and the second is the month. This holds in both directions. Writing one out, "10 Aug 2026" becomes 10-08-2026, never 08-10-2026. Reading one that is already in that format, 10-08-2026 means 10 August 2026, never 8 October 2026. Keep the month the user named, and never swap a day and month to reach a date that looks more plausible.
-
+${buildNarrativeDirective(templateFields)}
 ${indented}
 </field_formats>`;
 };

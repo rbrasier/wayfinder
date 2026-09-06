@@ -7,8 +7,8 @@ import {
 } from "@rbrasier/domain";
 
 // The field types a row editor can author. `select` / `multiselect` are the UI
-// names for an options / multi-options field. `narrative` and `signature` are
-// document-only, so the structured editor omits both.
+// names for an options / multi-options field. `signature` is document-only, so
+// the structured editor omits it.
 export type FieldRowType =
   | "text"
   | "number"
@@ -37,13 +37,23 @@ const BASE_TYPE_OPTIONS: FieldRowTypeOption[] = [
   { value: "multiselect", label: "Multi-select" },
 ];
 
-// ADR-038 §5: a structured conversation has no document, so `narrative` (prose
-// the AI writes into a document) has no meaning there.
-export const STRUCTURED_TYPE_OPTIONS: FieldRowTypeOption[] = BASE_TYPE_OPTIONS;
+// Long-form prose the AI composes, with an optional brief saying what it should
+// cover. Offered to both editors: a structured step has no document, but the
+// record is its output, and prose composed into that record is as meaningful
+// there as in a rendered document. ADR-038 §5 withholds only `section` from the
+// structured editor — an include/omit-this-part-of-the-document decision — and
+// says nothing about narrative.
+const NARRATIVE_TYPE_OPTION: FieldRowTypeOption = { value: "narrative", label: "Narrative" };
 
-export const TEMPLATE_TYPE_OPTIONS: FieldRowTypeOption[] = [
+export const STRUCTURED_TYPE_OPTIONS: FieldRowTypeOption[] = [
   ...BASE_TYPE_OPTIONS,
-  { value: "narrative", label: "Narrative" },
+  NARRATIVE_TYPE_OPTION,
+];
+
+// ADR-043 §2: a signature is filled by an approval step signing a document, so
+// it is the one type a structured step cannot carry.
+export const TEMPLATE_TYPE_OPTIONS: FieldRowTypeOption[] = [
+  ...STRUCTURED_TYPE_OPTIONS,
   { value: "signature", label: "Signature" },
 ];
 

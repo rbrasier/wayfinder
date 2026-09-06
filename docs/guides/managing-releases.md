@@ -93,8 +93,11 @@ lifecycle that accompanies each bump.
 
 Every change arrives as a PR against the branch it belongs to:
 
-- `fix/<slug>` or `enhance/<slug>` → PR against the current release branch
-- `feature/<slug>` → PR against `main`
+- `bugfix/<slug>/claude-<username>` or `enhance/<slug>/claude-<username>` → PR against the current release branch
+- `feature/<slug>/claude-<username>` → PR against `main`
+
+Branch names are `<changetype>/<slug>/claude-<username>`: the type of change, a
+short kebab-case description, and the author's GitHub login.
 
 The `/bugfix` and `/enhance` skills ask which release a change targets and
 handle the branching; `/build` and `/new-feature` always work against `main`.
@@ -134,7 +137,7 @@ on:
 Two things worth understanding about this:
 
 - The `pull_request` filter matches the PR's **target** branch, not the
-  branch the work lives on. A PR from `fix/whatever` into `release/alpha-2`
+  branch the work lives on. A PR from `bugfix/whatever/claude-someone` into `release/alpha-2`
   runs full CI, whatever the source branch is called. Since all work arrives
   by PR, every contribution is checked before merge.
 - The `push` filter covers direct commits to the long-lived branches

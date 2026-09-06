@@ -3,6 +3,7 @@
 import type { User } from "@rbrasier/domain";
 import { useState } from "react";
 import { toast } from "sonner";
+import { ResetPasswordModal } from "@/components/admin/reset-password-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -81,6 +82,7 @@ export function AdminUsersContent() {
   const [editing, setEditing] = useState<FormState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<User | null>(null);
   const [confirmRevoke, setConfirmRevoke] = useState<User | null>(null);
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
 
   const onSubmit = async (form: FormState): Promise<void> => {
     if (form.id) {
@@ -170,6 +172,13 @@ export function AdminUsersContent() {
                       onClick={() => setConfirmRevoke(u)}
                     >
                       Sign out everywhere
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setResetTarget(u)}
+                    >
+                      Reset password
                     </Button>
                     <Button
                       size="sm"
@@ -268,6 +277,11 @@ export function AdminUsersContent() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ResetPasswordModal
+        target={resetTarget && { id: resetTarget.id, email: resetTarget.email }}
+        onClose={() => setResetTarget(null)}
+      />
 
       <Dialog open={confirmDelete !== null} onOpenChange={(o) => !o && setConfirmDelete(null)}>
         <DialogContent>
