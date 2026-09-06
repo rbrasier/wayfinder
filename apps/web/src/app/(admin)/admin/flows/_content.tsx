@@ -25,6 +25,8 @@ import { EmptyState } from "@/components/empty-state";
 import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { FlowMetadataDialog, type FlowMetadataValues } from "@/components/flow/flow-metadata-dialog";
 import { ShareFlowDialog } from "@/components/flow/share-flow-dialog";
+import { BusyOverlay } from "@/components/ui/busy-overlay";
+import { useNavigationBusy } from "@/lib/use-navigation-busy";
 import { trpc } from "@/trpc/client";
 
 interface AssignOwnerState {
@@ -42,6 +44,9 @@ export function AdminFlowsContent() {
   const utils = trpc.useUtils();
   const flowsQuery = trpc.flow.list.useQuery();
   const usersQuery = trpc.user.list.useQuery({});
+  // Same wait as the user-facing list: a heavy server-rendered canvas with no
+  // loading skeleton of its own.
+  const busy = useNavigationBusy();
 
   // A new flow is empty, so the only useful next step is laying out its steps —
   // go straight to the canvas rather than back to the list.
@@ -51,6 +56,10 @@ export function AdminFlowsContent() {
       setCreating(false);
       toast.success("Flow created");
       router.push(`/flows/${flow.id}/config`);
+    },
+    onError: (error) => {
+      busy.stop();
+      toast.error(error.message);
     },
   });
 
@@ -83,6 +92,7 @@ export function AdminFlowsContent() {
   const [assignOwner, setAssignOwner] = useState<AssignOwnerState | null>(null);
 
   const handleCreate = (values: FlowMetadataValues) => {
+    busy.start();
     void createMutation.mutateAsync({
       name: values.name,
       expertRole: values.expertRole,
@@ -120,6 +130,7 @@ export function AdminFlowsContent() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
+      {busy.busy && <BusyOverlay label="Opening the flow builder…" />}
       <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#e7e3db] bg-white pl-5 pr-[52px]">
         <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">All Flows</h1>
         <div className="flex items-center gap-2">
@@ -224,7 +235,9 @@ export function AdminFlowsContent() {
                           }}
                         />
                         <Button size="sm" asChild>
-                          <Link href={`/flows/${flow.id}/config`}>Configure Flow</Link>
+                          <Link href={`/flows/${flow.id}/config`} onClick={busy.start}>
+                            Configure Flow
+                          </Link>
                         </Button>
                       </TableCell>
                     </TableRow>

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { HelpCircle, Info } from "lucide-react";
-import { helpMenuAboutLinks, isExternalAboutLink } from "@rbrasier/domain";
+import { expandAboutLinkUrl, helpMenuAboutLinks, isExternalAboutLink } from "@rbrasier/domain";
+import { APP_VERSION } from "@/lib/app-version";
 import { trpc } from "@/trpc/client";
 import { AboutModal } from "./about-modal";
 import { ABOUT_LINK_ICON_COMPONENTS } from "./about-link-icons";
@@ -71,7 +72,7 @@ export function HelpMenu({ className }: { className?: string }) {
                 <a
                   key={`${link.label}-${link.url}`}
                   role="menuitem"
-                  href={link.url}
+                  href={expandAboutLinkUrl(link.url, APP_VERSION)}
                   {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
                   onClick={() => setOpen(false)}
                   className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"

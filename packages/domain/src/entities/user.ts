@@ -22,6 +22,9 @@ export interface User {
   // user, since domains are spoofable at an unverified signup.
   readonly emailVerified: boolean;
   readonly isAdmin: boolean;
+  // When the first-login welcome tour was completed or skipped (ADR-056). Null
+  // means it is still pending and the `(user)` layout shows it on the next page.
+  readonly welcomeTourCompletedAt: Date | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -42,4 +45,5 @@ export interface UserUpdate {
   readonly team?: string | null;
   readonly organisationId?: string | null;
   readonly isAdmin?: boolean;
+  readonly welcomeTourCompletedAt?: Date | null;
 }

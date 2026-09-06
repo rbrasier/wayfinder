@@ -14,8 +14,10 @@ import {
   type NodeChange,
   type OnConnectEnd,
 } from "@xyflow/react";
+import { PlayCircle } from "lucide-react";
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { EDGE_TYPES, NODE_TYPES } from "@/lib/canvas/rf-adapters";
 import {
   findDisconnectedNodeIds,
@@ -43,6 +45,8 @@ export function FlowCanvasViewport({
   onNodeDragStop,
   onAddStep,
   onAddNextStep,
+  onShowExplainer,
+  highlightFirstStep = false,
   staleReferences,
 }: {
   nodes: Node[];
@@ -55,6 +59,12 @@ export function FlowCanvasViewport({
   onNodeDragStop: (event: React.MouseEvent, node: Node) => void;
   onAddStep: () => void;
   onAddNextStep: (anchor: NextStepAnchor) => void;
+  // The owner screen offers a replay of the flow explainer under the
+  // first-step button; the admin screen has no tour and leaves this unset.
+  onShowExplainer?: () => void;
+  // Set when the explainer's closing call to action hands off to the button:
+  // it pulses and a "Start here" pointer sits above it until it is used.
+  highlightFirstStep?: boolean;
   staleReferences: string[];
 }) {
   const disconnectedCount = useMemo(
@@ -123,10 +133,37 @@ export function FlowCanvasViewport({
         )}
       </ReactFlow>
       {nodes.length === 0 && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-          <Button size="lg" onClick={onAddStep} className="pointer-events-auto px-10 py-4 text-[15px] shadow-lg">
-            + Create your first step in your workflow
-          </Button>
+        <div className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-3">
+          <div className="relative">
+            {highlightFirstStep && (
+              <div
+                data-testid="first-step-pointer"
+                className="wf-tour-pointer absolute -top-9 left-1/2 whitespace-nowrap rounded-full bg-[#1c1b19] px-3 py-1 text-[12px] font-semibold text-white shadow-md"
+              >
+                Start here ↓
+              </div>
+            )}
+            <Button
+              size="lg"
+              onClick={onAddStep}
+              className={cn(
+                "pointer-events-auto px-10 py-4 text-[15px] shadow-lg",
+                highlightFirstStep && "wf-tour-pulse",
+              )}
+            >
+              + Create your first step in your workflow
+            </Button>
+          </div>
+          {onShowExplainer && (
+            <button
+              type="button"
+              onClick={onShowExplainer}
+              className="pointer-events-auto flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[12px] text-[#666055] underline-offset-4 transition-colors hover:text-[#2f56d3] hover:underline"
+            >
+              <PlayCircle size={13} />
+              Watch how flows work
+            </button>
+          )}
         </div>
       )}
       {/* One band for every authoring advisory, so a flow with more than one
