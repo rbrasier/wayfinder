@@ -40,6 +40,10 @@ import {
   GetFlowVersion,
   GetValueDashboard,
   GetSession,
+  GetFlowMemoryPanel,
+  GetLessonDetail,
+  AcceptLesson,
+  RejectLesson,
   GetSessionForTurn,
   GetUsageSummary,
   GrantFlowOwner,
@@ -739,6 +743,10 @@ const build = () => {
       // plus a SQL-side aggregation of gathered context, so the streaming route
       // stops loading the whole history on every turn (scaling wall #1).
       getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions, flowLessons),
+      getFlowMemoryPanel: new GetFlowMemoryPanel(flows, analyticsRepo, flowLessons),
+      getLessonDetail: new GetLessonDetail(flowLessons, flows, flowObservations),
+      acceptLesson: new AcceptLesson(flowLessons, flows, flowObservations, answerFeedback, auditLogger),
+      rejectLesson: new RejectLesson(flowLessons, flows, auditLogger),
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
