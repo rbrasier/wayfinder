@@ -30,15 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
-import { FlowCanvasViewport } from "@/components/canvas/flow-canvas-viewport";
-import { FlowMemoryPanel } from "@/components/canvas/flow-memory-panel";
-import { FlowMemoryToggle } from "@/components/canvas/flow-memory-toggle";
-import {
-  readPanelState,
-  stateAfterReopening,
-  writePanelState,
-  type FlowMemoryPanelState,
-} from "@/components/canvas/flow-memory-panel-model";
+import { CanvasRegion } from "./_canvas-region";
 import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal";
@@ -100,19 +92,6 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const [flowDescription, setFlowDescription] = useState<string>("");
   const [flowIcon, setFlowIcon] = useState<string>("");
   const [flowStatus, setFlowStatus] = useState<"draft" | "published">("draft");
-  // Persisted per user per flow, read on mount and written on every
-  // transition (see flow-memory-panel-model).
-  const [memoryPanelState, setMemoryPanelStateRaw] = useState<FlowMemoryPanelState>("narrow");
-  useEffect(() => {
-    setMemoryPanelStateRaw(readPanelState(typeof window === "undefined" ? null : window.localStorage, flowId));
-  }, [flowId]);
-  const setMemoryPanelState = useCallback(
-    (next: FlowMemoryPanelState) => {
-      setMemoryPanelStateRaw(next);
-      writePanelState(typeof window === "undefined" ? null : window.localStorage, flowId, next);
-    },
-    [flowId],
-  );
   const [flowVisibility, setFlowVisibility] = useState<"private" | "global" | "group" | "organisation">("private");
   const [flowGroupIds, setFlowGroupIds] = useState<string[]>([]);
   const [expertRole, setExpertRole] = useState<string>("");
@@ -161,15 +140,6 @@ function CanvasInner({ flowId }: { flowId: string }) {
     if (versionStatusQuery.data) setHasUnpublishedChanges(versionStatusQuery.data.hasOpenDraft);
   }, [versionStatusQuery.data]);
   const markEdited = useCallback(() => setHasUnpublishedChanges(true), []);
-
-  // The panel shows a lesson's step by name; the canvas already holds them.
-  const nodeNamesById = useMemo(
-    () =>
-      Object.fromEntries(
-        rfNodes.map((node) => [node.id, String(node.data?.name ?? "Unknown step")]),
-      ),
-    [rfNodes],
-  );
 
   const positionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -685,42 +655,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setDeleteConfirmOpen={setDeleteConfirmOpen}
       />
 
-      <div className="relative flex min-h-0 flex-1">
-        <div className="relative min-w-0 flex-1">
-          <FlowCanvasViewport
-            nodes={displayNodes}
-            edges={displayEdges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onConnectEnd={onConnectEnd}
-            onNodeClick={onNodeClick}
-            onNodeDragStop={onNodeDragStop}
-            onAddStep={handleAddStep}
-            onAddNextStep={handleAddNextStep}
-            staleReferences={staleReferences}
-            memoryToggle={
-              // Only a published flow has sessions to learn from, so a draft
-              // shows neither the panel nor the affordance that reopens it.
-              flowStatus === "published" && memoryPanelState === "hidden" ? (
-                <FlowMemoryToggle
-                  proposedCount={0}
-                  onReopen={() => setMemoryPanelState(stateAfterReopening())}
-                />
-              ) : null
-            }
-          />
-        </div>
-
-        {flowStatus === "published" ? (
-          <FlowMemoryPanel
-            flowId={flowId}
-            state={memoryPanelState}
-            onStateChange={setMemoryPanelState}
-            nodeNamesById={nodeNamesById}
-          />
-        ) : null}
-      </div>
+      <CanvasRegion
+        flow={{ id: flowId, status: flowStatus }}
+        nodes={displayNodes}
+        edges={displayEdges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onConnectEnd={onConnectEnd}
+        onNodeClick={onNodeClick}
+        onNodeDragStop={onNodeDragStop}
+        onAddStep={handleAddStep}
+        onAddNextStep={handleAddNextStep}
+        staleReferences={staleReferences}
+      />
 
       {flowTest.modal}
 

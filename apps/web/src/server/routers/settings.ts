@@ -36,6 +36,8 @@ import {
   type NotificationPreferences,
   type ProviderName,
   type StorageConfig,
+  RETENTION_TARGET_KEYS,
+  type RetentionTargetKey,
 } from "@rbrasier/domain";
 import {
   EMBEDDINGS_DEFAULT_MODELS,
@@ -273,6 +275,33 @@ const bedrockState = (value: BedrockCredentials | null) => ({
 
 
 export const settingsRouter = router({
+  // Data retention (ADR-041 §2: DB-first, env kept as fallback). Admin-only, and
+  // the use case checks that too rather than trusting the procedure.
+  retention: adminProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.getRetentionSettings.execute(
+      ctx.container.retentionEnvFallback,
+    );
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  setRetentionWindow: adminProcedure
+    .input(
+      z.object({
+        key: z.enum(RETENTION_TARGET_KEYS as unknown as [string, ...string[]]),
+        retentionDays: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.setRetentionWindow.execute({
+        key: input.key as RetentionTargetKey,
+        retentionDays: input.retentionDays,
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   get: adminProcedure
     .input(z.object({ key: z.string().min(1) }))
     .query(async ({ ctx, input }) => {

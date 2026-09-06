@@ -23,6 +23,7 @@ import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
 import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
+import { RetentionCard } from "@/components/settings/retention-card";
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
 import { SiteBannerCard } from "@/components/settings/site-banner-card";
 import { StorageCard } from "@/components/settings/storage-card";
@@ -108,6 +109,7 @@ export default function AppSettingsPage() {
               <HrDataCard />
               <EntraDirectoryCard connectivity={connectivity} />
               <SiemStreamingCard />
+              <RetentionCard />
             </CollapsibleSection>
           </div>
         </div>
