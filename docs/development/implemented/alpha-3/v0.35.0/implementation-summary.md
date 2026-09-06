@@ -74,7 +74,7 @@ barrels.
 
 ## Migration
 
-One generated migration, `packages/adapters/drizzle/0049_steady_thor_girl.sql`:
+One generated migration, `packages/adapters/drizzle/0050_pretty_thaddeus_ross.sql`:
 
 - `CREATE TABLE ai_flow_observations`, `ai_flow_lessons`,
   `ai_flow_lesson_evidence`, with their indexes.
@@ -85,9 +85,14 @@ One generated migration, `packages/adapters/drizzle/0049_steady_thor_girl.sql`:
 a defaulted `ADD COLUMN` and a `DROP NOT NULL` cannot fail against existing data.
 `migration-safety.test.ts` agrees.
 
+Originally generated as `0049`; renumbered to `0050` when `main` landed its own
+`0049_welcome_tour` while this branch was open. The migration was regenerated
+with `pnpm db:generate` against main's new baseline rather than renamed by hand,
+and its content is unchanged — the two migrations touch disjoint tables.
+
 ## Tests
 
-All 361 test files pass; `./validate.sh` exits 0 on 25 checks.
+All 373 test files pass (count grew after merging main); `./validate.sh` exits 0 on 25 checks.
 
 - **Domain** — every capture rule and every lesson rule, each asserted to fire on
   its signal and on nothing else; `computeFlowUsageStats`; the seventh retention

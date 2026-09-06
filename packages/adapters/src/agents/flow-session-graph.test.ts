@@ -174,6 +174,40 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).not.toContain("<document_template>");
   });
 
+  it("tells the model to work a narrative field's brief with the user", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "structured" as const,
+        structuredFields: [
+          { key: "scope", label: "Scope", type: "narrative", instruction: "What is in scope and what is explicitly excluded", optional: false, raw: 'Scope (narrative: "What is in scope and what is explicitly excluded")' },
+        ],
+      },
+    });
+    expect(result.error).toBeUndefined();
+    // The brief itself, so the model can relay it, and the directive telling it
+    // to relay rather than to silently compose from whatever it already has.
+    expect(result.data).toContain("What is in scope and what is explicitly excluded");
+    expect(result.data).toContain("explain what it needs to cover");
+    expect(result.data).toContain("compose the prose yourself");
+  });
+
+  it("omits the narrative directive when no field is a narrative", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "structured" as const,
+        structuredFields: [
+          { key: "supplier", label: "Supplier", type: "text", optional: false, raw: "Supplier" },
+        ],
+      },
+    });
+    expect(result.data).toContain("<field_formats>");
+    expect(result.data).not.toContain("explain what it needs to cover");
+  });
+
   it("maps a legacy conversation_only step to no field formats", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,

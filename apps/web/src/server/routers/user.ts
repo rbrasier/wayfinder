@@ -3,6 +3,7 @@ import {
   createUserInputSchema,
   deleteUserInputSchema,
   listUsersInputSchema,
+  resetUserPasswordInputSchema,
   updateProfileInputSchema,
   updateUserInputSchema,
 } from "@rbrasier/shared";
@@ -21,7 +22,22 @@ export const userRouter = router({
       team: user?.team ?? null,
       email: user?.email ?? null,
       permissions: [...ctx.permissions],
+      // Drives the first-login welcome tour gate (ADR-056): pending until the
+      // user completes or skips it, or an admin restarts it from Settings.
+      welcomeTourPending: user ? user.welcomeTourCompletedAt === null : false,
     };
+  }),
+
+  completeWelcomeTour: authenticatedProcedure.mutation(async ({ ctx }) => {
+    const result = await ctx.container.useCases.setWelcomeTourCompleted.execute(ctx.userId, true);
+    if (result.error) throw toTrpcError(result.error);
+    return { ok: true };
+  }),
+
+  restartWelcomeTour: authenticatedProcedure.mutation(async ({ ctx }) => {
+    const result = await ctx.container.useCases.setWelcomeTourCompleted.execute(ctx.userId, false);
+    if (result.error) throw toTrpcError(result.error);
+    return { ok: true };
   }),
 
   updateProfile: authenticatedProcedure
@@ -55,6 +71,18 @@ export const userRouter = router({
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
+
+  resetPassword: adminProcedure
+    .input(resetUserPasswordInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.resetUserPassword.execute({
+        actorId: ctx.userId,
+        userId: input.id,
+        password: input.password,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { sessionsRevoked: result.data.sessionsRevoked };
+    }),
 
   delete: adminProcedure.input(deleteUserInputSchema).mutation(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.deleteUser.execute(input.id);

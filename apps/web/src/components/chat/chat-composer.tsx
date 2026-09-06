@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
 import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@rbrasier/shared";
+import { resolveChatDisclaimerComposerText } from "@rbrasier/domain";
+import { trpc } from "@/trpc/client";
 
 interface ChatComposerProps {
   sessionId: string;
@@ -33,6 +35,17 @@ export function ChatComposer({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploads, setUploads] = useState<SessionUploadSummary[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+
+  // This component re-renders on every keystroke, so the disclaimer is read with
+  // a long stale time and no refetch on focus — it changes only when an admin
+  // edits it, and must not sit on the typing path.
+  const disclaimerQuery = trpc.settings.getChatDisclaimer.useQuery(undefined, {
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const disclaimerText = disclaimerQuery.data
+    ? resolveChatDisclaimerComposerText(disclaimerQuery.data)
+    : null;
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -170,11 +183,11 @@ export function ChatComposer({
           </button>
         </div>
 
-        <p className="text-center text-[10.5px] text-[#736d5f]">
-          {isUploading
-            ? "Uploading file…"
-            : "Wayfinder works agentically — it asks follow-up questions and signals when each step is complete."}
-        </p>
+        {(isUploading || disclaimerText) && (
+          <p className="text-center text-[10.5px] text-[#736d5f]" data-testid="chat-disclaimer-line">
+            {isUploading ? "Uploading file…" : disclaimerText}
+          </p>
+        )}
       </div>
     </div>
   );

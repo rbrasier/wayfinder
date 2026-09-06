@@ -38,7 +38,7 @@ so the user can approve on the headline alone without reading the sections.
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
 | Tests | The failing regression test that comes first, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — the regression test is the guard" |
-| Version, branch & PR target | The PATCH bump and resulting version, the `fix/<slug>` branch name, the base branch, and the branch the PR opens against |
+| Version, branch & PR target | The PATCH bump and resulting version, the `bugfix/<slug>/claude-<username>` branch name, the base branch, and the branch the PR opens against |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
 
@@ -73,8 +73,11 @@ it.
 
 ### Step 0 — Branch from the target release
 
-Create the working branch (`fix/<slug>`) from the base branch chosen in
-question 5. The PR at the end must target that same base branch.
+Create the working branch (`bugfix/<slug>/claude-<username>`) from the base
+branch chosen in question 5, where `<slug>` is a short kebab-case description of
+the fix and `<username>` is your GitHub login (`gh api user --jq .login`; fall
+back to the local-part of `git config user.email`). The PR at the end must
+target that same base branch.
 
 ### Step 1 — Diagnose first, code second
 

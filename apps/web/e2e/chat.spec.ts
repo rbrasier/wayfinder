@@ -50,7 +50,11 @@ test.describe('Chat: Session', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    // A session page holds an open SSE stream, so the network is never idle and
+    // waitForLoadState('networkidle') can only burn the timeout (see
+    // docs/development/e2e-triage-handover.md §4). Wait for the composer, which is
+    // what "the session page is ready" actually means.
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
     await page.screenshot({ path: 'screenshots/chat-session-initial.png', fullPage: true });
 
     const errors = consoleLogs.filter(l => l.type === 'error');
@@ -61,7 +65,7 @@ test.describe('Chat: Session', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     // ChatComposer renders a <textarea> with placeholder "Message Wayfinder…"
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
@@ -76,7 +80,7 @@ test.describe('Chat: Session', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     await expect(input).toBeVisible();
@@ -120,7 +124,7 @@ test.describe('Chat: Session', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
     await expect(input).toBeVisible();

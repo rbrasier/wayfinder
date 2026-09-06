@@ -1,6 +1,6 @@
 "use client";
 
-import { isExternalAboutLink, type AboutLink } from "@rbrasier/domain";
+import { expandAboutLinkUrl, isExternalAboutLink, type AboutLink } from "@rbrasier/domain";
 import {
   Dialog,
   DialogBody,
@@ -8,11 +8,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { APP_VERSION } from "@/lib/app-version";
 import { trpc } from "@/trpc/client";
 import { ABOUT_LINK_ICON_COMPONENTS } from "./about-link-icons";
-
-// Inlined at build time from the repo-root VERSION file (see next.config.ts).
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
 
 function AboutLinkButton({ link }: { link: AboutLink }) {
   const Icon = ABOUT_LINK_ICON_COMPONENTS[link.icon];
@@ -20,7 +18,7 @@ function AboutLinkButton({ link }: { link: AboutLink }) {
 
   return (
     <a
-      href={link.url}
+      href={expandAboutLinkUrl(link.url, APP_VERSION)}
       {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
       className="flex items-center gap-2 rounded-[8px] border border-[#e7e3db] bg-white px-3 py-2 text-[13px] font-medium text-[#1c1b19] transition-colors hover:border-[#2f56d3] hover:bg-[#eaeefb] hover:text-[#2f56d3]"
     >

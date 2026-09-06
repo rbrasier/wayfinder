@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { NodeConfigValues } from "./node-config-modal";
 import type { OutputType } from "./output-type";
 import { StructuredFieldEditor } from "./structured-field-editor";
+import type { HelpVariant } from "./template-tags-help-content";
 
 const EXAMPLE_TAG = "{{First name}}";
 
@@ -43,7 +44,7 @@ export interface NodeConfigModalConversationalProps {
   isUploading: boolean;
   uploadError: string | null;
   setUploadError: (value: string | null) => void;
-  onOpenHelpDialog: () => void;
+  onOpenHelpDialog: (variant: HelpVariant) => void;
   // Re-opens the field editor for the attached template without re-uploading.
   onEditTemplateFields?: () => void;
   // Present once a template is attached; null before then.
@@ -201,7 +202,7 @@ export function NodeConfigModalConversational({
               type="button"
               aria-label="How template tags work"
               className="flex h-4 w-4 items-center justify-center rounded-full text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
-              onClick={onOpenHelpDialog}
+              onClick={() => onOpenHelpDialog("template")}
             >
               <HelpCircle size={13} />
             </button>
@@ -305,7 +306,7 @@ export function NodeConfigModalConversational({
         <StructuredFieldEditor
           lines={structuredLines}
           onChange={onStructuredLinesChange}
-          onOpenHelp={onOpenHelpDialog}
+          onOpenHelp={() => onOpenHelpDialog("structured")}
         />
       )}
 

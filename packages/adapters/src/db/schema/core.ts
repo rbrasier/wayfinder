@@ -43,6 +43,9 @@ export const core_users = pgTable("core_users", {
   image: text("image"),
   cert_fingerprint: text("cert_fingerprint"),
   cert_subject_dn: text("cert_subject_dn"),
+  // Null until the first-login welcome tour is completed or skipped (ADR-056).
+  // Backfilled to the migration time for accounts that already existed.
+  welcome_tour_completed_at: timestamp("welcome_tour_completed_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
