@@ -3,6 +3,9 @@ import type { LessonCandidate, LessonKind } from "../entities/flow-lesson";
 import type { Result } from "../result";
 
 export interface LessonDistillationRequest {
+  // Carried so the model call is attributed to the flow in ai_usage_events
+  // and counted against budgets like any other spend.
+  readonly flowId: string;
   readonly nodeId: string;
   readonly nodeName: string;
   // What the author told the step to do, so a proposed rule sits beside the

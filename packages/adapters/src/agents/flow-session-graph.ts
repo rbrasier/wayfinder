@@ -8,6 +8,7 @@ import {
   type ISessionAgent,
   type PromptSessionUpload,
   type PromptUserProfile,
+  type ResolvedLesson,
   type ResolvedSkill,
   type Result,
   type RetrievedChunk,
@@ -30,6 +31,11 @@ export class FlowSessionGraph implements ISessionAgent {
     // stable region of the prompt — above per-turn retrieved chunks — to preserve
     // prompt-cache hits. They steer behaviour; they do not replace <instructions>.
     const skillsBlock = buildSkillsBlock(input.resolvedSkills ?? []);
+    // Accepted flow-memory lessons (ADR-057 §5), resolved live rather than from
+    // the pinned snapshot (ADR-058). Sits beside <skills> in the cache-stable
+    // region, above every per-turn block, so accepting one costs a single cache
+    // miss rather than one on every turn forever (ADR-016).
+    const learnedGuidanceBlock = buildLearnedGuidanceBlock(input.acceptedLessons ?? []);
 
     // Attached documents are the user's own files for this request, injected in
     // full and independent of RAG, so a thin message ("here is the solution")
@@ -85,7 +91,7 @@ export class FlowSessionGraph implements ISessionAgent {
         ? buildFieldFormatsBlock(gatheredFields)
         : "";
 
-    const prompt = `${roleBlock}${globalInstructionsBlock}${skillsBlock}
+    const prompt = `${roleBlock}${globalInstructionsBlock}${skillsBlock}${learnedGuidanceBlock}
 
 <instructions>
   ${nodeConfig.aiInstruction}
@@ -189,6 +195,14 @@ const buildReferenceDocumentsBlock = (chunks: RetrievedChunk[]): string => {
   );
 
   return `\n\n<reference_documents>\n  The most relevant excerpts retrieved from documents attached to this workflow and any files the user has shared. Consult these when the user's question touches on policy or process. They are excerpts, not whole documents — if something needed is missing, ask the user rather than assuming.\n${entries.join("\n")}\n</reference_documents>`;
+};
+
+// Renders nothing at all for an empty list, so a flow with no memory produces a
+// byte-identical prompt to the one it produced before this feature existed.
+const buildLearnedGuidanceBlock = (lessons: ResolvedLesson[]): string => {
+  if (lessons.length === 0) return "";
+  const rendered = lessons.map((lesson) => `  - ${lesson.statement}`).join("\n");
+  return `\n\n<learned_guidance>\n  Guidance accepted by this workflow's owner, learned from how earlier sessions on it actually went. Follow it alongside the instructions below; it never overrides them.\n${rendered}\n</learned_guidance>`;
 };
 
 const buildSkillsBlock = (skills: ResolvedSkill[]): string => {

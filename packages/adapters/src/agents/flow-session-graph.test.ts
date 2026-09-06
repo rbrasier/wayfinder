@@ -450,3 +450,71 @@ describe("FlowSessionGraph.buildBranchChoicePrompt", () => {
     expect(result.data).not.toContain("undefined");
   });
 });
+
+// ── <learned_guidance> (ADR-057 §5, ADR-058 §4) ──────────────────────────────
+
+describe("FlowSessionGraph.buildSystemPrompt — learned guidance", () => {
+  const withLessons = (statements: string[]) =>
+    agent.buildSystemPrompt({
+      ...baseInput,
+      acceptedLessons: statements.map((statement) => ({ statement })),
+    });
+
+  it("renders nothing when no lessons are supplied", () => {
+    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<learned_guidance>");
+  });
+
+  it("produces a byte-identical prompt to one built with no lessons key at all", () => {
+    // A flow with no memory must cost nothing — not a stray newline, not a blank
+    // block. Asserted directly rather than by inspection.
+    const withoutKey = agent.buildSystemPrompt(baseInput).data;
+    const withEmptyList = agent.buildSystemPrompt({ ...baseInput, acceptedLessons: [] }).data;
+
+    expect(withEmptyList).toBe(withoutKey);
+  });
+
+  it("renders each accepted statement", () => {
+    const prompt = withLessons([
+      "Ask for the supplier's registered legal name.",
+      "Confirm the budget before generating.",
+    ]).data;
+
+    expect(prompt).toContain("<learned_guidance>");
+    expect(prompt).toContain("Ask for the supplier's registered legal name.");
+    expect(prompt).toContain("Confirm the budget before generating.");
+  });
+
+  it("places the block after <skills> and before <instructions>", () => {
+    const prompt = agent.buildSystemPrompt({
+      ...baseInput,
+      resolvedSkills: [{ name: "House style", body: "Write in British English." }],
+      acceptedLessons: [{ statement: "Ask for the registered legal name." }],
+    }).data!;
+
+    expect(prompt.indexOf("<skills>")).toBeLessThan(prompt.indexOf("<learned_guidance>"));
+    expect(prompt.indexOf("<learned_guidance>")).toBeLessThan(prompt.indexOf("<instructions>"));
+  });
+
+  it("places the block above every per-turn block, preserving the cache boundary", () => {
+    // ADR-016 puts retrieved chunks and attachments below the cache boundary
+    // precisely because they change every turn. A lesson set changes only when
+    // someone accepts one, so it belongs above.
+    const prompt = agent.buildSystemPrompt({
+      ...baseInput,
+      acceptedLessons: [{ statement: "Ask for the registered legal name." }],
+      sessionUploads: [{ filename: "brief.docx", extractedText: "A brief." }],
+      retrievedChunks: [
+        { content: "A policy excerpt.", documentName: "Policy", score: 0.9 },
+      ] as never,
+    }).data!;
+
+    expect(prompt.indexOf("<learned_guidance>")).toBeLessThan(prompt.indexOf("<attached_documents>"));
+    expect(prompt.indexOf("<learned_guidance>")).toBeLessThan(prompt.indexOf("<reference_documents>"));
+  });
+
+  it("states that guidance never overrides the author's instructions", () => {
+    expect(withLessons(["Ask for the registered legal name."]).data).toContain(
+      "never overrides them",
+    );
+  });
+});
