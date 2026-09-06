@@ -42,7 +42,7 @@ sections.
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
 | Tests | The test files written before each sub-component, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
-| Version, branch & PR target | The bump and resulting version — PATCH when the base branch is a `release/*` branch, MINOR or PATCH only when the base is `main` — the `enhance/<slug>` branch name, the base branch, and the branch the PR opens against |
+| Version, branch & PR target | The bump and resulting version — PATCH when the base branch is a `release/*` branch, MINOR or PATCH only when the base is `main` — the `enhance/<slug>/claude-<username>` branch name, the base branch, and the branch the PR opens against |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
 
@@ -74,8 +74,11 @@ it — and carry the approved summary into the phase doc when step 1 generates i
 
 ## Workflow
 
-0. Create the working branch (`enhance/<slug>`) from the base branch chosen in
-   question 5. The PR at the end must target that same base branch.
+0. Create the working branch (`enhance/<slug>/claude-<username>`) from the base
+   branch chosen in question 5 — `<slug>` a short kebab-case description of the
+   change, `<username>` your GitHub login (`gh api user --jq .login`; fall back
+   to the local-part of `git config user.email`). The PR at the end must target
+   that same base branch.
 1. Generate an updated phase doc in `docs/development/to-be-implemented/` describing
    what changes and why — do not start coding yet.
 2. Run `/doc-review` on the new phase doc before building.

@@ -71,12 +71,16 @@ the version digits.
 Rules:
 
 1. **Fixing a bug or enhancing existing behaviour?** Branch from
-   `release/alpha-2` (name it `fix/<slug>` or `enhance/<slug>`) and open your
-   PR against `release/alpha-2`.
-2. **Building a new feature?** Branch from `main` (name it `feature/<slug>`)
-   and open your PR against `main`. New features never target a release
-   branch.
+   `release/alpha-2` (name it `bugfix/<slug>/claude-<username>` or
+   `enhance/<slug>/claude-<username>`) and open your PR against `release/alpha-2`.
+2. **Building a new feature?** Branch from `main` (name it
+   `feature/<slug>/claude-<username>`) and open your PR against `main`. New
+   features never target a release branch.
 3. **Not sure which one you have?** Open an issue first and ask.
+
+Branch names are `<changetype>/<slug>/claude-<username>` — the type of change,
+a short kebab-case description, and the author's GitHub login — so it is clear
+at a glance what a branch is for and who owns it.
 
 You never need to land the same change twice. Maintainers periodically merge
 the release branch forward into `main`, so a fix on the current line

@@ -6,8 +6,11 @@ or when the user explicitly asks to implement a specific phase or feature.
 **Pre-flight:** Confirm the phase doc in `docs/development/to-be-implemented/`
 exists and has passed `/doc-review`. Read the PRD, ADR(s), and phase doc in
 full before writing a single line of code. Create the working branch
-(`feature/<slug>`) from `main` — new features land on the next release line,
-never on a `release/*` branch (see **Release Branching** in `CLAUDE.md`).
+(`feature/<slug>/claude-<username>`) from `main` — new features land on the next
+release line, never on a `release/*` branch (see **Release Branching** in
+`CLAUDE.md`). `<slug>` is a short kebab-case description of the feature and
+`<username>` is your GitHub login (`gh api user --jq .login`; fall back to the
+local-part of `git config user.email`).
 
 ---
 
@@ -34,7 +37,7 @@ sections.
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
 | Tests | The test files written before each implementation file, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
-| Version, branch & PR target | MINOR or PATCH and the resulting version, the `feature/<slug>` branch name, and `main` as both base and PR target |
+| Version, branch & PR target | MINOR or PATCH and the resulting version, the `feature/<slug>/claude-<username>` branch name, and `main` as both base and PR target |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done in this phase |
 
