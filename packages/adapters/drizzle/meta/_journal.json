@@ -344,6 +344,13 @@
       "when": 1788349726721,
       "tag": "0048_hard_nocturne",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788690018614,
+      "tag": "0049_steady_thor_girl",
+      "breakpoints": true
     }
   ]
 }

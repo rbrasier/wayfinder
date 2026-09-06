@@ -123,10 +123,16 @@ export const kb_answer_feedback = pgTable(
   "kb_answer_feedback",
   {
     id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-    session_id: uuid("session_id")
-      .notNull()
-      .references(() => app_sessions.id, { onDelete: "cascade" }),
+    // Nullable since flow memory: an accepted knowledge_gap lesson (ADR-057 §6)
+    // has no single session behind it, and its evidence sessions may already
+    // have been retained away.
+    session_id: uuid("session_id").references(() => app_sessions.id, { onDelete: "cascade" }),
     message_id: uuid("message_id"),
+    // Where the item came from. Defaults to `frontline`, so every existing row
+    // and every existing call site stays correct.
+    source: text("source", { enum: ["frontline", "flow_lesson"] })
+      .notNull()
+      .default("frontline"),
     flagged_answer: text("flagged_answer").notNull(),
     corrected_text: text("corrected_text").notNull(),
     reason: text("reason", {

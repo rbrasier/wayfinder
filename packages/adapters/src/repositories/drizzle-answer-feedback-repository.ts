@@ -19,6 +19,7 @@ const toAnswerFeedback = (row: typeof kb_answer_feedback.$inferSelect): AnswerFe
   flaggedAnswer: row.flagged_answer,
   correctedText: row.corrected_text,
   reason: row.reason,
+  source: row.source,
   status: row.status,
   createdBy: row.created_by,
   createdAt: row.created_at,
@@ -38,6 +39,7 @@ export class DrizzleAnswerFeedbackRepository implements IAnswerFeedbackRepositor
           flagged_answer: feedback.flaggedAnswer,
           corrected_text: feedback.correctedText,
           reason: feedback.reason,
+          source: feedback.source ?? "frontline",
           created_by: feedback.createdBy,
         })
         .returning();
