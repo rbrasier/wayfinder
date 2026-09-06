@@ -1,4 +1,4 @@
-import type { SessionStatus } from "./session";
+import { isSessionDiscarded, type SessionStatus } from "./session";
 import type { MessageRole } from "./conversation";
 import type { StepOutputField } from "./session-step-output";
 import type { TemplateFieldType } from "./template-field";
@@ -9,6 +9,8 @@ import {
   type AggregateConfidence,
   type ExtractionRecord,
 } from "./extraction-record";
+
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
 
 export const parseNumeric = (value: string): number | null => {
   const cleaned = value.replace(/[^0-9.\-]/g, "");
@@ -436,4 +438,52 @@ export const computeFieldReport = (
   }
 
   return { columns, rows };
+};
+
+// ── Flow memory panel ────────────────────────────────────────────────────────
+
+// The five stat tiles on the flow memory panel. Every one is derived at query
+// time; nothing here is stored, `stale` included.
+export interface FlowUsageStats {
+  total: number;
+  completed: number;
+  inProgress: number;
+  stale: number;
+  abandoned: number;
+}
+
+// `stale` is a lens on in-progress work rather than a fourth status: a session
+// counted stale is also counted in progress, because it is still active — it has
+// simply stopped moving. `cancelled` counts under `abandoned`, matching
+// `DISCARDED_SESSION_STATUSES`.
+export const computeFlowUsageStats = (
+  sessions: AnalyticsSessionRow[],
+  now: Date,
+  staleAfterDays: number,
+): FlowUsageStats => {
+  const staleBefore = new Date(now.getTime() - staleAfterDays * MILLISECONDS_PER_DAY);
+
+  const stats: FlowUsageStats = {
+    total: sessions.length,
+    completed: 0,
+    inProgress: 0,
+    stale: 0,
+    abandoned: 0,
+  };
+
+  for (const session of sessions) {
+    if (session.status === "complete") {
+      stats.completed += 1;
+      continue;
+    }
+    if (isSessionDiscarded(session.status)) {
+      stats.abandoned += 1;
+      continue;
+    }
+
+    stats.inProgress += 1;
+    if (session.updatedAt < staleBefore) stats.stale += 1;
+  }
+
+  return stats;
 };

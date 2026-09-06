@@ -362,6 +362,43 @@ duplicated here. Every item there must be green, plus:
 
 ---
 
+## Approved build summary — `/build`, 2026-09-06
+
+Approved at the Step 0 gate. Records what was approved before code was written;
+where the implementation deviated, the implementation summary in
+`implemented/alpha-3/v0.35.0/` is authoritative.
+
+**Branch deviation approved:** built on `claude/flow-memory-phase-review-e3f0ts`
+rather than `feature/flow-memory`, per the session's harness branch instruction.
+That branch contains all of `main` plus the `/doc-review` revisions this build
+depends on. PR still targets `main`.
+
+### Build order (20 sub-components, each validated before the next)
+
+1. Observation + lesson entities · 2. The seven capture rules · 3. Usage stats ·
+4. Shape changes (turn payload, retention target, feedback) · 5. Ports + exports ·
+6. Schema + generated migration · 7. Drizzle observation repository ·
+8. Drizzle lesson repository · 9. Retention + answer-feedback repository edits ·
+10. `CaptureSessionObservations` · 11. `AiLessonDistiller` · 12. `DistilFlowLessons` ·
+13. `AcceptLesson` / `RejectLesson` · 14. `buildLearnedGuidanceBlock` ·
+15. Turn wiring · 16. Panel read use cases · 17. `flowMemory` tRPC router ·
+18. Panel, drawer, toggle · 19. Worker + container wiring ·
+20. Retention settings + card
+
+Sub-components 1–18 are flow memory proper; 19–20 carry the retention rider
+folded in at `/doc-review`.
+
+### Deviations flagged at approval
+
+- **Keep-forever default flips three existing windows.** Usage events (400d),
+  error log (90d) and notification log (180d) stop pruning by default. Needs a
+  release note, not just a changelog line.
+- **No e2e spec.** No part of this phase falls into the six groups of
+  `docs/guides/e2e-test-policy.md`. Panel state persistence is asserted at the
+  storage interface in a component test, deliberately not across a document load.
+
+---
+
 ## Appendix — Approved change summary
 
 The summary approved before any doc was written, with the approver's UI notes

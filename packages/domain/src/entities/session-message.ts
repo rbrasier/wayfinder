@@ -47,6 +47,14 @@ export interface AiTurnPayload {
   // Audit trail for the conversational tool-loop pre-pass (ADR-032): the tool
   // calls whose results shaped this step. Absent on turns that called no tools.
   toolCalls?: McpToolCallRecord[];
+  // What the readiness gate found still outstanding on this turn, and how many
+  // chunks retrieval returned above threshold. Both are written for the
+  // `knowledge_gap` capture rule (ADR-057 §1), which has no other source: the
+  // gate's finding is otherwise rendered into prose and discarded, and retrieval
+  // results are not persisted anywhere. Absent on turns written before this
+  // release, which reads as "not recorded" and never as a gap.
+  missingInformation?: string[];
+  retrievedChunkCount?: number;
 }
 
 export type DocumentStatus = "pending" | "complete" | "failed";
