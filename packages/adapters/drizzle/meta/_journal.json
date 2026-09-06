@@ -351,6 +351,13 @@
       "when": 1788710737427,
       "tag": "0049_welcome_tour",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1788723844336,
+      "tag": "0050_pretty_thaddeus_ross",
+      "breakpoints": true
     }
   ]
 }

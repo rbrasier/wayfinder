@@ -75,6 +75,12 @@ export interface ISessionRepository {
   // well as in the calling use-case: this is the only delete path sessions have,
   // and a live session is a customer's record of work (ADR-048 §6).
   deleteTestSession(id: string): Promise<Result<void>>;
+  // Live sessions that reached a terminal state at or after `since`, oldest
+  // first, for the flow-memory capture sweep. `since` null means "everything",
+  // which is what the first run after the feature ships needs. Bounded by
+  // `limit`; test runs are excluded in the SQL as well as in the use case,
+  // because a test run must never become evidence (ADR-057 §2).
+  listTerminalSince(since: Date | null, limit: number): Promise<Result<Session[]>>;
   // Test runs older than the cutoff, oldest first, excluding any session under
   // a legal hold. Bounded by `limit` so one sweep cannot rewrite the table.
   listTestSessionsOlderThan(

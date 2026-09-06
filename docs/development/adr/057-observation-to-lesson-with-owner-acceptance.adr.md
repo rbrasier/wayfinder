@@ -136,6 +136,16 @@ Folding this into prompt guidance was the tempting mistake: it would have been o
 mechanism instead of two, and it would have papered a knowledge problem over with
 an instruction, permanently, in a place no SME looks.
 
+`kb_answer_feedback` was shaped for a frontline "Fix This Answer" submission and
+does not fit a lesson as it stands: `session_id` is `not null`, and
+`flagged_answer` / `corrected_text` assume a worker who has both. A lesson has
+neither — not knowing the answer is the whole point of a knowledge gap — and its
+evidence session may already have been retained away. The table therefore gains a
+`source` discriminator (`frontline` | `flow_lesson`) and drops `not null` from
+`session_id`. Both are safe operations against existing rows, and the two sources
+stay one queue, which is the decision: an SME triages knowledge gaps in one place
+regardless of who noticed them.
+
 **7. Accept, reject and retire are audited; a lesson has no other way to change
 state.**
 
@@ -153,7 +163,14 @@ an unimplemented feature.
 - "Why did this flow start saying that, and who decided it" is answerable from the
   audit log plus the evidence join, for every statement in every prompt.
 - Two tables and a join carry data that grows with session volume. Observations
-  are the bulk of it; they are swept with the sessions they came from.
+  are the bulk of it, and they are **not** swept with the sessions they came
+  from: `session_id` is `on delete set null`, so a lesson keeps its evidence
+  after retention removes the session behind it. Observations are therefore
+  their own retention target (`ai_flow_observations`), swept on their own
+  window, which defaults to keep-forever. An operator who needs a `detail`
+  payload gone sets that window; nothing else deletes it. The alternative —
+  cascading with the session — was rejected because it silently empties the
+  evidence behind a lesson that is still in force.
 - The distiller can be replaced, or run offline, without touching capture,
   application, or a single stored fact.
 - Lessons are not authoring config: a flow export (ADR-049) carries none, and an

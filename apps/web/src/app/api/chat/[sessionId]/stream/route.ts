@@ -2,6 +2,7 @@ import { createDataStreamResponse } from "ai";
 import {
   buildBranchDescriptors,
   normaliseAdvanceConfidenceThreshold,
+  selectInjectableLessons,
   type ConversationalNodeConfig,
   type SessionEvent,
 } from "@rbrasier/domain";
@@ -78,6 +79,7 @@ export async function POST(
     messagesTail: dbMessages,
     gatheredContext: gatheredContextItems,
     currentNodeAssistantMessages,
+    acceptedLessons,
   } = sessionResult.data;
 
   if (session.status !== "active") {
@@ -213,6 +215,12 @@ export async function POST(
     globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
+    // Filtered to this step and capped before it reaches the prompt: only
+    // accepted guidance/efficiency lessons are injectable, most recently
+    // accepted first (ADR-057 §5).
+    acceptedLessons: selectInjectableLessons(
+      acceptedLessons.filter((lesson) => lesson.nodeId === session.currentNodeId),
+    ),
     now: new Date(),
     resolvedSkills,
   });

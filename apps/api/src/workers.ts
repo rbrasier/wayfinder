@@ -17,12 +17,14 @@ export interface WorkerHost {
   readonly schedulerWorkers: readonly TickWorker[];
   readonly retentionWorkers: readonly TickWorker[];
   readonly extractionWorkers: readonly TickWorker[];
+  readonly flowMemoryWorkers: readonly TickWorker[];
 }
 
 export interface WorkerToggles {
   readonly SCHEDULER_ENABLED: boolean;
   readonly RETENTION_ENABLED: boolean;
   readonly EXTRACTION_WORKER_ENABLED: boolean;
+  readonly FLOW_MEMORY_ENABLED: boolean;
 }
 
 const startGroup = (
@@ -55,6 +57,10 @@ export const startWorkers = (host: WorkerHost, toggles: WorkerToggles): void => 
     startGroup(host, host.retentionWorkers, "retention worker", "Retention worker failed to start.");
   }
 
+  if (toggles.FLOW_MEMORY_ENABLED && host.flowMemoryWorkers.length > 0) {
+    startGroup(host, host.flowMemoryWorkers, "flow memory worker", "Flow memory worker failed to start.");
+  }
+
   if (toggles.EXTRACTION_WORKER_ENABLED && host.extractionWorkers.length > 0) {
     startGroup(host, host.extractionWorkers, "extraction worker", "Extraction worker failed to start.");
   }
@@ -63,5 +69,6 @@ export const startWorkers = (host: WorkerHost, toggles: WorkerToggles): void => 
 export const stopWorkers = (host: WorkerHost): void => {
   for (const worker of host.schedulerWorkers) worker.stop();
   for (const worker of host.retentionWorkers) worker.stop();
+  for (const worker of host.flowMemoryWorkers) worker.stop();
   for (const worker of host.extractionWorkers) worker.stop();
 };

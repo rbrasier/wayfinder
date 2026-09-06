@@ -11,6 +11,7 @@ const makeHost = (overrides: Partial<WorkerHost> = {}): WorkerHost => ({
   schedulerWorkers: [],
   retentionWorkers: [],
   extractionWorkers: [],
+  flowMemoryWorkers: [],
   ...overrides,
 });
 
@@ -18,6 +19,7 @@ const allEnabled: WorkerToggles = {
   SCHEDULER_ENABLED: true,
   RETENTION_ENABLED: true,
   EXTRACTION_WORKER_ENABLED: true,
+  FLOW_MEMORY_ENABLED: true,
 };
 
 let logged: string[];
@@ -134,10 +136,12 @@ describe("stopWorkers", () => {
     const scheduler = makeWorker();
     const retention = makeWorker();
     const extraction = makeWorker();
+    const flowMemory = makeWorker();
     const host = makeHost({
       schedulerWorkers: [scheduler],
       retentionWorkers: [retention],
       extractionWorkers: [extraction],
+      flowMemoryWorkers: [flowMemory],
     });
 
     stopWorkers(host);
@@ -145,5 +149,6 @@ describe("stopWorkers", () => {
     expect(scheduler.stop).toHaveBeenCalledOnce();
     expect(retention.stop).toHaveBeenCalledOnce();
     expect(extraction.stop).toHaveBeenCalledOnce();
+    expect(flowMemory.stop).toHaveBeenCalledOnce();
   });
 });

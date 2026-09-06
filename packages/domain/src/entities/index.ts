@@ -93,3 +93,6 @@ export * from "./skill";
 export * from "./mcp-server";
 export * from "./extraction-run";
 export * from "./extraction-document";
+export * from "./flow-observation";
+export * from "./flow-lesson";
+export * from "./flow-observation-rules";

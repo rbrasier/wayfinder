@@ -1,11 +1,11 @@
 # PRD — Flow Memory (Self-Improving Flows)
 
-- **Status**: Draft — awaiting `/doc-review`
+- **Status**: Reviewed — `/doc-review` passed 2026-09-06; ready to build
 - **Date**: 2026-09-05
 - **Author**: Solo / Claude Code
-- **Target version**: **0.35.0** — **MINOR** (new feature + additive schema).
-  Provisional; allocated for real at `/doc-review`. See §9 for the line it is
-  allocated against.
+- **Target version**: **0.35.0** — **MINOR** (new feature + schema change).
+  Allocated at `/doc-review` (2026-09-06). See §9 for the line it is allocated
+  against.
 
 ## 1. Problem
 
@@ -85,12 +85,14 @@ quality and one that quietly decays.
 | `LessonStatus` | `packages/domain/src/entities/flow-lesson.ts` | new | `"proposed" \| "accepted" \| "rejected" \| "retired"`. Only `accepted` has any runtime effect. |
 | `ResolvedLesson` | `packages/domain/src/entities/flow-lesson.ts` | new | `{ statement }` — the prompt-facing projection, mirroring `ResolvedSkill`. Nothing else reaches the model. |
 | `FlowUsageStats` | `packages/domain/src/entities/analytics.ts` | existing file, new type | `{ total, completed, inProgress, stale, abandoned }`, computed from `AnalyticsSessionRow[]`. |
-| `IFlowObservationRepository` | `packages/domain/src/ports/flow-observation-repository.ts` | new | `createMany`, `listUndistilledByFlow`, `listByLesson`. |
+| `IFlowObservationRepository` | `packages/domain/src/ports/flow-observation-repository.ts` | new | `createMany`, `listUndistilledByFlow`, `listByLesson`, `markDistilled`. |
 | `IFlowLessonRepository` | `packages/domain/src/ports/flow-lesson-repository.ts` | new | `listByFlow`, `listAcceptedByFlow`, `findById`, `createProposed`, `setStatus`, `retireForMissingNodes`. |
-| `ILessonDistiller` | `packages/domain/src/ports/lesson-distiller.ts` | new | `distil({ nodeName, nodeInstruction, observations, existingStatements }) -> Result<{ candidates: LessonCandidate[] }>`. Proposes only — it can never write `accepted`. |
+| `ILessonDistiller` | `packages/domain/src/ports/lesson-distiller.ts` | new | `distil({ nodeName, nodeInstruction, kind, observations, existingStatements }) -> Result<{ candidates: LessonCandidate[] }>`. Proposes only — it can never write `accepted`. |
 | `DocumentEditSummary` | `packages/domain/src/entities/document-edit-summary.ts` | existing | Already computes the before/after diff a `field_corrected` observation needs. Reused, unchanged. |
 | `ApprovalChangeRequest` | `packages/domain/src/entities/approval-change-request.ts` | existing | Already resolves the outstanding change request and its comment. Reused, unchanged. |
-| `AnswerFeedback` | `packages/domain/src/entities/answer-feedback.ts` | existing | The destination for a `knowledge_gap` lesson (ADR-028's curation loop). Reused, unchanged. |
+| `AnswerFeedback` | `packages/domain/src/entities/answer-feedback.ts` | existing, **changed** | The destination for a `knowledge_gap` lesson (ADR-028's curation loop). Gains `source: "frontline" \| "flow_lesson"`, and `sessionId` becomes nullable — a lesson has no single session and no corrected text. See §8. |
+| `AiTurnPayload` | `packages/domain/src/entities/session-message.ts` | existing, **changed** | Gains `missingInformation: string[]` and `retrievedChunkCount: number` so a `knowledge_gap` observation has a persisted source. Both optional; absent reads as "not recorded". |
+| `RetentionConfig` / `RetentionTargetKey` | `packages/domain/src/entities/retention-policy.ts` | existing, **changed** | Gains a seventh target, `ai_flow_observations`. All seven windows move to `admin_system_settings` and default to keep-forever. See §7 and §8. |
 
 ## 6. User stories
 
@@ -141,7 +143,17 @@ quality and one that quietly decays.
 - **Chat / session UI** — unchanged. The operator sees no indication that a
   lesson is in play; the effect is in the reply, not the chrome.
 - **Knowledge curation (`kb_answer_feedback` surfaces)** — an accepted
-  `knowledge_gap` lesson raises an item here. No new screen.
+  `knowledge_gap` lesson raises an item here, tagged `source = "flow_lesson"`
+  so an SME can tell a step-level gap from a frontline flag. No new screen.
+- **`/admin/settings` — a new Data Retention card.** The seven retention
+  windows are operator policy and currently live in environment variables,
+  invisible and un-editable without a redeploy. They move to
+  `admin_system_settings`, read DB-first with env as fallback per ADR-041 §2,
+  and gain a card alongside the existing settings cards: one row per target
+  (session messages, audit log, usage events, error log, notification log,
+  extraction runs, flow observations), each a day count, **`0` meaning keep
+  forever, which is the default for all seven**. A legal hold still overrides
+  any window (ADR-033).
 
 ## 8. Database changes
 
@@ -162,17 +174,46 @@ force. Evidence then reads as "the session behind this has since been deleted",
 which is honest — silently retiring an in-force lesson because a row aged out
 would be worse.
 
+Because observations therefore outlive their sessions, they are **their own
+retention target**. `RetentionTargetKey` gains `ai_flow_observations` (a seventh
+key, with its `RetentionConfig` field and label), so an operator can put a window
+on the `detail` payloads — which hold real before/after field values — without
+that window being tied to session deletion. It defaults to keep-forever, as all
+seven now do.
+
+### Changes to existing tables
+
+| Table | Change | Safe against existing rows? |
+| ----- | ------ | --------------------------- |
+| `kb_answer_feedback` | `ADD COLUMN source text not null default 'frontline'`; `ALTER COLUMN session_id DROP NOT NULL` | yes — a defaulted add and a constraint relaxation. No `-- data-impact:` declaration required |
+| `admin_system_settings` | Seven new keys (rows, not schema): `retention.<target>_days` | yes — data only, no migration |
+
+An accepted `knowledge_gap` lesson writes a `kb_answer_feedback` row with
+`source = "flow_lesson"`, `session_id` set to the most recent surviving evidence
+session or null, `flagged_answer` carrying the lesson statement, and
+`corrected_text` empty — the SME supplies it during triage, which is the whole
+point of routing it here rather than into a prompt.
+
+`AiTurnPayload` gains `missingInformation: string[]` and `retrievedChunkCount:
+number`. It is a `jsonb` column shape, so this is **not** a migration; but
+without it a `knowledge_gap` observation has no source, since `missingInformation`
+is currently rendered into prose by `buildCrossCheckGapNote` and discarded, and
+retrieval results are never persisted at all.
+
 `ai_` rather than `app_` for all three: these are model-derived artefacts of the
 AI subsystem, sitting with `ai_usage_events`, and they are deliberately **not**
 part of a flow's authoring config — a flow export (ADR-049) carries no lessons.
 
-One generated migration, additive `CREATE TABLE` / `CREATE INDEX` only. No
-`-- data-impact:` declaration is required: nothing drops or rewrites rows, and no
-constraint can fail against existing data. Generated migration only — never
+One generated migration covering the three new tables and the two
+`kb_answer_feedback` alterations. No `-- data-impact:` declaration is required:
+nothing drops or rewrites rows, and no constraint can fail against existing data —
+a defaulted `ADD COLUMN` and a `DROP NOT NULL` are both safe in the sense
+`migration-safety.test.ts` checks. Generated migration only — never
 `drizzle-kit push`.
 
-No change to `app_sessions`, `app_flows` or `app_flow_versions`. Every panel
-stat, `stale` included, is derived at query time.
+No change to `app_sessions`, `app_flows` or `app_flow_versions` — the two new
+`AiTurnPayload` fields are a `jsonb` shape, not columns. Every panel stat, `stale`
+included, is derived at query time.
 
 ## 9. Architectural decisions
 
@@ -184,14 +225,25 @@ stat, `stale` included, is derived at query time.
   version snapshot.* Records why memory is deliberately outside the pinned
   `app_flow_versions` snapshot that ADR-015 makes every session read, and what
   that costs.
+- **Amends `015-flow-versioning-snapshots`** — that ADR gains an `Amended by:
+  ADR-058` line, so a reader of ADR-015 alone does not come away with the wrong
+  guarantee. ADR-058 already states the obligation; this phase discharges it.
 - **Assumes** ADR-052 and `032-normalisation-overlay-and-ai-propose-confirm` for
   the propose-confirm shape this reuses; **ADR-031** for the skills block the
   `<learned_guidance>` block sits beside; **ADR-016** for the prompt-cache
   discipline that decides where in the prompt it goes; **ADR-028** for the
   knowledge-curation loop it feeds; **ADR-033 (immutable audit log)** for the
-  accept/reject record; **ADR-048** for the `mode = "test"` discriminator that
-  excludes test runs from capture. Where an ADR number is used twice in
-  `docs/development/adr/`, it is cited here by filename.
+  accept/reject record and for legal hold overriding any retention window;
+  **ADR-041 §2 (DB-first, env kept as fallback)** for moving the retention
+  windows out of environment variables and onto a settings card; **ADR-048** for
+  the `mode = "test"` discriminator that excludes test runs from capture. Where
+  an ADR number is used twice in `docs/development/adr/`, it is cited here by
+  filename.
+- **Citation caveat**: the "ADR-031" cited for skills is the number the code
+  already uses (`ports/session-agent.ts`, `agents/flow-session-graph.ts`), but
+  `031-usage-limit-scope-cascade.adr.md` is a different decision and no skills
+  ADR exists. Pre-existing; inherited here rather than introduced, and not fixed
+  in this phase.
 - **Branch and version**: builds on **`main`**, currently **0.34.0**, so a MINOR
   bump lands on **0.35.0**, with the implemented doc going to
   `docs/development/implemented/alpha-3/v0.35.0/` — the routing `CLAUDE.md`
@@ -213,8 +265,10 @@ stat, `stale` included, is derived at query time.
       no code path lets a distiller output reach `accepted` — enforced by the
       repository's `createProposed` accepting no status argument.
 - [ ] A distiller response is validated before persistence: a candidate naming a
-      node that is not the one it was asked about, or an unknown `kind`, is
-      reported as a reject rather than written.
+      node that is not the one it was asked about, an unknown `kind`, or a
+      statement containing a verbatim substring of an observation's `detail`
+      values, is reported as a reject rather than written. The last of these turns
+      the leak-path review obligation into a mechanical one.
 - [ ] Each proposed lesson has at least one `ai_flow_lesson_evidence` row, and
       `evidenceCount` equals the number of linked observations.
 - [ ] Only `accepted` lessons of kind `guidance` or `efficiency` render into
@@ -229,8 +283,12 @@ stat, `stale` included, is derived at query time.
       turn, with no restart and no change to `flowVersionId`.
 - [ ] A lesson applies in a `mode = "test"` session, so an author can try one
       before accepting it — capture is excluded, application is not.
-- [ ] Accepting a `knowledge_gap` lesson creates an `AnswerFeedback` row and no
-      prompt text.
+- [ ] A `knowledge_gap` observation fires from persisted turn data —
+      `retrievedChunkCount === 0` and a non-empty `missingInformation` on the
+      turn's `AiTurnPayload` — with no parsing of message prose.
+- [ ] Accepting a `knowledge_gap` lesson creates a `kb_answer_feedback` row with
+      `source = "flow_lesson"` and no prompt text; the row survives when its
+      evidence session is later deleted.
 - [ ] Accept, reject and retire each write a `core_audit_log` entry naming the
       lesson, the flow, the node and the deciding user.
 - [ ] A lesson whose `node_id` is absent from the flow's current nodes is retired
@@ -242,13 +300,26 @@ stat, `stale` included, is derived at query time.
 - [ ] The panel's five stat tiles match `computeFlowUsageStats` over the flow's
       live sessions, with `stale` derived from the configured window and
       `cancelled` counted under `abandoned`.
-- [ ] The panel collapses to hidden, restores from the canvas top-right icon, and
-      the chosen state persists across a reload for that user.
+- [ ] The panel collapses to hidden and restores from the canvas top-right icon.
+      Panel state is persisted per user per flow: the component writes its state
+      key on every transition and reads it on mount, asserted directly against the
+      storage interface in a component test. The browser-reload behaviour itself
+      is not asserted — see the e2e note below.
 - [ ] Clicking a lesson expands the drawer to ~85% of the viewport over a scrim;
       clicking the scrim or the minimise control returns it to narrow with canvas
       viewport and node selection intact.
-- [ ] Panel and drawer are component-tested; no Playwright spec is added — none of
-      this falls into the six groups in `docs/guides/e2e-test-policy.md`.
+- [ ] Panel and drawer are component-tested; no Playwright spec is added. No
+      criterion above asserts behaviour in any of the six groups in
+      `docs/guides/e2e-test-policy.md` — in particular, panel state persistence is
+      asserted at the storage interface, not across a document load (group 4).
+- [ ] `ai_flow_observations` is a `RetentionTargetKey`, appears in
+      `buildRetentionPolicies`, and is swept by `ApplyRetentionPolicies` on its own
+      window; a legal hold on a session excludes its observations from the sweep.
+- [ ] All seven retention windows read DB-first from `admin_system_settings` with
+      env as fallback (ADR-041 §2), and every one defaults to `0` — keep forever.
+      An existing deployment that set a window in env keeps that window.
+- [ ] The Data Retention settings card lists all seven targets, saves a window,
+      and states that `0` means keep forever — component-tested.
 - [ ] Architecture boundaries intact — `domain` dependency-free, ports in domain,
       Result at every boundary, no `-- data-impact:` needed for an additive
       migration. `VERSION` matches `package.json#version` at `0.35.0`;
@@ -263,6 +334,8 @@ stat, `stale` included, is derived at query time.
 - Measuring whether an accepted lesson helped: a before/after on turns-to-advance
   and correction rate per lesson, which would let a bad lesson be found rather
   than merely suspected.
+- An owner-triggered "check now" on the panel, so an author who has just fixed a
+  flow need not wait for the daily sweep to see whether new lessons appear.
 - Auto-accept for a lesson kind an organisation has decided to trust.
 - Surfacing lessons in the node config modal itself, so an author sees a step's
   memory while editing its instruction.
@@ -281,11 +354,18 @@ stat, `stale` included, is derived at query time.
   lessons can contradict each other. Mitigated by the per-node cap and by
   `supersedesLessonId`. Open: whether the distiller should be shown existing
   accepted statements so it proposes supersessions rather than near-duplicates —
-  the phase doc assumes yes (`existingStatements` on the port); confirm at review.
+  **resolved at `/doc-review`: yes.** `existingStatements` is on the port in both
+  documents, and the adapter additionally rejects a candidate that restates a
+  verbatim value from its evidence.
 - **Evidence carries real session content.** A `field_corrected` observation
   stores a before/after of a real value. Observations inherit the flow's
-  visibility, are visible only to those who pass `canUserEditFlow`, and are swept
-  by the same retention and legal-hold rules as the session they came from. A
+  visibility and are visible only to those who pass `canUserEditFlow`. They are
+  **not** swept with the session they came from — `session_id` is set null so a
+  lesson keeps its evidence — so they are their own retention target with their
+  own window, defaulting to keep-forever. The consequence to state plainly: on a
+  default deployment, deleting a session does not delete the observation values
+  taken from it. An operator who needs that must set the
+  `ai_flow_observations` window; legal hold still overrides it. A
   lesson's *statement*, however, is model-written prose that can restate a
   specific value — that is a genuine leak path into every future prompt on the
   flow, and the accept gate is the only thing standing in front of it. The
@@ -293,8 +373,9 @@ stat, `stale` included, is derived at query time.
   enforcement.
 - **Distillation cost.** A periodic model call per flow with new observations,
   bounded by a batch cap, attributed through `ai_usage_events` and counted against
-  budgets like any other spend. Open: the sweep cadence — the phase doc proposes
-  daily, which is cheap and slow enough that nobody watches a lesson appear.
+  budgets like any other spend. The sweep cadence is **resolved at `/doc-review`:
+  daily**, which is cheap and slow enough that nobody watches a lesson appear. An
+  owner-triggered "check now" is deferred to §11.
 - **Live resolution vs. the version snapshot.** ADR-058's subject and the
   sharpest trade-off here: a session pinned to flow version 4 can be running
   under a lesson accepted after version 7 was published. That is the intended

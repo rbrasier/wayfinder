@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, notInArray, sql, type SQL } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -266,6 +266,29 @@ export class DrizzleSessionRepository implements ISessionRepository {
       return ok(undefined);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to delete test session.", cause));
+    }
+  }
+
+  async listTerminalSince(since: Date | null, limit: number): Promise<Result<Session[]>> {
+    try {
+      const clauses: SQL[] = [
+        // Test runs are excluded here as well as in the capture use case: a test
+        // run must never become evidence, and the sweep should not pay to load
+        // one only to discard it (ADR-057 §2).
+        sessionModePredicate("live"),
+        inArray(app_sessions.status, ["complete", "abandoned", "cancelled"]),
+      ];
+      if (since) clauses.push(gte(app_sessions.updated_at, since));
+
+      const rows = await this.db
+        .select()
+        .from(app_sessions)
+        .where(and(...clauses))
+        .orderBy(app_sessions.updated_at)
+        .limit(limit);
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list terminal sessions.", cause));
     }
   }
 

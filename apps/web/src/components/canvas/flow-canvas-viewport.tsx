@@ -48,7 +48,11 @@ export function FlowCanvasViewport({
   onShowExplainer,
   highlightFirstStep = false,
   staleReferences,
+  memoryToggle,
 }: {
+  // An overlay affordance pinned above the pane — currently the flow-memory
+  // reopen button. Null on screens that have none.
+  memoryToggle?: React.ReactNode;
   nodes: Node[];
   edges: Edge[];
   onNodesChange: (changes: NodeChange[]) => void;
@@ -83,6 +87,9 @@ export function FlowCanvasViewport({
 
   return (
     <div className="relative flex-1">
+      {memoryToggle ? (
+        <div className="pointer-events-none absolute right-4 top-4 z-20">{memoryToggle}</div>
+      ) : null}
       <ReactFlow
         nodes={nodes}
         edges={edges}

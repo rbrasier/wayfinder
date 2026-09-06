@@ -8,7 +8,7 @@ import {
 } from "@rbrasier/domain";
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Database } from "../db/client";
-import { ai_usage_events } from "../db/schema/ai";
+import { ai_flow_observations, ai_usage_events } from "../db/schema/ai";
 import { app_error_log } from "../db/schema/app";
 import { core_audit_log } from "../db/schema/core";
 import {
@@ -36,6 +36,16 @@ const RETENTION_TARGETS: Record<RetentionTargetKey, RetentionTarget> = {
     table: ai_usage_events,
     idColumn: ai_usage_events.id,
     timestampColumn: ai_usage_events.created_at,
+  },
+  // Observations outlive their sessions by design (`session_id` is set null, not
+  // cascaded), so this is the only thing that ever deletes a `detail` payload —
+  // and it honours a by_session legal hold like any other session-scoped target.
+  ai_flow_observations: {
+    tableName: "ai_flow_observations",
+    table: ai_flow_observations,
+    idColumn: ai_flow_observations.id,
+    timestampColumn: ai_flow_observations.created_at,
+    sessionColumn: ai_flow_observations.session_id,
   },
   app_session_messages: {
     tableName: "app_session_messages",

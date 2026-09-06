@@ -7,6 +7,7 @@ import {
   computeSessionActivity,
   type AnalyticsMessageRow,
   type AnalyticsNode,
+  computeFlowUsageStats,
   type AnalyticsSessionRow,
 } from "./analytics";
 import { APPROVAL_PROJECTION_FIELDS } from "./approval-record";
@@ -849,5 +850,78 @@ describe("computeExtractionFieldReport", () => {
       ],
     );
     expect(report.rows[0]!.aggregateConfidence).toEqual({ selection: 0.6, accuracy: null });
+  });
+});
+
+describe("computeFlowUsageStats", () => {
+  const staleAfterDays = 14;
+  const asOf = new Date("2026-05-29T00:00:00Z");
+
+  it("counts an empty flow as all zeroes", () => {
+    expect(computeFlowUsageStats([], asOf, staleAfterDays)).toEqual({
+      total: 0,
+      completed: 0,
+      inProgress: 0,
+      stale: 0,
+      abandoned: 0,
+    });
+  });
+
+  it("counts a completed session under completed only", () => {
+    const stats = computeFlowUsageStats([session({ status: "complete" })], asOf, staleAfterDays);
+
+    expect(stats).toMatchObject({ total: 1, completed: 1, inProgress: 0, stale: 0, abandoned: 0 });
+  });
+
+  it("counts a recently active session as in progress, not stale", () => {
+    const stats = computeFlowUsageStats(
+      [session({ status: "active", updatedAt: new Date("2026-05-28T00:00:00Z") })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats).toMatchObject({ total: 1, inProgress: 1, stale: 0 });
+  });
+
+  it("counts an active session past the window as both in progress and stale", () => {
+    // `stale` is a lens on in-progress work, not a fourth status: the session is
+    // still active, it has simply stopped moving.
+    const stats = computeFlowUsageStats(
+      [session({ status: "active", updatedAt: new Date("2026-05-01T00:00:00Z") })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats).toMatchObject({ total: 1, inProgress: 1, stale: 1 });
+  });
+
+  it("does not call a session stale exactly on the boundary", () => {
+    const stats = computeFlowUsageStats(
+      [session({ status: "active", updatedAt: new Date("2026-05-15T00:00:00Z") })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats.stale).toBe(0);
+  });
+
+  it("counts cancelled under abandoned, matching DISCARDED_SESSION_STATUSES", () => {
+    const stats = computeFlowUsageStats(
+      [session({ status: "cancelled" }), session({ id: "s2", status: "abandoned" })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats).toMatchObject({ total: 2, abandoned: 2, completed: 0, inProgress: 0 });
+  });
+
+  it("never marks a finished session stale, however old it is", () => {
+    const stats = computeFlowUsageStats(
+      [session({ status: "complete", updatedAt: new Date("2024-01-01T00:00:00Z") })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats.stale).toBe(0);
   });
 });

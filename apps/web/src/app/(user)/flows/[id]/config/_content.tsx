@@ -30,7 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
-import { FlowCanvasViewport } from "@/components/canvas/flow-canvas-viewport";
+import { CanvasRegion } from "./_canvas-region";
 import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal";
@@ -605,7 +605,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setDeleteConfirmOpen={setDeleteConfirmOpen}
       />
 
-      <FlowCanvasViewport
+      <CanvasRegion
+        flow={{ id: flowId, status: flowStatus }}
         nodes={displayNodes}
         edges={displayEdges}
         onNodesChange={onNodesChange}

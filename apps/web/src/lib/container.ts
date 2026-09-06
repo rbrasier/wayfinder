@@ -202,6 +202,7 @@ import {
   type AuthMethod,
 } from "@rbrasier/adapters";
 import type { FlowVersion } from "@rbrasier/domain";
+import { buildFlowMemory, retentionEnvFallback } from "./container-flow-memory";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildFlowPortability } from "./container-flow-portability";
 import { buildSessionAuth } from "./container-session-auth";
@@ -500,6 +501,8 @@ const build = () => {
   const documentChunks = new DrizzleDocumentChunksRepository(db);
   const chunkCuration = new DrizzleChunkCurationRepository(db);
   const answerFeedback = new DrizzleAnswerFeedbackRepository(db);
+  // Flow memory and the retention settings governing its evidence (ADR-057).
+  const flowMemory = buildFlowMemory({ db, flows, analytics: analyticsRepo, answerFeedback, auditLogger, systemSettings });
   const hybridRetriever = new DrizzleHybridRetriever(db);
   const embeddings = createEmbeddingsProvider(() => runtimeConfig.getEmbeddingsConfig(), {
     openaiApiKey: env.OPENAI_API_KEY ?? null,
@@ -625,6 +628,7 @@ const build = () => {
     logger,
     objectStorage,
     runtimeConfig,
+    retentionEnvFallback: retentionEnvFallback(),
     adminSettings,
     connectivityTester,
     resolveSession: resolveCachedSession,
@@ -722,7 +726,8 @@ const build = () => {
       // Leaner turn-scoped variant of getSession: the tail of the transcript
       // plus a SQL-side aggregation of gathered context, so the streaming route
       // stops loading the whole history on every turn (scaling wall #1).
-      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions, flowMemory.repos.flowLessons),
+      ...flowMemory.useCases,
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
