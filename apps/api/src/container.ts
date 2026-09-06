@@ -26,6 +26,9 @@ import {
   UpdateErrorStatus,
   UpdateUser,
   UpsertFeatureFlag,
+  SweepFlowMemory,
+  CaptureSessionObservations,
+  DistilFlowLessons,
 } from "@rbrasier/application";
 import {
   AiHealthChecker,
@@ -63,6 +66,12 @@ import {
   NodemailerEmailSender,
   PinoLogger,
   RetentionWorker,
+  FlowMemoryWorker,
+  AiLessonDistiller,
+  DrizzleApprovalRepository,
+  DrizzleAnalyticsRepository,
+  DrizzleFlowObservationRepository,
+  DrizzleFlowLessonRepository,
   RuntimeConfigStore,
   SchedulerWorker,
   SystemClock,
@@ -219,6 +228,7 @@ export const buildContainer = (env: Env) => {
     appErrorLogDays: env.RETENTION_ERROR_LOG_DAYS,
     appNotificationLogDays: env.RETENTION_NOTIFICATION_LOG_DAYS,
     appExtractionRunsDays: env.RETENTION_EXTRACTION_RUNS_DAYS,
+    aiFlowObservationsDays: env.RETENTION_FLOW_OBSERVATIONS_DAYS,
   });
   const applyRetentionPolicies = new ApplyRetentionPolicies(
     retentionRepository,
@@ -244,6 +254,41 @@ export const buildContainer = (env: Env) => {
       return testSessions;
     },
   };
+
+  // Flow memory (ADR-057): capture from sessions that finished since the last
+  // successful run, then distil the flows that now carry enough evidence. Off by
+  // default, so an upgrade never starts spending model calls unasked.
+  const memoryApprovals = new DrizzleApprovalRepository(db);
+  const memoryAnalytics = new DrizzleAnalyticsRepository(db);
+  const flowObservations = new DrizzleFlowObservationRepository(db);
+  const flowLessons = new DrizzleFlowLessonRepository(db);
+  const flowMemorySweeper = new SweepFlowMemory(
+    sessions,
+    flowObservations,
+    new CaptureSessionObservations(
+      sessions,
+      sessionMessages,
+      memoryApprovals,
+      memoryAnalytics,
+      flowObservations,
+    ),
+    new DistilFlowLessons(
+      flowObservations,
+      flowLessons,
+      new AiLessonDistiller(llm),
+      flowNodes,
+      auditLogger,
+    ),
+  );
+
+  const flowMemoryWorkers = env.FLOW_MEMORY_ENABLED
+    ? [
+        new FlowMemoryWorker(flowMemorySweeper, jobRepo, logger, {
+          tickIntervalMs: env.FLOW_MEMORY_TICK_MS,
+          evidenceThreshold: env.FLOW_MEMORY_EVIDENCE_THRESHOLD,
+        }),
+      ]
+    : [];
 
   const retentionWorkers = env.RETENTION_ENABLED
     ? [
@@ -284,6 +329,7 @@ export const buildContainer = (env: Env) => {
     runtimeConfig,
     schedulerWorkers,
     retentionWorkers,
+    flowMemoryWorkers,
     extractionWorkers,
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
