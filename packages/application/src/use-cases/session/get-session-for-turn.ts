@@ -6,9 +6,11 @@ import {
   ok,
   type Flow,
   type FlowEdge,
+  type FlowLesson,
   type FlowNode,
   type GatheredContextItem,
   type IFlowEdgeRepository,
+  type IFlowLessonRepository,
   type IFlowNodeRepository,
   type IFlowRepository,
   type IFlowVersionRepository,
@@ -35,6 +37,9 @@ export interface SessionTurnDetail {
   // history. The readiness gate counts prior holds over these rather than the
   // bounded tail, which can miss an older hold on a long-running node.
   currentNodeAssistantMessages: SessionMessage[];
+  // Accepted lessons for the whole flow. The caller filters to the current node
+  // and caps the list before it reaches the prompt.
+  acceptedLessons: FlowLesson[];
 }
 
 export interface GetSessionForTurnOptions {
@@ -51,6 +56,9 @@ export class GetSessionForTurn {
     private readonly flowNodes: IFlowNodeRepository,
     private readonly flowEdges: IFlowEdgeRepository,
     private readonly flowVersions: IFlowVersionRepository,
+    // Optional so a caller with no flow memory wired still constructs. Absent
+    // means the turn simply carries no accepted lessons.
+    private readonly flowLessons?: IFlowLessonRepository,
   ) {}
 
   async execute(
@@ -74,14 +82,22 @@ export class GetSessionForTurn {
     // are independent. The current-node read is a plain scan of one node's
     // turns — cheap next to the whole transcript.
     const currentNodeId = session.currentNodeId;
-    const [tailResult, gatheredResult, flowResult, currentNodeResult] = await Promise.all([
-      this.sessionMessages.latestBySession(sessionId, options.messagesTailN),
-      this.sessionMessages.aggregateGatheredContext(sessionId),
-      this.flows.findById(session.flowId),
-      currentNodeId
-        ? this.sessionMessages.listStepAssistantMessages(sessionId, currentNodeId)
-        : Promise.resolve(ok<SessionMessage[]>([])),
-    ]);
+    const [tailResult, gatheredResult, flowResult, currentNodeResult, lessonsResult] =
+      await Promise.all([
+        this.sessionMessages.latestBySession(sessionId, options.messagesTailN),
+        this.sessionMessages.aggregateGatheredContext(sessionId),
+        this.flows.findById(session.flowId),
+        currentNodeId
+          ? this.sessionMessages.listStepAssistantMessages(sessionId, currentNodeId)
+          : Promise.resolve(ok<SessionMessage[]>([])),
+        // Accepted lessons resolve live rather than from the pinned snapshot
+        // (ADR-058 §1), so a session already in flight picks one up on its next
+        // turn. One indexed read, joined to the fan-out rather than serialised
+        // behind it.
+        this.flowLessons
+          ? this.flowLessons.listAcceptedByFlow(session.flowId)
+          : Promise.resolve(ok<FlowLesson[]>([])),
+      ]);
     if (tailResult.error) return tailResult;
     if (gatheredResult.error) return gatheredResult;
     if (flowResult.error) return flowResult;
@@ -98,6 +114,9 @@ export class GetSessionForTurn {
       edges: definitionResult.data.edges,
       messagesTail: tailResult.data,
       gatheredContext: gatheredResult.data,
+      // A memory read that fails must never cost the operator their turn: the
+      // flow simply runs without its lessons, as it did before this feature.
+      acceptedLessons: lessonsResult.error ? [] : lessonsResult.data,
       currentNodeAssistantMessages: currentNodeResult.data,
     });
   }

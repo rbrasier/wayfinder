@@ -133,6 +133,8 @@ import {
   DrizzleDocumentChunksRepository,
   DrizzleChunkCurationRepository,
   DrizzleAnswerFeedbackRepository,
+  DrizzleFlowLessonRepository,
+  DrizzleFlowObservationRepository,
   DrizzleHybridRetriever,
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
@@ -497,6 +499,10 @@ const build = () => {
   const documentChunks = new DrizzleDocumentChunksRepository(db);
   const chunkCuration = new DrizzleChunkCurationRepository(db);
   const answerFeedback = new DrizzleAnswerFeedbackRepository(db);
+  // Flow memory (ADR-057). The lesson repository is read on every turn, so it
+  // is constructed here alongside the other hot-path repositories.
+  const flowObservations = new DrizzleFlowObservationRepository(db);
+  const flowLessons = new DrizzleFlowLessonRepository(db);
   const hybridRetriever = new DrizzleHybridRetriever(db);
   const embeddings = createEmbeddingsProvider(() => runtimeConfig.getEmbeddingsConfig(), {
     openaiApiKey: env.OPENAI_API_KEY ?? null,
@@ -732,7 +738,7 @@ const build = () => {
       // Leaner turn-scoped variant of getSession: the tail of the transcript
       // plus a SQL-side aggregation of gathered context, so the streaming route
       // stops loading the whole history on every turn (scaling wall #1).
-      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions, flowLessons),
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
