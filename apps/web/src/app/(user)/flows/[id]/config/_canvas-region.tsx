@@ -24,20 +24,23 @@ export function CanvasRegion({ flow, ...viewportProps }: CanvasRegionProps) {
   const { isPublished, state, changeState } = memory;
 
   return (
-    <div className="relative flex min-h-0 flex-1">
-      <div className="relative min-w-0 flex-1">
-        <FlowCanvasViewport
-          {...viewportProps}
-          memoryToggle={
-            isPublished && state === "hidden" ? (
-              <FlowMemoryToggle
-                proposedCount={0}
-                onReopen={() => changeState(stateAfterReopening())}
-              />
-            ) : null
-          }
-        />
-      </div>
+    // FlowCanvasViewport's own root is `relative flex-1` — it is already the
+    // canvas column, so it goes straight into the row. An extra wrapper here
+    // covered the pane and swallowed clicks on branch-rule indicators: it was
+    // not a flex container, so the viewport's flex-1 did nothing and the wrapper
+    // stretched over it.
+    <div className="flex min-h-0 flex-1">
+      <FlowCanvasViewport
+        {...viewportProps}
+        memoryToggle={
+          isPublished && state === "hidden" ? (
+            <FlowMemoryToggle
+              proposedCount={0}
+              onReopen={() => changeState(stateAfterReopening())}
+            />
+          ) : null
+        }
+      />
 
       {isPublished ? (
         <FlowMemoryPanel
