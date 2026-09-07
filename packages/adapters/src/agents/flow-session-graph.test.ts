@@ -394,6 +394,29 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     // It must read as the user's own attachment, not a generic reference excerpt.
     expect(result.data?.toLowerCase()).toContain("the user has attached");
   });
+
+  it("states the formatting the reply may use and forbids a written-out newline escape", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("<formatting>");
+    expect(result.data).toContain("**bold**");
+    // The bug this guards: the model writing the two characters \ and n into the
+    // JSON string instead of breaking the line.
+    expect(result.data).toContain("\\n");
+    expect(result.data).toContain("Never write a line break out as characters");
+  });
+
+  it("puts the formatting rules above the per-turn blocks so the cached prefix is unaffected", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      now: new Date("2026-07-27T09:30:00Z"),
+      retrievedChunks: [{ filename: "policy.pdf", chunkIndex: 0, chunkText: "Spend under $5,000." }],
+    });
+    const prompt = result.data as string;
+    expect(prompt.indexOf("<formatting>")).toBeGreaterThan(-1);
+    expect(prompt.indexOf("<formatting>")).toBeLessThan(prompt.indexOf("<reference_documents>"));
+    expect(prompt.indexOf("<formatting>")).toBeLessThan(prompt.indexOf("<current_context>"));
+  });
 });
 
 // ── buildBranchChoicePrompt ──────────────────────────────────────────────────

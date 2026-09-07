@@ -14,6 +14,23 @@ import {
   type TemplateField,
 } from "@rbrasier/domain";
 
+// The reply is one field of a JSON object, and a model asked for JSON will
+// sometimes escape the escape — writing the two characters `\` and `n` where a
+// line break was meant, which then print on screen. The vocabulary is kept to
+// what the chat bubble renders well: headings collapse to a bold lead-in there,
+// so asking for one buys nothing, and tables and fences have no styling at all.
+const FORMATTING_BLOCK = `<formatting>
+  Write the "response" field as plain, readable text. The only formatting you may use is:
+  - Short paragraphs
+  - **bold** for a key term or label
+  - "- " at the start of a line for a bulleted list
+  - "1. " at the start of a line for a numbered list
+
+  Use nothing else — no headings, tables, code blocks, links, images or HTML.
+
+  Break a line by putting an actual line break in the string. Never write a line break out as characters: a reply containing \\n shows those characters to the user instead of starting a new line.
+</formatting>`;
+
 export class FlowSessionGraph implements ISessionAgent {
   buildSystemPrompt(input: BuildSystemPromptInput): Result<string> {
     const { nodeConfig, gatheredContext, workflowName, organisationName, expertRole } = input;
@@ -104,6 +121,8 @@ export class FlowSessionGraph implements ISessionAgent {
   - Do not re-ask for information already in gathered_context unless clarification would meaningfully improve the output
   - If the user goes off-topic, gently redirect them back to this step
 </constraints>${fieldFormatsBlock}
+
+${FORMATTING_BLOCK}
 
 <output>
   Respond only with valid JSON in this exact structure — no prose outside it:
