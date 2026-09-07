@@ -59,6 +59,53 @@ describe("parseMarkdownBlocks", () => {
   });
 });
 
+// The model returns its reply inside a JSON "response" field and sometimes
+// escapes the escape, so a line break arrives as the two characters \ and n.
+// Splitting on real newlines alone left those visible AND collapsed the whole
+// reply into one line, so no list or heading in it was ever recognised.
+describe("parseMarkdownBlocks — escaped line breaks", () => {
+  it("restores the structure of a reply whose line breaks arrived escaped", () => {
+    const reported =
+      "I just need two more things:\\n\\n1. What type of equipment does Joe need?\\n2. Who is requesting this equipment?";
+
+    expect(parseMarkdownBlocks(reported)).toEqual([
+      { type: "paragraph", content: "I just need two more things:" },
+      {
+        type: "list",
+        ordered: true,
+        items: ["What type of equipment does Joe need?", "Who is requesting this equipment?"],
+      },
+    ]);
+  });
+
+  it("normalises escaped carriage returns the same way", () => {
+    expect(parseMarkdownBlocks("first\\r\\nsecond")).toEqual([
+      { type: "paragraph", content: "first\nsecond" },
+    ]);
+    expect(parseMarkdownBlocks("first\\rsecond")).toEqual([
+      { type: "paragraph", content: "first\nsecond" },
+    ]);
+  });
+
+  it("leaves a real newline untouched", () => {
+    expect(parseMarkdownBlocks("hello\nthere")).toEqual([
+      { type: "paragraph", content: "hello\nthere" },
+    ]);
+  });
+
+  it("keeps a lone backslash literal", () => {
+    expect(parseMarkdownBlocks("C:\\ then more")).toEqual([
+      { type: "paragraph", content: "C:\\ then more" },
+    ]);
+  });
+
+  it("keeps escape sequences inside a fenced block verbatim", () => {
+    expect(parseMarkdownBlocks('```\nconst a = "x\\ny";\n```')).toEqual([
+      { type: "code", value: 'const a = "x\\ny";' },
+    ]);
+  });
+});
+
 describe("parseInline", () => {
   it("returns plain text untouched", () => {
     expect(parseInline("just words")).toEqual([{ type: "text", value: "just words" }]);

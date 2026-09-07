@@ -28,6 +28,13 @@ const UNORDERED_ITEM_PATTERN = /^\s*[-*+]\s+(.*)$/;
 const ORDERED_ITEM_PATTERN = /^\s*\d+[.)]\s+(.*)$/;
 const FENCE_PATTERN = /^\s*```/;
 
+// The model returns its reply inside a JSON "response" field, and sometimes
+// escapes the escape — writing `\\n` where `\n` was meant — so the decoded
+// string carries the two characters `\` and `n` instead of a line break. Left
+// alone those are not just visible: the whole reply becomes one line, so no
+// heading, bullet or numbered list in it is recognised either.
+const ESCAPED_LINE_BREAK_PATTERN = /\\r\\n|\\r|\\n/g;
+
 // Anything else — notably `javascript:` — renders as literal text rather than
 // becoming a clickable link.
 const SAFE_HREF_PATTERN = /^(https?:\/\/|mailto:)/i;
@@ -139,8 +146,26 @@ const listItemOf = (line: string): { text: string; ordered: boolean } | null => 
   return null;
 };
 
+// Fenced content is left exactly as it arrived, so a reply that deliberately
+// shows an escape sequence in a code block keeps it.
+const normaliseEscapedLineBreaks = (input: string): string => {
+  let insideFence = false;
+
+  return input
+    .split("\n")
+    .map((line) => {
+      if (FENCE_PATTERN.test(line)) {
+        insideFence = !insideFence;
+        return line;
+      }
+      if (insideFence) return line;
+      return line.replace(ESCAPED_LINE_BREAK_PATTERN, "\n");
+    })
+    .join("\n");
+};
+
 export const parseMarkdownBlocks = (input: string): MarkdownBlock[] => {
-  const lines = input.split("\n");
+  const lines = normaliseEscapedLineBreaks(input).split("\n");
   const blocks: MarkdownBlock[] = [];
   let paragraph: string[] = [];
 
