@@ -1,5 +1,7 @@
 import {
+  SIGNATURE_SLOT_MARKER,
   buildFieldConstraintsText,
+  gatherableTemplateContent,
   nodeFieldSet,
   normaliseOutputType,
   ok,
@@ -60,11 +62,24 @@ export class FlowSessionGraph implements ISessionAgent {
     // hits on everything above.
     const currentContextBlock = input.now ? buildCurrentContextBlock(input.now) : "";
 
-    const templateContent =
+    // The body is masked before it is interpolated, or the model reads the
+    // template's `(approval)` tags as more information to gather and asks the
+    // operator to supply a signature (ADR-043 §2).
+    const rawTemplateContent =
       nodeConfig.documentTemplateStructuredContent ?? nodeConfig.documentTemplateContent;
+    const templateContent = gatherableTemplateContent(rawTemplateContent);
     const templateBlock =
       outputType === "generate_document" && templateContent
         ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${templateContent}\n  </document_template>`
+        : "";
+
+    // Masking removes the tag but not the label the template puts in front of
+    // it, so the constraint says what the remaining marker means. Added only
+    // when a slot was actually masked — a template with no signature gets no
+    // instruction about signatures.
+    const signatureConstraint =
+      templateBlock && templateContent !== rawTemplateContent
+        ? `\n  - ${SIGNATURE_SLOT_MARKER} is recorded by an approval step later in the flow — never ask the user for it, never treat it as missing, and never report it as outstanding`
         : "";
 
     // The "all fields captured" sentinel is shared by template and structured
@@ -102,7 +117,7 @@ export class FlowSessionGraph implements ISessionAgent {
   - Be plain-spoken — no jargon or technical terms
   - Do not discuss future steps
   - Do not re-ask for information already in gathered_context unless clarification would meaningfully improve the output
-  - If the user goes off-topic, gently redirect them back to this step
+  - If the user goes off-topic, gently redirect them back to this step${signatureConstraint}
 </constraints>${fieldFormatsBlock}
 
 <output>
