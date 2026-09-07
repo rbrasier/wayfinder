@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, gatherableTemplateContent, ok } from "@rbrasier/domain";
 import type { IReindexSourceRepository, ReindexableDocument, Result } from "@rbrasier/domain";
 import type { Database } from "../db/client";
 import { app_flow_nodes, app_flows, app_session_uploads } from "../db/schema/wayfinder";
@@ -9,6 +9,35 @@ const hasText = (text: string | null): text is string =>
   typeof text === "string" && text.trim().length > 0;
 
 const basename = (path: string): string => path.split("/").pop() ?? path;
+
+// One node's stored config as an indexable document, or null when the node
+// carries no template. Template chunks are retrieved into the same system prompt
+// that gathers fields, so the body is masked on the way in: an indexed
+// `(approval)` tag is a signature slot reaching the conversation by a second
+// route (ADR-043 §2). Forward-only — chunks indexed before this keep their tags
+// until a reindex runs.
+export const templateReindexDocument = (
+  flowId: string,
+  config: Record<string, unknown>,
+): ReindexableDocument | null => {
+  const storagePath = config.documentTemplatePath;
+  const text = config.documentTemplateContent;
+  if (typeof storagePath !== "string") return null;
+  if (typeof text !== "string" || !hasText(text)) return null;
+
+  const gatherableText = gatherableTemplateContent(text);
+  if (!gatherableText) return null;
+
+  const filenameValue = config.documentTemplateFilename;
+  return {
+    flowId,
+    sessionId: null,
+    sourceType: "template",
+    storagePath,
+    filename: typeof filenameValue === "string" ? filenameValue : basename(storagePath),
+    text: gatherableText,
+  };
+};
 
 // Reads the stored extracted text for every indexed document across the three
 // chunk source types. The stored text is the source of truth (ADR-017), so this
@@ -70,24 +99,9 @@ export class DrizzleReindexSourceRepository implements IReindexSourceRepository 
       .select({ flowId: app_flow_nodes.flow_id, config: app_flow_nodes.config })
       .from(app_flow_nodes);
 
-    const documents: ReindexableDocument[] = [];
-    for (const node of nodeRows) {
-      const storagePath = node.config.documentTemplatePath;
-      const text = node.config.documentTemplateContent;
-      if (typeof storagePath !== "string") continue;
-      if (typeof text !== "string" || !hasText(text)) continue;
-
-      const filenameValue = node.config.documentTemplateFilename;
-      documents.push({
-        flowId: node.flowId,
-        sessionId: null,
-        sourceType: "template",
-        storagePath,
-        filename: typeof filenameValue === "string" ? filenameValue : basename(storagePath),
-        text,
-      });
-    }
-    return documents;
+    return nodeRows
+      .map((node) => templateReindexDocument(node.flowId, node.config))
+      .filter((document): document is ReindexableDocument => document !== null);
   }
 
   private async listSessionUploads(): Promise<ReindexableDocument[]> {

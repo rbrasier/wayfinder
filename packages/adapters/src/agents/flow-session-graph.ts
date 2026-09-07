@@ -1,5 +1,7 @@
 import {
+  SIGNATURE_SLOT_MARKER,
   buildFieldConstraintsText,
+  gatherableTemplateContent,
   nodeFieldSet,
   normaliseOutputType,
   ok,
@@ -14,6 +16,23 @@ import {
   type RetrievedChunk,
   type TemplateField,
 } from "@rbrasier/domain";
+
+// The reply is one field of a JSON object, and a model asked for JSON will
+// sometimes escape the escape — writing the two characters `\` and `n` where a
+// line break was meant, which then print on screen. The vocabulary is kept to
+// what the chat bubble renders well: headings collapse to a bold lead-in there,
+// so asking for one buys nothing, and tables and fences have no styling at all.
+const FORMATTING_BLOCK = `<formatting>
+  Write the "response" field as plain, readable text. The only formatting you may use is:
+  - Short paragraphs
+  - **bold** for a key term or label
+  - "- " at the start of a line for a bulleted list
+  - "1. " at the start of a line for a numbered list
+
+  Use nothing else — no headings, tables, code blocks, links, images or HTML.
+
+  Break a line by putting an actual line break in the string. Never write a line break out as characters: a reply containing \\n shows those characters to the user instead of starting a new line.
+</formatting>`;
 
 export class FlowSessionGraph implements ISessionAgent {
   buildSystemPrompt(input: BuildSystemPromptInput): Result<string> {
@@ -66,11 +85,24 @@ export class FlowSessionGraph implements ISessionAgent {
     // hits on everything above.
     const currentContextBlock = input.now ? buildCurrentContextBlock(input.now) : "";
 
-    const templateContent =
+    // The body is masked before it is interpolated, or the model reads the
+    // template's `(approval)` tags as more information to gather and asks the
+    // operator to supply a signature (ADR-043 §2).
+    const rawTemplateContent =
       nodeConfig.documentTemplateStructuredContent ?? nodeConfig.documentTemplateContent;
+    const templateContent = gatherableTemplateContent(rawTemplateContent);
     const templateBlock =
       outputType === "generate_document" && templateContent
         ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${templateContent}\n  </document_template>`
+        : "";
+
+    // Masking removes the tag but not the label the template puts in front of
+    // it, so the constraint says what the remaining marker means. Added only
+    // when a slot was actually masked — a template with no signature gets no
+    // instruction about signatures.
+    const signatureConstraint =
+      templateBlock && templateContent !== rawTemplateContent
+        ? `\n  - ${SIGNATURE_SLOT_MARKER} is recorded by an approval step later in the flow — never ask the user for it, never treat it as missing, and never report it as outstanding`
         : "";
 
     // The "all fields captured" sentinel is shared by template and structured
@@ -108,8 +140,10 @@ export class FlowSessionGraph implements ISessionAgent {
   - Be plain-spoken — no jargon or technical terms
   - Do not discuss future steps
   - Do not re-ask for information already in gathered_context unless clarification would meaningfully improve the output
-  - If the user goes off-topic, gently redirect them back to this step
+  - If the user goes off-topic, gently redirect them back to this step${signatureConstraint}
 </constraints>${fieldFormatsBlock}
+
+${FORMATTING_BLOCK}
 
 <output>
   Respond only with valid JSON in this exact structure — no prose outside it:

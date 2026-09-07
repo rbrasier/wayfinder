@@ -324,6 +324,100 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("Procurement Brief");
   });
 
+  // The v0.27.0 fix filtered the *field set* and left the template *body*
+  // untouched, so the model read the signature tags straight out of
+  // <document_template> and asked the operator to supply them (ADR-043 §2).
+  // These assert on the whole prompt rather than one block: two prompt inputs
+  // have now leaked, and a guard scoped to the block that leaked last would not
+  // have caught this one.
+  it("never lets a signature slot reach the prompt through the template body", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent:
+          "Full Name: {{Full Name}}\nFirst Level Supervisor Approval: {{ First Level Supervisor Approval (approval) }}\nSecond Level Supervisor Approval: {{ Second Level Supervisor Approval (approval) }}",
+        documentTemplateFields: [
+          { key: "full_name", label: "Full Name", type: "text", optional: false, raw: "Full Name" },
+          {
+            key: "first_level_supervisor_approval",
+            label: "First Level Supervisor Approval",
+            type: "signature",
+            optional: true,
+            raw: "First Level Supervisor Approval (approval)",
+          },
+        ],
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).not.toContain("(approval)");
+    expect(result.data).not.toContain("First Level Supervisor Approval");
+    expect(result.data).not.toContain("Second Level Supervisor Approval");
+    // The gatherable half of the same template must survive untouched.
+    expect(result.data).toContain("{{Full Name}}");
+  });
+
+  it("filters the summarised template body, which is preferred over the raw one", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent: "raw body",
+        documentTemplateStructuredContent:
+          "Name: {{Full Name}}\nSigned: {{ Delegate Signature (approval) }}",
+      },
+    });
+
+    expect(result.data).not.toContain("Delegate Signature");
+    expect(result.data).not.toContain("raw body");
+    expect(result.data).toContain("{{Full Name}}");
+  });
+
+  it("omits <document_template> entirely when a template declares nothing but signatures", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent: "{{ Annexe Signature (approval) }}",
+      },
+    });
+
+    expect(result.data).not.toContain("<document_template>");
+    expect(result.data).not.toContain("Annexe Signature");
+  });
+
+  it("explains the marker left on a line a signature shares with a gatherable field", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent:
+          "Executed on {{ Start Date (date) }} by {{ Delegate Signature (approval) }}",
+      },
+    });
+
+    expect(result.data).not.toContain("Delegate Signature");
+    expect(result.data).toContain("recorded by an approval step");
+  });
+
+  it("adds no signature guidance to a template that declares none", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent: "Full Name: {{Full Name}}",
+      },
+    });
+
+    expect(result.data).not.toContain("recorded by an approval step");
+  });
+
   it("includes <output> section with JSON schema", () => {
     const result = agent.buildSystemPrompt(baseInput);
     expect(result.data).toContain("<output>");
@@ -393,6 +487,29 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("Office 365 licences");
     // It must read as the user's own attachment, not a generic reference excerpt.
     expect(result.data?.toLowerCase()).toContain("the user has attached");
+  });
+
+  it("states the formatting the reply may use and forbids a written-out newline escape", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("<formatting>");
+    expect(result.data).toContain("**bold**");
+    // The bug this guards: the model writing the two characters \ and n into the
+    // JSON string instead of breaking the line.
+    expect(result.data).toContain("\\n");
+    expect(result.data).toContain("Never write a line break out as characters");
+  });
+
+  it("puts the formatting rules above the per-turn blocks so the cached prefix is unaffected", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      now: new Date("2026-07-27T09:30:00Z"),
+      retrievedChunks: [{ filename: "policy.pdf", chunkIndex: 0, chunkText: "Spend under $5,000." }],
+    });
+    const prompt = result.data as string;
+    expect(prompt.indexOf("<formatting>")).toBeGreaterThan(-1);
+    expect(prompt.indexOf("<formatting>")).toBeLessThan(prompt.indexOf("<reference_documents>"));
+    expect(prompt.indexOf("<formatting>")).toBeLessThan(prompt.indexOf("<current_context>"));
   });
 });
 

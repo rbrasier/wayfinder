@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { ConversationalNodeConfig } from "./flow-node";
 import {
+  SIGNATURE_SLOT_MARKER,
+  gatherableTemplateContent,
   nodeFieldSet,
   normaliseOutputType,
   validateStructuredFieldSet,
@@ -138,5 +140,79 @@ describe("validateStructuredFieldSet", () => {
     const result = validateStructuredFieldSet([]);
     expect(result.error).toBeUndefined();
     expect(result.data).toEqual([]);
+  });
+});
+
+describe("gatherableTemplateContent", () => {
+  it("drops a signature line whole, so its label cannot be asked about either", () => {
+    // The reported transcript asked for "First Level Supervisor Approval" — the
+    // label, not the tag. Removing only the tag leaves that label over a blank.
+    const gatherable = gatherableTemplateContent(
+      "Full Name: {{Full Name}}\nFirst Level Supervisor Approval: {{ First Level Supervisor Approval (approval) }}",
+    );
+
+    expect(gatherable).toBe("Full Name: {{Full Name}}");
+  });
+
+  it("drops every signature line in a template that declares more than one", () => {
+    const gatherable = gatherableTemplateContent(
+      "Name: {{Full Name}}\n{{ First Level Supervisor Approval (approval) }}\n{{ Second Level Supervisor Approval (approval) }}",
+    );
+
+    expect(gatherable).toBe("Name: {{Full Name}}");
+  });
+
+  it("keeps a line that mixes a signature with a gatherable tag, masking only the signature", () => {
+    // The gatherable tag has to survive, so the line cannot be dropped; the
+    // marker stands in for the signature and the prompt's constraint explains it.
+    const gatherable = gatherableTemplateContent(
+      "Executed on {{ Start Date (date) }} by {{ Delegate Signature (approval) }}",
+    );
+
+    expect(gatherable).toBe(
+      `Executed on {{ Start Date (date) }} by ${SIGNATURE_SLOT_MARKER}`,
+    );
+    expect(gatherable).not.toContain("Delegate Signature");
+  });
+
+  it("leaves a template with no signatures byte-identical", () => {
+    const content =
+      "Name: {{Full Name}}\nStart: {{ Start Date (date) }}\nDept: {{ Department (options: Legal, Sales) }}";
+
+    expect(gatherableTemplateContent(content)).toBe(content);
+  });
+
+  it("recognises the annotation regardless of case or surrounding whitespace", () => {
+    expect(gatherableTemplateContent("Name: {{Name}}\nSig: {{Sig (APPROVAL)}}")).toBe(
+      "Name: {{Name}}",
+    );
+    expect(gatherableTemplateContent("Name: {{Name}}\nSig: {{   Sig   (Approval)   }}")).toBe(
+      "Name: {{Name}}",
+    );
+  });
+
+  it("recognises a signature tag carrying other annotations alongside (approval)", () => {
+    // Validation rejects this combination at upload, but this is a safety
+    // filter — it must not depend on the tag being well-formed.
+    expect(gatherableTemplateContent("Name: {{Name}}\n{{ Sig (approval) (optional) }}")).toBe(
+      "Name: {{Name}}",
+    );
+  });
+
+  it("does not touch a tag whose name merely mentions approval", () => {
+    const content = "{{ Approval Notes }}";
+
+    expect(gatherableTemplateContent(content)).toBe(content);
+  });
+
+  it("returns null when a template declares nothing but signatures", () => {
+    // No gatherable body left, so the caller emits no template block and indexes
+    // no chunk — better than a body of markers.
+    expect(gatherableTemplateContent("{{ Annexe Signature (approval) }}")).toBeNull();
+  });
+
+  it("returns null for absent content", () => {
+    expect(gatherableTemplateContent(null)).toBeNull();
+    expect(gatherableTemplateContent(undefined)).toBeNull();
   });
 });

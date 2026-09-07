@@ -52,6 +52,14 @@ const extractAnnotationGroups = (rawTag: string): string[] => {
   return matches.map((match) => (match[1] ?? "").trim());
 };
 
+// True when a raw tag body declares `(approval)` — the signature annotation.
+// Reads the annotation off the tag rather than running it through
+// `parseTemplateField`, because the callers are safety filters: a tag that would
+// fail validation for some unrelated reason is still a signature slot, and must
+// still be excluded from anything that gathers values (ADR-043 §2).
+export const isSignatureTag = (rawTag: string): boolean =>
+  extractAnnotationGroups(rawTag).some((annotation) => annotation.toLowerCase() === "approval");
+
 const stripAnnotations = (rawTag: string): string =>
   rawTag.replace(/\([^()]*\)/g, " ").replace(/\s+/g, " ").trim();
 
