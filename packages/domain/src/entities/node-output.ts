@@ -2,7 +2,7 @@ import { domainError } from "../errors/domain-error";
 import { err, ok } from "../result";
 import type { Result } from "../result";
 import type { ConversationalNodeConfig } from "./flow-node";
-import type { TemplateField } from "./template-field";
+import { isSignatureTag, type TemplateField } from "./template-field";
 
 // Stored in `doneWhen` when a template-backed step's completion criterion is
 // "the template is filled" rather than an author-written sentence. It is a
@@ -67,6 +67,60 @@ export const nodeFieldSet = (config: ConversationalNodeConfig): TemplateField[] 
 export const gatherableFields = (
   fields: TemplateField[] | null | undefined,
 ): TemplateField[] => (fields ?? []).filter((field) => field.type !== "signature");
+
+// What a masked signature slot reads as in a template body handed to a model.
+export const SIGNATURE_SLOT_MARKER =
+  "[signature slot — recorded by an approval step, never gathered in conversation]";
+
+const TEMPLATE_TAG_PATTERN = /\{\{([\s\S]*?)\}\}/g;
+
+// A template line with its signature tags handled, or null when the whole line
+// must go.
+//
+// Removing the tag alone is not enough: a template introduces its slot with a
+// label — "First Level Supervisor Approval:" — and a label left standing over a
+// blank is exactly what the model asked the operator about. So a line whose only
+// tags are signatures is dropped entire, label and all. A line that also carries
+// a gatherable tag has to survive for that tag's sake, and there the signature
+// becomes the marker, which the prompt's constraint then explains.
+const gatherableTemplateLine = (line: string): string | null => {
+  const tags = [...line.matchAll(TEMPLATE_TAG_PATTERN)];
+  const signatureCount = tags.filter((tag) => isSignatureTag(tag[1] ?? "")).length;
+  if (signatureCount === 0) return line;
+  if (signatureCount === tags.length) return null;
+
+  return line.replace(TEMPLATE_TAG_PATTERN, (tag, body: string) =>
+    isSignatureTag(body) ? SIGNATURE_SLOT_MARKER : tag,
+  );
+};
+
+// `gatherableFields` for the template *body*. A template step's prose reaches
+// the gathering model twice over — verbatim in the session prompt's
+// <document_template> block, and as retrieved chunks once indexed — and neither
+// path carries a field set, so neither inherits the field filter. The body still
+// spells out `{{ Supervisor Signature (approval) }}` under an instruction to
+// gather everything needed to complete the template, which is enough on its own
+// for the model to ask the operator for a signature (ADR-043 §2).
+//
+// Null when nothing gatherable is left, so a template of signatures alone
+// produces no template block and no indexed chunk at all, rather than a body of
+// markers.
+//
+// Rendering is the same deliberate exception it is for fields: `buildRenderData`
+// reads the raw body, because the tag must survive to be substituted.
+export const gatherableTemplateContent = (
+  content: string | null | undefined,
+): string | null => {
+  if (!content) return null;
+
+  const gatherable = content
+    .split("\n")
+    .map(gatherableTemplateLine)
+    .filter((line): line is string => line !== null)
+    .join("\n");
+
+  return gatherable.trim().length > 0 ? gatherable : null;
+};
 
 // Validates an author-declared structured field set. The `section` type is a
 // document "include/omit this part" concept with no meaning when no document

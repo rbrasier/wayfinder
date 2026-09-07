@@ -98,6 +98,32 @@ The exclusion is now exported as `gatherableFields` and applied on every branch.
 A caller that cannot go through `nodeFieldSet` must still go through the same
 predicate; being unable to reach the choke point is not permission to skip it.
 
+**Amended v0.28.18 — the field set is not the only thing the model reads.** The
+table above names `buildFieldConstraintsText → AI prompt` as *the* prompt
+consumer. It is not. `FlowSessionGraph.buildSystemPrompt` also interpolates the
+template **body** into `<document_template>` verbatim, under the instruction
+"gather all information needed to fully complete the following template", and
+`DrizzleReindexSourceRepository` indexes that same body as a `template` RAG
+source whose chunks land in the same prompt. Neither path carries a field set, so
+neither inherited the field filter, and the body still spelled out
+`{{ Supervisor Signature (approval) }}` — enough on its own for the model to ask
+the operator for a signature, during ordinary conversation rather than after a
+cross-check.
+
+`gatherableTemplateContent` is `gatherableFields` for the body, and both
+prompt-facing readers of that text go through it. It drops a line whose only tags
+are signatures **entire, label and all** — the reported transcript asked for
+"First Level Supervisor Approval", the label rather than the tag, so removing the
+tag alone leaves the invitation intact. A line also carrying a gatherable tag
+survives with the signature replaced by `SIGNATURE_SLOT_MARKER` and a constraint
+explaining it. Content left with nothing gatherable becomes null: no block, no
+chunk.
+
+The rule generalises past this fix: **anything a value-gathering model reads must
+go through the exclusion, whether it arrives as fields or as prose.** A guard on
+one prompt block would not have caught this leak and will not catch the next, so
+the regression test asserts over the entire built prompt.
+
 **Rendering is the deliberate exception.** `GenerateDocument` and
 `ApplyApprovalSignature` keep the raw set, because a signature must reach
 `buildRenderData` to be written at all — as the attestation once decided, as an
