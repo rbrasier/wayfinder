@@ -63,3 +63,16 @@ const VERB_PHRASE: Record<string, string> = {
 
 export const decisionVerbPhrase = (outcome: string): string =>
   VERB_PHRASE[outcome.trim()] ?? outcome;
+
+// The two outcomes that sign the document under review. Keyed on the sentence
+// for the same reason `VERB_PHRASE` is — the status is not in the persisted
+// message — and fails closed: an unrecognised sentence is not a grant, so a
+// future domain wording lands as a missing card rather than as a download
+// offered under a refusal.
+const GRANTED_OUTCOMES = new Set([
+  "Approval granted.",
+  "Approval granted, with edits made by the approver.",
+]);
+
+export const isApprovalGranted = (outcome: string): boolean =>
+  GRANTED_OUTCOMES.has(outcome.trim());

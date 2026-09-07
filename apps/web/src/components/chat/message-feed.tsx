@@ -22,10 +22,12 @@ import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
 import {
   decisionVerbPhrase,
+  isApprovalGranted,
   parseApprovalDecisionMessage,
 } from "@/lib/approval-decision-message";
 import { parseApproverEditMessage } from "@/lib/approver-edit-message";
 import { formatScheduledResume, parseScheduledMessage } from "@/lib/scheduled-message";
+import { resolveApprovalDecisionDocument } from "./approval-decision-document";
 import { resolveApproverEditDocument } from "./approver-edit-document";
 import { showsDocumentCard, showsEditAffordance } from "./document-card-state";
 import { participantInitials, participantTint } from "./participant-identity";
@@ -274,6 +276,14 @@ export function MessageFeed({
             ? resolveApproverEditDocument(dbMessages, msg.stepNodeId)
             : null;
 
+          // The document the approver signed, offered again under their note:
+          // the only card for it sits on the message that generated it, which
+          // by then is above the approval request and out of view.
+          const signedDocument =
+            decision && isApprovalGranted(decision.outcome)
+              ? resolveApprovalDecisionDocument(dbMessages, index)
+              : null;
+
           // A message belongs to someone else when it is stamped with a sender
           // who is not the viewer. An unstamped user message is the viewer's
           // own — that is every message in a single-participant chat, which
@@ -378,6 +388,19 @@ export function MessageFeed({
                     </div>
                   </div>
                 </div>
+              )}
+              {/* Read-only: this is the copy the approver put their name to,
+                  offered for download rather than for further editing. The
+                  editable card on the generating message is unchanged. */}
+              {signedDocument?.document && (
+                <DocumentCard
+                  messageId={signedDocument.id}
+                  document={signedDocument.document}
+                  documentGenerationConfidence={
+                    signedDocument.aiPayload?.documentGenerationConfidence ?? null
+                  }
+                  canEdit={false}
+                />
               )}
               {/* Read-only: the author is being shown what the approver did,
                   and the record is locked while an approval is pending. */}
