@@ -3,6 +3,7 @@ import { buildApprovalDecisionMessage } from "@rbrasier/domain";
 import {
   decisionVerbPhrase,
   formatDecisionMoment,
+  isApprovalGranted,
   parseApprovalDecisionMessage,
 } from "./approval-decision-message";
 
@@ -126,5 +127,44 @@ describe("an approval recorded off system", () => {
     const parsed = parseApprovalDecisionMessage(built());
 
     expect(decisionVerbPhrase(parsed!.outcome)).toBe("granted approval.");
+  });
+
+  it("is still a grant, so the feed offers the signed document under it", () => {
+    // `DecideApproval` applies the signature for an off-system decision like any
+    // other approval, so there is a signed revision to download.
+    const parsed = parseApprovalDecisionMessage(built({ offSystemApprovedOn: "2026-08-14" }));
+
+    expect(isApprovalGranted(parsed!.outcome)).toBe(true);
+  });
+});
+
+describe("isApprovalGranted", () => {
+  // The feed offers the signed document under a decision that granted approval.
+  // Nothing is signed by a refusal, and the operator is being sent back to edit
+  // rather than to download.
+  it.each([
+    ["approved" as const, true],
+    ["approved_with_edits" as const, true],
+    ["changes_requested" as const, false],
+    ["rejected" as const, false],
+    ["withdrawn" as const, false],
+  ])("answers %j with %j", (status, expected) => {
+    const parsed = parseApprovalDecisionMessage(built({ status }));
+
+    expect(isApprovalGranted(parsed!.outcome)).toBe(expected);
+  });
+
+  it("treats a rejection routed back to the originator as not granted", () => {
+    // The rejection sentence differs by whether the work was routed back, so
+    // both wordings have to be recognised as refusals.
+    const parsed = parseApprovalDecisionMessage(built({ status: "rejected", routedBack: true }));
+
+    expect(isApprovalGranted(parsed!.outcome)).toBe(false);
+  });
+
+  it("does not grant an unrecognised sentence", () => {
+    // A domain wording change must fail closed: no card is better than a card
+    // under a refusal.
+    expect(isApprovalGranted("Something new happened.")).toBe(false);
   });
 });
