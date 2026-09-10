@@ -2,7 +2,7 @@
 #
 # Create the label taxonomy the /daily-triage skill classifies against.
 #
-#   ./labels.sh              create or update the 27 labels (safe to re-run)
+#   ./labels.sh              create or update the 28 labels (safe to re-run)
 #   ./labels.sh --prune      also delete the 4 labels this scheme orphans
 #
 # Requires the `gh` CLI, authenticated with write access to the repo.
@@ -69,8 +69,9 @@ label "status:analysed"       "0e8a16" "Triaged by /daily-triage; analysis comme
 label "status:needs-info"     "fbca04" "Parked awaiting information from the reporter"
 label "status:in-progress"    "1d76db" "Someone is working on it"
 label "status:triage-failed"  "b60205" "/daily-triage could not analyse it; needs a human look"
+label "status:fixed"          "6f42c1" "Closed by /daily-triage; a linked pull request merged"
 
-echo "==> Done. 27 labels created or updated."
+echo "==> Done. 28 labels created or updated."
 
 # ---------------------------------------------------------------------------
 # Orphans. These four are GitHub defaults superseded by the type: axis. Only

@@ -15,6 +15,11 @@ Ask all of these via `AskUserQuestion` before proceeding:
 5. Which release does this affect? Default is the current release branch (see
    **Release Branching** in `CLAUDE.md`); choose `main` only if the bug exists
    solely in unreleased work.
+6. Is there a GitHub issue behind this? Give the number, or "no issue". If the
+   session started from a triage build link the issue number is already in the
+   prompt — confirm it rather than asking blind. The reporter gets a plain-English
+   reply on that issue when the PR opens, so the number has to be carried through
+   the whole run.
 
 ---
 
@@ -39,6 +44,7 @@ so the user can approve on the headline alone without reading the sections.
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
 | Tests | The failing regression test that comes first, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — the regression test is the guard" |
 | Version, branch & PR target | The PATCH bump and resulting version, the `bugfix/<slug>/claude-<username>` branch name, the base branch, and the branch the PR opens against |
+| Source issue | The issue number from question 6, and **what it actually asked for** in one line. Omit the section entirely when there is no issue |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
 
@@ -136,4 +142,6 @@ Most bug fixes need **no** e2e test. The Step 2 regression test is the guard tha
 
 - **Call out every deviation** from the approved summary explicitly, in the implementation block's deviations line. "None" if there were none.
 - A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
+- **Reference the source issue in the PR body** so GitHub links them: `Fixes #<number>` on its own line at the end of `## Why this change is required`, which is where the template asks for it. That link is what lets the daily triage routine close the issue once this merges — a passing mention of the number does not count.
+- **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked. The PR body is written for a maintainer; this comment is written for them. Skip this only when question 6 was "no issue".
 - Report the PR URL, and note that the e2e suite runs there rather than locally.
