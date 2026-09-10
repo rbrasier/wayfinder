@@ -37,7 +37,7 @@ const REFERENCE: ReferenceGroup[] = [
       {
         syntax: "{{ Delegate Sign Off (approval) }}",
         meaning:
-          "A signature slot. Nobody is asked for it — an approval step fills it in with the approver's name, decision, date and comment when they decide.",
+          "A signature slot. Nobody is asked for it — an approval step fills it in with the approver's name, decision, date and comment when they decide. (signature) means the same thing.",
       },
     ],
   },

@@ -161,6 +161,46 @@ describe("XlsxGenerator", () => {
     });
   });
 
+  // Issue #286: TAG_PATTERN is non-greedy, so a mistyped brace ran forward into
+  // the next well-formed tag and both collapsed into one nonsense field.
+  describe("malformed tags", () => {
+    const subjects = (result: { error?: { details?: readonly { subject: string }[] } }) =>
+      (result.error?.details ?? []).map((detail) => detail.subject).join(" | ");
+
+    it("rejects an unclosed tag instead of merging it into the next one", () => {
+      const templateBytes = buildXlsx([["{{ Client Name and {{ Other Field }}"]]);
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.data?.tags).toBeUndefined();
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Client Name");
+    });
+
+    it("names the cell a malformed tag sits in", () => {
+      const templateBytes = buildXlsx([
+        ["Owner", "{{ Good Tag }}"],
+        ["Ref", "{[ Broken Tag }}"],
+      ]);
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(result.error?.details?.[0]?.message).toContain("cell B2");
+      expect(subjects(result)).toContain("Broken Tag");
+    });
+
+    it("lists every tag with an unknown annotation, not just the first", () => {
+      const templateBytes = buildXlsx([["{{ Name (frobnicate) }}", "{{ Age (wibble) }}"]]);
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Name (frobnicate)");
+      expect(subjects(result)).toContain("Age (wibble)");
+    });
+  });
+
   describe("extractFields", () => {
     it("parses tag-mode fields when any tag is present, ignoring headings", () => {
       const templateBytes = buildXlsx([

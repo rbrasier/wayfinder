@@ -4,6 +4,7 @@ import {
   DEFAULT_ITEM_CAP,
   deriveFieldKey,
   describeTemplateFieldFormat,
+  isSignatureTag,
   parseTemplateField,
   parseTemplateFields,
   templateFieldToLine,
@@ -568,6 +569,41 @@ describe("repeating group fields", () => {
         ["delegate_signature", "signature"],
         ["finance_signature", "signature"],
       ]);
+    });
+
+    // Issue #286: `signature` is the parsed type name, the web type-picker value
+    // and every internal identifier, so authors reach for it in the document too.
+    it("accepts (signature) as a synonym for (approval)", () => {
+      const result = parseTemplateField("Delegate Sign Off (signature)");
+
+      expect(result.error).toBeUndefined();
+      expect(result.data).toMatchObject({
+        key: "delegate_sign_off",
+        label: "Delegate Sign Off",
+        type: "signature",
+        optional: true,
+      });
+    });
+
+    it("holds the synonym to the same constraints as (approval)", () => {
+      expect(parseTemplateField("Signature (signature) (text)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+      expect(parseTemplateField("Signature (signature) (maxlen: 200)").error?.code).toBe(
+        "VALIDATION_FAILED",
+      );
+    });
+
+    it("recognises (signature) in the safety filter that keeps slots out of chat", () => {
+      expect(isSignatureTag("Delegate Sign Off (signature)")).toBe(true);
+      expect(isSignatureTag("Delegate Sign Off (SIGNATURE)")).toBe(true);
+    });
+
+    it("serialises a tag written as (signature) back out as (approval)", () => {
+      const parsed = parseTemplateField("Delegate Sign Off (signature)");
+      expect(parsed.error).toBeUndefined();
+
+      expect(templateFieldToLine(parsed.data!)).toBe("Delegate Sign Off (approval)");
     });
 
     it("round-trips back to the (approval) annotation, not the type name", () => {

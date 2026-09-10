@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
-import type { IDocumentGenerator, TemplateField } from "@rbrasier/domain";
+import type { DomainErrorDetail, IDocumentGenerator, TemplateField } from "@rbrasier/domain";
 import { getContainer, type Container } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 
@@ -115,7 +115,10 @@ export interface TemplateExtraction {
 
 export interface ExtractionFailure {
   status: number;
-  body: { error: string; code?: string };
+  // `details` names each malformed {{ tag }} so the author can find it in Word
+  // rather than hunting through a hundred of them (issue #286). `error` always
+  // stands on its own, so a client may ignore it.
+  body: { error: string; code?: string; details?: readonly DomainErrorDetail[] };
 }
 
 // Reduces a template to the fields a conversation must gather, the prose to
@@ -134,7 +137,15 @@ export const extractTemplate = (
 
   const tagsResult = generator.extractTags({ templateBytes: buffer });
   if (tagsResult.error) {
-    return { error: { status: 422, body: { error: `Invalid template: ${tagsResult.error.message}` } } };
+    return {
+      error: {
+        status: 422,
+        body: {
+          error: `Invalid template: ${tagsResult.error.message}`,
+          ...(tagsResult.error.details ? { details: tagsResult.error.details } : {}),
+        },
+      },
+    };
   }
 
   if (requireTags && format === "docx" && tagsResult.data.tags.length === 0) {
@@ -163,7 +174,14 @@ export const extractTemplate = (
   if (fieldsResult.error) {
     if (requireTags) {
       return {
-        error: { status: 422, body: { error: fieldsResult.error.message, code: "INVALID_TEMPLATE_FIELDS" } },
+        error: {
+          status: 422,
+          body: {
+            error: fieldsResult.error.message,
+            code: "INVALID_TEMPLATE_FIELDS",
+            ...(fieldsResult.error.details ? { details: fieldsResult.error.details } : {}),
+          },
+        },
       };
     }
     return {

@@ -47,18 +47,26 @@ const SCALAR_TYPES: TemplateFieldType[] = ["text", "date", "currency", "number",
 const VALID_ANNOTATIONS_HINT =
   "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (approval), (options: A, B, C), (multi-options: A, B, C), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
 
+// `signature` is the parsed type name, the annotator's type-picker value and
+// every internal identifier for the slot, so authors reach for it in the
+// document too. Both spellings mean the same thing; (approval) stays canonical
+// on the way out (see templateFieldToLine).
+const SIGNATURE_KEYWORDS = ["approval", "signature"];
+
 const extractAnnotationGroups = (rawTag: string): string[] => {
   const matches = [...rawTag.matchAll(/\(([^()]*)\)/g)];
   return matches.map((match) => (match[1] ?? "").trim());
 };
 
-// True when a raw tag body declares `(approval)` — the signature annotation.
+// True when a raw tag body declares `(approval)` or its `(signature)` synonym.
 // Reads the annotation off the tag rather than running it through
 // `parseTemplateField`, because the callers are safety filters: a tag that would
 // fail validation for some unrelated reason is still a signature slot, and must
 // still be excluded from anything that gathers values (ADR-043 §2).
 export const isSignatureTag = (rawTag: string): boolean =>
-  extractAnnotationGroups(rawTag).some((annotation) => annotation.toLowerCase() === "approval");
+  extractAnnotationGroups(rawTag).some((annotation) =>
+    SIGNATURE_KEYWORDS.includes(annotation.toLowerCase()),
+  );
 
 const stripAnnotations = (rawTag: string): string =>
   rawTag.replace(/\([^()]*\)/g, " ").replace(/\s+/g, " ").trim();
@@ -97,7 +105,7 @@ const applyAnnotation = (
 ): Result<TemplateField> => {
   const lower = annotation.toLowerCase();
 
-  if (lower === "approval") {
+  if (SIGNATURE_KEYWORDS.includes(lower)) {
     if (field.options || field.type !== "text") {
       return err(
         domainError(
