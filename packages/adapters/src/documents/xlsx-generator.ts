@@ -1,5 +1,7 @@
 import PizZip from "pizzip";
 import { deriveFieldKey, domainError, err, ok, parseTemplateFields, templateFieldKey } from "@rbrasier/domain";
+import type { DomainError, DomainErrorDetail } from "@rbrasier/domain";
+import { detailsFromTagContent, headlineFor, tagSyntaxIssues } from "./tag-syntax";
 import type {
   AnnotateInput,
   AnnotateOutput,
@@ -53,7 +55,7 @@ export class XlsxGenerator implements IDocumentGenerator {
 
       if (tagsResult.data.tags.length > 0) {
         const parsed = parseTemplateFields(tagsResult.data.tags);
-        if (parsed.error) return parsed;
+        if (parsed.error) return err(this.tagContentFailure(tagsResult.data.tags, parsed.error));
 
         // Signature semantics in a spreadsheet cell are unclear — cell geometry,
         // and header-mode templates that carry no tags at all — and guessing
@@ -162,29 +164,65 @@ export class XlsxGenerator implements IDocumentGenerator {
   private collectRawTags(zip: PizZip): Result<ExtractTagsOutput> {
     const sharedStrings = readSharedStrings(zip);
     const tags: string[] = [];
+    // TAG_PATTERN is non-greedy, so a mistyped brace runs forward into the next
+    // well-formed tag and both collapse into one nonsense field. Checked here
+    // rather than per caller so the upload route and the renderer agree.
+    const issues: DomainErrorDetail[] = [];
     let scannedCells = 0;
 
     for (const part of allSheetParts(zip)) {
       const grid = readSheetGrid(zip.file(part)?.asText() ?? "", sharedStrings);
-      for (const row of grid.rows) {
-        for (const value of row) {
-          if (value === undefined) continue;
-          scannedCells += 1;
-          if (scannedCells > MAX_TEMPLATE_CELLS) {
-            return err(
-              domainError(
-                "VALIDATION_FAILED",
-                `This workbook is too large to scan for tags (over ${MAX_TEMPLATE_CELLS.toLocaleString()} cells). Upload a smaller template.`,
-              ),
-            );
-          }
-          for (const match of value.matchAll(TAG_PATTERN)) {
-            tags.push((match[1] ?? "").trim());
-          }
+      const scanned = this.scanGrid(grid, scannedCells);
+      if (scanned.error) return scanned;
+      scannedCells = scanned.data.scannedCells;
+      tags.push(...scanned.data.tags);
+      issues.push(...scanned.data.issues);
+    }
+
+    if (issues.length > 0) {
+      return err(domainError("VALIDATION_FAILED", headlineFor(issues), undefined, issues));
+    }
+    return ok({ tags });
+  }
+
+  private scanGrid(
+    grid: SheetGrid,
+    startingCellCount: number,
+  ): Result<{ tags: string[]; issues: DomainErrorDetail[]; scannedCells: number }> {
+    const tags: string[] = [];
+    const issues: DomainErrorDetail[] = [];
+    let scannedCells = startingCellCount;
+
+    for (const [rowIndex, row] of grid.rows.entries()) {
+      for (const [columnIndex, value] of row.entries()) {
+        if (value === undefined) continue;
+        scannedCells += 1;
+        if (scannedCells > MAX_TEMPLATE_CELLS) {
+          return err(
+            domainError(
+              "VALIDATION_FAILED",
+              `This workbook is too large to scan for tags (over ${MAX_TEMPLATE_CELLS.toLocaleString()} cells). Upload a smaller template.`,
+            ),
+          );
+        }
+        const reference = `${columnLetter(columnIndex)}${rowIndex + 1}`;
+        issues.push(...tagSyntaxIssues(value, ` (in cell ${reference})`));
+        for (const match of value.matchAll(TAG_PATTERN)) {
+          tags.push((match[1] ?? "").trim());
         }
       }
     }
-    return ok({ tags });
+
+    return ok({ tags, issues, scannedCells });
+  }
+
+  // No per-tag details means the failure is structural — a group nested in a
+  // section, an unclosed block — which parseTemplateFields already words better
+  // than a list of individually valid tags could.
+  private tagContentFailure(rawTags: string[], fallback: DomainError): DomainError {
+    const details = detailsFromTagContent(rawTags);
+    if (details.length === 0) return fallback;
+    return domainError("VALIDATION_FAILED", headlineFor(details), undefined, details);
   }
 
   private headerFields(zip: PizZip): Result<ExtractFieldsOutput> {
