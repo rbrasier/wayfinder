@@ -1,6 +1,6 @@
 "use client";
 
-import type { FlowTestSeed, SeedContextItem, SeedReject } from "@rbrasier/domain";
+import type { FlowTestSeed, SeedContextItem, SeedReject } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 

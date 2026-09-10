@@ -7,7 +7,7 @@ import {
   type NewScheduleRun,
   type Result,
   type SessionSchedule,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { computeNextFireAt } from "./compute-next-fire";
 
 export interface FireDueSchedulesOutput {

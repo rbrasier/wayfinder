@@ -1,10 +1,10 @@
-import { domainError, err, ok, type EmbeddingsConfig, type IEmbeddingsProvider, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type EmbeddingsConfig, type IEmbeddingsProvider, type Result } from "@wayfinder/domain";
 import {
   EMBEDDINGS_DEFAULT_PROVIDER,
   EMBEDDINGS_DIMENSION,
   isEmbeddingsProvider,
   type EmbeddingsProvider,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import { createOpenAI } from "@ai-sdk/openai";
 import { embed, type EmbeddingModel } from "ai";
 import {

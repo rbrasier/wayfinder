@@ -1,4 +1,4 @@
-import type { ApprovalStatus } from "@rbrasier/domain";
+import type { ApprovalStatus } from "@wayfinder/domain";
 
 export type OutcomeTone = "approved" | "rejected" | "changes" | "pending" | "withdrawn";
 

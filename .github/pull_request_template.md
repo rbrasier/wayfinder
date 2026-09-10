@@ -30,7 +30,7 @@
   Errors · Feature flags · Sessions
   Reporting — Dashboards · Insights · Exports
   Cross-cutting — Auth & sessions · API (apps/api) · Background jobs ·
-  Framework packages (@rbrasier/*)
+  Framework packages (@wayfinder/*)
 -->
 
 **Business rules changed:**

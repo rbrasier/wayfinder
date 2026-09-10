@@ -6,8 +6,8 @@ import {
   type McpToolCallRecord,
   type Session,
   type SessionMessage,
-} from "@rbrasier/domain";
-import { resolveModel } from "@rbrasier/adapters";
+} from "@wayfinder/domain";
+import { resolveModel } from "@wayfinder/adapters";
 import type { getContainer } from "@/lib/container";
 
 type Container = ReturnType<typeof getContainer>;

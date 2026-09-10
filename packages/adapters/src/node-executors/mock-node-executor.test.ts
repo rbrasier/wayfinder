@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { err, domainError, ok } from "@rbrasier/domain";
-import type { GenerateObjectInput, ILanguageModel, NodeExecutionInput } from "@rbrasier/domain";
+import { err, domainError, ok } from "@wayfinder/domain";
+import type { GenerateObjectInput, ILanguageModel, NodeExecutionInput } from "@wayfinder/domain";
 import { MockNodeExecutor } from "./mock-node-executor";
 
 const usage = {

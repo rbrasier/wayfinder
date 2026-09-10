@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { TemplateField } from "@rbrasier/domain";
+import type { TemplateField } from "@wayfinder/domain";
 import { validateGroupItems } from "./group-edit";
 
 const suppliersGroup = (overrides: Partial<TemplateField> = {}): TemplateField => ({

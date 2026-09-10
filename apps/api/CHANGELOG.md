@@ -1,4 +1,4 @@
-# @rbrasier/api
+# @wayfinder/api
 
 ## 0.2.2
 
@@ -6,17 +6,17 @@
 
 - bd560c9: Deployment
 - Updated dependencies [bd560c9]
-  - @rbrasier/adapters@1.0.3
-  - @rbrasier/application@1.0.3
-  - @rbrasier/domain@1.0.3
-  - @rbrasier/shared@1.0.3
+  - @wayfinder/adapters@1.0.3
+  - @wayfinder/application@1.0.3
+  - @wayfinder/domain@1.0.3
+  - @wayfinder/shared@1.0.3
 
 ## 0.2.1
 
 ### Patch Changes
 
 - Updated dependencies [4ce5d72]
-  - @rbrasier/adapters@1.0.2
+  - @wayfinder/adapters@1.0.2
 
 ## 0.2.0
 
@@ -27,7 +27,7 @@
 ### Patch Changes
 
 - Updated dependencies [d122762]
-  - @rbrasier/adapters@1.0.0
-  - @rbrasier/application@1.0.0
-  - @rbrasier/domain@1.0.0
-  - @rbrasier/shared@1.0.0
+  - @wayfinder/adapters@1.0.0
+  - @wayfinder/application@1.0.0
+  - @wayfinder/domain@1.0.0
+  - @wayfinder/shared@1.0.0

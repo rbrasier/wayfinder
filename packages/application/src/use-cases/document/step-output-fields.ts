@@ -1,5 +1,5 @@
-import type { StepOutputField, TemplateField } from "@rbrasier/domain";
-import type { DocumentData, GroupItems } from "@rbrasier/shared";
+import type { StepOutputField, TemplateField } from "@wayfinder/domain";
+import type { DocumentData, GroupItems } from "@wayfinder/shared";
 
 // Maps extracted field values onto the format-neutral StepOutputField shape that
 // every consumer (manual editing, Insights, the record card) reads. A group

@@ -6,7 +6,7 @@ import {
   type IUsageRepository,
   type ProviderName,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { recordTokenUsage, UsageTrackingAdapter } from "./usage-tracking-adapter";
 
 const createMockRepo = (

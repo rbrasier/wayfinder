@@ -1,4 +1,4 @@
-import type { RetentionPolicy } from "@rbrasier/domain";
+import type { RetentionPolicy } from "@wayfinder/domain";
 
 export const KEEP_FOREVER_LABEL = "Keep forever";
 

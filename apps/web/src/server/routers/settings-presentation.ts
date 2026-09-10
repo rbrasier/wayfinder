@@ -9,7 +9,7 @@ import {
   SITE_BANNER_MIN_TEXT_SIZE_PT,
   normaliseAboutLinkUrl,
   normaliseSiteBannerLinkUrl,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { adminProcedure, authenticatedProcedure, publicProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 

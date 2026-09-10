@@ -1,4 +1,4 @@
-import type { FieldValueSource, ScheduleAnchor } from "@rbrasier/domain";
+import type { FieldValueSource, ScheduleAnchor } from "@wayfinder/domain";
 import type { NodeConfigValues } from "./node-config-modal";
 
 // Maps the modal's scheduling fields to the persisted ScheduledNodeConfig jsonb,

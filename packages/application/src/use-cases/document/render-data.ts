@@ -1,5 +1,5 @@
-import type { TemplateField } from "@rbrasier/domain";
-import type { DocumentData, GroupItems } from "@rbrasier/shared";
+import type { TemplateField } from "@wayfinder/domain";
+import type { DocumentData, GroupItems } from "@wayfinder/shared";
 
 // docxtemplater gates {{#section}} blocks on truthiness, and every non-empty
 // string is truthy — so a section's "Yes"/"No" must become a real boolean,

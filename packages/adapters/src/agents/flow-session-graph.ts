@@ -15,7 +15,7 @@ import {
   type Result,
   type RetrievedChunk,
   type TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The reply is one field of a JSON object, and a model asked for JSON will
 // sometimes escape the escape — writing the two characters `\` and `n` where a

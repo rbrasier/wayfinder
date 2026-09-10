@@ -1,6 +1,6 @@
 "use client";
 
-import { confidenceBand, fieldConfidence, type ConfidenceBand } from "@rbrasier/domain";
+import { confidenceBand, fieldConfidence, type ConfidenceBand } from "@wayfinder/domain";
 import {
   confidenceMetricLabel,
   derivationSummary,

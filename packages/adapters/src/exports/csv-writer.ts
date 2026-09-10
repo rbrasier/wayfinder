@@ -1,5 +1,5 @@
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { CsvTable, ICsvWriter, Result, WriteCsvOutput } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { CsvTable, ICsvWriter, Result, WriteCsvOutput } from "@wayfinder/domain";
 
 // RFC 4180 line ending. Fixed rather than configurable: a dialect option
 // multiplies the ways a consumer can receive something it cannot parse, for a

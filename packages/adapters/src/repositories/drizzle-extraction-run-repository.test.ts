@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import type { ExtractionFieldResult } from "@rbrasier/domain";
+import type { ExtractionFieldResult } from "@wayfinder/domain";
 import {
   buildClaimPendingStatement,
   persistedAggregateConfidence,

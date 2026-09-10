@@ -7,7 +7,7 @@ import {
   type NodeExecutionInput,
   type NodeExecutionOutput,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Signs the outbound request body with the shared secret. The inbound webhook
 // verifies the callback with the same secret (apps/api routes/webhooks.ts).

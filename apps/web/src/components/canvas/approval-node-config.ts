@@ -2,7 +2,7 @@ import type {
   ApprovalSubject,
   ChangesRequestedTarget,
   PriorStepField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Maps the approval modal's subject / signature / routing fields to the
 // persisted `ApprovalNodeConfig` jsonb, and back. Every control has an "absent"

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
 import type {
   FlowLesson,
   FlowNode,
@@ -11,7 +11,7 @@ import type {
   ILessonDistiller,
   LessonCandidate,
   ObservationKind,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { DistilFlowLessons } from "./distil-flow-lessons";
 
 const observation = (

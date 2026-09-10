@@ -31,18 +31,18 @@ import {
   type StorageConfig,
   RETENTION_TARGET_KEYS,
   type RetentionTargetKey,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   EMBEDDINGS_DEFAULT_MODELS,
   EMBEDDINGS_DIMENSION,
   EMBEDDINGS_PROVIDERS,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import {
   DEFAULT_MODELS_FOR,
   RuntimeConfigStore,
   isLocalEmbeddingsAvailable,
   resolveContextWindow,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { authSettingsProcedures } from "./settings-auth";

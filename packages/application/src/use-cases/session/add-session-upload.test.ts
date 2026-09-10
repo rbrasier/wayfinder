@@ -1,4 +1,4 @@
-import { ok, type ISessionUploadRepository, type NewSessionUpload, type SessionUpload } from "@rbrasier/domain";
+import { ok, type ISessionUploadRepository, type NewSessionUpload, type SessionUpload } from "@wayfinder/domain";
 import { describe, expect, it, vi } from "vitest";
 import { AddSessionUpload } from "./add-session-upload";
 import { RemoveSessionUpload } from "./remove-session-upload";

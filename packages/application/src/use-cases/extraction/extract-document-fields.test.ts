@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
-import type { ExtractionField, ILanguageModel } from "@rbrasier/domain";
-import type { ExtractionResultData } from "@rbrasier/shared";
+import { ok, err, domainError } from "@wayfinder/domain";
+import type { ExtractionField, ILanguageModel } from "@wayfinder/domain";
+import type { ExtractionResultData } from "@wayfinder/shared";
 import { extractDocumentFields, UNREADABLE_RATIONALE } from "./extract-document-fields";
 
 const usage = {

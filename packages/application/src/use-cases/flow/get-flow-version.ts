@@ -5,7 +5,7 @@ import {
   type FlowVersion,
   type IFlowVersionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // One full snapshot for read-only inspection of a past version.
 export class GetFlowVersion {

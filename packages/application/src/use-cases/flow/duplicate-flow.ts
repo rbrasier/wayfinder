@@ -1,4 +1,4 @@
-import { buildFlowSnapshot, domainError, err, ok, remapNodeReferences } from "@rbrasier/domain";
+import { buildFlowSnapshot, domainError, err, ok, remapNodeReferences } from "@wayfinder/domain";
 import type {
   Flow,
   IFlowEdgeRepository,
@@ -6,7 +6,7 @@ import type {
   IFlowRepository,
   IObjectStorage,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { canExportFlow } from "./export-flow";
 import type { GenerateStorageKey } from "./import-flow";
 

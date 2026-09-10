@@ -13,12 +13,12 @@ import {
   type ISystemSettingsRepository,
   type ProviderName,
   type StorageConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
-} from "@rbrasier/shared";
-import { DOCUMENT_GENERATION_CONFIG_SETTING_KEY } from "@rbrasier/domain";
+} from "@wayfinder/shared";
+import { DOCUMENT_GENERATION_CONFIG_SETTING_KEY } from "@wayfinder/domain";
 import {
   DEFAULT_DOCUMENT_GENERATION_CONFIG,
   DEFAULT_MODELS_FOR,

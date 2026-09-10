@@ -1,7 +1,7 @@
 # Overriding Framework Adapters
 
-Every adapter in `@rbrasier/adapters` implements an interface from
-`@rbrasier/domain`. Because the contract is the interface — not the
+Every adapter in `@wayfinder/adapters` implements an interface from
+`@wayfinder/domain`. Because the contract is the interface — not the
 implementation — you can override any adapter without touching framework code.
 
 There are four levels, from least to most invasive:
@@ -15,7 +15,7 @@ in `lib/container.ts`:
 
 ```typescript
 // apps/web/src/lib/container.ts
-import { createAdapters } from "@rbrasier/adapters";
+import { createAdapters } from "@wayfinder/adapters";
 
 const adapters = createAdapters(db, {
   aiProvider: "openai",      // switch from the default provider
@@ -31,11 +31,11 @@ const adapters = createAdapters(db, {
 
 ## Level 2 — Swap (implement the port yourself)
 
-Because every adapter implements a `I*` interface from `@rbrasier/domain`,
+Because every adapter implements a `I*` interface from `@wayfinder/domain`,
 any piece can be replaced by passing an alternative to `createAdapters`:
 
 ```typescript
-import type { IUserRepository } from "@rbrasier/domain";
+import type { IUserRepository } from "@wayfinder/domain";
 
 class MyUserRepository implements IUserRepository {
   // custom implementation — e.g. backed by a different DB, or cached
@@ -59,7 +59,7 @@ same interface regardless of which implementation is wired.
 When you want the base behaviour plus additions:
 
 ```typescript
-import { DrizzleUserRepository } from "@rbrasier/adapters/repositories";
+import { DrizzleUserRepository } from "@wayfinder/adapters/repositories";
 
 class CachingUserRepository extends DrizzleUserRepository {
   private cache = new Map<string, User>();
@@ -84,14 +84,14 @@ your use case. Copy the source file into your project manually:
 
 ```bash
 # Copy the adapter source
-cp node_modules/@rbrasier/adapters/src/repositories/drizzle-user-repository.ts \
+cp packages/adapters/src/repositories/drizzle-user-repository.ts \
    packages/adapters/src/repositories/my-user-repository.ts
 
 # Update the import in container.ts
 ```
 
-After ejecting you own that file and will not receive framework updates for it.
-All other adapters continue to update normally.
+The copy is now a separate adapter that no longer tracks changes to the one it
+was taken from — a fix to `drizzle-user-repository.ts` will not reach it.
 
 ---
 

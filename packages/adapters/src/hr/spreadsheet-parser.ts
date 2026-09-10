@@ -7,7 +7,7 @@ import {
   type ParsedSpreadsheet,
   type ParseSpreadsheetInput,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // CSV/XLSX parser for HR uploads. Rows are returned in the structure they arrived
 // in — original headers preserved, values as strings — so the dataset can be

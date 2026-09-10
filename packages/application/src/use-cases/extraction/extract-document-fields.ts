@@ -8,12 +8,12 @@ import {
   type FlowContextDoc,
   type ILanguageModel,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   buildExtractionResultSchema,
   type ExtractionFieldResultData,
   type ExtractionResultData,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import { buildExtractionSystemPrompt } from "./build-extraction-prompt";
 
 // Shown when a record's source documents carry no readable text (e.g. a scanned

@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   AnswerFeedback,
   FeedbackListFilter,
@@ -6,7 +6,7 @@ import type {
   IAnswerFeedbackRepository,
   NewAnswerFeedback,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { kb_answer_feedback } from "../db/schema/kb";

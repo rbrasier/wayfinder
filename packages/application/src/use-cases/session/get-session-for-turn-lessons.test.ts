@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok, selectInjectableLessons } from "@rbrasier/domain";
+import { domainError, err, ok, selectInjectableLessons } from "@wayfinder/domain";
 import type {
   Flow,
   FlowLesson,
@@ -11,7 +11,7 @@ import type {
   ISessionMessageRepository,
   ISessionRepository,
   Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { GetSessionForTurn } from "./get-session-for-turn";
 
 const lesson = (overrides: Partial<FlowLesson> = {}): FlowLesson =>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultSiteBannerConfig } from "@rbrasier/domain";
+import { createDefaultSiteBannerConfig } from "@wayfinder/domain";
 import { buildSiteBannerStyle } from "./site-banner";
 
 describe("buildSiteBannerStyle", () => {

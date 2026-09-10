@@ -3,7 +3,7 @@ import {
   type ApprovalChangeRequest,
   type IApprovalRepository,
   type IFlowNodeRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The change requests a session is still carrying, ready to be handed to
 // whichever path is about to re-derive the step's field values.

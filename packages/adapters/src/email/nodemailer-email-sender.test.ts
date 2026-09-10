@@ -7,7 +7,7 @@ import {
   type ISystemSettingsRepository,
   type Result,
   type SystemSetting,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { NodemailerEmailSender } from "./nodemailer-email-sender";
 import type { SmtpEnvConfig } from "./smtp-transport";
 

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { schema } from "@rbrasier/adapters";
+import { schema } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 
 // This endpoint only exists when TEST_AUTH_BYPASS=true. It exposes the

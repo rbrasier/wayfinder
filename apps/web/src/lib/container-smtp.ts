@@ -1,4 +1,4 @@
-import type { SmtpEnvConfig } from "@rbrasier/adapters";
+import type { SmtpEnvConfig } from "@wayfinder/adapters";
 import type { ServerEnv } from "./env";
 
 // SMTP_TRANSPORT_MODE set means credentials live in the environment (ADR-023);

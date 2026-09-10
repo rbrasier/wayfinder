@@ -6,7 +6,7 @@ import {
   type ExtractionSchema,
   type TemplateField,
   type TemplateFieldType,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The field types an extraction field can take. `select` / `multiselect` are the
 // UI names for an options / multi-options field — the same vocabulary as the

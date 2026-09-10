@@ -5,7 +5,7 @@ import {
   type IJobRepository,
   type Job,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { job_registry } from "../db/schema/job";

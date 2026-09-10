@@ -11,7 +11,7 @@ import {
   type Result,
   type SeedContextItem,
   type SessionMessage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface BuildSeedFromSessionInput {
   sessionId: string;

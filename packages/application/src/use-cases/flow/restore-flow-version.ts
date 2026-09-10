@@ -6,7 +6,7 @@ import {
   type IAuditLogger,
   type IFlowVersionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface RestoreFlowVersionInput {
   versionId: string;

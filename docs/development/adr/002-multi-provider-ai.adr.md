@@ -23,7 +23,7 @@ behind a single domain port, `ILanguageModel`.
 - Defaults: `AI_DEFAULT_PROVIDER` env var picks the active provider.
   Anthropic → `claude-haiku-4-5-20251001`.
 - `streamObject` is the streaming primitive used by the `/sample` page. The
-  schema is a Zod object shared via `@rbrasier/shared`, so the type flows from
+  schema is a Zod object shared via `@wayfinder/shared`, so the type flows from
   the model output to the React component without translation.
 
 ## Why Vercel AI SDK over raw provider SDKs?

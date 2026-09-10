@@ -1,5 +1,5 @@
-import type { SessionUploadConfig } from "@rbrasier/domain";
-import type { TtlCache } from "@rbrasier/adapters";
+import type { SessionUploadConfig } from "@wayfinder/domain";
+import type { TtlCache } from "@wayfinder/adapters";
 
 // The near-static admin settings the chat stream route reads on every turn. They
 // change only when an admin edits them, so a short TTL removes three DB/config

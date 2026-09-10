@@ -1,6 +1,6 @@
 import PizZip from "pizzip";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { Result } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { Result } from "@wayfinder/domain";
 
 // PizZip exposes the central-directory uncompressed size on a private field. We
 // read it (best-effort) to reject an oversized entry before decompressing it, so

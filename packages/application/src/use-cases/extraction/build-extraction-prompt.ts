@@ -2,7 +2,7 @@ import {
   buildFieldConstraintsText,
   type ExtractionField,
   type FlowContextDoc,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { buildContextDocsSection } from "../document/structured-fields";
 
 export interface BuildExtractionSystemPromptInput {

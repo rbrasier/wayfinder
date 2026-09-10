@@ -7,7 +7,7 @@ import {
   type IAnalyticsRepository,
   type IUsageRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ValueFlowRow extends FlowEffortRow {
   // Spend is attributed per flow (`ai_usage_events.flow_id`). It is reported

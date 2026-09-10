@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { TemplateAnnotationEdit } from "@rbrasier/domain";
-import { TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS } from "@rbrasier/shared";
+import type { TemplateAnnotationEdit } from "@wayfinder/domain";
+import { TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS } from "@wayfinder/shared";
 import type { Container } from "@/lib/container";
 import { buildAnnotationEdits, type AnnotationRow } from "@/lib/template-annotation";
 import {

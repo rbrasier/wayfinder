@@ -1,4 +1,4 @@
-import type { ConversationalNodeConfig } from "@rbrasier/domain";
+import type { ConversationalNodeConfig } from "@wayfinder/domain";
 
 export type DocumentTemplateFormat = "docx" | "xlsx";
 

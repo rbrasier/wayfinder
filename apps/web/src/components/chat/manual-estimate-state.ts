@@ -2,7 +2,7 @@
 // presets mean, and how a days-and-hours entry becomes minutes. Kept out of the
 // component so all of it can be asserted without rendering.
 
-import type { SessionStatus } from "@rbrasier/domain";
+import type { SessionStatus } from "@wayfinder/domain";
 
 export const MINUTES_PER_HOUR = 60;
 

@@ -1,11 +1,11 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   FlowObservation,
   IFlowObservationRepository,
   NewFlowObservation,
   ObservationDetail,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { ai_flow_lesson_evidence, ai_flow_observations } from "../db/schema/ai";

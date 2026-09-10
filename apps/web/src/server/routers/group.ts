@@ -4,7 +4,7 @@ import {
   GROUP_ROLES,
   type GroupRole,
   type PermissionKey,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";

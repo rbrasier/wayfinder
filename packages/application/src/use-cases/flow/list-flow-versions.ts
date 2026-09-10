@@ -2,7 +2,7 @@ import type {
   FlowVersionSummary,
   IFlowVersionRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // History metadata, newest first — never carries the heavy snapshot payload.
 export class ListFlowVersions {

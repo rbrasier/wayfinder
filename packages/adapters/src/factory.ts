@@ -9,8 +9,8 @@ import type {
   ISystemSettingsRepository,
   IUsageRepository,
   IUserRepository,
-} from "@rbrasier/domain";
-import { EMBEDDINGS_DEFAULT_PROVIDER } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { EMBEDDINGS_DEFAULT_PROVIDER } from "@wayfinder/shared";
 import { DrizzleSystemSettingsRepository } from "./repositories/drizzle-system-settings-repository";
 import { RuntimeConfigStore } from "./config/runtime-config-store";
 import { AiHealthChecker } from "./health/ai-health-checker";

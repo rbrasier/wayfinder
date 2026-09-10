@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RetentionPolicy } from "@rbrasier/domain";
+import type { RetentionPolicy } from "@wayfinder/domain";
 import {
   KEEP_FOREVER_LABEL,
   LEGAL_HOLD_NOTE,

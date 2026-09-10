@@ -1,4 +1,4 @@
-import type { Approval, IApprovalRepository, TemplateField } from "@rbrasier/domain";
+import type { Approval, IApprovalRepository, TemplateField } from "@wayfinder/domain";
 import { ATTESTATION_TEXT_KEY, SIGNATURE_FIELD_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
 
 // Every signature slot on a step's template, mapped to the attestation block

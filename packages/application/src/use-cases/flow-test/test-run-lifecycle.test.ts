@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ok, type ILegalHoldRepository, type IUsageRepository, type LegalHold, type Result, type UsageEvent } from "@rbrasier/domain";
+import { ok, type ILegalHoldRepository, type IUsageRepository, type LegalHold, type Result, type UsageEvent } from "@wayfinder/domain";
 import { DeleteTestSession } from "./delete-test-session";
 import { GetTestRunReport } from "./get-test-run-report";
 import { SweepTestSessions } from "./sweep-test-sessions";

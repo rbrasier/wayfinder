@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   FlowNode,
   ILanguageModel,
   ISessionStepOutputRepository,
   NewSessionStepOutput,
   SessionStepOutput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CaptureStructuredStepOutput } from "./capture-structured-output";
 
 const usage = {

@@ -19,7 +19,7 @@ import {
   SaveExtractionSchema,
   StartBatchRun,
   UploadDraftDocuments,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import {
   CsvWriter,
   DrizzleExtractionDraftRepository,
@@ -27,7 +27,7 @@ import {
   XlsxWriter,
   ZipIngestor,
   createDatabase,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import type {
   IAuditLogger,
   IDocumentExtractor,
@@ -36,7 +36,7 @@ import type {
   IFlowVersionRepository,
   ILanguageModel,
   IObjectStorage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 type Database = ReturnType<typeof createDatabase>;
 

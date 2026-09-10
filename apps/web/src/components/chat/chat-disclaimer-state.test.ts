@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createDefaultChatDisclaimerConfig, type ChatDisclaimerConfig } from "@rbrasier/domain";
+import { createDefaultChatDisclaimerConfig, type ChatDisclaimerConfig } from "@wayfinder/domain";
 import {
   ACKNOWLEDGED_VALUE,
   hasAcknowledgedDisclaimer,

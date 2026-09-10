@@ -27,7 +27,7 @@ import {
   type Result,
   type SystemSetting,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../../db/client";
 import { core_accounts, core_sessions } from "../../db/schema/core";
 import type { Auth } from "../better-auth";

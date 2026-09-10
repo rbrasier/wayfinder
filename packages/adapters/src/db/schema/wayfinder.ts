@@ -19,8 +19,8 @@ import {
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
-import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@rbrasier/domain";
-import type { AiTurnPayload, PendingExecutions, SeedContextItem, SeedStepOutput, SessionDocument, StepOutputField } from "@rbrasier/domain";
+import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@wayfinder/domain";
+import type { AiTurnPayload, PendingExecutions, SeedContextItem, SeedStepOutput, SessionDocument, StepOutputField } from "@wayfinder/domain";
 import { core_users } from "./core";
 
 type StoredContextDoc = {

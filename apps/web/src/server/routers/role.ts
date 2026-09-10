@@ -1,4 +1,4 @@
-import { PERMISSIONS, type PermissionKey } from "@rbrasier/domain";
+import { PERMISSIONS, type PermissionKey } from "@wayfinder/domain";
 import { z } from "zod";
 import { adminProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";

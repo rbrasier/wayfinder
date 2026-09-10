@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowUp, Paperclip, X } from "lucide-react";
 import { toast } from "sonner";
-import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@rbrasier/shared";
-import { resolveChatDisclaimerComposerText } from "@rbrasier/domain";
+import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@wayfinder/shared";
+import { resolveChatDisclaimerComposerText } from "@wayfinder/domain";
 import { trpc } from "@/trpc/client";
 
 interface ChatComposerProps {

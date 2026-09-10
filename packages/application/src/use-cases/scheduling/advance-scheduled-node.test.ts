@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   FlowEdge,
   IFlowEdgeRepository,
   ISessionRepository,
   Session,
   SessionUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { AdvanceScheduledNode } from "./advance-scheduled-node";
 
 const makeSession = (overrides: Partial<Session> = {}): Session =>

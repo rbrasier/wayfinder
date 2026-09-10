@@ -11,7 +11,7 @@ import {
   type NewAuditLog,
   type Result,
   type SystemSetting,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { AdminExists, CreateFirstAdmin } from "./create-admin";
 
 class FakeSettings implements ISystemSettingsRepository {

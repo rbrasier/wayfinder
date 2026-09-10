@@ -4,7 +4,7 @@
   "commit": false,
   "fixed": [],
   "linked": [
-    ["@rbrasier/domain", "@rbrasier/shared", "@rbrasier/application", "@rbrasier/adapters"]
+    ["@wayfinder/domain", "@wayfinder/shared", "@wayfinder/application", "@wayfinder/adapters"]
   ],
   "access": "public",
   "baseBranch": "main",

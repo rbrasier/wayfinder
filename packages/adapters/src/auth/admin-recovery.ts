@@ -14,7 +14,7 @@ import {
   type IUserRepository,
   type RecoverAdminAccessInput,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { parseAuthConfig } from "../config/runtime-config-defaults";
 import { core_accounts, core_sessions } from "../db/schema/core";

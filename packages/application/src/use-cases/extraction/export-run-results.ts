@@ -15,7 +15,7 @@ import {
   type Result,
   type SpreadsheetColumn,
   type SpreadsheetSheet,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { loadExtractionSchemaForVersion } from "./run-schema";
 
 export interface ExportRunResultsInput {

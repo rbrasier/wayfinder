@@ -13,7 +13,7 @@ import {
   SuggestApprover,
   WithdrawApproval,
   type UpdateDocumentFields,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import type {
   IApprovalRepository,
   IAuditLogger,
@@ -33,7 +33,7 @@ import type {
   IUnitOfWork,
   IUserRepository,
   Sha256Hex,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ApprovalUseCaseDeps {
   unitOfWork: IUnitOfWork;

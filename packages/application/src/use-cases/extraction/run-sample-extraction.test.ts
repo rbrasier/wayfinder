@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   ExtractionSchema,
   IDocumentExtractor,
   ILanguageModel,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { RunSampleExtraction, type SampleInputDocument } from "./run-sample-extraction";
 
 const usage = {

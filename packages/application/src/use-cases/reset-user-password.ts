@@ -8,7 +8,7 @@ import {
   domainError,
   err,
   ok,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export const RESET_PASSWORD_AUDIT_ACTION = "admin.user.password_reset";
 

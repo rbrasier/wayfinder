@@ -1,4 +1,4 @@
-import type { Approval, IUserRepository } from "@rbrasier/domain";
+import type { Approval, IUserRepository } from "@wayfinder/domain";
 
 export interface SuggestedApprover {
   userId: string;

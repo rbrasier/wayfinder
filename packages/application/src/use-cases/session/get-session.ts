@@ -16,7 +16,7 @@ import {
   type Session,
   type SessionMessage,
   type Flow,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface SessionDetail {
   session: Session;

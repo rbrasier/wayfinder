@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ConversationalNodeConfig } from "@rbrasier/domain";
+import type { ConversationalNodeConfig } from "@wayfinder/domain";
 import { buildTurnRetrievalQueries } from "./build-retrieval-query";
 
 // The reported flow: a step that captures a new hire's name and start date,

@@ -15,7 +15,7 @@ import {
   type Result,
   type Session,
   type SessionMessage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { accumulateInsights } from "../../services/accumulate-insights";
 import { resolveFieldValues } from "../../services/resolve-field-values";
 

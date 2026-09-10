@@ -5,7 +5,7 @@ import {
   type PermissionKey,
   type Result,
   type Role,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface RoleWithPermissions {
   readonly role: Role;

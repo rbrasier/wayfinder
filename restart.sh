@@ -199,10 +199,10 @@ if [ -f .env ]; then
   set +a
 fi
 
-# Safety-net: create the database if it does not yet exist (e.g. dropped manually
-# or first run on a machine that skipped the scaffold). The primary creation happens
-# in the scaffold (create package) using the postgres npm package. Here we fall back
-# to CLI tools, passing PGPASSWORD from DATABASE_URL so no interactive prompt appears.
+# Safety-net: create the database if it does not yet exist — a first run on a new
+# machine, or a database dropped by hand. Uses the CLI tools rather than a driver
+# so it works before any install has happened, and passes PGPASSWORD from
+# DATABASE_URL so no interactive prompt appears.
 DB_NAME=$(node -e "
   const u = process.env.DATABASE_URL || '';
   const m = u.match(/\/([^/?#]+)(?:\?|#|$)/);
@@ -235,40 +235,20 @@ if [ -n "$DB_NAME" ]; then
     || true
 fi
 
-# packages/adapters/package.json exists in the template repo but is removed when
-# a project is scaffolded (the package becomes a versioned npm dependency).
-# In template mode: use pnpm --filter to run drizzle-kit migrate.
-# In scaffolded mode: pnpm --filter finds no workspace package; instead call
-# the exported runMigrations() function from the installed npm package.
-if [ -f packages/adapters/package.json ]; then
-  ADAPTERS_PKG=$(node -e "process.stdout.write(require('./packages/adapters/package.json').name)")
-  pnpm --filter "$ADAPTERS_PKG" db:migrate || {
-    echo "  migration failed — check DATABASE_URL in .env"
-    exit 1
-  }
-  # Generated migrations are the only thing that alters the schema. This asks
-  # the one question the old `drizzle-kit push` step was there for — has the
-  # schema been edited without generating a migration? — by diffing the schema
-  # against its own snapshot instead of against the live database, so it never
-  # offers to truncate a table and it stops complaining once a migration exists.
-  echo "→ checking the schema matches its migrations"
-  pnpm --filter "$ADAPTERS_PKG" -s db:drift || {
-    echo "  starting anyway — the app will run against the migrated schema, not the edited one"
-  }
-else
-  FRAMEWORK_SCOPE=$(cat .framework-scope 2>/dev/null || echo "@rbrasier")
-  ADAPTERS_PKG="${FRAMEWORK_SCOPE}/adapters"
-  # @rbrasier/adapters is a dependency of apps/api, not the project root.
-  # Run node from apps/api so module resolution finds the package.
-  (cd "$ROOT/apps/api" && node --input-type=module -e "
-    import { runMigrations } from '${ADAPTERS_PKG}/db';
-    await runMigrations(process.env.DATABASE_URL ?? '');
-    console.log('  migrations complete');
-  ") || {
-    echo "  migration failed — check DATABASE_URL in .env and that pnpm install completed"
-    exit 1
-  }
-fi
+ADAPTERS_PKG=$(node -e "process.stdout.write(require('./packages/adapters/package.json').name)")
+pnpm --filter "$ADAPTERS_PKG" db:migrate || {
+  echo "  migration failed — check DATABASE_URL in .env"
+  exit 1
+}
+# Generated migrations are the only thing that alters the schema. This asks
+# the one question the old `drizzle-kit push` step was there for — has the
+# schema been edited without generating a migration? — by diffing the schema
+# against its own snapshot instead of against the live database, so it never
+# offers to truncate a table and it stops complaining once a migration exists.
+echo "→ checking the schema matches its migrations"
+pnpm --filter "$ADAPTERS_PKG" -s db:drift || {
+  echo "  starting anyway — the app will run against the migrated schema, not the edited one"
+}
 
 if [ "$WITH_MOCKS" -eq 1 ]; then
   echo "→ starting mocks on :$MOCKS_PORT"

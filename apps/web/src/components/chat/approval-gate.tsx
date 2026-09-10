@@ -1,6 +1,6 @@
 "use client";
 
-import type { ApproverSource } from "@rbrasier/domain";
+import type { ApproverSource } from "@wayfinder/domain";
 import { trpc } from "@/trpc/client";
 import { ApproverPicker } from "./approver-picker";
 

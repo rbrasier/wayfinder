@@ -11,7 +11,7 @@ import {
   type Result,
   type TemplateField,
   type TemplateFieldType,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   N8nHttpExecutionClient,
   type IN8nExecutionClient,

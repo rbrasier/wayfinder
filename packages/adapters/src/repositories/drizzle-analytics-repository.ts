@@ -8,7 +8,7 @@ import {
   type AnalyticsTimeRange,
   type IAnalyticsRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_flows, app_session_messages, app_sessions } from "../db/schema/wayfinder";
 

@@ -12,7 +12,7 @@ import {
   type IObjectStorage,
   type ISessionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { DecideApproval, DecideApprovalOutput } from "./decide-approval";
 
 export interface RecordOffSystemApprovalInput {

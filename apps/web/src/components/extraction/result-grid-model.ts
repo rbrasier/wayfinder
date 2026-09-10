@@ -3,7 +3,7 @@ import type {
   FieldDerivation,
   FieldProvenance,
   FieldSourceRef,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ResultDocument {
   id: string;

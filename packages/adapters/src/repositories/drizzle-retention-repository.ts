@@ -5,7 +5,7 @@ import {
   type IRetentionRepository,
   type Result,
   type RetentionTargetKey,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { sql, type SQL, type SQLWrapper } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { ai_flow_observations, ai_usage_events } from "../db/schema/ai";

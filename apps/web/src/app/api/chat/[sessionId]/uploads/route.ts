@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { sumSessionUploadChars } from "@rbrasier/domain";
-import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@rbrasier/shared";
+import { sumSessionUploadChars } from "@wayfinder/domain";
+import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@wayfinder/shared";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";

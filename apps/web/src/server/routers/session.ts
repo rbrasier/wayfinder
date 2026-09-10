@@ -1,14 +1,14 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { groupIdsForMemberships, isFlowDiscoverableBy } from "@rbrasier/domain";
-import type { Session, SessionListSummary } from "@rbrasier/domain";
+import { groupIdsForMemberships, isFlowDiscoverableBy } from "@wayfinder/domain";
+import type { Session, SessionListSummary } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { orderStepIds } from "@/lib/step-order";
 import { buildCompletedStepData } from "@/lib/step-data";
 import { confirmStep } from "@/lib/chat/confirm-step";
-import { MAX_ESTIMATE_MINUTES } from "@rbrasier/application";
+import { MAX_ESTIMATE_MINUTES } from "@wayfinder/application";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;
 

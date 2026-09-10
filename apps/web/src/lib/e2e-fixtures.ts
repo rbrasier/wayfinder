@@ -1,5 +1,5 @@
-import type { Result } from "@rbrasier/domain";
-import { schema } from "@rbrasier/adapters";
+import type { Result } from "@wayfinder/domain";
+import { schema } from "@wayfinder/adapters";
 import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
 import { seedForkFlow, seedConfirmationSession } from "./e2e-fixtures-flows";

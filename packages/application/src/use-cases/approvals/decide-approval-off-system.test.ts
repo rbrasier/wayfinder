@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createHash } from "node:crypto";
-import type { NewApproval } from "@rbrasier/domain";
+import type { NewApproval } from "@wayfinder/domain";
 import { DecideApproval } from "./decide-approval";
 import {
   InMemoryApprovals,

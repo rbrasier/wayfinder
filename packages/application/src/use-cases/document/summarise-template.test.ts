@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
-import type { ILanguageModel } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
+import type { ILanguageModel } from "@wayfinder/domain";
 import { SummariseTemplate } from "./summarise-template";
 
 const makeLanguageModel = (

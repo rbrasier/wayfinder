@@ -6,7 +6,7 @@ import {
   type LegalHold,
   type NewLegalHold,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { desc, eq, isNull } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_legal_holds } from "../db/schema/app";

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { accumulateInsights } from "../../services/accumulate-insights";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   FlowEdge,
   FlowNode,
@@ -12,7 +12,7 @@ import type {
   Session,
   SessionMessage,
   SessionUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { RewindToFork } from "./rewind-to-fork";
 
 class FakeSessionRepository implements ISessionRepository {

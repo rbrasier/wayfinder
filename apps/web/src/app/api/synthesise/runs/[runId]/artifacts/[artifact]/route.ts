@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { loadExtractionSchemaForVersion } from "@rbrasier/application";
-import type { ExtractionSchema } from "@rbrasier/domain";
+import { loadExtractionSchemaForVersion } from "@wayfinder/application";
+import type { ExtractionSchema } from "@wayfinder/domain";
 import { getContainer } from "@/lib/container";
 import { authoriseRunAccess } from "@/lib/extraction-artifact-access";
 

@@ -9,7 +9,7 @@ import {
   DEFAULT_ISSUE_TRACKER_URL,
   type AboutLink,
   type AboutLinkIcon,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";

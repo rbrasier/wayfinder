@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { resolveChangeRequests } from "@rbrasier/application";
-import type { ConversationalNodeConfig } from "@rbrasier/domain";
+import { resolveChangeRequests } from "@wayfinder/application";
+import type { ConversationalNodeConfig } from "@wayfinder/domain";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";

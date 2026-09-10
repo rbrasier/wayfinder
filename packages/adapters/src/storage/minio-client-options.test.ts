@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { StorageConfig } from "@rbrasier/domain";
+import type { StorageConfig } from "@wayfinder/domain";
 import { minioClientOptions } from "./minio-client-options";
 
 const config = (overrides: Partial<StorageConfig> = {}): StorageConfig => ({

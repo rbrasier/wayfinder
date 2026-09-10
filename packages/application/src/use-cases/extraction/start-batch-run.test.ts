@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   ExtractionRun,
   ExtractionSchema,
@@ -11,7 +11,7 @@ import type {
   IFlowVersionRepository,
   ILanguageModel,
   IObjectStorage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { StartBatchRun } from "./start-batch-run";
 
 const schema: ExtractionSchema = {

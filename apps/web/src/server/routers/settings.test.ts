@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sessionPolicyViolations, type AiConfig } from "@rbrasier/domain";
+import { sessionPolicyViolations, type AiConfig } from "@wayfinder/domain";
 import {
   documentGenerationConfigInputSchema,
   extractionConfigInputSchema,

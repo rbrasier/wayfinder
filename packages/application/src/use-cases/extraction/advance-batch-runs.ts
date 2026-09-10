@@ -14,7 +14,7 @@ import {
   type IExtractionRunRepository,
   type IFlowVersionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ProcessExtractionTask } from "./process-extraction-task";
 
 export interface AdvanceBatchRunsOptions {

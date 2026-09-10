@@ -49,7 +49,7 @@ import type {
   FlowContextDoc,
   PermissionKey,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { computeStepNumbers } from "@/lib/flow-utils";
 import type { NextStepAnchor } from "@/lib/canvas/canvas-guidance";
 import {

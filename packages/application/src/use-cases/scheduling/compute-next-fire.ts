@@ -7,7 +7,7 @@ import {
   type RecurrenceRule,
   type Result,
   type ScheduleKind,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { nextCronTime } from "./cron";
 
 const UNIT_MS: Record<string, number> = {

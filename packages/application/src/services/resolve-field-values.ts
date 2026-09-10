@@ -5,7 +5,7 @@ import type {
   Result,
   SessionStepOutput,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { extractStructuredFields } from "../use-cases/document/structured-fields";
 
 export interface ResolveFieldValuesInput {

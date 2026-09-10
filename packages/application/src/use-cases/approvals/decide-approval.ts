@@ -30,7 +30,7 @@ import {
   type Sha256Hex,
   type StepOutputField,
   type TransactionalRepositories,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { IApprovalDecidedNotifier } from "../notifications/notify-on-approval-decided";
 import type { ApplyApprovalSignature } from "./apply-approval-signature";
 import {

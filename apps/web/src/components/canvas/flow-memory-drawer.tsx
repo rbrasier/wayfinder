@@ -1,7 +1,7 @@
 "use client";
 
 import { Minimize2, X } from "lucide-react";
-import type { FlowLesson } from "@rbrasier/domain";
+import type { FlowLesson } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { evidenceLabel } from "./flow-memory-panel-model";
 

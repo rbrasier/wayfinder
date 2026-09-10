@@ -9,7 +9,7 @@ import {
   type ISessionRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";
 
 export interface ConfirmStepAdvanceInput {

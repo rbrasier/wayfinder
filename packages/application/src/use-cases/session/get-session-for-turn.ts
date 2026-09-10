@@ -19,7 +19,7 @@ import {
   type Result,
   type Session,
   type SessionMessage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The turn-scoped shape: only the last N messages instead of the whole
 // transcript, plus the SQL-side aggregation of every prior turn's gathered

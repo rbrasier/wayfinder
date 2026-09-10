@@ -5,8 +5,8 @@ import type {
   IUserRoleRepository,
   NewFeatureFlag,
   Result,
-} from "@rbrasier/domain";
-import { ok } from "@rbrasier/domain";
+} from "@wayfinder/domain";
+import { ok } from "@wayfinder/domain";
 
 // Flags that are on for a fresh install with no persisted row. Automation flags
 // (auto_node, skills, mcp) are deliberately absent — they default off (ADR-041

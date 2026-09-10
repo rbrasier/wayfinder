@@ -1,6 +1,6 @@
 "use client";
 
-import type { FlowImportInspection } from "@rbrasier/domain";
+import type { FlowImportInspection } from "@wayfinder/domain";
 import { Badge } from "@/components/ui/badge";
 import { summariseInspection } from "./flow-import-summary";
 

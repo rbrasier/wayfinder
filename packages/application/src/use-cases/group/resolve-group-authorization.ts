@@ -4,7 +4,7 @@ import {
   type GroupAuthorizationContext,
   type IGroupRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Resolves the per-request group authorization context — the caller's memberships
 // plus the global-admin flag — so the router's guard and group-scoped flow

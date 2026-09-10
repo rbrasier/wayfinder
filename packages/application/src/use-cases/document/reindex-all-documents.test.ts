@@ -10,7 +10,7 @@ import {
   type Job,
   type ReindexableDocument,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { REINDEX_JOB_NAME, ReindexAllDocuments } from "./reindex-all-documents";
 
 const aJob = (name: string): Job => ({

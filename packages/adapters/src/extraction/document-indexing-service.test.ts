@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   DocumentChunkSearch,
   IDocumentChunkRepository,
@@ -7,7 +7,7 @@ import type {
   NewDocumentChunk,
   Result,
   RetrievedChunk,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { DocumentIndexingService } from "./document-indexing-service";
 
 class FakeEmbeddings implements IEmbeddingsProvider {

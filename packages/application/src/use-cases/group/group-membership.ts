@@ -4,7 +4,7 @@ import type {
   IGroupRepository,
   NewGroupMembership,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class ListGroupMembers {
   constructor(private readonly groups: IGroupRepository) {}

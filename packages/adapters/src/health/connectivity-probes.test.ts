@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok, type AiConfig, type AuthConfig, type EmbeddingsConfig, type N8nConfig, type Result, type StorageConfig } from "@rbrasier/domain";
+import { domainError, err, ok, type AiConfig, type AuthConfig, type EmbeddingsConfig, type N8nConfig, type Result, type StorageConfig } from "@wayfinder/domain";
 import {
   probeAiConnectivity,
   probeAuthEmailPassword,

@@ -7,7 +7,7 @@ import {
   type PermissionKey,
   type Result,
   type Role,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ListRoles } from "./list-roles";
 import { CreateRole } from "./create-role";
 import { RenameRole } from "./rename-role";

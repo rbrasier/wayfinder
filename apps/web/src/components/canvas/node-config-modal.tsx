@@ -12,8 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { deriveFieldKey } from "@rbrasier/domain";
-import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
+import { deriveFieldKey } from "@wayfinder/domain";
+import type { FieldValueSource, PriorStepField, TemplateField } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";

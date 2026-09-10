@@ -1,4 +1,4 @@
-import { ScriptedLanguageModel } from "@rbrasier/adapters";
+import { ScriptedLanguageModel } from "@wayfinder/adapters";
 
 const globalForScriptedLlm = globalThis as typeof globalThis & {
   _wayfinder_scripted_llm: ScriptedLanguageModel | undefined;

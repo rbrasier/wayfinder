@@ -34,12 +34,12 @@ const { container, execute, setSecret, setFireResult } = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/container", () => ({ getContainer: () => container }));
-vi.mock("@rbrasier/application", () => ({
+vi.mock("@wayfinder/application", () => ({
   FireDueSchedules: class {
     execute = execute;
   },
 }));
-vi.mock("@rbrasier/adapters", () => ({ SystemClock: class {} }));
+vi.mock("@wayfinder/adapters", () => ({ SystemClock: class {} }));
 vi.mock("@/lib/scheduler/scheduled-session-fire-handler", () => ({
   ScheduledSessionFireHandler: class {},
 }));

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   IDocumentGenerator,
   IObjectStorage,
@@ -10,7 +10,7 @@ import type {
   SessionStepOutput,
   FlowNode,
   Flow,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { GenerateDocument } from "./generate-document";
 
 const makeMessage = (overrides: Partial<SessionMessage> = {}): SessionMessage => ({

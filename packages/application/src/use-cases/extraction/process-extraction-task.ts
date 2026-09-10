@@ -12,7 +12,7 @@ import {
   type ILanguageModel,
   type IObjectStorage,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { extractDocumentFields } from "./extract-document-fields";
 
 // A weakly-readable document has no text layer (e.g. a scanned PDF); it is

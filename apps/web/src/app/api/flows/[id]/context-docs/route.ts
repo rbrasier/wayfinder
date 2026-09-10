@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   CONTEXT_DOCS_ALLOWED_MIME_TYPES,
   CONTEXT_DOCS_MAX_FILE_SIZE_BYTES,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 

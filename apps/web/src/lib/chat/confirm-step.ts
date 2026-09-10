@@ -7,8 +7,8 @@ import {
   type Result,
   type Session,
   type SessionMessage,
-} from "@rbrasier/domain";
-import { branchChoiceSchema } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { branchChoiceSchema } from "@wayfinder/shared";
 import type { getContainer } from "@/lib/container";
 import {
   applyAdvanceSideEffects,

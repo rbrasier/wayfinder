@@ -1,4 +1,4 @@
-import type { FieldValueSource, McpToolRef, TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, McpToolRef, TemplateField } from "@wayfinder/domain";
 import type { ApprovalSubjectKind } from "./approval-node-config";
 import type {
   ScheduleModifier,

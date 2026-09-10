@@ -16,7 +16,7 @@ import {
   type FlowNode,
   type McpNodeConfig,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // An imported flow whose skills or MCP tools did not resolve carries them on the
 // nodes that wanted them (ADR-049 §4). Publishing such a flow would put a step

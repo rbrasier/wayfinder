@@ -1,4 +1,4 @@
-import { deriveFieldKey, parseTemplateField, type TemplateAnnotationEdit } from "@rbrasier/domain";
+import { deriveFieldKey, parseTemplateField, type TemplateAnnotationEdit } from "@wayfinder/domain";
 
 export interface AnnotationOccurrence {
   // The exact text to find, as it reads in the extracted document text.

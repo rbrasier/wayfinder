@@ -3,7 +3,7 @@ import {
   err,
   type IExtractionRunRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Resumes a run paused at the preview breakpoint or by a cost cap (phase §6-7).
 // Already-processed documents are `complete` and never re-claimed, so continuing

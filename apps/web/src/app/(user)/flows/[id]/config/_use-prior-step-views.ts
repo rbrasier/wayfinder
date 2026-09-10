@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { Node } from "@xyflow/react";
-import type { ApprovalSubject, PriorStepField } from "@rbrasier/domain";
+import type { ApprovalSubject, PriorStepField } from "@wayfinder/domain";
 import { defaultSubjectNodeId, type PriorStep } from "@/components/canvas/approval-node-config";
 import { compareStepLabels } from "@/lib/flow-utils";
 import { readFields } from "@/lib/canvas/rf-adapters";

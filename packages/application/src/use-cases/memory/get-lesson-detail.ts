@@ -9,7 +9,7 @@ import {
   type IFlowObservationRepository,
   type IFlowRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface LessonEvidenceSession {
   sessionId: string | null;

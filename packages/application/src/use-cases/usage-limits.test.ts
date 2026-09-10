@@ -11,7 +11,7 @@ import {
   type SystemSetting,
   type UsageFilter,
   type UsageSummary,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { GetUserUsage } from "./get-user-usage";
 import { GetUsageLimitsEnabled, SetUsageLimitsEnabled } from "./usage-limits-settings";
 

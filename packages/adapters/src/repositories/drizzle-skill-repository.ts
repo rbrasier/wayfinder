@@ -9,7 +9,7 @@ import {
   type Skill,
   type SkillStatus,
   type SkillUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { eq, inArray, and, desc } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_skills } from "../db/schema/app";

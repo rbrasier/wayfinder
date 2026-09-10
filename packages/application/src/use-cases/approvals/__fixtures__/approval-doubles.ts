@@ -55,7 +55,7 @@ import {
   type TransactionalRepositories,
   type UnresolvedSuggestion,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type {
   IApprovalDecidedNotifier,
   NotifyOnApprovalDecidedInput,

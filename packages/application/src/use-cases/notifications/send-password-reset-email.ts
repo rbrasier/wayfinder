@@ -4,7 +4,7 @@ import {
   ok,
   type IEmailSender,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { buildPasswordResetEmail } from "./templates";
 
 export interface SendPasswordResetEmailInput {

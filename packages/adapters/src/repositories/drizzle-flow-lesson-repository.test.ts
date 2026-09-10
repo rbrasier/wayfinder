@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LessonCandidate, LessonStatus } from "@rbrasier/domain";
+import type { LessonCandidate, LessonStatus } from "@wayfinder/domain";
 import { lessonStatusPatch, proposedLessonValues } from "./drizzle-flow-lesson-repository";
 
 const candidate: LessonCandidate = {

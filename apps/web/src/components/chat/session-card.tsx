@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Flow, Session } from "@rbrasier/domain";
+import type { Flow, Session } from "@wayfinder/domain";
 
 export interface SessionCardStepInfo {
   currentIndex: number;

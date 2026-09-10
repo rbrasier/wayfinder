@@ -10,7 +10,7 @@ import {
   normaliseSiteBannerLinkUrl,
   resolveSiteBannerLinkLabel,
   type SiteBannerConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {

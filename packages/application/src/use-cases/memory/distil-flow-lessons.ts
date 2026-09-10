@@ -11,7 +11,7 @@ import {
   type LessonKind,
   type ObservationKind,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Which lesson kind a signal becomes. `knowledge_gap` is its own kind because it
 // routes to the knowledge base rather than to a prompt (ADR-057 §6); the

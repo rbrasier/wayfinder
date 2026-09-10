@@ -1,4 +1,4 @@
-import type { FlowExportDependency } from "@rbrasier/domain";
+import type { FlowExportDependency } from "@wayfinder/domain";
 import { describe, expect, it } from "vitest";
 import { unresolvedBadgeModel, unresolvedDependenciesOf } from "./unresolved-dependencies";
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { User } from "@rbrasier/domain";
+import type { User } from "@wayfinder/domain";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ResetPasswordModal } from "@/components/admin/reset-password-modal";

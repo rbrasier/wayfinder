@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { err, ok, type ErrorLogPayload, type IErrorLogRepository } from "@rbrasier/domain";
+import { err, ok, type ErrorLogPayload, type IErrorLogRepository } from "@wayfinder/domain";
 import { DrizzleErrorLogger } from "./drizzle-error-logger";
 
 const createRepo = (

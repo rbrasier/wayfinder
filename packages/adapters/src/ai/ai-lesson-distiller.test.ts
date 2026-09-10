@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { FlowObservation, ILanguageModel, LessonDistillationRequest } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { FlowObservation, ILanguageModel, LessonDistillationRequest } from "@wayfinder/domain";
 import { AiLessonDistiller } from "./ai-lesson-distiller";
 
 const observation = (detail: FlowObservation["detail"]): FlowObservation => ({

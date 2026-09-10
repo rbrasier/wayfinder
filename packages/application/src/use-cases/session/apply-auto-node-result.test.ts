@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   FlowEdge,
   FlowNode,
@@ -9,7 +9,7 @@ import type {
   ISessionStepOutputRepository,
   PendingExecutions,
   Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ApplyAutoNodeResult } from "./apply-auto-node-result";
 
 const makeSession = (pendingExecutions: PendingExecutions): Session => ({

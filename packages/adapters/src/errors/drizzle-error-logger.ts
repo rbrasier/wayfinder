@@ -4,7 +4,7 @@ import {
   type IErrorLogRepository,
   type IErrorLogger,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 const formatPayload = (payload: ErrorLogPayload): string => {
   const parts: string[] = [];

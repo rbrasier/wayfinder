@@ -19,8 +19,8 @@ import {
   type SessionDocument,
   type StepOutputField,
   type TemplateField,
-} from "@rbrasier/domain";
-import { documentSummarySchema, type DocumentData, type GroupItems } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { documentSummarySchema, type DocumentData, type GroupItems } from "@wayfinder/shared";
 import { DOCUMENT_MIME, templateFormat } from "./document-format";
 import { buildRenderData } from "./render-data";
 import { validateGroupItems } from "./group-edit";

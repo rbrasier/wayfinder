@@ -6,7 +6,7 @@ import {
   type ExtractionSchema,
   type FlowVersion,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { GetExtractionRunReport } from "./get-extraction-run-report";
 
 const run: ExtractionRun = {

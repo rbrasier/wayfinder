@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Download, Pencil } from "lucide-react";
-import { confidenceBand, type ConfidenceBand } from "@rbrasier/domain";
+import { confidenceBand, type ConfidenceBand } from "@wayfinder/domain";
 import { aggregateConfidenceSummaries } from "./field-provenance-display";
 import { FieldRationale, ProvenanceTag } from "./field-provenance-detail";
 import {

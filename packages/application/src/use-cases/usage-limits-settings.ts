@@ -5,7 +5,7 @@ import {
   parseUsageLimitsConfig,
   type ISystemSettingsRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Read the usage-limits master switch. A missing row means an unconfigured
 // install, which defaults to on (ADR-031) so nothing is enforced until a limit

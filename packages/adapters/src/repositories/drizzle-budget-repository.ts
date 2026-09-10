@@ -7,7 +7,7 @@ import {
   type IBudgetRepository,
   type NewBudget,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, eq, inArray, or, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_usage_budgets } from "../db/schema/wayfinder";

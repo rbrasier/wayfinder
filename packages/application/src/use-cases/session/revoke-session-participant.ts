@@ -4,7 +4,7 @@ import {
   type ISessionParticipantRepository,
   type Result,
   type SessionParticipant,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface RevokeSessionParticipantInput {
   sessionId: string;

@@ -1,5 +1,5 @@
-import { domainError, err, ok, type Result } from "@rbrasier/domain";
-import type { DueScheduleFirer } from "@rbrasier/adapters";
+import { domainError, err, ok, type Result } from "@wayfinder/domain";
+import type { DueScheduleFirer } from "@wayfinder/adapters";
 
 // Drives the scheduler from this long-lived process without owning the firing
 // logic: each tick POSTs the internal web tick endpoint (which holds the AI turn

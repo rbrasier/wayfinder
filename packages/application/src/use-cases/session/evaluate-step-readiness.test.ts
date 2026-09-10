@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError, parseTemplateFields } from "@rbrasier/domain";
+import { ok, err, domainError, parseTemplateFields } from "@wayfinder/domain";
 import type {
   Flow,
   FlowNode,
@@ -8,7 +8,7 @@ import type {
   IObjectStorage,
   SessionMessage,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { EvaluateStepReadiness } from "./evaluate-step-readiness";
 
 const usage = {

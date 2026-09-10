@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getContainer } from "@/lib/container";
-import { schema } from "@rbrasier/adapters";
+import { schema } from "@wayfinder/adapters";
 
 // This endpoint only exists when TEST_AUTH_BYPASS=true.
 // It creates a real DB session for the given email and returns the token

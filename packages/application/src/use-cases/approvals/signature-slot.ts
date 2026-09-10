@@ -1,4 +1,4 @@
-import type { FlowNode, TemplateField } from "@rbrasier/domain";
+import type { FlowNode, TemplateField } from "@wayfinder/domain";
 
 // Compatibility for flows authored before v0.26.2, whose config editor showed no
 // slot dropdown when the subject step's template declared exactly one signature

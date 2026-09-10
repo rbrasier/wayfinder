@@ -1,5 +1,5 @@
 {
-  "name": "@rbrasier/application",
+  "name": "@wayfinder/application",
   "version": "1.1.0",
   "type": "module",
   "description": "Framework use cases — orchestrates domain ports. No frameworks, no ORMs, no AI SDKs.",
@@ -17,8 +17,8 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@rbrasier/domain": "workspace:*",
-    "@rbrasier/shared": "workspace:*"
+    "@wayfinder/domain": "workspace:*",
+    "@wayfinder/shared": "workspace:*"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.0",

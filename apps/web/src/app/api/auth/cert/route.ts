@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isPkiUsable } from "@rbrasier/domain";
+import { isPkiUsable } from "@wayfinder/domain";
 import { CERT_SIGN_IN_ERROR_PARAM, type CertSignInError } from "@/lib/cert-sign-in-errors";
 import { getContainer } from "@/lib/container";
 

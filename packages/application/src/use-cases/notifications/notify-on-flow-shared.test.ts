@@ -15,7 +15,7 @@ import {
   type Result,
   type SendEmailInput,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { NotifyOnFlowShared } from "./notify-on-flow-shared";
 
 class FakeNotificationLogRepository implements INotificationLogRepository {

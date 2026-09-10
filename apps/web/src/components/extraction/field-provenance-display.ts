@@ -6,7 +6,7 @@ import {
   type ConfidenceBand,
   type ConfidenceKind,
   type FieldProvenance,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { ResultFieldValue } from "./result-grid-model";
 
 // How provenance reads on screen, as a decision separate from the markup that

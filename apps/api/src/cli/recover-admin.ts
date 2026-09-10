@@ -30,14 +30,14 @@ import {
   createAuth,
   createDatabase,
   createSettingsEncryptionKey,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import {
   DEFAULT_SIEM_CONFIG,
   SIEM_CONFIG_SETTING_KEY,
   createDefaultAuthConfig,
   parseSiemConfig,
   type SiemConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { loadEnv } from "../env.js";
 
 interface Arguments {

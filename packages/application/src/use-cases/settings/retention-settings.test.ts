@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, RETENTION_TARGET_KEYS, type ISystemSettingsRepository, type RetentionConfig } from "@rbrasier/domain";
+import { ok, RETENTION_TARGET_KEYS, type ISystemSettingsRepository, type RetentionConfig } from "@wayfinder/domain";
 import {
   GetRetentionSettings,
   KEEP_FOREVER,

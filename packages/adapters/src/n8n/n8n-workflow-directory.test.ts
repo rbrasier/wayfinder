@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
-import type { N8nConfig } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
+import type { N8nConfig } from "@wayfinder/domain";
 import { N8nHttpWorkflowDirectory } from "./n8n-workflow-directory";
 import type { IN8nExecutionClient, N8nExecutionData } from "./n8n-execution-client";
 

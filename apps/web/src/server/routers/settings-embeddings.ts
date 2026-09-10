@@ -1,4 +1,4 @@
-import { EMBEDDINGS_PROVIDERS, type EmbeddingsProvider } from "@rbrasier/shared";
+import { EMBEDDINGS_PROVIDERS, type EmbeddingsProvider } from "@wayfinder/shared";
 
 // ADR-017 makes the embedding provider switchable at runtime; ADR-056 §4 adds
 // that the switchable set is whatever the running artefact can actually load. A

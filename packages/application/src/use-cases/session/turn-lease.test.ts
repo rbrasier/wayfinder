@@ -6,7 +6,7 @@ import type {
   Result,
   Session,
   User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { TurnLease } from "./turn-lease";
 
 const session = { id: "sess-1" } as Session;

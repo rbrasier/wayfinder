@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Search } from "lucide-react";
-import type { McpServerWithTools } from "@rbrasier/domain";
+import type { McpServerWithTools } from "@wayfinder/domain";
 import {
   Dialog,
   DialogBody,

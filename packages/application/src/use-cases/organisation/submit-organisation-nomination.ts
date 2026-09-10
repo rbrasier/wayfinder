@@ -12,7 +12,7 @@ import {
   type Organisation,
   type OrganisationResolution,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CreateOrganisation } from "./create-organisation";
 
 // Which self-nomination rules apply when a user submits a nomination. A user is

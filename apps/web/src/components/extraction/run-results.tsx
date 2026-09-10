@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
-import { isTerminalRun, type RunStatus } from "@rbrasier/domain";
+import { isTerminalRun, type RunStatus } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/trpc/client";
 import { RunProgress, RUN_POLL_INTERVAL_MS } from "./run-progress";

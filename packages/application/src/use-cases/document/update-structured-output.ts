@@ -14,8 +14,8 @@ import {
   type Result,
   type StepOutputField,
   type TemplateField,
-} from "@rbrasier/domain";
-import type { GroupItems } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import type { GroupItems } from "@wayfinder/shared";
 import { resolveRecordLock } from "../approvals/resolve-record-lock";
 import { validateGroupItems } from "./group-edit";
 

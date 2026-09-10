@@ -7,7 +7,7 @@ import {
   type PeopleSearchInput,
   type Person,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { SearchPeople } from "./search-people";
 
 const person = (overrides: Partial<Person> & Pick<Person, "email" | "source">): Person => ({

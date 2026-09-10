@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { parseTemplateField, type TemplateField } from "@rbrasier/domain";
+import { parseTemplateField, type TemplateField } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 

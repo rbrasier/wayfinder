@@ -1,6 +1,6 @@
 "use client";
 
-import type { Flow } from "@rbrasier/domain";
+import type { Flow } from "@wayfinder/domain";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";

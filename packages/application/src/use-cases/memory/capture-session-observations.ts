@@ -26,7 +26,7 @@ import {
   type ObservationContext,
   type Result,
   type SessionMessage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface CaptureResult {
   written: number;

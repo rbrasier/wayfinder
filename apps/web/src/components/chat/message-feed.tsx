@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
-import type { FlowNode, SessionMessage } from "@rbrasier/domain";
+import type { FlowNode, SessionMessage } from "@wayfinder/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
 import { resolveGeneratingDocumentState } from "./generating-document-state";

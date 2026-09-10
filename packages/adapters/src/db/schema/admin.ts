@@ -10,7 +10,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import type { HrColumnMapping } from "@rbrasier/domain";
+import type { HrColumnMapping } from "@wayfinder/domain";
 import { core_organisations, core_users } from "./core";
 
 export const admin_roles = pgTable("admin_roles", {

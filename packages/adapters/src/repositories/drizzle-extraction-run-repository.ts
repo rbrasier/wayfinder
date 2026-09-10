@@ -15,7 +15,7 @@ import {
   type Result,
   type RunStatus,
   type RunStatusCounts,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {

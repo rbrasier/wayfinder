@@ -4,7 +4,7 @@ import {
   isSessionTimedOut,
   shouldRefreshLastActive,
   type SessionPolicy,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_sessions, core_users } from "../db/schema/core";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import type { RetentionTargetKey } from "@rbrasier/domain";
+import type { RetentionTargetKey } from "@wayfinder/domain";
 import {
   RETENTION_TARGET_TABLE_NAMES,
   buildAuditRetentionDeleteStatement,

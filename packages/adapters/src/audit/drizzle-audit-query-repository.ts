@@ -8,7 +8,7 @@ import {
   type ChainedAuditRow,
   type IAuditQueryRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, asc, count, desc, eq, gte, lte, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_audit_log } from "../db/schema/core";

@@ -6,7 +6,7 @@ import {
   type LessonDistillationRequest,
   type ObservationDetail,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { z } from "zod";
 
 // A statement long enough to be a rule and short enough to sit in a prompt

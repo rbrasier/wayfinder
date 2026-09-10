@@ -12,8 +12,8 @@ import {
   type SessionMessage,
   type SessionStepOutput,
   type TemplateField,
-} from "@rbrasier/domain";
-import type { DocumentData } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import type { DocumentData } from "@wayfinder/shared";
 import { batchTemplateFields, buildDocumentTranscript } from "./field-resolution";
 import { buildStepOutputFields } from "./step-output-fields";
 import { extractStructuredFields } from "./structured-fields";

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
 import type {
   AnalyticsMessageRow,
   AnalyticsSessionRow,
@@ -12,11 +12,11 @@ import type {
   NewFlowObservation,
   Session,
   SessionMessage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CaptureSessionObservations } from "./capture-session-observations";
 
 // Doubles live in the test file rather than a __fixtures__ module:
-// packages/application may import only @rbrasier/domain and @rbrasier/shared,
+// packages/application may import only @wayfinder/domain and @wayfinder/shared,
 // and only *.test.ts is exempt from that rule.
 
 import type {
@@ -31,7 +31,7 @@ import type {
   ISessionRepository,
   Session,
   SessionMessage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export const session = (overrides: Partial<Session> = {}): Session =>
   ({

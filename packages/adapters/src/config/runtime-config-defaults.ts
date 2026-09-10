@@ -55,7 +55,7 @@ import {
   type AboutLinksConfig,
   type StorageConfig,
   type UsageLimitsConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   DOCUMENT_GENERATION_CHARS_PER_TOKEN,
   DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_PERCENT,
@@ -68,7 +68,7 @@ import {
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
   type EmbeddingsProvider,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 
 export const ALL_PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
 export const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral", "bedrock"];

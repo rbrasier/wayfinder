@@ -114,7 +114,7 @@ import {
   UpdateRolePermissions,
   UpdateUser,
   UpsertFeatureFlag,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import { buildApprovalNotifiers } from "./container-approval-notifiers";
 import { buildFlowTestUseCases } from "./container-flow-test-use-cases";
 import { buildApprovalUseCases } from "./container-approval-use-cases";
@@ -200,8 +200,8 @@ import {
   withQuotaEnforcement,
   withUsageTracking,
   type AuthMethod,
-} from "@rbrasier/adapters";
-import type { FlowVersion } from "@rbrasier/domain";
+} from "@wayfinder/adapters";
+import type { FlowVersion } from "@wayfinder/domain";
 import { buildFlowMemory, retentionEnvFallback } from "./container-flow-memory";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildFlowPortability } from "./container-flow-portability";

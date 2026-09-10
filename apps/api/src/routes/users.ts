@@ -8,7 +8,7 @@ import {
   type DeleteUserInput,
   type ListUsersInput,
   type UpdateUserInput,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import type { Container } from "../container.js";
 import { validate } from "../middleware/validate.js";
 
