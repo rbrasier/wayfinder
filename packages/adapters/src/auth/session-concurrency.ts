@@ -1,5 +1,5 @@
 import { and, eq, gt, inArray } from "drizzle-orm";
-import { planSessionAdmission, type SessionPolicy } from "@rbrasier/domain";
+import { planSessionAdmission, type SessionPolicy } from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_sessions, core_users } from "../db/schema/core";
 import type { SessionRevocationRegistry } from "./session-revocation";

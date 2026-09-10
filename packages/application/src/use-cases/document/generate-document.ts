@@ -19,8 +19,8 @@ import {
   type SessionDocument,
   type SessionMessage,
   type TemplateField,
-} from "@rbrasier/domain";
-import { documentSummarySchema, type DocumentData } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { documentSummarySchema, type DocumentData } from "@wayfinder/shared";
 import { DOCUMENT_MIME, templateFormat, type DocumentTemplateFormat } from "./document-format";
 import {
   batchTemplateFields,

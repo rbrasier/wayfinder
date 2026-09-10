@@ -3,7 +3,7 @@ import type {
   FeedbackStatus,
   IAnswerFeedbackRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // An SME resolves a pending submission by accepting it (the correction has been
 // applied to a chunk) or dismissing it. Mapping a submission to a chunk is a

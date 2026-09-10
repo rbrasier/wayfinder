@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
-import type { IDocumentGenerator, TemplateField } from "@rbrasier/domain";
+import { DocxGenerator, XlsxGenerator } from "@wayfinder/adapters";
+import type { IDocumentGenerator, TemplateField } from "@wayfinder/domain";
 import { getContainer, type Container } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 

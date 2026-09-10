@@ -1,4 +1,4 @@
-import { APPROVER_EDIT_PHRASE } from "@rbrasier/domain";
+import { APPROVER_EDIT_PHRASE } from "@wayfinder/domain";
 
 export interface ParsedApproverEdit {
   editorName: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { N8nConfig } from "@rbrasier/domain";
+import type { N8nConfig } from "@wayfinder/domain";
 import { N8nHttpExecutionClient } from "./n8n-execution-client";
 
 const config: N8nConfig = { baseUrl: "https://n8n.example.com", apiKey: "secret-key" };

@@ -9,7 +9,7 @@ import {
   type SeedProposalRequest,
   type TemplateField,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { AiSeedProposer } from "./ai-seed-proposer";
 
 const usage: TokenUsage = {

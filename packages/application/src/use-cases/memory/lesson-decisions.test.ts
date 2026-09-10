@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
 import type {
   Flow,
   FlowLesson,
@@ -9,7 +9,7 @@ import type {
   IFlowLessonRepository,
   IFlowObservationRepository,
   IFlowRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { AcceptLesson } from "./accept-lesson";
 import { RejectLesson } from "./reject-lesson";
 

@@ -10,8 +10,8 @@ import {
   type SessionStepOutput,
   type StepOutputField,
   type TemplateField,
-} from "@rbrasier/domain";
-import { documentDataSchema, type DocumentData, type GroupItems } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { documentDataSchema, type DocumentData, type GroupItems } from "@wayfinder/shared";
 
 // Rough char-per-token ratio for English prose, used only to keep prompts under
 // the model context window — it does not need to be exact, only conservative.

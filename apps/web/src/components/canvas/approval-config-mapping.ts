@@ -1,4 +1,4 @@
-import type { ApprovalSubject, ChangesRequestedTarget } from "@rbrasier/domain";
+import type { ApprovalSubject, ChangesRequestedTarget } from "@wayfinder/domain";
 import {
   decodeApprovalSubject,
   decodeChangesRequestedTarget,

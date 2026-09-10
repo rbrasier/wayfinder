@@ -10,7 +10,7 @@ import {
   type Result,
   type CsvTable,
   type WriteSpreadsheetInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ExportRunResults } from "./export-run-results";
 
 const run: ExtractionRun = {

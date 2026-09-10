@@ -1,5 +1,5 @@
 import { Client as MinioClient } from "minio";
-import { isEntraConfigured } from "@rbrasier/domain";
+import { isEntraConfigured } from "@wayfinder/domain";
 import { minioClientOptions } from "../storage/minio-client-options";
 import type {
   AiConfig,
@@ -11,7 +11,7 @@ import type {
   N8nConfig,
   Result,
   StorageConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Default bound for any single probe: short enough that a parallel "Test all"
 // stays snappy, long enough for a real TLS/auth handshake.

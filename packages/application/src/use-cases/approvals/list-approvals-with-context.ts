@@ -20,7 +20,7 @@ import {
   type SessionStatus,
   type StepOutputField,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { ResolveApprovalSubject } from "./resolve-approval-subject";
 
 export interface PreviousStepDocument {

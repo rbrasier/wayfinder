@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type Approval } from "@rbrasier/domain";
+import { ok, type Approval } from "@wayfinder/domain";
 import { ApproverEditSubjectFields } from "./approver-edit-subject-fields";
 
 const at = (iso: string) => new Date(iso);

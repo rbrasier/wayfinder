@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { ok, err, domainError, type AuthConfig } from "@rbrasier/domain";
+import { ok, err, domainError, type AuthConfig } from "@wayfinder/domain";
 
 const { authenticate, container, setPkiState } = vi.hoisted(() => {
   let authConfig: AuthConfig = {

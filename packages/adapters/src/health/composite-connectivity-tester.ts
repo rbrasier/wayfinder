@@ -13,7 +13,7 @@ import {
   type N8nConfig,
   type Result,
   type StorageConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   probeAiConnectivity,
   probeAuthEmailPassword,

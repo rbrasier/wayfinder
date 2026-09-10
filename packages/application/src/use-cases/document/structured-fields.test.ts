@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError, parseTemplateFields } from "@rbrasier/domain";
-import type { FlowContextDoc, ILanguageModel, TemplateField } from "@rbrasier/domain";
+import { ok, err, domainError, parseTemplateFields } from "@wayfinder/domain";
+import type { FlowContextDoc, ILanguageModel, TemplateField } from "@wayfinder/domain";
 import {
   CONTEXT_DOCS_CHAR_BUDGET,
   buildContextDocsSection,

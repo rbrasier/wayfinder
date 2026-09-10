@@ -1,5 +1,5 @@
 import PizZip from "pizzip";
-import { deriveFieldKey, domainError, err, ok, parseTemplateFields, templateFieldKey } from "@rbrasier/domain";
+import { deriveFieldKey, domainError, err, ok, parseTemplateFields, templateFieldKey } from "@wayfinder/domain";
 import type {
   AnnotateInput,
   AnnotateOutput,
@@ -15,7 +15,7 @@ import type {
   Result,
   TemplateAnnotationEdit,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Upper bound on cells scanned across the whole workbook. An .xlsx template is a
 // header table or a tagged sheet, never a data warehouse — a workbook past this

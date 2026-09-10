@@ -1,5 +1,5 @@
 import { generateObject } from "ai";
-import { recordTokenUsage, resolveModel } from "@rbrasier/adapters";
+import { recordTokenUsage, resolveModel } from "@wayfinder/adapters";
 import {
   buildBranchDescriptors,
   domainError,
@@ -12,8 +12,8 @@ import {
   type Result,
   type SessionMessage,
   type SessionSchedule,
-} from "@rbrasier/domain";
-import { branchChoiceSchema } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { branchChoiceSchema } from "@wayfinder/shared";
 import type { getContainer } from "@/lib/container";
 import { toBranchChoiceMessages } from "@/lib/chat/branch-choice-messages";
 import {

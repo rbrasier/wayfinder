@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, MessageSquare } from "lucide-react";
-import type { SessionStatus } from "@rbrasier/domain";
+import type { SessionStatus } from "@wayfinder/domain";
 import {
   ApprovalSubject,
   ApproverStage,

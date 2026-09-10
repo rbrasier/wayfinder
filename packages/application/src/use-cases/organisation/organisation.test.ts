@@ -9,7 +9,7 @@ import {
   type Result,
   type User,
   type UserUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CreateOrganisation } from "./create-organisation";
 import { DeleteOrganisation } from "./delete-organisation";
 import { AssignUserOrganisation } from "./assign-user-organisation";

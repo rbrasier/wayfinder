@@ -16,7 +16,7 @@ import {
   TestMcpServer,
   UpdateMcpServer,
   UpdateSkill,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import {
   AiSdkMcpClient,
   DrizzleMcpServerRepository,
@@ -26,13 +26,13 @@ import {
   SkillParser,
   createDatabase,
   type QuotaEnforcer,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import type {
   ILanguageModel,
   ISessionRepository,
   ISessionStepOutputRepository,
   IUsageRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 interface SkillsAndMcpDependencies {
   db: ReturnType<typeof createDatabase>;

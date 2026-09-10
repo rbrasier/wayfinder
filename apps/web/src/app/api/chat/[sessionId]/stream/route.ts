@@ -5,9 +5,9 @@ import {
   selectInjectableLessons,
   type ConversationalNodeConfig,
   type SessionEvent,
-} from "@rbrasier/domain";
-import { buildTurnRetrievalQueries } from "@rbrasier/application";
-import { streamTurnRequestSchema } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { buildTurnRetrievalQueries } from "@wayfinder/application";
+import { streamTurnRequestSchema } from "@wayfinder/shared";
 import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
 import { getSessionTokenFromRequest } from "@/lib/session-token";

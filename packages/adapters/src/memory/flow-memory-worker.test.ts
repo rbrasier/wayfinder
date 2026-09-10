@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { IJobRepository, ILogger, Job } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { IJobRepository, ILogger, Job } from "@wayfinder/domain";
 import { FLOW_MEMORY_JOB_NAME, FlowMemoryWorker, type FlowMemorySweeper } from "./flow-memory-worker";
 
 const job = (lastRunAt: Date | null = null): Job =>

@@ -8,7 +8,7 @@ import {
   type NewSessionParticipant,
   type Session,
   type SessionParticipant,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ResolveSessionAccess } from "./resolve-session-access";
 
 const makeSession = (overrides: Partial<Session> = {}): Session => ({

@@ -1,5 +1,5 @@
-import { DEFAULT_ITEM_CAP, validateTemplateFieldValue, type TemplateField } from "@rbrasier/domain";
-import type { GroupItems } from "@rbrasier/shared";
+import { DEFAULT_ITEM_CAP, validateTemplateFieldValue, type TemplateField } from "@wayfinder/domain";
+import type { GroupItems } from "@wayfinder/shared";
 
 export interface GroupItemError {
   key: string;

@@ -10,7 +10,7 @@ import {
   type IFlowLessonRepository,
   type IFlowRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The staleness window is an operator preference, not a safety bound, so it is a
 // setting rather than a constant. This is the value used when the key is unset.

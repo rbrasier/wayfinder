@@ -6,7 +6,7 @@ import {
   type Result,
   type SystemSetting,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ResolveOrganisationOnSignIn } from "./resolve-organisation-on-sign-in";
 
 const ORG = {

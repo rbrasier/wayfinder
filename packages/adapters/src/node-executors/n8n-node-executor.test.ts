@@ -1,6 +1,6 @@
 import { createHmac } from "crypto";
 import { describe, expect, it, vi } from "vitest";
-import type { NodeExecutionInput } from "@rbrasier/domain";
+import type { NodeExecutionInput } from "@wayfinder/domain";
 import { N8nNodeExecutor } from "./n8n-node-executor";
 
 const SECRET = "shared-secret";

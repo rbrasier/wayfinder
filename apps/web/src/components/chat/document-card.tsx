@@ -4,7 +4,7 @@ import { useState } from "react";
 import { FileText, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import type { DocumentGenerationConfidence, SessionDocument } from "@rbrasier/domain";
+import type { DocumentGenerationConfidence, SessionDocument } from "@wayfinder/domain";
 import { DocumentInfoModal } from "./document-info-modal";
 import { DocumentEditDialog } from "./document-edit-dialog";
 import { DocumentEditHistoryModal } from "./document-edit-history-modal";

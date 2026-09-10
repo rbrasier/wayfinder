@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildApprovalDecisionMessage } from "@rbrasier/domain";
+import { buildApprovalDecisionMessage } from "@wayfinder/domain";
 import {
   decisionVerbPhrase,
   formatDecisionMoment,

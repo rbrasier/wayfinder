@@ -125,7 +125,7 @@ present per convention.
   `INotificationLogRepository` are domain ports; only `packages/adapters`
   knows about Nodemailer or SMTP.
 - **ADR-003 Monorepo Structure** — the adapter is an npm dep of
-  `@rbrasier/adapters`; wiring lives in `apps/web/lib/container.ts`.
+  `@wayfinder/adapters`; wiring lives in `apps/web/lib/container.ts`.
 
 ### New ADR introduced by this PRD
 

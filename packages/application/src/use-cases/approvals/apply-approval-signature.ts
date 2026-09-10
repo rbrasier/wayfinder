@@ -14,8 +14,8 @@ import {
   type Result,
   type SessionDocument,
   type TemplateField,
-} from "@rbrasier/domain";
-import type { DocumentData } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import type { DocumentData } from "@wayfinder/shared";
 import { DOCUMENT_MIME, templateFormat } from "../document/document-format";
 import { buildRenderData } from "../document/render-data";
 import { nextRevisionPath } from "../document/update-document-fields";

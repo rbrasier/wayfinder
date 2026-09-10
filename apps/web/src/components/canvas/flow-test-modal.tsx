@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { FlowTestSeed, SeedReject } from "@rbrasier/domain";
+import type { FlowTestSeed, SeedReject } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

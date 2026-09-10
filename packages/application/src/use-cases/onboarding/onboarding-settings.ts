@@ -11,7 +11,7 @@ import {
   type ISystemSettingsRepository,
   type OnboardingState,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Read the first-run onboarding gate (ADR-041 §1). A missing/malformed row reads
 // as an unconfigured install, so the wizard opens.

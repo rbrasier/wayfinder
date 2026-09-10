@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import type { ConnectivityResult, ConnectivityTarget } from "@rbrasier/domain";
+import type { ConnectivityResult, ConnectivityTarget } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/trpc/client";
 

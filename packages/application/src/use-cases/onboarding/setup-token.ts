@@ -4,7 +4,7 @@ import {
   type IAdminLookup,
   type ISystemSettingsRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface EnsureSetupTokenConfig {
   // Env override (`SETUP_TOKEN`) for automated installs. When set it is the

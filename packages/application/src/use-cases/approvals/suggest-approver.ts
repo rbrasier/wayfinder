@@ -14,8 +14,8 @@ import {
   type IUserRepository,
   type PositionLookupInput,
   type Result,
-} from "@rbrasier/domain";
-import { delegationPositionSchema, type DelegationPosition } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { delegationPositionSchema, type DelegationPosition } from "@wayfinder/shared";
 import {
   describeApprover,
   describeAssignedApprover,

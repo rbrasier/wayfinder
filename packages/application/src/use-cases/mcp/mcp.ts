@@ -1,4 +1,4 @@
-import { domainError, err, isValidMcpCredentialRef, MCP_CREDENTIAL_ENV_PREFIX, ok } from "@rbrasier/domain";
+import { domainError, err, isValidMcpCredentialRef, MCP_CREDENTIAL_ENV_PREFIX, ok } from "@wayfinder/domain";
 import type {
   IMcpClient,
   IMcpServerDirectory,
@@ -10,7 +10,7 @@ import type {
   McpToolRef,
   McpTransport,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 const credentialRefError = domainError(
   "VALIDATION_FAILED",

@@ -5,7 +5,7 @@ import {
   type GroupUpdate,
   type IGroupRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class UpdateGroup {
   constructor(private readonly groups: IGroupRepository) {}

@@ -15,14 +15,12 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
-    "db:generate": "pnpm --filter @rbrasier/adapters db:generate",
-    "db:migrate": "pnpm --filter @rbrasier/adapters db:migrate",
-    "db:check": "pnpm --filter @rbrasier/adapters db:check",
-    "db:drift": "pnpm --filter @rbrasier/adapters db:drift",
+    "db:generate": "pnpm --filter @wayfinder/adapters db:generate",
+    "db:migrate": "pnpm --filter @wayfinder/adapters db:migrate",
+    "db:check": "pnpm --filter @wayfinder/adapters db:check",
+    "db:drift": "pnpm --filter @wayfinder/adapters db:drift",
     "validate": "./validate.sh",
-    "restart": "./restart.sh",
-    "init": "./scripts/init-project.sh",
-    "framework:update": "./scripts/update-framework.sh"
+    "restart": "./restart.sh"
   },
   "pnpm": {
     "overrides": {

@@ -1,4 +1,4 @@
-// Mirrors MINIMUM_PASSWORD_LENGTH in @rbrasier/domain. Duplicated rather than
+// Mirrors MINIMUM_PASSWORD_LENGTH in @wayfinder/domain. Duplicated rather than
 // imported because this module is bundled into the browser, and the domain
 // package is not part of the client build.
 export const MINIMUM_PASSWORD_LENGTH = 8;

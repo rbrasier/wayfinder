@@ -8,7 +8,7 @@ import {
   type Result,
   type SessionEvent,
   type Unsubscribe,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // One Postgres channel carries every session's events; the session id inside the
 // payload routes each notification to the right in-process subscribers. A single

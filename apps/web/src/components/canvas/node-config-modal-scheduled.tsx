@@ -1,6 +1,6 @@
 "use client";
 
-import type { PriorStepField } from "@rbrasier/domain";
+import type { PriorStepField } from "@wayfinder/domain";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";

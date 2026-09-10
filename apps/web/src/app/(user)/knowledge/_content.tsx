@@ -1,6 +1,6 @@
 "use client";
 
-import type { ChunkStatus, CuratedChunk } from "@rbrasier/domain";
+import type { ChunkStatus, CuratedChunk } from "@wayfinder/domain";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";

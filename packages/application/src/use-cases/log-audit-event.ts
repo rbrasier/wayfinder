@@ -1,4 +1,4 @@
-import type { IAuditLogger, NewAuditLog, Result } from "@rbrasier/domain";
+import type { IAuditLogger, NewAuditLog, Result } from "@wayfinder/domain";
 
 export class LogAuditEvent {
   constructor(private readonly logger: IAuditLogger) {}

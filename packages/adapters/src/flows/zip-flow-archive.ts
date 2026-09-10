@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import PizZip from "pizzip";
-import { domainError, err, migrateManifest, ok, validateManifest } from "@rbrasier/domain";
+import { domainError, err, migrateManifest, ok, validateManifest } from "@wayfinder/domain";
 import type {
   FlowArchiveAsset,
   FlowArchiveContents,
@@ -9,7 +9,7 @@ import type {
   IFlowArchiveReader,
   IFlowArchiveWriter,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   decompressionBomb,
   guardDeclaredSizes,

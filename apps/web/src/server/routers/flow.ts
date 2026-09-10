@@ -1,5 +1,5 @@
-import { groupIdsForMemberships, normaliseOutputType, validateStructuredFieldSet } from "@rbrasier/domain";
-import type { TemplateField } from "@rbrasier/domain";
+import { groupIdsForMemberships, normaliseOutputType, validateStructuredFieldSet } from "@wayfinder/domain";
+import type { TemplateField } from "@wayfinder/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";

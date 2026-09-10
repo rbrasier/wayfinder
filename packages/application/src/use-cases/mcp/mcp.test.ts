@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   IMcpClient,
   IMcpServerRepository,
@@ -10,7 +10,7 @@ import type {
   McpToolCallOutput,
   NewMcpServer,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   DeleteMcpServer,

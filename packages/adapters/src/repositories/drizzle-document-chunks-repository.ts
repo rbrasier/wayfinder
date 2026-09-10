@@ -1,11 +1,11 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   DocumentChunkSearch,
   IDocumentChunkRepository,
   NewDocumentChunk,
   Result,
   RetrievedChunk,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, cosineDistance, desc, eq, gte, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { kb_document_chunks } from "../db/schema/kb";

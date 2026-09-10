@@ -1,4 +1,4 @@
-import { domainError, err, ok, type FlowEdge, type IFlowEdgeRepository, type NewFlowEdge, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type FlowEdge, type IFlowEdgeRepository, type NewFlowEdge, type Result } from "@wayfinder/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SetFlowEdgeBranchRule } from "./set-flow-edge-branch-rule";
 

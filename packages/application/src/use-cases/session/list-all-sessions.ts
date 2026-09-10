@@ -1,4 +1,4 @@
-import type { ISessionRepository, Result, Session } from "@rbrasier/domain";
+import type { ISessionRepository, Result, Session } from "@wayfinder/domain";
 
 export class ListAllSessions {
   constructor(private readonly sessions: ISessionRepository) {}

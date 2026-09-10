@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   Flow,
   FlowEdge,
@@ -22,8 +22,8 @@ import type {
   SessionMessage,
   SessionUpdate,
   TransactionalRepositories,
-} from "@rbrasier/domain";
-import { buildFlowSnapshot } from "@rbrasier/domain";
+} from "@wayfinder/domain";
+import { buildFlowSnapshot } from "@wayfinder/domain";
 import { StartSession } from "./start-session";
 import { ListSessions } from "./list-sessions";
 import { ListAllSessions } from "./list-all-sessions";
@@ -189,8 +189,8 @@ class FakeSessionRepository implements ISessionRepository {
 
   private paginate(
     rows: Session[],
-    options: import("@rbrasier/domain").SessionListPageOptions,
-  ): import("@rbrasier/domain").SessionListPage<Session> {
+    options: import("@wayfinder/domain").SessionListPageOptions,
+  ): import("@wayfinder/domain").SessionListPage<Session> {
     const sorted = this.sortedNewestFirst(rows);
     let startIndex = 0;
     if (options.cursor) {
@@ -218,15 +218,15 @@ class FakeSessionRepository implements ISessionRepository {
 
   async listByUserPage(
     userId: string,
-    options: import("@rbrasier/domain").SessionListPageOptions,
-  ): Promise<Result<import("@rbrasier/domain").SessionListPage<Session>>> {
+    options: import("@wayfinder/domain").SessionListPageOptions,
+  ): Promise<Result<import("@wayfinder/domain").SessionListPage<Session>>> {
     const rows = [...this.sessions.values()].filter((s) => s.userId === userId);
     return ok(this.paginate(rows, options));
   }
 
   async listAllPage(
-    options: import("@rbrasier/domain").SessionListPageOptions,
-  ): Promise<Result<import("@rbrasier/domain").SessionListPage<Session>>> {
+    options: import("@wayfinder/domain").SessionListPageOptions,
+  ): Promise<Result<import("@wayfinder/domain").SessionListPage<Session>>> {
     return ok(this.paginate([...this.sessions.values()], options));
   }
 
@@ -297,7 +297,7 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
 
   async aggregateGatheredContext(
     sessionId: string,
-  ): Promise<Result<import("@rbrasier/domain").GatheredContextItem[]>> {
+  ): Promise<Result<import("@wayfinder/domain").GatheredContextItem[]>> {
     const items = this.chronological(sessionId)
       .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
       .flatMap((m) => m.aiPayload!.contextGathered);
@@ -320,7 +320,7 @@ class FakeSessionMessageRepository implements ISessionMessageRepository {
 
   async summariseForSessionList(
     sessionIds: readonly string[],
-  ): Promise<Result<import("@rbrasier/domain").SessionListSummary[]>> {
+  ): Promise<Result<import("@wayfinder/domain").SessionListSummary[]>> {
     const summaries = sessionIds.flatMap((sessionId) => {
       const assistantMessages = this.chronological(sessionId).filter((m) => m.role === "assistant");
       if (assistantMessages.length === 0) return [];

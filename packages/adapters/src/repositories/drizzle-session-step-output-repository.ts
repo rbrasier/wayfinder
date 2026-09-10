@@ -8,7 +8,7 @@ import {
   type Result,
   type SessionStepOutput,
   type StepOutputField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_session_step_outputs, app_sessions } from "../db/schema/wayfinder";
 

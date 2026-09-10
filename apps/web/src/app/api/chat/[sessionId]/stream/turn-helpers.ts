@@ -13,9 +13,9 @@ import {
   type SessionMessage,
   type SessionUpload,
   type TurnStreamWriter,
-} from "@rbrasier/domain";
-import { buildTurnRetrievalQueries, resolveChangeRequests } from "@rbrasier/application";
-import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { buildTurnRetrievalQueries, resolveChangeRequests } from "@wayfinder/application";
+import { turnResponseSchema, type DocumentData } from "@wayfinder/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
 import type { ModelMessage } from "./model-messages";

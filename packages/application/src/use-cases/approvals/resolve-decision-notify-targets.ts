@@ -9,7 +9,7 @@ import {
   type IUserRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Why this person is being named, so the UI can say it rather than listing
 // addresses without explanation.

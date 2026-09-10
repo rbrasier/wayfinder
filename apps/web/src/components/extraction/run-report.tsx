@@ -1,6 +1,6 @@
 "use client";
 
-import type { ConfidenceBand, ExtractionFieldReportRow } from "@rbrasier/domain";
+import type { ConfidenceBand, ExtractionFieldReportRow } from "@wayfinder/domain";
 import { reportBandSource } from "./field-provenance-display";
 import { trpc } from "@/trpc/client";
 import { RUN_POLL_INTERVAL_MS } from "./run-progress";

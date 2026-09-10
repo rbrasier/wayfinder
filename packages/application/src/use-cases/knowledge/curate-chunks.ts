@@ -1,11 +1,11 @@
-import { domainError, err } from "@rbrasier/domain";
+import { domainError, err } from "@wayfinder/domain";
 import type {
   ChunkStatus,
   ChunkVersion,
   CuratedChunk,
   IChunkCurationRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Bulk lifecycle and tagging actions over a multi-selection, plus revert and
 // version history (ADR-028). Kept together because they are thin pass-throughs

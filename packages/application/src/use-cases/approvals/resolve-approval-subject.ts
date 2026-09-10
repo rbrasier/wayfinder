@@ -17,7 +17,7 @@ import {
   type Result,
   type SessionStepOutput,
   type StepOutputField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { SUBJECT_DESCRIPTION_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
 
 export interface ResolveApprovalSubjectInput {

@@ -1,4 +1,4 @@
-import { buildRetentionPolicies } from "@rbrasier/domain";
+import { buildRetentionPolicies } from "@wayfinder/domain";
 import {
   ApplyAutoNodeResult,
   ApplyRetentionPolicies,
@@ -29,7 +29,7 @@ import {
   SweepFlowMemory,
   CaptureSessionObservations,
   DistilFlowLessons,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import {
   AiHealthChecker,
   CompositeHealthChecker,
@@ -78,9 +78,9 @@ import {
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import { HttpTickFirer } from "./scheduler/http-tick-firer.js";
-import { EMBEDDINGS_DEFAULT_PROVIDER } from "@rbrasier/shared";
+import { EMBEDDINGS_DEFAULT_PROVIDER } from "@wayfinder/shared";
 import type { Env } from "./env.js";
 
 export const buildContainer = (env: Env) => {

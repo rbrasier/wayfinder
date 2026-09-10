@@ -8,7 +8,7 @@ import {
   type ISystemSettingsRepository,
   type Result,
   type SendEmailInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import nodemailer from "nodemailer";
 import {
   buildEnvTransportOptions,

@@ -12,7 +12,7 @@ import {
   type SessionListPageOptions,
   type SessionMode,
   type SessionUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_sessions } from "../db/schema/wayfinder";
 

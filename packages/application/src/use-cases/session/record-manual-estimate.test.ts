@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ok, type Result, type Session, type SessionUpdate } from "@rbrasier/domain";
+import { ok, type Result, type Session, type SessionUpdate } from "@wayfinder/domain";
 import { MAX_ESTIMATE_MINUTES, RecordManualEstimate } from "./record-manual-estimate";
 
 const baseSession: Session = {

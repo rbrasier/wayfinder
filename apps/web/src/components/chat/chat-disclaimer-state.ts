@@ -6,7 +6,7 @@
 import {
   chatDisclaimerAcknowledgementKey,
   type ChatDisclaimerConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export const ACKNOWLEDGED_VALUE = "acknowledged";
 

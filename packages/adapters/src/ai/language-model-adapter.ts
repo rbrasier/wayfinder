@@ -14,7 +14,7 @@ import {
   type StreamObjectInput,
   type StreamTextInput,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { generateObject, generateText, streamObject, streamText } from "ai";
 import { resolveModel, type ProviderCredentials } from "./providers";
 import { RuntimeConfigStore } from "../config/runtime-config-store";

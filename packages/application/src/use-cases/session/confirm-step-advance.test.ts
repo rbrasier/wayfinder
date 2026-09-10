@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   FlowEdge,
   IFlowEdgeRepository,
@@ -9,7 +9,7 @@ import type {
   Result,
   Session,
   SessionUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ConfirmStepAdvance } from "./confirm-step-advance";
 
 class FakeSessionRepository implements ISessionRepository {

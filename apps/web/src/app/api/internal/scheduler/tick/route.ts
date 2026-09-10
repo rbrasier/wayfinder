@@ -1,5 +1,5 @@
-import { FireDueSchedules } from "@rbrasier/application";
-import { SystemClock } from "@rbrasier/adapters";
+import { FireDueSchedules } from "@wayfinder/application";
+import { SystemClock } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { ScheduledSessionFireHandler } from "@/lib/scheduler/scheduled-session-fire-handler";
 

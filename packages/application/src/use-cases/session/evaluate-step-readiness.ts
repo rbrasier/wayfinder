@@ -18,8 +18,8 @@ import {
   type Result,
   type SessionMessage,
   type TemplateField,
-} from "@rbrasier/domain";
-import type { DocumentData } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import type { DocumentData } from "@wayfinder/shared";
 import {
   batchTemplateFields,
   buildDocumentTranscript,

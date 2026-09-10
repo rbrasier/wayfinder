@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   ChunkEdit,
   ChunkListFilter,
@@ -8,7 +8,7 @@ import type {
   CuratedChunk,
   IChunkCurationRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { kb_chunk_versions, kb_document_chunks } from "../db/schema/kb";

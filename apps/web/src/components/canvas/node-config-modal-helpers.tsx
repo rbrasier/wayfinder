@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
-import type { FieldValueSource } from "@rbrasier/domain";
+import type { FieldValueSource } from "@wayfinder/domain";
 import type { NodeConfigValues } from "./node-config-modal";
 
 export const COLOURS = [

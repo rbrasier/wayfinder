@@ -6,7 +6,7 @@ import {
   remapNodeReferences,
   resolveFlowDependencies,
   rewriteSnapshot,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type {
   Flow,
   FlowArchiveLimits,
@@ -22,7 +22,7 @@ import type {
   IObjectStorage,
   ISkillRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { loadDependencyCandidates } from "./inspect-flow-import";
 
 export interface ImportFlowInput {

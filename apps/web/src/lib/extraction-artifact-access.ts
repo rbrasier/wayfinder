@@ -1,4 +1,4 @@
-import type { ExtractionRun } from "@rbrasier/domain";
+import type { ExtractionRun } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { canEditFlow } from "@/server/routers/flow";

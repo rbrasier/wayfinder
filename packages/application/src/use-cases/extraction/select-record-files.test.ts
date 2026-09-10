@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
-import type { ILanguageModel } from "@rbrasier/domain";
-import type { FileGroupingData } from "@rbrasier/shared";
+import { ok, err, domainError } from "@wayfinder/domain";
+import type { ILanguageModel } from "@wayfinder/domain";
+import type { FileGroupingData } from "@wayfinder/shared";
 import {
   oneRecordPerFile,
   selectRecordFiles,

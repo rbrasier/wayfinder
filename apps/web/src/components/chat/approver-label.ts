@@ -1,4 +1,4 @@
-import type { ApproverSource } from "@rbrasier/domain";
+import type { ApproverSource } from "@wayfinder/domain";
 
 const STRUCTURAL_LABEL: Record<ApproverSource, string> = {
   first_level_supervisor: "First-level supervisor",

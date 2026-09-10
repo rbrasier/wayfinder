@@ -7,7 +7,7 @@ import {
   type CreateAdminAccountInput,
   type IAdminAccountCreator,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_users } from "../db/schema/core";
 import { DrizzleAdminLookup } from "./admin-lookup";

@@ -1,4 +1,4 @@
-import type { MessageRole } from "@rbrasier/domain";
+import type { MessageRole } from "@wayfinder/domain";
 
 export interface ModelMessage {
   role: "user" | "assistant";

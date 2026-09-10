@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@rbrasier/domain";
+import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@wayfinder/domain";
 import {
   appendShortcomingsToContext,
   applyAdvanceSideEffects,
@@ -20,7 +20,7 @@ import {
   writeCrossCheckGapNote,
   writeCrossCheckPassNote,
 } from "./turn-helpers";
-import type { Session, TurnStreamWriter } from "@rbrasier/domain";
+import type { Session, TurnStreamWriter } from "@wayfinder/domain";
 
 // The approval reads every extracting generation makes, to pick up an
 // approver's outstanding change requests. Stubbed empty so these tests stay

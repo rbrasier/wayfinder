@@ -7,7 +7,7 @@ import {
   type AuthConfig,
   type EntraCredentials,
   type ISystemSettingsRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
 import { probeAuthEntra } from "../health/connectivity-probes";
 import { GraphClient } from "./graph-client";

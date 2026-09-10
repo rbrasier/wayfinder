@@ -8,7 +8,7 @@ import {
   type RateLimitOutcome,
   type Result,
   type TokenBucket,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 /**
  * Per-instance token-bucket rate limiter. Correct for a single instance; when

@@ -1,4 +1,4 @@
-import type { FlowLesson, FlowUsageStats } from "@rbrasier/domain";
+import type { FlowLesson, FlowUsageStats } from "@wayfinder/domain";
 
 // Three states, not two: an author with a crowded canvas needs the panel gone
 // entirely, and one reading evidence needs it over the canvas.

@@ -6,8 +6,8 @@ import {
   revokeUserSessions,
   type CachedPrincipal,
   type Database,
-} from "@rbrasier/adapters";
-import type { AuthConfig, PermissionKey, Result } from "@rbrasier/domain";
+} from "@wayfinder/adapters";
+import type { AuthConfig, PermissionKey, Result } from "@wayfinder/domain";
 
 interface SessionAuthDeps {
   db: Database;

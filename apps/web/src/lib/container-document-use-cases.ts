@@ -4,7 +4,7 @@ import {
   SummariseTemplate,
   UpdateDocumentFields,
   UpdateStructuredStepOutput,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import type {
   IApprovalRepository,
   IAuditLogger,
@@ -15,7 +15,7 @@ import type {
   ISessionMessageRepository,
   ISessionRepository,
   ISessionStepOutputRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface DocumentUseCaseDeps {
   documentGenerator: IDocumentGenerator;

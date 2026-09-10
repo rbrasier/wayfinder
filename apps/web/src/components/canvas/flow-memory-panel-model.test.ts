@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { FlowLesson } from "@rbrasier/domain";
+import type { FlowLesson } from "@wayfinder/domain";
 import {
   EMPTY_STATE_MESSAGE,
   evidenceLabel,

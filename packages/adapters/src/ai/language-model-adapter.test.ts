@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AiConfig } from "@rbrasier/domain";
+import type { AiConfig } from "@wayfinder/domain";
 import { LanguageModelAdapter } from "./language-model-adapter";
 import type { RuntimeConfigStore } from "../config/runtime-config-store";
 

@@ -12,7 +12,7 @@ import {
   type Result,
   type Session,
   type SessionUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { coerceStructuredFields, coerceVerbatimFields } from "../document/structured-fields";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";

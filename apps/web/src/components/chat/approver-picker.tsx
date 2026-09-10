@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Copy, Info, Loader2, Mail, Stamp, Undo2, UserPen, FileCheck2 } from "lucide-react";
 import { toast } from "sonner";
-import type { ApproverSource } from "@rbrasier/domain";
+import type { ApproverSource } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";

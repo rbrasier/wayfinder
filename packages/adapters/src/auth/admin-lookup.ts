@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { domainError, err, ok, type IAdminLookup, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type IAdminLookup, type Result } from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_users } from "../db/schema/core";
 

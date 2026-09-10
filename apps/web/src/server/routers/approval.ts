@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { ApprovalNodeConfig, ApproverSource } from "@rbrasier/domain";
+import type { ApprovalNodeConfig, ApproverSource } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";

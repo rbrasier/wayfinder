@@ -106,9 +106,9 @@ framework it's talking to.
 
 ```
 packages/domain        entities + port interfaces. Zero external imports, relative imports only.
-packages/application   use cases. Imports @rbrasier/domain and @rbrasier/shared only — no frameworks, no ORMs, no AI SDKs.
+packages/application   use cases. Imports @wayfinder/domain and @wayfinder/shared only — no frameworks, no ORMs, no AI SDKs.
 packages/adapters       implements domain ports — Drizzle, Vercel AI SDK, LangGraph.js, Langfuse, Better Auth.
-apps/web / apps/api    imports @rbrasier/application and @rbrasier/adapters only. Wiring lives in lib/container.ts.
+apps/web / apps/api    imports @wayfinder/application and @wayfinder/adapters only. Wiring lives in lib/container.ts.
 ```
 
 This is enforced by ESLint and `validate.sh`, not just convention — a PR

@@ -11,8 +11,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { computePivot, type PivotColumn, type PivotMeasure } from "@rbrasier/domain";
-import type { FieldReportSessionRow } from "@rbrasier/domain";
+import { computePivot, type PivotColumn, type PivotMeasure } from "@wayfinder/domain";
+import type { FieldReportSessionRow } from "@wayfinder/domain";
 import {
   Sheet,
   SheetBody,

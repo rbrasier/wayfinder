@@ -18,7 +18,7 @@ nobody can trace to a commit.
 | Stream | Status | Publishes |
 |---|---|---|
 | **Container image** | Active | `ghcr.io/rbrasier/wayfinder:<version>` |
-| **npm packages** | Not yet implemented | The four `@rbrasier/*` framework packages |
+| **npm packages** | Not yet implemented | The four `@wayfinder/*` framework packages |
 
 Today, answer "container image" without asking — it is the only stream that
 ships. Ask only once npm publishing exists.

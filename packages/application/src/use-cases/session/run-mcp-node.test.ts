@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   Flow,
   FlowNode,
@@ -11,7 +11,7 @@ import type {
   McpServer,
   Session,
   SessionMessage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { RunMcpNode } from "./run-mcp-node";
 
 const usage = {

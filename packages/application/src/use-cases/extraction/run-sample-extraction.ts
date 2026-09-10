@@ -8,7 +8,7 @@ import {
   type IDocumentExtractor,
   type ILanguageModel,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { extractDocumentFields } from "./extract-document-fields";
 import {
   oneRecordPerFile,

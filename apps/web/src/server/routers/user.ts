@@ -6,7 +6,7 @@ import {
   resetUserPasswordInputSchema,
   updateProfileInputSchema,
   updateUserInputSchema,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 

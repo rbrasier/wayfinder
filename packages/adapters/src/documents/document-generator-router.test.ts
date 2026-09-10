@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import PizZip from "pizzip";
-import { ok } from "@rbrasier/domain";
-import type { IDocumentGenerator } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
+import type { IDocumentGenerator } from "@wayfinder/domain";
 import { DocumentGeneratorRouter } from "./document-generator-router";
 
 const zipWith = (entry: string): Buffer => {

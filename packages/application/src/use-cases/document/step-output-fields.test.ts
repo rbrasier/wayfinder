@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TemplateField } from "@rbrasier/domain";
+import type { TemplateField } from "@wayfinder/domain";
 import { buildStepOutputFields } from "./step-output-fields";
 
 const field = (key: string, type: TemplateField["type"] = "text"): TemplateField => ({

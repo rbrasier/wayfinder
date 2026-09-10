@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   ConversationalNodeConfig,
   IDocumentGenerator,
   SessionMessage,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   DEFAULT_FIELD_BATCH_SIZE,
   batchTemplateFields,

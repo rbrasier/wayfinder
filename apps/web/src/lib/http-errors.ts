@@ -1,4 +1,4 @@
-import type { DomainError, DomainErrorCode } from "@rbrasier/domain";
+import type { DomainError, DomainErrorCode } from "@wayfinder/domain";
 
 // The route-handler counterpart to `toTrpcError`. Binary endpoints answer with
 // plain HTTP rather than a tRPC envelope, and a DomainError still has to arrive

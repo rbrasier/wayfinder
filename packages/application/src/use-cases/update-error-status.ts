@@ -5,7 +5,7 @@ import {
   type Result,
   domainError,
   err,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class UpdateErrorStatus {
   constructor(private readonly repo: IErrorLogRepository) {}

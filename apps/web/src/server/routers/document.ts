@@ -6,14 +6,14 @@ import {
   nodeFieldSet,
   normaliseOutputType,
   summariseDocumentEdits,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type {
   ConversationalNodeConfig,
   DocumentEdit,
   SessionStatus,
   StepOutputField,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 import type { Container } from "@/lib/container";
 import { authenticatedProcedure, router } from "../trpc";

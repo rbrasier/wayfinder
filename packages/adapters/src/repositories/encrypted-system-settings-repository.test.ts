@@ -5,7 +5,7 @@ import {
   ok,
   type ISystemSettingsRepository,
   type SystemSetting,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { describe, expect, it } from "vitest";
 import {
   SettingsEncryptionService,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ILanguageModel, StreamObjectInput, TokenUsage } from "@rbrasier/domain";
+import type { ILanguageModel, StreamObjectInput, TokenUsage } from "@wayfinder/domain";
 import { z } from "zod";
 import { streamTurn } from "./stream-turn";
 

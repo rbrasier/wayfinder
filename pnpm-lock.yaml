@@ -71,16 +71,16 @@ importers:
       '@huggingface/transformers':
         specifier: ^4.2.0
         version: 4.2.0(@types/node@25.9.0)
-      '@rbrasier/adapters':
+      '@wayfinder/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
-      '@rbrasier/application':
+      '@wayfinder/application':
         specifier: workspace:*
         version: link:../../packages/application
-      '@rbrasier/domain':
+      '@wayfinder/domain':
         specifier: workspace:*
         version: link:../../packages/domain
-      '@rbrasier/shared':
+      '@wayfinder/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       cors:
@@ -144,18 +144,6 @@ importers:
       '@radix-ui/react-slot':
         specifier: ^1.1.0
         version: 1.2.4(@types/react@19.2.14)(react@19.2.6)
-      '@rbrasier/adapters':
-        specifier: workspace:*
-        version: link:../../packages/adapters
-      '@rbrasier/application':
-        specifier: workspace:*
-        version: link:../../packages/application
-      '@rbrasier/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
-      '@rbrasier/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
       '@tanstack/react-query':
         specifier: ^5.59.0
         version: 5.100.9(react@19.2.6)
@@ -171,6 +159,18 @@ importers:
       '@trpc/server':
         specifier: ^11.0.0-rc.500
         version: 11.17.0(typescript@5.9.3)
+      '@wayfinder/adapters':
+        specifier: workspace:*
+        version: link:../../packages/adapters
+      '@wayfinder/application':
+        specifier: workspace:*
+        version: link:../../packages/application
+      '@wayfinder/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@wayfinder/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@xyflow/react':
         specifier: ^12.10.2
         version: 12.10.2(@types/react@19.2.14)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -308,15 +308,15 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: ^1.41.1
         version: 1.41.1
-      '@rbrasier/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@rbrasier/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@types/lodash':
         specifier: ^4.17.24
         version: 4.17.24
+      '@wayfinder/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@wayfinder/shared':
+        specifier: workspace:*
+        version: link:../shared
       docx:
         specifier: ^9.6.1
         version: 9.6.1
@@ -408,10 +408,10 @@ importers:
 
   packages/application:
     dependencies:
-      '@rbrasier/domain':
+      '@wayfinder/domain':
         specifier: workspace:*
         version: link:../domain
-      '@rbrasier/shared':
+      '@wayfinder/shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:

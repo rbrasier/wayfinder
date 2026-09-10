@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CsvTable } from "@rbrasier/domain";
+import type { CsvTable } from "@wayfinder/domain";
 import { CsvWriter } from "./csv-writer";
 
 const NAME_COLUMN = [{ key: "name", label: "Name" }];

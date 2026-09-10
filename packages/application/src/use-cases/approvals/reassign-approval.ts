@@ -10,7 +10,7 @@ import {
   type ISessionRepository,
   type IUserRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { IApprovalReassignedNotifier } from "../notifications/notify-on-approval-reassigned";
 import type { IApprovalRequestedNotifier } from "../notifications/notify-on-approval-requested";
 

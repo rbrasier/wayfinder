@@ -8,7 +8,7 @@ import {
   isSelfServicePasswordResetAvailable,
   sessionPolicyViolations,
   type AuthConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { adminProcedure, publicProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { apiKeyState } from "./settings-secrets";

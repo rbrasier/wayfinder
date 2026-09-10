@@ -1,5 +1,5 @@
 {
-  "name": "@rbrasier/adapters",
+  "name": "@wayfinder/adapters",
   "version": "1.1.0",
   "type": "module",
   "description": "Framework adapters — Drizzle, Better Auth, Vercel AI SDK, LangGraph, health checks, logging, observability.",
@@ -40,8 +40,8 @@
     "@opentelemetry/sdk-node": "^0.218.0",
     "@opentelemetry/sdk-trace-node": "^2.7.1",
     "@opentelemetry/semantic-conventions": "^1.41.1",
-    "@rbrasier/domain": "workspace:*",
-    "@rbrasier/shared": "workspace:*",
+    "@wayfinder/domain": "workspace:*",
+    "@wayfinder/shared": "workspace:*",
     "@types/lodash": "^4.17.24",
     "docx": "^9.6.1",
     "docxtemplater": "^3.68.7",

@@ -4,7 +4,7 @@ import {
   templateFieldToLine,
   type TemplateField,
   type TemplateFieldType,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The field types a row editor can author. `select` / `multiselect` are the UI
 // names for an options / multi-options field. `signature` is document-only, so

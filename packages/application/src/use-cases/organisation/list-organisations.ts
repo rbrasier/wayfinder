@@ -1,4 +1,4 @@
-import type { IOrganisationRepository, Organisation, Result } from "@rbrasier/domain";
+import type { IOrganisationRepository, Organisation, Result } from "@wayfinder/domain";
 
 export class ListOrganisations {
   constructor(private readonly organisations: IOrganisationRepository) {}

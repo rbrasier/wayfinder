@@ -9,7 +9,7 @@ import {
   type NewGroup,
   type NewGroupMembership,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CreateGroup } from "./create-group";
 import { UpdateGroup } from "./update-group";
 import { DeleteGroup } from "./delete-group";

@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { isEntraConfigured, type AuthConfig as AuthMethodsConfig } from "@rbrasier/domain";
+import { isEntraConfigured, type AuthConfig as AuthMethodsConfig } from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
 import { applyEntraPrecedence } from "./entra-precedence";

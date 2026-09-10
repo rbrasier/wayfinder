@@ -1,6 +1,6 @@
 "use client";
 
-import { expandAboutLinkUrl, isExternalAboutLink, type AboutLink } from "@rbrasier/domain";
+import { expandAboutLinkUrl, isExternalAboutLink, type AboutLink } from "@wayfinder/domain";
 import {
   Dialog,
   DialogBody,

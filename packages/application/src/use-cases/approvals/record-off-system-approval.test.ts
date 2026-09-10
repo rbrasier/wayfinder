@@ -7,7 +7,7 @@ import {
   type IObjectStorage,
   type NewApproval,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { DecideApproval } from "./decide-approval";
 import { RecordOffSystemApproval } from "./record-off-system-approval";
 import {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { NewAuditLog } from "@rbrasier/domain";
+import type { NewAuditLog } from "@wayfinder/domain";
 import { adminProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 

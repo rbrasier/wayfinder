@@ -11,7 +11,7 @@ import {
   type NewHrRow,
   type Result,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { GraphClient } from "./graph-client";
 import { GraphPeopleDirectory } from "./graph-people-directory";
 import { HrPeopleDirectory } from "./hr-people-directory";

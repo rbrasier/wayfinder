@@ -4,7 +4,7 @@ import {
   type IFlowObservationRepository,
   type ISessionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { CaptureSessionObservations } from "./capture-session-observations";
 import type { DistilFlowLessons } from "./distil-flow-lessons";
 

@@ -9,7 +9,7 @@ import {
   type McpServerUpdate,
   type NewMcpServer,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { admin_mcp_servers } from "../db/schema/admin";

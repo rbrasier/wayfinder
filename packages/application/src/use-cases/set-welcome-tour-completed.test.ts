@@ -8,7 +8,7 @@ import {
   type Result,
   type User,
   type UserUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { SetWelcomeTourCompleted } from "./set-welcome-tour-completed";
 
 const makeUser = (overrides: Partial<User> = {}): User => ({

@@ -1,6 +1,6 @@
 "use client";
 
-import { PERMISSIONS, type PermissionKey } from "@rbrasier/domain";
+import { PERMISSIONS, type PermissionKey } from "@wayfinder/domain";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";

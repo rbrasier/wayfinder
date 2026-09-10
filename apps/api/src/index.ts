@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { setupTelemetry } from "@rbrasier/adapters";
+import { setupTelemetry } from "@wayfinder/adapters";
 import { buildApp } from "./app.js";
 import { buildContainer } from "./container.js";
 import { loadEnv } from "./env.js";

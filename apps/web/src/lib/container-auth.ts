@@ -8,9 +8,9 @@ import {
   type PkiEnvDefaults,
   type RuntimeConfigStore,
   type SessionRevocationRegistry,
-} from "@rbrasier/adapters";
-import { SendPasswordResetEmail } from "@rbrasier/application";
-import type { IEmailSender } from "@rbrasier/domain";
+} from "@wayfinder/adapters";
+import { SendPasswordResetEmail } from "@wayfinder/application";
+import type { IEmailSender } from "@wayfinder/domain";
 
 interface PkiEnv {
   AUTH_METHOD: string;

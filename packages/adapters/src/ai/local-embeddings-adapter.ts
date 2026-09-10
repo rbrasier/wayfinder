@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { domainError, err, ok, type IEmbeddingsProvider, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type IEmbeddingsProvider, type Result } from "@wayfinder/domain";
 
 // Whether this artefact can run the local provider at all. A Lambda zip ships
 // without onnxruntime-node so that cold starts stay sane (ADR-056 §4), which

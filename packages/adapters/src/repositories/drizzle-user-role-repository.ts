@@ -5,7 +5,7 @@ import {
   type IUserRoleRepository,
   type Result,
   type Role,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { admin_roles, admin_user_roles } from "../db/schema/admin";

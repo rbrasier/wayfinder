@@ -21,7 +21,7 @@ import {
   type Session,
   type SessionMessage,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { NotifyOnStepComplete } from "./notify-on-step-complete";
 
 class FakeNotificationLogRepository implements INotificationLogRepository {

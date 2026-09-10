@@ -1,4 +1,4 @@
-import type { FlowExportDependency, FlowImportInspection } from "@rbrasier/domain";
+import type { FlowExportDependency, FlowImportInspection } from "@wayfinder/domain";
 import { describe, expect, it } from "vitest";
 import { describeDependency, formatAssetSize, summariseInspection } from "./flow-import-summary";
 

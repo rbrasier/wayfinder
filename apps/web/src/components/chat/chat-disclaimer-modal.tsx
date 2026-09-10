@@ -16,7 +16,7 @@ import {
   shouldOpenDisclaimerModal,
   type AcknowledgementStorage,
 } from "./chat-disclaimer-state";
-import { chatDisclaimerAcknowledgementKey } from "@rbrasier/domain";
+import { chatDisclaimerAcknowledgementKey } from "@wayfinder/domain";
 
 const browserStorage = (): AcknowledgementStorage | null => {
   try {

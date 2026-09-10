@@ -9,7 +9,7 @@ import {
   type NewAuditLog,
   type Result,
   type Sha256Hex,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { desc, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_audit_log } from "../db/schema/core";

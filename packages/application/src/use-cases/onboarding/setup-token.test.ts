@@ -6,7 +6,7 @@ import {
   type ISystemSettingsRepository,
   type Result,
   type SystemSetting,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { EnsureSetupToken } from "./setup-token";
 
 class FakeSettings implements ISystemSettingsRepository {

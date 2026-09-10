@@ -9,8 +9,8 @@ import {
   type Result,
   type User,
   type UserUpdate,
-} from "@rbrasier/domain";
-import { DEFAULT_SESSION_POLICY } from "@rbrasier/domain";
+} from "@wayfinder/domain";
+import { DEFAULT_SESSION_POLICY } from "@wayfinder/domain";
 import { createSessionRevocationRegistry } from "../session-revocation";
 import { PkiCertAdapter, type PkiConfig } from "../pki-cert-adapter";
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { EmbeddingModelV1 } from "@ai-sdk/provider";
-import { ok, type EmbeddingsConfig, type IEmbeddingsProvider } from "@rbrasier/domain";
+import { ok, type EmbeddingsConfig, type IEmbeddingsProvider } from "@wayfinder/domain";
 import {
   DispatchingEmbeddingsAdapter,
   EmbeddingsAdapter,

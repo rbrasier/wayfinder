@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FieldValueSource, PriorStepField } from "@rbrasier/domain";
+import type { FieldValueSource, PriorStepField } from "@wayfinder/domain";
 import { decodeSource, encodeSource, groupPriorStepFields } from "./field-value-selector";
 
 const priorField = (

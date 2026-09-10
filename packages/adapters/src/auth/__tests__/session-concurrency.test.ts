@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_SESSION_POLICY, type SessionPolicy } from "@rbrasier/domain";
+import { DEFAULT_SESSION_POLICY, type SessionPolicy } from "@wayfinder/domain";
 import { enforceSessionConcurrency } from "../session-concurrency";
 import { createSessionRevocationRegistry } from "../session-revocation";
 import type { Database } from "../../db/client";

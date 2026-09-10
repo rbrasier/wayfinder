@@ -12,7 +12,7 @@ import {
   type IApprovalRepository,
   type NewApproval,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_session_approvals, app_sessions } from "../db/schema/wayfinder";
 

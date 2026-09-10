@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
+import type { FieldValueSource, PriorStepField, TemplateField } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 
 const SELECT_CLASS =

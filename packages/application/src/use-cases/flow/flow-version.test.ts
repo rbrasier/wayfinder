@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { buildFlowSnapshot, domainError, err, ok } from "@rbrasier/domain";
+import { buildFlowSnapshot, domainError, err, ok } from "@wayfinder/domain";
 import type {
   CreatePublishedVersion,
   Flow,
@@ -21,7 +21,7 @@ import type {
   RestoreVersion,
   Result,
   UpsertDraftVersion,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { PublishFlowVersion } from "./publish-flow-version";
 import { ListFlowVersions } from "./list-flow-versions";
 import { GetFlowVersion } from "./get-flow-version";

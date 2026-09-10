@@ -9,7 +9,7 @@ import {
   type RetentionPolicy,
   type RetentionTargetKey,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // One settings key per target. The env value stays the fallback (ADR-041 §2), so
 // a deployment that set a window in its environment keeps that window until an

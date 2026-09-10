@@ -8,7 +8,7 @@ import {
   type FlowArchiveLimits,
   type FlowExportManifest,
   type FlowSnapshot,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ZipFlowArchive } from "./zip-flow-archive";
 
 const archive = new ZipFlowArchive();

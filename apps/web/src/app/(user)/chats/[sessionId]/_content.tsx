@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { toast } from "sonner";
-import { visitedNodeIdsInOrder, type ApproverSource, type FlowEdge, type FlowNode } from "@rbrasier/domain";
+import { visitedNodeIdsInOrder, type ApproverSource, type FlowEdge, type FlowNode } from "@wayfinder/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";

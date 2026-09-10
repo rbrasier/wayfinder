@@ -5,12 +5,12 @@ import {
   GetRetentionSettings,
   RejectLesson,
   SetRetentionWindow,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import {
   DrizzleFlowLessonRepository,
   DrizzleFlowObservationRepository,
   type Database,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import type {
   IAnalyticsRepository,
   IAnswerFeedbackRepository,
@@ -18,7 +18,7 @@ import type {
   IFlowRepository,
   ISystemSettingsRepository,
   RetentionConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The retention windows this deployment's environment sets, used as the fallback
 // behind a stored settings row (ADR-041 §2). Every one defaults to 0 — keep

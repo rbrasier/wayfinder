@@ -27,7 +27,7 @@ import {
   type RunStatus,
   type RunStatusCounts,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { AdvanceBatchRuns } from "./advance-batch-runs";
 import { CancelRun } from "./cancel-run";
 import { ContinueRun } from "./continue-run";

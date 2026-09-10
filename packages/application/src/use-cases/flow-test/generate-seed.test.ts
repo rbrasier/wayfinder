@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { domainError, err, ok, type FlowTestSeed, type ISeedProposer, type Result, type SeedProposalRequest } from "@rbrasier/domain";
+import { domainError, err, ok, type FlowTestSeed, type ISeedProposer, type Result, type SeedProposalRequest } from "@wayfinder/domain";
 import { GenerateSeed } from "./generate-seed";
 import {
   FakeFlowEdgeRepository,

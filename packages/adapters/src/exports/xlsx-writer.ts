@@ -1,12 +1,12 @@
 import PizZip from "pizzip";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   ISpreadsheetWriter,
   Result,
   SpreadsheetSheet,
   WriteSpreadsheetInput,
   WriteSpreadsheetOutput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Builds a fresh .xlsx workbook from one or more tabs for the structured export
 // (phase §2.2, ADR-039 risk: "the writer is new work"). This is the multi-row

@@ -390,7 +390,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Coverage — domain
-        run: pnpm --filter "@rbrasier/domain" test:coverage
+        run: pnpm --filter "@wayfinder/domain" test:coverage
 
       - name: Coverage — application
-        run: pnpm --filter "@rbrasier/application" test:coverage
+        run: pnpm --filter "@wayfinder/application" test:coverage
