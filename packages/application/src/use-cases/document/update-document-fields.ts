@@ -1,6 +1,7 @@
 import {
   domainError,
   err,
+  gatherableFields,
   ok,
   validateTemplateFieldValue,
   type ConversationalNodeConfig,
@@ -25,7 +26,7 @@ import { DOCUMENT_MIME, templateFormat } from "./document-format";
 import { buildRenderData } from "./render-data";
 import { validateGroupItems } from "./group-edit";
 import { resolveRecordLock } from "../approvals/resolve-record-lock";
-import { signatureValuesForStep } from "../approvals/signature-values";
+import { approvalValuesForStep } from "../approvals/approval-values";
 
 export interface UpdateDocumentFieldsInput {
   messageId: string;
@@ -127,12 +128,12 @@ export class UpdateDocumentFields {
       if (field.type === "group") renderValues[field.key] = itemsFor(field.key);
     }
     // Without this the re-render would write an empty string into every
-    // signature slot, silently unsigning a document an approver had already
-    // signed. Signatures live in the approval records, not the step output, so
-    // they have to be read back in on every render.
+    // signature slot and every approval comment, silently unsigning a document
+    // an approver had already signed. Both live in the approval records, not the
+    // step output, so they have to be read back in on every render.
     Object.assign(
       renderValues,
-      await signatureValuesForStep(
+      await approvalValuesForStep(
         this.approvals,
         message.sessionId,
         message.stepNodeId ?? "",
@@ -155,10 +156,11 @@ export class UpdateDocumentFields {
     if (putResult.error) return putResult;
 
     const previousValues = new Map(stepOutput.fields.map((field) => [field.key, field.value]));
-    // A signature is never a captured value — it belongs to the approval record,
-    // and letting one into the step output would put it in reporting and in the
-    // edit dialog, which is exactly what nodeFieldSet exists to prevent.
-    const capturedFields = fields.filter((field) => field.type !== "signature");
+    // A signature and its comment are never captured values — they belong to the
+    // approval record, and letting one into the step output would put it in
+    // reporting and in the edit dialog, which is exactly what the gatherable
+    // filter exists to prevent.
+    const capturedFields = gatherableFields(fields);
     const newFields: StepOutputField[] = capturedFields.map((field) => {
       if (field.type === "group") {
         return {

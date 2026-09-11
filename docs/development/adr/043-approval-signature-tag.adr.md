@@ -163,6 +163,53 @@ Decisions are recorded verbatim: a `rejected` or `changes_requested` outcome
 renders the same block with that decision named. An undecided slot renders as an
 empty string — a document must never imply an approval that has not happened.
 
+**Amended v0.28.21 — the comment may also stand on its own, bound by name.**
+The block above is the only place a template could put the approver's comment,
+and its shape is fixed: one `Comment:` row, in that order, wherever the signature
+sits. An author wanting the rationale in a "Reason for decision" box, a table
+cell beside the recommendation, or a covering paragraph had nowhere to put it.
+
+`(approval-comment: <Signature Name>)` is a second annotation producing the
+`approval_comment` field type, carrying `signatureLabel` — the signature tag's
+own name, as the author wrote it:
+
+```
+{{ Delegate Signature (approval) }}
+{{ Reason For Decision (approval-comment: Delegate Signature) }}
+```
+
+`(signature-comment: …)` is its synonym, for the reason `(signature)` is a
+synonym of `(approval)`. `approvalCommentSlotKey` resolves the reference through
+`deriveFieldKey` — the same derivation that produced the signature's own key from
+its own label, so the two cannot disagree.
+
+**The reference is explicit because §5 already settled that guessing is worse
+than refusing.** A bare `(approval-comment)` binds to the template's only
+signature and is a `VALIDATION_FAILED` with none or with two or more, on the
+same reasoning as the lone-slot fallback: with several slots, a guess prints one
+approver's words under another approver's name. A comment naming a signature the
+template does not declare fails at upload with the available names listed, rather
+than rendering blank forever at run time. Both are cross-tag rules, so they are
+resolved in a pass after the whole tag list is walked — a comment tag may sit
+*above* the signature it names, which is the ordinary layout for a rationale box.
+
+The value is the deciding approval's `comment`, carried out of the same
+latest-first pass that fills the signature slot, so the block and the comment
+printed beside it can never come from different decisions. It is read from the
+approval row's own column — written once by the pending-guarded update, never
+again — so no new record key is introduced and an approval decided before this
+amendment fills its comment tag on the next render. An undecided slot, or a
+decision made without a comment, renders empty: a document must never imply a
+rationale nobody gave, any more than an approval that never happened.
+
+Everything §2 and §5a say about a signature applies unchanged to its comment, and
+is inherited rather than re-implemented: `gatherableFields` and
+`gatherableTemplateContent` are the same two choke points, the annotation editor
+gains a row type whose settings panel is the signature picker, and a `(repeat)`
+group refuses a comment for the reason it refuses a signature — one decision is
+not *N*. The attestation block itself is untouched: it is frozen, hashed text,
+and altering it would alter what was signed.
+
 ### 4. Plain runs, so the block renders everywhere
 
 The block is ordinary text substituted by docxtemplater into normal runs. It

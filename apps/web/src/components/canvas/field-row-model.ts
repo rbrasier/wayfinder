@@ -7,8 +7,9 @@ import {
 } from "@rbrasier/domain";
 
 // The field types a row editor can author. `select` / `multiselect` are the UI
-// names for an options / multi-options field. `signature` is document-only, so
-// the structured editor omits it.
+// names for an options / multi-options field. `signature` and the
+// `approval_comment` that belongs to one are document-only, so the structured
+// editor omits both.
 export type FieldRowType =
   | "text"
   | "number"
@@ -19,7 +20,8 @@ export type FieldRowType =
   | "select"
   | "multiselect"
   | "narrative"
-  | "signature";
+  | "signature"
+  | "approval_comment";
 
 export interface FieldRowTypeOption {
   value: FieldRowType;
@@ -50,11 +52,13 @@ export const STRUCTURED_TYPE_OPTIONS: FieldRowTypeOption[] = [
   NARRATIVE_TYPE_OPTION,
 ];
 
-// ADR-043 §2: a signature is filled by an approval step signing a document, so
-// it is the one type a structured step cannot carry.
+// ADR-043 §2: a signature is filled by an approval step signing a document, and
+// an approval comment by the same decision, so these are the types a structured
+// step cannot carry.
 export const TEMPLATE_TYPE_OPTIONS: FieldRowTypeOption[] = [
   ...STRUCTURED_TYPE_OPTIONS,
   { value: "signature", label: "Signature" },
+  { value: "approval_comment", label: "Approval comment" },
 ];
 
 export interface FieldModel {
@@ -66,6 +70,10 @@ export interface FieldModel {
   min?: number;
   options: string[];
   instruction?: string;
+  // Which signature an approval comment belongs to, named as the signature's own
+  // label. Empty until the author picks one, which the row's settings panel
+  // offers from the signatures declared elsewhere in the same template.
+  signatureLabel?: string;
 }
 
 export const emptyModel = (): FieldModel => ({
@@ -97,6 +105,7 @@ export const lineToModel = (line: string): FieldModel => {
     ...(field.max !== undefined ? { max: field.max } : {}),
     ...(field.min !== undefined ? { min: field.min } : {}),
     ...(field.instruction !== undefined ? { instruction: field.instruction } : {}),
+    ...(field.signatureLabel !== undefined ? { signatureLabel: field.signatureLabel } : {}),
   };
 };
 
@@ -109,6 +118,8 @@ const fieldRowTypeOf = (field: TemplateField): FieldRowType => {
   switch (field.type) {
     case "signature":
       return "signature";
+    case "approval_comment":
+      return "approval_comment";
     case "number":
     case "currency":
     case "date":
@@ -153,6 +164,9 @@ export const modelToLine = (model: FieldModel): string => {
     ...(model.max !== undefined ? { max: model.max } : {}),
     ...(model.min !== undefined ? { min: model.min } : {}),
     ...(model.type === "narrative" && model.instruction ? { instruction: model.instruction } : {}),
+    ...(model.type === "approval_comment" && model.signatureLabel
+      ? { signatureLabel: model.signatureLabel }
+      : {}),
   };
 
   return templateFieldToLine(field);
@@ -163,8 +177,11 @@ export const modelToLine = (model: FieldModel): string => {
 // opening it. Field name and type are the row's own controls, not config.
 export const hasNonDefaultConfig = (model: FieldModel): boolean =>
   // A signature is optional by construction rather than by an author's choice,
-  // and its cog carries no controls, so it is never "configured".
-  (model.type !== "signature" && model.optional) ||
+  // and its cog carries no controls, so it is never "configured". An approval
+  // comment is optional by construction too, but its cog holds the signature it
+  // belongs to — the one setting that row has.
+  (model.type !== "signature" && model.type !== "approval_comment" && model.optional) ||
+  (model.signatureLabel?.trim().length ?? 0) > 0 ||
   model.maxLength !== undefined ||
   model.max !== undefined ||
   model.min !== undefined ||
@@ -176,11 +193,15 @@ export const hasNonDefaultConfig = (model: FieldModel): boolean =>
 export const withType = (model: FieldModel, type: FieldRowType): FieldModel => ({
   label: model.label,
   type,
-  // parseTemplateField makes every signature optional and rejects one that is
-  // required, so the switch has to carry the model to where the parser will.
-  optional: type === "signature" ? true : model.optional,
+  // parseTemplateField makes every signature and approval comment optional and
+  // rejects one that is required, so the switch has to carry the model to where
+  // the parser will.
+  optional: type === "signature" || type === "approval_comment" ? true : model.optional,
   options: type === "select" || type === "multiselect" ? model.options : [],
   ...(type === "narrative" && model.instruction ? { instruction: model.instruction } : {}),
+  ...(type === "approval_comment" && model.signatureLabel
+    ? { signatureLabel: model.signatureLabel }
+    : {}),
 });
 
 export const linesToModels = (lines: string[]): FieldModel[] =>

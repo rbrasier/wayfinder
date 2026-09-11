@@ -14,7 +14,12 @@ export type TemplateFieldType =
   | "group"
   // Filled by the approval step that owns the slot, never by the conversation
   // (ADR-043). `nodeFieldSet` keeps it out of everything that gathers values.
-  | "signature";
+  | "signature"
+  // The comment the approver left, rendered on its own wherever the author put
+  // it rather than only inside the signature's attestation block. Filled by the
+  // same decision that fills the signature it names, and gathered no more than
+  // a signature is.
+  | "approval_comment";
 
 export interface TemplateField {
   key: string;
@@ -31,6 +36,11 @@ export interface TemplateField {
   // One repeating-group item's sub-fields (group only). Parsed from the tags
   // between the group's {{#name (repeat)}} open and {{/name}} close.
   itemFields?: TemplateField[];
+  // The signature this comment belongs to (approval_comment only), named as the
+  // author wrote it in the tag. Resolved to the slot's key by
+  // `approvalCommentSlotKey`, which is how a document with several signatures
+  // keeps each comment under the right one.
+  signatureLabel?: string;
   // Hard maximum number of items the AI may emit for a group (group only).
   // Defaults to DEFAULT_ITEM_CAP when the open tag carries no (max: N).
   itemCap?: number;
@@ -45,13 +55,17 @@ export const DEFAULT_ITEM_CAP = 20;
 const SCALAR_TYPES: TemplateFieldType[] = ["text", "date", "currency", "number", "email", "yesno"];
 
 const VALID_ANNOTATIONS_HINT =
-  "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (approval), (options: A, B, C), (multi-options: A, B, C), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
+  "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (approval), (approval-comment: Signature Name), (options: A, B, C), (multi-options: A, B, C), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
 
 // `signature` is the parsed type name, the annotator's type-picker value and
 // every internal identifier for the slot, so authors reach for it in the
 // document too. Both spellings mean the same thing; (approval) stays canonical
 // on the way out (see templateFieldToLine).
 const SIGNATURE_KEYWORDS = ["approval", "signature"];
+
+// `(approval-comment: Delegate Signature)`, with `(signature-comment: …)` as its
+// synonym for the same reason `(signature)` is a synonym of `(approval)`.
+const APPROVAL_COMMENT_KEYWORDS = ["approval-comment", "signature-comment"];
 
 const extractAnnotationGroups = (rawTag: string): string[] => {
   const matches = [...rawTag.matchAll(/\(([^()]*)\)/g)];
@@ -68,6 +82,17 @@ export const isSignatureTag = (rawTag: string): boolean =>
     SIGNATURE_KEYWORDS.includes(annotation.toLowerCase()),
   );
 
+const stripWrappingQuotes = (value: string): string => {
+  const trimmed = value.trim();
+  const first = trimmed.at(0);
+  const last = trimmed.at(-1);
+  const quotes = ['"', "'", "“", "”", "‘", "’"];
+  if (trimmed.length >= 2 && first && last && quotes.includes(first) && quotes.includes(last)) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+};
+
 const stripAnnotations = (rawTag: string): string =>
   rawTag.replace(/\([^()]*\)/g, " ").replace(/\s+/g, " ").trim();
 
@@ -80,22 +105,38 @@ export const deriveFieldKey = (label: string): string => {
   return normalized || "field";
 };
 
+// True when a raw tag body declares an approval comment, with the signature it
+// references if it named one. Null for every other annotation.
+const approvalCommentAnnotation = (annotation: string): { reference: string } | null => {
+  const colonIndex = annotation.indexOf(":");
+  const keyword = (colonIndex >= 0 ? annotation.slice(0, colonIndex) : annotation)
+    .trim()
+    .toLowerCase();
+  if (!APPROVAL_COMMENT_KEYWORDS.includes(keyword)) return null;
+  const reference = colonIndex >= 0 ? stripWrappingQuotes(annotation.slice(colonIndex + 1)) : "";
+  return { reference };
+};
+
+// Every tag an approval step owns — the signature and the comment alike. The
+// safety filters take this rather than `isSignatureTag`, because a comment slot
+// the conversation can reach is a comment an operator can put words into.
+export const isApprovalOwnedTag = (rawTag: string): boolean =>
+  isSignatureTag(rawTag) ||
+  extractAnnotationGroups(rawTag).some(
+    (annotation) => approvalCommentAnnotation(annotation) !== null,
+  );
+
+// The signature slot an approval comment fills, as the key that slot renders
+// under. Null for an unbound comment, which renders empty rather than guessing
+// which approver it belongs to.
+export const approvalCommentSlotKey = (field: TemplateField): string | null =>
+  field.signatureLabel ? deriveFieldKey(field.signatureLabel) : null;
+
 // Best-effort render key for a raw tag: strips annotations then snake_cases the
 // remaining name. Never throws — annotation validity is enforced at upload time.
 export const templateFieldKey = (rawTag: string): string => {
   const label = stripAnnotations(rawTag);
   return deriveFieldKey(label || rawTag);
-};
-
-const stripWrappingQuotes = (value: string): string => {
-  const trimmed = value.trim();
-  const first = trimmed.at(0);
-  const last = trimmed.at(-1);
-  const quotes = ['"', "'", "“", "”", "‘", "’"];
-  if (trimmed.length >= 2 && first && last && quotes.includes(first) && quotes.includes(last)) {
-    return trimmed.slice(1, -1).trim();
-  }
-  return trimmed;
 };
 
 const applyAnnotation = (
@@ -117,6 +158,27 @@ const applyAnnotation = (
     // Implicitly optional: the slot is filled by the approver at decision time,
     // so an unsigned document must never look incomplete.
     return ok({ ...field, type: "signature", optional: true });
+  }
+
+  const approvalComment = approvalCommentAnnotation(annotation);
+  if (approvalComment) {
+    if (field.options || field.type !== "text") {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${rawTag}}}" declares more than one type. Pick a single type keyword.`,
+        ),
+      );
+    }
+    // Optional for the same reason a signature is, and unbound until
+    // `parseTemplateFields` sees the whole template: a comment tag may sit above
+    // the signature it names, so a single tag cannot resolve its own reference.
+    return ok({
+      ...field,
+      type: "approval_comment",
+      optional: true,
+      ...(approvalComment.reference ? { signatureLabel: approvalComment.reference } : {}),
+    });
   }
 
   if (lower === "narrative" || lower.startsWith("narrative:")) {
@@ -363,19 +425,22 @@ export const parseTemplateField = (rawTag: string): Result<TemplateField> => {
   }
 
   // Checked after the loop so the constraint is caught whichever order the
-  // author wrote the annotations in. A signature carries no author-supplied
-  // value, so there is nothing for a length, bound or multiplicity to constrain.
-  if (field.type === "signature") {
+  // author wrote the annotations in. Neither a signature nor its comment carries
+  // an author-supplied value, so there is nothing for a length, bound or
+  // multiplicity to constrain.
+  if (field.type === "signature" || field.type === "approval_comment") {
     const constrained =
       field.maxLength !== undefined ||
       field.min !== undefined ||
       field.max !== undefined ||
       field.multiple === true;
     if (constrained) {
+      const description =
+        field.type === "signature" ? "an (approval) signature" : "an (approval-comment)";
       return err(
         domainError(
           "VALIDATION_FAILED",
-          `Tag "{{${rawTag.trim()}}}" is an (approval) signature, which takes no (maxlen: …), (min: …), (max: …) or (multiple). Remove them.`,
+          `Tag "{{${rawTag.trim()}}}" is ${description}, which takes no (maxlen: …), (min: …), (max: …) or (multiple). Remove them.`,
         ),
       );
     }
@@ -413,6 +478,9 @@ const describeType = (field: TemplateField): string => {
   }
   if (field.type === "signature") {
     return "filled by the approval step that owns this slot — never ask anyone for it";
+  }
+  if (field.type === "approval_comment") {
+    return "filled with the comment left by the approval step that signs this document — never ask anyone for it";
   }
   if (field.options && field.options.length > 0) {
     const prefix = field.multiple ? "one or more of" : "exactly one of";
@@ -463,6 +531,15 @@ export const templateFieldToLine = (field: TemplateField): string => {
   // The keyword is `approval`; `signature` is the parsed type name, so writing
   // the type here would produce a line the parser rejects.
   if (field.type === "signature") return `${field.label} (approval)`;
+
+  // The reference goes back out with the comment, or the annotation editor would
+  // re-emit a bound comment as an unbound one and quietly break the pairing it
+  // was opened to edit.
+  if (field.type === "approval_comment") {
+    return field.signatureLabel
+      ? `${field.label} (approval-comment: ${field.signatureLabel})`
+      : `${field.label} (approval-comment)`;
+  }
 
   if (field.type === "narrative") {
     const instruction = field.instruction?.trim();
@@ -557,8 +634,9 @@ export const validateTemplateFieldValue = (
   }
 
   // Reached only if a caller bypasses nodeFieldSet's filter. A signature typed
-  // by anyone other than the decision path is a forged signature.
-  if (field.type === "signature") {
+  // by anyone other than the decision path is a forged signature, and words put
+  // into an approver's mouth are no better.
+  if (field.type === "signature" || field.type === "approval_comment") {
     return err(
       domainError(
         "VALIDATION_FAILED",
@@ -594,112 +672,4 @@ export const validateTemplateFieldValue = (
     default:
       return ok(value);
   }
-};
-
-interface OpenGroup {
-  field: TemplateField;
-  inner: TemplateField[];
-  innerKeys: Set<string>;
-}
-
-// Walks the ordered raw tags, folding {{#name (repeat)}} … {{/name}} blocks into
-// a single `group` field whose `itemFields` are the inner tags (kept out of the
-// top level). A {{#name}} without (repeat) stays a v1.19.0 boolean gate with its
-// inner tags at the top level. Nesting a group inside a section or another group
-// (or a section inside a group) is a validation error — v1 is single-level only.
-export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> => {
-  const fields: TemplateField[] = [];
-  const seenKeys = new Set<string>();
-  let openGroup: OpenGroup | null = null;
-  const openSections: string[] = [];
-
-  const addTopLevel = (field: TemplateField): void => {
-    if (seenKeys.has(field.key)) return;
-    seenKeys.add(field.key);
-    fields.push(field);
-  };
-
-  for (const rawTag of rawTags) {
-    const trimmed = rawTag.trim();
-    const sigil = /^[#/^]/.test(trimmed) ? trimmed[0] : null;
-    const parsed = parseTemplateField(trimmed);
-    if (parsed.error) return parsed;
-    const field = parsed.data;
-
-    if (sigil === "#" || sigil === "^") {
-      if (field.type === "group") {
-        if (openGroup) {
-          return err(
-            domainError(
-              "VALIDATION_FAILED",
-              `Repeating group "{{${trimmed}}}" is nested inside another group. Nested groups are not supported — keep groups at the top level.`,
-            ),
-          );
-        }
-        if (openSections.length > 0) {
-          return err(
-            domainError(
-              "VALIDATION_FAILED",
-              `Repeating group "{{${trimmed}}}" is nested inside an optional section. A group cannot sit inside a section — move it out.`,
-            ),
-          );
-        }
-        openGroup = { field, inner: [], innerKeys: new Set<string>() };
-        addTopLevel(field);
-        continue;
-      }
-      if (openGroup) {
-        return err(
-          domainError(
-            "VALIDATION_FAILED",
-            `Section "{{${trimmed}}}" is nested inside a repeating group. Sections inside groups are not supported.`,
-          ),
-        );
-      }
-      openSections.push(field.key);
-      addTopLevel(field);
-      continue;
-    }
-
-    if (sigil === "/") {
-      if (openGroup && openGroup.field.key === field.key) {
-        if (openGroup.inner.length === 0) {
-          return err(
-            domainError(
-              "VALIDATION_FAILED",
-              `Repeating group "{{#${field.label}}}" has no fields inside it. Add at least one {{ Field }} between the open and close tags.`,
-            ),
-          );
-        }
-        openGroup.field.itemFields = openGroup.inner;
-        openGroup = null;
-        continue;
-      }
-      const sectionIndex = openSections.lastIndexOf(field.key);
-      if (sectionIndex >= 0) openSections.splice(sectionIndex, 1);
-      // Close tags never emit a field — they dedupe against their open by key.
-      continue;
-    }
-
-    if (openGroup) {
-      // A signature is a single attested act, not a repeating item — inside a
-      // group it would imply N decisions from one approval (ADR-043 §1).
-      if (field.type === "signature") {
-        return err(
-          domainError(
-            "VALIDATION_FAILED",
-            `Signature "{{${trimmed}}}" is inside the repeating group "${openGroup.field.label}". A signature is one attested decision, so it must sit outside any (repeat) block.`,
-          ),
-        );
-      }
-      if (!openGroup.innerKeys.has(field.key)) {
-        openGroup.innerKeys.add(field.key);
-        openGroup.inner.push(field);
-      }
-      continue;
-    }
-    addTopLevel(field);
-  }
-
-  return ok(fields);
 };

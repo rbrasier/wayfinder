@@ -248,6 +248,29 @@ describe("XlsxGenerator", () => {
       expect(result.error?.message).toContain(".docx");
     });
 
+    // A comment cannot outlive the signature it belongs to, so a spreadsheet
+    // refuses it either way round: with a signature the signature is refused
+    // first, and without one there is nothing for the comment to belong to.
+    it("rejects an (approval-comment) tag, naming the tag that cannot be used", () => {
+      const withSignature = generator.extractFields({
+        templateBytes: buildXlsx([
+          [
+            "{{ Delegate Signature (approval) }}",
+            "{{ Delegate Note (approval-comment: Delegate Signature) }}",
+          ],
+        ]),
+      });
+      expect(withSignature.error?.code).toBe("VALIDATION_FAILED");
+
+      const alone = generator.extractFields({
+        templateBytes: buildXlsx([
+          ["{{ Client Email (email) }}", "{{ Delegate Note (approval-comment) }}"],
+        ]),
+      });
+      expect(alone.error?.code).toBe("VALIDATION_FAILED");
+      expect(alone.error?.message).toContain("Delegate Note");
+    });
+
     it("rejects a workbook with no tags and no usable header row", () => {
       const templateBytes = buildXlsx([[], [""]]);
 

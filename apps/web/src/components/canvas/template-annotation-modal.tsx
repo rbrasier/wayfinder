@@ -29,10 +29,12 @@ import {
   duplicateCounts,
   rowTypeLabel,
   saveBlockedReason,
+  signatureLabelsIn,
   toEditableRows,
   validateRow,
   type AnnotationStep,
   type EditableRow,
+  type RowValidation,
   type TemplateClassification,
 } from "./template-annotation-model";
 
@@ -223,6 +225,7 @@ export function TemplateAnnotationModal({
   const duplicates = duplicateCounts(rows);
   const blockedReason = saveBlockedReason(rows);
   const activeConfigRow = configIndex !== null ? rows[configIndex] : null;
+  const signatureOptions = signatureLabelsIn(rows);
   const foundFields = rows.filter((row) => !row.locked && row.line.trim().length > 0);
   const hasFields = foundFields.length > 0;
 
@@ -266,6 +269,7 @@ export function TemplateAnnotationModal({
                   <ReviewRow
                     key={row.id}
                     row={row}
+                    validation={validateRow(row, rows)}
                     index={index}
                     duplicateCount={duplicates.get(row.key.split(":")[0] ?? row.key) ?? 0}
                     onChangeModel={(patch) => updateModel(index, patch)}
@@ -333,6 +337,7 @@ export function TemplateAnnotationModal({
             model={activeConfigRow.model}
             onChange={(patch) => updateModel(configIndex, patch)}
             onClose={() => setConfigIndex(null)}
+            signatureOptions={signatureOptions}
           />
         )}
       </DialogContent>
@@ -467,6 +472,7 @@ function ReuploadPanel({
 
 function ReviewRow({
   row,
+  validation,
   index,
   duplicateCount,
   onChangeModel,
@@ -476,6 +482,9 @@ function ReviewRow({
   onAcceptCorrection,
 }: {
   row: EditableRow;
+  // Computed by the parent, because a comment row's binding is only valid or
+  // not against the other rows in the same template.
+  validation: RowValidation;
   index: number;
   duplicateCount: number;
   onChangeModel: (patch: Partial<FieldModel>) => void;
@@ -484,8 +493,6 @@ function ReviewRow({
   onOpenConfig: () => void;
   onAcceptCorrection: (line: string) => void;
 }) {
-  const validation = validateRow(row);
-
   if (row.locked) {
     return (
       <div className="flex items-start gap-2 rounded-[9px] border border-[#ebe8e0] bg-[#faf9f7] px-3 py-2">
