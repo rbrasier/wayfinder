@@ -6,6 +6,7 @@ import {
   rowTypeLabel,
   saveBlockedReason,
   toEditableRows,
+  signatureLabelsIn,
   validateRow,
   type EditableRow,
 } from "./template-annotation-model";
@@ -26,19 +27,19 @@ const row = (overrides: Partial<EditableRow> = {}): EditableRow => {
 
 describe("validateRow", () => {
   it("passes a well-formed row", () => {
-    expect(validateRow(row()).blocking).toEqual([]);
+    expect(validateRow(row(), []).blocking).toEqual([]);
   });
 
   it("blocks an unknown type", () => {
-    expect(validateRow(row({ line: "Supplier Name (telephone)" })).blocking).toHaveLength(1);
+    expect(validateRow(row({ line: "Supplier Name (telephone)" }), []).blocking).toHaveLength(1);
   });
 
   it("blocks an empty enum", () => {
-    expect(validateRow(row({ line: "Status (options: )" })).blocking).toHaveLength(1);
+    expect(validateRow(row({ line: "Status (options: )" }), []).blocking).toHaveLength(1);
   });
 
   it("warns with a correction for a misspelled modifier", () => {
-    const validation = validateRow(row({ line: "Status (optoins: A, B)" }));
+    const validation = validateRow(row({ line: "Status (optoins: A, B)" }), []);
     expect(validation.blocking).toEqual([]);
     expect(validation.warnings[0]?.correctedLine).toBe("Status (options: A, B)");
   });
@@ -46,11 +47,11 @@ describe("validateRow", () => {
   it("never blocks on a locked section row", () => {
     // A section's raw open tag is not a Label (annotations) line, so parsing it
     // as one would flag a construct the author cannot edit here anyway.
-    expect(validateRow(row({ locked: true, line: "#Pricing" })).blocking).toEqual([]);
+    expect(validateRow(row({ locked: true, line: "#Pricing" }), []).blocking).toEqual([]);
   });
 
   it("does not flag an empty row", () => {
-    expect(validateRow(row({ line: "" })).blocking).toEqual([]);
+    expect(validateRow(row({ line: "" }), []).blocking).toEqual([]);
   });
 });
 
@@ -149,5 +150,60 @@ describe("rowTypeLabel", () => {
     expect(rowTypeLabel(row({ model: { ...row().model, type: "multiselect" } }))).toBe(
       "Multi-select",
     );
+  });
+});
+
+// The pairing is a cross-row rule — the comment is on one row and the signature
+// it names on another — so it is checked here rather than line by line, and
+// checked in the editor at all so the author is not told at save time.
+describe("approval comment binding", () => {
+  const signature = (label: string) =>
+    row({ id: `sig-${label}`, key: label, line: `${label} (approval)` });
+  const comment = (line: string) => row({ id: "note", key: "note", line });
+
+  it("lists the signatures a comment can be pointed at", () => {
+    const rows = [signature("Delegate Signature"), signature("Finance Signature"), comment("Note (approval-comment)")];
+
+    expect(signatureLabelsIn(rows)).toEqual(["Delegate Signature", "Finance Signature"]);
+  });
+
+  it("accepts an unnamed comment when the template has exactly one signature", () => {
+    const rows = [signature("Delegate Signature"), comment("Note (approval-comment)")];
+
+    expect(validateRow(rows[1]!, rows).blocking).toEqual([]);
+    expect(canSave(rows)).toBe(true);
+  });
+
+  it("blocks an unnamed comment when the template has several signatures", () => {
+    const rows = [
+      signature("Delegate Signature"),
+      signature("Finance Signature"),
+      comment("Note (approval-comment)"),
+    ];
+
+    expect(validateRow(rows[2]!, rows).blocking).toHaveLength(1);
+    expect(saveBlockedReason(rows)).not.toBeNull();
+  });
+
+  it("blocks a comment when the template has no signature at all", () => {
+    const rows = [row(), comment("Note (approval-comment)")];
+
+    expect(validateRow(rows[1]!, rows).blocking).toHaveLength(1);
+  });
+
+  it("blocks a comment naming a signature the template does not have", () => {
+    const rows = [signature("Delegate Signature"), comment("Note (approval-comment: Legal Signature)")];
+
+    expect(validateRow(rows[1]!, rows).blocking).toHaveLength(1);
+  });
+
+  it("accepts a comment naming a signature the template has", () => {
+    const rows = [
+      signature("Delegate Signature"),
+      signature("Finance Signature"),
+      comment("Note (approval-comment: Finance Signature)"),
+    ];
+
+    expect(validateRow(rows[2]!, rows).blocking).toEqual([]);
   });
 });
