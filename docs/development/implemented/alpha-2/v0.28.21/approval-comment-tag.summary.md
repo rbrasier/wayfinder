@@ -83,7 +83,12 @@ out of reporting.
   settings panel listing the signatures declared elsewhere in the template.
 - `canvas/template-annotation-model.ts`, `canvas/template-annotation-modal.tsx`
   — `signatureLabelsIn`, the cross-row binding check, and the list passed down.
-- `canvas/annotation-reference.tsx` — the new tag documented beside `(approval)`.
+- `canvas/annotation-reference.tsx` — the new tag documented beside `(approval)`
+  in the annotator's quick reference.
+- `canvas/template-tags-help-content.ts` — the same in the "Template tags &
+  validation" help dialog reached from the node config modal, which is the fuller
+  of the two instructional surfaces. Its Signatures section now carries both tags
+  and the combined example.
 
 ## Tests
 
@@ -101,6 +106,28 @@ into the six groups in [`e2e-test-policy.md`](../../../../guides/e2e-test-policy
 | `adapters/agents/flow-session-graph.test.ts` | the tag never reaches the session prompt through the template body |
 | `web/canvas/field-row-model.test.ts` | round-trip with and without a reference, type-switch behaviour, type-picker membership |
 | `web/canvas/template-annotation-model.test.ts` | the cross-row binding rule as the editor enforces it |
+| `web/canvas/template-tags-help-dialog.test.ts` | the tag is documented beside its signature for a template, and withheld from a structured step |
+
+## Where a broken binding is caught
+
+Three places, in the order an author meets them:
+
+1. **In the annotation modal, before saving.** A comment row that names no
+   signature where the template has several, or names one that does not exist,
+   is flagged on the row and blocks Save.
+2. **On save, server-side.** Both routes that write a template — `POST` (upload
+   or re-upload) and `PATCH` (edit the tags of the stored template, no new file)
+   — go through `storeTemplate` → `extractTemplate` → `extractFields` →
+   `parseTemplateFields`, so the binding rules are enforced on every write. A
+   failure returns 422 with `code: "INVALID_TEMPLATE_FIELDS"` and the message
+   the binding pass produced.
+3. **Never at render.** A template that cannot bind its comments never reaches
+   storage, so generation has no binding case to handle.
+
+The analyse step is deliberately *not* a gate: it builds its rows from the
+document's tags rather than from a parsed field set, so a document with a broken
+binding still opens in the editor with the offending row visible — which is what
+the author needs in order to fix it.
 
 ## Deviations from the approved plan
 
