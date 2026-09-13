@@ -3,7 +3,8 @@ import Docxtemplater from "docxtemplater";
 import InspectModule from "docxtemplater/js/inspect-module.js";
 import { domainError, err, ok, parseTemplateFields, templateFieldKey } from "@wayfinder/domain";
 import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateInput, GenerateOutput, AnnotateInput, AnnotateOutput, TemplateAnnotationEdit } from "@wayfinder/domain";
-import type { Result } from "@wayfinder/domain";
+import type { DomainError, DomainErrorDetail, Result } from "@wayfinder/domain";
+import { detailsFromCause, detailsFromTagContent, headlineFor, tagSyntaxIssues } from "./tag-syntax";
 
 interface RunInfo {
   xml: string;
@@ -23,9 +24,25 @@ interface SpanReplacement {
   rPrXml: string;
 }
 
+const INVALID_DOCX_MESSAGE =
+  "Failed to parse DOCX template. Ensure the file is a valid .docx and all {{tags}} are correctly formed.";
+
+const partDescription = (filename: string): string => {
+  if (/^word\/header\d*\.xml$/.test(filename)) return " (in a page header)";
+  if (/^word\/footer\d*\.xml$/.test(filename)) return " (in a page footer)";
+  return "";
+};
+
 export class DocxGenerator implements IDocumentGenerator {
   extractTags(input: ExtractTagsInput): Result<ExtractTagsOutput> {
     try {
+      // Runs before preprocessTemplate, which would otherwise normalise a
+      // broken tag into a plausible-looking one.
+      const scanned = this.findTagIssues(input.templateBytes);
+      if (scanned.length > 0) {
+        return err(domainError("VALIDATION_FAILED", headlineFor(scanned), undefined, scanned));
+      }
+
       const processedBytes = this.preprocessTemplate(input.templateBytes);
       const zip = new PizZip(processedBytes);
       const inspectModule = new InspectModule();
@@ -39,18 +56,29 @@ export class DocxGenerator implements IDocumentGenerator {
       const tags = Object.keys(tagMap);
       return ok({ tags });
     } catch (cause) {
-      return err(domainError("VALIDATION_FAILED", "Failed to parse DOCX template. Ensure the file is a valid .docx and all {{tags}} are correctly formed.", cause));
+      return err(this.parseFailure(cause));
     }
   }
 
   extractFields(input: ExtractFieldsInput): Result<ExtractFieldsOutput> {
     try {
+      const scanned = this.findTagIssues(input.templateBytes);
+      if (scanned.length > 0) {
+        return err(domainError("VALIDATION_FAILED", headlineFor(scanned), undefined, scanned));
+      }
+
       const rawTags = this.collectRawTags(input.templateBytes);
       const parsed = parseTemplateFields(rawTags);
-      if (parsed.error) return parsed;
-      return ok({ fields: parsed.data });
+      if (!parsed.error) return ok({ fields: parsed.data });
+
+      // No per-tag details means the failure is structural — a group nested in a
+      // section, an unclosed block — which parseTemplateFields already words
+      // better than a list of individually valid tags could.
+      const details = detailsFromTagContent(rawTags);
+      if (details.length === 0) return parsed;
+      return err(domainError("VALIDATION_FAILED", headlineFor(details), undefined, details));
     } catch (cause) {
-      return err(domainError("VALIDATION_FAILED", "Failed to parse DOCX template. Ensure the file is a valid .docx and all {{tags}} are correctly formed.", cause));
+      return err(this.parseFailure(cause));
     }
   }
 
@@ -121,6 +149,42 @@ export class DocxGenerator implements IDocumentGenerator {
         domainError("INFRA_FAILURE", "Failed to write annotations into the DOCX template.", cause),
       );
     }
+  }
+
+  // A thrown cause is either docxtemplater naming the tags it rejected, or a
+  // file too corrupt to say anything about.
+  private parseFailure(cause: unknown): DomainError {
+    const details = detailsFromCause(cause);
+    if (details.length === 0) {
+      return domainError("VALIDATION_FAILED", INVALID_DOCX_MESSAGE, cause);
+    }
+    return domainError("VALIDATION_FAILED", headlineFor(details), cause, details);
+  }
+
+  // Walks the body, then headers and footers, so issues are listed in the order
+  // the author reads them.
+  private findTagIssues(docxBytes: Buffer): DomainErrorDetail[] {
+    const zip = new PizZip(docxBytes);
+    const details: DomainErrorDetail[] = [];
+
+    for (const filename of this.annotatableParts(zip)) {
+      const file = zip.file(filename);
+      if (!file) continue;
+      const paragraphs = file.asText().match(/<w:p[ >][\s\S]*?<\/w:p>/g) ?? [];
+      details.push(...this.paragraphTagIssues(paragraphs, filename));
+    }
+
+    return details;
+  }
+
+  private paragraphTagIssues(paragraphs: string[], filename: string): DomainErrorDetail[] {
+    const where = partDescription(filename);
+    return paragraphs.flatMap((paragraph) => {
+      const text = this.extractRuns(paragraph)
+        .map((run) => run.text)
+        .join("");
+      return tagSyntaxIssues(text, where);
+    });
   }
 
   private annotatableParts(zip: PizZip): string[] {

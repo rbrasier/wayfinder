@@ -15,7 +15,7 @@ Ask via `AskUserQuestion` before proceeding:
 
 1. Which operation?
    - **Cut the next release line** — freeze `main` into a new `release/*` branch
-   - **Tag a build** — publish a `vX.Y.Z` tag on the current release branch
+   - **Tag & publish a build** — hands off to `/publish` (tag, Release, image)
    - **Forward-merge** — merge the current release branch's fixes into `main`
 
 If the answer is **Cut the next release line**, ask a second question in the
@@ -120,53 +120,16 @@ user wants a published artifact for the new line straight away.
 
 ---
 
-## Operation B — Tag a build
+## Operation B — Tag & publish a build
 
-1. `git checkout <current release branch> && git pull`
-2. Verify CI is green on the branch head — never tag a red build.
-3. Tag the exact version being shipped and push it:
+Tagging, releasing, and publishing a build all live in **`/publish`** now — it
+tags the current release branch, creates the GitHub Release with notes, drives
+the publish workflow, fills in the digest, and re-pins the deployment guides, in
+one re-runnable command. `/release` no longer does any of this inline: a registry
+failure part-way through `/release` would leave a release half-finished, with a
+pushed tag and no image and no obvious way back in.
 
-   ```bash
-   git tag v$(cat VERSION)
-   git push origin v$(cat VERSION)
-   ```
-
-4. **Create a GitHub Release for the tag** — always, not as an offer. A pushed
-   tag with no Release is a build nobody can read the changelog for.
-
-   Summarise changes since the previous tag on the branch
-   (`git log <previous-tag>..HEAD --oneline --no-merges`), grouping into
-   **Features** and **Fixes** and folding pure test/CI churn into a single line
-   rather than listing every commit. Because the version no longer encodes the
-   stage, title the release `vX.Y.Z — <line>` (e.g. `v0.19.4 — alpha-2`).
-
-   Match the established body shape (see the previous release with
-   `gh release view <previous-tag>`): a lead line naming the release line, the
-   image reference, the digest, the `docker pull` command, `## Highlights`
-   (Features / Fixes), an `## Upgrading` line pointing at `upgrading.md`, and a
-   `**Full changelog:**` compare link. Then create it:
-
-   ```bash
-   gh release create v$(cat VERSION) --title "v$(cat VERSION) — <line>" \
-     --notes-file <notes> --latest
-   ```
-
-   Pass `--latest` only when the tag is on a release line (it moves the "Latest"
-   badge, mirroring how a release-line tag moves the `latest` image). For a tag
-   on `main` or a throwaway pre-release, use `--latest=false`. If the digest is
-   not yet known because the image has not finished publishing, create the
-   Release now and leave the digest line to be filled once `/publish` reports it.
-
-5. **Offer to publish the container image**, then hand off to **`/publish`**.
-
-   Pushing the tag starts `publish.yml` on its own, so this is usually a matter
-   of following the run rather than starting one — but ask, because a tag whose
-   image was never published is a release nobody can deploy.
-
-   Do **not** publish inline from this skill. A registry failure part-way
-   through `/release` would leave a release half-finished, with a pushed tag and
-   no image and no obvious way back in. `/publish` is separately re-runnable and
-   safe to retry, which is the whole reason it is its own skill.
+So for "tag a build", **hand off to `/publish`** and stop.
 
 ---
 

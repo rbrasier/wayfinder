@@ -24,7 +24,8 @@ code, run `./validate.sh` and fix all failures before declaring done.
 | Implement a phase, build a spec, write code                | `/build`       |
 | Change or extend existing functionality                    | `/enhance`     |
 | Fix something broken or not working                        | `/bugfix`      |
-| Cut the next release line, tag a build, forward-merge fixes | `/release`    |
+| Cut the next release line, forward-merge fixes             | `/release`     |
+| Tag, release & publish a build (container image, later npm) | `/publish`     |
 | Anything else                                              | Answer directly |
 
 ---

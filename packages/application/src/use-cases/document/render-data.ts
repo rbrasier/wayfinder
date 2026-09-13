@@ -20,10 +20,11 @@ export const buildRenderData = (
     const value = values[field.key];
     const stringValue = typeof value === "string" ? value : "";
     // A signature carries the attestation block frozen into the deciding
-    // approval's record, supplied by the caller. Absent means undecided, which
-    // renders as an empty string: a document must never imply an approval that
-    // has not happened (ADR-043 §3). `linebreaks: true` on the generator turns
-    // the block's newlines into real breaks.
+    // approval's record, and an approval comment the words that approver left,
+    // both supplied by the caller. Absent means undecided, which renders as an
+    // empty string: a document must never imply an approval that has not
+    // happened, or a rationale nobody gave (ADR-043 §3). `linebreaks: true` on
+    // the generator turns the block's newlines into real breaks.
     renderData[field.key] = field.type === "section" ? stringValue === "Yes" : stringValue;
   }
   return renderData;

@@ -405,6 +405,22 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("recorded by an approval step");
   });
 
+  it("never lets an approval comment slot reach the prompt through the template body", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent:
+          "Full Name: {{ Full Name }}\nReason for decision: {{ Reason For Decision (approval-comment: Delegate Signature) }}",
+      },
+    });
+
+    expect(result.data).toContain("Full Name");
+    expect(result.data).not.toContain("Reason for decision");
+    expect(result.data).not.toContain("approval-comment");
+  });
+
   it("adds no signature guidance to a template that declares none", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,

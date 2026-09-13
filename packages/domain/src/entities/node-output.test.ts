@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { ConversationalNodeConfig } from "./flow-node";
 import {
+  APPROVAL_COMMENT_SLOT_MARKER,
   SIGNATURE_SLOT_MARKER,
   gatherableTemplateContent,
   nodeFieldSet,
@@ -100,6 +101,32 @@ describe("nodeFieldSet", () => {
     expect(result).toEqual([field("amount"), field("vendor")]);
   });
 
+  it("filters an approval comment out of a document step's set", () => {
+    const result = nodeFieldSet(
+      config({
+        outputType: "generate_document",
+        documentTemplateFields: [
+          field("amount"),
+          field("delegate_note", "approval_comment"),
+          field("vendor"),
+        ],
+      }),
+    );
+
+    expect(result).toEqual([field("amount"), field("vendor")]);
+  });
+
+  it("keeps an approval comment out of the AI's field constraints entirely", () => {
+    const fields = nodeFieldSet(
+      config({
+        outputType: "generate_document",
+        documentTemplateFields: [field("amount"), field("delegate_note", "approval_comment")],
+      }),
+    );
+
+    expect(buildFieldConstraintsText(fields)).not.toContain("delegate_note");
+  });
+
   it("keeps a signature out of the AI's field constraints entirely", () => {
     const fields = nodeFieldSet(
       config({
@@ -134,6 +161,14 @@ describe("validateStructuredFieldSet", () => {
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(result.error?.message).toContain("Delegate Signature");
+  });
+
+  it("rejects a set containing an approval comment field", () => {
+    const fields = [field("decision"), field("Delegate Note", "approval_comment")];
+    const result = validateStructuredFieldSet(fields);
+    expect(result.data).toBeUndefined();
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Delegate Note");
   });
 
   it("accepts an empty set", () => {
@@ -173,6 +208,33 @@ describe("gatherableTemplateContent", () => {
       `Executed on {{ Start Date (date) }} by ${SIGNATURE_SLOT_MARKER}`,
     );
     expect(gatherable).not.toContain("Delegate Signature");
+  });
+
+  it("drops an approval comment line whole, as it drops a signature line", () => {
+    const gatherable = gatherableTemplateContent(
+      "Full Name: {{Full Name}}\nReason for decision: {{ Reason For Decision (approval-comment: Delegate Signature) }}",
+    );
+
+    expect(gatherable).toBe("Full Name: {{Full Name}}");
+  });
+
+  it("masks an approval comment sharing a line with a gatherable tag", () => {
+    const gatherable = gatherableTemplateContent(
+      "Signed off on {{ Start Date (date) }} because {{ Reason (approval-comment: Delegate Signature) }}",
+    );
+
+    expect(gatherable).toBe(
+      `Signed off on {{ Start Date (date) }} because ${APPROVAL_COMMENT_SLOT_MARKER}`,
+    );
+    expect(gatherable).not.toContain("Reason (approval-comment");
+  });
+
+  it("drops a signature and its comment together", () => {
+    const gatherable = gatherableTemplateContent(
+      "Name: {{Full Name}}\n{{ Delegate Signature (approval) }}\n{{ Delegate Note (approval-comment: Delegate Signature) }}",
+    );
+
+    expect(gatherable).toBe("Name: {{Full Name}}");
   });
 
   it("leaves a template with no signatures byte-identical", () => {

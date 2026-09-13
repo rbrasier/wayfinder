@@ -709,3 +709,75 @@ describe("UpdateDocumentFields — signature slots", () => {
     );
   });
 });
+
+describe("UpdateDocumentFields — approval comment slots", () => {
+  const COMMENTED_FIELDS = [
+    ...FIELDS,
+    {
+      key: "delegate_signature",
+      label: "Delegate Signature",
+      type: "signature",
+      optional: true,
+      raw: "Delegate Signature (approval)",
+    },
+    {
+      key: "delegate_note",
+      label: "Delegate Note",
+      type: "approval_comment",
+      optional: true,
+      signatureLabel: "Delegate Signature",
+      raw: "Delegate Note (approval-comment: Delegate Signature)",
+    },
+  ] as const;
+
+  const withCommentSlot = (approvalRows: unknown[]) => {
+    const approvals = makeApprovals();
+    (approvals.listBySession as ReturnType<typeof vi.fn>).mockResolvedValue(ok(approvalRows));
+    return build({
+      flowNodes: makeFlowNodes(makeNode({ documentTemplateFields: COMMENTED_FIELDS })),
+      approvals,
+    });
+  };
+
+  const decidedWithComment = {
+    id: "appr-1",
+    status: "approved",
+    comment: "Within delegated authority.",
+    recordSnapshot: {
+      subjectNodeId: "node-1",
+      signatureFieldKey: "delegate_signature",
+      attestationText: "Approved by:   Jane Doe\nDecision:      Approved",
+    },
+  };
+
+  const renderedBy = (deps: { documentGenerator: unknown }) =>
+    (deps.documentGenerator as { generate: ReturnType<typeof vi.fn> }).generate.mock.calls[0]![0];
+
+  it("keeps the approver's comment on the document when a later edit re-renders it", async () => {
+    const { useCase, deps } = withCommentSlot([decidedWithComment]);
+
+    await useCase.execute({ messageId: "msg-1", editedByUserId: "user-1", values: validValues });
+
+    expect(renderedBy(deps).data.delegate_note).toBe("Within delegated authority.");
+  });
+
+  it("leaves the comment of an undecided slot empty", async () => {
+    const { useCase, deps } = withCommentSlot([]);
+
+    await useCase.execute({ messageId: "msg-1", editedByUserId: "user-1", values: validValues });
+
+    expect(renderedBy(deps).data.delegate_note).toBe("");
+  });
+
+  // Reporting reads the step output, and an approver's words are the approval
+  // record's to hold — not a value the edit dialog offers anyone to retype.
+  it("never writes an approval comment into the step output", async () => {
+    const { useCase, deps } = withCommentSlot([decidedWithComment]);
+
+    await useCase.execute({ messageId: "msg-1", editedByUserId: "user-1", values: validValues });
+
+    const [, fields] = (deps.sessionStepOutputs.updateFields as ReturnType<typeof vi.fn>).mock
+      .calls[0]!;
+    expect((fields as StepOutputField[]).map((field) => field.key)).not.toContain("delegate_note");
+  });
+});

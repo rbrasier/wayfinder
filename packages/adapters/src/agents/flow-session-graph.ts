@@ -1,4 +1,5 @@
 import {
+  APPROVAL_COMMENT_SLOT_MARKER,
   SIGNATURE_SLOT_MARKER,
   buildFieldConstraintsText,
   gatherableTemplateContent,
@@ -102,7 +103,7 @@ export class FlowSessionGraph implements ISessionAgent {
     // instruction about signatures.
     const signatureConstraint =
       templateBlock && templateContent !== rawTemplateContent
-        ? `\n  - ${SIGNATURE_SLOT_MARKER} is recorded by an approval step later in the flow — never ask the user for it, never treat it as missing, and never report it as outstanding`
+        ? `\n  - ${SIGNATURE_SLOT_MARKER} and ${APPROVAL_COMMENT_SLOT_MARKER} are recorded by an approval step later in the flow — never ask the user for either, never treat one as missing, and never report one as outstanding`
         : "";
 
     // The "all fields captured" sentinel is shared by template and structured

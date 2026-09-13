@@ -20,7 +20,7 @@ import { DOCUMENT_MIME, templateFormat } from "../document/document-format";
 import { buildRenderData } from "../document/render-data";
 import { nextRevisionPath } from "../document/update-document-fields";
 import { SIGNATURE_FIELD_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
-import { signatureValuesForStep } from "./signature-values";
+import { approvalValuesForStep } from "./approval-values";
 
 export interface ApplyApprovalSignatureInput {
   // The approval whose decision triggered this render. Every *other* decided
@@ -115,8 +115,9 @@ export class ApplyApprovalSignature {
     return latest?.document ? { id: latest.id, document: latest.document } : null;
   }
 
-  // The gathered values plus every decided approval's frozen attestation, so
-  // approvals may decide in any order and each fills only its own slot.
+  // The gathered values plus every decided approval's frozen attestation and the
+  // comment beside it, so approvals may decide in any order and each fills only
+  // its own slot.
   private async renderValues(
     approval: Approval,
     subjectNodeId: string,
@@ -132,13 +133,13 @@ export class ApplyApprovalSignature {
       }
     }
 
-    const signatures = await signatureValuesForStep(
+    const approvalOwned = await approvalValuesForStep(
       this.approvals,
       approval.sessionId,
       subjectNodeId,
       fields,
     );
-    return { ...values, ...signatures };
+    return { ...values, ...approvalOwned };
   }
 }
 

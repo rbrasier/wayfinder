@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import type { AnnotationRow } from "@/lib/template-annotation";
 import { AnnotationReference } from "./annotation-reference";
+import { toTemplateError, type TemplateError } from "./template-error-model";
 import { AnnotationTypingDemo } from "./annotation-typing-demo";
 import { FieldConfigModal, FieldRow } from "./field-row";
 import {
@@ -28,10 +29,12 @@ import {
   duplicateCounts,
   rowTypeLabel,
   saveBlockedReason,
+  signatureLabelsIn,
   toEditableRows,
   validateRow,
   type AnnotationStep,
   type EditableRow,
+  type RowValidation,
   type TemplateClassification,
 } from "./template-annotation-model";
 
@@ -82,7 +85,7 @@ export function TemplateAnnotationModal({
   const [rows, setRows] = useState<EditableRow[]>(() =>
     existingRows ? toEditableRows(existingRows) : [],
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<TemplateError | null>(null);
   const [configIndex, setConfigIndex] = useState<number | null>(null);
   // The file currently under review. Held in state (not just the prop) so the
   // author can swap it via the re-upload panel and restart the flow in place.
@@ -119,14 +122,14 @@ export function TemplateAnnotationModal({
           error?: string;
         };
         if (!response.ok) {
-          setError(payload.error ?? "Could not save the template.");
+          setError(toTemplateError(payload, "Could not save the template."));
           setStep("review");
           return;
         }
 
         onSaved(payload);
       } catch {
-        setError("Could not save the template.");
+        setError(toTemplateError(null, "Could not save the template."));
         setStep("review");
       }
     },
@@ -144,7 +147,7 @@ export function TemplateAnnotationModal({
         const response = await fetch(`${templateUrl}/analyse`, { method: "POST", body });
         const payload = (await response.json()) as AnalyseResponse & { error?: string };
         if (!response.ok) {
-          setError(payload.error ?? "Could not read that document.");
+          setError(toTemplateError(payload, "Could not read that document."));
           setStep("detected");
           return;
         }
@@ -160,7 +163,7 @@ export function TemplateAnnotationModal({
         setRows(toEditableRows(payload.rows));
         setStep("detected");
       } catch {
-        setError("Could not read that document.");
+        setError(toTemplateError(null, "Could not read that document."));
         setStep("detected");
       }
     },
@@ -222,6 +225,7 @@ export function TemplateAnnotationModal({
   const duplicates = duplicateCounts(rows);
   const blockedReason = saveBlockedReason(rows);
   const activeConfigRow = configIndex !== null ? rows[configIndex] : null;
+  const signatureOptions = signatureLabelsIn(rows);
   const foundFields = rows.filter((row) => !row.locked && row.line.trim().length > 0);
   const hasFields = foundFields.length > 0;
 
@@ -237,11 +241,7 @@ export function TemplateAnnotationModal({
         </DialogHeader>
 
         <DialogBody className="min-h-0 flex-1 overflow-y-auto">
-          {error && (
-            <p className="mb-3 rounded-[9px] border border-[#f0c9d4] bg-[#f9e8eb] px-3 py-2 text-[12px] text-[#a8324c]">
-              {error}
-            </p>
-          )}
+          {error && <TemplateErrorPanel error={error} />}
 
           {step === "analysing" && <Working message="Reading your document…" />}
           {step === "saving" && <Working message="Saving your template…" />}
@@ -269,6 +269,7 @@ export function TemplateAnnotationModal({
                   <ReviewRow
                     key={row.id}
                     row={row}
+                    validation={validateRow(row, rows)}
                     index={index}
                     duplicateCount={duplicates.get(row.key.split(":")[0] ?? row.key) ?? 0}
                     onChangeModel={(patch) => updateModel(index, patch)}
@@ -336,10 +337,34 @@ export function TemplateAnnotationModal({
             model={activeConfigRow.model}
             onChange={(patch) => updateModel(configIndex, patch)}
             onClose={() => setConfigIndex(null)}
+            signatureOptions={signatureOptions}
           />
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// A headline the author can act on, plus one row per malformed tag: the text as
+// they typed it in Word, and what is wrong with it. Before v0.28.20 this was a
+// single generic sentence, which in a hundred-tag template named nothing at all.
+function TemplateErrorPanel({ error }: { error: TemplateError }) {
+  return (
+    <div className="mb-3 rounded-[9px] border border-[#f0c9d4] bg-[#f9e8eb] px-3 py-2 text-[12px] text-[#a8324c]">
+      <p>{error.headline}</p>
+      {error.details.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {error.details.map((detail) => (
+            <li key={`${detail.subject} ${detail.message}`} className="border-l-2 border-[#e0a9b8] pl-2">
+              <code className="block break-words font-mono text-[11px] text-[#7d2338]">
+                {detail.subject}
+              </code>
+              <span className="text-[11px] text-[#a8324c]">{detail.message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -447,6 +472,7 @@ function ReuploadPanel({
 
 function ReviewRow({
   row,
+  validation,
   index,
   duplicateCount,
   onChangeModel,
@@ -456,6 +482,9 @@ function ReviewRow({
   onAcceptCorrection,
 }: {
   row: EditableRow;
+  // Computed by the parent, because a comment row's binding is only valid or
+  // not against the other rows in the same template.
+  validation: RowValidation;
   index: number;
   duplicateCount: number;
   onChangeModel: (patch: Partial<FieldModel>) => void;
@@ -464,8 +493,6 @@ function ReviewRow({
   onOpenConfig: () => void;
   onAcceptCorrection: (line: string) => void;
 }) {
-  const validation = validateRow(row);
-
   if (row.locked) {
     return (
       <div className="flex items-start gap-2 rounded-[9px] border border-[#ebe8e0] bg-[#faf9f7] px-3 py-2">

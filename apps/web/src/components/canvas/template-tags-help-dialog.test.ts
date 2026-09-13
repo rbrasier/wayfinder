@@ -37,6 +37,7 @@ describe("helpDialogContent", () => {
   it("withholds signatures, sections and repeating groups from a structured step", () => {
     const annotations = allAnnotations("structured").join(" ");
     expect(annotations).not.toContain("(approval)");
+    expect(annotations).not.toContain("(approval-comment");
     expect(annotations).not.toContain("{{#Section Name}}");
     expect(annotations).not.toContain("(repeat)");
   });
@@ -52,6 +53,26 @@ describe("helpDialogContent", () => {
     expect(title).not.toContain("Template tags");
     expect(intro).not.toContain(".docx");
     expect(examples.join("\n")).not.toContain("{{");
+  });
+
+  // The comment tag is useless without the signature it names, so the two are
+  // documented together or not at all.
+  it("documents the approval comment beside the signature it belongs to", () => {
+    const signatures = helpDialogContent("template").sections.find(
+      (section) => section.title === "Signatures",
+    );
+
+    expect(signatures?.rows.map((row) => row.annotation)).toEqual([
+      "(approval)",
+      "(approval-comment: Signature Name)",
+    ]);
+  });
+
+  it("shows a signature and its comment together in the examples", () => {
+    const examples = helpDialogContent("template").examples.join("\n");
+
+    expect(examples).toContain("(approval)");
+    expect(examples).toContain("(approval-comment:");
   });
 
   it("keeps the .docx framing for a document template", () => {

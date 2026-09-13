@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { BusyOverlay } from "@/components/ui/busy-overlay";
 import { useNavigationBusy } from "@/lib/use-navigation-busy";
+import { handleSessionCreated } from "@/components/chat/new-chat-model";
 import { trpc } from "@/trpc/client";
 
 interface NewChatModalProps {
@@ -34,8 +35,11 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
 
   const createMutation = trpc.session.create.useMutation({
     onSuccess: (session) => {
-      void utils.session.list.invalidate();
-      router.push(`/chats/${session.id}`);
+      handleSessionCreated(session.id, {
+        closeDialog: onClose,
+        refreshSessionList: () => void utils.session.list.invalidate(),
+        navigateToSession: (sessionId) => router.push(`/chats/${sessionId}`),
+      });
     },
     onError: (error) => {
       busy.stop();
