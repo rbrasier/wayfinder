@@ -47,7 +47,7 @@ callback webhook (`/v1/webhooks`), which is the one route an outside caller hits
 Wayfinder publishes a container image, so there is nothing to build:
 
 ```
-ghcr.io/rbrasier/wayfinder:0.28.17
+ghcr.io/rbrasier/wayfinder:0.28.21
 ```
 
 It is public — no credential, no `imagePullSecret`. One image contains both
@@ -68,9 +68,9 @@ aws ecr create-repository --repository-name wayfinder --region "$AWS_REGION"
 aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
 
-docker pull ghcr.io/rbrasier/wayfinder:0.28.17
-docker tag ghcr.io/rbrasier/wayfinder:0.28.17 "$REPO:0.28.17"
-docker push "$REPO:0.28.17"
+docker pull ghcr.io/rbrasier/wayfinder:0.28.21
+docker tag ghcr.io/rbrasier/wayfinder:0.28.21 "$REPO:0.28.21"
+docker push "$REPO:0.28.21"
 ```
 
 **Air-gapped or egress-restricted?** The published image fetches the local

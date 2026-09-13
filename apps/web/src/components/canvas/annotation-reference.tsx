@@ -37,7 +37,12 @@ const REFERENCE: ReferenceGroup[] = [
       {
         syntax: "{{ Delegate Sign Off (approval) }}",
         meaning:
-          "A signature slot. Nobody is asked for it — an approval step fills it in with the approver's name, decision, date and comment when they decide.",
+          "A signature slot. Nobody is asked for it — an approval step fills it in with the approver's name, decision, date and comment when they decide. (signature) means the same thing.",
+      },
+      {
+        syntax: "{{ Reason (approval-comment: Delegate Sign Off) }}",
+        meaning:
+          "Just the comment that approver left, on its own wherever you put it. Name the signature it belongs to, so a document with several keeps each comment under the right one. With only one signature you can write (approval-comment) on its own.",
       },
     ],
   },

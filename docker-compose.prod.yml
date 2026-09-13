@@ -49,7 +49,7 @@ services:
       retries: 20
 
   storage:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

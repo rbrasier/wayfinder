@@ -55,12 +55,48 @@ export interface RowValidation {
 
 const EMPTY_VALIDATION: RowValidation = { blocking: [], warnings: [] };
 
-export const validateRow = (row: EditableRow): RowValidation => {
+// Every signature a comment row in this template could be pointed at. Read from
+// the row models rather than the serialised lines, because a row the author is
+// part-way through editing has a model before it has a line worth parsing.
+export const signatureLabelsIn = (rows: EditableRow[]): string[] =>
+  rows
+    .filter((row) => !row.locked && row.model.type === "signature")
+    .map((row) => row.model.label.trim())
+    .filter((label) => label.length > 0);
+
+// The binding rule `parseTemplateFields` enforces at upload, applied while the
+// author is still in the editor. It is a cross-row rule — the comment is on one
+// row, the signature it names on another — so it cannot live in the per-line
+// validator, and without it the author would only learn at save time.
+const approvalCommentBlocking = (row: EditableRow, signatures: string[]): string[] => {
+  if (row.model.type !== "approval_comment") return [];
+
+  const chosen = row.model.signatureLabel?.trim();
+  if (!chosen) {
+    if (signatures.length === 1) return [];
+    if (signatures.length === 0) {
+      return [
+        "This template has no signature for this comment to belong to. Add a Signature field first.",
+      ];
+    }
+    return ["Choose which signature this comment belongs to — this template has more than one."];
+  }
+
+  const known = signatures.some((label) => deriveFieldKey(label) === deriveFieldKey(chosen));
+  if (known) return [];
+  return [`No signature in this template is called "${chosen}". Choose one from the list.`];
+};
+
+export const validateRow = (row: EditableRow, rows: EditableRow[]): RowValidation => {
   // A section or group row carries a raw open tag, not a Label (annotations)
   // line. It rides through the annotator untouched, so validating it as a field
   // would flag a construct the author cannot edit here.
   if (row.locked) return EMPTY_VALIDATION;
-  return validateAnnotationLine(row.line);
+
+  const line = validateAnnotationLine(row.line);
+  const binding = approvalCommentBlocking(row, signatureLabelsIn(rows));
+  if (binding.length === 0) return line;
+  return { ...line, blocking: [...line.blocking, ...binding] };
 };
 
 const labelKeyOf = (row: EditableRow): string | null => {
@@ -94,7 +130,7 @@ const activeRows = (rows: EditableRow[]): EditableRow[] =>
   rows.filter((row) => !row.locked && row.line.trim().length > 0);
 
 export const saveBlockedReason = (rows: EditableRow[]): string | null => {
-  if (rows.some((row) => validateRow(row).blocking.length > 0)) {
+  if (rows.some((row) => validateRow(row, rows).blocking.length > 0)) {
     return "Fix the highlighted fields before saving.";
   }
 
