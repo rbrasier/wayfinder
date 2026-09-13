@@ -65,6 +65,11 @@ const SIGNATURE_ROWS: AnnotationRow[] = [
     meaning:
       "A signature slot, filled by the approval step that signs it — approver name, decision, UTC timestamp, comment and a verification code. Never asked for in chat, never editable by hand, and implicitly optional so an unsigned document is not treated as incomplete. Takes no other annotation. Cannot go inside a (repeat) block: one approval is one decision, not a list. .docx only.",
   },
+  {
+    annotation: "(approval-comment: Signature Name)",
+    meaning:
+      "Just the comment that approver left, on its own wherever you put it — a reason-for-decision box, a notes column, a covering paragraph. Name the signature it belongs to so a document with several keeps each comment under the right one; with only one signature you can write (approval-comment) on its own. (signature-comment: …) means the same thing. Filled at the moment that signature is signed, and blank until then. Same rules as the signature: never asked for in chat, never editable by hand, no other annotation, not inside a (repeat) block, .docx only.",
+  },
 ];
 
 const SECTION_ROWS: AnnotationRow[] = [
@@ -94,6 +99,7 @@ const TEMPLATE_EXAMPLES = [
   "{{ Notes (text) (maxlen: 200) (optional) }}",
   '{{ Background (narrative: "Summarise the rationale in 2–3 paragraphs") }}',
   "{{ Delegate Sign Off (approval) }}",
+  "{{ Reason For Decision (approval-comment: Delegate Sign Off) }}",
   "{{#Risk Section}} … {{ Risk Narrative (narrative) }} … {{/Risk Section}}",
   "{{#Recommendations (repeat)}} {{ Owner }}: {{ Action }} {{/Recommendations}}",
 ];
@@ -115,7 +121,7 @@ const documentOnlySections = (): HelpSection[] => [
   {
     title: "Signatures",
     blurb:
-      "Put one of these wherever an approver's sign-off belongs. Each signature slot is claimed by one approval step in the flow, so a document needing a delegate and a finance sign-off carries two slots and two approval steps.",
+      "Put one of these wherever an approver's sign-off belongs. Each signature slot is claimed by one approval step in the flow, so a document needing a delegate and a finance sign-off carries two slots and two approval steps. Add a comment tag alongside a signature when the approver's reasoning belongs somewhere other than inside the signature block.",
     rows: SIGNATURE_ROWS,
   },
   {

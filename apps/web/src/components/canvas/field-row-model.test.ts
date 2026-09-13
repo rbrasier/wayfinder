@@ -89,6 +89,15 @@ describe("lineToModel", () => {
       optional: true,
     });
   });
+
+  it("reads an (approval-comment: …) tag with the signature it names", () => {
+    expect(lineToModel("Delegate Note (approval-comment: Delegate Sign Off)")).toMatchObject({
+      label: "Delegate Note",
+      type: "approval_comment",
+      optional: true,
+      signatureLabel: "Delegate Sign Off",
+    });
+  });
 });
 
 describe("modelToLine", () => {
@@ -152,6 +161,21 @@ describe("modelToLine", () => {
 
     expect(modelToLine(lineToModel(line))).toBe(line);
   });
+
+  // The reference is the whole binding. An editor that dropped it would re-emit
+  // every comment unbound, breaking the pairing on documents it never touched
+  // beyond opening them.
+  it("keeps the signature reference on an approval comment", () => {
+    const line = "Delegate Note (approval-comment: Delegate Sign Off)";
+
+    expect(modelToLine(lineToModel(line))).toBe(line);
+  });
+
+  it("emits an unbound approval comment without inventing a signature", () => {
+    expect(modelToLine(model({ label: "Delegate Note", type: "approval_comment" }))).toBe(
+      "Delegate Note (approval-comment)",
+    );
+  });
 });
 
 describe("hasNonDefaultConfig", () => {
@@ -192,6 +216,15 @@ describe("hasNonDefaultConfig", () => {
   // accented cog would fire on every signature row and mean nothing.
   it("ignores a signature's implicit optionality", () => {
     expect(hasNonDefaultConfig(model({ type: "signature", optional: true }))).toBe(false);
+  });
+
+  it("ignores an approval comment's implicit optionality but accents a chosen signature", () => {
+    expect(hasNonDefaultConfig(model({ type: "approval_comment", optional: true }))).toBe(false);
+    expect(
+      hasNonDefaultConfig(
+        model({ type: "approval_comment", optional: true, signatureLabel: "Delegate Sign Off" }),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -235,6 +268,19 @@ describe("withType", () => {
     expect(withType(model({ optional: false }), "signature").optional).toBe(true);
   });
 
+  it("forces an approval comment optional, matching what the parser produces", () => {
+    expect(withType(model({ optional: false }), "approval_comment").optional).toBe(true);
+  });
+
+  // A reference means nothing on a field that is no longer a comment, and
+  // carrying it would re-emit it the moment the author switched back.
+  it("drops the signature reference when switching away from an approval comment", () => {
+    const comment = model({ type: "approval_comment", signatureLabel: "Delegate Sign Off" });
+
+    expect(withType(comment, "text").signatureLabel).toBeUndefined();
+    expect(withType(comment, "approval_comment").signatureLabel).toBe("Delegate Sign Off");
+  });
+
   it("emits a saveable line after a switch to signature", () => {
     expect(modelToLine(withType(model({ type: "number", min: 1 }), "signature"))).toBe(
       "Supplier Name (approval)",
@@ -271,6 +317,14 @@ describe("type options", () => {
     expect(values(STRUCTURED_TYPE_OPTIONS)).not.toContain("signature");
   });
 
+  it("does not offer an approval comment in a structured step", () => {
+    expect(values(STRUCTURED_TYPE_OPTIONS)).not.toContain("approval_comment");
+  });
+
+  it("offers an approval comment in a template step", () => {
+    expect(values(TEMPLATE_TYPE_OPTIONS)).toContain("approval_comment");
+  });
+
   it("offers both narrative and signature in a template step", () => {
     expect(values(TEMPLATE_TYPE_OPTIONS)).toEqual(
       expect.arrayContaining(["narrative", "signature"]),
@@ -285,7 +339,9 @@ describe("type options", () => {
 
   it("offers the same scalar types to both editors", () => {
     const structured = values(STRUCTURED_TYPE_OPTIONS);
-    const template = values(TEMPLATE_TYPE_OPTIONS).filter((value) => value !== "signature");
+    const template = values(TEMPLATE_TYPE_OPTIONS).filter(
+      (value) => value !== "signature" && value !== "approval_comment",
+    );
     expect(structured).toEqual(template);
   });
 });

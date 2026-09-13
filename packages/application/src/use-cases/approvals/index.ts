@@ -12,6 +12,6 @@ export * from "./resolve-approval-subject";
 export * from "./apply-approval-signature";
 export * from "./approver-edit-subject-fields";
 export * from "./resolve-change-requests";
-export * from "./signature-values";
+export * from "./approval-values";
 export * from "./approval-record-keys";
 export * from "./resolve-decision-notify-targets";

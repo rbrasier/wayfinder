@@ -108,14 +108,19 @@ export function FieldConfigModal({
   model,
   onChange,
   onClose,
+  signatureOptions = [],
 }: {
   model: FieldModel;
   onChange: (patch: Partial<FieldModel>) => void;
   onClose: () => void;
+  // The signatures declared elsewhere in this template, for an approval comment
+  // to be pointed at. Empty for the structured editor, which carries neither.
+  signatureOptions?: string[];
 }) {
   const isNumeric = model.type === "number" || model.type === "currency";
   const hasOptions = model.type === "select" || model.type === "multiselect";
   const isSignature = model.type === "signature";
+  const isApprovalComment = model.type === "approval_comment";
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -138,7 +143,40 @@ export function FieldConfigModal({
             </p>
           )}
 
-          {!isSignature && (
+          {/* The one setting an approval comment has: which signature it belongs
+              to. A document can carry several, and a comment under the wrong
+              one puts an approver's words in another approver's mouth. */}
+          {isApprovalComment && (
+            <div className="space-y-1">
+              <Label htmlFor="field-signature">Which signature is this comment for?</Label>
+              {signatureOptions.length === 0 ? (
+                <p className="text-[12px] leading-[1.55] text-[#5c574c]">
+                  This template has no signature yet. Add a field of type Signature, then come back
+                  and point this comment at it.
+                </p>
+              ) : (
+                <select
+                  id="field-signature"
+                  value={model.signatureLabel ?? ""}
+                  onChange={(event) => onChange({ signatureLabel: event.target.value })}
+                  className="h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+                >
+                  <option value="">Choose a signature…</option>
+                  {signatureOptions.map((label) => (
+                    <option key={label} value={label}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <p className="text-[12px] text-[#666055]">
+                When that approval is decided, the comment the approver left is written in here.
+                Nobody is asked for it during the conversation.
+              </p>
+            </div>
+          )}
+
+          {!isSignature && !isApprovalComment && (
             <div className="flex items-center justify-between gap-3">
               <div className="space-y-0.5">
                 <Label htmlFor="field-required">Required</Label>

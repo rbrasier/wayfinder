@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeGroupCompletenessNotes } from "./group-fields";
-import { parseTemplateFields } from "./template-field";
+import { parseTemplateFields } from "./template-field-set";
 
 const suppliersGroup = () =>
   parseTemplateFields([
