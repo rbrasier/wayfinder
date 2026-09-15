@@ -194,7 +194,3 @@ node configuration modal on the canvas (**Admin → Flows → [flow] → edit a 
 
 [GNU General Public License v3.0](LICENSE) — free to use, study, modify, and distribute;
 any modifications must be released under the same licence.
-
----
-
-_Last updated: 5 August 2026_
