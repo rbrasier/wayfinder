@@ -1,7 +1,10 @@
 import {
+  analyseDocumentCount,
+  DEFAULT_ANALYSE_DOCUMENTS,
   domainError,
   err,
   isExtractionSnapshot,
+  isRunActive,
   ok,
   PREVIEW_FILE_THRESHOLD,
   SAMPLE_MAX_DOCUMENTS,
@@ -12,6 +15,7 @@ import {
   type ExtractionSchema,
   type IArchiveExtractor,
   type IDocumentExtractor,
+  type IExtractionDraftDocumentRepository,
   type IExtractionRunRepository,
   type IFlowVersionRepository,
   type ILanguageModel,
@@ -86,6 +90,7 @@ export class StartBatchRun {
     private readonly archiveExtractor: IArchiveExtractor,
     private readonly languageModel: ILanguageModel,
     private readonly documentExtractor: IDocumentExtractor,
+    private readonly drafts: IExtractionDraftDocumentRepository,
     options: StartBatchRunOptions = {},
   ) {
     this.archiveLimits = options.archiveLimits ?? DEFAULT_ARCHIVE_LIMITS;
@@ -165,6 +170,62 @@ export class StartBatchRun {
       previewBoundary: Math.min(sampleSize, input.files.length),
       mode: "sample",
     });
+  }
+
+  // Starts an Auto Analyse pass over the flow's staged documents (ADR-060).
+  // Unlike a sample or full run it needs no version and no schema — it exists to
+  // produce the field set the first version will carry — and it seeds no document
+  // or record rows, because the worker claims the run itself.
+  async startAnalysis(input: {
+    flowId: string;
+    userId: string;
+  }): Promise<Result<ExtractionRun>> {
+    const staged = await this.drafts.listForFlow(input.flowId);
+    if (staged.error) return staged;
+    if (staged.data.length === 0) {
+      return err(
+        domainError("VALIDATION_FAILED", "Upload at least one document before analysing."),
+      );
+    }
+
+    const live = await this.runs.listRunsForFlow(input.flowId);
+    if (live.error) return live;
+    const alreadyRunning = live.data.some(
+      (run) => run.mode === "analyse" && isRunActive(run),
+    );
+    if (alreadyRunning) {
+      return err(
+        domainError("VALIDATION_FAILED", "An analysis is already running for this synthesis."),
+      );
+    }
+
+    const readCount = await this.analyseReadCount(input.flowId);
+    if (readCount.error) return readCount;
+
+    const run = await this.runs.createRun({
+      flowId: input.flowId,
+      flowVersionId: null,
+      initiatedByUserId: input.userId,
+      mode: "analyse",
+      // An analysis has nothing to preview, so it never pauses at a boundary.
+      previewBoundary: 0,
+      totalCount: Math.min(readCount.data, staged.data.length),
+    });
+    if (run.error) return run;
+
+    return this.runs.getRun(run.data.id);
+  }
+
+  // Reads the author's configured read count, falling back to the default for a
+  // flow that has never been saved — which is the common case, since analysis is
+  // usually the first thing that happens to a new synthesis.
+  private async analyseReadCount(flowId: string): Promise<Result<number>> {
+    const draft = await this.flowVersions.openDraft(flowId);
+    if (draft.error) return draft;
+    if (!draft.data || !isExtractionSnapshot(draft.data.snapshot)) {
+      return ok(DEFAULT_ANALYSE_DOCUMENTS);
+    }
+    return ok(analyseDocumentCount(draft.data.snapshot.extraction.input));
   }
 
   private async materialiseRun(input: {
