@@ -20,6 +20,16 @@ plain-English reply on the issue when the PR opens. If the phase came from a PRD
 rather than an issue, there is no source issue and that part of Step 4 is
 skipped; note which it is rather than leaving it ambiguous.
 
+**Claim it before Step 0.** Once the number is established, post the one-line
+**"picked this up"** comment on the issue and move it to `status:in-progress`,
+before the Step 0 change summary. Read
+[`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) — it carries
+the exact shape, the `<!-- wayfinder-issue-started:v1 -->` marker to check for
+first, and the label mechanics (comment first, then the label; send the union of
+the existing labels with any other `status:` removed). One line, no analysis: the
+phase is still unapproved, and the comment exists only so the issue stops looking
+untouched while a session is open on it.
+
 ---
 
 ## Workflow
@@ -136,5 +146,6 @@ Once all sub-components pass validation, decide whether the feature needs an e2e
 - **Call out every deviation** from the approved Step 0 summary explicitly, in the implementation block's deviations line. "None" if there were none.
 - A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
 - **Reference the source issue in the PR body** so GitHub links them: `Closes #<number>` on its own line at the end of `## Why this change is required`, which is where the template asks for it. That link is what lets the daily triage routine close the issue once this merges — a passing mention of the number does not count. Use `Closes` only when the phase genuinely finishes what the issue asked; when it delivers part of it, write `Part of #<number>` instead and leave the issue open.
-- **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked. The PR body is written for a maintainer; this comment is written for them. A phase is usually wider than the issue that prompted it — the comment covers **the part that answers the issue**, not the whole phase. Skip this only when the phase came from a PRD rather than an issue.
+- **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked, signing off with the merge promise and the invitation to raise anything further as a new issue. The PR body is written for a maintainer; this comment is written for them. A phase is usually wider than the issue that prompted it — the comment covers **the part that answers the issue**, not the whole phase. Skip this only when the phase came from a PRD rather than an issue.
+- **Then move the issue to `status:in-review`**, by the label mechanics in the same guide — comment first, then the label, sending the union of its existing labels with `status:in-progress` (or any other `status:`) removed. When the PR body says `Part of #<number>` rather than `Closes`, the issue still moves: a PR is open against it either way, and triage only closes it if a merged PR is linked with a closing keyword.
 - Report the PR URL, and note that the e2e suite runs there rather than locally.
