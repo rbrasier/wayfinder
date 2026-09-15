@@ -39,3 +39,4 @@ export * from "./job-health";
 export * from "./get-system-health";
 export * from "./memory/index";
 export * from "./settings/retention-settings";
+export * from "./lookup/index";

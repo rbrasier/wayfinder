@@ -1,12 +1,13 @@
 import { createDataStreamResponse } from "ai";
 import {
   buildBranchDescriptors,
+  nodeFieldSet,
   normaliseAdvanceConfidenceThreshold,
   selectInjectableLessons,
   type ConversationalNodeConfig,
   type SessionEvent,
 } from "@wayfinder/domain";
-import { buildTurnRetrievalQueries } from "@wayfinder/application";
+import { buildTurnRetrievalQueries, inlineExternalOptions } from "@wayfinder/application";
 import { streamTurnRequestSchema } from "@wayfinder/shared";
 import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
@@ -205,8 +206,17 @@ export async function POST(
   // disable Send and can attribute the hold ("Alex's turn is in progress").
   publishEvent({ type: "turn.claimed", userId: authSession.userId, userName: userProfile?.name ?? null });
 
+  // A field bound to a lookup source gets its set inlined here when it is small
+  // enough, so the assistant can name real values when it asks. A large set stays
+  // out and the operator searches it instead (ADR-050 §4).
+  const templateFields = await inlineExternalOptions(
+    container.services.valueSetProvider,
+    nodeFieldSet(nodeConfig),
+  );
+
   const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
     nodeConfig,
+    templateFields,
     retrievedChunks,
     sessionUploads,
     gatheredContext: gatheredContextWithTools,

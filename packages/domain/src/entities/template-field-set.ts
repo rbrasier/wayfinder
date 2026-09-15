@@ -14,6 +14,11 @@ interface OpenGroup {
   innerKeys: Set<string>;
 }
 
+// {{ Department.key }} renders the key stored for {{ Department }}. It is an
+// accessor, not a field — the operator answers the parent once (ADR-050 §3) —
+// so it is a cross-tag rule rather than something a single tag can check.
+const KEY_ACCESSOR_PATTERN = /^(.+)\.key$/i;
+
 // Binds one approval comment to the signature it names, or to the template's
 // only signature when it named none.
 //
@@ -99,6 +104,8 @@ export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> 
   let openGroup: OpenGroup | null = null;
   const openSections: string[] = [];
 
+  const keyAccessors: Array<{ rawTag: string; parentKey: string }> = [];
+
   const addTopLevel = (field: TemplateField): void => {
     if (seenKeys.has(field.key)) return;
     seenKeys.add(field.key);
@@ -108,6 +115,16 @@ export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> 
   for (const rawTag of rawTags) {
     const trimmed = rawTag.trim();
     const sigil = /^[#/^]/.test(trimmed) ? trimmed[0] : null;
+
+    // Collected rather than parsed: the accessor renders a value the parent
+    // field already carries, so it must not become a field of its own. Validated
+    // after the loop, when every field it could reference has been seen.
+    const accessorMatch = sigil === null ? trimmed.match(KEY_ACCESSOR_PATTERN) : null;
+    if (accessorMatch) {
+      keyAccessors.push({ rawTag: trimmed, parentKey: deriveFieldKey(accessorMatch[1] ?? "") });
+      continue;
+    }
+
     const parsed = parseTemplateField(trimmed);
     if (parsed.error) return parsed;
     const field = parsed.data;
@@ -187,6 +204,26 @@ export const parseTemplateFields = (rawTags: string[]): Result<TemplateField[]> 
       continue;
     }
     addTopLevel(field);
+  }
+
+  for (const accessor of keyAccessors) {
+    const target = fields.find((field) => field.key === accessor.parentKey);
+    if (!target) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${accessor.rawTag}}}" reads the key of a field this template does not have. Add the field, or remove the accessor.`,
+        ),
+      );
+    }
+    if (!target.optionsSource) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Tag "{{${accessor.rawTag}}}" reads the key of the field "${target.label}", which is not bound to a lookup source. Only a field with (options-source: …) has a key.`,
+        ),
+      );
+    }
   }
 
   return bindApprovalComments(fields);

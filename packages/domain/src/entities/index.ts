@@ -97,3 +97,6 @@ export * from "./extraction-document";
 export * from "./flow-observation";
 export * from "./flow-lesson";
 export * from "./flow-observation-rules";
+export * from "./lookup-source";
+export * from "./value-set-matching";
+export * from "./template-field-value";

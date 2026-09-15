@@ -37,7 +37,8 @@ const TYPE_ROWS: AnnotationRow[] = [
 const OPTION_ROWS: AnnotationRow[] = [
   { annotation: "(options: A, B, C)", meaning: "AI must return exactly one of the listed values" },
   { annotation: "(multi-options: A, B, C)", meaning: "Shorthand — AI may return one or more of the listed values (comma-separated)" },
-  { annotation: "(multiple)", meaning: "Combined with (options: …) — allows multiple values to be selected" },
+  { annotation: "(multiple)", meaning: "Combined with (options: …) or (options-source: …) — allows multiple values to be selected" },
+  { annotation: "(options-source: name)", meaning: "The values come from a registered lookup source instead of being typed here — see Live value lists below" },
 ];
 
 const CONSTRAINT_ROWS: AnnotationRow[] = [
@@ -72,6 +73,27 @@ const SIGNATURE_ROWS: AnnotationRow[] = [
   },
 ];
 
+const LOOKUP_ROWS: AnnotationRow[] = [
+  {
+    annotation: "(options-source: departments)",
+    meaning:
+      "Binds the field to a lookup source an admin registered under that name, so the valid values come from live data — the department tree, a cost-centre list, the people directory — instead of being typed into every template. The name is the source's slug (lowercase letters, numbers and hyphens); an unregistered name is rejected at upload rather than at generation. Cannot be combined with (options: …), (multi-options: …) or a type keyword: the source already decides what a valid value is.",
+  },
+  {
+    annotation: "(options-source: departments) (multiple)",
+    meaning:
+      "Allows more than one value from the source. Each one is checked separately when the step completes.",
+  },
+];
+
+const LOOKUP_KEY_ROWS: AnnotationRow[] = [
+  {
+    annotation: "{{ Department.key }}",
+    meaning:
+      "Renders the code behind the value chosen for {{ Department }} — FIN-001 where the document shows Finance — so a downstream system gets the identifier and the reader gets the label. It is an accessor, not a field: the person is asked for Department once, and .key needs no annotation of its own. Only works on a field bound to a lookup source that has a key.",
+  },
+];
+
 const SECTION_ROWS: AnnotationRow[] = [
   {
     annotation: "{{#Section Name}} … {{/Section Name}}",
@@ -94,6 +116,9 @@ const TEMPLATE_EXAMPLES = [
   "{{ Approval Status (options: Approved, Rejected, Pending) (optional) }}",
   "{{ Skills (multi-options: Python, Go, Rust) (max: 3) }}",
   "{{ Tags (options: Urgent, Billing, Legal) (multiple) (optional) }}",
+  "{{ Department (options-source: departments) }}  →  renders Finance",
+  "{{ Department.key }}  →  renders FIN-001",
+  "{{ Business Units (options-source: business-units) (multiple) }}",
   "{{ Contract Value (currency) (optional) }}",
   "{{ Employee Email (email) }}",
   "{{ Notes (text) (maxlen: 200) (optional) }}",
@@ -107,6 +132,7 @@ const TEMPLATE_EXAMPLES = [
 const STRUCTURED_EXAMPLES = [
   "Approval Status (options: Approved, Rejected, Pending) (optional)",
   "Skills (multi-options: Python, Go, Rust) (max: 3)",
+  "Department (options-source: departments)",
   "Contract Value (currency) (optional)",
   "Employee Email (email)",
   "Notes (text) (maxlen: 200) (optional)",
@@ -145,6 +171,13 @@ export const helpDialogContent = (variant: HelpVariant): HelpContent => {
     { title: "Type keywords", rows: TYPE_ROWS },
     { title: "Options / enum", rows: OPTION_ROWS },
     { title: "Constraints", rows: CONSTRAINT_ROWS },
+    {
+      title: "Live value lists",
+      blurb: isTemplate
+        ? "Use one of these when the valid values are real reference data that changes — departments, cost centres, suppliers, people — rather than a short list you can type out. An admin registers the source once under Configuration → Lookup Sources and every template refers to it by name, so nothing has to be re-edited when the organisation changes. The person picks from live values, and whatever reaches the field is checked against the source again when the step completes: a misspelling that unmistakably means one entry is corrected silently, anything less certain comes back as a short list to choose from."
+        : "Use one of these when the valid values are real reference data that changes — departments, cost centres, suppliers, people — rather than a short list you can type out. An admin registers the source once under Configuration → Lookup Sources and every step refers to it by name. The person picks from live values rather than a list that has to be re-typed whenever the organisation changes.",
+      rows: isTemplate ? [...LOOKUP_ROWS, ...LOOKUP_KEY_ROWS] : LOOKUP_ROWS,
+    },
     {
       title: "Narrative prose",
       blurb: isTemplate

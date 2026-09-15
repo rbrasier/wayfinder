@@ -2,6 +2,7 @@ import type {
   FieldValueSource,
   FlowContextDoc,
   ILanguageModel,
+  IValueSetProvider,
   Result,
   SessionStepOutput,
   TemplateField,
@@ -21,6 +22,10 @@ export interface ResolveFieldValuesInput {
   userId?: string | null;
   flowId?: string | null;
   sessionId?: string | null;
+  // Supplies the valid set for fields bound to a lookup source, so a small set
+  // reaches the extraction prompt (ADR-050 §4). Optional — omitted, external
+  // fields simply stay uninlined.
+  valueSetProvider?: IValueSetProvider;
 }
 
 export const lookupStepField = (
@@ -78,6 +83,7 @@ export const resolveFieldValues = async (
     sessionId: input.sessionId,
     priorStepOutputs: input.priorStepOutputs,
     insights: input.insights,
+    valueSetProvider: input.valueSetProvider,
   });
   if (extracted.error) return extracted;
 

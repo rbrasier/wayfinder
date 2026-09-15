@@ -1,0 +1,96 @@
+import type {
+  LookupSourceConfig,
+  LookupSourceKind,
+  ValueSetEntry,
+  ValueSetProbe,
+} from "../entities/lookup-source";
+import type { ValueSetMatchOutcome } from "../entities/value-set-matching";
+import type { Result } from "../result";
+
+export interface ValueSetSearchInput {
+  sourceName: string;
+  query: string;
+  limit: number;
+}
+
+// A source's full set as served to the caller, carrying the audit fields every
+// stored value snapshots. `stale` means the live source could not be reached and
+// this is the last-known-good version (ADR-050 §5).
+export interface ValueSetListing {
+  entries: ValueSetEntry[];
+  version: string;
+  fetchedAt: Date;
+  stale: boolean;
+}
+
+// One input value paired with the entry it resolved to. The pairing is explicit
+// because canonicalisation rewrites the value — a caller cannot re-derive which
+// input produced which entry by comparing strings.
+export interface ResolvedValue {
+  input: string;
+  entry: ValueSetEntry;
+}
+
+// The step-end batch outcome. `unresolved` and `ambiguous` name the raw values
+// that failed, which block step completion until corrected — unless the outcome
+// is `stale`, when the set itself is not authoritative (ADR-050 §5, §6).
+export interface ResolveOutcome {
+  matched: ResolvedValue[];
+  unresolved: string[];
+  ambiguous: string[];
+  stale: boolean;
+  version: string;
+  fetchedAt: Date;
+}
+
+// What `match` runs against: raw values as an operator typed or an assistant
+// proposed them, before anything has been confirmed.
+export interface ValueSetMatchInput {
+  sourceName: string;
+  values: string[];
+  limit?: number;
+  // The field being filled, where the caller knows it. It reaches the shortlist
+  // prompt so a value can be read as what it is meant to be — a department
+  // rather than a job title — which is the context letter-matching discards.
+  context?: string;
+}
+
+// One input value, narrowed. `outcome` says whether the ladder settled it or
+// only shortlisted candidates for someone to choose between (ADR-051 §2).
+export interface ValueSetMatch {
+  input: string;
+  outcome: ValueSetMatchOutcome;
+}
+
+// A narrowing pass over a whole batch. It carries the same audit fields as a
+// resolve because a caller acting on a suggestion needs to know which version of
+// the set produced it — and whether that version was last-known-good.
+export interface ValueSetMatchResult {
+  matches: ValueSetMatch[];
+  stale: boolean;
+  version: string;
+  fetchedAt: Date;
+}
+
+// What Test runs against. It carries a raw config rather than a registered name
+// because the admin has to see the source's fields before they can choose a
+// display and key field, which is before the source can be saved (ADR-050 §2b).
+export interface ValueSetProbeInput {
+  kind: LookupSourceKind;
+  config: LookupSourceConfig;
+  // The secret in plaintext. Test runs against a draft, so the caller supplies
+  // either what the admin just typed or what the repository decrypted.
+  credential?: string;
+}
+
+// Abstracts where a field's valid set comes from, so neither `application` nor
+// the AI layer knows whether values are people, admin-entered rows, or an HTTP
+// response. Every method returns the Result pattern and fails degraded — a
+// provider outage yields last-known-good, never a throw (ADR-050 §2).
+export interface IValueSetProvider {
+  search(input: ValueSetSearchInput): Promise<Result<ValueSetEntry[]>>;
+  list(sourceName: string): Promise<Result<ValueSetListing>>;
+  resolve(sourceName: string, values: string[]): Promise<Result<ResolveOutcome>>;
+  match(input: ValueSetMatchInput): Promise<Result<ValueSetMatchResult>>;
+  probe(input: ValueSetProbeInput): Promise<Result<ValueSetProbe>>;
+}

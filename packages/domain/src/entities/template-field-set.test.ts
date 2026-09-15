@@ -7,8 +7,8 @@ import {
   isSignatureTag,
   parseTemplateField,
   templateFieldToLine,
-  validateTemplateFieldValue,
 } from "./template-field";
+import { validateTemplateFieldValue } from "./template-field-value";
 import { parseTemplateFields } from "./template-field-set";
 
 describe("parseTemplateFields", () => {
@@ -590,3 +590,44 @@ describe("repeating group fields", () => {
     ]);
   });
 });
+
+describe("parseTemplateFields — the Field.key accessor", () => {
+  it("does not emit a field for the accessor tag", () => {
+    const result = parseTemplateFields([
+      "Department (options-source: departments)",
+      "Department.key",
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(1);
+    expect(result.data?.[0]?.key).toBe("department");
+  });
+
+  it("rejects an accessor on a field with no options source", () => {
+    const result = parseTemplateFields(["Department", "Department.key"]);
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Department.key");
+  });
+
+  it("rejects an accessor that names no field in the template", () => {
+    const result = parseTemplateFields([
+      "Department (options-source: departments)",
+      "Supplier.key",
+    ]);
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Supplier.key");
+  });
+
+  it("accepts an accessor written before the field it references", () => {
+    const result = parseTemplateFields([
+      "Department.key",
+      "Department (options-source: departments)",
+    ]);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toHaveLength(1);
+  });
+});
+

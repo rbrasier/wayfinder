@@ -15,6 +15,7 @@ describe("helpDialogContent", () => {
       "Type keywords",
       "Options / enum",
       "Constraints",
+      "Live value lists",
       "Narrative prose",
       "Signatures",
       "Optional sections",
@@ -27,6 +28,7 @@ describe("helpDialogContent", () => {
       "Type keywords",
       "Options / enum",
       "Constraints",
+      "Live value lists",
       "Narrative prose",
     ]);
   });
@@ -40,6 +42,19 @@ describe("helpDialogContent", () => {
     expect(annotations).not.toContain("(approval-comment");
     expect(annotations).not.toContain("{{#Section Name}}");
     expect(annotations).not.toContain("(repeat)");
+  });
+
+  // A structured step can bind a field to a lookup source, so the annotation is
+  // offered — but .key renders a value into a document, and there is nothing to
+  // render into here.
+  it("offers a lookup source to a structured step but not the key accessor", () => {
+    const annotations = allAnnotations("structured").join(" ");
+    expect(annotations).toContain("(options-source: departments)");
+    expect(annotations).not.toContain(".key");
+  });
+
+  it("documents the key accessor for a template", () => {
+    expect(allAnnotations("template").join(" ")).toContain("{{ Department.key }}");
   });
 
   it("still documents narrative and its brief in a structured step", () => {

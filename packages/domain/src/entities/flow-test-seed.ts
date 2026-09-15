@@ -3,7 +3,7 @@ import type { FlowTestSeed, SeedContextItem, SeedStepOutput } from "./flow-test-
 import { nodeFieldSet } from "./node-output";
 import type { StepOutputField } from "./session-step-output";
 import type { TemplateField } from "./template-field";
-import { validateTemplateFieldValue } from "./template-field";
+import { validateTemplateFieldValue } from "./template-field-value";
 
 // The only part of an edge this needs, declared structurally so a caller can
 // pass rows straight from the repository.

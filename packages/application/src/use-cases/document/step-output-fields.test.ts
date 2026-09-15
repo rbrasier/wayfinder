@@ -45,3 +45,62 @@ describe("buildStepOutputFields", () => {
     expect(result[0]!.items).toEqual([]);
   });
 });
+
+describe("buildStepOutputFields — external-sourced fields", () => {
+  const snapshot = {
+    name: "departments",
+    version: "v-2026-08-02",
+    fetchedAt: new Date("2026-08-02T09:00:00.000Z"),
+  };
+
+  const externalField: TemplateField = {
+    key: "department",
+    label: "Department",
+    type: "text",
+    optionsSource: "departments",
+    optional: false,
+    raw: "Department (options-source: departments)",
+  };
+
+  it("stores the key and the snapshot the value was validated against", () => {
+    const [field] = buildStepOutputFields([externalField], { department: "Finance" }, {
+      department: { valueKey: "FIN-001", sourceRef: snapshot },
+    });
+
+    expect(field?.value).toBe("Finance");
+    expect(field?.valueKey).toBe("FIN-001");
+    expect(field?.sourceRef).toEqual(snapshot);
+  });
+
+  it("stores the display alone when the source declares no key", () => {
+    const [field] = buildStepOutputFields([externalField], { department: "Finance" }, {
+      department: { sourceRef: snapshot },
+    });
+
+    expect(field?.valueKey).toBeUndefined();
+    expect(field?.sourceRef).toEqual(snapshot);
+  });
+
+  it("leaves options empty for an external field even when a set was inlined", () => {
+    const inlined = { ...externalField, options: ["Finance (FIN-001)"] };
+
+    const [field] = buildStepOutputFields([inlined], { department: "Finance" });
+
+    expect(field?.options).toBeUndefined();
+  });
+
+  it("keeps inline options for a field that is not externally sourced", () => {
+    const inline: TemplateField = {
+      key: "status",
+      label: "Status",
+      type: "text",
+      options: ["Open", "Closed"],
+      optional: false,
+      raw: "Status (options: Open, Closed)",
+    };
+
+    const [field] = buildStepOutputFields([inline], { status: "Open" });
+
+    expect(field?.options).toEqual(["Open", "Closed"]);
+  });
+});

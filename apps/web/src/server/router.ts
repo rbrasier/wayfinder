@@ -15,6 +15,7 @@ import { groupRouter } from "./routers/group";
 import { hrRouter } from "./routers/hr";
 import { knowledgeRouter } from "./routers/knowledge";
 import { legalHoldRouter } from "./routers/legal-hold";
+import { lookupSourceRouter } from "./routers/lookup-source";
 import { mcpServerRouter } from "./routers/mcp-server";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
@@ -58,6 +59,7 @@ export const appRouter = router({
   feedback: feedbackRouter,
   skill: skillRouter,
   flowMemory: flowMemoryRouter,
+  lookupSource: lookupSourceRouter,
   mcpServer: mcpServerRouter,
   audit: auditRouter,
   legalHold: legalHoldRouter,

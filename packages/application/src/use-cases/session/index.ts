@@ -21,3 +21,4 @@ export * from "./override-branch";
 export * from "./rewind-to-fork";
 export * from "./confirm-step-advance";
 export * from "./record-manual-estimate";
+export * from "./validate-external-fields";

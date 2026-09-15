@@ -79,3 +79,6 @@ export * from "./archive-extractor";
 export * from "./flow-observation-repository";
 export * from "./flow-lesson-repository";
 export * from "./lesson-distiller";
+export * from "./value-set-provider";
+export * from "./value-set-shortlister";
+export * from "./lookup-source-repository";

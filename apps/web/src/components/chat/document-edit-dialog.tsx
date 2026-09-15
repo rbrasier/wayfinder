@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { LookupValueInput } from "./lookup-value-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
@@ -291,6 +292,20 @@ function FieldControl({ field, value, onChange }: Omit<FieldInputProps, "error">
         <option value="Yes">Yes</option>
         <option value="No">No</option>
       </select>
+    );
+  }
+
+  // A large external set is not inlined, so the operator searches the live source
+  // instead of scrolling a dropdown (ADR-050 §4).
+  if (field.optionsSource && !(field.options && field.options.length > 0)) {
+    return (
+      <LookupValueInput
+        fieldKey={field.key}
+        sourceName={field.optionsSource}
+        multiple={field.multiple === true}
+        value={value}
+        onChange={onChange}
+      />
     );
   }
 
