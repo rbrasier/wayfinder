@@ -136,6 +136,26 @@ cookie exists in the browser jar. The e2e spec also had a hollow assertion —
 `toHaveURL(/chats/)` after starting, when the admin was already on `/chats` — so
 it would have passed whether or not anything happened; it is gone.
 
+## Second CI round — three faults in the spec, not the product
+
+The cookie fix worked: `POST /api/impersonation/start` returned 200 and the
+banner rendered. Two e2e tests still failed, and all three faults were in the
+spec:
+
+1. **Near-duplicate tests.** The cookie-guard test added with the fix repeated
+   almost all of the happy-path test. Merged into one round trip.
+2. **A 5s timeout against a cold compile.** `next dev` compiles routes on
+   demand; the CI app log shows a page taking 8,742ms. The first test of the run
+   paid that cost and timed out, while the identical second test passed because
+   everything was warm. The first banner assertion now allows 30s; the rest keep
+   the default.
+3. **A false premise.** "A non-admin is never offered the entry point" could
+   never pass: `/api/auth/test-session` mints every user with `isAdmin: true`,
+   so the suite has no non-admin. Removed rather than papered over — and per
+   `e2e-test-policy.md`, a button hidden for a role is conditional rendering,
+   not one of the six groups. The boundary itself is enforced server-side and
+   tested there: the start route answers 403, `listTargets` answers FORBIDDEN.
+
 ## Known limitations
 
 - **RSC prefetches are not inside the audit actor scope.** `createServerHelpers`

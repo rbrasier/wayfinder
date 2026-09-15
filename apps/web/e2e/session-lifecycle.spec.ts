@@ -141,6 +141,12 @@ test.describe('Session lifecycle: policy dialog', () => {
  * and router, and are deliberately not re-tested here.
  */
 test.describe('View as user', () => {
+  // One round trip, not three near-identical ones. The admin-only gate is not
+  // tested here: `/api/auth/test-session` mints every user with isAdmin true
+  // (route.ts), so the suite has no non-admin to assert against, and "a button
+  // is hidden for a role" is conditional rendering rather than one of the six
+  // groups in e2e-test-policy.md. That boundary is enforced server-side and
+  // covered there — the start route answers 403 and `listTargets` FORBIDDEN.
   test('an admin views as another user, sees the banner, and returns', async ({
     browser,
     request,
@@ -161,10 +167,21 @@ test.describe('View as user', () => {
     // clicking, so that assertion passes whether or not anything happened. The
     // banner is the first thing that only exists if the server re-resolved the
     // request as somebody else.
+    //
+    // The generous timeout is for `next dev`, which compiles routes on demand:
+    // the first navigation of a run has been seen taking over eight seconds in
+    // CI, against a 5s default. Later assertions use the default.
     const banner = page.getByTestId('impersonation-banner');
-    await expect(banner).toBeVisible();
+    await expect(banner).toBeVisible({ timeout: 30_000 });
     await expect(banner).toContainText(REVOKE_TARGET_EMAIL);
     await expect(page.getByTestId('impersonation-minutes')).toContainText(/\d+ min left/);
+
+    // The cookie is the thing that was silently missing when this feature first
+    // shipped: it was set inside a tRPC procedure, and the app's streaming tRPC
+    // link returns the response headers before any procedure body runs, so
+    // `Set-Cookie` was dropped and the whole feature was inert.
+    const cookies = await page.context().cookies();
+    expect(cookies.find((c) => c.name === 'wf.impersonation')?.value ?? '').not.toBe('');
 
     await page.screenshot({
       path: 'screenshots/view-as-user-banner.png',
@@ -177,47 +194,9 @@ test.describe('View as user', () => {
 
     await page.getByRole('button', { name: /return to your account/i }).click();
 
-    await expect(page.getByTestId('impersonation-banner')).toBeHidden();
+    await expect(banner).toBeHidden();
     // Proof the admin really is themselves again: the admin section admits them.
     await page.goto('/admin/users');
     await expect(page).toHaveURL(/\/admin\/users/);
-  });
-
-  // The bug this guards: the cookie was originally set inside a tRPC procedure,
-  // and the app's streaming tRPC link returns the response headers before any
-  // procedure body runs — so `Set-Cookie` was silently dropped and the whole
-  // feature was inert while every unit test passed.
-  test('starting a simulation actually sets the impersonation cookie', async ({
-    browser,
-    request,
-    page,
-  }) => {
-    const targetContext = await signedInContextFor(browser, request, REVOKE_TARGET_EMAIL);
-    await targetContext.close();
-
-    await page.goto('/chats');
-    await page.getByLabel('Account menu').click();
-    await page.getByTestId('view-as-user').click();
-    await page.getByLabel('Search users').fill(REVOKE_TARGET_EMAIL);
-    await page.getByRole('button', { name: new RegExp(REVOKE_TARGET_EMAIL, 'i') }).click();
-
-    await expect(page.getByTestId('impersonation-banner')).toBeVisible();
-
-    const cookies = await page.context().cookies();
-    expect(cookies.find((c) => c.name === 'wf.impersonation')?.value ?? '').not.toBe('');
-
-    await page.getByRole('button', { name: /return to your account/i }).click();
-    await expect(page.getByTestId('impersonation-banner')).toBeHidden();
-  });
-
-  test('a non-admin is never offered the entry point', async ({ browser, request }) => {
-    const plainContext = await signedInContextFor(browser, request, REVOKE_TARGET_EMAIL);
-    const plainPage = await plainContext.newPage();
-
-    await plainPage.goto('/chats');
-    await plainPage.getByLabel('Account menu').click();
-
-    await expect(plainPage.getByTestId('view-as-user')).toBeHidden();
-    await plainContext.close();
   });
 });
