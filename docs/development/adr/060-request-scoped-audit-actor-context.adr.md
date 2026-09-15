@@ -62,6 +62,14 @@ context opens the scope for the request with `{ userId, impersonatorId }`;
 `payload.metadata` before hashing. No use-case signature changes, so every present
 and future audit write is covered by construction rather than by remembering.
 
+**3a. Resolving the principal and opening the scope are one operation.** REST
+routes go through a single `withPrincipal(request, handler)` helper that reads
+both cookies, resolves the principal (ADR-059 §3b), opens the scope, and hands the
+principal to the handler. Splitting the two would let a route resolve correctly
+and forget to scope, losing attribution silently — §4's degraded case arrived at
+by accident rather than by design. Fused, forgetting the scope means not having a
+principal at all, which does not compile.
+
 **4. Absence of a scope means "not impersonated", and is never an error.** A write
 outside any request — a background job, a webhook handler, a queue worker, a
 migration — reads an empty store and writes no impersonation keys. This is
@@ -71,10 +79,12 @@ the *absence* of the keys means "acted as themselves", and the presence of
 a missing key.
 
 **5. Explicit payload wins.** If a caller passes `metadata.impersonatorId` itself,
-the context does not overwrite it. This keeps the `impersonation.started`,
-`impersonation.stopped` and `impersonation.extended` rows — which are the admin's
-own actions and carry `actor_id` = the admin — writable without fighting the
-ambient scope.
+the context does not overwrite it. All three of `impersonation.started`,
+`impersonation.stopped` and `impersonation.extended` must use this: they are the
+admin's own actions and carry `actor_id` = the admin, so letting the ambient merge
+reach them would stamp `impersonated: true` on a row whose actor is already the
+impersonator — a row that reads as the admin impersonating themselves. The
+explicit metadata is not optional on any of the three.
 
 **6. The context is for attribution only.** No authorisation decision, anywhere,
 may read the actor context. Permission checks read the tRPC context, which
@@ -103,11 +113,12 @@ port.
   parameter. §6 and §7 are the guardrails that keep it from becoming a general
   context-passing mechanism; a review that finds anything else reading the store
   should treat it as a defect.
-- The scope must be opened in every entry point that can audit — the tRPC handler
-  and any REST route under `apps/web/src/app/api/` that writes audit rows. A
-  missed entry point degrades to §4 (attributed to the target, impersonator
-  absent) rather than to a wrong attribution, but it is still a bug and the phase
-  doc requires a test per entry point.
+- The scope must be opened in every entry point that can audit — both tRPC context
+  builders (`server/trpc.ts` and `server/server-context.ts`) and every REST route
+  under `apps/web/src/app/api/`. §3a is what makes this tractable: the routes get
+  it from `withPrincipal` rather than each remembering. A missed entry point
+  degrades to §4 (attributed to the target, impersonator absent) rather than to a
+  wrong attribution, but it is still a bug.
 
 ## Alternatives rejected
 

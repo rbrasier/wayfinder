@@ -38,6 +38,8 @@ the ability for an admin to *be* another user for a few minutes.
   screen for the whole duration, and states whose account is being viewed.
 - Returning to the admin's own account is a single click and always succeeds;
   the admin's own session is never at risk.
+- The admin section is closed for the duration of a simulation, whoever is being
+  simulated.
 - Every audited action taken during a simulated session names both the account it
   was taken under and the admin who actually took it.
 
@@ -59,7 +61,8 @@ the ability for an admin to *be* another user for a few minutes.
 | `AuditActorContext` | `packages/domain/src/entities/audit-actor-context.ts` | new | `{ userId, impersonatorId }` — the value carried through the request-scoped actor store (ADR-060). |
 | `ResolvedSession` | `packages/adapters/src/auth/session-resolver.ts:11` | existing, extended | Gains `impersonatorId: string \| null`. |
 | `CachedPrincipal` | `packages/adapters/src/auth/cached-session-resolver.ts` | existing, extended | Must carry `impersonatorId` or the cache would erase it on the second request. |
-| `TrpcContext` | `apps/web/src/server/trpc.ts:9` | existing, extended | Gains `impersonatorId: string \| null`. |
+| `TrpcContext` | `apps/web/src/server/trpc.ts:9` | existing, extended | Gains `impersonatorId: string \| null`. Both context builders — `server/trpc.ts` and `server/server-context.ts` — must set it. |
+| `withPrincipal` | `apps/web/src/lib/with-principal.ts` | new | `(request, handler)` — reads both cookies, resolves the principal, opens the audit actor scope, hands the principal to the handler. The single entry point for the 12 REST routes (ADR-060 §3a). |
 | `AuditLog` | `packages/domain/src/entities/audit-log.ts` | existing, unchanged | Impersonator rides `metadata`; no new field, so `computeAuditHash`'s input shape is untouched. |
 
 ## 6. User stories
@@ -89,11 +92,24 @@ the ability for an admin to *be* another user for a few minutes.
 - New modal component — user picker with a search filter.
 - `apps/web/src/app/layout.tsx` — the impersonation banner, rendered beside
   `SiteBanner` inside the flex column so it subtracts from viewport height rather
-  than overlaying the app.
+  than overlaying the app. `impersonation.current` is a **public** procedure
+  returning `null` when unauthenticated, because this layout also renders
+  `/login` and `/register` — the same reason `SiteBanner`'s query is public
+  (`site-banner.tsx:55`).
 - `/chats` — the landing route after starting a simulated session.
+- `apps/web/src/app/(admin)/admin/layout.tsx` — redirects to `/chats` while a
+  ticket is live, regardless of the target's `is_admin` (ADR-059 §3a).
 - tRPC: `impersonation.start`, `impersonation.stop`, `impersonation.extend`,
   `impersonation.current`, `impersonation.listTargets` — all added.
-- `apps/web/src/server/trpc.ts` — context resolution and the actor scope.
+- **Session resolution, at every call site.** `container.resolveSession` takes the
+  impersonation cookie as a *required* second argument (ADR-059 §3b), so all 20
+  call sites across 17 files must be converted: `server/trpc.ts`,
+  `server/server-context.ts`, `(user)/layout.tsx`, `(user)/page.tsx`,
+  `(admin)/admin/layout.tsx`, `(auth)/register/page.tsx`, 12 REST routes under
+  `app/api/`, and `lib/template-route-helpers.ts` +
+  `lib/extraction-artifact-access.ts`.
+- `packages/shared` — `listUsersInputSchema` gains an optional `search` field,
+  with matching support in the `listUsers` use case and repository.
 - `apps/web/src/middleware.ts` — no change; the admin's own session cookie is
   still present throughout, so the existing cookie check still passes.
 
@@ -106,6 +122,9 @@ already folds into the hash chain — so an impersonator recorded there is exact
 as tamper-evident as one in a dedicated column, with no migration and no
 `-- data-impact:` declaration. See ADR-060 for why a column and a
 `core_impersonation_sessions` table were both rejected.
+
+The `search` field added to user listing is a query filter over existing columns
+(`name`, `email`) — no schema change either.
 
 ## 9. Architectural decisions
 
@@ -130,9 +149,10 @@ as tamper-evident as one in a dedicated column, with no migration and no
 - [ ] After starting, `trpc.user.me` returns the target's id, name, email and
       permissions, and the target's `isAdmin`.
 - [ ] After starting, the browser lands on `/chats`.
-- [ ] The banner is visible on every authenticated route while simulating, names
-      the target, shows whole minutes remaining, and is absent when not
-      simulating.
+- [ ] The banner renders while simulating on each of `/chats`, `/chats/[sessionId]`,
+      `/approvals`, `/flows`, `/knowledge` and `/settings`, naming the target and
+      showing whole minutes remaining; it is absent when not simulating, and
+      absent on `/login` and `/register` in both states.
 - [ ] The banner's Extend button resets the remaining time to the full TTL and
       writes an `impersonation.extended` audit row.
 - [ ] "Return to your account" clears the cookie; the next request resolves as
@@ -151,8 +171,26 @@ as tamper-evident as one in a dedicated column, with no migration and no
       target and `metadata.impersonatorId` = the admin.
 - [ ] An audited write made outside a simulated session has no `impersonated` key
       in its metadata.
-- [ ] Two concurrent requests — one simulated, one not — do not leak each other's
-      actor context.
+- [ ] Two audit writes issued from interleaved `runWithAuditActor` scopes — one
+      carrying an `impersonatorId`, one not — produce one row with the
+      impersonation keys and one without. Asserted by awaiting both scopes
+      concurrently and inspecting the two payloads passed to the logger.
+- [ ] `/admin` redirects to `/chats` while simulating, including when the target
+      is themselves an admin, and the sidebar's "Enter admin mode" control is
+      hidden for the duration.
+- [ ] Server-rendered content matches the client's principal: with a live ticket,
+      the `user.me` and `session.list` data prefetched by `(user)/layout.tsx`
+      is the target's, not the admin's.
+- [ ] Each of the 12 REST routes under `app/api/` resolves as the target while
+      simulating, and an audit row written from one carries
+      `metadata.impersonatorId`.
+- [ ] A second request on a warm cache still resolves as the target —
+      `impersonatorId` survives the cached resolver's hit path.
+- [ ] `impersonation.started`, `impersonation.stopped` and `impersonation.extended`
+      each have `actor_id` = the admin and carry **no** `impersonated: true` key.
+- [ ] `impersonation.stop` called with no active simulation clears any stray
+      cookie, returns ok, and writes no audit row.
+- [ ] The picker's search filters server-side on name and email.
 - [ ] `./validate.sh` passes.
 
 ## 11. Out of scope / future work
@@ -183,3 +221,10 @@ as tamper-evident as one in a dedicated column, with no migration and no
   recalled.
 - `packages/application` must not learn about impersonation. If a use case needs
   the impersonator, that is a signal the actor context is in the wrong place.
+- The required-parameter change to `resolveSession` (ADR-059 §3b) is a wide,
+  mechanical diff across 17 files. It is deliberate — an optional parameter would
+  let a call site resolve as the admin while the UI claimed otherwise — but it
+  means the build cannot be landed piecemeal.
+- Server components and REST routes resolve independently of tRPC. A simulation
+  that fixes only the tRPC path produces the worst failure mode available: the
+  banner says one identity while the server renders another.

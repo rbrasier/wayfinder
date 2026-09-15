@@ -58,9 +58,28 @@ another's is inert. A ticket that outlives its issuer's session is inert.
 **3. Resolution redirects the principal, it does not elevate it.**
 `resolveSession` returns `{ userId: target, isAdmin: target.isAdmin, impersonatorId: admin }`.
 The admin holds the target's authority and nothing more: an admin simulating a
-non-admin loses the ADR-021 bypass, cannot reach admin routes, and cannot start a
-nested impersonation. `impersonatorId` exists for attribution, never for
-authorisation — no permission check may read it.
+non-admin loses the ADR-021 bypass and cannot start a nested impersonation.
+`impersonatorId` exists for attribution, never for authorisation — no permission
+check may read it.
+
+**3a. The admin section is closed for the duration, unconditionally.** `/admin` is
+unreachable while a ticket is live, *regardless of the target's `is_admin`*, and
+the sidebar's "Enter admin mode" control is hidden. Deriving admin reachability
+from the target's flag would make the rule conditional and would leave an admin
+simulating another admin taking admin actions inside a simulation — a case the
+audit story does not need to carry. One rule: simulating means not being an
+admin, whoever you are simulating. An admin who lands on an `/admin` route with a
+live ticket is redirected to `/chats`.
+
+**3b. Resolution takes both cookies as required arguments.** `resolveSession`'s
+signature changes so that the impersonation cookie is a *required* parameter, not
+an optional one. The web app resolves sessions at twenty call sites across
+seventeen files — two tRPC context builders, three server layouts/pages, twelve
+REST routes and two lib helpers — and an optional parameter would let any of them,
+present or future, silently resolve as the admin while the UI claimed otherwise.
+Making it required moves completeness from a reviewer's memory to the compiler.
+REST routes obtain the principal through one `withPrincipal` helper, which also
+opens the ADR-060 actor scope (ADR-060 §3).
 
 **4. No session row is created.** A simulated session is not a session in the
 ADR-035 sense. It creates nothing in `core_sessions`, so it counts against no
@@ -68,7 +87,11 @@ concurrency limit, never evicts a real device, and is untouched by the idle and
 absolute timeout logic. The corollary is that `revokeUserSessions` on the target
 does not end an in-flight simulation — the admin's own session is what is live —
 and that is correct: the admin remains responsible for the simulation, and the
-banner's Return control is always available.
+banner's Return control is always available. This is a deliberate divergence from
+ADR-035's leaver flow, which exists to end *every* session a user holds: a
+compliance reader should know that revoking a user's sessions does not, by
+itself, evict an admin currently simulating them. The ticket's own expiry
+(§5) bounds that window to the TTL.
 
 **5. Expiry is in the ticket, not in the cookie's lifetime alone.** `expiresAt` is
 inside the signed payload and checked at resolution. A cookie `Max-Age` is set to
@@ -97,6 +120,13 @@ themselves again.
 - Session resolution grows a third outcome to reason about (`self`,
   `impersonating`, `invalid ticket → self`), and `CachedPrincipal` must carry
   `impersonatorId` or the cache would erase the simulation on the second request.
+  The cached resolver's hit path reconstructs its return value field by field
+  (`cached-session-resolver.ts:35`) rather than spreading, so it drops any field
+  not named there — adding the field to the type is necessary but not sufficient.
+  The cache key must include the impersonation cookie, or a simulated and a
+  non-simulated request from the same admin share one entry.
+- The signature change in §3b is a wide but mechanical diff: seventeen files stop
+  compiling until each is converted. That is the intended cost.
 - Two cookies means two signing surfaces. The impersonation cookie must use the
   same secret discipline as the session cookie, and its verification must be
   constant-time and fail closed.
