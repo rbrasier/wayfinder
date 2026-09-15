@@ -12,6 +12,7 @@ import { flowVersionRouter } from "./routers/flow-version";
 import { flowTestRouter } from "./routers/flow-test";
 import { governanceRouter } from "./routers/governance";
 import { groupRouter } from "./routers/group";
+import { impersonationRouter } from "./routers/impersonation";
 import { hrRouter } from "./routers/hr";
 import { knowledgeRouter } from "./routers/knowledge";
 import { legalHoldRouter } from "./routers/legal-hold";
@@ -44,6 +45,7 @@ export const appRouter = router({
   extraction: extractionRouter,
   role: roleRouter,
   group: groupRouter,
+  impersonation: impersonationRouter,
   organisation: organisationRouter,
   session: sessionRouter,
   schedule: scheduleRouter,

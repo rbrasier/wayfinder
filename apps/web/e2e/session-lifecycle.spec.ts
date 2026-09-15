@@ -128,3 +128,68 @@ test.describe('Session lifecycle: policy dialog', () => {
     await expect(page.getByText(/session policy saved/i)).toBeVisible();
   });
 });
+
+/**
+ * Admin "view as user" — ADR-059 layered sessions, v0.37.0.
+ *
+ * Qualifies under group 1 ("auth session lifecycle": the whole feature is
+ * cookie behaviour and the redirects it drives) and group 4 ("navigation state
+ * across a page load": starting and stopping both do a full document load, and
+ * the point of the feature is that the server re-renders as a different
+ * principal). The ticket's expiry arithmetic, the cookie's signing, the six
+ * resolver paths and the audit metadata are unit-tested in the domain, adapters
+ * and router, and are deliberately not re-tested here.
+ */
+test.describe('View as user', () => {
+  test('an admin views as another user, sees the banner, and returns', async ({
+    browser,
+    request,
+    page,
+  }) => {
+    // Give the picker somebody to find who is not the admin driving the test.
+    const targetContext = await signedInContextFor(browser, request, REVOKE_TARGET_EMAIL);
+    await targetContext.close();
+
+    await page.goto('/chats');
+    await page.getByLabel('Account menu').click();
+    await page.getByTestId('view-as-user').click();
+
+    await page.getByLabel('Search users').fill(REVOKE_TARGET_EMAIL);
+    await page.getByRole('button', { name: new RegExp(REVOKE_TARGET_EMAIL, 'i') }).click();
+
+    // The start does a full document load, so the assertion is about what the
+    // server rendered for the new principal, not about a client-side swap.
+    await expect(page).toHaveURL(/\/chats/);
+    const banner = page.getByTestId('impersonation-banner');
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText(REVOKE_TARGET_EMAIL);
+    await expect(page.getByTestId('impersonation-minutes')).toContainText(/\d+ min left/);
+
+    await page.screenshot({
+      path: 'screenshots/view-as-user-banner.png',
+      fullPage: true,
+    });
+
+    // A simulated session is never an admin session, whoever is simulated.
+    await page.goto('/admin/users');
+    await expect(page).toHaveURL(/\/chats/);
+
+    await page.getByRole('button', { name: /return to your account/i }).click();
+
+    await expect(page.getByTestId('impersonation-banner')).toBeHidden();
+    // Proof the admin really is themselves again: the admin section admits them.
+    await page.goto('/admin/users');
+    await expect(page).toHaveURL(/\/admin\/users/);
+  });
+
+  test('a non-admin is never offered the entry point', async ({ browser, request }) => {
+    const plainContext = await signedInContextFor(browser, request, REVOKE_TARGET_EMAIL);
+    const plainPage = await plainContext.newPage();
+
+    await plainPage.goto('/chats');
+    await plainPage.getByLabel('Account menu').click();
+
+    await expect(plainPage.getByTestId('view-as-user')).toBeHidden();
+    await plainContext.close();
+  });
+});

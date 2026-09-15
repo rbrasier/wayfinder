@@ -95,7 +95,10 @@ export const authenticatedProcedure = publicProcedure.use(({ ctx, next }) => {
   return next({ ctx: { ...ctx, userId: ctx.userId } });
 });
 
-export const adminProcedure = publicProcedure.use(({ ctx, next }) => {
+// Chains from authenticatedProcedure so `userId` is narrowed to a string: an
+// admin is by definition a resolved session, and admin procedures that need to
+// name the acting user should not each re-prove it.
+export const adminProcedure = authenticatedProcedure.use(({ ctx, next }) => {
   if (!ctx.isAdmin) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
   }

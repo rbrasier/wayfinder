@@ -112,10 +112,16 @@ describe("impersonationMinutesRemaining", () => {
     expect(impersonationMinutesRemaining(ticket, NOW)).toBe(30);
   });
 
-  it("floors part-minutes so the banner never over-promises", () => {
-    const ninetySecondsLeft = new Date(ticket.expiresAt.getTime() - 90_000);
+  it("rounds part-minutes up, so a just-started ticket never reads as 29", () => {
+    const aMomentAfterIssue = new Date(NOW.getTime() + 1_200);
 
-    expect(impersonationMinutesRemaining(ticket, ninetySecondsLeft)).toBe(1);
+    expect(impersonationMinutesRemaining(ticket, aMomentAfterIssue)).toBe(30);
+  });
+
+  it("still shows a minute left during the final seconds", () => {
+    const oneSecondLeft = new Date(ticket.expiresAt.getTime() - 1_000);
+
+    expect(impersonationMinutesRemaining(ticket, oneSecondLeft)).toBe(1);
   });
 
   it("reports zero rather than a negative number once expired", () => {

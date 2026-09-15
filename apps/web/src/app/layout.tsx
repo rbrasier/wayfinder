@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Figtree, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { NavigationProgress } from "@/components/navigation-progress";
+import { ImpersonationBanner } from "@/components/impersonation/impersonation-banner";
 import { SiteBanner } from "@/components/site-banner";
 import { TrpcProvider } from "@/trpc/Provider";
 import "@/styles/globals.css";
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <NavigationProgress />
         <TrpcProvider>
           <SiteBanner />
+          <ImpersonationBanner />
           <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         </TrpcProvider>
         {/* `expand` keeps concurrent toasts as a spaced column growing upward

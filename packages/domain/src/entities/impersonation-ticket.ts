@@ -70,8 +70,13 @@ export const extendImpersonation = (
 };
 
 /**
- * Whole minutes left, floored and never negative. The banner and the server read
- * the same function so they cannot disagree about how long is left.
+ * Whole minutes left, rounded up and never negative. The banner and the server
+ * read the same function so they cannot disagree about how long is left.
+ *
+ * Rounded up, not down: a ticket issued moments ago has a shade under 30 minutes
+ * on it, and flooring would show "29 min left" the instant an admin starts —
+ * which reads as broken every single time. Rounding up costs at most a minute of
+ * optimism in the final minute, which is the cheaper artefact.
  */
 export const impersonationMinutesRemaining = (
   ticket: ImpersonationTicket,
@@ -79,5 +84,5 @@ export const impersonationMinutesRemaining = (
 ): number => {
   const remaining = ticket.expiresAt.getTime() - now.getTime();
   if (remaining <= 0) return 0;
-  return Math.floor(remaining / MS_PER_MINUTE);
+  return Math.ceil(remaining / MS_PER_MINUTE);
 };
