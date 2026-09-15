@@ -247,3 +247,38 @@ The PRD's §10 checklist is the test plan. A step is done when its tests are wri
 - **Proposal quality varies with document type.** A scanned PDF with no extractable text yields
   nothing useful; the partial-with-no-fields state exists so that failure is legible rather than
   silent.
+
+---
+
+## 12. Approved build summary (`/build`, 2026-09-15)
+
+Auto Analyse makes the Synthesise Information editor draft its own extraction fields. Uploading
+input documents starts a background analysis run that reads up to ten of them, proposes a field set
+with labels, types and instructions, and writes it straight into the open draft for the author to
+edit by hand. A toggle in the Input card header turns it on by default and hides the two questions
+non-technical authors cannot answer. Nothing a user has typed is ever overwritten, and Publish
+remains the gate that makes any of it real.
+
+**Business rules changing** — analysis starts on successful upload with no user action; while on,
+`cardinality` is forced to `one_per_file` and `selectionCriteria` to null, with the author's saved
+values restored on toggle-off; a proposed field whose derived key collides with an existing one is
+dropped; a failed analysis leaves the field set byte-identical and offers a retry; one live analysis
+per flow.
+
+**Version, branch, PR** — MINOR to 0.37.0 from `main`'s 0.36.0. Built on
+`claude/practical-franklin-iahe4j`, this session's designated branch, which overrides the skill's
+`feature/<slug>/claude-<username>` convention. PR against `main`.
+
+**Source issue** — #296 "Agent background processing". It asked for background orchestration so a
+long document-drafting job need not rest on one huge context window. This phase answers the Auto
+Analyse half specified in the issue comments; the blackboard-style iterative drafting stays open.
+
+**e2e decision** — no spec. Under `docs/guides/e2e-test-policy.md` none of the six groups is met:
+the file-upload boundary is already covered by existing specs and this adds no new file-dialog or
+download path. Coverage sits at `apps/web` component tests (toggle, analysis states, permission
+absence) and `packages/application` (merge, propose, claim).
+
+**Build order** — 12 sub-components of no more than four files each: (1) domain input config,
+(2) domain run mode, (3) proposer port, (4) shared schema, (5) merge use case, (6) propose use case,
+(7) start and advance, (8) adapter proposer, (9) DB schema, migration and the null audit,
+(10) router, (11) editor UI, (12) final validation.
