@@ -89,13 +89,31 @@ drift.
   control in its header; the read-guidance Textarea and file-mapping Segmented hide while the
   toggle is on; the Input card widens relative to the Output card; the `Run sample` button moves
   into the Input card header while the toggle is on.
-- tRPC: `extraction.startAnalysis` — added. Starts an analysis run for a flow.
-- tRPC: `extraction.analysisStatus` — added. Polls a running analysis and returns drafted fields
-  when it settles.
+- tRPC: `extraction.startAnalysis` — added, on **`authorProcedure`**. Starts an analysis run for a
+  flow. Analysis writes the schema, which is an authoring act, so it sits behind
+  `extraction:author` and not `extraction:run` (see §9).
+- tRPC: `extraction.analysisStatus` — added, on `viewProcedure`. Polls a running analysis and
+  returns drafted fields when it settles. Reading progress is not an authoring act.
 - tRPC: `extraction.saveSchema` — changed. Accepts `autoAnalyse` and `analyseSampleSize` in the
   input config.
+- tRPC: `extraction.listRuns` — changed. Excludes `mode: "analyse"`; a user opening run history
+  means extraction runs, not schema analyses.
 - tRPC: `extraction.uploadDraftDocuments` — unchanged on the wire; the client starts an analysis
   after a successful upload rather than the server doing it implicitly.
+
+**A user holding only `extraction:run` does not see the Auto analyse toggle at all.** They upload
+and run against a schema someone else authored, exactly as `033-extraction-flows.adr.md` §7 intends.
+The toggle is not rendered disabled — advertising a control they cannot use is worse than its
+absence.
+
+### Durability depends on the deployment
+
+The promise that a user can leave and come back holds where the batch worker runs — `apps/api` with
+`EXTRACTION_WORKER_ENABLED=true`. `apps/web` has no worker and advances runs through the
+client-polled `extraction.tick` procedure, so in a web-only deployment an analysis progresses only
+while the editor is open and stalls if the tab closes, resuming when it is reopened. This is exactly
+how a sample run already behaves; Auto Analyse inherits it rather than introducing it. The UI copy
+must not promise more than the deployment can deliver.
 
 ## 8. Database changes
 
@@ -127,8 +145,11 @@ The migration must carry the declaration:
 - **ADR-013** (template-field annotations as the lingua franca) — assumed. The proposer emits
   annotation lines and they go through `parseTemplateField`, so there is no second route into the
   field model.
-- **ADR-033** (extraction authoring config inside the flow snapshot) — assumed and extended by
-  the two new input-config settings.
+- **`033-extraction-flows.adr.md`** — assumed and extended. §3 (authoring config inside the flow
+  snapshot) houses the two new input-config settings; §7 (`extraction:author` vs `extraction:run`)
+  decides which permission gates analysis; §9 (per-run cost ceiling) is what bounds its spend.
+  Cited by filename throughout: a second, unrelated ADR-033 exists
+  (`033-immutable-audit-log-and-legal-hold.adr.md`), and the bare number is ambiguous.
 
 ## 10. Acceptance criteria
 
@@ -150,7 +171,18 @@ The migration must carry the declaration:
       it, server-side as well as in the UI.
 - [ ] Only one analysis run per flow is live at a time; a second upload during analysis does not
       start a competing run.
-- [ ] An analysis run is subject to the same per-run cost ceiling as every other run mode.
+- [ ] `AdvanceBatchRuns` claims an analyse run as a single unit of work and never sends it down the
+      document-claim path.
+- [ ] The per-run cost ceiling is checked before an analyse run is claimed, and a run already at or
+      over the ceiling is not claimed.
+- [ ] A worker restart mid-analysis leaves the run claimable, and a later tick completes it.
+- [ ] `startAnalysis` rejects a caller holding `extraction:run` but not `extraction:author`.
+- [ ] The Auto analyse toggle is absent from the DOM for a user without `extraction:author`.
+- [ ] `listRuns` returns no `mode: "analyse"` rows.
+- [ ] Where a batch worker runs, an analysis started and then abandoned by the client still settles
+      and its fields are present on return.
+- [ ] Where no batch worker runs, an analysis advances on `tick` while the editor is open, and a
+      reopened editor resumes rather than restarting it.
 - [ ] `Run sample` is reachable from the Input card header while Auto Analyse is on.
 - [ ] An analysis run can start for a flow that has no draft version yet.
 
@@ -169,8 +201,11 @@ The migration must carry the declaration:
   reversal, not a clarification.
 - **Discarding planned work.** Superseding `collaborative-schema-definition` drops its revision
   history, validation-before-confirm and multi-turn refinement design.
-- **Unmetered automatic spend.** Analysis fires on upload rather than on a button, so the cost
-  ceiling is the only thing standing between a user and repeated unprompted spend.
+- **Automatic spend, loosely bounded.** Analysis fires on upload rather than on a button, so the
+  cost ceiling is the only thing standing between a user and repeated unprompted spend — and
+  because the claim is run-level, that ceiling is checked once before the claim rather than between
+  documents (ADR-060 §4). A run that starts under the ceiling can finish over it by up to one
+  analysis.
 - **Distinguishing hand-edited from AI-drafted fields** is what the never-overwrite rule rests on.
   If that distinction is unreliable, the rule is unenforceable.
 - **A weakened invariant.** `flow_version_id` going nullable affects every reader of the run

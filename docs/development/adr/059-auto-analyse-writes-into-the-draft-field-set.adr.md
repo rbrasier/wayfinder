@@ -3,8 +3,9 @@
 - **Status**: Proposed (scoped by `auto-analyse-synthesis.prd.md`)
 - **Date**: 2026-09-15
 - **Supersedes**: ADR-052 (a schema proposal is a draft artefact requiring explicit activation)
-- **Builds on**: ADR-013 (template-field annotations as the lingua franca), ADR-033 (extraction
-  authoring config inside the flow snapshot)
+- **Builds on**: ADR-013 (template-field annotations as the lingua franca),
+  `033-extraction-flows.adr.md` §3 (extraction authoring config inside the flow snapshot — cited by
+  filename because a second, unrelated ADR-033 exists)
 
 ## Context
 

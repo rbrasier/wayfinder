@@ -2,7 +2,8 @@
 
 - **Status**: Proposed (scoped by `auto-analyse-synthesis.prd.md`)
 - **Date**: 2026-09-15
-- **Builds on**: ADR-033 (extraction flows: run aggregate, batch engine, cost ceiling),
+- **Builds on**: `033-extraction-flows.adr.md` (run aggregate, batch engine, cost ceiling —
+  cited by filename because a second, unrelated ADR-033 exists),
   ADR-059 (Auto Analyse writes into the draft field set)
 
 ## Context
@@ -75,7 +76,32 @@ An analysis produces a field set, not records. It writes no `app_extraction_docu
 `app_extraction_draft_documents`, read in place. `totalCount` and `doneCount` track documents
 analysed so the UI can show progress; `failedCount` and `unreadableCount` carry their usual meaning.
 
-**4. The terminal statuses keep their existing meanings.**
+**4. The unit of work is the run, not the document.**
+
+Every other run mode is map-shaped: N independent documents, each its own claimable row, each
+retried on its own. An analysis is map-reduce — read up to `MAX_ANALYSE_DOCUMENTS` documents, then
+make **one** proposal call over all of them — and the reduce step is the whole point. Split across
+per-document claims it would have nowhere to live.
+
+So `AdvanceBatchRuns` gains an analyse branch that claims the **run** as a single unit of work and
+performs the read and the proposal inside it. This is what makes an analysis durable: the claim is
+what a worker picks up after a restart, and it is where `033-extraction-flows.adr.md` §9's ceiling
+check goes. Without it
+an analysis would have no claimable work at all, the ceiling would never be consulted, and nothing
+outside the originating request would ever advance the run — which is the whole reason the run
+aggregate was reused.
+
+A run-level claim is a real trade, and this ADR takes it knowingly:
+
+- **No per-document retry.** One unreadable document does not cost the analysis its other reads,
+  but a failure partway through discards the reads already done and the whole claim is retried.
+  Acceptable because the read phase is cheap relative to the proposal call, and bounded at ten.
+- **The ceiling is checked once, before the claim, not between documents.** A run that starts under
+  the ceiling can finish over it. The exposure is one analysis, bounded by `MAX_ANALYSE_DOCUMENTS`;
+  the alternative (re-checking mid-claim) buys a tighter bound at the cost of abandoning a
+  half-finished analysis, which is worse for a pass whose expensive step comes last.
+
+**5. The terminal statuses keep their existing meanings.**
 
 `complete` means fields were drafted. `partial` means some documents could not be read but a field
 set was still produced from the rest. `cancelled` means the user turned Auto Analyse off or removed
@@ -90,9 +116,14 @@ preview, so `previewBoundary` stays 0.
 - Every existing reader of `ExtractionRun.flowVersionId` must handle null. This is the main cost of
   the decision and the phase doc audits each call site explicitly rather than trusting the compiler
   to find them all.
-- `AdvanceBatchRuns` must skip `"analyse"` runs when claiming document rows — an analysis run has
-  none, and a claim loop that assumes otherwise would settle it instantly as complete with zero
-  work done.
+- `AdvanceBatchRuns` gains a branch, not an exclusion (§4). It must not send an analyse run down the
+  document-claim path — one has no document rows, and a claim loop that assumes otherwise would
+  settle it instantly as complete with zero work done — but it must still claim and advance it.
+- Durability is a property of the deployment, not of this ADR. The batch worker runs in `apps/api`
+  behind `EXTRACTION_WORKER_ENABLED`; `apps/web` has none and advances runs through the
+  client-polled `tick` procedure. Where no worker runs, an analysis advances only while a tab is
+  open, exactly as a sample run does today. The PRD states this as a constraint rather than
+  pretending otherwise.
 - Analysis spend is visible in the same place as every other run's spend, and subject to the same
   ceiling, which is the main thing this reuse buys.
 - Runs listed in the flow's run history will include analyses unless filtered. The phase doc

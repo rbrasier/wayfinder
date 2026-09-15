@@ -5,8 +5,8 @@
 - **PRD**: `docs/development/prd/auto-analyse-synthesis.prd.md`
 - **ADRs**: ADR-059 (Auto Analyse writes into the draft field set), ADR-060 (analysis is an
   extraction run mode)
-- **Depends on**: ADR-013 (annotation lingua franca), ADR-033 (extraction authoring config, run
-  aggregate, batch engine)
+- **Depends on**: ADR-013 (annotation lingua franca), `033-extraction-flows.adr.md` §3/§7/§9
+  (authoring config, permission split, cost ceiling — cited by filename; a second ADR-033 exists)
 - **Supersedes**: `collaborative-schema-definition.phase.md` (retired with ADR-052)
 - **Source**: issue #296
 
@@ -58,11 +58,11 @@ Two settings join `ExtractionInputConfig` inside the flow snapshot — no author
 | `packages/application/src/use-cases/extraction/propose-extraction-fields.ts` | new | Read docs → propose → merge into draft |
 | `packages/application/src/use-cases/extraction/merge-proposed-fields.ts` | new | Append-and-fill merge; never overwrites |
 | `packages/application/src/use-cases/extraction/start-batch-run.ts` | changed | `startAnalysis()`; version required only for sample/full |
-| `packages/application/src/use-cases/extraction/advance-batch-runs.ts` | changed | Skip `"analyse"` runs when claiming document rows |
+| `packages/application/src/use-cases/extraction/advance-batch-runs.ts` | changed | Analyse branch: claim the run as one unit; never the document-claim path (ADR-060 §4) |
 | `packages/adapters/src/ai/field-proposer.ts` | new | `IFieldProposer` over the language model |
 | `packages/adapters/src/db/schema/wayfinder.ts` | changed | `flow_version_id` nullable; `mode` enum widened |
 | `packages/adapters/drizzle/00NN_*.sql` | new | One generated migration (§8) |
-| `apps/web/src/server/routers/extraction.ts` | changed | `startAnalysis`, `analysisStatus`; `saveSchema` input; `listRuns` excludes analyses |
+| `apps/web/src/server/routers/extraction.ts` | changed | `startAnalysis` (**`authorProcedure`**), `analysisStatus` (`viewProcedure`); `saveSchema` input; `listRuns` excludes analyses |
 | `apps/web/src/components/extraction/editor-cards.tsx` | changed | Toggle, sample-size control, conditional hiding, card widths, Run button placement |
 | `apps/web/src/components/extraction/editor-cards-controls.tsx` | changed | Subtle inline numeric control (§7) |
 | `apps/web/src/lib/container-extraction.ts`, `apps/api/src/container.ts` | changed | Wire the proposer and the new use cases |
@@ -112,8 +112,12 @@ Two settings join `ExtractionInputConfig` inside the flow snapshot — no author
    `mode: "analyse"`, null `flowVersionId` and `previewBoundary` 0, for a flow with **no** draft
    version; (b) `startAnalysis` refuses when an analysis run for the flow is already `running`;
    (c) `startSample` and `startBatch` still require a version and still error without one;
-   (d) `AdvanceBatchRuns` does not claim document rows for an analyse run; (e) the cost ceiling is
-   enforced for an analyse run as for any other. Then implement.
+   (d) `AdvanceBatchRuns` claims an analyse run as a **single unit of work** and runs the read and
+   the proposal inside that one claim (ADR-060 §4); (e) it never sends an analyse run down the
+   document-claim path — assert no document rows are claimed and the run is not settled complete
+   with zero work; (f) the cost ceiling is checked **before** the analyse claim, and a run already
+   at or over it is not claimed; (g) a claim abandoned mid-flight (simulating a worker restart)
+   leaves the run `running` and claimable, and the next tick completes it. Then implement.
 
 8. **Adapters — proposer.** Implement `IFieldProposer` over the language model with
    `fieldProposalSchema`, **verifying the SDK call shape in `node_modules`** rather than from
@@ -124,22 +128,28 @@ Two settings join `ExtractionInputConfig` inside the flow snapshot — no author
    `drizzle-kit push` — and add the `-- data-impact:` declaration from §8. Audit every existing
    reader of `flowVersionId` for null handling and list them in the PR body (ADR-060).
 
-10. **Web — router.** Add `startAnalysis` and `analysisStatus` on `runProcedure`, both behind the
-    existing `canEditFlow` check. Extend `saveSchema`'s zod input with the two settings. Exclude
-    `"analyse"` from `listRuns`. Test the permission boundary and the sample-size bound
+10. **Web — router.** Add `startAnalysis` on **`authorProcedure`** and `analysisStatus` on
+    `viewProcedure`, both behind the existing `canEditFlow` check. `startAnalysis` must not sit on
+    `runProcedure`: analysis writes the field set, so a caller holding only `extraction:run` would
+    otherwise rewrite a flow's schema by uploading a file — an authoring act through a run-level
+    door (`033-extraction-flows.adr.md` §7). Extend `saveSchema`'s zod input with the two settings.
+    Exclude `"analyse"` from `listRuns`. Test both permission boundaries and the sample-size bound
     server-side — the UI control is not the enforcement point.
 
 11. **Web — editor.** Component tests first, then the UI (§7). Cover: toggle default on; the two
     controls absent from the DOM while on; previous manual values restored when toggled off;
     analysis states rendered; the sample-size control bounded; `Run sample` present in the Input
-    card header while on.
+    card header while on; and the whole Auto analyse control absent from the DOM for a user without
+    `extraction:author`.
 
 12. **Validate.** Run `./validate.sh` and fix every failure before declaring done.
 
 ## 7. UI specification
 
 **Auto analyse toggle.** A `Switch` in the Input card header (`FocusCard` `headerAction`), labelled
-"Auto analyse", on by default. While on:
+"Auto analyse", on by default — and rendered only for a user holding `extraction:author`. A
+run-only user sees the Input card exactly as it is today: no toggle, no sample-size control, no
+analysis states. Not disabled, not tooltipped — absent. While on:
 
 - The `read-instructions` Textarea and the `How do files map to records?` `Segmented` are **not
   rendered** — hidden, not disabled, so they are absent from the DOM and from the accessibility
@@ -182,6 +192,10 @@ favour, since the Output card is now AI-drafted. Both cards keep stacking vertic
 implicitly on upload — an explicit call keeps the upload endpoint's contract unchanged and makes the
 "one live analysis per flow" rule enforceable in one place.
 
+Where no batch worker runs (`apps/web` alone — see PRD §7), the client must also drive
+`extraction.tick` while polling, the way a sample run is driven today. Reopening the editor on an
+unsettled analysis resumes it; it never restarts it, and never starts a second one.
+
 ## 8. Database & migration
 
 One generated migration, `app_` prefix, on an existing table:
@@ -223,8 +237,13 @@ The PRD's §10 checklist is the test plan. A step is done when its tests are wri
   mitigation and its output belongs in the PR body.
 - **The never-overwrite rule** carries the safety burden that a confirm step would otherwise carry
   (ADR-059 §3). Step 5's tests are the enforcement.
-- **Automatic spend.** Analysis fires on upload, so the cost ceiling is the only guard. Step 7(e)
-  tests it explicitly rather than assuming inheritance from the run aggregate.
+- **Automatic spend.** Analysis fires on upload, so the cost ceiling is the only guard, and a
+  run-level claim means it is checked once before the claim rather than between documents
+  (ADR-060 §4) — a run can finish up to one analysis over the ceiling. Step 7(f) tests the check
+  explicitly rather than assuming inheritance from the run aggregate.
+- **Durability varies by deployment.** Only `apps/api` with `EXTRACTION_WORKER_ENABLED` advances an
+  analysis without a tab open. Step 7(g) tests worker-restart resumption; §7's trigger rule covers
+  the web-only path. The UI copy must not promise background completion the deployment cannot give.
 - **Proposal quality varies with document type.** A scanned PDF with no extractable text yields
   nothing useful; the partial-with-no-fields state exists so that failure is legible rather than
   silent.
