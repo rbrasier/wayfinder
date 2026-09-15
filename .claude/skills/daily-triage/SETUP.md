@@ -16,7 +16,7 @@ authenticated:
 ./.claude/skills/daily-triage/labels.sh
 ```
 
-That creates or updates 28 labels and is safe to re-run. It then prints the
+That creates or updates 29 labels and is safe to re-run. It then prints the
 four labels this scheme orphans and stops. To delete them as well:
 
 ```bash
@@ -25,7 +25,7 @@ four labels this scheme orphans and stops. To delete them as well:
 
 | | Labels |
 |---|---|
-| **Created** (28) | `type:` ×6, `area:` ×9, `priority:` ×4, `size:` ×4, `status:` ×5 |
+| **Created** (29) | `type:` ×6, `area:` ×9, `priority:` ×4, `size:` ×4, `status:` ×6 |
 | **Orphaned** (4) | `bug`, `enhancement`, `documentation`, `question` — superseded by the `type:` axis. Only issue #164 carries any (`enhancement`, `question`) and it is closed |
 | **Kept** (5) | `duplicate`, `invalid`, `wontfix` — terminal states the sweep excludes by name; `good first issue`, `help wanted` — contributor-facing and orthogonal to triage |
 
@@ -97,7 +97,9 @@ Work through these in order:
 |---|---|---|
 | 1 | Exactly **one** comment on the issue | Two comments means the marker check is not working — the most important thing to get right |
 | 2 | The comment opens with `<!-- wayfinder-triage:v1 -->` | Missing marker means every future run will comment again |
-| 3 | All four sections present, in order | A missing section 2 usually means "None." was dropped rather than written |
+| 3 | Sections 1–4 present, in order | A missing section 2 usually means "None." was dropped rather than written |
+| 3a | **Section 5 is absent** on an issue you wrote clearly | A `5. Worth checking before building` on every issue means it is being written reflexively. Raise a deliberately vague issue to confirm it appears when it should |
+| 3b | The analysis reflects the issue's **comments**, not just its body | Add a comment to the test issue that narrows the scope before the run, then check the comment accounts for it. Ignoring it is the failure this check exists for |
 | 4 | **The section 1 heading names the finding** — `Confirmed bug`, `Business-rule question`, `New capability request`… — and matches the `type:` label on the header line | A literal `1. Confirmed bug, business-rule question, or neither` is the old static heading; a heading that disagrees with the label means the label is wrong |
 | 5 | Sections 1, 2 and 4 read as **business analysis** | Function names, types, call chains or fenced code above section 3 means the language rule was ignored. Naming a screen, a document type or a table like `core_audit_log` is fine and wanted |
 | 6 | Section 3 **opens with the process**, then a `**Technical detail**` line | Straight into filenames means the business overview was skipped |
@@ -107,6 +109,7 @@ Work through these in order:
 | 10 | **Re-run the routine.** Nothing changes | The idempotency proof. A second comment here is a bug in the marker check, not a quirk |
 | 11 | One digest e-mail, to you only | Check `cc`/`bcc` are empty |
 | 12 | The build link opens the right base branch | `release/alpha-2` for a bug, `main` for a feature |
+| 13 | The build link's prompt tells the session to **re-check the analysis and ask about ambiguities** | A prompt that just says "follow /bugfix" hands the session an unverified diagnosis to build on |
 
 ### Then test the close-on-merge path
 

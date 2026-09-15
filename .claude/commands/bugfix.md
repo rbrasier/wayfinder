@@ -23,6 +23,21 @@ Ask all of these via `AskUserQuestion` before proceeding:
 
 ---
 
+## Claim the issue — as soon as question 6 is answered
+
+If question 6 named an issue, post the one-line **"picked this up"** comment on
+it and move it to `status:in-progress`, *before* writing the change summary. Read
+[`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) — it carries
+the exact shape, the `<!-- wayfinder-issue-started:v1 -->` marker to check for
+first, and the label mechanics (comment first, then the label; send the union of
+the existing labels with any other `status:` removed).
+
+One line, no analysis — at this point the diagnosis is still unconfirmed, and the
+comment exists only so the issue stops looking untouched while a session is open
+on it. Skip the whole step when question 6 was "no issue".
+
+---
+
 ## Change Summary — before any code is written
 
 Once the questions are answered, and before creating or editing a single file,
@@ -143,5 +158,6 @@ Most bug fixes need **no** e2e test. The Step 2 regression test is the guard tha
 - **Call out every deviation** from the approved summary explicitly, in the implementation block's deviations line. "None" if there were none.
 - A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
 - **Reference the source issue in the PR body** so GitHub links them: `Fixes #<number>` on its own line at the end of `## Why this change is required`, which is where the template asks for it. That link is what lets the daily triage routine close the issue once this merges — a passing mention of the number does not count.
-- **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked. The PR body is written for a maintainer; this comment is written for them. Skip this only when question 6 was "no issue".
+- **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked, signing off with the merge promise and the invitation to raise anything further as a new issue. The PR body is written for a maintainer; this comment is written for them. Skip this only when question 6 was "no issue".
+- **Then move the issue to `status:in-review`**, by the label mechanics in the same guide — comment first, then the label, sending the union of its existing labels with `status:in-progress` (or any other `status:`) removed.
 - Report the PR URL, and note that the e2e suite runs there rather than locally.
