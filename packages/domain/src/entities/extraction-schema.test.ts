@@ -3,6 +3,8 @@ import {
   buildExtractionField,
   parseExtractionSchema,
   SAMPLE_MAX_DOCUMENTS,
+  MAX_ANALYSE_DOCUMENTS,
+  DEFAULT_ANALYSE_DOCUMENTS,
   PREVIEW_FILE_THRESHOLD,
   shouldPreviewByDefault,
   type ExtractionInputConfig,
@@ -159,6 +161,184 @@ describe("parseExtractionSchema", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data!.output.summaryTemplate).toBeNull();
+  });
+});
+
+describe("auto analyse input config", () => {
+  it("defaults to on, reading three documents, when the author has said nothing", () => {
+    const result = parseExtractionSchema({ fields: oneField, input: onePerFileInput, output });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data!.input.autoAnalyse).toBe(true);
+    expect(result.data!.input.analyseSampleSize).toBe(DEFAULT_ANALYSE_DOCUMENTS);
+  });
+
+  it("defaults the read count to three rather than to the ceiling", () => {
+    expect(DEFAULT_ANALYSE_DOCUMENTS).toBe(3);
+    expect(MAX_ANALYSE_DOCUMENTS).toBe(10);
+  });
+
+  it("keeps the analysis ceiling independent of the sample run size", () => {
+    expect(SAMPLE_MAX_DOCUMENTS).toBe(3);
+    expect(MAX_ANALYSE_DOCUMENTS).not.toBe(SAMPLE_MAX_DOCUMENTS);
+  });
+
+  it("forces one file per record while auto analyse is on", () => {
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: {
+        cardinality: "many_per_record",
+        selectionCriteria: "all files sharing a prefix",
+        guidance: "",
+        autoAnalyse: true,
+      },
+      output,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data!.input.cardinality).toBe("one_per_file");
+    expect(result.data!.input.selectionCriteria).toBeNull();
+  });
+
+  it("rejects a read count below one", () => {
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: { ...onePerFileInput, autoAnalyse: true, analyseSampleSize: 0 },
+      output,
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toMatch(/between 1 and 10/i);
+  });
+
+  it("rejects a read count above the ceiling", () => {
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: {
+        ...onePerFileInput,
+        autoAnalyse: true,
+        analyseSampleSize: MAX_ANALYSE_DOCUMENTS + 1,
+      },
+      output,
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toMatch(/between 1 and 10/i);
+  });
+
+  it("rejects a fractional read count", () => {
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: { ...onePerFileInput, autoAnalyse: true, analyseSampleSize: 2.5 },
+      output,
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("accepts the ceiling itself", () => {
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: { ...onePerFileInput, autoAnalyse: true, analyseSampleSize: MAX_ANALYSE_DOCUMENTS },
+      output,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data!.input.analyseSampleSize).toBe(MAX_ANALYSE_DOCUMENTS);
+  });
+
+  it("leaves the existing selection-criteria rules untouched when auto analyse is off", () => {
+    const missingCriteria = parseExtractionSchema({
+      fields: oneField,
+      input: {
+        cardinality: "many_per_record",
+        selectionCriteria: "  ",
+        guidance: "",
+        autoAnalyse: false,
+      },
+      output,
+    });
+    expect(missingCriteria.error?.message).toMatch(/selection criteria/i);
+
+    const criteriaOnOnePerFile = parseExtractionSchema({
+      fields: oneField,
+      input: {
+        cardinality: "one_per_file",
+        selectionCriteria: "all files with a prefix",
+        guidance: "",
+        autoAnalyse: false,
+      },
+      output,
+    });
+    expect(criteriaOnOnePerFile.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("keeps many_per_record when auto analyse is off", () => {
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: {
+        cardinality: "many_per_record",
+        selectionCriteria: "all files sharing a prefix",
+        guidance: "",
+        autoAnalyse: false,
+      },
+      output,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data!.input.cardinality).toBe("many_per_record");
+    expect(result.data!.input.selectionCriteria).toBe("all files sharing a prefix");
+  });
+
+  it("leaves a pre-existing many_per_record config alone rather than defaulting auto analyse on", () => {
+    // A config saved before this setting existed carries no autoAnalyse flag.
+    // Reading absence as "on" would force one_per_file and drop the criteria.
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: {
+        cardinality: "many_per_record",
+        selectionCriteria: "all files sharing a filename prefix",
+        guidance: "",
+      },
+      output,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data!.input.autoAnalyse).toBe(false);
+    expect(result.data!.input.cardinality).toBe("many_per_record");
+    expect(result.data!.input.selectionCriteria).toBe("all files sharing a filename prefix");
+  });
+
+  it("turns auto analyse on for a pre-existing one_per_file config, where it changes nothing", () => {
+    const result = parseExtractionSchema({ fields: oneField, input: onePerFileInput, output });
+
+    expect(result.data!.input.autoAnalyse).toBe(true);
+    expect(result.data!.input.cardinality).toBe("one_per_file");
+  });
+
+  it("honours an explicit autoAnalyse true even on a many_per_record config", () => {
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: {
+        cardinality: "many_per_record",
+        selectionCriteria: "all files sharing a prefix",
+        guidance: "",
+        autoAnalyse: true,
+      },
+      output,
+    });
+
+    expect(result.data!.input.cardinality).toBe("one_per_file");
+  });
+
+  it("validates the read count even when auto analyse is off, so toggling on cannot surface a bad value", () => {
+    const result = parseExtractionSchema({
+      fields: oneField,
+      input: { ...onePerFileInput, autoAnalyse: false, analyseSampleSize: 99 },
+      output,
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 });
 

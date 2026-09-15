@@ -63,7 +63,7 @@ export const DEFAULT_ITEM_CAP = 20;
 
 const SCALAR_TYPES: TemplateFieldType[] = ["text", "date", "currency", "number", "email", "yesno"];
 
-const VALID_ANNOTATIONS_HINT =
+export const VALID_ANNOTATIONS_HINT =
   "Valid annotations: (text), (date), (currency), (number), (email), (yesno), (approval), (approval-comment: Signature Name), (options: A, B, C), (multi-options: A, B, C), (options-source: name), (multiple), (maxlen: N), (max: N), (min: N), (optional).";
 
 // `signature` is the parsed type name, the annotator's type-picker value and

@@ -3,6 +3,7 @@ import {
   canMarkComplete,
   exceptionCount,
   hasReachedPreviewBoundary,
+  isAnalysisRun,
   isRunActive,
   isTerminalRun,
   processedCount,
@@ -144,5 +145,49 @@ describe("canMarkComplete", () => {
 
   it("refuses to finalise a cancelled run", () => {
     expect(canMarkComplete(buildRun({ status: "cancelled" }))).toBe(false);
+  });
+});
+
+describe("isAnalysisRun", () => {
+  it("is true only for the analyse mode", () => {
+    expect(isAnalysisRun(buildRun({ mode: "analyse" }))).toBe(true);
+    expect(isAnalysisRun(buildRun({ mode: "sample" }))).toBe(false);
+    expect(isAnalysisRun(buildRun({ mode: "full" }))).toBe(false);
+  });
+});
+
+describe("an analysis run", () => {
+  const analysisRun = (overrides: Partial<ExtractionRun> = {}): ExtractionRun =>
+    buildRun({ mode: "analyse", flowVersionId: null, previewBoundary: 0, ...overrides });
+
+  it("carries no flow version, because it runs before one exists", () => {
+    expect(analysisRun().flowVersionId).toBeNull();
+  });
+
+  it("is claimable while running, like any other run", () => {
+    expect(isRunActive(analysisRun())).toBe(true);
+    expect(isRunActive(analysisRun({ status: "complete" }))).toBe(false);
+  });
+
+  it("never reaches a preview boundary — it has nothing to preview", () => {
+    const run = analysisRun({ totalCount: 10, doneCount: 10 });
+    expect(hasReachedPreviewBoundary(run)).toBe(false);
+  });
+
+  it("settles complete when every document was read", () => {
+    expect(settledRunStatus(analysisRun({ doneCount: 3 }))).toBe("complete");
+  });
+
+  it("settles partial when a document could not be read", () => {
+    expect(settledRunStatus(analysisRun({ doneCount: 2, unreadableCount: 1 }))).toBe("partial");
+  });
+
+  it("is subject to the cost ceiling like any other run", () => {
+    expect(wouldExceedCostCeiling(analysisRun({ costUsd: 5 }), 4)).toBe(true);
+    expect(wouldExceedCostCeiling(analysisRun({ costUsd: 1 }), 4)).toBe(false);
+  });
+
+  it("can be cancelled, which is how turning the toggle off stops it", () => {
+    expect(isTerminalRun(analysisRun({ status: "cancelled" }))).toBe(true);
   });
 });

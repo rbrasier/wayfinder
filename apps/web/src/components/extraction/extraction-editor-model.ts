@@ -165,3 +165,89 @@ export const annotationToField = (line: string): TemplateField | null => {
   const parsed = parseTemplateField(line);
   return parsed.error ? null : parsed.data;
 };
+
+// --- Auto Analyse (ADR-059) ---------------------------------------------------
+
+// What the editor shows for a live or settled analysis. Kept as a pure decision
+// so the six states in the phase doc are testable without a browser: this repo
+// has no component-test harness, and the branching is the part worth asserting.
+export type AnalysisStateKind =
+  | "running"
+  | "drafted"
+  | "drafted_with_exceptions"
+  | "unreadable"
+  | "failed";
+
+export interface AnalysisSummaryModel {
+  status: string;
+  totalCount: number;
+  doneCount: number;
+  unreadableCount: number;
+}
+
+export const resolveAnalysisState = (
+  analysis: AnalysisSummaryModel,
+  starting: boolean,
+): AnalysisStateKind => {
+  if (starting || analysis.status === "running") return "running";
+  if (analysis.doneCount > 0) {
+    // A run can settle non-complete for reasons that cost it no documents — it
+    // was cancelled, or paused at the spend ceiling. Reporting "0 documents
+    // could not be read" in those cases is just noise, so the exception wording
+    // is reserved for a run that actually lost a document.
+    return analysis.unreadableCount > 0 ? "drafted_with_exceptions" : "drafted";
+  }
+  // Nothing drafted: separate "we could not read your files" from "drafting
+  // itself went wrong", because only the first tells the author what to change.
+  return analysis.unreadableCount > 0 ? "unreadable" : "failed";
+};
+
+// The output is ready to run against once there is at least one field to pull
+// and, in template mode, a template to pull it into. Auto Analyse satisfies the
+// first on its own, which is why an author with it on never has to open the
+// output configuration by hand.
+export const outputIsConfigured = (fieldCount: number, hasTemplate: boolean): boolean =>
+  fieldCount > 0 && hasTemplate;
+
+// Whether the manual read-guidance and file-mapping questions render at all.
+// Auto analyse answers both, so they are unmounted rather than disabled.
+export const showsManualInputQuestions = (autoAnalyse: boolean): boolean => !autoAnalyse;
+
+// The whole Auto analyse control is absent for a user who cannot author: it
+// writes the field set, so advertising it to someone the server will refuse is
+// worse than not showing it (033-extraction-flows.adr.md §7).
+export const showsAutoAnalyseControls = (canAuthor: boolean): boolean => canAuthor;
+
+// Uploading is the trigger, not a button — but only when the toggle is on and
+// the user may author.
+export const uploadShouldStartAnalysis = (autoAnalyse: boolean, canAuthor: boolean): boolean =>
+  autoAnalyse && canAuthor;
+
+// Folds the server's saved field set into the editor's live state after an
+// analysis settles.
+//
+// The analysis has already written these fields server-side, but this editor
+// seeds its form state at mount and the page's remount key does not change for a
+// flow that already had a schema. Without this the author sees "drafted fields"
+// over an unchanged form, and the next Save posts the stale set straight over
+// the AI's work.
+//
+// Append-only, by derived key, mirroring the server-side merge: a field the
+// author is editing locally is never replaced, and an unsaved local addition is
+// never dropped.
+export const adoptDraftedFields = (
+  current: ExtractionFieldModel[],
+  saved: ExtractionSchema | null,
+): ExtractionFieldModel[] => {
+  if (!saved) return current;
+
+  const held = new Set(current.map((field) => deriveFieldKey(field.label)));
+  const additions = schemaToFieldModels(saved, false).filter(
+    (field) => field.label.trim().length > 0 && !held.has(deriveFieldKey(field.label)),
+  );
+  if (additions.length === 0) return current;
+
+  // A single blank row is the editor's empty state, not a field the author typed.
+  const seeded = current.filter((field) => field.label.trim().length > 0);
+  return [...seeded, ...additions];
+};

@@ -140,3 +140,57 @@ export function Switch({
     </div>
   );
 }
+
+// A deliberately quiet stepper: the number is the only interactive part, sitting
+// at label weight beside the toggle rather than presenting as a form field. Auto
+// Analyse's read count matters to the few authors who want it and should not
+// compete with the upload area for everyone else (phase §7).
+export function InlineStepper({
+  id,
+  value,
+  min,
+  max,
+  onChange,
+  formatLabel,
+  title,
+}: {
+  id: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+  formatLabel: (value: number) => string;
+  title: string;
+}) {
+  const step = (delta: number): void => {
+    const next = value + delta;
+    if (next < min || next > max) return;
+    onChange(next);
+  };
+
+  return (
+    <span className="flex items-center gap-1 text-[11px] text-[#736d5f]" title={title}>
+      <button
+        type="button"
+        aria-label="Read one fewer document"
+        disabled={value <= min}
+        onClick={() => step(-1)}
+        className="rounded px-1 leading-none transition-colors hover:bg-[#f5f3ee] disabled:opacity-35 disabled:hover:bg-transparent"
+      >
+        −
+      </button>
+      <output id={id} className="tabular-nums">
+        {formatLabel(value)}
+      </output>
+      <button
+        type="button"
+        aria-label="Read one more document"
+        disabled={value >= max}
+        onClick={() => step(1)}
+        className="rounded px-1 leading-none transition-colors hover:bg-[#f5f3ee] disabled:opacity-35 disabled:hover:bg-transparent"
+      >
+        +
+      </button>
+    </span>
+  );
+}

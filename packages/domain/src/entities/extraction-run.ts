@@ -1,7 +1,9 @@
-// A run is either a synchronous sample (Phase 1) or a durable full batch
-// (Phase 2). The mode is fixed at creation and decides whether the batch worker
-// ever claims the run's documents.
-export type RunMode = "sample" | "full";
+// A run is a synchronous sample (Phase 1), a durable full batch (Phase 2), or an
+// Auto Analyse pass that drafts the field set before either can exist
+// (ADR-060). The mode is fixed at creation and decides how the batch worker
+// claims the run: sample and full claim document rows, analyse claims the run
+// itself as one unit of work.
+export type RunMode = "sample" | "full" | "analyse";
 
 // The run lifecycle (ADR-033 §5, phase §6-7). `paused_preview` and `paused_cap`
 // are first-class stops the operator resumes from — not error states — so a
@@ -21,7 +23,10 @@ export type RunStatus =
 export interface ExtractionRun {
   id: string;
   flowId: string;
-  flowVersionId: string;
+  // Null for an analyse run: it drafts the schema the first version will be
+  // built from, so there is no version to pin it to (ADR-060 §2). Sample and
+  // full runs always carry one, enforced in the use case.
+  flowVersionId: string | null;
   initiatedByUserId: string;
   mode: RunMode;
   status: RunStatus;
@@ -50,6 +55,11 @@ export const isTerminalRun = (run: ExtractionRun): boolean =>
 // skipped at claim time (phase §5), which is how cancellation and cap-pause take
 // effect without touching in-flight tasks.
 export const isRunActive = (run: ExtractionRun): boolean => run.status === "running";
+
+// An analyse run is advanced by its own branch in the batch engine — it has no
+// document rows, so the document-claim path would settle it complete having done
+// nothing (ADR-060 §4).
+export const isAnalysisRun = (run: ExtractionRun): boolean => run.mode === "analyse";
 
 // Every document ends in exactly one of these buckets, so their sum is how many
 // of the total have been resolved.

@@ -92,3 +92,42 @@ export const fileGroupingSchema = z.object({
 export type ExtractionFieldResultData = z.infer<typeof extractionFieldResultSchema>;
 export type ExtractionResultData = z.infer<typeof extractionResultSchema>;
 export type FileGroupingData = z.infer<typeof fileGroupingSchema>;
+
+// One field Auto Analyse proposes from the input documents (ADR-059). The shape
+// is the domain's ExtractionFieldDraft minus doneWhen, which the proposer does
+// not invent — a completion criterion is the author's judgement, not the
+// documents'.
+//
+// The annotation is a line in the author's own annotation language, so a
+// proposed field reaches the schema through parseTemplateField like a typed one.
+// The valid annotation list is not repeated here: this package cannot import
+// @wayfinder/domain, so the prompt carries the list (VALID_ANNOTATIONS_HINT) and
+// this schema describes only the shape.
+export const fieldProposalSchema = z.object({
+  fields: z
+    .array(
+      z.object({
+        label: z
+          .string()
+          .min(1)
+          .describe("Short human-readable field name, e.g. \"Supplier Name\"."),
+        annotation: z
+          .string()
+          .min(1)
+          .describe(
+            "The field's annotation line: the label followed by its type and any modifiers in parentheses, e.g. \"Submission Date (date) (optional)\". Use only the annotations listed in the instructions.",
+          ),
+        instruction: z
+          .string()
+          .min(1)
+          .describe(
+            "Plain-English instruction telling the extractor what to pull for this field and where it typically sits in the documents.",
+          ),
+      }),
+    )
+    .describe(
+      "The fields a person reading these documents would most likely want extracted, in the order they should appear.",
+    ),
+});
+
+export type FieldProposalData = z.infer<typeof fieldProposalSchema>;
