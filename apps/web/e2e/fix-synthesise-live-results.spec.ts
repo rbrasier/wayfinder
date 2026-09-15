@@ -58,6 +58,16 @@ async function createSynthesis(page: Page, name: string): Promise<boolean> {
   await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible({
     timeout: ROUTE_COMPILE_TIMEOUT,
   });
+
+  // The heading lives in the page header, outside the editor's loading gate, so
+  // it appears while the body is still "Loading…" — and the editor is mounted
+  // under the `pending` seed key at that point. When the schema query settles
+  // the key flips and EditorCards remounts, discarding any state a test has
+  // already set. Waiting for the upload control, which only renders once the
+  // query has settled, means every case below starts from the final mount.
+  await expect(page.getByText(/Upload documents or a zip/i)).toBeVisible({
+    timeout: ROUTE_COMPILE_TIMEOUT,
+  });
   return true;
 }
 
