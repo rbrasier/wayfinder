@@ -165,3 +165,54 @@ export const annotationToField = (line: string): TemplateField | null => {
   const parsed = parseTemplateField(line);
   return parsed.error ? null : parsed.data;
 };
+
+// --- Auto Analyse (ADR-059) ---------------------------------------------------
+
+// What the editor shows for a live or settled analysis. Kept as a pure decision
+// so the six states in the phase doc are testable without a browser: this repo
+// has no component-test harness, and the branching is the part worth asserting.
+export type AnalysisStateKind =
+  | "running"
+  | "drafted"
+  | "drafted_with_exceptions"
+  | "unreadable"
+  | "failed";
+
+export interface AnalysisSummaryModel {
+  status: string;
+  totalCount: number;
+  doneCount: number;
+  unreadableCount: number;
+}
+
+export const resolveAnalysisState = (
+  analysis: AnalysisSummaryModel,
+  starting: boolean,
+): AnalysisStateKind => {
+  if (starting || analysis.status === "running") return "running";
+  if (analysis.status === "complete") return "drafted";
+  if (analysis.doneCount > 0) return "drafted_with_exceptions";
+  // Nothing drafted: separate "we could not read your files" from "drafting
+  // itself went wrong", because only the first tells the author what to change.
+  return analysis.unreadableCount > 0 ? "unreadable" : "failed";
+};
+
+// Where the Run sample button lives. Auto analyse makes the output card
+// AI-drafted, so the author's next action belongs beside the documents they just
+// uploaded rather than across the editor (phase §7).
+export const runSampleBelongsInInputCard = (autoAnalyse: boolean, canAuthor: boolean): boolean =>
+  autoAnalyse && canAuthor;
+
+// Whether the manual read-guidance and file-mapping questions render at all.
+// Auto analyse answers both, so they are unmounted rather than disabled.
+export const showsManualInputQuestions = (autoAnalyse: boolean): boolean => !autoAnalyse;
+
+// The whole Auto analyse control is absent for a user who cannot author: it
+// writes the field set, so advertising it to someone the server will refuse is
+// worse than not showing it (033-extraction-flows.adr.md §7).
+export const showsAutoAnalyseControls = (canAuthor: boolean): boolean => canAuthor;
+
+// Uploading is the trigger, not a button — but only when the toggle is on and
+// the user may author.
+export const uploadShouldStartAnalysis = (autoAnalyse: boolean, canAuthor: boolean): boolean =>
+  autoAnalyse && canAuthor;

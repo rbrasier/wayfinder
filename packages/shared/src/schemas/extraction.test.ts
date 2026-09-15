@@ -12,7 +12,8 @@ describe("fieldProposalSchema", () => {
     const result = fieldProposalSchema.safeParse({ fields: [validField] });
 
     expect(result.success).toBe(true);
-    expect(result.data!.fields[0].annotation).toBe("Supplier Name (text)");
+    expect(result.data?.fields).toHaveLength(1);
+    expect(result.data?.fields.at(0)?.annotation).toBe("Supplier Name (text)");
   });
 
   it("accepts an empty field list, which is how a proposer says it found nothing", () => {

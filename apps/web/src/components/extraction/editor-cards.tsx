@@ -4,7 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Eye, MoreHorizontal, Upload } from "lucide-react";
-import { shouldPreviewByDefault, type ExtractionSchema, type FlowContextDoc } from "@wayfinder/domain";
+import {
+  analyseDocumentCount,
+  isAutoAnalyseOn,
+  shouldPreviewByDefault,
+  type ExtractionSchema,
+  type FlowContextDoc,
+} from "@wayfinder/domain";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,12 +30,18 @@ import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
 import { UploadTree, type UploadedFile } from "./upload-tree";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
 import { FocusCard, Segmented, Switch } from "./editor-cards-controls";
+import { AnalyseControls, AnalysisState } from "./auto-analyse-panel";
+import { usePermissions } from "@/lib/use-permissions";
 import {
   deriveOutputMode,
   emptyExtractionField,
   extractionFieldToDraft,
+  runSampleBelongsInInputCard,
   schemaToFieldModels,
+  showsAutoAnalyseControls,
+  showsManualInputQuestions,
   templateFieldToModel,
+  uploadShouldStartAnalysis,
   type ExtractionFieldModel,
   type OutputMode,
 } from "./extraction-editor-model";
@@ -64,6 +76,19 @@ export function EditorCards({
   const initialMode = deriveOutputMode(initialSchema);
 
   const [focused, setFocused] = useState<FocusedCard>("input");
+
+  // Auto analyse is an authoring act — it writes the field set — so a run-only
+  // user never sees the control (033-extraction-flows.adr.md §7). Server-side
+  // startAnalysis enforces the same thing; this only keeps the UI honest.
+  const permissions = usePermissions();
+  const canAuthor = permissions.has("extraction:author");
+
+  const [autoAnalyse, setAutoAnalyse] = useState(
+    initialSchema ? isAutoAnalyseOn(initialSchema.input) : true,
+  );
+  const [analyseSampleSize, setAnalyseSampleSize] = useState(
+    initialSchema ? analyseDocumentCount(initialSchema.input) : 3,
+  );
 
   // Input config.
   const [guidance, setGuidance] = useState(initialSchema?.input.guidance ?? "");
@@ -113,6 +138,40 @@ export function EditorCards({
     [draftDocsQuery.data],
   );
 
+  // Poll while an analysis is live. Where a batch worker runs (apps/api with
+  // EXTRACTION_WORKER_ENABLED) it advances on its own; where none does, the tick
+  // below drives it exactly as a sample run is driven, so the editor being open
+  // is what makes progress. Reopening resumes rather than restarting.
+  const analysisQuery = trpc.extraction.analysisStatus.useQuery(
+    { flowId },
+    { refetchInterval: (query) => (query.state.data?.status === "running" ? 1500 : false) },
+  );
+  const analysis = analysisQuery.data ?? null;
+  const analysisRunning = analysis?.status === "running";
+
+  const tickMutation = trpc.extraction.tick.useMutation();
+  const startAnalysisMutation = trpc.extraction.startAnalysis.useMutation({
+    onSuccess: () => void analysisQuery.refetch(),
+  });
+
+  useEffect(() => {
+    if (!analysisRunning || !analysis) return;
+    const timer = setInterval(() => tickMutation.mutate({ runId: analysis.runId }), 1500);
+    return () => clearInterval(timer);
+  }, [analysisRunning, analysis?.runId]);
+
+  // The settled analysis has written fields into the draft, so the editor must
+  // re-read the schema rather than keep rendering the set it loaded with.
+  const previousAnalysisStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = analysis?.status ?? null;
+    if (previousAnalysisStatus.current === "running" && status !== "running") {
+      void utils.extraction.getSchema.invalidate({ flowId });
+      router.refresh();
+    }
+    previousAnalysisStatus.current = status;
+  }, [analysis?.status, flowId]);
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -144,6 +203,8 @@ export function EditorCards({
       cardinality,
       selectionCriteria: cardinality === "many_per_record" ? selectionCriteria : null,
       guidance,
+      autoAnalyse,
+      analyseSampleSize,
     },
     output: {
       format: outputMode === "template" ? templateFormat : ("xlsx" as const),
@@ -180,7 +241,13 @@ export function EditorCards({
   const invalidateDraftDocs = () => void utils.extraction.listDraftDocuments.invalidate({ flowId });
 
   const uploadDraftMutation = trpc.extraction.uploadDraftDocuments.useMutation({
-    onSuccess: invalidateDraftDocs,
+    onSuccess: () => {
+      invalidateDraftDocs();
+      // The whole point of the feature: uploading is the trigger, not a button.
+      // The server refuses a second analysis while one is live, so a burst of
+      // uploads cannot start competing runs.
+      if (uploadShouldStartAnalysis(autoAnalyse, canAuthor)) startAnalysisMutation.mutate({ flowId });
+    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -302,6 +369,22 @@ export function EditorCards({
     </Button>
   );
 
+  const analyseControls = showsAutoAnalyseControls(canAuthor) ? (
+    <AnalyseControls
+      autoAnalyse={autoAnalyse}
+      onAutoAnalyseChange={setAutoAnalyse}
+      sampleSize={analyseSampleSize}
+      onSampleSizeChange={setAnalyseSampleSize}
+    />
+  ) : null;
+
+  const inputHeaderActions = (
+    <div className="flex items-center gap-2.5">
+      {analyseControls}
+      {runSampleBelongsInInputCard(autoAnalyse, canAuthor) ? runSampleButton : null}
+    </div>
+  );
+
   const outputHeaderActions = (
     <div className="flex items-center gap-1.5">
       <button
@@ -313,7 +396,7 @@ export function EditorCards({
       >
         <Eye size={15} />
       </button>
-      {runSampleButton}
+      {runSampleBelongsInInputCard(autoAnalyse, canAuthor) ? null : runSampleButton}
     </div>
   );
 
@@ -387,30 +470,39 @@ export function EditorCards({
                   title="Input — documents"
                   focused={focused === "input"}
                   onFocus={() => setFocused("input")}
+                  headerAction={inputHeaderActions}
                 >
                   <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="read-instructions">How should the AI read these documents?</Label>
-                      <Textarea
-                        id="read-instructions"
-                        value={guidance}
-                        onChange={(event) => setGuidance(event.target.value)}
-                        placeholder="e.g. Each file is one supplier's tender response."
-                        rows={2}
+                    {/* Auto analyse answers both of these from the documents, so
+                        they leave the default path entirely rather than sitting
+                        disabled. The author's values are held in state, so
+                        turning the toggle off brings them back as they were. */}
+                    {showsManualInputQuestions(autoAnalyse) && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="read-instructions">How should the AI read these documents?</Label>
+                        <Textarea
+                          id="read-instructions"
+                          value={guidance}
+                          onChange={(event) => setGuidance(event.target.value)}
+                          placeholder="e.g. Each file is one supplier's tender response."
+                          rows={2}
+                        />
+                      </div>
+                    )}
+
+                    {showsManualInputQuestions(autoAnalyse) && (
+                      <Segmented
+                        label="How do files map to records?"
+                        value={cardinality}
+                        onChange={(value) => setCardinality(value as Cardinality)}
+                        options={[
+                          { value: "one_per_file", label: "One file → one record" },
+                          { value: "many_per_record", label: "Many files → one record" },
+                        ]}
                       />
-                    </div>
+                    )}
 
-                    <Segmented
-                      label="How do files map to records?"
-                      value={cardinality}
-                      onChange={(value) => setCardinality(value as Cardinality)}
-                      options={[
-                        { value: "one_per_file", label: "One file → one record" },
-                        { value: "many_per_record", label: "Many files → one record" },
-                      ]}
-                    />
-
-                    {cardinality === "many_per_record" && (
+                    {showsManualInputQuestions(autoAnalyse) && cardinality === "many_per_record" && (
                       <div className="space-y-1.5">
                         <Label htmlFor="selection-criteria">Which files make up one record?</Label>
                         <Textarea
@@ -443,6 +535,14 @@ export function EditorCards({
                       </label>
                       <UploadTree files={uploads} onRemove={handleRemoveDraft} />
                     </div>
+
+                    {uploadShouldStartAnalysis(autoAnalyse, canAuthor) && uploads.length > 0 && analysis && (
+                      <AnalysisState
+                        analysis={analysis}
+                        starting={startAnalysisMutation.isPending}
+                        onRetry={() => startAnalysisMutation.mutate({ flowId })}
+                      />
+                    )}
                   </div>
                 </FocusCard>
 

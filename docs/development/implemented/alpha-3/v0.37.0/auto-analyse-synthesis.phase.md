@@ -1,6 +1,6 @@
 # Phase — Auto Analyse for Synthesise Information
 
-- **Status**: Awaiting review
+- **Status**: Implemented (v0.37.0)
 - **Target version**: 0.37.0  (bump: MINOR — new feature; **one migration**, see §8)
 - **PRD**: `docs/development/prd/auto-analyse-synthesis.prd.md`
 - **ADRs**: ADR-059 (Auto Analyse writes into the draft field set), ADR-060 (analysis is an
@@ -223,7 +223,7 @@ visible to whoever implements it, not as work for `/build`:
   reversed.
 
 One thing `/build` must not undo: ADR-052 is still cited by ADR-057, `flow-memory.prd.md` and
-`calculated-extraction-fields.phase.md` for its propose/validate discipline, which this phase does
+the calculated-extraction-fields phase doc for its propose/validate discipline, which this phase does
 not touch. Those citations stay as they are.
 
 ## 10. Acceptance
