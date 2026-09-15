@@ -13,6 +13,7 @@ import {
 import { desc, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_audit_log } from "../db/schema/core";
+import { currentAuditActor, withImpersonationMetadata } from "./audit-actor-store";
 import { sha256Hex as defaultSha256Hex } from "./sha256";
 
 // A single constant advisory-lock key serialises audit writers (ADR-033). Audit
@@ -57,7 +58,11 @@ export class DrizzleAuditLogger implements IAuditLogger {
         const createdAt = new Date();
         const actorId = payload.actorId ?? null;
         const resourceId = payload.resourceId ?? null;
-        const metadata = payload.metadata ?? null;
+        // The impersonator is merged in before the hash is computed, so it is
+        // covered by the chain exactly as a first-class column would be
+        // (ADR-060 §2). Read here rather than at the call site because the use
+        // cases that audit have no idea who is driving the request.
+        const metadata = withImpersonationMetadata(payload.metadata ?? null, currentAuditActor());
 
         const hash = computeAuditHash(
           {

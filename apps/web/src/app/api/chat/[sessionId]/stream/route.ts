@@ -9,9 +9,10 @@ import {
 } from "@wayfinder/domain";
 import { buildTurnRetrievalQueries, inlineExternalOptions } from "@wayfinder/application";
 import { streamTurnRequestSchema } from "@wayfinder/shared";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
+import { withPrincipal } from "@/lib/with-principal";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { executeTurn } from "./execute-turn";
 import { toModelMessages } from "./model-messages";
 import { DataStreamTurnWriter } from "./turn-stream-writer";
@@ -26,8 +27,9 @@ import { runMcpToolPrepass } from "./mcp-turn-helpers";
 // client's own slice so the two agree (scaling wall #1).
 const CONTEXT_WINDOW_MESSAGES = 20;
 
-export async function POST(
+async function handlePOST(
   req: Request,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
@@ -39,15 +41,9 @@ export async function POST(
     void container.services.sessionEvents.publish(sessionId, event);
   };
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return new Response("Unauthorized", { status: 401 });
-
-  const authSession = await container.resolveSession(token);
-  if (!authSession) return new Response("Unauthorized", { status: 401 });
-
   // Throttle turns per user so one account cannot stampede the model or the DB
   // (scaling wall #5 at the edge). Fail open if the limiter itself errors.
-  const rateDecision = await container.services.chatRateLimiter.consume(`chat:${authSession.userId}`);
+  const rateDecision = await container.services.chatRateLimiter.consume(`chat:${principal.userId}`);
   if (!rateDecision.error && !rateDecision.data.allowed) {
     return tooManyRequestsResponse(rateDecision.data.retryAfterMs);
   }
@@ -98,8 +94,8 @@ export async function POST(
   const accessResult = await container.useCases.resolveSessionAccess.execute({
     session,
     flow,
-    userId: authSession.userId,
-    isAdmin: authSession.isAdmin,
+    userId: principal.userId,
+    isAdmin: principal.isAdmin,
     isApprover: false,
     allowAutoEnrol: true,
   });
@@ -118,7 +114,7 @@ export async function POST(
   const claimResult = await container.useCases.turnLease.claim({
     sessionId: session.id,
     turnId,
-    userId: authSession.userId,
+    userId: principal.userId,
     leaseSeconds: container.env.TURN_LEASE_SECONDS,
   });
   if (claimResult.error) return new Response("Server error", { status: 500 });
@@ -150,7 +146,7 @@ export async function POST(
     // message ("here is the solution") retrieves nothing, so without this the
     // agent never sees the file it was just given.
     container.repos.sessionUploads.listBySession(sessionId),
-    container.repos.users.findById(authSession.userId),
+    container.repos.users.findById(principal.userId),
     // Two retrieval keys, not one: the operator's message rarely names the
     // guidance that governs it ("are there any options for a start date?" does
     // not mention the Monday rule), so the step's own instruction and field set
@@ -195,8 +191,8 @@ export async function POST(
     dbMessages,
     lastUserMessage,
     gatheredContext,
-    userId: authSession.userId,
-    isAdmin: authSession.isAdmin,
+    userId: principal.userId,
+    isAdmin: principal.isAdmin,
     flowId: flow.id,
     sessionId,
     nodeId: session.currentNodeId,
@@ -204,7 +200,7 @@ export async function POST(
 
   // The lease is claimed; tell every open window whose turn it now is so they
   // disable Send and can attribute the hold ("Alex's turn is in progress").
-  publishEvent({ type: "turn.claimed", userId: authSession.userId, userName: userProfile?.name ?? null });
+  publishEvent({ type: "turn.claimed", userId: principal.userId, userName: userProfile?.name ?? null });
 
   // A field bound to a lookup source gets its set inlined here when it is small
   // enough, so the assistant can name real values when it asks. A large set stays
@@ -294,8 +290,8 @@ export async function POST(
           userProfile,
           chatModelName,
           branchingModelName,
-          userId: authSession.userId,
-          isAdmin: authSession.isAdmin,
+          userId: principal.userId,
+          isAdmin: principal.isAdmin,
           lastUserMessage,
         });
       } finally {
@@ -327,3 +323,10 @@ export async function POST(
     },
   });
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const POST = (
+  req: Request,
+  context: { params: Promise<{ sessionId: string }> },
+): Promise<Response> => withPrincipal(req, (principal) => handlePOST(req, principal, context));

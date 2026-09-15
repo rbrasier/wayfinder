@@ -279,3 +279,34 @@ green, plus:
       unauthenticated caller, and never returns the impersonator's identity.
 - [ ] `withPrincipal` is the only way the REST routes obtain a principal.
 - [ ] `./validate.sh` passes.
+
+---
+
+## 9. Approved build summary
+
+Approved at `/build` Step 1 on 2026-09-15. Recorded here per the skill; the PR
+body is corrected against what was actually implemented.
+
+**Headline.** An admin browses Wayfinder as another user for 30 minutes with full
+read and write access, under a purple banner naming the target and counting down.
+The admin's session cookie is never touched — a second signed cookie carries the
+ticket, and exiting is a cookie delete. `container.resolveSession` gains a
+**required** second argument, stopping 17 files compiling until all 20 call sites
+are converted; that is what prevents the server rendering one identity while the
+banner names another. Audited actions keep the target as `actor_id` and gain
+`metadata.impersonatorId`, delivered by a request-scoped `AsyncLocalStorage` the
+singleton audit logger reads at write time.
+
+**Build order (11 sub-components).** 1 domain ticket + actor context · 2 cookie
+sign/verify · 3 impersonated resolver · 4 actor store + logger merge · 5 cached
+resolver · 6 user search · 7 `withPrincipal` · 8 signature change + all 20 call
+sites (atomic) · 9 impersonation router · 10 admin redirect + UI · 11 e2e spec,
+version bump, docs move.
+
+**Version:** MINOR, 0.36.0 → 0.37.0. **Base/PR target:** `main`.
+**Source issue:** #295 — `Closes`.
+**e2e:** one spec extended (policy groups 1 and 4), written but not run; CI runs it.
+
+**Deviation from skill convention:** built on `claude/confident-newton-v8j4mb`
+rather than `feature/admin-view-as-user/claude-rbrasier`, because the session is
+pinned to that branch and the approved docs already live there.

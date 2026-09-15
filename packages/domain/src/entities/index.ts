@@ -5,6 +5,8 @@ export * from "./audit-log";
 export * from "./audit-hash";
 export * from "./audit-query";
 export * from "./audit-export";
+export * from "./audit-actor-context";
+export * from "./impersonation-ticket";
 export * from "./legal-hold";
 export * from "./feature-flag";
 export * from "./role";

@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
 import { OrganisationSignInGate } from "@/components/organisation/organisation-sign-in-gate";
@@ -7,20 +6,15 @@ import { SignInPromptsProvider } from "@/components/layout/sign-in-prompts";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { WelcomeTourGate } from "@/components/tour/welcome-tour-gate";
 import { createServerHelpers } from "@/trpc/server";
-import { getContainer } from "@/lib/container";
+import { resolveServerPrincipal } from "@/lib/server-principal";
 
 export default async function UserLayout({ children }: { children: ReactNode }) {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore
-    .getAll()
-    .find((c) => c.name.endsWith(".session_token") || c.name === "better-auth.session_token");
+  const { hasSessionCookie, principal } = await resolveServerPrincipal();
 
-  if (!sessionCookie?.value) {
+  if (!hasSessionCookie) {
     redirect("/login");
   }
-
-  const session = await getContainer().resolveSession(sessionCookie.value);
-  if (!session) {
+  if (!principal) {
     redirect("/login?expired=true");
   }
 

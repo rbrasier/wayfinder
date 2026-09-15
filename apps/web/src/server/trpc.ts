@@ -3,13 +3,20 @@ import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import { ZodError } from "zod";
 import { getContainer, type Container } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import {
+  getImpersonationCookieFromRequest,
+  getSessionTokenFromRequest,
+} from "@/lib/session-token";
 import { causeToMetadata } from "./error-metadata";
 
 export interface TrpcContext {
   readonly container: Container;
   readonly userId: string | null;
   readonly isAdmin: boolean;
+  // The admin behind a simulated session (ADR-059). Attribution only — no
+  // procedure may gate on it; `isAdmin` above already reflects the principal
+  // actually in force.
+  readonly impersonatorId: string | null;
   readonly permissions: Set<PermissionKey>;
   readonly headers: Headers;
 }
@@ -29,19 +36,21 @@ export const createTrpcContext = async (req: Request): Promise<TrpcContext> => {
 
   let userId: string | null = null;
   let isAdmin = false;
+  let impersonatorId: string | null = null;
 
   const token = getSessionTokenFromRequest(req);
   if (token) {
-    const session = await container.resolveSession(token);
+    const session = await container.resolveSession(token, getImpersonationCookieFromRequest(req));
     if (session) {
       userId = session.userId;
       isAdmin = session.isAdmin;
+      impersonatorId = session.impersonatorId;
     }
   }
 
   const permissions = await resolvePermissions(container, userId, isAdmin);
 
-  return { container, userId, isAdmin, permissions, headers: req.headers };
+  return { container, userId, isAdmin, impersonatorId, permissions, headers: req.headers };
 };
 
 const t = initTRPC.context<TrpcContext>().create({

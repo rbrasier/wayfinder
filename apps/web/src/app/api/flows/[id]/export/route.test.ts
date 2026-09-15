@@ -10,6 +10,8 @@ vi.mock("@/lib/container", () => ({
 
 vi.mock("@/lib/session-token", () => ({
   getSessionTokenFromRequest: (req: NextRequest) => req.headers.get("x-test-token"),
+  getImpersonationCookieFromRequest: (req: NextRequest) =>
+    req.headers.get("x-test-impersonation"),
 }));
 
 const { GET } = await import("./route");

@@ -93,6 +93,7 @@ const contextFor = (
   container: containerFor(calls),
   userId,
   isAdmin,
+  impersonatorId: null,
   permissions: new Set<PermissionKey>(),
   headers: new Headers(),
 });

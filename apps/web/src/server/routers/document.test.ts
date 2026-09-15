@@ -90,6 +90,7 @@ const contextWith = (container: Container): TrpcContext => ({
   container,
   userId: "user-1",
   isAdmin: false,
+  impersonatorId: null,
   permissions: new Set(),
   headers: new Headers(),
 });

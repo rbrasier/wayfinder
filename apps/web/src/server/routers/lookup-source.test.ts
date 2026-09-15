@@ -84,6 +84,7 @@ const contextFor = (
   container: containerWith(useCases),
   userId: "dana",
   isAdmin: true,
+  impersonatorId: null,
   permissions: new Set<PermissionKey>(),
   headers: new Headers(),
   ...overrides,

@@ -3,23 +3,20 @@ import {
   CONTEXT_DOCS_ALLOWED_MIME_TYPES,
   CONTEXT_DOCS_MAX_FILE_SIZE_BYTES,
 } from "@wayfinder/shared";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { withPrincipal } from "@/lib/with-principal";
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(CONTEXT_DOCS_ALLOWED_MIME_TYPES);
 
-export async function POST(
+async function handlePOST(
   req: NextRequest,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id: flowId } = await params;
   const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const session = await container.resolveSession(token);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const canvasResult = await container.useCases.getFlowCanvas.execute(flowId);
   if (canvasResult.error || !canvasResult.data) {
@@ -28,9 +25,9 @@ export async function POST(
 
   const { flow } = canvasResult.data;
   const canEdit =
-    session.isAdmin ||
-    flow.ownerUserId === session.userId ||
-    flow.permissions.some((p) => p.userId === session.userId && p.role === "owner");
+    principal.isAdmin ||
+    flow.ownerUserId === principal.userId ||
+    flow.permissions.some((p) => p.userId === principal.userId && p.role === "owner");
   if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const formData = await req.formData();
@@ -144,3 +141,11 @@ export async function POST(
     { status: 201 },
   );
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const POST = (
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+): Promise<NextResponse> =>
+  withPrincipal(req, (principal) => handlePOST(req, principal, context));

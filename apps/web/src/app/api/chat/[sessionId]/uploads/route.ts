@@ -1,26 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sumSessionUploadChars } from "@wayfinder/domain";
 import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@wayfinder/shared";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { withPrincipal } from "@/lib/with-principal";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(SESSION_UPLOADS_ALLOWED_MIME_TYPES);
 
-export async function GET(
+async function handleGET(
   req: NextRequest,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ sessionId: string }> },
 ): Promise<NextResponse> {
   const { sessionId } = await params;
   const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const authSession = await container.resolveSession(token);
-  if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const access = await authorizeSessionAccess(container, sessionId, authSession.userId, authSession.isAdmin, {
+  const access = await authorizeSessionAccess(container, sessionId, principal.userId, principal.isAdmin, {
     requireSend: false,
     allowApprover: true,
   });
@@ -41,18 +38,14 @@ export async function GET(
   );
 }
 
-export async function POST(
+async function handlePOST(
   req: NextRequest,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ sessionId: string }> },
 ): Promise<NextResponse> {
   const { sessionId } = await params;
   const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const authSession = await container.resolveSession(token);
-  if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sessionResult = await container.useCases.getSession.execute(sessionId);
   if (sessionResult.error) return NextResponse.json({ error: "Server error" }, { status: 500 });
@@ -63,8 +56,8 @@ export async function POST(
   const accessResult = await container.useCases.resolveSessionAccess.execute({
     session,
     flow,
-    userId: authSession.userId,
-    isAdmin: authSession.isAdmin,
+    userId: principal.userId,
+    isAdmin: principal.isAdmin,
     isApprover: false,
     allowAutoEnrol: true,
   });
@@ -185,3 +178,16 @@ export async function POST(
     { status: 201 },
   );
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const GET = (
+  req: NextRequest,
+  context: { params: Promise<{ sessionId: string }> },
+): Promise<NextResponse> =>
+  withPrincipal(req, (principal) => handleGET(req, principal, context));
+export const POST = (
+  req: NextRequest,
+  context: { params: Promise<{ sessionId: string }> },
+): Promise<NextResponse> =>
+  withPrincipal(req, (principal) => handlePOST(req, principal, context));

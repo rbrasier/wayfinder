@@ -1,29 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { withPrincipal } from "@/lib/with-principal";
 import { statusForDomainError } from "@/lib/http-errors";
 
 // Downloads a flow as a portable archive. A binary body, so it is a route
 // handler rather than a tRPC procedure (PRD §7). Authorisation is the
 // use-case's — owner or admin — and it is enforced there rather than here so
 // the rule has one home.
-export async function GET(
+async function handleGET(
   req: NextRequest,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   const { id: flowId } = await params;
   const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const session = await container.resolveSession(token);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const result = await container.useCases.exportFlow.execute({
     flowId,
-    requestedByUserId: session.userId,
-    isAdmin: session.isAdmin,
+    requestedByUserId: principal.userId,
+    isAdmin: principal.isAdmin,
   });
 
   if (result.error) {
@@ -45,3 +42,11 @@ export async function GET(
     },
   });
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const GET = (
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> },
+): Promise<NextResponse> =>
+  withPrincipal(req, (principal) => handleGET(req, principal, context));

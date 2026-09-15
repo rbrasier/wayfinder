@@ -1,6 +1,7 @@
 import type { SessionEvent } from "@wayfinder/domain";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer, type Container } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { withPrincipal } from "@/lib/with-principal";
 
 // A long-lived Node connection, never cached or statically rendered.
 export const runtime = "nodejs";
@@ -29,17 +30,13 @@ async function isSessionApprover(
 // typing poll and 3 s session poll: the client opens one EventSource and the
 // server pushes turn/message/typing/state events as they happen. Reconnects are
 // lossless via Last-Event-ID replay against the message `seq`.
-export async function GET(
+async function handleGET(
   req: Request,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
   const container = getContainer();
-
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return new Response("Unauthorized", { status: 401 });
-  const authSession = await container.resolveSession(token);
-  if (!authSession) return new Response("Unauthorized", { status: 401 });
 
   const sessionResult = await container.useCases.getSession.execute(sessionId);
   if (sessionResult.error) return new Response("Server error", { status: 500 });
@@ -48,15 +45,15 @@ export async function GET(
 
   // Watching is a read; viewers and approvers may subscribe. Authorise against
   // participant rows exactly as the page load does, so a non-visible flow is 403.
-  const isOwnerOrAdmin = authSession.isAdmin || session.userId === authSession.userId;
+  const isOwnerOrAdmin = principal.isAdmin || session.userId === principal.userId;
   const isApprover = isOwnerOrAdmin
     ? false
-    : await isSessionApprover(container, authSession.userId, session.id);
+    : await isSessionApprover(container, principal.userId, session.id);
   const access = await container.useCases.resolveSessionAccess.execute({
     session,
     flow,
-    userId: authSession.userId,
-    isAdmin: authSession.isAdmin,
+    userId: principal.userId,
+    isAdmin: principal.isAdmin,
     isApprover,
     allowAutoEnrol: true,
   });
@@ -147,3 +144,10 @@ export async function GET(
     },
   });
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const GET = (
+  req: Request,
+  context: { params: Promise<{ sessionId: string }> },
+): Promise<Response> => withPrincipal(req, (principal) => handleGET(req, principal, context));

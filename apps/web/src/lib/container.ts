@@ -237,6 +237,7 @@ const build = () => {
       cacheTtlMs: env.AUTH_CACHE_TTL_MS,
       cacheMaxEntries: env.AUTH_CACHE_MAX_ENTRIES,
       getAuthConfig: () => runtimeConfig.getAuthConfig(),
+      authSecret: env.BETTER_AUTH_SECRET,
     });
 
   const users = new DrizzleUserRepository(db);
