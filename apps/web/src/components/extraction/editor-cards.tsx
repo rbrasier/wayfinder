@@ -398,11 +398,12 @@ export function EditorCards({
           {analysisRunning ? "Drafting the output…" : "Configure the output first"}
         </span>
       )}
-      {!outputReady && !analysisRunning && (
-        <Button type="button" variant="outline" size="sm" onClick={() => setOutputOpen(true)}>
-          Configure output
-        </Button>
-      )}
+      {/* Always reachable. Gating this on !outputReady left an author who had
+          configured the output with no way back into it — the fields became
+          uneditable the moment they were valid. */}
+      <Button type="button" variant="outline" size="sm" onClick={() => setOutputOpen(true)}>
+        {outputReady ? "Edit output" : "Configure output"}
+      </Button>
       <Button
         type="button"
         size="sm"
