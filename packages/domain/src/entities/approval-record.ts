@@ -26,6 +26,12 @@ export const approvalSubjectOf = (config: ApprovalNodeConfig): ApprovalSubject =
 export const changesRequestedTargetOf = (config: ApprovalNodeConfig): ChangesRequestedTarget =>
   config.changesRequestedTarget ?? { kind: "nearest_editable" };
 
+// Whether this approval step accepts an off-system nomination (ADR-055 §4).
+// Absent is permissive, matching `allowManualEdit`: a node authored before the
+// setting existed gains the capability rather than silently losing it.
+export const offSystemApprovalAllowed = (config: ApprovalNodeConfig): boolean =>
+  config.allowOffSystemApproval !== false;
+
 // Step keys for a flow's approval nodes, in author order. Two steps sharing a
 // label would collide in the flat record, so the second and later get a numeric
 // suffix — resolved when the flow is saved rather than at decision time, because
@@ -97,6 +103,13 @@ export interface ApprovalRecordInput {
   verificationCode?: string | null;
   editsMade?: boolean;
   editedFieldKeys?: string[];
+  // Set only when the decision was recorded off system (ADR-055 §6). The
+  // approval date and the moment it reached Wayfinder are both kept: the
+  // document shows when it was approved, the record shows when the system
+  // learned of it, and a report needs to be able to tell them apart.
+  offSystemApprovedOn?: string | null;
+  offSystemEvidenceFilename?: string | null;
+  recordedAt?: Date | null;
 }
 
 export const buildApprovalRecord = (input: ApprovalRecordInput): Record<string, unknown> => {
@@ -118,6 +131,13 @@ export const buildApprovalRecord = (input: ApprovalRecordInput): Record<string, 
   if (input.verificationCode) record[prefixed("verification_code")] = input.verificationCode;
   if (input.editsMade !== undefined) record[prefixed("edits_made")] = input.editsMade;
   if (input.editedFieldKeys) record[prefixed("edited_field_keys")] = input.editedFieldKeys;
+  if (input.offSystemApprovedOn) {
+    record[prefixed("off_system_approved_on")] = input.offSystemApprovedOn;
+  }
+  if (input.offSystemEvidenceFilename) {
+    record[prefixed("off_system_evidence")] = input.offSystemEvidenceFilename;
+  }
+  if (input.recordedAt) record[prefixed("recorded_at")] = input.recordedAt.toISOString();
 
   return record;
 };

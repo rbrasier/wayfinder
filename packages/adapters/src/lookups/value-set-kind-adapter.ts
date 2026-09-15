@@ -3,7 +3,7 @@ import type {
   RecordCollection,
   Result,
   ValueSetEntry,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface FetchRecordsInput {
   config: LookupSourceConfig;

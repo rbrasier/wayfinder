@@ -8,6 +8,7 @@ import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogFooter, Dia
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConnectivityTest, type ConnectivityController } from "@/components/settings/connectivity";
+import { SessionPolicyDialog } from "@/components/settings/session-policy-dialog";
 import { trpc } from "@/trpc/client";
 
 // Named once so the card, the wizard and the E2E spec agree on what an operator
@@ -32,6 +33,7 @@ export function AuthMethodsCard({ connectivity }: { connectivity?: ConnectivityC
   });
 
   const [open, setOpen] = useState(false);
+  const [sessionPolicyOpen, setSessionPolicyOpen] = useState(false);
   const [emailPasswordEnabled, setEmailPasswordEnabled] = useState(true);
   const [entraEnabled, setEntraEnabled] = useState(false);
   const [pkiEnabled, setPkiEnabled] = useState(false);
@@ -77,15 +79,27 @@ export function AuthMethodsCard({ connectivity }: { connectivity?: ConnectivityC
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">Authentication</CardTitle>
-        <Button
-          size="sm"
-          variant="outline"
-          data-testid="auth-methods-edit"
-          onClick={() => setOpen(true)}
-          disabled={!config}
-        >
-          Edit
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Session lifetime is part of how sign-in behaves, so it lives behind
+              this card rather than as a card of its own (ADR-035). */}
+          <Button
+            size="sm"
+            variant="outline"
+            data-testid="session-policy-open"
+            onClick={() => setSessionPolicyOpen(true)}
+          >
+            Set session policies
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            data-testid="auth-methods-edit"
+            onClick={() => setOpen(true)}
+            disabled={!config}
+          >
+            Edit
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <p className="text-muted-foreground">
@@ -275,6 +289,8 @@ export function AuthMethodsCard({ connectivity }: { connectivity?: ConnectivityC
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <SessionPolicyDialog open={sessionPolicyOpen} onOpenChange={setSessionPolicyOpen} />
     </Card>
   );
 }

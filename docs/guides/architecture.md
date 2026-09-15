@@ -10,8 +10,8 @@ and AI providers, so we can change any of them without rewriting the core.
 packages/
 ├── domain/        Pure TypeScript. Entities, port interfaces, domain errors,
 │                  the Result type. Zero external dependencies.
-├── application/   Use cases. Orchestrates ports. Imports only @rbrasier/domain
-│                  and @rbrasier/shared. No frameworks, no SDKs.
+├── application/   Use cases. Orchestrates ports. Imports only @wayfinder/domain
+│                  and @wayfinder/shared. No frameworks, no SDKs.
 ├── shared/        Zod schemas and shared types used at boundaries
 │                  (HTTP/tRPC inputs, AI output schemas).
 └── adapters/      Concrete implementations of domain ports.
@@ -28,8 +28,8 @@ apps/
 
 - `domain` imports nothing outside itself. ESLint blocks any non-relative
   import path in `packages/domain/src/**`.
-- `application` may import only `@rbrasier/domain` and `@rbrasier/shared`.
-  ESLint blocks `@rbrasier/adapters`, ORMs, AI SDKs, frameworks.
+- `application` may import only `@wayfinder/domain` and `@wayfinder/shared`.
+  ESLint blocks `@wayfinder/adapters`, ORMs, AI SDKs, frameworks.
 - `adapters` may import everything it needs, and depends on `domain` only via
   port interfaces.
 - Apps depend on `application` and `adapters`. All wiring lives in their
@@ -44,7 +44,7 @@ type Result<T> = { data: T } | { error: DomainError };
 ```
 
 Use `ok(value)`, `err(domainError(code, message))`, and the `isOk` / `isErr`
-guards from `@rbrasier/domain`. Adapters wrap try/catch and convert SDK errors
+guards from `@wayfinder/domain`. Adapters wrap try/catch and convert SDK errors
 into a `DomainError` with a code from a small enum (`NOT_FOUND`,
 `AI_PROVIDER_FAILED`, `INFRA_FAILURE`, etc.).
 

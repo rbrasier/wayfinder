@@ -10,6 +10,7 @@ import {
   isAtLeastOneMethodEnabled,
   isEntraConfigured,
   isPkiUsable,
+  isSelfServicePasswordResetAvailable,
   isSiemConfigured,
   parseDeploymentConfig,
   parseOnboardingState,
@@ -19,6 +20,7 @@ import {
   type DirectoryConfig,
   type EntraCredentials,
 } from "./runtime-config";
+import { DEFAULT_SESSION_POLICY } from "./session-policy";
 
 describe("AuthConfig defaults", () => {
   it("enables email/password and disables Entra by default", () => {
@@ -39,6 +41,33 @@ describe("AuthConfig defaults", () => {
 
     expect(config.pkiEnabled).toBe(false);
     expect(config.pki.sessionTtlHours).toBe(DEFAULT_PKI_SESSION_TTL_HOURS);
+  });
+});
+
+describe("isSelfServicePasswordResetAvailable", () => {
+  const config = (emailPasswordEnabled: boolean): AuthConfig => ({
+    ...createDefaultAuthConfig(),
+    emailPasswordEnabled,
+  });
+
+  it("is true only when password sign-in is on and email can actually be sent", () => {
+    expect(isSelfServicePasswordResetAvailable(config(true), true)).toBe(true);
+  });
+
+  // Without a transport the reset link has no way to reach the user, so the
+  // entry point must stay hidden rather than accept an address and do nothing.
+  it("is false when password sign-in is on but no email transport is configured", () => {
+    expect(isSelfServicePasswordResetAvailable(config(true), false)).toBe(false);
+  });
+
+  // Resetting a password nobody can sign in with would hand back a useless
+  // credential on an Entra- or certificate-only install.
+  it("is false when email is configured but password sign-in is off", () => {
+    expect(isSelfServicePasswordResetAvailable(config(false), true)).toBe(false);
+  });
+
+  it("is false when neither is available", () => {
+    expect(isSelfServicePasswordResetAvailable(config(false), false)).toBe(false);
   });
 });
 
@@ -78,6 +107,9 @@ describe("isEntraConfigured", () => {
 describe("isAtLeastOneMethodEnabled", () => {
   const blankEntra = { tenantId: "", clientId: "", clientSecret: "" };
   const pkiOff = { pkiEnabled: false, pki: { sessionTtlHours: 8 } };
+  // The lockout guard reads method flags only; the session policy just has to be
+  // present for the config to be a whole AuthConfig.
+  const sessionPolicy = DEFAULT_SESSION_POLICY;
 
   it("is true when only email/password is enabled", () => {
     const config: AuthConfig = {
@@ -85,6 +117,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entraEnabled: false,
       entra: blankEntra,
       ...pkiOff,
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, false)).toBe(true);
@@ -96,6 +129,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entraEnabled: true,
       entra: blankEntra,
       ...pkiOff,
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, false)).toBe(true);
@@ -107,6 +141,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entraEnabled: false,
       entra: blankEntra,
       ...pkiOff,
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, false)).toBe(false);
@@ -119,6 +154,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entra: blankEntra,
       pkiEnabled: true,
       pki: { sessionTtlHours: 8 },
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, true)).toBe(true);
@@ -133,6 +169,7 @@ describe("isAtLeastOneMethodEnabled", () => {
       entra: blankEntra,
       pkiEnabled: true,
       pki: { sessionTtlHours: 8 },
+      sessionPolicy,
     };
 
     expect(isAtLeastOneMethodEnabled(config, false)).toBe(false);

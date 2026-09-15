@@ -1,5 +1,5 @@
 import { Book, Bug, Github, HelpCircle, Link2, Mail, MessageSquare, Shield } from "lucide-react";
-import type { AboutLinkIcon } from "@rbrasier/domain";
+import type { AboutLinkIcon } from "@wayfinder/domain";
 
 // The icon name crosses the wire as a string from admin_system_settings; this is
 // the only place it becomes a component. Every key of AboutLinkIcon must appear

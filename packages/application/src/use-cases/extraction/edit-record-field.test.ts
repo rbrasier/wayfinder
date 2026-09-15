@@ -6,7 +6,7 @@ import {
   type ExtractionFieldResult,
   type ExtractionRecord,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { EditRecordField } from "./edit-record-field";
 
 const record: ExtractionRecord = {

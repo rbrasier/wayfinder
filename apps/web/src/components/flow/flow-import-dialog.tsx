@@ -1,6 +1,6 @@
 "use client";
 
-import type { FlowImportInspection } from "@rbrasier/domain";
+import type { FlowImportInspection } from "@wayfinder/domain";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {

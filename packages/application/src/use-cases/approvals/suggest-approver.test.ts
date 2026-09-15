@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   type Person,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { SuggestApprover } from "./suggest-approver";
 import { InMemoryApprovals, InMemoryFlowNodes, InMemorySessions, InMemoryUsers, StubDocumentChunks, StubEmbeddings, StubLanguageModel, StubResolver, approvalNode, policyChunk, session, user } from "./__fixtures__/approval-doubles";
 

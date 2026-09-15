@@ -1,6 +1,6 @@
 import {
   computeFieldReport,
-  computeNodeBreakdown,
+  computeStepFunnel,
   ok,
   type AnalyticsNode,
   type FieldReport,
@@ -9,9 +9,9 @@ import {
   type IFlowNodeRepository,
   type IFlowRepository,
   type ISessionStepOutputRepository,
-  type NodeBreakdownRow,
   type Result,
-} from "@rbrasier/domain";
+  type StepFunnelRow,
+} from "@wayfinder/domain";
 
 export interface SessionSummary {
   total: number;
@@ -29,7 +29,7 @@ export interface FlowDeepDiveCard {
 export interface FlowDeepDive {
   flows: FlowDeepDiveCard[];
   selectedFlowId: string | null;
-  nodeBreakdown: NodeBreakdownRow[];
+  stepFunnel: StepFunnelRow[];
   fieldReport: FieldReport;
   sessionSummary: SessionSummary;
 }
@@ -82,7 +82,7 @@ export class GetFlowDeepDive {
       return ok({
         flows: cards,
         selectedFlowId: null,
-        nodeBreakdown: [],
+        stepFunnel: [],
         fieldReport: emptyFieldReport,
         sessionSummary: emptySessionSummary,
       });
@@ -119,7 +119,7 @@ export class GetFlowDeepDive {
     return ok({
       flows: cards,
       selectedFlowId,
-      nodeBreakdown: computeNodeBreakdown(nodes, messagesResult.data, flowSessions),
+      stepFunnel: computeStepFunnel(nodes, messagesResult.data, flowSessions, now),
       fieldReport: computeFieldReport(
         stepOutputsResult.data.map((output) => ({
           sessionId: output.sessionId,

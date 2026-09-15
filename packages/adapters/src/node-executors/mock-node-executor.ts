@@ -5,8 +5,8 @@ import {
   type NodeExecutionInput,
   type NodeExecutionOutput,
   type Result,
-} from "@rbrasier/domain";
-import { documentDataSchema } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { documentDataSchema } from "@wayfinder/shared";
 
 // Dev/test executor for INodeExecutor. Completes synchronously so an auto node
 // can be exercised without a running n8n instance. When the node declares

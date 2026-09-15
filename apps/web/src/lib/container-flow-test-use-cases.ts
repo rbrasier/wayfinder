@@ -5,7 +5,7 @@ import {
   GetTestRunReport,
   StartSession,
   StartTestRun,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import type {
   IFlowEdgeRepository,
   IFlowNodeRepository,
@@ -16,7 +16,7 @@ import type {
   ISessionRepository,
   ISessionStepOutputRepository,
   IUsageRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface FlowTestUseCaseDeps {
   sessions: ISessionRepository;

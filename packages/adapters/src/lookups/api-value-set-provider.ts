@@ -1,5 +1,5 @@
-import { domainError, err, findRecordCollections, ok } from "@rbrasier/domain";
-import type { LookupSourceConfig, RecordCollection, Result } from "@rbrasier/domain";
+import { domainError, err, findRecordCollections, ok } from "@wayfinder/domain";
+import type { LookupSourceConfig, RecordCollection, Result } from "@wayfinder/domain";
 import { guardOutboundUrl, type OutboundUrlGuardOptions } from "./outbound-url-guard";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "./value-set-kind-adapter";
 

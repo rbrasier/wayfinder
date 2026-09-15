@@ -11,7 +11,7 @@ import {
   type ISessionMessageRepository,
   type IUserRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type {
   UpdateDocumentFields,
   UpdateDocumentFieldsOutput,

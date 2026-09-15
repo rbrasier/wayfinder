@@ -1,0 +1,34 @@
+{
+  "name": "@wayfinder/deploy-lambda",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AWS Lambda entrypoints and CDK stack for Wayfinder. Deliberately outside the pnpm workspace — see ADR-056 §2.",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint handlers infra",
+    "test": "vitest run",
+    "audit": "npm audit --audit-level=high",
+    "cdk": "cdk",
+    "build:web": "cd ../../apps/web && npx open-next build",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
+  },
+  "dependencies": {
+    "@codegenie/serverless-express": "^4.17.1",
+    "aws-cdk-lib": "^2.268.0",
+    "constructs": "^10.8.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@opennextjs/aws": "^3.10.4",
+    "@types/aws-lambda": "^8.10.163",
+    "@types/node": "^22.0.0",
+    "aws-cdk": "^2.1029.0",
+    "eslint": "^9.0.0",
+    "postgres": "^3.4.9",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^4.1.0"
+  }
+}

@@ -161,6 +161,46 @@ describe("XlsxGenerator", () => {
     });
   });
 
+  // Issue #286: TAG_PATTERN is non-greedy, so a mistyped brace ran forward into
+  // the next well-formed tag and both collapsed into one nonsense field.
+  describe("malformed tags", () => {
+    const subjects = (result: { error?: { details?: readonly { subject: string }[] } }) =>
+      (result.error?.details ?? []).map((detail) => detail.subject).join(" | ");
+
+    it("rejects an unclosed tag instead of merging it into the next one", () => {
+      const templateBytes = buildXlsx([["{{ Client Name and {{ Other Field }}"]]);
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.data?.tags).toBeUndefined();
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Client Name");
+    });
+
+    it("names the cell a malformed tag sits in", () => {
+      const templateBytes = buildXlsx([
+        ["Owner", "{{ Good Tag }}"],
+        ["Ref", "{[ Broken Tag }}"],
+      ]);
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(result.error?.details?.[0]?.message).toContain("cell B2");
+      expect(subjects(result)).toContain("Broken Tag");
+    });
+
+    it("lists every tag with an unknown annotation, not just the first", () => {
+      const templateBytes = buildXlsx([["{{ Name (frobnicate) }}", "{{ Age (wibble) }}"]]);
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Name (frobnicate)");
+      expect(subjects(result)).toContain("Age (wibble)");
+    });
+  });
+
   describe("extractFields", () => {
     it("parses tag-mode fields when any tag is present, ignoring headings", () => {
       const templateBytes = buildXlsx([
@@ -206,6 +246,29 @@ describe("XlsxGenerator", () => {
       expect(result.error?.code).toBe("VALIDATION_FAILED");
       expect(result.error?.message).toContain("Delegate Signature");
       expect(result.error?.message).toContain(".docx");
+    });
+
+    // A comment cannot outlive the signature it belongs to, so a spreadsheet
+    // refuses it either way round: with a signature the signature is refused
+    // first, and without one there is nothing for the comment to belong to.
+    it("rejects an (approval-comment) tag, naming the tag that cannot be used", () => {
+      const withSignature = generator.extractFields({
+        templateBytes: buildXlsx([
+          [
+            "{{ Delegate Signature (approval) }}",
+            "{{ Delegate Note (approval-comment: Delegate Signature) }}",
+          ],
+        ]),
+      });
+      expect(withSignature.error?.code).toBe("VALIDATION_FAILED");
+
+      const alone = generator.extractFields({
+        templateBytes: buildXlsx([
+          ["{{ Client Email (email) }}", "{{ Delegate Note (approval-comment) }}"],
+        ]),
+      });
+      expect(alone.error?.code).toBe("VALIDATION_FAILED");
+      expect(alone.error?.message).toContain("Delegate Note");
     });
 
     it("rejects a workbook with no tags and no usable header row", () => {

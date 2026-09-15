@@ -7,3 +7,4 @@ export * from "./notify-on-approval-requested";
 export * from "./notify-on-approval-decided";
 export * from "./notify-on-approval-withdrawn";
 export * from "./notify-on-approval-reassigned";
+export * from "./send-password-reset-email";

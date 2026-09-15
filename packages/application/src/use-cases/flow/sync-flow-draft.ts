@@ -9,7 +9,7 @@ import {
   type IFlowRepository,
   type IFlowVersionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Opens (or refreshes) the single draft version that captures edits diverging
 // from the published baseline. Only published flows accrue a draft — an

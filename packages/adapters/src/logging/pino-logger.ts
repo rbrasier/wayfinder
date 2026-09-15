@@ -1,6 +1,6 @@
 import { createRequire } from "module";
 import path from "node:path";
-import type { ILogger } from "@rbrasier/domain";
+import type { ILogger } from "@wayfinder/domain";
 import pino from "pino";
 
 const createPinoInstance = (isDev: boolean): pino.Logger => {

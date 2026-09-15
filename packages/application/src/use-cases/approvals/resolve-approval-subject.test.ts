@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type Approval, type FlowNode, type SessionStepOutput } from "@rbrasier/domain";
+import { ok, type Approval, type FlowNode, type SessionStepOutput } from "@wayfinder/domain";
 import { ResolveApprovalSubject } from "./resolve-approval-subject";
 
 const at = (iso: string) => new Date(iso);
@@ -254,6 +254,20 @@ describe("ResolveApprovalSubject — custom case", () => {
     const prompt = languageModel.generateText.mock.calls[0]![0] as { prompt: string };
     expect(prompt.prompt).toContain("Describe the authority being delegated.");
     expect(prompt.prompt).toContain("Acme Ltd");
+  });
+
+  // Without the requesting user the summary lands on an unattributed usage row
+  // and QuotaEnforcer.check returns before it looks at a budget (ADR-026).
+  it("bills the summary to the user who requested the approval", async () => {
+    const { useCase, languageModel } = build({ nodes: customNodes });
+
+    await useCase.execute({ approvalId: "approval-1" });
+
+    expect(languageModel.generateText.mock.calls[0]![0]).toMatchObject({
+      userId: "user-1",
+      flowId: "flow-1",
+      sessionId: "sess-1",
+    });
   });
 
   it("caches the summary on the pending approval so a second read does not recompute it", async () => {

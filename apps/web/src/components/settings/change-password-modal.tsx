@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MINIMUM_PASSWORD_LENGTH, validatePasswordPair } from "@/components/password-form-model";
 
 interface ChangePasswordModalProps {
   open: boolean;
@@ -44,13 +45,9 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
     event.preventDefault();
     setError(null);
 
-    if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setError("New passwords do not match");
+    const invalid = validatePasswordPair(newPassword, confirmPassword);
+    if (invalid) {
+      setError(invalid);
       return;
     }
 
@@ -98,7 +95,7 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={MINIMUM_PASSWORD_LENGTH}
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
                 disabled={submitting}
@@ -111,7 +108,7 @@ export function ChangePasswordModal({ open, onClose }: ChangePasswordModalProps)
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={8}
+                minLength={MINIMUM_PASSWORD_LENGTH}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 disabled={submitting}

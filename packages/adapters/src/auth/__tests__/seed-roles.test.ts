@@ -8,7 +8,7 @@ import {
   type PermissionKey,
   type Result,
   type Role,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { seedRoles } from "../seed-roles";
 
 class FakeRoleRepository implements IRoleRepository {

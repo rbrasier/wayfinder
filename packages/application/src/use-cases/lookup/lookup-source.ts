@@ -13,7 +13,7 @@ import {
   type Result,
   type TemplateField,
   type ValueSetEntry,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class ListLookupSources {
   constructor(private readonly sources: ILookupSourceRepository) {}

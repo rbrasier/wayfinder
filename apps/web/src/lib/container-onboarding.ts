@@ -14,15 +14,15 @@ import {
   SetOrganisationResolution,
   SubmitOrganisationNomination,
   UpdateOrganisation,
-} from "@rbrasier/application";
-import { BetterAuthAdminAccountCreator, type Auth, type Database } from "@rbrasier/adapters";
+} from "@wayfinder/application";
+import { BetterAuthAdminAccountCreator, type Auth, type Database } from "@wayfinder/adapters";
 import type {
   IAuditLogger,
   IClock,
   IOrganisationRepository,
   ISystemSettingsRepository,
   IUserRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface OnboardingDeps {
   db: Database;

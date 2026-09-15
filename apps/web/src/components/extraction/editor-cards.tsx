@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Eye, MoreHorizontal, Upload } from "lucide-react";
-import { shouldPreviewByDefault, type ExtractionSchema, type FlowContextDoc } from "@rbrasier/domain";
+import { shouldPreviewByDefault, type ExtractionSchema, type FlowContextDoc } from "@wayfinder/domain";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {

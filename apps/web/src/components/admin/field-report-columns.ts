@@ -1,4 +1,4 @@
-import type { FieldReportColumn } from "@rbrasier/domain";
+import type { FieldReportColumn } from "@wayfinder/domain";
 
 // A column as rendered: either a single raw column or several collapsed into
 // one. `memberKeys` lists the raw `columnKey`s whose values it coalesces.

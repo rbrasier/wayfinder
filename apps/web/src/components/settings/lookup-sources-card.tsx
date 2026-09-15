@@ -9,7 +9,7 @@ import {
   type LookupSourceKind,
   type RecordCollection,
   type ValueSetEntry,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";

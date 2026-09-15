@@ -1,4 +1,4 @@
-import type { SessionEvent } from "@rbrasier/domain";
+import type { SessionEvent } from "@wayfinder/domain";
 import { getContainer, type Container } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 

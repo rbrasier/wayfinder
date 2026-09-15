@@ -2,6 +2,8 @@
 // is the source of truth for the decision; the resolver only ever *suggests* an
 // approver, and the operator must confirm (or override) before it is sent.
 
+import type { OffSystemApprovalEvidence } from "./off-system-approval";
+
 export type ApproverSource =
   | "first_level_supervisor"
   | "second_level_supervisor"
@@ -72,9 +74,30 @@ export interface Approval {
   // `.approver_name`, `.approver_email`, `.decided_at` and `.comment` are the
   // guaranteed minimum. Built by `buildApprovalRecord` in `approval-record.ts`.
   readonly recordSnapshot: Record<string, unknown> | null;
+  // Set only when the decision was recorded off system (ADR-055). The calendar
+  // date the approval actually happened, as `YYYY-MM-DD` — a date rather than a
+  // timestamp, because a memo or a minute carries a day and no clock time.
+  readonly offSystemApprovedOn: string | null;
+  // The file filed as proof. Null together with `offSystemApprovedOn`, since
+  // neither is recordable without the other.
+  readonly offSystemEvidenceFilename: string | null;
+  readonly offSystemEvidenceMimeType: string | null;
+  readonly offSystemEvidenceSizeBytes: number | null;
+  readonly offSystemEvidenceStoragePath: string | null;
+  // Who entered it — never the approver, who is named by `decidedByUserId`.
+  // Conflating the two would credit the approval to the wrong person or lose
+  // who recorded it, and both facts have to survive (ADR-055 §2).
+  readonly offSystemNominatedByUserId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
+
+// Whether this decision was recorded off system. Keyed on the date rather than
+// on the evidence path, because the date is the fact that makes the decision
+// off-system; the evidence is what backs it up.
+export const isOffSystemApproval = (approval: {
+  offSystemApprovedOn: string | null;
+}): boolean => approval.offSystemApprovedOn !== null;
 
 export interface NewApproval {
   sessionId: string;
@@ -102,4 +125,9 @@ export interface ApprovalUpdate {
   comment?: string | null;
   requestMessage?: string | null;
   recordSnapshot?: Record<string, unknown> | null;
+  // Written in the same patch as the decision they belong to, so a nomination
+  // that loses the pending race leaves no evidence columns behind (ADR-055 §1).
+  offSystemApprovedOn?: string | null;
+  offSystemEvidence?: OffSystemApprovalEvidence | null;
+  offSystemNominatedByUserId?: string | null;
 }

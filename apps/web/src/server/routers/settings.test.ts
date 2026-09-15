@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
-import type { AiConfig } from "@rbrasier/domain";
+import { sessionPolicyViolations, type AiConfig } from "@wayfinder/domain";
 import {
   documentGenerationConfigInputSchema,
   extractionConfigInputSchema,
   mergeApiKeys,
 } from "./settings";
+import {
+  UNAVAILABLE_LOCAL_EMBEDDINGS_REASON,
+  embeddingsProviderOptions,
+  embeddingsProviderUnavailableReason,
+} from "./settings-embeddings";
 
 const stored: AiConfig["apiKeys"] = {
   anthropic: "sk-stored-anthropic",
@@ -174,7 +179,7 @@ describe("settings router — extractionConfigInputSchema", () => {
   });
 });
 
-import { mergeAuthConfig } from "./settings-auth";
+import { mergeAuthConfig, sessionPolicyInputSchema } from "./settings-auth";
 
 const storedAuth = {
   emailPasswordEnabled: true,
@@ -182,6 +187,12 @@ const storedAuth = {
   entra: { tenantId: "stored-tenant", clientId: "stored-client", clientSecret: "stored-secret" },
   pkiEnabled: true,
   pki: { sessionTtlHours: 12 },
+  sessionPolicy: {
+    idleTimeoutMinutes: 30,
+    absoluteTimeoutMinutes: 480,
+    concurrentSessionLimit: 3,
+    evictionStrategy: "evict_oldest" as const,
+  },
 };
 
 describe("settings router — mergeAuthConfig", () => {
@@ -370,5 +381,111 @@ describe("settings router — directoryConfigInputSchema", () => {
 
     expect(parsed).not.toHaveProperty("baseUrl");
     expect(parsed).not.toHaveProperty("authority");
+  });
+});
+
+describe("settings router — session policy", () => {
+  // The auth card and the session-policy card share one stored row, so saving
+  // either must leave the other's fields exactly as they were.
+  it("carries the stored session policy through an auth-methods save", () => {
+    const merged = mergeAuthConfig(
+      {
+        emailPasswordEnabled: true,
+        entraEnabled: false,
+        entra: { tenantId: "t", clientId: "c" },
+      },
+      storedAuth,
+    );
+
+    expect(merged.sessionPolicy).toEqual(storedAuth.sessionPolicy);
+  });
+
+  it("accepts a policy with everything switched off", () => {
+    const parsed = sessionPolicyInputSchema.safeParse({
+      idleTimeoutMinutes: 0,
+      absoluteTimeoutMinutes: 0,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
+  it("rejects a negative timeout, a fractional one and an unknown strategy", () => {
+    const negative = sessionPolicyInputSchema.safeParse({
+      idleTimeoutMinutes: -1,
+      absoluteTimeoutMinutes: 0,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    });
+    const fractional = sessionPolicyInputSchema.safeParse({
+      idleTimeoutMinutes: 1.5,
+      absoluteTimeoutMinutes: 0,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    });
+    const unknownStrategy = sessionPolicyInputSchema.safeParse({
+      idleTimeoutMinutes: 0,
+      absoluteTimeoutMinutes: 0,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "delete_everything",
+    });
+
+    expect(negative.success).toBe(false);
+    expect(fractional.success).toBe(false);
+    expect(unknownStrategy.success).toBe(false);
+  });
+
+  // The schema cannot express this one: it is a relationship between two fields,
+  // and it is what stops a policy that expires sessions before they can idle.
+  it("leaves absolute-below-idle to the domain guard the router calls", () => {
+    const parsed = sessionPolicyInputSchema.parse({
+      idleTimeoutMinutes: 120,
+      absoluteTimeoutMinutes: 60,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    });
+
+    expect(sessionPolicyViolations(parsed)).toEqual([
+      "The absolute timeout must be at least as long as the idle timeout.",
+    ]);
+  });
+});
+
+describe("settings router — embeddings provider availability", () => {
+  it("offers both providers when the local runtime is present", () => {
+    const options = embeddingsProviderOptions(true);
+
+    expect(options).toEqual([
+      { provider: "local", available: true, unavailableReason: null },
+      { provider: "openai", available: true, unavailableReason: null },
+    ]);
+  });
+
+  it("marks local unavailable, with a reason, when the runtime was never packaged", () => {
+    const options = embeddingsProviderOptions(false);
+
+    expect(options).toContainEqual({
+      provider: "local",
+      available: false,
+      unavailableReason: UNAVAILABLE_LOCAL_EMBEDDINGS_REASON,
+    });
+  });
+
+  it("never marks a hosted provider unavailable on account of the local runtime", () => {
+    const options = embeddingsProviderOptions(false);
+
+    expect(options).toContainEqual({ provider: "openai", available: true, unavailableReason: null });
+  });
+
+  it("gives no reason to reject a provider that can be loaded", () => {
+    expect(embeddingsProviderUnavailableReason("local", true)).toBeNull();
+    expect(embeddingsProviderUnavailableReason("openai", false)).toBeNull();
+  });
+
+  it("gives a reason to reject local when the runtime is absent", () => {
+    expect(embeddingsProviderUnavailableReason("local", false)).toBe(
+      UNAVAILABLE_LOCAL_EMBEDDINGS_REASON,
+    );
   });
 });

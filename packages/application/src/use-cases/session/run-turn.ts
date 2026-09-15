@@ -11,7 +11,7 @@ import {
   type Session,
   type SessionMessage,
   type TransactionalRepositories,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";
 

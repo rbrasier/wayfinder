@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SessionStatus } from "@rbrasier/domain";
+import type { SessionStatus } from "@wayfinder/domain";
 import {
   RECENT_CHATS_LIMIT,
   formatRecentChatMeta,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getContainer } from "@/lib/container";
-import { schema } from "@rbrasier/adapters";
+import { schema } from "@wayfinder/adapters";
 
 // This endpoint only exists when TEST_AUTH_BYPASS=true.
 // It creates a real DB session for the given email and returns the token
@@ -11,7 +11,7 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const body = (await req.json()) as { email?: string };
+  const body = (await req.json()) as { email?: string; tour?: "pending" | "completed" };
   const email = body.email?.trim();
 
   if (!email) {
@@ -33,6 +33,15 @@ export async function POST(req: Request): Promise<Response> {
       return NextResponse.json({ error: "Failed to create test user." }, { status: 500 });
     }
     user = createResult.data;
+  }
+
+  // The shared e2e session must never meet the first-login welcome tour, which
+  // would sit over every other spec; only the tour's own spec asks for it.
+  const tourResult = await repos.users.update(user.id, {
+    welcomeTourCompletedAt: body.tour === "pending" ? null : new Date(),
+  });
+  if ("error" in tourResult) {
+    return NextResponse.json({ error: "Failed to set the welcome tour state." }, { status: 500 });
   }
 
   const token = randomBytes(32).toString("hex");

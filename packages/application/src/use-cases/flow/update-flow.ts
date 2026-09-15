@@ -6,7 +6,7 @@ import {
   type FlowUpdate,
   type IFlowRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface UpdateFlowCaller {
   canPublishToEveryone: boolean;

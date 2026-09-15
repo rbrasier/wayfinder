@@ -72,7 +72,7 @@ export interface ConfidenceProgression {
 }
 
 export interface ModelRef {
-  provider: ProviderName;       // from @rbrasier/domain language-model port
+  provider: ProviderName;       // from @wayfinder/domain language-model port
   model: string;                // must be a member of the allow-list (ADR-015)
 }
 

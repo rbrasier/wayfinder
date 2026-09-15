@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   FlowEdge,
   FlowNode,
@@ -9,7 +9,7 @@ import type {
   ISessionStepOutputRepository,
   PendingExecutions,
   Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ApplyAutoNodeResult } from "./apply-auto-node-result";
 
 const makeSession = (pendingExecutions: PendingExecutions): Session => ({
@@ -133,6 +133,53 @@ describe("ApplyAutoNodeResult", () => {
     const advanceUpdate = updates.find((patch) => "currentNodeId" in patch);
     expect(advanceUpdate?.currentNodeId).toBe("node-2");
     expect((advanceUpdate?.pendingExecutions as PendingExecutions)["corr-1"]).toBeUndefined();
+  });
+
+  it("trims a value by default, as the ordinary coercion always has", async () => {
+    const session = makeSession(pending());
+    const { repo: sessions } = makeSessions(session);
+    const stepOutputs = makeStepOutputs();
+
+    await new ApplyAutoNodeResult(
+      sessions,
+      makeNodes(),
+      makeEdges([edge("node-1", "node-2")]),
+      stepOutputs,
+    ).execute({
+      sessionId: "sess-1",
+      correlationId: "corr-1",
+      nodeId: "node-1",
+      status: "completed",
+      data: { vendor: "  Acme \n" },
+    });
+
+    const persisted = (stepOutputs.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(persisted.fields[0].value).toBe("Acme");
+  });
+
+  it("preserves the received bytes when the step ran a verbatim-only connection", async () => {
+    const session = makeSession(pending());
+    const { repo: sessions } = makeSessions(session);
+    const stepOutputs = makeStepOutputs();
+
+    await new ApplyAutoNodeResult(
+      sessions,
+      makeNodes(),
+      makeEdges([edge("node-1", "node-2")]),
+      stepOutputs,
+    ).execute({
+      sessionId: "sess-1",
+      correlationId: "corr-1",
+      nodeId: "node-1",
+      status: "completed",
+      data: { vendor: "  Acme \n" },
+      verbatim: true,
+    });
+
+    // Trimming is a transformation, and this connection was marked as one
+    // Wayfinder does not transform.
+    const persisted = (stepOutputs.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(persisted.fields[0].value).toBe("  Acme \n");
   });
 
   it("completes the session when the auto node has no outgoing edge", async () => {

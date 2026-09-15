@@ -5,7 +5,7 @@ import {
   type ISessionParticipantRepository,
   type SessionParticipant,
   type SessionParticipantRole,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { RevokeSessionParticipant } from "./revoke-session-participant";
 
 class FakeParticipants implements ISessionParticipantRepository {

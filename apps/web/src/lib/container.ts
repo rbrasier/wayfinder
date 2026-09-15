@@ -23,6 +23,7 @@ import {
   DeleteFlowEdge,
   DeleteFlowNode,
   DeleteUser,
+  ResetUserPassword,
   EvaluateStepReadiness,
   CreateBudget,
   UpdateBudget,
@@ -38,7 +39,7 @@ import {
   GetFlowCanvas,
   GetFlowDeepDive,
   GetFlowVersion,
-  GetOverviewDashboard,
+  GetValueDashboard,
   GetSession,
   GetSessionForTurn,
   GetUsageSummary,
@@ -67,8 +68,10 @@ import {
   NotifyOnFlowShared,
   NotifyOnSessionComplete,
   ConfirmStepAdvance,
+  RecordManualEstimate,
   NotifyOnStepComplete,
   OverrideBranch,
+  RewindToFork,
   PublishFlowVersion,
   RestoreFlowVersion,
   SyncFlowDraft,
@@ -98,6 +101,7 @@ import {
   ScheduleNodeEvent,
   SendMessage,
   SetFeatureFlagRoles,
+  SetWelcomeTourCompleted,
   StartSession,
   TrackUsage,
   UpdateErrorStatus,
@@ -107,7 +111,7 @@ import {
   UpdateRolePermissions,
   UpdateUser,
   UpsertFeatureFlag,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import { buildApprovalNotifiers } from "./container-approval-notifiers";
 import { buildFlowTestUseCases } from "./container-flow-test-use-cases";
 import { buildApprovalUseCases } from "./container-approval-use-cases";
@@ -183,8 +187,6 @@ import {
   SystemClock,
   sha256Hex,
   TtlCache,
-  createAuth,
-  createCachedSessionResolver,
   createDatabase,
   createNodeExecutors,
   createPostgresSessionEventBus,
@@ -194,11 +196,12 @@ import {
   withQuotaEnforcement,
   withUsageTracking,
   type AuthMethod,
-  type ResolvedSession,
-} from "@rbrasier/adapters";
-import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
+} from "@wayfinder/adapters";
+import type { FlowVersion } from "@wayfinder/domain";
+import { buildFlowMemory, retentionEnvFallback } from "./container-flow-memory";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildFlowPortability } from "./container-flow-portability";
+import { buildSessionAuth } from "./container-session-auth";
 import { buildExtractionModule } from "./container-extraction";
 import { buildLookupSources } from "./container-lookup-sources";
 import { buildPeopleDirectory } from "./container-people-directory";
@@ -207,6 +210,7 @@ import { buildSmtpEnvConfig } from "./container-smtp";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 import {
   resolveAuthMethod,
+  buildAuthRuntime,
   resolvePkiEnv,
   warnOnLegacyAuthMethodContradiction,
   warnOnRejectedProxyEntries,
@@ -227,18 +231,13 @@ const build = () => {
   const db = createDatabase(env.DATABASE_URL, env.DATABASE_POOL_MAX);
   const logger = new PinoLogger(env.NODE_ENV !== "production");
 
-  // Short-TTL caches in front of the two hottest auth lookups (session +
-  // permission resolution). Single-instance correct; promote to a shared store
-  // when running multiple instances. See the scaling-new-infrastructure phase doc.
-  const sessionCache = new TtlCache<ResolvedSession>({
-    ttlMs: env.AUTH_CACHE_TTL_MS,
-    maxEntries: env.AUTH_CACHE_MAX_ENTRIES,
-  });
-  const permissionCache = new TtlCache<Set<PermissionKey>>({
-    ttlMs: env.AUTH_CACHE_TTL_MS,
-    maxEntries: env.AUTH_CACHE_MAX_ENTRIES,
-  });
-  const resolveCachedSession = createCachedSessionResolver(db, sessionCache);
+  const { permissionCache, sessionRevocations, resolveCachedSession, revokeSessionsForUser } =
+    buildSessionAuth({
+      db,
+      cacheTtlMs: env.AUTH_CACHE_TTL_MS,
+      cacheMaxEntries: env.AUTH_CACHE_MAX_ENTRIES,
+      getAuthConfig: () => runtimeConfig.getAuthConfig(),
+    });
 
   const users = new DrizzleUserRepository(db);
   const conversations = new DrizzleConversationRepository(db);
@@ -505,6 +504,8 @@ const build = () => {
   const documentChunks = new DrizzleDocumentChunksRepository(db);
   const chunkCuration = new DrizzleChunkCurationRepository(db);
   const answerFeedback = new DrizzleAnswerFeedbackRepository(db);
+  // Flow memory and the retention settings governing its evidence (ADR-057).
+  const flowMemory = buildFlowMemory({ db, flows, analytics: analyticsRepo, answerFeedback, auditLogger, systemSettings });
   const hybridRetriever = new DrizzleHybridRetriever(db);
   const embeddings = createEmbeddingsProvider(() => runtimeConfig.getEmbeddingsConfig(), {
     openaiApiKey: env.OPENAI_API_KEY ?? null,
@@ -547,34 +548,20 @@ const build = () => {
     users,
     { trustedProxyIps: pkiEnv.trustedProxyIps },
     runtimeConfig,
+    sessionRevocations,
   );
 
-  // The Better Auth instance reflects the runtime auth config, so it is built
-  // lazily and rebuilt whenever the config is invalidated (ADR-025). The auth
-  // route resolves the current instance per request — a settings change applies
-  // on the next request with no process restart.
-  let authInstance: ReturnType<typeof createAuth> | null = null;
-  let builtAuthVersion = -1;
-
-  const buildAuth = async () => {
-    const authConfig = await runtimeConfig.getAuthConfig();
-    return createAuth(db, {
-      secret: env.BETTER_AUTH_SECRET,
-      baseURL: env.BETTER_AUTH_URL,
-      adminSeedEmail: env.ADMIN_SEED_EMAIL,
-      authMethod,
-      authConfig,
-      entraAuthority: env.ENTRA_AUTHORITY,
-    });
-  };
-
-  const getAuth = async () => {
-    const version = runtimeConfig.getAuthVersion();
-    if (authInstance && builtAuthVersion === version) return authInstance;
-    authInstance = await buildAuth();
-    builtAuthVersion = version;
-    return authInstance;
-  };
+  const { getAuth, passwordResetter, sendPasswordResetEmail } = buildAuthRuntime({
+    db,
+    runtimeConfig,
+    emailSender,
+    authMethod,
+    secret: env.BETTER_AUTH_SECRET,
+    baseURL: env.BETTER_AUTH_URL,
+    adminSeedEmail: env.ADMIN_SEED_EMAIL,
+    entraAuthority: env.ENTRA_AUTHORITY,
+    sessionRevocations,
+  });
 
   const getEffectivePermissions = new GetEffectivePermissions(roles, userRoles);
   const resolveEffectivePermissions = createCachedPermissionResolver(
@@ -629,6 +616,7 @@ const build = () => {
     embeddings,
     documentChunks,
     sha256Hex,
+    clock,
     updateDocumentFields: documentUseCases.updateDocumentFields,
     notifyOnApprovalRequested,
     notifyOnApprovalDecided,
@@ -644,9 +632,11 @@ const build = () => {
     logger,
     objectStorage,
     runtimeConfig,
+    retentionEnvFallback: retentionEnvFallback(),
     adminSettings,
     connectivityTester,
     resolveSession: resolveCachedSession,
+    revokeUserSessions: revokeSessionsForUser,
     resolveEffectivePermissions,
     services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, valueSetProvider: lookupSources.valueSetProvider, ...skillsAndMcp.services },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, flowTestFixtures, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, lookupSources: lookupSources.repository, ...skillsAndMcp.repos },
@@ -655,7 +645,10 @@ const build = () => {
       evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
+      setWelcomeTourCompleted: new SetWelcomeTourCompleted(users),
       deleteUser: new DeleteUser(users),
+      resetUserPassword: new ResetUserPassword(users, passwordResetter, auditLogger),
+      sendPasswordResetEmail,
       listUsers: new ListUsers(users),
       logError: new LogError(errorLogger),
       listErrors: new ListErrors(errorLogs),
@@ -737,7 +730,8 @@ const build = () => {
       // Leaner turn-scoped variant of getSession: the tail of the transcript
       // plus a SQL-side aggregation of gathered context, so the streaming route
       // stops loading the whole history on every turn (scaling wall #1).
-      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions, flowMemory.repos.flowLessons),
+      ...flowMemory.useCases,
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
@@ -745,7 +739,7 @@ const build = () => {
       // resolution), heartbeat, release — so the stream route stops reaching
       // into the session/user repos directly for the lease.
       turnLease: new TurnLease(sessions, users),
-      publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
+      publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger, skillsAndMcp.repos.mcpServers),
       ...buildFlowPortability({ flows, flowNodes, flowEdges, objectStorage, auditLogger, skillsAndMcp }),
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),
@@ -760,8 +754,10 @@ const build = () => {
       notifyOnFlowShared,
       listScheduleRuns: new ListScheduleRuns(scheduleRuns),
       overrideBranch: new OverrideBranch(sessions, flowEdges),
+      rewindToFork: new RewindToFork(sessions, sessionMessages),
       confirmStepAdvance: new ConfirmStepAdvance(sessions, flowEdges, flowVersions, notifyOnStepComplete),
-      getOverviewDashboard: new GetOverviewDashboard(analyticsRepo),
+      getValueDashboard: new GetValueDashboard(analyticsRepo, usageRepo),
+      recordManualEstimate: new RecordManualEstimate(sessions),
       getGovernanceDashboard: new GetGovernanceDashboard(usageRepo, budgets, users, flows),
       createBudget: new CreateBudget(budgets),
       updateBudget: new UpdateBudget(budgets),

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   type IUnitOfWork,
   type NewApproval,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { WithdrawApproval } from "./withdraw-approval";
 import { FakeUnitOfWork, InMemoryApprovals, InMemoryFlowNodes, InMemoryMessages, InMemorySessions, InMemoryStepOutputs, InMemoryUsers, RecordingAuditLogger, RecordingWithdrawnNotifier, approvalNode, session, unitOfWorkFor, user } from "./__fixtures__/approval-doubles";
 

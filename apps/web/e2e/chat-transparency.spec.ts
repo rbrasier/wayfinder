@@ -28,7 +28,11 @@ test.describe('Chat: AI transparency modal', () => {
     const { sessionId } = requireSeedFixtures();
 
     await page.goto(`/chats/${sessionId}`);
-    await page.waitForLoadState('networkidle');
+    // A session page holds an open SSE stream, so the network is never idle and
+    // waitForLoadState('networkidle') can only burn the timeout (see
+    // docs/development/e2e-triage-handover.md §4). Wait for the composer, which is
+    // what "the session page is ready" actually means.
+    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
     let infoButton = page.getByRole('button', { name: /show ai reasoning/i }).first();
 

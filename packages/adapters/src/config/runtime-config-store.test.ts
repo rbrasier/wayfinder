@@ -2,21 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
+  DEFAULT_SESSION_POLICY,
   DIRECTORY_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   SITE_BANNER_MAX_TEXT_SIZE_PT,
+  createDefaultChatDisclaimerConfig,
   createDefaultDirectoryConfig,
   createDefaultSiteBannerConfig,
   type AiConfig,
   type ISystemSettingsRepository,
   type ProviderName,
   type StorageConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
-} from "@rbrasier/shared";
-import { DOCUMENT_GENERATION_CONFIG_SETTING_KEY } from "@rbrasier/domain";
+} from "@wayfinder/shared";
+import { DOCUMENT_GENERATION_CONFIG_SETTING_KEY } from "@wayfinder/domain";
 import {
   DEFAULT_DOCUMENT_GENERATION_CONFIG,
   DEFAULT_MODELS_FOR,
@@ -333,6 +335,70 @@ describe("RuntimeConfigStore.getSiteBannerConfig", () => {
   });
 });
 
+describe("RuntimeConfigStore.getChatDisclaimerConfig", () => {
+  it("returns the modal-off default when no value is stored", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getChatDisclaimerConfig();
+
+    expect(config).toEqual(createDefaultChatDisclaimerConfig());
+  });
+
+  it("parses a stored configuration", async () => {
+    const stored = JSON.stringify({
+      composerText: "Check every answer.",
+      modalMode: "every_session",
+      modalText: "Verify all output before relying on it.",
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getChatDisclaimerConfig();
+
+    expect(config).toEqual({
+      composerText: "Check every answer.",
+      modalMode: "every_session",
+      modalText: "Verify all output before relying on it.",
+    });
+  });
+
+  it("falls back to the off mode for an unrecognised stored mode", async () => {
+    const store = new RuntimeConfigStore(makeRepo(JSON.stringify({ modalMode: "always" })), makeEnv());
+
+    const config = await store.getChatDisclaimerConfig();
+
+    expect(config.modalMode).toBe("off");
+  });
+
+  it("falls back to defaults for an unparseable row", async () => {
+    const store = new RuntimeConfigStore(makeRepo("{ not json"), makeEnv());
+
+    const config = await store.getChatDisclaimerConfig();
+
+    expect(config).toEqual(createDefaultChatDisclaimerConfig());
+  });
+
+  it("re-reads after invalidateChatDisclaimer", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getChatDisclaimerConfig();
+    store.invalidateChatDisclaimer();
+    await store.getChatDisclaimerConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("caches the config so repeated reads do not hit the repository", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getChatDisclaimerConfig();
+    await store.getChatDisclaimerConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("RuntimeConfigStore — embeddings config", () => {
   it("falls back to the env default provider + its default model when nothing is stored", async () => {
     const store = new RuntimeConfigStore(makeRepo(null), makeEnv({ embeddingsProvider: "local" }));
@@ -477,6 +543,77 @@ describe("RuntimeConfigStore — getAuthConfig", () => {
 
     expect(redacted.pkiEnabled).toBe(true);
     expect(redacted.pki).toEqual({ sessionTtlHours: 12 });
+  });
+});
+
+describe("RuntimeConfigStore — session policy", () => {
+  it("defaults to a policy that enforces nothing when no value is stored", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    expect(config.sessionPolicy).toEqual({
+      idleTimeoutMinutes: 0,
+      absoluteTimeoutMinutes: 0,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    });
+  });
+
+  // Every auth_config row written before this phase lacks the key entirely.
+  // Reading one must not produce an undefined policy on the hot path.
+  it("default-fills the policy for a row written before the field existed", async () => {
+    const stored = JSON.stringify({ emailPasswordEnabled: true, entraEnabled: false });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    expect(config.sessionPolicy).toEqual(DEFAULT_SESSION_POLICY);
+  });
+
+  it("reads a stored policy back", async () => {
+    const stored = JSON.stringify({
+      emailPasswordEnabled: true,
+      sessionPolicy: {
+        idleTimeoutMinutes: 30,
+        absoluteTimeoutMinutes: 480,
+        concurrentSessionLimit: 3,
+        evictionStrategy: "refuse",
+      },
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    expect(config.sessionPolicy).toEqual({
+      idleTimeoutMinutes: 30,
+      absoluteTimeoutMinutes: 480,
+      concurrentSessionLimit: 3,
+      evictionStrategy: "refuse",
+    });
+  });
+
+  it("falls back field by field when the stored policy is malformed", async () => {
+    const stored = JSON.stringify({
+      sessionPolicy: {
+        idleTimeoutMinutes: "thirty",
+        absoluteTimeoutMinutes: 480,
+        concurrentSessionLimit: -1,
+        evictionStrategy: "delete_everything",
+      },
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getAuthConfig();
+
+    // A hand-edited or half-migrated row must not switch enforcement on in a
+    // shape nothing else understands.
+    expect(config.sessionPolicy).toEqual({
+      idleTimeoutMinutes: 0,
+      absoluteTimeoutMinutes: 480,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    });
   });
 });
 

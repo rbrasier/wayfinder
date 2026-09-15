@@ -7,7 +7,7 @@ import {
   type Result,
   type RestoreVersion,
   type UpsertDraftVersion,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { TtlCache } from "../cache/ttl-cache";
 
 // A published flow version is a frozen snapshot (ADR-015): once created, neither

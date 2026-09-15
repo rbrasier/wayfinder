@@ -1,4 +1,4 @@
-import { FLOW_ARCHIVE_LIMITS } from "@rbrasier/domain";
+import { FLOW_ARCHIVE_LIMITS } from "@wayfinder/domain";
 import { NextResponse, type NextRequest } from "next/server";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";

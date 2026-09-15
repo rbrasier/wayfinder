@@ -64,13 +64,13 @@ export default tseslint.config(
           selector:
             "BinaryExpression[operator=/^[!=]==$/][left.property.name='status'][right.value=/^(approved|approved_with_edits|rejected|changes_requested)$/]",
           message:
-            "Do not compare an approval status to a literal — an `approved_with_edits` approval did approve. Use isApproved(status) from @rbrasier/domain.",
+            "Do not compare an approval status to a literal — an `approved_with_edits` approval did approve. Use isApproved(status) from @wayfinder/domain.",
         },
         {
           selector:
             "BinaryExpression[operator=/^[!=]==$/][right.property.name='status'][left.value=/^(approved|approved_with_edits|rejected|changes_requested)$/]",
           message:
-            "Do not compare an approval status to a literal — an `approved_with_edits` approval did approve. Use isApproved(status) from @rbrasier/domain.",
+            "Do not compare an approval status to a literal — an `approved_with_edits` approval did approve. Use isApproved(status) from @wayfinder/domain.",
         },
       ],
     },
@@ -88,8 +88,8 @@ export default tseslint.config(
           patterns: [
             {
               group: [
-                "@rbrasier/adapters",
-                "@rbrasier/adapters/*",
+                "@wayfinder/adapters",
+                "@wayfinder/adapters/*",
                 "drizzle-orm",
                 "drizzle-orm/*",
                 "ai",
@@ -101,7 +101,7 @@ export default tseslint.config(
                 "express",
               ],
               message:
-                "packages/application may only import @rbrasier/domain and @rbrasier/shared.",
+                "packages/application may only import @wayfinder/domain and @wayfinder/shared.",
             },
           ],
         },

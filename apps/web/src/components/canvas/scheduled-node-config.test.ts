@@ -93,6 +93,7 @@ describe("scheduledConfigFromValues", () => {
     approvalSubjectNodeId: "",
     approvalSubjectInstruction: "",
     signatureFieldKey: "",
+  allowOffSystemApproval: true,
     changesRequestedTargetNodeId: "",
     notifyOnComplete: true,
   };

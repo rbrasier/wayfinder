@@ -9,7 +9,7 @@ import {
   type Result,
   type User,
   type UserUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CreateOrganisation } from "./create-organisation";
 import { DeleteOrganisation } from "./delete-organisation";
 import { AssignUserOrganisation } from "./assign-user-organisation";
@@ -95,6 +95,7 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   organisationId: null,
   emailVerified: true,
   isAdmin: false,
+  welcomeTourCompletedAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,

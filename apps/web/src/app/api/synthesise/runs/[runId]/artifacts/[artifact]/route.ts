@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { loadExtractionSchemaForVersion } from "@rbrasier/application";
-import type { ExtractionSchema } from "@rbrasier/domain";
+import { loadExtractionSchemaForVersion } from "@wayfinder/application";
+import type { ExtractionSchema } from "@wayfinder/domain";
 import { getContainer } from "@/lib/container";
 import { authoriseRunAccess } from "@/lib/extraction-artifact-access";
 
@@ -8,6 +8,7 @@ const MIME: Record<string, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   json: "application/json",
+  csv: "text/csv",
   md: "text/markdown",
 };
 
@@ -37,6 +38,9 @@ const resolveArtifact = async (
   }
   if (artifact === "export-json") {
     return { key: `${base}/exports/results.json`, mime: MIME.json!, filename: `run-${shortId}-results.json` };
+  }
+  if (artifact === "export-csv") {
+    return { key: `${base}/exports/results.csv`, mime: MIME.csv!, filename: `run-${shortId}-results.csv` };
   }
   if (artifact === "summary") {
     return { key: `${base}/outputs/summary.md`, mime: MIME.md!, filename: `run-${shortId}-summary.md` };

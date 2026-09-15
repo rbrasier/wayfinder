@@ -15,7 +15,7 @@ Ask via `AskUserQuestion` before proceeding:
 
 1. Which operation?
    - **Cut the next release line** — freeze `main` into a new `release/*` branch
-   - **Tag a build** — publish a `vX.Y.Z` tag on the current release branch
+   - **Tag & publish a build** — hands off to `/publish` (tag, Release, image)
    - **Forward-merge** — merge the current release branch's fixes into `main`
 
 If the answer is **Cut the next release line**, ask a second question in the
@@ -92,6 +92,21 @@ On a working branch off `main` (`release-prep/<next line>`):
 - Run `./validate.sh` (the version-sync check must pass)
 - Commit (`chore: open the <next line> line`), push, and open a PR against
   `main` via `mcp__github__create_pull_request`
+- **Write the PR body into
+  [`.github/pull_request_template.md`](../../.github/pull_request_template.md)**
+  — the same four sections every other PR uses. A line cut has no product
+  change, so most of them carry a reason line rather than content:
+  - `## Summary` — which line is being frozen, which branch now carries it,
+    and the new `Next release line` value
+  - `## Impact` → Features affected — "None — release-line bookkeeping".
+    Business rules changed — "None — no product code touched"
+  - `## UI Impact` — "None — no application change"
+  - `## Why this change is required` — why this line is being cut now: what
+    `main` has accumulated that warrants stabilising, and what the retiring
+    line is being closed to (critical fixes only)
+  - Implementation block — the pointer files updated (`CLAUDE.md`,
+    `AGENTS.md`, `CONTRIBUTING.md` §2, `README.md` Quickstart), the new docs
+    folder, the `versioning.md` history row, and whether `VERSION` moved
 
 ### Step 5 — Report
 
@@ -105,32 +120,16 @@ user wants a published artifact for the new line straight away.
 
 ---
 
-## Operation B — Tag a build
+## Operation B — Tag & publish a build
 
-1. `git checkout <current release branch> && git pull`
-2. Verify CI is green on the branch head — never tag a red build.
-3. Tag the exact version being shipped and push it:
+Tagging, releasing, and publishing a build all live in **`/publish`** now — it
+tags the current release branch, creates the GitHub Release with notes, drives
+the publish workflow, fills in the digest, and re-pins the deployment guides, in
+one re-runnable command. `/release` no longer does any of this inline: a registry
+failure part-way through `/release` would leave a release half-finished, with a
+pushed tag and no image and no obvious way back in.
 
-   ```bash
-   git tag v$(cat VERSION)
-   git push origin v$(cat VERSION)
-   ```
-
-4. Offer to create a GitHub Release for the tag, summarising changes since
-   the previous tag on the branch (`git log <previous-tag>..HEAD --oneline`).
-   Because the version no longer encodes the stage, title the release
-   `vX.Y.Z — <line>` (e.g. `v0.19.4 — alpha-2`).
-
-5. **Offer to publish the container image**, then hand off to **`/publish`**.
-
-   Pushing the tag starts `publish.yml` on its own, so this is usually a matter
-   of following the run rather than starting one — but ask, because a tag whose
-   image was never published is a release nobody can deploy.
-
-   Do **not** publish inline from this skill. A registry failure part-way
-   through `/release` would leave a release half-finished, with a pushed tag and
-   no image and no obvious way back in. `/publish` is separately re-runnable and
-   safe to retry, which is the whole reason it is its own skill.
+So for "tag a build", **hand off to `/publish`** and stop.
 
 ---
 
@@ -140,6 +139,11 @@ user wants a published artifact for the new line straight away.
 2. Resolve conflicts in favour of `main`'s shape while preserving what each
    fix *does* — the fix's regression tests must still pass.
 3. Run `./validate.sh` and fix all failures.
-4. Push `main` (or open a PR if `main` is protected and direct push fails).
+4. Push `main` (or open a PR if `main` is protected and direct push fails —
+   its body uses [`.github/pull_request_template.md`](../../.github/pull_request_template.md)
+   like any other, with `## Summary` naming the fixes being carried across,
+   `## Impact` and `## UI Impact` aggregating what those fixes changed on the
+   release line, and `## Why this change is required` stating that `main` must
+   not regress behind the release branch).
 5. Never merge in the other direction — `main` must not be merged into a
    release branch.

@@ -6,6 +6,7 @@ import { SetupWizard } from "@/components/onboarding/setup-wizard";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
 import { AboutLinksCard } from "@/components/settings/about-links-card";
 import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
+import { ChatDisclaimerCard } from "@/components/settings/chat-disclaimer-card";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
 import {
   ALL_CONNECTIVITY_TARGETS,
@@ -24,6 +25,7 @@ import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
 import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
+import { RetentionCard } from "@/components/settings/retention-card";
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
 import { SiteBannerCard } from "@/components/settings/site-banner-card";
 import { StorageCard } from "@/components/settings/storage-card";
@@ -99,6 +101,7 @@ export default function AppSettingsPage() {
 
             <CollapsibleSection title="Notifications" description="How and when Wayfinder notifies people.">
               <NotificationSettingsCard />
+              <ChatDisclaimerCard />
               <SiteBannerCard />
             </CollapsibleSection>
 
@@ -110,6 +113,7 @@ export default function AppSettingsPage() {
               <LookupSourcesCard />
               <EntraDirectoryCard connectivity={connectivity} />
               <SiemStreamingCard />
+              <RetentionCard />
             </CollapsibleSection>
           </div>
         </div>

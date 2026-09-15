@@ -27,7 +27,7 @@ import {
   type SessionMode,
   type SessionStepOutput,
   type StepOutputField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 const notUsed = <T>(): Promise<Result<T>> =>
   Promise.resolve(err(domainError("INFRA_FAILURE", "not used")));

@@ -9,7 +9,7 @@ import {
   type McpTool,
   type McpToolCallOutput,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { experimental_createMCPClient, type MCPTransport } from "ai";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 

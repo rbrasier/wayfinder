@@ -41,4 +41,6 @@ export * from "./drizzle-mcp-server-repository";
 export * from "./drizzle-budget-repository";
 export * from "./drizzle-extraction-run-repository";
 export * from "./drizzle-extraction-draft-repository";
+export * from "./drizzle-flow-observation-repository";
+export * from "./drizzle-flow-lesson-repository";
 export * from "./drizzle-lookup-source-repository";

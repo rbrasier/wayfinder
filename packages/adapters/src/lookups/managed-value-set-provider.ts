@@ -1,5 +1,5 @@
-import { findRecordCollections, ok } from "@rbrasier/domain";
-import type { ILookupSourceRepository, RecordCollection, Result } from "@rbrasier/domain";
+import { findRecordCollections, ok } from "@wayfinder/domain";
+import type { ILookupSourceRepository, RecordCollection, Result } from "@wayfinder/domain";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "./value-set-kind-adapter";
 
 // A managed source has no external schema to discover, so its two fields are

@@ -4,7 +4,7 @@ import {
   type ErrorLogGroup,
   type IErrorLogRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class ListErrors {
   constructor(private readonly repo: IErrorLogRepository) {}

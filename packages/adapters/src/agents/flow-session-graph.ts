@@ -1,5 +1,8 @@
 import {
+  APPROVAL_COMMENT_SLOT_MARKER,
+  SIGNATURE_SLOT_MARKER,
   buildFieldConstraintsText,
+  gatherableTemplateContent,
   nodeFieldSet,
   normaliseOutputType,
   ok,
@@ -8,11 +11,29 @@ import {
   type ISessionAgent,
   type PromptSessionUpload,
   type PromptUserProfile,
+  type ResolvedLesson,
   type ResolvedSkill,
   type Result,
   type RetrievedChunk,
   type TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
+
+// The reply is one field of a JSON object, and a model asked for JSON will
+// sometimes escape the escape — writing the two characters `\` and `n` where a
+// line break was meant, which then print on screen. The vocabulary is kept to
+// what the chat bubble renders well: headings collapse to a bold lead-in there,
+// so asking for one buys nothing, and tables and fences have no styling at all.
+const FORMATTING_BLOCK = `<formatting>
+  Write the "response" field as plain, readable text. The only formatting you may use is:
+  - Short paragraphs
+  - **bold** for a key term or label
+  - "- " at the start of a line for a bulleted list
+  - "1. " at the start of a line for a numbered list
+
+  Use nothing else — no headings, tables, code blocks, links, images or HTML.
+
+  Break a line by putting an actual line break in the string. Never write a line break out as characters: a reply containing \\n shows those characters to the user instead of starting a new line.
+</formatting>`;
 
 export class FlowSessionGraph implements ISessionAgent {
   buildSystemPrompt(input: BuildSystemPromptInput): Result<string> {
@@ -30,6 +51,11 @@ export class FlowSessionGraph implements ISessionAgent {
     // stable region of the prompt — above per-turn retrieved chunks — to preserve
     // prompt-cache hits. They steer behaviour; they do not replace <instructions>.
     const skillsBlock = buildSkillsBlock(input.resolvedSkills ?? []);
+    // Accepted flow-memory lessons (ADR-057 §5), resolved live rather than from
+    // the pinned snapshot (ADR-058). Sits beside <skills> in the cache-stable
+    // region, above every per-turn block, so accepting one costs a single cache
+    // miss rather than one on every turn forever (ADR-016).
+    const learnedGuidanceBlock = buildLearnedGuidanceBlock(input.acceptedLessons ?? []);
 
     // Attached documents are the user's own files for this request, injected in
     // full and independent of RAG, so a thin message ("here is the solution")
@@ -60,11 +86,24 @@ export class FlowSessionGraph implements ISessionAgent {
     // hits on everything above.
     const currentContextBlock = input.now ? buildCurrentContextBlock(input.now) : "";
 
-    const templateContent =
+    // The body is masked before it is interpolated, or the model reads the
+    // template's `(approval)` tags as more information to gather and asks the
+    // operator to supply a signature (ADR-043 §2).
+    const rawTemplateContent =
       nodeConfig.documentTemplateStructuredContent ?? nodeConfig.documentTemplateContent;
+    const templateContent = gatherableTemplateContent(rawTemplateContent);
     const templateBlock =
       outputType === "generate_document" && templateContent
         ? `\n\n  <document_template>\n    This step produces a document. Your goal is to gather all information needed to fully complete the following template:\n    ${templateContent}\n  </document_template>`
+        : "";
+
+    // Masking removes the tag but not the label the template puts in front of
+    // it, so the constraint says what the remaining marker means. Added only
+    // when a slot was actually masked — a template with no signature gets no
+    // instruction about signatures.
+    const signatureConstraint =
+      templateBlock && templateContent !== rawTemplateContent
+        ? `\n  - ${SIGNATURE_SLOT_MARKER} and ${APPROVAL_COMMENT_SLOT_MARKER} are recorded by an approval step later in the flow — never ask the user for either, never treat one as missing, and never report one as outstanding`
         : "";
 
     // The "all fields captured" sentinel is shared by template and structured
@@ -85,7 +124,7 @@ export class FlowSessionGraph implements ISessionAgent {
         ? buildFieldFormatsBlock(gatheredFields)
         : "";
 
-    const prompt = `${roleBlock}${globalInstructionsBlock}${skillsBlock}
+    const prompt = `${roleBlock}${globalInstructionsBlock}${skillsBlock}${learnedGuidanceBlock}
 
 <instructions>
   ${nodeConfig.aiInstruction}
@@ -102,8 +141,10 @@ export class FlowSessionGraph implements ISessionAgent {
   - Be plain-spoken — no jargon or technical terms
   - Do not discuss future steps
   - Do not re-ask for information already in gathered_context unless clarification would meaningfully improve the output
-  - If the user goes off-topic, gently redirect them back to this step
+  - If the user goes off-topic, gently redirect them back to this step${signatureConstraint}
 </constraints>${fieldFormatsBlock}
+
+${FORMATTING_BLOCK}
 
 <output>
   Respond only with valid JSON in this exact structure — no prose outside it:
@@ -151,6 +192,15 @@ First explain your reasoning, then give the chosen node id. Return only: { "rati
   }
 }
 
+// A narrative field inverts the default "capture what the user said": the model
+// writes the prose itself. Its brief is already in the constraints line, but
+// without this the model has no direction to *use* it in conversation — so it
+// asks for the bare field name and composes from a one-line answer.
+const buildNarrativeDirective = (templateFields: TemplateField[]): string => {
+  if (!templateFields.some((field) => field.type === "narrative")) return "";
+  return `\n  Some fields are narrative prose. Where one carries a brief, treat the brief as what the finished prose must cover: explain what it needs to cover in your own words, ask for whatever is still missing, and never read the brief out verbatim. When you have enough, compose the prose yourself rather than pasting back what the user said — they are giving you the material, not the wording.\n`;
+};
+
 const buildFieldFormatsBlock = (templateFields: TemplateField[]): string => {
   const indented = buildFieldConstraintsText(templateFields)
     .split("\n")
@@ -160,7 +210,7 @@ const buildFieldFormatsBlock = (templateFields: TemplateField[]): string => {
   This step captures fields with required formats. When the user gives you information for a field, silently reformat it into the required format yourself whenever you reasonably can — for example, turn "next Tuesday" or "3rd of June" into DD-MM-YYYY, or "twelve hundred dollars" into $1,200.00. Only ask the user to clarify when you genuinely cannot determine or format a value. For (options) fields, map what the user says to the closest listed value; if none clearly fits, ask them to choose.
 
   Dates are always day-first: in DD-MM-YYYY the first number is the day and the second is the month. This holds in both directions. Writing one out, "10 Aug 2026" becomes 10-08-2026, never 08-10-2026. Reading one that is already in that format, 10-08-2026 means 10 August 2026, never 8 October 2026. Keep the month the user named, and never swap a day and month to reach a date that looks more plausible.
-
+${buildNarrativeDirective(templateFields)}
 ${indented}
 </field_formats>`;
 };
@@ -189,6 +239,14 @@ const buildReferenceDocumentsBlock = (chunks: RetrievedChunk[]): string => {
   );
 
   return `\n\n<reference_documents>\n  The most relevant excerpts retrieved from documents attached to this workflow and any files the user has shared. Consult these when the user's question touches on policy or process. They are excerpts, not whole documents — if something needed is missing, ask the user rather than assuming.\n${entries.join("\n")}\n</reference_documents>`;
+};
+
+// Renders nothing at all for an empty list, so a flow with no memory produces a
+// byte-identical prompt to the one it produced before this feature existed.
+const buildLearnedGuidanceBlock = (lessons: ResolvedLesson[]): string => {
+  if (lessons.length === 0) return "";
+  const rendered = lessons.map((lesson) => `  - ${lesson.statement}`).join("\n");
+  return `\n\n<learned_guidance>\n  Guidance accepted by this workflow's owner, learned from how earlier sessions on it actually went. Follow it alongside the instructions below; it never overrides them.\n${rendered}\n</learned_guidance>`;
 };
 
 const buildSkillsBlock = (skills: ResolvedSkill[]): string => {

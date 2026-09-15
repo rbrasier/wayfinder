@@ -1,6 +1,6 @@
 "use client";
 
-import type { ApiPagingStyle } from "@rbrasier/adapters";
+import type { ApiPagingStyle } from "@wayfinder/adapters";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 

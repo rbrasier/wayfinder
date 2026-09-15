@@ -1,4 +1,4 @@
-import type { IScheduleRunRepository, Result, ScheduleRunView } from "@rbrasier/domain";
+import type { IScheduleRunRepository, Result, ScheduleRunView } from "@wayfinder/domain";
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;

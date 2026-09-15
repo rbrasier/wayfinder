@@ -14,7 +14,7 @@ import {
   type IUsageRepository,
   type IUserRoleRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 const PERIODS: BudgetPeriod[] = ["daily", "weekly", "monthly"];
 

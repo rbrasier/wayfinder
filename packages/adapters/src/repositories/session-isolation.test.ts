@@ -135,6 +135,14 @@ describe("session isolation — DrizzleAnalyticsRepository", () => {
     await new DrizzleAnalyticsRepository(db).listAssistantMessages(range);
     expectExcludesTestSessions(clauses);
   });
+
+  // Arrived on the release line, where test mode does not exist, so it was
+  // written without the join the rest of this class carries.
+  it("excludes test sessions from listAllMessages", async () => {
+    const { db, clauses } = recorder();
+    await new DrizzleAnalyticsRepository(db).listAllMessages(range);
+    expectExcludesTestSessions(clauses);
+  });
 });
 
 describe("session isolation — DrizzleSessionStepOutputRepository", () => {

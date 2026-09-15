@@ -1,4 +1,4 @@
-import { domainError, err, type IOrganisationRepository, type Result } from "@rbrasier/domain";
+import { domainError, err, type IOrganisationRepository, type Result } from "@wayfinder/domain";
 
 export class DeleteOrganisation {
   constructor(private readonly organisations: IOrganisationRepository) {}

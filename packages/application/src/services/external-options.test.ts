@@ -7,7 +7,7 @@ import {
   type ValueSetEntry,
   type ValueSetListing,
   type ValueSetProbe,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { buildExternalOptionsPreview, inlineExternalOptions } from "./external-options";
 
 const field = (rawTag: string): TemplateField => {

@@ -10,7 +10,7 @@ import {
   type UsageFilter,
   type UsageGroupSummary,
   type UsageSummary,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, asc, eq, gte, lte, sum, count, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { ai_usage_events } from "../db/schema/ai";

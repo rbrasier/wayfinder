@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   IDocumentGenerator,
   IObjectStorage,
@@ -10,7 +10,7 @@ import type {
   SessionStepOutput,
   FlowNode,
   Flow,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { GenerateDocument } from "./generate-document";
 
 const makeMessage = (overrides: Partial<SessionMessage> = {}): SessionMessage => ({
@@ -658,6 +658,41 @@ describe("GenerateDocument", () => {
       .map((call) => call[0])
       .filter((call) => call.purpose === "documentGeneration");
     expect(extractionCalls).toHaveLength(0);
+  });
+});
+
+// Field extraction, grading and the summary all bill the requesting user's
+// budget. Passing no userId leaves the rows unattributed and skips the quota
+// check entirely, because QuotaEnforcer.check returns early without one
+// (ADR-026).
+describe("GenerateDocument — usage attribution", () => {
+  it("carries the requesting user, flow and session on every model call it makes", async () => {
+    const languageModel = makeLanguageModel();
+
+    const useCase = new GenerateDocument(
+      makeDocumentGenerator(),
+      makeObjectStorage(),
+      languageModel,
+      makeSessionMessages(),
+      makeStepOutputs(),
+    );
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage({ role: "user", content: "I need an RFT" }), makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+      userId: "user-1",
+    });
+
+    expect(result.error).toBeUndefined();
+
+    const calls = (languageModel.generateObject as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.length).toBeGreaterThan(1);
+    for (const [input] of calls) {
+      expect(input).toMatchObject({ userId: "user-1", flowId: "flow-1", sessionId: "sess-1" });
+    }
   });
 });
 

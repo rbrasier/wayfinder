@@ -5,7 +5,7 @@ import {
   type User,
   domainError,
   err,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class CreateUser {
   constructor(private readonly users: IUserRepository) {}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildApproverEditMessage } from "@rbrasier/domain";
+import { buildApproverEditMessage } from "@wayfinder/domain";
 import { parseApproverEditMessage } from "./approver-edit-message";
 
 describe("parseApproverEditMessage", () => {

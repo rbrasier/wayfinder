@@ -1,6 +1,6 @@
 "use client";
 
-import type { PriorStepField } from "@rbrasier/domain";
+import type { PriorStepField } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { groupPriorStepFields } from "./field-value-selector";
 import type { ScheduleModifier, ScheduleUnit } from "./scheduled-node-config";

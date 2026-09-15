@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { EnsureSetupToken } from "@rbrasier/application";
+import { EnsureSetupToken } from "@wayfinder/application";
 import {
   DrizzleAdminLookup,
   DrizzleSystemSettingsRepository,
@@ -7,13 +7,13 @@ import {
   SettingsEncryptionService,
   createDatabase,
   createSettingsEncryptionKey,
-} from "@rbrasier/adapters/bootstrap";
+} from "@wayfinder/adapters/bootstrap";
 import { serverEnv } from "./env";
 
 // Emits the first-run setup link (ADR-041 §5) while no administrator exists.
 //
 // Deliberately does not go through getContainer(), and imports the narrow
-// `@rbrasier/adapters/bootstrap` entry rather than the package barrel. Either
+// `@wayfinder/adapters/bootstrap` entry rather than the package barrel. Either
 // one would build the entire application graph — AI providers, the extraction
 // engine, the embeddings model — on the boot path, delaying the dev server's
 // first response and holding thousands of modules in memory from startup.

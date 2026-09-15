@@ -6,8 +6,8 @@ import {
   type McpToolCallRecord,
   type Session,
   type SessionMessage,
-} from "@rbrasier/domain";
-import { resolveModel } from "@rbrasier/adapters";
+} from "@wayfinder/domain";
+import { resolveModel } from "@wayfinder/adapters";
 import type { getContainer } from "@/lib/container";
 
 type Container = ReturnType<typeof getContainer>;
@@ -41,6 +41,9 @@ export async function dispatchMcpNode(input: DispatchMcpNodeInput): Promise<void
         nodeId: node.id,
         status: "completed",
         data: result.data.data,
+        // A verbatim-only connection's result must reach storage as the bytes it
+        // arrived as; the ordinary coercion would trim it (ADR-053 §5).
+        verbatim: result.data.verbatim,
       });
     }
 

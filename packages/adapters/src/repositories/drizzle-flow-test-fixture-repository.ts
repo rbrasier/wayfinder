@@ -8,7 +8,7 @@ import {
   type IFlowTestFixtureRepository,
   type NewFlowTestFixture,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_flow_test_fixtures } from "../db/schema/wayfinder";
 

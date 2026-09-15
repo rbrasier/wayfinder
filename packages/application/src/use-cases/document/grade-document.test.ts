@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
-import type { FlowContextDoc, ILanguageModel } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
+import type { FlowContextDoc, ILanguageModel } from "@wayfinder/domain";
 import { gradeDocumentFields } from "./grade-document";
 
 const usage = {

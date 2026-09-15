@@ -9,7 +9,7 @@ import {
   type RestoreVersion,
   type Result,
   type UpsertDraftVersion,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, desc, eq, max, notInArray } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_flow_edges, app_flow_nodes, app_flow_versions, app_flows } from "../db/schema/wayfinder";

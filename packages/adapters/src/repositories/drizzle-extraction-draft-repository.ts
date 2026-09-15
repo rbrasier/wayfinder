@@ -6,7 +6,7 @@ import {
   type IExtractionDraftDocumentRepository,
   type NewExtractionDraftDocument,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_extraction_draft_documents } from "../db/schema/wayfinder";

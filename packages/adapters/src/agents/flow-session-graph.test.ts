@@ -174,6 +174,40 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).not.toContain("<document_template>");
   });
 
+  it("tells the model to work a narrative field's brief with the user", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "structured" as const,
+        structuredFields: [
+          { key: "scope", label: "Scope", type: "narrative", instruction: "What is in scope and what is explicitly excluded", optional: false, raw: 'Scope (narrative: "What is in scope and what is explicitly excluded")' },
+        ],
+      },
+    });
+    expect(result.error).toBeUndefined();
+    // The brief itself, so the model can relay it, and the directive telling it
+    // to relay rather than to silently compose from whatever it already has.
+    expect(result.data).toContain("What is in scope and what is explicitly excluded");
+    expect(result.data).toContain("explain what it needs to cover");
+    expect(result.data).toContain("compose the prose yourself");
+  });
+
+  it("omits the narrative directive when no field is a narrative", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "structured" as const,
+        structuredFields: [
+          { key: "supplier", label: "Supplier", type: "text", optional: false, raw: "Supplier" },
+        ],
+      },
+    });
+    expect(result.data).toContain("<field_formats>");
+    expect(result.data).not.toContain("explain what it needs to cover");
+  });
+
   it("maps a legacy conversation_only step to no field formats", () => {
     const result = agent.buildSystemPrompt({
       ...baseInput,
@@ -290,6 +324,116 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("Procurement Brief");
   });
 
+  // The v0.27.0 fix filtered the *field set* and left the template *body*
+  // untouched, so the model read the signature tags straight out of
+  // <document_template> and asked the operator to supply them (ADR-043 §2).
+  // These assert on the whole prompt rather than one block: two prompt inputs
+  // have now leaked, and a guard scoped to the block that leaked last would not
+  // have caught this one.
+  it("never lets a signature slot reach the prompt through the template body", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent:
+          "Full Name: {{Full Name}}\nFirst Level Supervisor Approval: {{ First Level Supervisor Approval (approval) }}\nSecond Level Supervisor Approval: {{ Second Level Supervisor Approval (approval) }}",
+        documentTemplateFields: [
+          { key: "full_name", label: "Full Name", type: "text", optional: false, raw: "Full Name" },
+          {
+            key: "first_level_supervisor_approval",
+            label: "First Level Supervisor Approval",
+            type: "signature",
+            optional: true,
+            raw: "First Level Supervisor Approval (approval)",
+          },
+        ],
+      },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).not.toContain("(approval)");
+    expect(result.data).not.toContain("First Level Supervisor Approval");
+    expect(result.data).not.toContain("Second Level Supervisor Approval");
+    // The gatherable half of the same template must survive untouched.
+    expect(result.data).toContain("{{Full Name}}");
+  });
+
+  it("filters the summarised template body, which is preferred over the raw one", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent: "raw body",
+        documentTemplateStructuredContent:
+          "Name: {{Full Name}}\nSigned: {{ Delegate Signature (approval) }}",
+      },
+    });
+
+    expect(result.data).not.toContain("Delegate Signature");
+    expect(result.data).not.toContain("raw body");
+    expect(result.data).toContain("{{Full Name}}");
+  });
+
+  it("omits <document_template> entirely when a template declares nothing but signatures", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent: "{{ Annexe Signature (approval) }}",
+      },
+    });
+
+    expect(result.data).not.toContain("<document_template>");
+    expect(result.data).not.toContain("Annexe Signature");
+  });
+
+  it("explains the marker left on a line a signature shares with a gatherable field", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent:
+          "Executed on {{ Start Date (date) }} by {{ Delegate Signature (approval) }}",
+      },
+    });
+
+    expect(result.data).not.toContain("Delegate Signature");
+    expect(result.data).toContain("recorded by an approval step");
+  });
+
+  it("never lets an approval comment slot reach the prompt through the template body", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent:
+          "Full Name: {{ Full Name }}\nReason for decision: {{ Reason For Decision (approval-comment: Delegate Signature) }}",
+      },
+    });
+
+    expect(result.data).toContain("Full Name");
+    expect(result.data).not.toContain("Reason for decision");
+    expect(result.data).not.toContain("approval-comment");
+  });
+
+  it("adds no signature guidance to a template that declares none", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      nodeConfig: {
+        ...baseInput.nodeConfig,
+        outputType: "generate_document" as const,
+        documentTemplateContent: "Full Name: {{Full Name}}",
+      },
+    });
+
+    expect(result.data).not.toContain("recorded by an approval step");
+  });
+
   it("includes <output> section with JSON schema", () => {
     const result = agent.buildSystemPrompt(baseInput);
     expect(result.data).toContain("<output>");
@@ -359,6 +503,29 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("Office 365 licences");
     // It must read as the user's own attachment, not a generic reference excerpt.
     expect(result.data?.toLowerCase()).toContain("the user has attached");
+  });
+
+  it("states the formatting the reply may use and forbids a written-out newline escape", () => {
+    const result = agent.buildSystemPrompt(baseInput);
+    expect(result.error).toBeUndefined();
+    expect(result.data).toContain("<formatting>");
+    expect(result.data).toContain("**bold**");
+    // The bug this guards: the model writing the two characters \ and n into the
+    // JSON string instead of breaking the line.
+    expect(result.data).toContain("\\n");
+    expect(result.data).toContain("Never write a line break out as characters");
+  });
+
+  it("puts the formatting rules above the per-turn blocks so the cached prefix is unaffected", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      now: new Date("2026-07-27T09:30:00Z"),
+      retrievedChunks: [{ filename: "policy.pdf", chunkIndex: 0, chunkText: "Spend under $5,000." }],
+    });
+    const prompt = result.data as string;
+    expect(prompt.indexOf("<formatting>")).toBeGreaterThan(-1);
+    expect(prompt.indexOf("<formatting>")).toBeLessThan(prompt.indexOf("<reference_documents>"));
+    expect(prompt.indexOf("<formatting>")).toBeLessThan(prompt.indexOf("<current_context>"));
   });
 });
 
@@ -448,5 +615,73 @@ describe("FlowSessionGraph.buildBranchChoicePrompt", () => {
     expect(result.data).toContain("node-b");
     expect(result.data).toContain("Full review");
     expect(result.data).not.toContain("undefined");
+  });
+});
+
+// ── <learned_guidance> (ADR-057 §5, ADR-058 §4) ──────────────────────────────
+
+describe("FlowSessionGraph.buildSystemPrompt — learned guidance", () => {
+  const withLessons = (statements: string[]) =>
+    agent.buildSystemPrompt({
+      ...baseInput,
+      acceptedLessons: statements.map((statement) => ({ statement })),
+    });
+
+  it("renders nothing when no lessons are supplied", () => {
+    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<learned_guidance>");
+  });
+
+  it("produces a byte-identical prompt to one built with no lessons key at all", () => {
+    // A flow with no memory must cost nothing — not a stray newline, not a blank
+    // block. Asserted directly rather than by inspection.
+    const withoutKey = agent.buildSystemPrompt(baseInput).data;
+    const withEmptyList = agent.buildSystemPrompt({ ...baseInput, acceptedLessons: [] }).data;
+
+    expect(withEmptyList).toBe(withoutKey);
+  });
+
+  it("renders each accepted statement", () => {
+    const prompt = withLessons([
+      "Ask for the supplier's registered legal name.",
+      "Confirm the budget before generating.",
+    ]).data;
+
+    expect(prompt).toContain("<learned_guidance>");
+    expect(prompt).toContain("Ask for the supplier's registered legal name.");
+    expect(prompt).toContain("Confirm the budget before generating.");
+  });
+
+  it("places the block after <skills> and before <instructions>", () => {
+    const prompt = agent.buildSystemPrompt({
+      ...baseInput,
+      resolvedSkills: [{ name: "House style", body: "Write in British English." }],
+      acceptedLessons: [{ statement: "Ask for the registered legal name." }],
+    }).data!;
+
+    expect(prompt.indexOf("<skills>")).toBeLessThan(prompt.indexOf("<learned_guidance>"));
+    expect(prompt.indexOf("<learned_guidance>")).toBeLessThan(prompt.indexOf("<instructions>"));
+  });
+
+  it("places the block above every per-turn block, preserving the cache boundary", () => {
+    // ADR-016 puts retrieved chunks and attachments below the cache boundary
+    // precisely because they change every turn. A lesson set changes only when
+    // someone accepts one, so it belongs above.
+    const prompt = agent.buildSystemPrompt({
+      ...baseInput,
+      acceptedLessons: [{ statement: "Ask for the registered legal name." }],
+      sessionUploads: [{ filename: "brief.docx", extractedText: "A brief." }],
+      retrievedChunks: [
+        { content: "A policy excerpt.", documentName: "Policy", score: 0.9 },
+      ] as never,
+    }).data!;
+
+    expect(prompt.indexOf("<learned_guidance>")).toBeLessThan(prompt.indexOf("<attached_documents>"));
+    expect(prompt.indexOf("<learned_guidance>")).toBeLessThan(prompt.indexOf("<reference_documents>"));
+  });
+
+  it("states that guidance never overrides the author's instructions", () => {
+    expect(withLessons(["Ask for the registered legal name."]).data).toContain(
+      "never overrides them",
+    );
   });
 });

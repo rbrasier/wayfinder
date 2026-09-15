@@ -24,6 +24,9 @@ interface ChatActionsMenuProps {
   collaborateUrl: string;
   onRename: (title: string) => void;
   onClose: () => void;
+  // Opens the rewind picker. Absent when the chat has passed no fork, which is
+  // what hides the menu item rather than offering a dead end.
+  onGoBackToFork?: () => void;
   isReadOnly?: boolean;
 }
 
@@ -34,6 +37,7 @@ export function ChatActionsMenu({
   collaborateUrl,
   onRename,
   onClose,
+  onGoBackToFork,
   isReadOnly = false,
 }: ChatActionsMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -83,6 +87,11 @@ export function ChatActionsMenu({
     onClose();
   };
 
+  const handleGoBackToFork = () => {
+    setMenuOpen(false);
+    onGoBackToFork?.();
+  };
+
   const handleShowData = () => {
     setMenuOpen(false);
     setShowDataOpen(true);
@@ -102,7 +111,7 @@ export function ChatActionsMenu({
         </Button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-[9px] border border-[#e7e3db] bg-white py-1 shadow-md">
+          <div className="absolute right-0 top-full z-50 mt-1 w-48 rounded-[9px] border border-[#e7e3db] bg-white py-1 shadow-md">
             {!isReadOnly && (
               <button
                 type="button"
@@ -110,6 +119,15 @@ export function ChatActionsMenu({
                 onClick={handleRenameOpen}
               >
                 Rename
+              </button>
+            )}
+            {!isReadOnly && onGoBackToFork && (
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-[13px] text-[#1c1b19] hover:bg-[#f5f3ee]"
+                onClick={handleGoBackToFork}
+              >
+                Go back to a fork
               </button>
             )}
             {!isReadOnly && (

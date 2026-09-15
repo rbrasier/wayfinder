@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { NewLookupSource } from "@rbrasier/domain";
+import type { NewLookupSource } from "@wayfinder/domain";
 import {
   toCachedValueSet,
   toEntryRows,

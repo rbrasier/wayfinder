@@ -2,8 +2,8 @@ import {
   type FlowContextDoc,
   type ILanguageModel,
   type Result,
-} from "@rbrasier/domain";
-import { preGenerationEvaluationSchema, type PreGenerationEvaluationData } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { preGenerationEvaluationSchema, type PreGenerationEvaluationData } from "@wayfinder/shared";
 import { buildContextDocsSection } from "./structured-fields";
 
 export interface GradeDocumentFieldsInput {

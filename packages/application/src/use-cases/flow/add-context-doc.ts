@@ -1,4 +1,4 @@
-import type { Flow, FlowContextDoc, IFlowRepository, Result } from "@rbrasier/domain";
+import type { Flow, FlowContextDoc, IFlowRepository, Result } from "@wayfinder/domain";
 
 export class AddContextDoc {
   constructor(private readonly flows: IFlowRepository) {}

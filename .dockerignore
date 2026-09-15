@@ -18,6 +18,12 @@ dist
 coverage
 **/coverage
 
+# The Lambda deployment target is not part of any container image. It sits
+# outside the pnpm workspace so its dependencies never reach the image; this
+# keeps its source out too, since the Dockerfile copies the whole tree
+# (ADR-056 §2).
+deploy
+
 # Repository and tooling noise that only slows the build context transfer.
 .git
 .github

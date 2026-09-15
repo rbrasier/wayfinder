@@ -9,7 +9,7 @@ import {
   type TokenUsage,
   SHORTLIST_ENTRY_BUDGET,
   type ValueSetEntry,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { AiValueSetShortlister, sampleForShortlist } from "./ai-value-set-shortlister";
 
 const usage: TokenUsage = {

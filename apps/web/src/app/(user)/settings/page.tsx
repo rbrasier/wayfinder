@@ -1,5 +1,6 @@
 import { OrganisationMembershipCard } from "@/components/settings/organisation-membership-card";
 import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
+import { WelcomeTourCard } from "@/components/settings/welcome-tour-card";
 
 export default function SettingsPage() {
   return (
@@ -14,6 +15,8 @@ export default function SettingsPage() {
         <ProfileSettingsForm />
 
         <OrganisationMembershipCard />
+
+        <WelcomeTourCard />
 
         {/* <Card>
           <CardHeader>

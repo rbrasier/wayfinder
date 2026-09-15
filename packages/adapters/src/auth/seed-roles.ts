@@ -5,7 +5,7 @@ import {
   type NewRole,
   type PermissionKey,
   type Role,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 interface SystemRoleSeed {
   readonly definition: NewRole;

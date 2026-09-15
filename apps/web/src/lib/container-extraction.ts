@@ -19,14 +19,15 @@ import {
   SaveExtractionSchema,
   StartBatchRun,
   UploadDraftDocuments,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import {
+  CsvWriter,
   DrizzleExtractionDraftRepository,
   DrizzleExtractionRunRepository,
   XlsxWriter,
   ZipIngestor,
   createDatabase,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import type {
   IAuditLogger,
   IDocumentExtractor,
@@ -35,7 +36,7 @@ import type {
   IFlowVersionRepository,
   ILanguageModel,
   IObjectStorage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 type Database = ReturnType<typeof createDatabase>;
 
@@ -71,6 +72,7 @@ export const buildExtractionModule = ({
   const extractionDrafts = new DrizzleExtractionDraftRepository(db);
   const archiveExtractor = new ZipIngestor();
   const spreadsheetWriter = new XlsxWriter();
+  const csvWriter = new CsvWriter();
   const processExtractionTask = new ProcessExtractionTask(
     extractionRuns,
     objectStorage,
@@ -110,6 +112,7 @@ export const buildExtractionModule = ({
         extractionRuns,
         flowVersions,
         spreadsheetWriter,
+        csvWriter,
         objectStorage,
         auditLogger,
       ),

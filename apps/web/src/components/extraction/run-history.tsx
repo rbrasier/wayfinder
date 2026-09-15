@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { processedCount, type RunStatus } from "@rbrasier/domain";
+import { processedCount, type RunStatus } from "@wayfinder/domain";
 import { trpc } from "@/trpc/client";
 
 // The run-history view (phase §5): every run for a flow with status, counts, and

@@ -1,5 +1,5 @@
 {
-  "name": "@rbrasier/domain",
+  "name": "@wayfinder/domain",
   "version": "1.1.0",
   "type": "module",
   "description": "Framework core — entities, port interfaces, Result type, DomainError. Zero external dependencies.",

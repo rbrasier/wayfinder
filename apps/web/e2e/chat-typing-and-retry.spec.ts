@@ -31,7 +31,11 @@ async function openSessionWithComposer(
   const { sessionId } = requireSeedFixtures();
 
   await page.goto(`/chats/${sessionId}`);
-  await page.waitForLoadState('networkidle');
+  // A session page holds an open SSE stream, so the network is never idle and
+  // waitForLoadState('networkidle') can only burn the timeout (see
+  // docs/development/e2e-triage-handover.md §4). Wait for the composer, which is
+  // what "the session page is ready" actually means.
+  await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
 
   const composer = page.getByRole('textbox').first();
   await expect(composer).toBeVisible();

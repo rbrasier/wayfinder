@@ -3,11 +3,11 @@
 import { BookOpen } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import type { FlowContextDoc } from "@rbrasier/domain";
+import type { FlowContextDoc } from "@wayfinder/domain";
 import {
   CONTEXT_DOCS_ALLOWED_MIME_TYPES,
   CONTEXT_DOCS_MAX_FILE_SIZE_BYTES,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/trpc/client";
 

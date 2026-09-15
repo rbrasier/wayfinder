@@ -3,7 +3,7 @@
 Wayfinder is distributed as a container image. Upgrading means pointing at a
 newer tag and applying any migrations that came with it.
 
-Every published tag is immutable — `0.28.0` is always the same image — so an
+Every published tag is immutable — `0.28.21` is always the same image — so an
 upgrade is a deliberate change of version, and a rollback is the same change in
 reverse.
 
@@ -28,7 +28,7 @@ Migrations are a **discrete step**, never a side effect of the web app starting
 
 ```bash
 docker run --rm -e DATABASE_URL="postgresql://…" \
-  ghcr.io/rbrasier/wayfinder:0.28.0 migrate
+  ghcr.io/rbrasier/wayfinder:0.28.21 migrate
 ```
 
 It reports what it did and exits `0` on success, non-zero on failure:
@@ -68,7 +68,7 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
   pg_dump -U postgres wayfinder | gzip > wayfinder-$(date +%F).sql.gz
 
 # 2. Point at the new version
-sed -i 's/^WAYFINDER_VERSION=.*/WAYFINDER_VERSION=0.28.0/' .env
+sed -i 's/^WAYFINDER_VERSION=.*/WAYFINDER_VERSION=0.28.21/' .env
 
 # 3. Pull and restart — migrations run automatically, before the app starts
 docker compose -f docker-compose.prod.yml pull
@@ -111,6 +111,45 @@ race.
 
 ---
 
+## AWS Lambda
+
+The same rule, with a different mechanism: **migrate first, then point traffic at
+the new version.** See [`setup-aws-lambda.md`](setup-aws-lambda.md) for the
+deployment itself.
+
+1. **Back up.** Take an RDS snapshot. Before every upgrade that includes a
+   migration.
+2. **Build the web bundle.** `cd deploy/lambda && npm run build:web`. The stack
+   packages OpenNext's output, so a stale build deploys stale code silently.
+3. **Deploy the stack**, pinning the version you intend to ship. Deploy from a
+   checkout at that tag — this target has no published artefact to pin, so the
+   git tag is the version.
+4. **Invoke the migrate function and confirm it exited cleanly**, before the new
+   web function serves traffic:
+   ```bash
+   aws lambda invoke --function-name Wayfinder-MigrateFunction... /dev/stdout
+   ```
+5. **Redeploy the always-on SSE service** to the matching image tag. It runs the
+   same application and must not drift from the functions.
+6. **Verify:** the web app answers, a chat turn streams, and a scheduled session
+   fires.
+
+Step 4 is not optional. Nothing here refuses to serve against an unmigrated
+schema — the app starts and every query fails — so a skipped migrate has to be a
+failed pipeline step rather than something a user finds.
+
+**Zero-downtime caveats.** In-flight session event streams drop when the
+always-on service redeploys; browsers reconnect, but an in-progress turn's live
+updates are interrupted. Lambda's own rollout is per-invocation, so the web and
+api functions cut over without dropping requests.
+
+**Rolling back** follows the general rule below, not a special case. This
+deployment target added no schema of its own, so a release carrying no migration
+rolls back by redeploying the previous tag. A release that *did* carry one
+follows the database-restore path exactly as the container guides do.
+
+---
+
 ## Rolling back
 
 Migrations are **forward-only**. There are no down-migrations, so a rollback has
@@ -131,7 +170,7 @@ This is why step 1 is a backup, every time.
 
 - **Read the release notes** for the version you are moving to, and for any you
   are skipping. Version numbers are continuous across release lines, so going
-  from `0.26.x` to `0.28.0` means you are taking `0.27.x`'s migrations too.
+  from `0.26.x` to `0.28.21` means you are taking `0.27.x`'s migrations too.
 - **Back up `SETTINGS_ENCRYPTION_KEY`** — separately from the database. It
   encrypts every integration credential the setup wizard stored. Restoring a
   database without it leaves those rows unreadable, and every integration has to

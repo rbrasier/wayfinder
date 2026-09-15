@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, type PermissionKey } from "@rbrasier/domain";
-import { TtlCache } from "@rbrasier/adapters";
+import { ok, err, type PermissionKey } from "@wayfinder/domain";
+import { TtlCache } from "@wayfinder/adapters";
 import { createCachedPermissionResolver } from "./cached-permission-resolver";
 
 const permissions = (...keys: string[]) => new Set(keys as PermissionKey[]);

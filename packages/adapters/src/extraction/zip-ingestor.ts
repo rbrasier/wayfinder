@@ -1,5 +1,5 @@
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { ArchiveEntry, ArchiveLimits, IArchiveExtractor, Result } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { ArchiveEntry, ArchiveLimits, IArchiveExtractor, Result } from "@wayfinder/domain";
 import {
   decompressionBomb,
   guardDeclaredSizes,

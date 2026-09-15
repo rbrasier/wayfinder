@@ -12,7 +12,7 @@ import {
   type SessionDocument,
   type SessionListSummary,
   type SessionMessage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_session_messages } from "../db/schema/wayfinder";
 

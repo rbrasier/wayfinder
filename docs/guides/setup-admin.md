@@ -1,8 +1,9 @@
-# Admin Setup — Template Maintainer
+# Admin Setup — Maintainer
 
-This guide covers setting up a local development environment for **framework
-maintainers**: people who work directly on the `ai-app-template` repository,
-publish new package versions, and run `./validate.sh`.
+This guide covers setting up a local development environment for **maintainers**:
+people who work on the framework packages under `packages/`, cut releases, and
+run `./validate.sh`. For getting Wayfinder running to work on a feature, see
+[`setup-end-user.md`](./setup-end-user.md).
 
 ---
 
@@ -23,8 +24,8 @@ publish new package versions, and run `./validate.sh`.
 ## 1. Clone the repository
 
 ```bash
-git clone https://github.com/rbrasier/ai-app-template
-cd ai-app-template
+git clone https://github.com/rbrasier/wayfinder.git
+cd wayfinder
 ```
 
 ---

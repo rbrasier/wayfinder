@@ -5,7 +5,7 @@ import {
   err,
   FLOW_EXPORT_FORMAT_VERSION,
   ok,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type {
   Flow,
   FlowArchiveAsset,
@@ -22,7 +22,7 @@ import type {
   ISkillRepository,
   Result,
   Sha256Bytes,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ExportFlowInput {
   flowId: string;
@@ -69,7 +69,7 @@ export class ExportFlow {
     private readonly auditLogger: IAuditLogger,
     private readonly appVersion: string,
     // Injected rather than imported: packages/application may not reach outside
-    // @rbrasier/domain and @rbrasier/shared, node:crypto included.
+    // @wayfinder/domain and @wayfinder/shared, node:crypto included.
     private readonly sha256Bytes: Sha256Bytes,
   ) {}
 

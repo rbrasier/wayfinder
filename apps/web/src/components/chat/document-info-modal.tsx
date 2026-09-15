@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Info } from "lucide-react";
-import type { DocumentGenerationConfidence } from "@rbrasier/domain";
+import type { DocumentGenerationConfidence } from "@wayfinder/domain";
 import {
   Dialog,
   DialogBody,

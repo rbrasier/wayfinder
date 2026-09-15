@@ -7,7 +7,7 @@ import {
   isSiteBannerVisible,
   resolveSiteBannerLinkLabel,
   type SiteBannerConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { trpc } from "@/trpc/client";
 
 export const buildSiteBannerStyle = (config: SiteBannerConfig): CSSProperties => ({

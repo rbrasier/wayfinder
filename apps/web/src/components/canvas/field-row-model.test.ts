@@ -5,6 +5,8 @@ import {
   lineToModel,
   linesToModels,
   modelToLine,
+  STRUCTURED_TYPE_OPTIONS,
+  TEMPLATE_TYPE_OPTIONS,
   withType,
   type FieldModel,
 } from "./field-row-model";
@@ -87,6 +89,15 @@ describe("lineToModel", () => {
       optional: true,
     });
   });
+
+  it("reads an (approval-comment: …) tag with the signature it names", () => {
+    expect(lineToModel("Delegate Note (approval-comment: Delegate Sign Off)")).toMatchObject({
+      label: "Delegate Note",
+      type: "approval_comment",
+      optional: true,
+      signatureLabel: "Delegate Sign Off",
+    });
+  });
 });
 
 describe("modelToLine", () => {
@@ -150,6 +161,21 @@ describe("modelToLine", () => {
 
     expect(modelToLine(lineToModel(line))).toBe(line);
   });
+
+  // The reference is the whole binding. An editor that dropped it would re-emit
+  // every comment unbound, breaking the pairing on documents it never touched
+  // beyond opening them.
+  it("keeps the signature reference on an approval comment", () => {
+    const line = "Delegate Note (approval-comment: Delegate Sign Off)";
+
+    expect(modelToLine(lineToModel(line))).toBe(line);
+  });
+
+  it("emits an unbound approval comment without inventing a signature", () => {
+    expect(modelToLine(model({ label: "Delegate Note", type: "approval_comment" }))).toBe(
+      "Delegate Note (approval-comment)",
+    );
+  });
 });
 
 describe("hasNonDefaultConfig", () => {
@@ -190,6 +216,15 @@ describe("hasNonDefaultConfig", () => {
   // accented cog would fire on every signature row and mean nothing.
   it("ignores a signature's implicit optionality", () => {
     expect(hasNonDefaultConfig(model({ type: "signature", optional: true }))).toBe(false);
+  });
+
+  it("ignores an approval comment's implicit optionality but accents a chosen signature", () => {
+    expect(hasNonDefaultConfig(model({ type: "approval_comment", optional: true }))).toBe(false);
+    expect(
+      hasNonDefaultConfig(
+        model({ type: "approval_comment", optional: true, signatureLabel: "Delegate Sign Off" }),
+      ),
+    ).toBe(true);
   });
 });
 
@@ -233,6 +268,19 @@ describe("withType", () => {
     expect(withType(model({ optional: false }), "signature").optional).toBe(true);
   });
 
+  it("forces an approval comment optional, matching what the parser produces", () => {
+    expect(withType(model({ optional: false }), "approval_comment").optional).toBe(true);
+  });
+
+  // A reference means nothing on a field that is no longer a comment, and
+  // carrying it would re-emit it the moment the author switched back.
+  it("drops the signature reference when switching away from an approval comment", () => {
+    const comment = model({ type: "approval_comment", signatureLabel: "Delegate Sign Off" });
+
+    expect(withType(comment, "text").signatureLabel).toBeUndefined();
+    expect(withType(comment, "approval_comment").signatureLabel).toBe("Delegate Sign Off");
+  });
+
   it("emits a saveable line after a switch to signature", () => {
     expect(modelToLine(withType(model({ type: "number", min: 1 }), "signature"))).toBe(
       "Supplier Name (approval)",
@@ -250,5 +298,79 @@ describe("linesToModels", () => {
       "text",
       "date",
     ]);
+  });
+});
+
+describe("type options", () => {
+  const values = (options: { value: string }[]) => options.map((option) => option.value);
+
+  // ADR-038 §5 hides `section` from the structured editor because an
+  // include/omit-this-part-of-the-document decision has no meaning with no
+  // document. It says nothing about narrative, and narrative prose composed
+  // into the record is meaningful whether or not a document is rendered.
+  it("offers narrative in a structured step", () => {
+    expect(values(STRUCTURED_TYPE_OPTIONS)).toContain("narrative");
+  });
+
+  // ADR-043 §2: no document, no signature.
+  it("does not offer a signature in a structured step", () => {
+    expect(values(STRUCTURED_TYPE_OPTIONS)).not.toContain("signature");
+  });
+
+  it("does not offer an approval comment in a structured step", () => {
+    expect(values(STRUCTURED_TYPE_OPTIONS)).not.toContain("approval_comment");
+  });
+
+  it("offers an approval comment in a template step", () => {
+    expect(values(TEMPLATE_TYPE_OPTIONS)).toContain("approval_comment");
+  });
+
+  it("offers both narrative and signature in a template step", () => {
+    expect(values(TEMPLATE_TYPE_OPTIONS)).toEqual(
+      expect.arrayContaining(["narrative", "signature"]),
+    );
+  });
+
+  it("lists each type once", () => {
+    for (const options of [STRUCTURED_TYPE_OPTIONS, TEMPLATE_TYPE_OPTIONS]) {
+      expect(new Set(values(options)).size).toBe(options.length);
+    }
+  });
+
+  it("offers the same scalar types to both editors", () => {
+    const structured = values(STRUCTURED_TYPE_OPTIONS);
+    const template = values(TEMPLATE_TYPE_OPTIONS).filter(
+      (value) => value !== "signature" && value !== "approval_comment",
+    );
+    expect(structured).toEqual(template);
+  });
+});
+
+describe("narrative guidance round-trip", () => {
+  it("serialises a brief the same way a .docx tag carries it", () => {
+    const line = modelToLine(
+      model({ label: "Scope", type: "narrative", instruction: "What is in and out of scope" }),
+    );
+    expect(line).toBe('Scope (narrative: "What is in and out of scope")');
+  });
+
+  it("reads its own serialised brief back unchanged", () => {
+    const brief = "Cover the background, the options considered, and the recommendation";
+    const line = modelToLine(model({ label: "Background", type: "narrative", instruction: brief }));
+    expect(lineToModel(line)).toMatchObject({ type: "narrative", instruction: brief });
+  });
+
+  it("serialises a narrative with no brief as a bare (narrative)", () => {
+    expect(modelToLine(model({ label: "Scope", type: "narrative" }))).toBe("Scope (narrative)");
+  });
+
+  it("carries an existing brief onto a switch to narrative", () => {
+    const changed = withType(model({ type: "text", instruction: "Two paragraphs" }), "narrative");
+    expect(changed.instruction).toBe("Two paragraphs");
+  });
+
+  it("drops the brief when switching away from narrative", () => {
+    const changed = withType(model({ type: "narrative", instruction: "Two paragraphs" }), "text");
+    expect(changed.instruction).toBeUndefined();
   });
 });

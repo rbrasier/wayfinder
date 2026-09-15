@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import type { ConversationalNodeConfig } from "./flow-node";
 import {
+  APPROVAL_COMMENT_SLOT_MARKER,
+  SIGNATURE_SLOT_MARKER,
+  gatherableTemplateContent,
   nodeFieldSet,
   normaliseOutputType,
   validateStructuredFieldSet,
@@ -98,6 +101,32 @@ describe("nodeFieldSet", () => {
     expect(result).toEqual([field("amount"), field("vendor")]);
   });
 
+  it("filters an approval comment out of a document step's set", () => {
+    const result = nodeFieldSet(
+      config({
+        outputType: "generate_document",
+        documentTemplateFields: [
+          field("amount"),
+          field("delegate_note", "approval_comment"),
+          field("vendor"),
+        ],
+      }),
+    );
+
+    expect(result).toEqual([field("amount"), field("vendor")]);
+  });
+
+  it("keeps an approval comment out of the AI's field constraints entirely", () => {
+    const fields = nodeFieldSet(
+      config({
+        outputType: "generate_document",
+        documentTemplateFields: [field("amount"), field("delegate_note", "approval_comment")],
+      }),
+    );
+
+    expect(buildFieldConstraintsText(fields)).not.toContain("delegate_note");
+  });
+
   it("keeps a signature out of the AI's field constraints entirely", () => {
     const fields = nodeFieldSet(
       config({
@@ -134,9 +163,118 @@ describe("validateStructuredFieldSet", () => {
     expect(result.error?.message).toContain("Delegate Signature");
   });
 
+  it("rejects a set containing an approval comment field", () => {
+    const fields = [field("decision"), field("Delegate Note", "approval_comment")];
+    const result = validateStructuredFieldSet(fields);
+    expect(result.data).toBeUndefined();
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toContain("Delegate Note");
+  });
+
   it("accepts an empty set", () => {
     const result = validateStructuredFieldSet([]);
     expect(result.error).toBeUndefined();
     expect(result.data).toEqual([]);
+  });
+});
+
+describe("gatherableTemplateContent", () => {
+  it("drops a signature line whole, so its label cannot be asked about either", () => {
+    // The reported transcript asked for "First Level Supervisor Approval" — the
+    // label, not the tag. Removing only the tag leaves that label over a blank.
+    const gatherable = gatherableTemplateContent(
+      "Full Name: {{Full Name}}\nFirst Level Supervisor Approval: {{ First Level Supervisor Approval (approval) }}",
+    );
+
+    expect(gatherable).toBe("Full Name: {{Full Name}}");
+  });
+
+  it("drops every signature line in a template that declares more than one", () => {
+    const gatherable = gatherableTemplateContent(
+      "Name: {{Full Name}}\n{{ First Level Supervisor Approval (approval) }}\n{{ Second Level Supervisor Approval (approval) }}",
+    );
+
+    expect(gatherable).toBe("Name: {{Full Name}}");
+  });
+
+  it("keeps a line that mixes a signature with a gatherable tag, masking only the signature", () => {
+    // The gatherable tag has to survive, so the line cannot be dropped; the
+    // marker stands in for the signature and the prompt's constraint explains it.
+    const gatherable = gatherableTemplateContent(
+      "Executed on {{ Start Date (date) }} by {{ Delegate Signature (approval) }}",
+    );
+
+    expect(gatherable).toBe(
+      `Executed on {{ Start Date (date) }} by ${SIGNATURE_SLOT_MARKER}`,
+    );
+    expect(gatherable).not.toContain("Delegate Signature");
+  });
+
+  it("drops an approval comment line whole, as it drops a signature line", () => {
+    const gatherable = gatherableTemplateContent(
+      "Full Name: {{Full Name}}\nReason for decision: {{ Reason For Decision (approval-comment: Delegate Signature) }}",
+    );
+
+    expect(gatherable).toBe("Full Name: {{Full Name}}");
+  });
+
+  it("masks an approval comment sharing a line with a gatherable tag", () => {
+    const gatherable = gatherableTemplateContent(
+      "Signed off on {{ Start Date (date) }} because {{ Reason (approval-comment: Delegate Signature) }}",
+    );
+
+    expect(gatherable).toBe(
+      `Signed off on {{ Start Date (date) }} because ${APPROVAL_COMMENT_SLOT_MARKER}`,
+    );
+    expect(gatherable).not.toContain("Reason (approval-comment");
+  });
+
+  it("drops a signature and its comment together", () => {
+    const gatherable = gatherableTemplateContent(
+      "Name: {{Full Name}}\n{{ Delegate Signature (approval) }}\n{{ Delegate Note (approval-comment: Delegate Signature) }}",
+    );
+
+    expect(gatherable).toBe("Name: {{Full Name}}");
+  });
+
+  it("leaves a template with no signatures byte-identical", () => {
+    const content =
+      "Name: {{Full Name}}\nStart: {{ Start Date (date) }}\nDept: {{ Department (options: Legal, Sales) }}";
+
+    expect(gatherableTemplateContent(content)).toBe(content);
+  });
+
+  it("recognises the annotation regardless of case or surrounding whitespace", () => {
+    expect(gatherableTemplateContent("Name: {{Name}}\nSig: {{Sig (APPROVAL)}}")).toBe(
+      "Name: {{Name}}",
+    );
+    expect(gatherableTemplateContent("Name: {{Name}}\nSig: {{   Sig   (Approval)   }}")).toBe(
+      "Name: {{Name}}",
+    );
+  });
+
+  it("recognises a signature tag carrying other annotations alongside (approval)", () => {
+    // Validation rejects this combination at upload, but this is a safety
+    // filter — it must not depend on the tag being well-formed.
+    expect(gatherableTemplateContent("Name: {{Name}}\n{{ Sig (approval) (optional) }}")).toBe(
+      "Name: {{Name}}",
+    );
+  });
+
+  it("does not touch a tag whose name merely mentions approval", () => {
+    const content = "{{ Approval Notes }}";
+
+    expect(gatherableTemplateContent(content)).toBe(content);
+  });
+
+  it("returns null when a template declares nothing but signatures", () => {
+    // No gatherable body left, so the caller emits no template block and indexes
+    // no chunk — better than a body of markers.
+    expect(gatherableTemplateContent("{{ Annexe Signature (approval) }}")).toBeNull();
+  });
+
+  it("returns null for absent content", () => {
+    expect(gatherableTemplateContent(null)).toBeNull();
+    expect(gatherableTemplateContent(undefined)).toBeNull();
   });
 });

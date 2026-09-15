@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type AiConfig, type AuthConfig, type EmbeddingsConfig, type N8nConfig, type StorageConfig } from "@rbrasier/domain";
+import { ok, type AiConfig, type AuthConfig, type EmbeddingsConfig, type N8nConfig, type StorageConfig } from "@wayfinder/domain";
 import { CompositeConnectivityTester, type ConnectivityTesterDeps } from "./composite-connectivity-tester";
 
 const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): ConnectivityTesterDeps => ({

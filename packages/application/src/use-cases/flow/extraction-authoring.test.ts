@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { domainError, err, ok, isExtractionSnapshot } from "@rbrasier/domain";
+import { domainError, err, ok, isExtractionSnapshot } from "@wayfinder/domain";
 import type {
   ExtractionSchemaDraft,
   Flow,
@@ -9,7 +9,7 @@ import type {
   NewFlow,
   Result,
   UpsertDraftVersion,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   CreateExtractionFlow,
   GetExtractionSchema,

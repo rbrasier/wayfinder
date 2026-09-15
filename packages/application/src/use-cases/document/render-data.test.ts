@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTemplateFields, type TemplateField } from "@rbrasier/domain";
+import { parseTemplateFields, type TemplateField } from "@wayfinder/domain";
 import { buildRenderData } from "./render-data";
 
 const field = (overrides: Partial<TemplateField>): TemplateField => ({

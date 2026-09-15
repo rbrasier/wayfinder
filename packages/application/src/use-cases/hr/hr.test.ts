@@ -15,7 +15,7 @@ import {
   type ParsedSpreadsheet,
   type ParseSpreadsheetInput,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ImportHrDataset } from "./import-hr-dataset";
 import { SetColumnMapping } from "./set-column-mapping";
 

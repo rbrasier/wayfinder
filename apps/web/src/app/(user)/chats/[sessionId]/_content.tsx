@@ -5,14 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { toast } from "sonner";
-import type { ApproverSource, FlowEdge, FlowNode } from "@rbrasier/domain";
+import { visitedNodeIdsInOrder, type ApproverSource, type FlowEdge, type FlowNode } from "@wayfinder/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";
 import { ChatComposer } from "@/components/chat/chat-composer";
+import { ChatDisclaimerModal } from "@/components/chat/chat-disclaimer-modal";
 import { ApprovalGate } from "@/components/chat/approval-gate";
 import { BranchOverrideModal } from "@/components/chat/branch-override-modal";
 import { toBranchOptions } from "@/lib/chat/branch-options";
+import { RewindForkModal } from "@/components/chat/rewind-fork-modal";
+import { toForkHistory } from "@/lib/chat/fork-history";
 import { ConfirmStepCard } from "@/components/chat/confirm-step-card";
 import { hasPendingDocumentGeneration } from "@/components/chat/document-poll-state";
 import { MessageFeed } from "@/components/chat/message-feed";
@@ -20,6 +23,8 @@ import { AppHeader } from "@/components/layout/app-header";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
+import { ManualEstimateModal } from "@/components/chat/manual-estimate-modal";
+import { shouldPromptForEstimate } from "@/components/chat/manual-estimate-state";
 
 const NULL_BRANCH_THRESHOLD = 3;
 
@@ -71,6 +76,16 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const isAdmin = meQuery.data?.isAdmin ?? false;
 
   const myUserId = meQuery.data?.userId ?? null;
+
+  // The manual-time estimate is asked once, when the operator's own session has
+  // finished. Skipping is remembered for the visit only — the row stays null, so
+  // a later visit can still capture it.
+  const [estimateDismissed, setEstimateDismissed] = useState(false);
+  const recordEstimateMutation = trpc.session.recordManualEstimate.useMutation({
+    onSuccess: () => {
+      void utils.session.get.invalidate({ sessionId });
+    },
+  });
   const emitTypingMutation = trpc.session.emitTyping.useMutation();
   const lastTypingEmitRef = useRef(0);
   // Live typing presence over the event bus instead of a 2 s poll (scaling wall
@@ -81,6 +96,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   const [_regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const [overrideOpen, setOverrideOpen] = useState(false);
+  const [rewindOpen, setRewindOpen] = useState(false);
   const kickoffSentRef = useRef(false);
 
   const renameMutation = trpc.session.rename.useMutation({
@@ -96,6 +112,15 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       toast.success("Chat abandoned");
       void utils.session.list.invalidate();
       router.push("/chats");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  const rewindMutation = trpc.session.rewindToFork.useMutation({
+    onSuccess: () => {
+      setRewindOpen(false);
+      void utils.session.get.invalidate({ sessionId });
+      toast.success("Went back to the chosen branch");
     },
     onError: (error) => toast.error(error.message),
   });
@@ -182,6 +207,16 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     return active;
   }, [typingTick, myUserId, senderNamesById]);
 
+  // Steps left behind by a rewind. They keep their messages (and so their
+  // insights), but they are no longer on the path this chat is taking, so the
+  // rail must stop calling them complete.
+  const checkpoint = sessionData?.session.graphCheckpoint ?? null;
+  const abandonedNodeIds = Array.isArray(checkpoint?.["abandonedNodeIds"])
+    ? (checkpoint["abandonedNodeIds"] as unknown[]).filter(
+        (nodeId): nodeId is string => typeof nodeId === "string",
+      )
+    : [];
+
   const completedNodeIds: string[] = [];
   if (dbMessages.length > 0) {
     const messagesByNode = new Map<string, { maxConfidence: number; lastStepNodeId: string }>();
@@ -194,7 +229,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       }
     }
     for (const [nodeId, data] of messagesByNode) {
-      if (data.maxConfidence >= 90 && nodeId !== currentNodeId) {
+      if (data.maxConfidence >= 90 && nodeId !== currentNodeId && !abandonedNodeIds.includes(nodeId)) {
         completedNodeIds.push(nodeId);
       }
     }
@@ -206,6 +241,14 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const showBranchOverride = isAdmin && !isReadOnly && stallCount >= NULL_BRANCH_THRESHOLD;
 
   const outgoingBranches = toBranchOptions(edges, nodes, currentNodeId);
+
+  // The forks this chat has already branched from, for the rewind picker. Read
+  // from the transcript rather than a visit history, the same source the taken
+  // path is derived from everywhere else.
+  const forkHistory = useMemo(
+    () => toForkHistory(edges, nodes, visitedNodeIdsInOrder(dbMessages, currentNodeId)),
+    [edges, nodes, dbMessages, currentNodeId],
+  );
 
   const { messages, input, handleSubmit, isLoading, setInput, error, reload, append, setMessages } = useChat({
     api: `/api/chat/${sessionId}/stream`,
@@ -426,6 +469,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             collaborateUrl={collaborateUrl}
             onRename={(title) => renameMutation.mutate({ sessionId, title })}
             onClose={() => closeMutation.mutate({ sessionId })}
+            onGoBackToFork={forkHistory.length > 0 ? () => setRewindOpen(true) : undefined}
             isReadOnly={isReadOnly}
           />
         }
@@ -514,6 +558,10 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             viewerUserId={myUserId}
             sessionOwnerUserId={session.userId}
             viewerIsAdmin={isAdmin}
+            offSystemAllowed={
+              (currentNode.config as { allowOffSystemApproval?: boolean })
+                .allowOffSystemApproval !== false
+            }
           />
         )}
 
@@ -535,6 +583,18 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         )}
       </div>
 
+      <RewindForkModal
+        open={rewindOpen}
+        forks={forkHistory}
+        onRewind={(forkNodeId, targetNodeId) =>
+          rewindMutation.mutate({ sessionId, forkNodeId, targetNodeId })
+        }
+        onClose={() => setRewindOpen(false)}
+        isPending={rewindMutation.isPending}
+      />
+
+      {myUserId && <ChatDisclaimerModal sessionId={sessionId} userId={myUserId} />}
+
       <BranchOverrideModal
         open={overrideOpen}
         branches={outgoingBranches}
@@ -543,6 +603,19 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         }
         onClose={() => setOverrideOpen(false)}
         isPending={overrideMutation.isPending}
+      />
+
+      <ManualEstimateModal
+        open={shouldPromptForEstimate({
+          status: session.status,
+          isOwner: myUserId !== null && session.userId === myUserId,
+          alreadyEstimated: session.manualEstimateMinutes != null,
+          dismissed: estimateDismissed,
+        })}
+        flowName={flow.name}
+        isSaving={recordEstimateMutation.isPending}
+        onSubmit={(minutes) => recordEstimateMutation.mutate({ sessionId, minutes })}
+        onSkip={() => setEstimateDismissed(true)}
       />
     </main>
   );

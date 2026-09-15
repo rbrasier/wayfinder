@@ -3,7 +3,7 @@ import {
   type BudgetUpdate,
   type IBudgetRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { validateBudgetInput } from "./create-budget";
 
 export class UpdateBudget {

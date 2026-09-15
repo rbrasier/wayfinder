@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTemplateField, type ExtractionSchema } from "@rbrasier/domain";
+import { parseTemplateField, type ExtractionSchema } from "@wayfinder/domain";
 import {
   deriveOutputMode,
   emptyExtractionField,

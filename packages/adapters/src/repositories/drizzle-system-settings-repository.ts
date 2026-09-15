@@ -6,7 +6,7 @@ import {
   type ISystemSettingsRepository,
   type Result,
   type SystemSetting,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { admin_system_settings } from "../db/schema/wayfinder";
 

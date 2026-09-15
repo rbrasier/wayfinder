@@ -10,7 +10,7 @@ import {
   type Result,
   type Session,
   type SessionParticipantRole,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export type SessionAccessRole = SessionParticipantRole | "admin";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { domainError } from "@rbrasier/domain";
+import { domainError } from "@wayfinder/domain";
 import { statusForDomainError } from "./http-errors";
 
 describe("statusForDomainError", () => {

@@ -1,4 +1,4 @@
-import type { SessionMessage } from "@rbrasier/domain";
+import type { SessionMessage } from "@wayfinder/domain";
 
 // The document an approver-edit announcement is about. Resolved from the
 // messages already loaded rather than fetched: the announcement carries the

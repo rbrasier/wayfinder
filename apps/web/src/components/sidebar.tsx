@@ -126,9 +126,9 @@ const buildAdminNav = ({
   const groups: NavGroup[] = [
     {
       items: [
-        { href: "/admin/dashboards/overview", icon: Activity, label: "Overview" },
-        { href: "/admin/dashboards/insights", icon: PieChart, label: "Flow Insights" },
-        { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Usage" },
+        { href: "/admin/dashboards/overview", icon: Activity, label: "Value" },
+        { href: "/admin/dashboards/insights", icon: PieChart, label: "Flow Reports" },
+        { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Health" },
         { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
         { href: "/admin/flows", icon: GitBranch, label: "All Flows" },
         // Shown only when the extraction_flows flag resolves (ADR-033 §7).

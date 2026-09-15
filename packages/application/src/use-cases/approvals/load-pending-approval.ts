@@ -4,7 +4,7 @@ import {
   type IApprovalRepository,
   type IUserRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   describeApprover,
   describeAssignedApprover,

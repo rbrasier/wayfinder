@@ -8,7 +8,7 @@ import {
   type NewLookupSource,
   type Result,
   type ValueSetEntry,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ListManagedEntries, ReplaceManagedEntries } from "./managed-entries";
 
 const managedSource = (overrides: Partial<LookupSource> = {}): LookupSource => ({

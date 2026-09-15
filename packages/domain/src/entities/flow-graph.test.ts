@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeForkSiblingGroups, type FlowGraphEdge } from "./flow-graph";
+import { computeForkSiblingGroups, reachableNodeIds, type FlowGraphEdge } from "./flow-graph";
 
 const edge = (fromNodeId: string, toNodeId: string): FlowGraphEdge => ({ fromNodeId, toNodeId });
 
@@ -79,5 +79,35 @@ describe("computeForkSiblingGroups", () => {
     const edges = [edge("s", "a"), edge("s", "b"), edge("a", "j"), edge("b", "j")];
 
     expect(computeForkSiblingGroups(["b", "a"], edges)).toEqual([["a", "b"]]);
+  });
+});
+
+describe("reachableNodeIds", () => {
+  it("returns every node downstream of the start, transitively", () => {
+    const edges = [edge("a", "b"), edge("b", "c"), edge("c", "d")];
+
+    expect(reachableNodeIds(edges, "a")).toEqual(new Set(["b", "c", "d"]));
+  });
+
+  it("excludes the start node itself when nothing routes back to it", () => {
+    const edges = [edge("a", "b"), edge("b", "c")];
+
+    expect(reachableNodeIds(edges, "a").has("a")).toBe(false);
+  });
+
+  it("returns an empty set for a node with no outgoing edges", () => {
+    expect(reachableNodeIds([edge("a", "b")], "b")).toEqual(new Set());
+  });
+
+  it("includes the start node when a cycle routes back to it", () => {
+    const edges = [edge("a", "b"), edge("b", "a")];
+
+    expect(reachableNodeIds(edges, "a")).toEqual(new Set(["a", "b"]));
+  });
+
+  it("follows both arms of a fork", () => {
+    const edges = [edge("s", "a"), edge("s", "b"), edge("a", "j"), edge("b", "j")];
+
+    expect(reachableNodeIds(edges, "s")).toEqual(new Set(["a", "b", "j"]));
   });
 });

@@ -1,4 +1,4 @@
-import type { IErrorLogRepository, Result } from "@rbrasier/domain";
+import type { IErrorLogRepository, Result } from "@wayfinder/domain";
 
 export class DeleteAllErrors {
   constructor(private readonly repo: IErrorLogRepository) {}

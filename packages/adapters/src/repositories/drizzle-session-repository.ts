@@ -1,4 +1,4 @@
-import { and, desc, eq, lt, notInArray, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, notInArray, sql, type SQL } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -12,7 +12,7 @@ import {
   type SessionListPageOptions,
   type SessionMode,
   type SessionUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_sessions } from "../db/schema/wayfinder";
 
@@ -142,6 +142,7 @@ const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   activeTurnClaimedBy: row.active_turn_claimed_by ?? null,
   activeTurnClaimedAt: row.active_turn_claimed_at ?? null,
   version: row.version,
+  manualEstimateMinutes: row.manual_estimate_minutes ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -268,6 +269,29 @@ export class DrizzleSessionRepository implements ISessionRepository {
     }
   }
 
+  async listTerminalSince(since: Date | null, limit: number): Promise<Result<Session[]>> {
+    try {
+      const clauses: SQL[] = [
+        // Test runs are excluded here as well as in the capture use case: a test
+        // run must never become evidence, and the sweep should not pay to load
+        // one only to discard it (ADR-057 §2).
+        sessionModePredicate("live"),
+        inArray(app_sessions.status, ["complete", "abandoned", "cancelled"]),
+      ];
+      if (since) clauses.push(gte(app_sessions.updated_at, since));
+
+      const rows = await this.db
+        .select()
+        .from(app_sessions)
+        .where(and(...clauses))
+        .orderBy(app_sessions.updated_at)
+        .limit(limit);
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list terminal sessions.", cause));
+    }
+  }
+
   async listTestSessionsOlderThan(
     cutoff: Date,
     limit: number,
@@ -313,6 +337,9 @@ export class DrizzleSessionRepository implements ISessionRepository {
             : {}),
           ...(patch.graphCheckpoint !== undefined ? { graph_checkpoint: patch.graphCheckpoint ?? undefined } : {}),
           ...(patch.pendingExecutions !== undefined ? { pending_executions: patch.pendingExecutions } : {}),
+          ...(patch.manualEstimateMinutes !== undefined
+            ? { manual_estimate_minutes: patch.manualEstimateMinutes }
+            : {}),
           version: sql`${app_sessions.version} + 1`,
           updated_at: new Date(),
         })

@@ -3,7 +3,7 @@
 // domain+shared-only import rule. Bodies stay minimal (names + link) to keep
 // PII out of email (PRD §12).
 
-import type { FlowPermissionRole } from "@rbrasier/domain";
+import type { FlowPermissionRole } from "@wayfinder/domain";
 
 export interface EmailContent {
   subject: string;
@@ -22,6 +22,15 @@ export interface StepCompleteEmailInput {
   stepName: string;
   sessionTitle: string | null;
   sessionUrl: string;
+}
+
+export interface PasswordResetEmailInput {
+  // Null for an account that never set a display name; the greeting falls back
+  // rather than addressing the reader as "null".
+  recipientName: string | null;
+  resetUrl: string;
+  // Shown so the reader can judge whether the link is still worth clicking.
+  expiryMinutes: number;
 }
 
 export interface FlowSharedEmailInput {
@@ -85,6 +94,34 @@ export const buildFlowSharedEmail = (input: FlowSharedEmailInput): EmailContent 
     html: [
       `<p>${escapeHtml(granter)} shared the '${escapeHtml(input.flowName)}' flow with you and assigned you the '${input.role}' role.</p>`,
       `<p><a href="${escapeHtml(input.flowUrl)}">Open the flow</a></p>`,
+    ].join("\n"),
+  };
+};
+
+export const buildPasswordResetEmail = (input: PasswordResetEmailInput): EmailContent => {
+  const greeting = input.recipientName ? `Hello ${input.recipientName},` : "Hello,";
+  // No account identifier in the body beyond the greeting: the message is sent
+  // to the address that asked, so repeating it back adds nothing and would put
+  // an identifier into a channel we do not control (PRD §12).
+  const closing =
+    "If you did not ask to reset your password you can ignore this email — your current password still works.";
+  return {
+    subject: "Reset your Wayfinder password",
+    text: [
+      greeting,
+      "",
+      "Use the link below to choose a new password:",
+      input.resetUrl,
+      "",
+      `The link expires in ${input.expiryMinutes} minutes and can only be used once.`,
+      "",
+      closing,
+    ].join("\n"),
+    html: [
+      `<p>${escapeHtml(greeting)}</p>`,
+      `<p><a href="${escapeHtml(input.resetUrl)}">Choose a new password</a></p>`,
+      `<p>The link expires in ${input.expiryMinutes} minutes and can only be used once.</p>`,
+      `<p>${escapeHtml(closing)}</p>`,
     ].join("\n"),
   };
 };

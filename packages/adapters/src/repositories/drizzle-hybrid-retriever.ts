@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   ChunkSearchResult,
   CuratedChunk,
@@ -6,7 +6,7 @@ import type {
   HybridRetrievalQuery,
   IHybridRetriever,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { logRepoError } from "./log-repo-error";

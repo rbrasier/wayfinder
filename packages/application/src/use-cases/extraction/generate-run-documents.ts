@@ -15,7 +15,7 @@ import {
   type ILanguageModel,
   type IObjectStorage,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { loadExtractionSchemaForVersion } from "./run-schema";
 
 export interface GenerateRunDocumentsInput {

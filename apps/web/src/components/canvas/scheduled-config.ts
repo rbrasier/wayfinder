@@ -1,4 +1,4 @@
-import { describeRecurrenceRule, parseRecurrenceRule } from "@rbrasier/domain";
+import { describeRecurrenceRule, parseRecurrenceRule } from "@wayfinder/domain";
 
 // A human summary for the canvas subtitle of legacy recurrence schedules; falls
 // back when the stored spec is not a recurrence rule (e.g. a legacy cron

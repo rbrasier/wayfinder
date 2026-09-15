@@ -9,7 +9,7 @@ import {
   type IHrDatasetRepository,
   type ISpreadsheetParser,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ImportHrDatasetInput {
   filename: string;

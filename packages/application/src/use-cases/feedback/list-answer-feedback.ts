@@ -3,7 +3,7 @@ import type {
   FeedbackListFilter,
   IAnswerFeedbackRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class ListAnswerFeedback {
   constructor(private readonly feedback: IAnswerFeedbackRepository) {}

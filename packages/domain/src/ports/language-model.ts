@@ -22,6 +22,17 @@ export interface TokenUsage {
   readonly cacheWriteTokens: number;
 }
 
+// What a call actually ran on, after the adapter resolved `purpose` against the
+// runtime config's per-purpose model map and read the provider currently
+// configured. Every result carries it because usage is recorded by a decorator
+// wrapped *around* the adapter: the decorator sees only the caller's input, and
+// a caller that routes by purpose passes no model at all, so without this the
+// row is written against a guess.
+export interface CalledModel {
+  readonly provider: ProviderName;
+  readonly model: string;
+}
+
 export interface GenerateObjectInput<TSchema = unknown> {
   readonly purpose: string;
   readonly userId?: string | null;
@@ -78,7 +89,8 @@ export interface StreamObjectInput<TSchema = unknown> {
 
 /**
  * Provider-agnostic language model port.
- * All call types surface token usage so adapters can record costs.
+ * All call types surface token usage, and the model and provider they ran on,
+ * so adapters can record costs against what was actually billed.
  * `purpose` is required on every call — it labels what the call is for
  * (e.g. "chat", "summarise-document") and appears in usage records.
  */
@@ -87,24 +99,28 @@ export interface ILanguageModel {
 
   generateObject<T>(
     input: GenerateObjectInput,
-  ): Promise<Result<{ object: T; usage: TokenUsage }>>;
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>>;
 
   generateText(
     input: GenerateTextInput,
-  ): Promise<Result<{ text: string; usage: TokenUsage }>>;
+  ): Promise<Result<{ text: string; usage: TokenUsage } & CalledModel>>;
 
   streamText(
     input: StreamTextInput,
-  ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>>;
+  ): Promise<
+    Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> } & CalledModel>
+  >;
 
   streamObject<T>(
     input: StreamObjectInput,
   ): Promise<
-    Result<{
-      partialObjectStream: AsyncIterable<Partial<T>>;
-      object: Promise<T>;
-      usage: Promise<TokenUsage>;
-    }>
+    Result<
+      {
+        partialObjectStream: AsyncIterable<Partial<T>>;
+        object: Promise<T>;
+        usage: Promise<TokenUsage>;
+      } & CalledModel
+    >
   >;
 }
 

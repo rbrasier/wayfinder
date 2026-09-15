@@ -3,7 +3,7 @@
 // domain+shared-only import rule. Bodies stay minimal (names + link) to keep PII
 // out of email.
 
-import type { ApprovalStatus } from "@rbrasier/domain";
+import type { ApprovalStatus } from "@wayfinder/domain";
 import type { EmailContent } from "./templates";
 
 const escapeHtml = (value: string): string =>

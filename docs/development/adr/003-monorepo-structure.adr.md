@@ -21,20 +21,29 @@ type-safety must hold without publishing internal packages to npm.
 
 ```
 apps/
-  web/        @rbrasier/web — Next.js 15, tRPC v11
-  api/        @rbrasier/api — Express, Zod
+  web/        @wayfinder/web — Next.js 15, tRPC v11
+  api/        @wayfinder/api — Express, Zod
 packages/
-  domain/         @rbrasier/domain
-  application/    @rbrasier/application
-  shared/         @rbrasier/shared
-  adapters/       @rbrasier/adapters
+  domain/         @wayfinder/domain
+  application/    @wayfinder/application
+  shared/         @wayfinder/shared
+  adapters/       @wayfinder/adapters
 ```
 
-### Why `@rbrasier/*` as the scope?
+### Why `@wayfinder/*` as the scope?
 
-`template` is the placeholder project name. The "New App / Feature Setup"
-skill in `CLAUDE.md` walks the new owner through renaming the scope to their
-real project name on bootstrap.
+One scope for the whole repo, named after the product. The packages are
+workspace-only and never published, so the scope exists to group them and to
+make an import's layer obvious at a glance, not to reserve a registry name.
+
+**Amended v0.35.1.** This ADR originally specified the personal-handle scope
+inherited from the `ai-app-template` repository Wayfinder was cloned from, and
+said the bootstrap script would rename it to the real project name. That rename
+ran for `apps/*` and never ran for `packages/*`, leaving the two halves of the
+repo under different scopes for several release lines. v0.35.1 finished it and
+removed the template scaffolding that was supposed to have done it. Phase docs
+under `docs/development/implemented/` still show the old scope; they record what
+was true at the time and were deliberately left alone.
 
 ### TypeScript project references
 
@@ -47,7 +56,7 @@ a built `.d.ts`, and lets `tsc -b` build the graph in dependency order.
 **Positive**
 
 - One `pnpm install` at the root resolves the whole graph.
-- `pnpm --filter @rbrasier/<x>` runs scripts per package.
+- `pnpm --filter @wayfinder/<x>` runs scripts per package.
 - Turbo caches make the typical `pnpm typecheck` near-instant after the first
   run.
 

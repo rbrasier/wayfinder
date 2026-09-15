@@ -17,7 +17,7 @@ import {
   type Result,
   type SessionStepOutput,
   type StepOutputField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { SUBJECT_DESCRIPTION_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
 
 export interface ResolveApprovalSubjectInput {
@@ -167,6 +167,7 @@ export class ResolveApprovalSubject {
     const gathered = this.gatheredText(outputs);
     const result = await this.languageModel.generateText({
       purpose: "branching",
+      userId: approval.requestedByUserId,
       sessionId: approval.sessionId,
       flowId: approval.flowId,
       system:

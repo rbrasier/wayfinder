@@ -1,4 +1,4 @@
-import type { FlowExportDependency } from "@rbrasier/domain";
+import type { FlowExportDependency } from "@wayfinder/domain";
 
 // Node config is jsonb and may have been written by any authoring surface, so
 // the flag is read defensively rather than trusted.

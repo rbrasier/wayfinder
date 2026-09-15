@@ -1,4 +1,4 @@
-import { doneWhenGuidance, nodeFieldSet, type ConversationalNodeConfig } from "@rbrasier/domain";
+import { doneWhenGuidance, nodeFieldSet, type ConversationalNodeConfig } from "@wayfinder/domain";
 
 // How much conversation tail the message query may carry. Long enough that a
 // thin reply ("Joe Bloggs, are there any options?") inherits the subject of the

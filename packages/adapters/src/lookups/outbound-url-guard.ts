@@ -1,5 +1,5 @@
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { Result } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { Result } from "@wayfinder/domain";
 import { lookup } from "node:dns/promises";
 
 // Resolves a hostname to the addresses it would actually be dialled on.

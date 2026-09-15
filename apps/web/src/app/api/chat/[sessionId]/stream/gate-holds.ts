@@ -1,4 +1,4 @@
-import type { AiTurnPayload } from "@rbrasier/domain";
+import type { AiTurnPayload } from "@wayfinder/domain";
 
 // Key prefix marking a gathered-context item as still outstanding, so the cheap
 // chat model treats it as something to ask about rather than a satisfied fact.

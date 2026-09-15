@@ -5,7 +5,7 @@ import type {
   Session,
   TokenUsage,
   TurnStreamWriter,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { buildCrossCheckGapNote, CROSS_CHECK_PASS_NOTE } from "./turn-helpers";
 import { executeTurn, type ExecuteTurnInput } from "./execute-turn";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { SessionMessage } from "@rbrasier/domain";
+import type { SessionMessage } from "@wayfinder/domain";
 import { resolveApproverEditDocument } from "./approver-edit-document";
 
 const message = (overrides: Partial<SessionMessage>): SessionMessage =>

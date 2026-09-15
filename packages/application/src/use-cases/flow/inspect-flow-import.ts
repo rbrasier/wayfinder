@@ -1,4 +1,4 @@
-import { err, FLOW_ARCHIVE_LIMITS, ok, resolveFlowDependencies } from "@rbrasier/domain";
+import { err, FLOW_ARCHIVE_LIMITS, ok, resolveFlowDependencies } from "@wayfinder/domain";
 import type {
   DependencyCandidates,
   FlowArchiveLimits,
@@ -7,7 +7,7 @@ import type {
   IMcpServerRepository,
   ISkillRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface InspectFlowImportInput {
   archive: Buffer;

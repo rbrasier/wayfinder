@@ -1,5 +1,5 @@
-import { buildAuditQuery, toAuditCsv, toAuditJson, verifyAuditChain } from "@rbrasier/domain";
-import { sha256Hex } from "@rbrasier/adapters";
+import { buildAuditQuery, toAuditCsv, toAuditJson, verifyAuditChain } from "@wayfinder/domain";
+import { sha256Hex } from "@wayfinder/adapters";
 import { z } from "zod";
 import { adminProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";

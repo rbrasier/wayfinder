@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Info } from "lucide-react";
-import { accumulateInsights } from "@rbrasier/application";
-import type { SessionMessage } from "@rbrasier/domain";
+import { accumulateInsights } from "@wayfinder/application";
+import type { SessionMessage } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

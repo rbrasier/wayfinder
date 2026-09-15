@@ -174,7 +174,7 @@ are not reused for session messages — sessions have a richer schema
   `claude-sonnet-4-20250514` for conversation, `claude-haiku-4-5-20251001` for
   confidence scoring (cost-driven choice).
 - **ADR-003 Monorepo Structure** — `apps/web` for Next.js + tRPC, `apps/api` for
-  Express webhooks; framework code stays in `@rbrasier/*` npm deps.
+  Express webhooks; framework code stays in `@wayfinder/*` npm deps.
 - **ADR-004 LangGraph as Adapter** — extended (not replaced) by ADR-007.
 
 ### New ADRs introduced by this PRD

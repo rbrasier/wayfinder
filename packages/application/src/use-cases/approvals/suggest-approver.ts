@@ -14,8 +14,8 @@ import {
   type IUserRepository,
   type PositionLookupInput,
   type Result,
-} from "@rbrasier/domain";
-import { delegationPositionSchema, type DelegationPosition } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { delegationPositionSchema, type DelegationPosition } from "@wayfinder/shared";
 import {
   describeApprover,
   describeAssignedApprover,
@@ -147,7 +147,11 @@ export class SuggestApprover {
     });
     if (chunks.error || chunks.data.length === 0) return fallback;
 
-    const extracted = await this.extractPosition(chunks.data.map((chunk) => chunk.chunkText), config.roleHint);
+    const extracted = await this.extractPosition(chunks.data.map((chunk) => chunk.chunkText), config.roleHint, {
+      userId: input.requestedByUserId,
+      flowId: input.flowId,
+      sessionId: input.sessionId,
+    });
     if (!extracted) return fallback;
 
     return {
@@ -160,9 +164,11 @@ export class SuggestApprover {
   private async extractPosition(
     chunkTexts: string[],
     roleHint: string | undefined,
+    attribution: { userId: string; flowId: string; sessionId: string },
   ): Promise<DelegationPosition | null> {
     const result = await this.languageModel!.generateObject<DelegationPosition>({
       purpose: "branching",
+      ...attribution,
       system:
         "You read an organisation's delegation policy and identify the single position that holds the approval authority described. Return only fields the policy states; leave a field empty if it is not named.",
       prompt: [

@@ -5,7 +5,7 @@ import {
   type ILegalHoldRepository,
   type ISessionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Test runs are disposable, but they occupy the same tables as live ones, so a
 // heavy tester adds rows to app_session_messages and app_session_step_outputs

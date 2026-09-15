@@ -1,5 +1,5 @@
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { IDocumentExtractor, IDocumentGenerator, Result } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { IDocumentExtractor, IDocumentGenerator, Result } from "@wayfinder/domain";
 import { PDFParse } from "pdf-parse";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";

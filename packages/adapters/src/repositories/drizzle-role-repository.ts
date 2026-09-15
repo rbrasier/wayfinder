@@ -7,7 +7,7 @@ import {
   type PermissionKey,
   type Result,
   type Role,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { admin_role_permissions, admin_roles } from "../db/schema/admin";

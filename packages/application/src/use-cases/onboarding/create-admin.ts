@@ -7,7 +7,7 @@ import {
   type IAuditLogger,
   type ISystemSettingsRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Public read backing `bootstrap.adminExists` and the no-admin redirect.
 export class AdminExists {

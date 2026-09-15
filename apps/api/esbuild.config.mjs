@@ -1,13 +1,13 @@
 import { build } from "esbuild";
 
-// The workspace packages are consumed as TypeScript source — `@rbrasier/adapters`
+// The workspace packages are consumed as TypeScript source — `@wayfinder/adapters`
 // resolves to packages/adapters/src/index.ts, and its relative imports are
 // extensionless. `tsc` alone therefore emits a dist/ that Node cannot load:
 // resolution walks into the workspace source and dies on the first `./db/index`.
 // Bundling inlines the workspace packages and leaves real node_modules imports
 // (including native ones like onnxruntime-node) as runtime requires.
 // Everything else is inlined. The workspace packages are TypeScript source, and
-// `@rbrasier/adapters` resolves its peer dependencies (ai, better-auth,
+// `@wayfinder/adapters` resolves its peer dependencies (ai, better-auth,
 // @langchain/*) from its own node_modules — a resolution base that does not
 // survive being emitted into apps/api/dist. Inlining sidesteps that entirely and
 // leaves a bundle whose only runtime requirement is the natives below.

@@ -8,7 +8,7 @@ import {
   type Result,
   type User,
   type UserUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_users } from "../db/schema/core";
@@ -40,6 +40,7 @@ const toEntity = (row: typeof core_users.$inferSelect): User => ({
   organisationId: row.organisation_id,
   emailVerified: row.email_verified,
   isAdmin: row.is_admin,
+  welcomeTourCompletedAt: row.welcome_tour_completed_at,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -144,6 +145,9 @@ export class DrizzleUserRepository implements IUserRepository {
           ...(patch.team !== undefined ? { team: patch.team } : {}),
           ...(patch.organisationId !== undefined ? { organisation_id: patch.organisationId } : {}),
           ...(patch.isAdmin !== undefined ? { is_admin: patch.isAdmin } : {}),
+          ...(patch.welcomeTourCompletedAt !== undefined
+            ? { welcome_tour_completed_at: patch.welcomeTourCompletedAt }
+            : {}),
           updated_at: new Date(),
         })
         .where(eq(core_users.id, id))

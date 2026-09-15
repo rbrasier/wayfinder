@@ -7,7 +7,7 @@ import {
   type IChunkCurationRepository,
   type IEmbeddingsProvider,
   type IHybridRetriever,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { describe, expect, it, vi } from "vitest";
 import { RevertChunk, SetChunkStatus, TagChunks } from "./curate-chunks";
 import { EditChunk } from "./edit-chunk";

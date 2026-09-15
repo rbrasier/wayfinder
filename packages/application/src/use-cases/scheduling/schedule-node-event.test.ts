@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   FlowNode,
   IClock,
@@ -9,7 +9,7 @@ import type {
   Session,
   SessionSchedule,
   SessionStepOutput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ScheduleNodeEvent } from "./schedule-node-event";
 
 const usage = {

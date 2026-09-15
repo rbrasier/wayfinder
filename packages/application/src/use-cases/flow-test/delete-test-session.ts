@@ -6,7 +6,7 @@ import {
   type IFlowRepository,
   type ISessionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface DeleteTestSessionInput {
   sessionId: string;

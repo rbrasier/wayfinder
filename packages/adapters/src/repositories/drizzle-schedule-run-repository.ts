@@ -7,7 +7,7 @@ import {
   type Result,
   type ScheduleRun,
   type ScheduleRunView,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {

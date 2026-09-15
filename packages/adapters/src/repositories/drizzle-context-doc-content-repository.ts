@@ -1,5 +1,5 @@
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { ExtractionStatus, Result } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { ExtractionStatus, Result } from "@wayfinder/domain";
 import { eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { kb_context_doc_content } from "../db/schema/kb";

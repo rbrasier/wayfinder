@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type ExtractionRun, type Result, type RunStatus } from "@rbrasier/domain";
+import { ok, type ExtractionRun, type Result, type RunStatus } from "@wayfinder/domain";
 import { MarkRunComplete } from "./mark-run-complete";
 
 const run = (status: RunStatus): ExtractionRun => ({

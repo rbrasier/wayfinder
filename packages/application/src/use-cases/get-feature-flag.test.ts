@@ -8,7 +8,7 @@ import {
   type NewFeatureFlag,
   type Result,
   type Role,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { IsFeatureEnabled, IsFeatureEnabledForUser, ListFeatureFlags, SetFeatureFlagRoles } from "./get-feature-flag";
 
 class FakeFeatureFlagRepository implements IFeatureFlagRepository {

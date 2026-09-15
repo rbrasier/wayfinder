@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { ok, type Result } from "@rbrasier/domain";
-import type { ReindexAllDocumentsResult, ReindexProgress } from "@rbrasier/application";
+import { ok, type Result } from "@wayfinder/domain";
+import type { ReindexAllDocumentsResult, ReindexProgress } from "@wayfinder/application";
 import {
   getReindexStatus,
   runReindex,

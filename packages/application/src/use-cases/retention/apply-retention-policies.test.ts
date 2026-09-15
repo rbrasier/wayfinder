@@ -11,7 +11,7 @@ import {
   type Result,
   type RetentionPolicy,
   type RetentionTargetKey,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ApplyRetentionPolicies } from "./apply-retention-policies";
 
 const fixedClock = (iso: string): IClock => ({ now: () => new Date(iso) });

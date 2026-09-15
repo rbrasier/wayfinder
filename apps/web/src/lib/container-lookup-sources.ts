@@ -5,9 +5,9 @@ import {
   DirectoryValueSetAdapter,
   DrizzleLookupSourceRepository,
   ManagedValueSetAdapter,
-} from "@rbrasier/adapters";
-import type { Database, SettingsEncryptionService } from "@rbrasier/adapters";
-import type { ILanguageModel } from "@rbrasier/domain";
+} from "@wayfinder/adapters";
+import type { Database, SettingsEncryptionService } from "@wayfinder/adapters";
+import type { ILanguageModel } from "@wayfinder/domain";
 import {
   DeleteLookupSource,
   ListLookupSources,
@@ -17,8 +17,8 @@ import {
   TestLookupSource,
   UpdateLookupSource,
   ValidateTemplateLookupSources,
-} from "@rbrasier/application";
-import type { IPeopleDirectory } from "@rbrasier/domain";
+} from "@wayfinder/application";
+import type { IPeopleDirectory } from "@wayfinder/domain";
 
 interface LookupSourceDependencies {
   db: Database;

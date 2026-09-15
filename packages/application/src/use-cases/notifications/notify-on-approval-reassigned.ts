@@ -7,7 +7,7 @@ import {
   type INotificationLogRepository,
   type NotificationLog,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { NotificationConfig } from "./notify-on-session-complete";
 import { buildApprovalReassignedEmail } from "./approval-templates";
 

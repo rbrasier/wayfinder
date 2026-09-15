@@ -24,6 +24,9 @@ import {
   createDefaultAboutLinksConfig,
   parseAboutLinksConfig,
   ABOUT_LINKS_SETTING_KEY,
+  CHAT_DISCLAIMER_CONFIG_SETTING_KEY,
+  createDefaultChatDisclaimerConfig,
+  parseChatDisclaimerConfig,
   createDefaultEmailConfig,
   isEntraConfigured,
   parseOrganisationResolution,
@@ -48,9 +51,10 @@ import {
   type SiemConfig,
   type SiteBannerConfig,
   type AboutLinksConfig,
+  type ChatDisclaimerConfig,
   type StorageConfig,
   type UsageLimitsConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   DOCUMENT_GENERATION_CHARS_PER_TOKEN,
   DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_PERCENT,
@@ -63,7 +67,7 @@ import {
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
   type EmbeddingsProvider,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import {
   DEFAULT_DOCUMENT_GENERATION_CONFIG,
   DEFAULT_EXTRACTION_CONFIG,
@@ -105,6 +109,8 @@ export class RuntimeConfigStore {
   private siteBannerPending: Promise<SiteBannerConfig> | null = null;
   private aboutLinksCache: AboutLinksConfig | null = null;
   private aboutLinksPending: Promise<AboutLinksConfig> | null = null;
+  private chatDisclaimerCache: ChatDisclaimerConfig | null = null;
+  private chatDisclaimerPending: Promise<ChatDisclaimerConfig> | null = null;
   private extractionCache: ExtractionConfig | null = null;
   private extractionPending: Promise<ExtractionConfig> | null = null;
   private documentGenerationCache: DocumentGenerationConfig | null = null;
@@ -191,6 +197,23 @@ export class RuntimeConfigStore {
       return config;
     })();
     return this.siteBannerPending;
+  }
+
+  async getChatDisclaimerConfig(): Promise<ChatDisclaimerConfig> {
+    if (this.chatDisclaimerCache) return this.chatDisclaimerCache;
+    if (this.chatDisclaimerPending) return this.chatDisclaimerPending;
+    this.chatDisclaimerPending = (async () => {
+      const fallback = createDefaultChatDisclaimerConfig();
+      const result = await this.settingsRepo.get(CHAT_DISCLAIMER_CONFIG_SETTING_KEY);
+      const config =
+        !result.error && result.data?.value
+          ? parseChatDisclaimerConfig(result.data.value, fallback)
+          : fallback;
+      this.chatDisclaimerCache = config;
+      this.chatDisclaimerPending = null;
+      return config;
+    })();
+    return this.chatDisclaimerPending;
   }
 
   async getAboutLinksConfig(): Promise<AboutLinksConfig> {
@@ -474,6 +497,11 @@ export class RuntimeConfigStore {
   invalidateSiteBanner(): void {
     this.siteBannerCache = null;
     this.siteBannerPending = null;
+  }
+
+  invalidateChatDisclaimer(): void {
+    this.chatDisclaimerCache = null;
+    this.chatDisclaimerPending = null;
   }
 
   invalidateAboutLinks(): void {

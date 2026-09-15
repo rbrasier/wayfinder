@@ -7,7 +7,7 @@ import {
   type Result,
   type TemplateField,
   type ValueSetEntry,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ValidateExternalFieldsInput {
   fields: TemplateField[];

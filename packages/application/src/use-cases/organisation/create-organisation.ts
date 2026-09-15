@@ -5,7 +5,7 @@ import {
   type IOrganisationRepository,
   type Organisation,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 const slugify = (name: string): string =>
   name

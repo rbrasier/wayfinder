@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   IMcpClient,
   IMcpServerRepository,
@@ -10,7 +10,7 @@ import type {
   McpToolCallOutput,
   NewMcpServer,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   DeleteMcpServer,
@@ -37,6 +37,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       url: input.url,
       credentialRef: input.credentialRef ?? null,
       communicatesExternally: input.communicatesExternally ?? false,
+      verbatimOnly: input.verbatimOnly ?? false,
       status: "active",
       createdByUserId: input.createdByUserId ?? null,
       createdAt: now,
@@ -57,6 +58,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       credentialRef:
         patch.credentialRef === undefined ? current.credentialRef : patch.credentialRef,
       communicatesExternally: patch.communicatesExternally ?? current.communicatesExternally,
+      verbatimOnly: patch.verbatimOnly ?? current.verbatimOnly,
     };
     this.rows[index] = updated;
     return ok(updated);

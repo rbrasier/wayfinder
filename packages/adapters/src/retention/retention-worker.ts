@@ -1,7 +1,7 @@
-import type { IJobRepository, ILogger, Result } from "@rbrasier/domain";
+import type { IJobRepository, ILogger, Result } from "@wayfinder/domain";
 
 // Structural abstraction over the application's ApplyRetentionPolicies use-case
-// so the adapter layer depends only on @rbrasier/domain. The app wires the
+// so the adapter layer depends only on @wayfinder/domain. The app wires the
 // concrete use-case (whose execute returns a richer summary) into the worker.
 export interface RetentionSweeper {
   execute(): Promise<Result<unknown>>;

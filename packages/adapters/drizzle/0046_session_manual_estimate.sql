@@ -1,0 +1,1 @@
+ALTER TABLE "app_sessions" ADD COLUMN "manual_estimate_minutes" integer;

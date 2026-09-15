@@ -1,6 +1,6 @@
 import PizZip from "pizzip";
 import { describe, expect, it } from "vitest";
-import type { ArchiveLimits } from "@rbrasier/domain";
+import type { ArchiveLimits } from "@wayfinder/domain";
 import { ZipIngestor } from "./zip-ingestor";
 
 const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46];

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { FlowTestSeed } from "@rbrasier/domain";
+import type { FlowTestSeed } from "@wayfinder/domain";
 import { StartSession } from "../session/start-session";
 import { StartTestRun } from "./start-test-run";
 import {

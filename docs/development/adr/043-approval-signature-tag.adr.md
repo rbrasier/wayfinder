@@ -98,6 +98,32 @@ The exclusion is now exported as `gatherableFields` and applied on every branch.
 A caller that cannot go through `nodeFieldSet` must still go through the same
 predicate; being unable to reach the choke point is not permission to skip it.
 
+**Amended v0.28.18 — the field set is not the only thing the model reads.** The
+table above names `buildFieldConstraintsText → AI prompt` as *the* prompt
+consumer. It is not. `FlowSessionGraph.buildSystemPrompt` also interpolates the
+template **body** into `<document_template>` verbatim, under the instruction
+"gather all information needed to fully complete the following template", and
+`DrizzleReindexSourceRepository` indexes that same body as a `template` RAG
+source whose chunks land in the same prompt. Neither path carries a field set, so
+neither inherited the field filter, and the body still spelled out
+`{{ Supervisor Signature (approval) }}` — enough on its own for the model to ask
+the operator for a signature, during ordinary conversation rather than after a
+cross-check.
+
+`gatherableTemplateContent` is `gatherableFields` for the body, and both
+prompt-facing readers of that text go through it. It drops a line whose only tags
+are signatures **entire, label and all** — the reported transcript asked for
+"First Level Supervisor Approval", the label rather than the tag, so removing the
+tag alone leaves the invitation intact. A line also carrying a gatherable tag
+survives with the signature replaced by `SIGNATURE_SLOT_MARKER` and a constraint
+explaining it. Content left with nothing gatherable becomes null: no block, no
+chunk.
+
+The rule generalises past this fix: **anything a value-gathering model reads must
+go through the exclusion, whether it arrives as fields or as prose.** A guard on
+one prompt block would not have caught this leak and will not catch the next, so
+the regression test asserts over the entire built prompt.
+
 **Rendering is the deliberate exception.** `GenerateDocument` and
 `ApplyApprovalSignature` keep the raw set, because a signature must reach
 `buildRenderData` to be written at all — as the attestation once decided, as an
@@ -136,6 +162,53 @@ signature* is defined by, reached with **no new dependency and no migration**.
 Decisions are recorded verbatim: a `rejected` or `changes_requested` outcome
 renders the same block with that decision named. An undecided slot renders as an
 empty string — a document must never imply an approval that has not happened.
+
+**Amended v0.28.21 — the comment may also stand on its own, bound by name.**
+The block above is the only place a template could put the approver's comment,
+and its shape is fixed: one `Comment:` row, in that order, wherever the signature
+sits. An author wanting the rationale in a "Reason for decision" box, a table
+cell beside the recommendation, or a covering paragraph had nowhere to put it.
+
+`(approval-comment: <Signature Name>)` is a second annotation producing the
+`approval_comment` field type, carrying `signatureLabel` — the signature tag's
+own name, as the author wrote it:
+
+```
+{{ Delegate Signature (approval) }}
+{{ Reason For Decision (approval-comment: Delegate Signature) }}
+```
+
+`(signature-comment: …)` is its synonym, for the reason `(signature)` is a
+synonym of `(approval)`. `approvalCommentSlotKey` resolves the reference through
+`deriveFieldKey` — the same derivation that produced the signature's own key from
+its own label, so the two cannot disagree.
+
+**The reference is explicit because §5 already settled that guessing is worse
+than refusing.** A bare `(approval-comment)` binds to the template's only
+signature and is a `VALIDATION_FAILED` with none or with two or more, on the
+same reasoning as the lone-slot fallback: with several slots, a guess prints one
+approver's words under another approver's name. A comment naming a signature the
+template does not declare fails at upload with the available names listed, rather
+than rendering blank forever at run time. Both are cross-tag rules, so they are
+resolved in a pass after the whole tag list is walked — a comment tag may sit
+*above* the signature it names, which is the ordinary layout for a rationale box.
+
+The value is the deciding approval's `comment`, carried out of the same
+latest-first pass that fills the signature slot, so the block and the comment
+printed beside it can never come from different decisions. It is read from the
+approval row's own column — written once by the pending-guarded update, never
+again — so no new record key is introduced and an approval decided before this
+amendment fills its comment tag on the next render. An undecided slot, or a
+decision made without a comment, renders empty: a document must never imply a
+rationale nobody gave, any more than an approval that never happened.
+
+Everything §2 and §5a say about a signature applies unchanged to its comment, and
+is inherited rather than re-implemented: `gatherableFields` and
+`gatherableTemplateContent` are the same two choke points, the annotation editor
+gains a row type whose settings panel is the signature picker, and a `(repeat)`
+group refuses a comment for the reason it refuses a signature — one decision is
+not *N*. The attestation block itself is untouched: it is frozen, hashed text,
+and altering it would alter what was signed.
 
 ### 4. Plain runs, so the block renders everywhere
 

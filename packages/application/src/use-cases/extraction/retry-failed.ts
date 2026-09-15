@@ -1,4 +1,4 @@
-import { ok, type IExtractionRunRepository, type Result } from "@rbrasier/domain";
+import { ok, type IExtractionRunRepository, type Result } from "@wayfinder/domain";
 
 export interface RetryFailedResult {
   retried: number;

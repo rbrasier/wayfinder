@@ -1,4 +1,4 @@
-import type { SessionStatus } from "@rbrasier/domain";
+import type { SessionStatus } from "@wayfinder/domain";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

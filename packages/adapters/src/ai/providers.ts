@@ -3,7 +3,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createMistral } from "@ai-sdk/mistral";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { wrapLanguageModel, type LanguageModel, type LanguageModelV1Middleware } from "ai";
-import type { BedrockCredentials, ProviderName } from "@rbrasier/domain";
+import type { BedrockCredentials, ProviderName } from "@wayfinder/domain";
 
 export type ProviderCredentials = string | BedrockCredentials | null;
 
@@ -37,7 +37,7 @@ interface ProviderEntry {
  * Registry of providers. To add a new provider:
  *   1. `pnpm add @ai-sdk/<name>` in this package.
  *   2. Add a new entry below with its default model + resolver.
- *   3. Add the literal name to ProviderName in @rbrasier/domain.
+ *   3. Add the literal name to ProviderName in @wayfinder/domain.
  * Nothing else changes.
  */
 const PROVIDERS = {

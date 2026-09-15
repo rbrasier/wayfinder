@@ -12,8 +12,8 @@ import {
   domainError,
   err,
   ok,
-} from "@rbrasier/domain";
-import { sampleResponseSchema, type SampleResponse } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { sampleResponseSchema, type SampleResponse } from "@wayfinder/shared";
 import { SendMessage } from "./send-message";
 
 const ZERO_USAGE: TokenUsage = {

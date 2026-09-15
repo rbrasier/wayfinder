@@ -1,4 +1,4 @@
-import { readBranchRule } from "@rbrasier/domain";
+import { readBranchRule } from "@wayfinder/domain";
 
 export interface BranchOption {
   nodeId: string;

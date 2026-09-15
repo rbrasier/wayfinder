@@ -7,7 +7,7 @@ entry.
 ## The provider port
 
 The application code only ever uses `ILanguageModel` from
-`@rbrasier/domain`:
+`@wayfinder/domain`:
 
 ```ts
 interface ILanguageModel {
@@ -28,7 +28,7 @@ in the registry at `packages/adapters/src/ai/providers.ts`.
 ### 1. Install the SDK
 
 ```bash
-pnpm --filter @rbrasier/adapters add @ai-sdk/groq
+pnpm --filter @wayfinder/adapters add @ai-sdk/groq
 ```
 
 ### 2. Add the provider name to the domain

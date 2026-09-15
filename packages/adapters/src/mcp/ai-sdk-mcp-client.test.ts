@@ -1,4 +1,4 @@
-import type { McpServer } from "@rbrasier/domain";
+import type { McpServer } from "@wayfinder/domain";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildMcpTransport } from "./ai-sdk-mcp-client";

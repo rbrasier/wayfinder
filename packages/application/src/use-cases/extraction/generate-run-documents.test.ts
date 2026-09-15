@@ -9,7 +9,7 @@ import {
   type FlowVersion,
   type GenerateInput,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { GenerateRunDocuments } from "./generate-run-documents";
 
 const contextDoc = (overrides: Partial<FlowContextDoc> = {}): FlowContextDoc => ({

@@ -1,6 +1,6 @@
-import { buildExtractionField, type ExtractionSchemaDraft } from "@rbrasier/domain";
-import { buildExtractionSystemPrompt } from "@rbrasier/application";
-import { DocumentGeneratorRouter, DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
+import { buildExtractionField, type ExtractionSchemaDraft } from "@wayfinder/domain";
+import { buildExtractionSystemPrompt } from "@wayfinder/application";
+import { DocumentGeneratorRouter, DocxGenerator, XlsxGenerator } from "@wayfinder/adapters";
 import type { Container } from "@/lib/container";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";

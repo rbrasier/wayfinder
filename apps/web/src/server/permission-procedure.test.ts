@@ -1,4 +1,4 @@
-import type { PermissionKey } from "@rbrasier/domain";
+import type { PermissionKey } from "@wayfinder/domain";
 import { TRPCError } from "@trpc/server";
 import { describe, expect, it } from "vitest";
 import type { Container } from "@/lib/container";

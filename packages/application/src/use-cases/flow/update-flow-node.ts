@@ -1,4 +1,4 @@
-import type { FlowNode, FlowNodeUpdate, IFlowNodeRepository, Result } from "@rbrasier/domain";
+import type { FlowNode, FlowNodeUpdate, IFlowNodeRepository, Result } from "@wayfinder/domain";
 
 export class UpdateFlowNode {
   constructor(private readonly nodes: IFlowNodeRepository) {}

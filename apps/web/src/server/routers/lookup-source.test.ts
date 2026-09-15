@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PermissionKey } from "@rbrasier/domain";
+import type { PermissionKey } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { lookupSourceRouter } from "./lookup-source";

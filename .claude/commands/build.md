@@ -6,8 +6,19 @@ or when the user explicitly asks to implement a specific phase or feature.
 **Pre-flight:** Confirm the phase doc in `docs/development/to-be-implemented/`
 exists and has passed `/doc-review`. Read the PRD, ADR(s), and phase doc in
 full before writing a single line of code. Create the working branch
-(`feature/<slug>`) from `main` — new features land on the next release line,
-never on a `release/*` branch (see **Release Branching** in `CLAUDE.md`).
+(`feature/<slug>/claude-<username>`) from `main` — new features land on the next
+release line, never on a `release/*` branch (see **Release Branching** in
+`CLAUDE.md`). `<slug>` is a short kebab-case description of the feature and
+`<username>` is your GitHub login (`gh api user --jq .login`; fall back to the
+local-part of `git config user.email`).
+
+**Also establish the source issue, if there is one.** A phase reaches `/build`
+from somewhere: a GitHub issue the user named, a triage build link that started
+the session, or an issue the phase doc cites. Find that number during the
+pre-flight read and hold it for the whole run — whoever raised it gets a
+plain-English reply on the issue when the PR opens. If the phase came from a PRD
+rather than an issue, there is no source issue and that part of Step 4 is
+skipped; note which it is rather than leaving it ambiguous.
 
 ---
 
@@ -34,7 +45,8 @@ sections.
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
 | Tests | The test files written before each implementation file, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
-| Version, branch & PR target | MINOR or PATCH and the resulting version, the `feature/<slug>` branch name, and `main` as both base and PR target |
+| Version, branch & PR target | MINOR or PATCH and the resulting version, the `feature/<slug>/claude-<username>` branch name, and `main` as both base and PR target |
+| Source issue | The issue number found in the pre-flight, and **what it actually asked for** in one line. A phase usually delivers more than any one issue asked for — say what of it answers the issue. Omit the section entirely when the phase came from a PRD rather than an issue |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done in this phase |
 
@@ -109,5 +121,20 @@ Once all sub-components pass validation, decide whether the feature needs an e2e
 - Run `./validate.sh` one final time — fix all failures before declaring done
 - State the version bump applied (MINOR / PATCH — MAJOR is reserved for the first stable release)
 - Commit all changes and push the branch
-- **Always open the pull request** via `mcp__github__create_pull_request`, against `main` — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. New features never target a `release/*` branch (see **Release Branching** in `CLAUDE.md`). **Build the PR body from the approved Step 0 change summary**, corrected to describe what was actually implemented rather than what was planned, and add the implementation detail the summary could not know up front: files created and modified, migrations generated, the version bump applied, which e2e tests cover the new functionality, known limitations, and any deviation from the approved summary called out explicitly.
+- **Always open the pull request** via `mcp__github__create_pull_request`, against `main` — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. New features never target a `release/*` branch (see **Release Branching** in `CLAUDE.md`).
+- **Write the PR body into [`.github/pull_request_template.md`](../../.github/pull_request_template.md)** — read that file and fill its sections; do not invent a structure. The approved Step 0 change summary is the source, **corrected to describe what was actually implemented rather than what was planned**:
+
+  | Template section | Filled from |
+  |---|---|
+  | `## Summary` | The Step 0 headline and **Goal**, as one paragraph in the user's terms |
+  | `## Impact` → Features affected | The user-facing and admin areas the phase touches |
+  | `## Impact` → Business rules changed | Step 0 **Business rules changing**, each with its trigger and resulting behaviour |
+  | `## UI Impact` | Step 0 **UI / visible behaviour**, restated as what the user experiences |
+  | `## Why this change is required` | The PRD and phase doc's rationale — the use case or problem the phase exists to serve |
+  | `<details>` implementation block | Version bump, files created and modified, migrations generated with their `-- data-impact:` line, tests written and the e2e decision (spec extended with its policy group, or "no e2e — covered at `<layer>`"), known limitations |
+
+- **Call out every deviation** from the approved Step 0 summary explicitly, in the implementation block's deviations line. "None" if there were none.
+- A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
+- **Reference the source issue in the PR body** so GitHub links them: `Closes #<number>` on its own line at the end of `## Why this change is required`, which is where the template asks for it. That link is what lets the daily triage routine close the issue once this merges — a passing mention of the number does not count. Use `Closes` only when the phase genuinely finishes what the issue asked; when it delivers part of it, write `Part of #<number>` instead and leave the issue open.
+- **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked. The PR body is written for a maintainer; this comment is written for them. A phase is usually wider than the issue that prompted it — the comment covers **the part that answers the issue**, not the whole phase. Skip this only when the phase came from a PRD rather than an issue.
 - Report the PR URL, and note that the e2e suite runs there rather than locally.

@@ -8,7 +8,7 @@ import {
   type Result,
   type SessionParticipant,
   type SessionParticipantRole,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_session_participants } from "../db/schema/wayfinder";
 

@@ -6,7 +6,7 @@ import {
   type IExtractionDraftDocumentRepository,
   type IObjectStorage,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // One staged input file: its display name, preserved folder path, mime type and
 // raw bytes (progressive upload — ADR-033).

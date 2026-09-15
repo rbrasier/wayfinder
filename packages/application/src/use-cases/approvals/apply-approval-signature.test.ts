@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type Approval, type TemplateField } from "@rbrasier/domain";
+import { ok, type Approval, type TemplateField } from "@wayfinder/domain";
 import { ApplyApprovalSignature } from "./apply-approval-signature";
 
 const at = (iso: string) => new Date(iso);

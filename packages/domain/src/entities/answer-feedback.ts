@@ -6,10 +6,19 @@ export type FeedbackReason = "outdated" | "wrong" | "incomplete" | "other";
 
 export type FeedbackStatus = "pending" | "accepted" | "dismissed";
 
+// Where the item came from. `frontline` is a worker flagging one answer;
+// `flow_lesson` is an accepted `knowledge_gap` lesson (ADR-057 §6), which has no
+// single session behind it and no correction to offer — the SME supplies that
+// during triage. Both land in the same queue on purpose.
+export type FeedbackSource = "frontline" | "flow_lesson";
+
 export interface AnswerFeedback {
   id: string;
-  sessionId: string;
+  // Null for a `flow_lesson` item: its evidence spans several sessions, any of
+  // which may since have been deleted.
+  sessionId: string | null;
   messageId: string | null;
+  source: FeedbackSource;
   flaggedAnswer: string;
   correctedText: string;
   reason: FeedbackReason;
@@ -20,8 +29,10 @@ export interface AnswerFeedback {
 }
 
 export interface NewAnswerFeedback {
-  sessionId: string;
+  sessionId: string | null;
   messageId: string | null;
+  // Absent reads as `frontline`, so every existing call site stays correct.
+  source?: FeedbackSource;
   flaggedAnswer: string;
   correctedText: string;
   reason: FeedbackReason;

@@ -1,14 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
-  computeConfidenceLifecycle,
   computeExtractionFieldReport,
   computeFieldReport,
   computeFlowDistribution,
-  computeNodeBreakdown,
   computeOverviewMetrics,
   computeSessionActivity,
   type AnalyticsMessageRow,
   type AnalyticsNode,
+  computeFlowUsageStats,
   type AnalyticsSessionRow,
 } from "./analytics";
 import { APPROVAL_PROJECTION_FIELDS } from "./approval-record";
@@ -20,6 +19,7 @@ const session = (overrides: Partial<AnalyticsSessionRow>): AnalyticsSessionRow =
   flowName: "Flow One",
   status: "active",
   currentNodeId: null,
+  manualEstimateMinutes: null,
   createdAt: new Date("2026-05-20T00:00:00Z"),
   updatedAt: new Date("2026-05-20T00:00:00Z"),
   ...overrides,
@@ -81,59 +81,6 @@ describe("computeFlowDistribution", () => {
 
     expect(distribution[0]).toEqual({ flowId: "f2", flowName: "Two", count: 2 });
     expect(distribution[1]).toEqual({ flowId: "f1", flowName: "One", count: 1 });
-  });
-});
-
-describe("computeConfidenceLifecycle", () => {
-  it("averages assistant confidence across normalised session positions", () => {
-    const messages: AnalyticsMessageRow[] = [
-      { sessionId: "s1", stepNodeId: "n1", role: "assistant", confidence: 20, createdAt: new Date("2026-05-20T00:00:00Z") },
-      { sessionId: "s1", stepNodeId: "n1", role: "assistant", confidence: 100, createdAt: new Date("2026-05-20T01:00:00Z") },
-    ];
-
-    const points = computeConfidenceLifecycle(messages, 10);
-
-    expect(points).toHaveLength(10);
-    expect(points[0]?.averageConfidence).toBe(20);
-    expect(points[9]?.averageConfidence).toBe(100);
-  });
-
-  it("ignores user messages and null confidences", () => {
-    const messages: AnalyticsMessageRow[] = [
-      { sessionId: "s1", stepNodeId: null, role: "user", confidence: null, createdAt: new Date() },
-    ];
-    const points = computeConfidenceLifecycle(messages, 5);
-    expect(points.every((point) => point.sampleCount === 0)).toBe(true);
-  });
-});
-
-describe("computeNodeBreakdown", () => {
-  const nodes: AnalyticsNode[] = [
-    { id: "n1", name: "Intake", colour: null },
-    { id: "n2", name: "Draft", colour: "#fff" },
-  ];
-
-  it("computes turns, completion rate and drop-off per node", () => {
-    const messages: AnalyticsMessageRow[] = [
-      { sessionId: "s1", stepNodeId: "n1", role: "user", confidence: null, createdAt: new Date("2026-05-20T00:00:00Z") },
-      { sessionId: "s1", stepNodeId: "n1", role: "assistant", confidence: 90, createdAt: new Date("2026-05-20T00:05:00Z") },
-      { sessionId: "s2", stepNodeId: "n2", role: "user", confidence: null, createdAt: new Date("2026-05-20T00:00:00Z") },
-    ];
-    const sessions = [
-      session({ id: "s1", status: "complete", currentNodeId: "n2" }),
-      session({ id: "s2", status: "abandoned", currentNodeId: "n2" }),
-    ];
-
-    const breakdown = computeNodeBreakdown(nodes, messages, sessions);
-
-    const intake = breakdown.find((row) => row.nodeId === "n1");
-    const draft = breakdown.find((row) => row.nodeId === "n2");
-    expect(intake?.sessionsVisited).toBe(1);
-    expect(intake?.averageTurns).toBe(1);
-    expect(intake?.averageConfidenceAtCompletion).toBe(90);
-    expect(intake?.completionRate).toBe(100);
-    expect(draft?.dropOff).toBe(1);
-    expect(draft?.completionRate).toBe(0);
   });
 });
 
@@ -885,11 +832,96 @@ describe("computeExtractionFieldReport", () => {
     expect(report.rows[1]!.values.price).toBe("");
   });
 
-  it("carries each record's aggregate (weakest-field) confidence for RAG banding", () => {
+  it("carries each record's aggregate confidence per scale for RAG banding", () => {
     const report = computeExtractionFieldReport(
       [{ key: "price", label: "Price", type: "currency" }],
       [record("r1", [{ key: "price", value: "£10", confidence: 0.3, rationale: "" }])],
     );
-    expect(report.rows[0]!.aggregateConfidence).toBe(0.3);
+    expect(report.rows[0]!.aggregateConfidence).toEqual({ selection: null, accuracy: 0.3 });
+  });
+
+  it("keeps a verbatim record's selection confidence off the accuracy scale", () => {
+    const report = computeExtractionFieldReport(
+      [{ key: "rate", label: "Rate", type: "text" }],
+      [
+        record("r1", [
+          { key: "rate", value: "4.25", confidence: 0.6, rationale: "", provenance: "verbatim" },
+        ]),
+      ],
+    );
+    expect(report.rows[0]!.aggregateConfidence).toEqual({ selection: 0.6, accuracy: null });
+  });
+});
+
+describe("computeFlowUsageStats", () => {
+  const staleAfterDays = 14;
+  const asOf = new Date("2026-05-29T00:00:00Z");
+
+  it("counts an empty flow as all zeroes", () => {
+    expect(computeFlowUsageStats([], asOf, staleAfterDays)).toEqual({
+      total: 0,
+      completed: 0,
+      inProgress: 0,
+      stale: 0,
+      abandoned: 0,
+    });
+  });
+
+  it("counts a completed session under completed only", () => {
+    const stats = computeFlowUsageStats([session({ status: "complete" })], asOf, staleAfterDays);
+
+    expect(stats).toMatchObject({ total: 1, completed: 1, inProgress: 0, stale: 0, abandoned: 0 });
+  });
+
+  it("counts a recently active session as in progress, not stale", () => {
+    const stats = computeFlowUsageStats(
+      [session({ status: "active", updatedAt: new Date("2026-05-28T00:00:00Z") })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats).toMatchObject({ total: 1, inProgress: 1, stale: 0 });
+  });
+
+  it("counts an active session past the window as both in progress and stale", () => {
+    // `stale` is a lens on in-progress work, not a fourth status: the session is
+    // still active, it has simply stopped moving.
+    const stats = computeFlowUsageStats(
+      [session({ status: "active", updatedAt: new Date("2026-05-01T00:00:00Z") })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats).toMatchObject({ total: 1, inProgress: 1, stale: 1 });
+  });
+
+  it("does not call a session stale exactly on the boundary", () => {
+    const stats = computeFlowUsageStats(
+      [session({ status: "active", updatedAt: new Date("2026-05-15T00:00:00Z") })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats.stale).toBe(0);
+  });
+
+  it("counts cancelled under abandoned, matching DISCARDED_SESSION_STATUSES", () => {
+    const stats = computeFlowUsageStats(
+      [session({ status: "cancelled" }), session({ id: "s2", status: "abandoned" })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats).toMatchObject({ total: 2, abandoned: 2, completed: 0, inProgress: 0 });
+  });
+
+  it("never marks a finished session stale, however old it is", () => {
+    const stats = computeFlowUsageStats(
+      [session({ status: "complete", updatedAt: new Date("2024-01-01T00:00:00Z") })],
+      asOf,
+      staleAfterDays,
+    );
+
+    expect(stats.stale).toBe(0);
   });
 });

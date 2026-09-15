@@ -15,6 +15,9 @@ const SEED_WITHDRAW_DRAFT_STEP = "Draft the request";
 const SEED_WITHDRAW_REQUEST_MESSAGE =
   "Board meets Thursday — a signature before then would help.";
 const SEED_SIGNATURE_WARNING_FLOW_NAME = "E2E SEED Signature Warning Flow";
+const SEED_OFF_SYSTEM_FLOW_NAME = "E2E SEED Off-System Approval Flow";
+const SEED_OFF_SYSTEM_SESSION_TITLE = "E2E SEED Off-System Approval Session";
+const SEED_OFF_SYSTEM_NEXT_STEP = "Notify the supplier";
 
 export const seedApprovalSubjectSession = async (
   container: Container,
@@ -615,4 +618,132 @@ export const seedApprovalFirstFlow = async (
   );
 
   return flow.id;
+};
+
+// A session parked on a sent approval, with a step *after* the approval so a
+// recorded off-system decision has somewhere to advance to — which is the
+// observable outcome the spec asserts.
+//
+// Its own flow rather than a reuse of the withdrawable one: recording an
+// approval advances the session, and two specs mutating one seeded session is
+// how a suite starts depending on the order it runs in.
+export const seedOffSystemApprovalSession = async (
+  container: Container,
+  ownerUserId: string,
+): Promise<{ sessionId: string; nextStepName: string }> => {
+  const flow = unwrap(
+    await container.useCases.createFlow.execute({
+      name: SEED_OFF_SYSTEM_FLOW_NAME,
+      description: "Seeded flow whose pending approval accepts an off-system nomination",
+      expertRole: "Procurement Officer",
+      ownerUserId,
+    }),
+    "create off-system flow",
+  );
+
+  const draftNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: "Draft the request",
+      positionX: 120,
+      positionY: 120,
+      config: { aiInstruction: "Draft the purchase request.", doneWhen: "The request is drafted." },
+    }),
+    "create off-system draft node",
+  );
+
+  const approvalNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "approval",
+      name: "Manager sign-off",
+      positionX: 420,
+      positionY: 120,
+      // No `allowOffSystemApproval` at all: the fixture proves the default is
+      // permissive for a node authored before the setting existed (ADR-055 §4).
+      config: { approverSource: "first_level_supervisor" },
+    }),
+    "create off-system approval node",
+  );
+
+  const nextNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "conversational",
+      name: SEED_OFF_SYSTEM_NEXT_STEP,
+      positionX: 720,
+      positionY: 120,
+      config: { aiInstruction: "Tell the supplier.", doneWhen: "The supplier is told." },
+    }),
+    "create off-system next node",
+  );
+
+  unwrap(
+    await container.useCases.createFlowEdge.execute({
+      flowId: flow.id,
+      fromNodeId: draftNode.id,
+      toNodeId: approvalNode.id,
+    }),
+    "create off-system draft edge",
+  );
+
+  unwrap(
+    await container.useCases.createFlowEdge.execute({
+      flowId: flow.id,
+      fromNodeId: approvalNode.id,
+      toNodeId: nextNode.id,
+    }),
+    "create off-system onward edge",
+  );
+
+  unwrap(
+    await container.useCases.updateFlow.execute(
+      flow.id,
+      { status: "published", visibility: { kind: "global" } },
+      { canPublishToEveryone: true },
+    ),
+    "publish off-system flow",
+  );
+
+  const session = unwrap(
+    await container.useCases.startSession.execute({ flowId: flow.id, userId: ownerUserId }),
+    "start off-system session",
+  );
+
+  unwrap(
+    await container.repos.sessionStepOutputs.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: draftNode.id,
+      fields: [{ key: "amount", label: "Amount", type: "text", value: "$3,400" }],
+    }),
+    "create off-system draft output",
+  );
+
+  unwrap(
+    await container.repos.sessions.update(session.id, {
+      title: SEED_OFF_SYSTEM_SESSION_TITLE,
+      currentNodeId: approvalNode.id,
+      graphCheckpoint: { currentNodeId: approvalNode.id, advancedFrom: draftNode.id },
+    }),
+    "park off-system session on the approval",
+  );
+
+  // Already sent, so the gate opens in its "Awaiting approval" state — the only
+  // state the off-system action is offered in.
+  unwrap(
+    await container.repos.approvals.create({
+      sessionId: session.id,
+      flowId: flow.id,
+      nodeId: approvalNode.id,
+      requestedByUserId: ownerUserId,
+      approverSource: "first_level_supervisor",
+      approverUserId: ownerUserId,
+      status: "pending",
+    }),
+    "create pending off-system approval",
+  );
+
+  return { sessionId: session.id, nextStepName: SEED_OFF_SYSTEM_NEXT_STEP };
 };

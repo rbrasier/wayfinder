@@ -6,7 +6,7 @@ import {
   type Result,
   type SystemSetting,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ResolveOrganisationOnSignIn } from "./resolve-organisation-on-sign-in";
 
 const ORG = {
@@ -26,6 +26,7 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   organisationId: null,
   emailVerified: true,
   isAdmin: false,
+  welcomeTourCompletedAt: null,
   createdAt: new Date(),
   updatedAt: new Date(),
   ...overrides,

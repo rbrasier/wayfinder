@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   Flow,
   FlowArchiveAsset,
@@ -29,8 +29,8 @@ import type {
   NewFlowNode,
   Result,
   Skill,
-} from "@rbrasier/domain";
-import { FLOW_ARCHIVE_LIMITS, FLOW_EXPORT_FORMAT_VERSION } from "@rbrasier/domain";
+} from "@wayfinder/domain";
+import { FLOW_ARCHIVE_LIMITS, FLOW_EXPORT_FORMAT_VERSION } from "@wayfinder/domain";
 import { DuplicateFlow } from "./duplicate-flow";
 import { ExportFlow } from "./export-flow";
 import { ImportFlow } from "./import-flow";

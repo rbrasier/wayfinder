@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError, parseTemplateFields } from "@rbrasier/domain";
-import type { FlowContextDoc, ILanguageModel, TemplateField } from "@rbrasier/domain";
+import { ok, err, domainError, parseTemplateFields } from "@wayfinder/domain";
+import type { FlowContextDoc, ILanguageModel, TemplateField } from "@wayfinder/domain";
 import {
   CONTEXT_DOCS_CHAR_BUDGET,
   buildContextDocsSection,
   coerceGroupItems,
   coerceStructuredFields,
+  coerceVerbatimFields,
   estimateTokens,
   extractStructuredFields,
   scalarValues,
@@ -390,6 +391,45 @@ describe("coerceStructuredFields", () => {
     const fields = [field({ key: "vendor", label: "Vendor" })];
 
     expect(() => coerceStructuredFields(fields, { vendor: { nested: true } as unknown as string })).not.toThrow();
+  });
+});
+
+describe("coerceVerbatimFields", () => {
+  it("keeps surrounding whitespace the ordinary coercion would strip", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    const result = coerceVerbatimFields(fields, { output: "  4.25 \n" });
+
+    // The whole point: the trim in coerceValue is itself a transformation, and a
+    // verbatim-only connection is one Wayfinder promised not to transform.
+    expect(result[0]!.value).toBe("  4.25 \n");
+    expect(coerceStructuredFields(fields, { output: "  4.25 \n" })[0]!.value).toBe("4.25");
+  });
+
+  it("keeps a value the ordinary coercion would reformat", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    expect(coerceVerbatimFields(fields, { output: "0004.250" })[0]!.value).toBe("0004.250");
+  });
+
+  it("blanks a missing key rather than inventing a value", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    expect(coerceVerbatimFields(fields, {})[0]!.value).toBe("");
+  });
+
+  it("blanks a non-string value, which cannot have been received as bytes", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    expect(coerceVerbatimFields(fields, { output: { nested: true } })[0]!.value).toBe("");
+  });
+
+  it("carries the field's own shape through unchanged", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    expect(coerceVerbatimFields(fields, { output: "x" })).toEqual([
+      { key: "output", label: "Output", type: "text", options: undefined, value: "x" },
+    ]);
   });
 });
 

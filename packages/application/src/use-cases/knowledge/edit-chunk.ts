@@ -1,10 +1,10 @@
-import { domainError, err } from "@rbrasier/domain";
+import { domainError, err } from "@wayfinder/domain";
 import type {
   CuratedChunk,
   IChunkCurationRepository,
   IEmbeddingsProvider,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface EditChunkInput {
   chunkId: string;

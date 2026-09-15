@@ -20,6 +20,11 @@ export interface McpServer {
   // external integration — registered but not selectable in flows at this stage
   // (integration-grade governance is future work).
   readonly communicatesExternally: boolean;
+  // Admin governance of Wayfinder's own handling (ADR-053 §5): when `true`,
+  // Wayfinder will not transform this connection's tool results — it selects
+  // from them or passes them through unchanged. It claims nothing about whether
+  // the source itself is correct, which Wayfinder cannot know.
+  readonly verbatimOnly: boolean;
   readonly status: McpServerStatus;
   readonly createdByUserId: string | null;
   readonly createdAt: Date;
@@ -32,6 +37,7 @@ export interface NewMcpServer {
   readonly url: string;
   readonly credentialRef?: string | null;
   readonly communicatesExternally?: boolean;
+  readonly verbatimOnly?: boolean;
   readonly createdByUserId?: string | null;
 }
 
@@ -40,6 +46,7 @@ export interface McpServerUpdate {
   readonly url?: string;
   readonly credentialRef?: string | null;
   readonly communicatesExternally?: boolean;
+  readonly verbatimOnly?: boolean;
 }
 
 // A tool discovered on a server. `inputSchema` is the tool's JSON-schema input

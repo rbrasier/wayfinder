@@ -1,4 +1,4 @@
-import { domainError, err, ok, type ISkillParser, type ParsedSkill, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type ISkillParser, type ParsedSkill, type Result } from "@wayfinder/domain";
 
 // Dependency-free SKILL.md parser. Honours only what ADR-031 needs — frontmatter
 // scalars, an `allowed-tools` list, and the markdown body. Bundled scripts/assets

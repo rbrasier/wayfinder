@@ -8,7 +8,7 @@ import {
   type Result,
   type SiemConfig,
   type SiemEvent,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Minimal transport seam so the forwarder is testable without real network I/O.
 export type FetchLike = (

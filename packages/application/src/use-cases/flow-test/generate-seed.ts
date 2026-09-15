@@ -16,7 +16,7 @@ import {
   type Result,
   type SeedProposalNode,
   type SeedReject,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface GenerateSeedInput {
   flowId: string;

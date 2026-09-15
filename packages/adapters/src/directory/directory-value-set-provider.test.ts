@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
-import type { IPeopleDirectory, PeopleSearchInput, Person } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
+import type { IPeopleDirectory, PeopleSearchInput, Person } from "@wayfinder/domain";
 import { DirectoryValueSetAdapter, DIRECTORY_LIST_LIMIT } from "./directory-value-set-provider";
 
 const person = (overrides: Partial<Person> = {}): Person => ({

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   IClock,
   IScheduleFireHandler,
@@ -9,7 +9,7 @@ import type {
   ScheduleFiredUpdate,
   ScheduleRun,
   SessionSchedule,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { FireDueSchedules } from "./fire-due-schedules";
 
 const NOW = new Date("2026-07-03T10:00:00.000Z");

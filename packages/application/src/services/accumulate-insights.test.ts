@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AiTurnPayload, SessionMessage } from "@rbrasier/domain";
+import type { AiTurnPayload, SessionMessage } from "@wayfinder/domain";
 import { accumulateInsights } from "./accumulate-insights";
 
 const makeAssistant = (

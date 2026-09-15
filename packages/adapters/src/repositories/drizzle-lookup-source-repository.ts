@@ -1,11 +1,11 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   CachedValueSet,
   ILookupSourceRepository,
   LookupSource,
   NewLookupSource,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import type { SettingsEncryptionService } from "../config/settings-encryption";

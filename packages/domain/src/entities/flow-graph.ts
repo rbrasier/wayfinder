@@ -9,28 +9,43 @@ export interface FlowGraphEdge {
   toNodeId: string;
 }
 
-// Transitive closure: for every node, the set of nodes reachable by following
-// directed edges. Cyclic edges resolve to mutual reachability, which the
-// sibling check below then treats as "not siblings".
-const computeReachableSets = (edges: FlowGraphEdge[]): Map<string, Set<string>> => {
+const buildOutgoing = (edges: FlowGraphEdge[]): Map<string, string[]> => {
   const outgoing = new Map<string, string[]>();
   for (const { fromNodeId, toNodeId } of edges) {
     const list = outgoing.get(fromNodeId) ?? [];
     list.push(toNodeId);
     outgoing.set(fromNodeId, list);
   }
+  return outgoing;
+};
+
+const walkFrom = (outgoing: Map<string, string[]>, startNodeId: string): Set<string> => {
+  const seen = new Set<string>();
+  const stack = [...(outgoing.get(startNodeId) ?? [])];
+  while (stack.length > 0) {
+    const next = stack.pop() as string;
+    if (seen.has(next)) continue;
+    seen.add(next);
+    for (const onward of outgoing.get(next) ?? []) stack.push(onward);
+  }
+  return seen;
+};
+
+// Every node reachable from `startNodeId` by following directed edges. The
+// start node is absent unless a cycle routes back to it, so a branch's own
+// exclusive downstream can be computed by set difference against a sibling.
+export const reachableNodeIds = (edges: FlowGraphEdge[], startNodeId: string): Set<string> =>
+  walkFrom(buildOutgoing(edges), startNodeId);
+
+// Transitive closure: for every node, the set of nodes reachable by following
+// directed edges. Cyclic edges resolve to mutual reachability, which the
+// sibling check below then treats as "not siblings".
+const computeReachableSets = (edges: FlowGraphEdge[]): Map<string, Set<string>> => {
+  const outgoing = buildOutgoing(edges);
 
   const reachable = new Map<string, Set<string>>();
   for (const start of outgoing.keys()) {
-    const seen = new Set<string>();
-    const stack = [...(outgoing.get(start) ?? [])];
-    while (stack.length > 0) {
-      const next = stack.pop() as string;
-      if (seen.has(next)) continue;
-      seen.add(next);
-      for (const onward of outgoing.get(next) ?? []) stack.push(onward);
-    }
-    reachable.set(start, seen);
+    reachable.set(start, walkFrom(outgoing, start));
   }
   return reachable;
 };

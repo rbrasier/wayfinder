@@ -4,7 +4,7 @@ import {
   type IRoleRepository,
   type PermissionKey,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class UpdateRolePermissions {
   constructor(private readonly roles: IRoleRepository) {}

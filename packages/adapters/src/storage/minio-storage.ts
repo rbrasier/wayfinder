@@ -1,8 +1,8 @@
 import { Readable } from "node:stream";
 import { Client } from "minio";
-import { domainError, err, ok, type StorageConfig } from "@rbrasier/domain";
-import type { IObjectStorage } from "@rbrasier/domain";
-import type { Result } from "@rbrasier/domain";
+import { domainError, err, ok, type StorageConfig } from "@wayfinder/domain";
+import type { IObjectStorage } from "@wayfinder/domain";
+import type { Result } from "@wayfinder/domain";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
 import { minioClientOptions } from "./minio-client-options";
 

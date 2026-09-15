@@ -25,6 +25,7 @@ import { roleRouter } from "./routers/role";
 import { scheduleRouter } from "./routers/schedule";
 import { sessionRouter } from "./routers/session";
 import { settingsRouter } from "./routers/settings";
+import { flowMemoryRouter } from "./routers/flow-memory";
 import { skillRouter } from "./routers/skill";
 import { usageRouter } from "./routers/usage";
 import { userRouter } from "./routers/user";
@@ -57,6 +58,7 @@ export const appRouter = router({
   knowledge: knowledgeRouter,
   feedback: feedbackRouter,
   skill: skillRouter,
+  flowMemory: flowMemoryRouter,
   lookupSource: lookupSourceRouter,
   mcpServer: mcpServerRouter,
   audit: auditRouter,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { findRecordCollections, ok } from "@rbrasier/domain";
+import { findRecordCollections, ok } from "@wayfinder/domain";
 import type {
   CachedValueSet,
   ILookupSourceRepository,
@@ -7,7 +7,7 @@ import type {
   LookupSourceKind,
   Result,
   ValueSetCandidate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CachingValueSetProvider } from "./caching-value-set-provider";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "./value-set-kind-adapter";
 

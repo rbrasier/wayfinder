@@ -27,7 +27,7 @@ import {
   type Result,
   type SystemSetting,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../../db/client";
 import { core_accounts, core_sessions } from "../../db/schema/core";
 import type { Auth } from "../better-auth";
@@ -44,6 +44,7 @@ const adminUser = (overrides: Partial<User> = {}): User => ({
   organisationId: null,
   emailVerified: false,
   isAdmin: true,
+  welcomeTourCompletedAt: null,
   createdAt: new Date("2026-01-01T00:00:00Z"),
   updatedAt: new Date("2026-01-01T00:00:00Z"),
   ...overrides,

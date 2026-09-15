@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   type NewApproval,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ReassignApproval } from "./reassign-approval";
 import { InMemoryApprovals, InMemoryMessages, InMemorySessions, InMemoryUsers, RecordingAuditLogger, RecordingReassignedNotifier, RecordingRequestedNotifier, session, user } from "./__fixtures__/approval-doubles";
 

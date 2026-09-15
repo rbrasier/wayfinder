@@ -18,7 +18,7 @@ import {
   type IUserRepository,
   type Result,
   type TransactionalRepositories,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { IApprovalWithdrawnNotifier } from "../notifications/notify-on-approval-withdrawn";
 
 export interface WithdrawApprovalInput {

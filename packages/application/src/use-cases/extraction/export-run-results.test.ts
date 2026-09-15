@@ -1,13 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  domainError,
+  err,
   ok,
   type ExtractionRecord,
   type ExtractionRun,
   type ExtractionSchema,
   type FlowVersion,
   type Result,
+  type CsvTable,
   type WriteSpreadsheetInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ExportRunResults } from "./export-run-results";
 
 const run: ExtractionRun = {
@@ -46,18 +49,33 @@ const records: ExtractionRecord[] = [
     id: "rec-1",
     label: "Acme",
     fields: [
-      { key: "supplier", value: "Acme Ltd", confidence: 0.9, rationale: "cover page" },
-      { key: "price", value: "£10", confidence: 0.4, rationale: "guessed" },
+      {
+        key: "supplier",
+        value: "Acme Ltd",
+        confidence: 0.9,
+        rationale: "cover page",
+        provenance: "verbatim",
+        sourceRef: { documentId: "doc-1", locator: "page 1" },
+      },
+      {
+        key: "price",
+        value: "£10",
+        confidence: 0.4,
+        rationale: "guessed",
+        provenance: "derived",
+        derivation: { method: "unit × quantity", sourceKeys: ["unit", "quantity"] },
+      },
     ],
     sourceDocumentIds: ["doc-1"],
   },
 ];
 
 const buildDeps = () => {
-  const stored: Array<{ key: string; data: Buffer }> = [];
+  const stored: Array<{ key: string; data: Buffer; mime: string }> = [];
   const runs = {
     getRun: vi.fn(async (): Promise<Result<ExtractionRun>> => ok(run)),
     listRecords: vi.fn(async (): Promise<Result<ExtractionRecord[]>> => ok(records)),
+    listDocuments: vi.fn(async () => ok([{ id: "doc-1", filename: "bid.pdf" }])),
   };
   const flowVersions = {
     getById: vi.fn(async (): Promise<Result<FlowVersion | null>> =>
@@ -78,9 +96,16 @@ const buildDeps = () => {
       return ok({ bytes: Buffer.from("xlsx-bytes") });
     }),
   };
+  let lastCsvTable: CsvTable | null = null;
+  const csvWriter = {
+    write: vi.fn((input: CsvTable) => {
+      lastCsvTable = input;
+      return ok({ bytes: Buffer.from("csv-bytes") });
+    }),
+  };
   const storage = {
-    put: vi.fn(async (key: string, data: Buffer) => {
-      stored.push({ key, data });
+    put: vi.fn(async (key: string, data: Buffer, mime: string) => {
+      stored.push({ key, data, mime });
       return ok({ key });
     }),
   };
@@ -91,13 +116,16 @@ const buildDeps = () => {
     runs,
     flowVersions,
     spreadsheetWriter,
+    csvWriter,
     storage,
     auditLogger,
     getWorkbook: () => lastWorkbook!,
+    getCsvTable: () => lastCsvTable!,
     useCase: new ExportRunResults(
       runs as never,
       flowVersions as never,
       spreadsheetWriter as never,
+      csvWriter as never,
       storage as never,
       auditLogger as never,
     ),
@@ -105,7 +133,7 @@ const buildDeps = () => {
 };
 
 describe("ExportRunResults", () => {
-  it("stores an XLSX and a JSON artifact and returns their keys", async () => {
+  it("stores an XLSX, a JSON and a CSV artifact and returns their keys", async () => {
     const deps = buildDeps();
     const result = await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
 
@@ -113,9 +141,11 @@ describe("ExportRunResults", () => {
     expect(result.data).toEqual({
       xlsxKey: "extraction-runs/run-1/exports/results.xlsx",
       jsonKey: "extraction-runs/run-1/exports/results.json",
+      csvKey: "extraction-runs/run-1/exports/results.csv",
       recordCount: 1,
     });
     expect(deps.stored.map((entry) => entry.key).sort()).toEqual([
+      "extraction-runs/run-1/exports/results.csv",
       "extraction-runs/run-1/exports/results.json",
       "extraction-runs/run-1/exports/results.xlsx",
     ]);
@@ -160,7 +190,11 @@ describe("ExportRunResults", () => {
       "field",
       "value",
       "confidence",
+      "kind",
       "band",
+      "provenance",
+      "derivation",
+      "source",
       "rationale",
     ]);
     expect(confidenceTab.rows).toEqual([
@@ -169,7 +203,11 @@ describe("ExportRunResults", () => {
         field: "Supplier",
         value: "Acme Ltd",
         confidence: "90",
+        kind: "selection",
         band: "green",
+        provenance: "verbatim",
+        derivation: "",
+        source: "bid.pdf — page 1",
         rationale: "cover page",
       },
       {
@@ -177,7 +215,11 @@ describe("ExportRunResults", () => {
         field: "Price",
         value: "£10",
         confidence: "40",
+        kind: "accuracy",
         band: "red",
+        provenance: "derived",
+        derivation: "unit × quantity (from unit, quantity)",
+        source: "",
         rationale: "guessed",
       },
     ]);
@@ -193,10 +235,17 @@ describe("ExportRunResults", () => {
     const workbook = deps.getWorkbook();
     expect(workbook.sheets[0]!.rows[0]).toMatchObject({ price: "" });
     expect(workbook.sheets[1]!.rows).toHaveLength(2);
-    expect(workbook.sheets[1]!.rows[1]).toMatchObject({ field: "Price", value: "", confidence: "0" });
+    expect(workbook.sheets[1]!.rows[1]).toMatchObject({
+      field: "Price",
+      value: "",
+      confidence: "0",
+      // A field the record never carried is not a provenance claim about a value.
+      provenance: "",
+      kind: "",
+    });
   });
 
-  it("writes the full records (with rationale + sources) into the JSON artifact", async () => {
+  it("writes the full records (with rationale, provenance + sources) into the JSON artifact", async () => {
     const deps = buildDeps();
     await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
 
@@ -207,6 +256,12 @@ describe("ExportRunResults", () => {
       value: "Acme Ltd",
       confidence: 0.9,
       rationale: "cover page",
+      provenance: "verbatim",
+      sourceRef: { documentId: "doc-1", locator: "page 1" },
+    });
+    expect(payload.records[0].fields[1].derivation).toEqual({
+      method: "unit × quantity",
+      sourceKeys: ["unit", "quantity"],
     });
     expect(payload.records[0].sourceDocumentIds).toEqual(["doc-1"]);
   });
@@ -223,5 +278,145 @@ describe("ExportRunResults", () => {
         resourceId: "run-1",
       }),
     );
+  });
+  it("writes the CSV to the run's export key with a text/csv content type", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const csvEntry = deps.stored.find((entry) => entry.key.endsWith(".csv"))!;
+    expect(csvEntry.key).toBe("extraction-runs/run-1/exports/results.csv");
+    expect(csvEntry.mime).toBe("text/csv");
+    expect(csvEntry.data.toString("utf8")).toBe("csv-bytes");
+  });
+
+  it("opens the CSV with the data sheet's value columns and row order", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const dataTab = deps.getWorkbook().sheets[0]!;
+    const table = deps.getCsvTable();
+    expect(table.columns.slice(0, dataTab.columns.length)).toEqual(dataTab.columns);
+    expect(table.rows.map((row) => row.record)).toEqual(dataTab.rows.map((row) => row.record));
+    for (const column of dataTab.columns) {
+      expect(table.rows[0]![column.key]).toBe(dataTab.rows[0]![column.key]);
+    }
+  });
+
+  it("carries provenance for every field, so a copied value is distinguishable from a composed one", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const table = deps.getCsvTable();
+    expect(table.columns.map((column) => column.key)).toContain("supplier__provenance");
+    expect(table.rows[0]!.supplier__provenance).toBe("verbatim");
+    expect(table.rows[0]!.price__provenance).toBe("derived");
+  });
+
+  it("carries a derived field's method and a field's source reference", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const table = deps.getCsvTable();
+    expect(table.rows[0]!.price__derivation).toBe("unit × quantity (from unit, quantity)");
+    expect(table.rows[0]!.supplier__source).toBe("bid.pdf — page 1");
+  });
+
+  it("falls back to the document id when the run's document listing cannot be read", async () => {
+    // A reference to a document since removed is still evidence, so the locator
+    // is kept rather than dropped with the name.
+    const deps = buildDeps();
+    deps.runs.listDocuments.mockResolvedValueOnce(err(domainError("DB_ERROR", "gone")));
+
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const table = deps.getCsvTable();
+    expect(table.rows[0]!.supplier__source).toBe("doc-1 — page 1");
+  });
+
+  it("omits a derivation or source column for a field no record recorded one on", async () => {
+    const deps = buildDeps();
+    deps.runs.listRecords.mockResolvedValueOnce(
+      ok([
+        {
+          ...records[0]!,
+          fields: [{ key: "supplier", value: "Acme Ltd", confidence: 0.9, rationale: "" }],
+        },
+      ]),
+    );
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const keys = deps.getCsvTable().columns.map((column) => column.key);
+    expect(keys).toEqual(["record", "supplier", "price", "supplier__provenance", "price__provenance"]);
+  });
+
+  it("keeps confidence and rationale out of the CSV", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const keys = deps.getCsvTable().columns.map((column) => column.key);
+    expect(keys.some((key) => key.includes("confidence"))).toBe(false);
+    expect(keys.some((key) => key.includes("rationale"))).toBe(false);
+  });
+
+  it("names CSV in the audit event's formats", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    expect(deps.auditLogger.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ formats: ["xlsx", "json", "csv"] }),
+      }),
+    );
+  });
+
+  // One number across three formats would be ambiguous, so volume is recorded
+  // per format — an auditor asking "how much left as CSV" gets an answer.
+  it("records byte volume per format in the audit event", async () => {
+    const deps = buildDeps();
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    const entry = deps.auditLogger.log.mock.calls[0]![0] as {
+      metadata: { bytes: Record<string, number>; recordCount: number };
+    };
+    const stored = new Map(deps.stored.map((item) => [item.key.split(".").pop()!, item.data.length]));
+    expect(entry.metadata.bytes).toEqual({
+      xlsx: stored.get("xlsx"),
+      json: stored.get("json"),
+      csv: stored.get("csv"),
+    });
+    expect(entry.metadata.recordCount).toBe(1);
+  });
+
+  it("returns a DomainError and announces no export when the CSV writer fails", async () => {
+    const deps = buildDeps();
+    deps.csvWriter.write.mockReturnValueOnce(
+      err(domainError("INFRA_FAILURE", "Failed to write the CSV export.")),
+    );
+
+    const result = await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    expect(result.data).toBeUndefined();
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+    expect(deps.stored).toEqual([]);
+    expect(deps.auditLogger.log).not.toHaveBeenCalled();
+  });
+
+  it("returns a DomainError and announces no export when storing the CSV fails", async () => {
+    const deps = buildDeps();
+    deps.storage.put.mockImplementationOnce(async (key: string, data: Buffer, mime: string) => {
+      deps.stored.push({ key, data, mime });
+      return ok({ key });
+    });
+    deps.storage.put.mockImplementationOnce(async (key: string, data: Buffer, mime: string) => {
+      deps.stored.push({ key, data, mime });
+      return ok({ key });
+    });
+    deps.storage.put.mockResolvedValueOnce(err(domainError("INFRA_FAILURE", "Storage is unavailable.")));
+
+    const result = await deps.useCase.execute({ runId: "run-1", userId: "user-1" });
+
+    expect(result.data).toBeUndefined();
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+    expect(deps.auditLogger.log).not.toHaveBeenCalled();
   });
 });

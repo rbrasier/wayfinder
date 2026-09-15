@@ -1,4 +1,4 @@
-import type { MessageRole } from "@rbrasier/domain";
+import type { MessageRole } from "@wayfinder/domain";
 import {
   toModelMessages,
   type ModelMessage,

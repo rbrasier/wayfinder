@@ -3,11 +3,12 @@ import {
   buildBranchDescriptors,
   nodeFieldSet,
   normaliseAdvanceConfidenceThreshold,
+  selectInjectableLessons,
   type ConversationalNodeConfig,
   type SessionEvent,
-} from "@rbrasier/domain";
-import { buildTurnRetrievalQueries, inlineExternalOptions } from "@rbrasier/application";
-import { streamTurnRequestSchema } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { buildTurnRetrievalQueries, inlineExternalOptions } from "@wayfinder/application";
+import { streamTurnRequestSchema } from "@wayfinder/shared";
 import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
@@ -79,6 +80,7 @@ export async function POST(
     messagesTail: dbMessages,
     gatheredContext: gatheredContextItems,
     currentNodeAssistantMessages,
+    acceptedLessons,
   } = sessionResult.data;
 
   if (session.status !== "active") {
@@ -223,6 +225,12 @@ export async function POST(
     globalInstructions,
     expertRole: flow.expertRole,
     userProfile,
+    // Filtered to this step and capped before it reaches the prompt: only
+    // accepted guidance/efficiency lessons are injectable, most recently
+    // accepted first (ADR-057 §5).
+    acceptedLessons: selectInjectableLessons(
+      acceptedLessons.filter((lesson) => lesson.nodeId === session.currentNodeId),
+    ),
     now: new Date(),
     resolvedSkills,
   });

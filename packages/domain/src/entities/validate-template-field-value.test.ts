@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { TemplateField } from "./template-field";
+import { parseTemplateField, type TemplateField } from "./template-field";
 import { validateTemplateFieldValue } from "./template-field-value";
 
 const field = (overrides: Partial<TemplateField> = {}): TemplateField => ({
@@ -125,3 +125,21 @@ describe("validateTemplateFieldValue", () => {
     expect(validateTemplateFieldValue(narrative, "Too long").error?.code).toBe("VALIDATION_FAILED");
   });
 });
+
+describe("validateTemplateFieldValue — external fields", () => {
+  it("accepts any non-empty value, leaving correctness to the step-end resolve", () => {
+    const field = parseTemplateField("Department (options-source: departments)").data!;
+
+    const result = validateTemplateFieldValue(field, "Finance");
+
+    expect(result.error).toBeUndefined();
+    expect(result.data).toBe("Finance");
+  });
+
+  it("still requires a value when the field is not optional", () => {
+    const field = parseTemplateField("Department (options-source: departments)").data!;
+
+    expect(validateTemplateFieldValue(field, "   ").error?.code).toBe("VALIDATION_FAILED");
+  });
+});
+

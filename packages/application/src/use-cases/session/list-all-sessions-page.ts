@@ -4,7 +4,7 @@ import type {
   Session,
   SessionListPage,
   SessionListPageOptions,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Admin counterpart of ListSessionsPage.
 export class ListAllSessionsPage {

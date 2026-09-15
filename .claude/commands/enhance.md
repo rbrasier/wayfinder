@@ -11,11 +11,18 @@ Ask all of these via `AskUserQuestion` before proceeding:
 1. What's changing, and why?
 2. Which entities or use cases are affected?
 3. Are DB changes needed?
-4. Is this a MINOR or PATCH bump?
+4. Is this a MINOR or PATCH bump? **A change targeting a release branch
+   (`release/*`) is always a PATCH** — MINOR bumps only ever land on `main`.
+   Only ask this question when the target is `main`; otherwise it's PATCH.
 5. Which release does this target? Default is the current release branch (see
    **Release Branching** in `CLAUDE.md`); choose `main` only if it extends
    unreleased work. If the change is really a new feature, stop and route to
    `/new-feature` instead — release branches take no new features.
+6. Is there a GitHub issue behind this? Give the number, or "no issue". If the
+   session started from a triage build link the issue number is already in the
+   prompt — confirm it rather than asking blind. Whoever asked for the change
+   gets a plain-English reply on that issue when the PR opens, so the number has
+   to be carried through the whole run.
 
 ---
 
@@ -40,7 +47,8 @@ sections.
 | Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
 | Tests | The test files written before each sub-component, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
-| Version, branch & PR target | MINOR or PATCH and the resulting version, the `enhance/<slug>` branch name, the base branch, and the branch the PR opens against |
+| Version, branch & PR target | The bump and resulting version — PATCH when the base branch is a `release/*` branch, MINOR or PATCH only when the base is `main` — the `enhance/<slug>/claude-<username>` branch name, the base branch, and the branch the PR opens against |
+| Source issue | The issue number from question 6, and **what it actually asked for** in one line. Where this enhancement is narrower than the ask, say so here — that gap is what the issue comment has to be honest about. Omit the section entirely when there is no issue |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
 
@@ -72,8 +80,11 @@ it — and carry the approved summary into the phase doc when step 1 generates i
 
 ## Workflow
 
-0. Create the working branch (`enhance/<slug>`) from the base branch chosen in
-   question 5. The PR at the end must target that same base branch.
+0. Create the working branch (`enhance/<slug>/claude-<username>`) from the base
+   branch chosen in question 5 — `<slug>` a short kebab-case description of the
+   change, `<username>` your GitHub login (`gh api user --jq .login`; fall back
+   to the local-part of `git config user.email`). The PR at the end must target
+   that same base branch.
 1. Generate an updated phase doc in `docs/development/to-be-implemented/` describing
    what changes and why — do not start coding yet.
 2. Run `/doc-review` on the new phase doc before building.
@@ -92,8 +103,23 @@ it — and carry the approved summary into the phase doc when step 1 generates i
      `Next release line` value when the base branch is `main`, the current release branch's own
      name otherwise (see `docs/guides/versioning.md`)
    - Write implementation summary (include which e2e test covers the change)
-   - Apply the version bump
+   - Apply the version bump (PATCH when the base branch is a `release/*` branch)
    - Run `./validate.sh`
    - Commit all changes and push the branch
-   - **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally. **Build the PR body from the approved change summary**, corrected to describe what was actually implemented rather than what was planned, and add the implementation detail the summary could not know up front: migrations generated, the version bump applied, which e2e test covers the new behaviour, known limitations, and any deviation from the approved summary called out explicitly.
+   - **Always open the pull request** via `mcp__github__create_pull_request`, against the base branch from step 0 (not necessarily `main`) — no need to ask first, and never stop at "pushed". The PR is what starts CI, including the e2e suite that was deliberately not run locally.
+   - **Write the PR body into [`.github/pull_request_template.md`](../../.github/pull_request_template.md)** — read that file and fill its sections; do not invent a structure. The approved change summary is the source, **corrected to describe what was actually implemented rather than what was planned**:
+
+     | Template section | Filled from |
+     |---|---|
+     | `## Summary` | The change summary's headline and **Goal**, as one paragraph in the user's terms |
+     | `## Impact` → Features affected | The user-facing and admin areas the enhancement touches |
+     | `## Impact` → Business rules changed | **Business rules changing**, each with its trigger and resulting behaviour |
+     | `## UI Impact` | **UI / visible behaviour**, restated as what the user experiences |
+     | `## Why this change is required` | The answer to clarifying question 1 — what becomes possible that isn't today, or what was going wrong |
+     | `<details>` implementation block | Version bump, files created and modified, migrations generated with their `-- data-impact:` line, tests written and the e2e decision (spec extended with its policy group, or "no e2e — covered at `<layer>`"), known limitations |
+
+   - **Call out every deviation** from the approved summary explicitly, in the implementation block's deviations line. "None" if there were none.
+   - A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
+   - **Reference the source issue in the PR body** so GitHub links them: `Closes #<number>` on its own line at the end of `## Why this change is required`, which is where the template asks for it. That link is what lets the daily triage routine close the issue once this merges — a passing mention of the number does not count.
+   - **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked. The PR body is written for a maintainer; this comment is written for them. If the **Source issue** row recorded a gap between what was asked and what this delivers, the comment says so in a sentence. Skip this only when question 6 was "no issue".
    - Report the PR URL, and note that the e2e suite runs there rather than locally.

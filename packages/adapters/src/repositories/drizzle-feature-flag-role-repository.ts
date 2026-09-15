@@ -4,7 +4,7 @@ import {
   ok,
   type IFeatureFlagRoleRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { admin_feature_flag_roles } from "../db/schema/admin";

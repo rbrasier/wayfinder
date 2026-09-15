@@ -1,10 +1,10 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   ISessionUploadRepository,
   NewSessionUpload,
   Result,
   SessionUpload,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { asc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_session_uploads } from "../db/schema/wayfinder";

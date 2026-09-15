@@ -6,7 +6,7 @@ import {
   type ISessionRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface OverrideBranchInput {
   sessionId: string;

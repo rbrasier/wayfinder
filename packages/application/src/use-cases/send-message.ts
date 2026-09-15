@@ -4,8 +4,8 @@ import {
   type Result,
   domainError,
   err,
-} from "@rbrasier/domain";
-import { sampleResponseSchema, type SampleResponse } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { sampleResponseSchema, type SampleResponse } from "@wayfinder/shared";
 
 export interface SendMessageInput {
   readonly prompt: string;

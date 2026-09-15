@@ -7,7 +7,7 @@ import {
   type ProviderName,
   type IUsageRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   experimental_createMCPClient,
   generateText,

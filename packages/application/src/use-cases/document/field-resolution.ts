@@ -5,7 +5,7 @@ import {
   type Result,
   type SessionMessage,
   type TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Number of template fields gathered per model call. Small enough to keep each
 // prompt and structured output bounded; large enough that typical templates

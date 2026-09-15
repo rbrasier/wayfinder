@@ -1,6 +1,6 @@
 import { formatDataStreamPart, type DataStreamWriter } from "ai";
 import type { JSONValue } from "ai";
-import type { TurnStreamAnnotation, TurnStreamWriter } from "@rbrasier/domain";
+import type { TurnStreamAnnotation, TurnStreamWriter } from "@wayfinder/domain";
 
 // The `ai`-SDK adapter for the TurnStreamWriter port: the single place that maps
 // the port's semantic operations onto the Vercel data-stream wire format. Keeping

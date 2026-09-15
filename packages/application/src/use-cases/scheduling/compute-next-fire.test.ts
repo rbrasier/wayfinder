@@ -1,4 +1,4 @@
-import { serializeRecurrenceRule, type RecurrenceRule } from "@rbrasier/domain";
+import { serializeRecurrenceRule, type RecurrenceRule } from "@wayfinder/domain";
 import { describe, expect, it } from "vitest";
 import { computeNextFireAt, computeNextRecurrence, parseRelativeDuration } from "./compute-next-fire";
 

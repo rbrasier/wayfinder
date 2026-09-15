@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { DEFAULT_ITEM_CAP, type TemplateField } from "@rbrasier/domain";
+import { DEFAULT_ITEM_CAP, type TemplateField } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

@@ -47,7 +47,7 @@ callback webhook (`/v1/webhooks`), which is the one route an outside caller hits
 Wayfinder publishes a container image, so there is nothing to build:
 
 ```
-ghcr.io/rbrasier/wayfinder:0.28.0
+ghcr.io/rbrasier/wayfinder:0.28.21
 ```
 
 It is public — no credential, no `imagePullSecret`. One image contains both
@@ -68,9 +68,9 @@ aws ecr create-repository --repository-name wayfinder --region "$AWS_REGION"
 aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
 
-docker pull ghcr.io/rbrasier/wayfinder:0.28.0
-docker tag ghcr.io/rbrasier/wayfinder:0.28.0 "$REPO:0.28.0"
-docker push "$REPO:0.28.0"
+docker pull ghcr.io/rbrasier/wayfinder:0.28.21
+docker tag ghcr.io/rbrasier/wayfinder:0.28.21 "$REPO:0.28.21"
+docker push "$REPO:0.28.21"
 ```
 
 **Air-gapped or egress-restricted?** The published image fetches the local
@@ -274,6 +274,12 @@ the `SMTP_*` and `M365_*` variables in [`.env.example`](../../.env.example).
 
 ## Alternatives
 
+- **AWS Lambda** removes the always-on web and worker compute entirely, which
+  suits pilots and low-duty-cycle tenants where a 24/7 Fargate pair is poor
+  value. It is a hybrid rather than fully serverless — one small always-on
+  service remains for the session event stream — and it requires a hosted
+  embeddings provider. See [`setup-aws-lambda.md`](setup-aws-lambda.md). The
+  container path documented above remains the tested reference deployment.
 - **App Runner** builds from source and manages TLS and scaling for you, which is
   closer to the Railway experience. It reads a single `apprunner.yaml` at the repo
   root, so running both `web` and `api` from one repo means either a container

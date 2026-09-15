@@ -9,7 +9,7 @@ import {
   type ValueSetCandidate,
   type ValueSetEntry,
   type ValueSetShortlistInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { z } from "zod";
 
 // Ranked candidates are scored below an exact or normalised string match and

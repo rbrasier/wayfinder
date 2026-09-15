@@ -6,7 +6,7 @@ import {
   type ExtractionSchema,
   type IFlowVersionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Loads the exact extraction schema a run was executed against, from the version
 // snapshot the run pinned (ADR-033 §3). Shared by the export, document-generation,

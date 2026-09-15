@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RecurrenceRule } from "@rbrasier/domain";
+import type { RecurrenceRule } from "@wayfinder/domain";
 import { recurrenceSummary } from "./scheduled-config";
 
 describe("recurrenceSummary", () => {

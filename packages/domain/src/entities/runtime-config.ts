@@ -1,4 +1,5 @@
 import type { ProviderName } from "../ports/language-model";
+import { DEFAULT_SESSION_POLICY, type SessionPolicy } from "./session-policy";
 
 export type AiPurpose = "chat" | "documentGeneration" | "branching";
 
@@ -220,6 +221,9 @@ export interface AuthConfig {
   // (ADR-042 §1).
   pkiEnabled: boolean;
   pki: PkiSessionConfig;
+  // Idle/absolute timeouts and the concurrency limit (ADR-035). Rides the auth
+  // config so it shares one settings row, one cache entry and one invalidation.
+  sessionPolicy: SessionPolicy;
 }
 
 export const DEFAULT_PKI_SESSION_TTL_HOURS = 8;
@@ -230,6 +234,7 @@ export const createDefaultAuthConfig = (): AuthConfig => ({
   entra: { tenantId: "", clientId: "", clientSecret: "" },
   pkiEnabled: false,
   pki: { sessionTtlHours: DEFAULT_PKI_SESSION_TTL_HOURS },
+  sessionPolicy: { ...DEFAULT_SESSION_POLICY },
 });
 
 export const isEntraConfigured = (entra: EntraCredentials): boolean =>
@@ -240,6 +245,17 @@ export const isEntraConfigured = (entra: EntraCredentials): boolean =>
 // anyone, so it is not a usable method.
 export const isPkiUsable = (config: AuthConfig, envHasTrustedProxies: boolean): boolean =>
   config.pkiEnabled && envHasTrustedProxies;
+
+// Whether a user can reset their own password from the sign-in screen. Both
+// halves are required: without a transport the emailed link can never arrive,
+// and without password sign-in the restored credential could not be used. An
+// install missing either must not show the entry point at all, rather than
+// accept an address and silently do nothing (the reset endpoint itself is only
+// mounted when a sender is wired, so the two stay in step).
+export const isSelfServicePasswordResetAvailable = (
+  config: Pick<AuthConfig, "emailPasswordEnabled">,
+  emailConfigured: boolean,
+): boolean => config.emailPasswordEnabled && emailConfigured;
 
 // Guards the lockout invariant: an admin must never disable every method.
 // envHasTrustedProxies is required rather than defaulted on purpose — a caller

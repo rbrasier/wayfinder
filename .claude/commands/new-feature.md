@@ -51,7 +51,7 @@ sections.
 | Data & types | Domain entities, value objects and TypeScript types the feature introduces, with the shape of each |
 | Files & packages touched | The docs to be generated (PRD, ADRs, phase doc) by path, plus the `domain` / `application` / `adapters` / `apps` packages the phase doc will target, so architecture-boundary problems surface at planning time |
 | Database & migration impact | Tables and their group prefix, and whether the phase doc will call for a generated migration and its `-- data-impact:` declaration |
-| Version, branch & PR target | The MINOR or PATCH bump the feature warrants against `main`'s version line — planned here, applied by `/build`, never by this skill |
+| Version, branch & PR target | The MINOR or PATCH bump the feature warrants against `main`'s version line — planned here, applied by `/build`, never by this skill — and the `docs/<slug>/claude-<username>` branch the generated docs land on |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being covered by these docs |
 
@@ -84,6 +84,11 @@ the approved summary into the phase doc when the workflow generates it.
 
 ## Workflow
 
+0. Create the working branch (`docs/<slug>/claude-<username>`) from `main` —
+   `<slug>` a short kebab-case description of the feature, `<username>` your
+   GitHub login (`gh api user --jq .login`; fall back to the local-part of
+   `git config user.email`). This skill writes only docs, so they land on this
+   branch off `main`.
 1. Generate a PRD in `docs/development/prd/` using `docs/development/prd/template.prd.md` as the starting point.
 2. If architectural decisions are needed, generate ADR(s) in `docs/development/adr/`.
 3. Generate a phase doc in `docs/development/to-be-implemented/`.

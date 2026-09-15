@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AiTurnPayload } from "@rbrasier/domain";
+import type { AiTurnPayload } from "@wayfinder/domain";
 import { countGateHoldsOnNode, OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
 
 const payload = (contextGathered: { key: string; value: string }[]): AiTurnPayload => ({

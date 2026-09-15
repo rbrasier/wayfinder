@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Sha256Bytes, Sha256Hex } from "@rbrasier/domain";
+import type { Sha256Bytes, Sha256Hex } from "@wayfinder/domain";
 
 // The SHA-256 primitive the domain hash-chain functions require. Lives in the
 // adapter layer because the domain forbids non-relative imports (node:crypto

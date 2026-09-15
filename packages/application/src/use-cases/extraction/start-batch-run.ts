@@ -19,7 +19,7 @@ import {
   type NewExtractionDocument,
   type NewExtractionRecord,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   oneRecordPerFile,
   selectRecordFiles,

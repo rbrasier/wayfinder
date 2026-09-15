@@ -10,7 +10,7 @@ import {
   type ReportingLineSuggestion,
   type Result,
   type UnresolvedSuggestion,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { GraphClient, GraphUser } from "./graph-client";
 
 const UNRESOLVED: UnresolvedSuggestion = { unresolved: true };

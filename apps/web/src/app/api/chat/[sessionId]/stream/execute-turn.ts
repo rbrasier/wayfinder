@@ -1,5 +1,5 @@
-import { resolveChangeRequests, type EvaluateStepReadinessOutput } from "@rbrasier/application";
-import { nodeFieldSet } from "@rbrasier/domain";
+import { resolveChangeRequests, type EvaluateStepReadinessOutput } from "@wayfinder/application";
+import { nodeFieldSet } from "@wayfinder/domain";
 import type {
   AiTurnPayload,
   BranchDescriptor,
@@ -12,8 +12,8 @@ import type {
   SessionEvent,
   SessionMessage,
   TurnStreamWriter,
-} from "@rbrasier/domain";
-import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@wayfinder/shared";
 import type { Container } from "@/lib/container";
 import { shouldComputeBranchChoice } from "./branch-gate";
 import { countGateHoldsOnNode } from "./gate-holds";
@@ -259,6 +259,8 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
           messages: [...messagesWithNew, { role: "assistant" as const, content: aiPayload.response }],
           flow,
           node: currentNode,
+          userId,
+          sessionId: session.id,
           budget,
           changeRequests,
         })

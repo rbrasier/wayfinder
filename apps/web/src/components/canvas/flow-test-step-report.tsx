@@ -1,6 +1,6 @@
 "use client";
 
-import type { FlowTestStepReport as StepReport } from "@rbrasier/domain";
+import type { FlowTestStepReport as StepReport } from "@wayfinder/domain";
 
 const formatCost = (costUsd: number): string =>
   costUsd === 0 ? "$0.00" : `$${costUsd.toFixed(costUsd < 0.01 ? 4 : 2)}`;

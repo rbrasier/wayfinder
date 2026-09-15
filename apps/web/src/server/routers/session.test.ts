@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Session } from "@rbrasier/domain";
+import type { Session } from "@wayfinder/domain";
 import { buildSessionListEntry, sessionListPageInputSchema } from "./session";
 
 const baseSession: Session = {

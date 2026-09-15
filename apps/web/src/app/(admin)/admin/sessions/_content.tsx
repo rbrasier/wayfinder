@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { Flow, Session, User } from "@rbrasier/domain";
+import type { Flow, Session, User } from "@wayfinder/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

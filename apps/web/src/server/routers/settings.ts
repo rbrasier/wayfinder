@@ -3,7 +3,6 @@ import { z } from "zod";
 import {
   AI_CONFIG_SETTING_KEY,
   CONNECTIVITY_TARGETS,
-  AUTH_CONFIG_SETTING_KEY,
   DOCUMENT_GENERATION_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
@@ -13,23 +12,14 @@ import {
   SESSION_UPLOAD_CONFIG_SETTING_KEY,
   EXTRACTION_CONFIG_SETTING_KEY,
   SIEM_CONFIG_SETTING_KEY,
-  SITE_BANNER_CONFIG_SETTING_KEY,
-  ABOUT_LINKS_SETTING_KEY,
-  ABOUT_LINK_ICONS,
-  SITE_BANNER_MAX_TEXT_SIZE_PT,
-  SITE_BANNER_MIN_TEXT_SIZE_PT,
   STORAGE_CONFIG_SETTING_KEY,
   type SiemConfig,
   createDefaultEmailConfig,
   isAiConfigured,
   isAtLeastOneMethodEnabled,
-  isPkiUsable,
   isEmailConfigured,
-  isEntraConfigured,
   isN8nConfigured,
   isStorageConfigured,
-  normaliseSiteBannerLinkUrl,
-  normaliseAboutLinkUrl,
   type AiConfig,
   type AiPurpose,
   type BedrockCredentials,
@@ -39,17 +29,30 @@ import {
   type NotificationPreferences,
   type ProviderName,
   type StorageConfig,
-} from "@rbrasier/domain";
+  RETENTION_TARGET_KEYS,
+  type RetentionTargetKey,
+} from "@wayfinder/domain";
 import {
   EMBEDDINGS_DEFAULT_MODELS,
   EMBEDDINGS_DIMENSION,
   EMBEDDINGS_PROVIDERS,
-} from "@rbrasier/shared";
-import { DEFAULT_MODELS_FOR, RuntimeConfigStore, resolveContextWindow } from "@rbrasier/adapters";
+} from "@wayfinder/shared";
+import {
+  DEFAULT_MODELS_FOR,
+  RuntimeConfigStore,
+  isLocalEmbeddingsAvailable,
+  resolveContextWindow,
+} from "@wayfinder/adapters";
 import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
-import { authConfigInputSchema, mergeAuthConfig } from "./settings-auth";
+import { authSettingsProcedures } from "./settings-auth";
 import { directorySettingsProcedures } from "./settings-directory";
+import { apiKeyState } from "./settings-secrets";
+import {
+  embeddingsProviderOptions,
+  embeddingsProviderUnavailableReason,
+} from "./settings-embeddings";
+import { presentationSettingsProcedures } from "./settings-presentation";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
 const providerSchema = z.enum(["anthropic", "openai", "mistral", "bedrock"]);
@@ -104,50 +107,6 @@ const n8nConfigInputSchema = z.object({
 const sessionUploadConfigInputSchema = z.object({
   maxFileSizeBytes: z.number().int().positive(),
   totalBudgetChars: z.number().int().positive(),
-});
-
-const hexColourSchema = z
-  .string()
-  .regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex colour, e.g. #dc2626");
-
-// Mirrors normaliseSiteBannerLinkUrl: the value becomes an href, so only
-// http(s) and site-relative paths are accepted. An admin gets a validation
-// error here rather than the silent fallback the read path applies.
-const siteBannerLinkUrlSchema = z.string().refine(
-  (value) => value.length === 0 || normaliseSiteBannerLinkUrl(value) === value.trim(),
-  "Enter a full https:// or http:// URL, or a path starting with /",
-);
-
-export const siteBannerConfigInputSchema = z.object({
-  enabled: z.boolean(),
-  text: z.string().max(300),
-  textSizePt: z.number().int().min(SITE_BANNER_MIN_TEXT_SIZE_PT).max(SITE_BANNER_MAX_TEXT_SIZE_PT),
-  textColour: hexColourSchema,
-  backgroundColour: hexColourSchema,
-  linkUrl: siteBannerLinkUrlSchema,
-  linkLabel: z.string().max(60),
-});
-
-// One row per configured About entry. The URL is validated the same way the
-// read path normalises it, so an admin sees a rejection rather than a link that
-// silently disappears from the modal.
-export const aboutLinksInputSchema = z.object({
-  links: z
-    .array(
-      z.object({
-        label: z.string().trim().min(1, "Give the link some text").max(60),
-        url: z
-          .string()
-          .trim()
-          .refine(
-            (value) => normaliseAboutLinkUrl(value) === value.trim() && value.trim().length > 0,
-            "Enter a full https:// or http:// URL, a mailto: address, or a path starting with /",
-          ),
-        icon: z.enum(ABOUT_LINK_ICONS),
-        showInHelpMenu: z.boolean(),
-      }),
-    )
-    .max(12),
 });
 
 export const extractionConfigInputSchema = z.object({
@@ -258,16 +217,41 @@ export const mergeApiKeys = (
   bedrock: mergeBedrockCredentials(incoming.bedrock, stored.bedrock),
 });
 
-const apiKeyState = (value: string | null): "set" | "unset" =>
-  value && value.length > 0 ? "set" : "unset";
-
 const bedrockState = (value: BedrockCredentials | null) => ({
   region: value?.region ?? null,
   accessKeyId: apiKeyState(value?.accessKeyId ?? null),
   secretAccessKey: apiKeyState(value?.secretAccessKey ?? null),
 });
 
+
 export const settingsRouter = router({
+  // Data retention (ADR-041 §2: DB-first, env kept as fallback). Admin-only, and
+  // the use case checks that too rather than trusting the procedure.
+  retention: adminProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.getRetentionSettings.execute(
+      ctx.container.retentionEnvFallback,
+    );
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  setRetentionWindow: adminProcedure
+    .input(
+      z.object({
+        key: z.enum(RETENTION_TARGET_KEYS as unknown as [string, ...string[]]),
+        retentionDays: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.setRetentionWindow.execute({
+        key: input.key as RetentionTargetKey,
+        retentionDays: input.retentionDays,
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   get: adminProcedure
     .input(z.object({ key: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
@@ -318,71 +302,10 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getAuthConfig: adminProcedure.query(async ({ ctx }) => {
-    const config = await ctx.container.runtimeConfig.getAuthConfig();
-    return {
-      emailPasswordEnabled: config.emailPasswordEnabled,
-      entraEnabled: config.entraEnabled,
-      entra: {
-        tenantId: config.entra.tenantId,
-        clientId: config.entra.clientId,
-        clientSecret: apiKeyState(config.entra.clientSecret),
-      },
-      pkiEnabled: config.pkiEnabled,
-      pki: {
-        sessionTtlHours: config.pki.sessionTtlHours,
-        // The boolean only. An admin-scoped response is still a network
-        // payload, and the client has no business knowing which addresses the
-        // trust anchor names (ADR-042 §1).
-        envConfigured: ctx.container.runtimeConfig.isPkiEnvConfigured(),
-      },
-      redirectUri: `${ctx.container.env.BETTER_AUTH_URL}/api/auth/callback/microsoft`,
-    };
-  }),
-
-  setAuthConfig: adminProcedure
-    .input(authConfigInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const current = await ctx.container.runtimeConfig.getAuthConfig();
-      const merged = mergeAuthConfig(input, current);
-      const envHasTrustedProxies = ctx.container.runtimeConfig.isPkiEnvConfigured();
-
-      // A disabled checkbox is a UI affordance, not an authorisation check.
-      if (merged.pkiEnabled && !envHasTrustedProxies) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "Certificate sign-in cannot be enabled until PKI_TRUSTED_PROXY_IPS is set in the environment.",
-        });
-      }
-
-      if (!isAtLeastOneMethodEnabled(merged, envHasTrustedProxies)) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "At least one usable sign-in method must stay enabled. Certificate sign-in does not count while PKI_TRUSTED_PROXY_IPS is unset.",
-        });
-      }
-      const result = await ctx.container.repos.systemSettings.set(
-        AUTH_CONFIG_SETTING_KEY,
-        JSON.stringify(merged),
-      );
-      if (result.error) throw toTrpcError(result.error);
-      ctx.container.runtimeConfig.invalidateAuth();
-      return { ok: true };
-    }),
-
-  // Public so the unauthenticated /login page can render the right controls.
-  enabledAuthMethods: publicProcedure.query(async ({ ctx }) => {
-    const config = await ctx.container.runtimeConfig.getAuthConfig();
-    return {
-      emailPassword: config.emailPasswordEnabled,
-      entra: config.entraEnabled && isEntraConfigured(config.entra),
-      pki: isPkiUsable(config, ctx.container.runtimeConfig.isPkiEnvConfigured()),
-    };
-  }),
+  ...authSettingsProcedures,
 
   ...directorySettingsProcedures,
+  ...presentationSettingsProcedures,
 
   getN8nConfig: adminProcedure.query(async ({ ctx }) => {
     const config: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();
@@ -446,12 +369,27 @@ export const settingsRouter = router({
 
   getEmbeddingsConfig: adminProcedure.query(async ({ ctx }) => {
     const config = await ctx.container.runtimeConfig.getEmbeddingsConfig();
-    return { ...config, dimension: EMBEDDINGS_DIMENSION };
+    return {
+      ...config,
+      dimension: EMBEDDINGS_DIMENSION,
+      providers: embeddingsProviderOptions(isLocalEmbeddingsAvailable()),
+    };
   }),
 
   setEmbeddingsConfig: adminProcedure
     .input(z.object({ provider: z.enum(EMBEDDINGS_PROVIDERS) }))
     .mutation(async ({ ctx, input }) => {
+      // A disabled control in the UI is a courtesy; this is the guard. A
+      // deployment packaged without a provider cannot serve it whatever the
+      // stored setting says (ADR-056 §4).
+      const unavailableReason = embeddingsProviderUnavailableReason(
+        input.provider,
+        isLocalEmbeddingsAvailable(),
+      );
+      if (unavailableReason) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: unavailableReason });
+      }
+
       // Model is derived from the provider; switching providers requires
       // re-indexing existing documents (ADR-017 Decision 3).
       const config = { provider: input.provider, model: EMBEDDINGS_DEFAULT_MODELS[input.provider] };
@@ -483,42 +421,6 @@ export const settingsRouter = router({
       );
       if (result.error) throw toTrpcError(result.error);
       ctx.container.runtimeConfig.invalidateSessionUpload();
-      return { ok: true };
-    }),
-
-  // Public: the login and register pages need the banner too, and a site
-  // warning carries no secret material.
-  getSiteBanner: publicProcedure.query(async ({ ctx }) => {
-    return ctx.container.runtimeConfig.getSiteBannerConfig();
-  }),
-
-  setSiteBanner: adminProcedure
-    .input(siteBannerConfigInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const result = await ctx.container.repos.systemSettings.set(
-        SITE_BANNER_CONFIG_SETTING_KEY,
-        JSON.stringify(input),
-      );
-      if (result.error) throw toTrpcError(result.error);
-      ctx.container.runtimeConfig.invalidateSiteBanner();
-      return { ok: true };
-    }),
-
-  // Authenticated rather than admin: every signed-in user sees these on the
-  // About modal and in the help menu, and they carry no secret material.
-  getAboutLinks: publicProcedure.query(async ({ ctx }) => {
-    return ctx.container.runtimeConfig.getAboutLinksConfig();
-  }),
-
-  setAboutLinks: adminProcedure
-    .input(aboutLinksInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const result = await ctx.container.repos.systemSettings.set(
-        ABOUT_LINKS_SETTING_KEY,
-        JSON.stringify(input),
-      );
-      if (result.error) throw toTrpcError(result.error);
-      ctx.container.runtimeConfig.invalidateAboutLinks();
       return { ok: true };
     }),
 

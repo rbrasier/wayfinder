@@ -1,10 +1,10 @@
-import { err, ok } from "@rbrasier/domain";
+import { err, ok } from "@wayfinder/domain";
 import type {
   IDocumentIndexer,
   IJobRepository,
   IReindexSourceRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Tracked in job_registry so the admin Jobs view records the last re-index run.
 export const REINDEX_JOB_NAME = "reindex-all-documents";

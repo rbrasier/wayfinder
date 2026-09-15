@@ -20,10 +20,10 @@ const config: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: readAppVersion(),
   },
   transpilePackages: [
-    "@rbrasier/domain",
-    "@rbrasier/application",
-    "@rbrasier/adapters",
-    "@rbrasier/shared",
+    "@wayfinder/domain",
+    "@wayfinder/application",
+    "@wayfinder/adapters",
+    "@wayfinder/shared",
   ],
   serverExternalPackages: [
     // Local embeddings (ADR-017): native onnxruntime-node binary + dynamic

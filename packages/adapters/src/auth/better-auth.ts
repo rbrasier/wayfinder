@@ -1,10 +1,12 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { isEntraConfigured, type AuthConfig as AuthMethodsConfig } from "@rbrasier/domain";
+import { isEntraConfigured, type AuthConfig as AuthMethodsConfig } from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
 import { applyEntraPrecedence } from "./entra-precedence";
 import { userInfoFromIdToken } from "./entra-user-info";
+import { enforceSessionConcurrency } from "./session-concurrency";
+import type { SessionRevocationRegistry } from "./session-revocation";
 
 // PKI is deliberately absent: certificate sign-in is decided by the runtime
 // auth config, not by the process's boot-time mechanism, and Better Auth never
@@ -14,6 +16,13 @@ export type AuthMethod =
   | { readonly type: "google-oauth" }
   | { readonly type: "other" };
 
+export interface PasswordResetEmailRequest {
+  readonly email: string;
+  readonly recipientName: string | null;
+  readonly resetUrl: string;
+  readonly expiryMinutes: number;
+}
+
 export interface CreateAuthOptions {
   readonly secret: string;
   readonly baseURL: string;
@@ -21,7 +30,21 @@ export interface CreateAuthOptions {
   readonly authMethod: AuthMethod;
   readonly authConfig: AuthMethodsConfig;
   readonly entraAuthority?: string;
+  // Shared with the cached session resolver so an eviction takes effect on the
+  // evicted device's next request rather than at the end of the cache TTL.
+  readonly sessionRevocations: SessionRevocationRegistry;
+  // Wired whenever the app can send mail *in principle*, not only when email is
+  // currently configured: this instance is rebuilt on auth-config changes alone,
+  // so binding the endpoint's existence to email settings would leave reset dead
+  // until a restart after an admin fills them in. The sender itself refuses when
+  // no transport is configured, and the sign-in screen hides the entry point on
+  // the same live check, so an unconfigured install still offers nothing.
+  readonly sendPasswordResetEmail?: (request: PasswordResetEmailRequest) => Promise<void>;
 }
+
+// One hour. Long enough to survive a mail queue and a distracted user, short
+// enough that a link left in an inbox stops working the same day.
+export const PASSWORD_RESET_TOKEN_TTL_SECONDS = 60 * 60;
 
 export interface MicrosoftProviderOptions {
   readonly clientId: string;
@@ -173,6 +196,25 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
       enabled: emailPasswordEnabled,
       autoSignIn: true,
       requireEmailVerification: false,
+      // A reset means the old password is no longer trusted, so every live
+      // session goes with it — the same stance the admin-initiated reset takes.
+      revokeSessionsOnPasswordReset: true,
+      ...(config.sendPasswordResetEmail
+        ? {
+            resetPasswordTokenExpiresIn: PASSWORD_RESET_TOKEN_TTL_SECONDS,
+            sendResetPassword: async (request: {
+              user: { email: string; name?: string | null };
+              url: string;
+            }) => {
+              await config.sendPasswordResetEmail?.({
+                email: request.user.email,
+                recipientName: request.user.name ?? null,
+                resetUrl: request.url,
+                expiryMinutes: PASSWORD_RESET_TOKEN_TTL_SECONDS / 60,
+              });
+            },
+          }
+        : {}),
     },
     databaseHooks: {
       account: {
@@ -183,10 +225,28 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
           // issued. Revoking sessions from there kills the sign-in that
           // triggered the link. `create.before` is awaited inline instead.
           before: async (account) => {
-            await applyEntraPrecedence(db, {
-              userId: account.userId,
-              providerId: account.providerId,
+            await applyEntraPrecedence(
+              db,
+              { userId: account.userId, providerId: account.providerId },
+              config.sessionRevocations,
+            );
+          },
+        },
+      },
+      session: {
+        create: {
+          // `before` for the same reason the account hook uses it: a
+          // `create.after` hook is queued until the request ends, by which point
+          // the session it was meant to vet has already been issued. Returning
+          // false here cancels the insert, which is what `refuse` means
+          // (ADR-035 §3).
+          before: async (session) => {
+            const admitted = await enforceSessionConcurrency(db, config.sessionRevocations, {
+              userId: session.userId,
+              policy: config.authConfig.sessionPolicy,
             });
+            // Anything but `false` lets the insert proceed unchanged.
+            return admitted ? undefined : false;
           },
         },
       },

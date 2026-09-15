@@ -1,4 +1,4 @@
-import type { FlowExportDependency, FlowImportInspection } from "@rbrasier/domain";
+import type { FlowExportDependency, FlowImportInspection } from "@wayfinder/domain";
 
 export const formatAssetSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;

@@ -13,7 +13,7 @@ import {
   type TemplateField,
   type ValueSetEntry,
   type ValueSetProbe,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   DeleteLookupSource,
   ListLookupSources,

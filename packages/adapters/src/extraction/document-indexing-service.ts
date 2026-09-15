@@ -1,4 +1,4 @@
-import { err, ok } from "@rbrasier/domain";
+import { err, ok } from "@wayfinder/domain";
 import type {
   IDocumentChunkRepository,
   IDocumentIndexer,
@@ -6,7 +6,7 @@ import type {
   IndexDocumentInput,
   NewDocumentChunk,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { chunkText } from "./text-chunker";
 
 export type { IndexDocumentInput };

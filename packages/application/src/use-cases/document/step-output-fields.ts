@@ -1,5 +1,5 @@
-import type { FieldValueSnapshot, StepOutputField, TemplateField } from "@rbrasier/domain";
-import type { DocumentData, GroupItems } from "@rbrasier/shared";
+import type { FieldValueSnapshot, StepOutputField, TemplateField } from "@wayfinder/domain";
+import type { DocumentData, GroupItems } from "@wayfinder/shared";
 
 // What the step-end resolve attached to an external-sourced field, by field key.
 export interface ResolvedExternalValues {

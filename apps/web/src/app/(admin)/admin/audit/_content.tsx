@@ -1,6 +1,6 @@
 "use client";
 
-import type { AuditLog } from "@rbrasier/domain";
+import type { AuditLog } from "@wayfinder/domain";
 import React, { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

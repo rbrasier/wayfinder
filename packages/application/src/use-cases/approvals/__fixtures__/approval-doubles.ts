@@ -9,6 +9,7 @@
  */
 
 import {
+  type CalledModel,
   domainError,
   err,
   isSessionDiscarded,
@@ -54,7 +55,7 @@ import {
   type TransactionalRepositories,
   type UnresolvedSuggestion,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type {
   IApprovalDecidedNotifier,
   NotifyOnApprovalDecidedInput,
@@ -71,6 +72,26 @@ import type {
   IApprovalRequestedNotifier,
   NotifyOnApprovalRequestedInput,
 } from "../../notifications/notify-on-approval-requested";
+
+// Mirrors the SQL repository's column mapping: the evidence is one nested value
+// on the patch and five flat fields on the row, so a double that merely spread
+// the patch would leave every off-system assertion reading undefined.
+const applyApprovalPatch = (row: Approval, patch: ApprovalUpdate): Approval => {
+  const { offSystemEvidence, ...rest } = patch;
+  return {
+    ...row,
+    ...rest,
+    ...(offSystemEvidence !== undefined
+      ? {
+          offSystemEvidenceFilename: offSystemEvidence?.filename ?? null,
+          offSystemEvidenceMimeType: offSystemEvidence?.mimeType ?? null,
+          offSystemEvidenceSizeBytes: offSystemEvidence?.sizeBytes ?? null,
+          offSystemEvidenceStoragePath: offSystemEvidence?.storagePath ?? null,
+        }
+      : {}),
+    updatedAt: new Date(),
+  };
+};
 
 export class InMemoryApprovals implements IApprovalRepository {
   rows = new Map<string, Approval>();
@@ -96,6 +117,12 @@ export class InMemoryApprovals implements IApprovalRepository {
       comment: null,
       requestMessage: input.requestMessage ?? null,
       recordSnapshot: input.recordSnapshot ?? null,
+      offSystemApprovedOn: null,
+      offSystemEvidenceFilename: null,
+      offSystemEvidenceMimeType: null,
+      offSystemEvidenceSizeBytes: null,
+      offSystemEvidenceStoragePath: null,
+      offSystemNominatedByUserId: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -170,7 +197,7 @@ export class InMemoryApprovals implements IApprovalRepository {
   async update(id: string, patch: ApprovalUpdate): Promise<Result<Approval>> {
     const row = this.rows.get(id);
     if (!row) return err(domainError("NOT_FOUND", `Approval ${id} not found.`));
-    const next: Approval = { ...row, ...patch, updatedAt: new Date() };
+    const next = applyApprovalPatch(row, patch);
     this.rows.set(id, next);
     return ok(next);
   }
@@ -178,7 +205,7 @@ export class InMemoryApprovals implements IApprovalRepository {
   async updateIfPending(id: string, patch: ApprovalUpdate): Promise<Result<Approval | null>> {
     const row = this.rows.get(id);
     if (!row || row.status !== "pending") return ok(null);
-    const next: Approval = { ...row, ...patch, updatedAt: new Date() };
+    const next = applyApprovalPatch(row, patch);
     this.rows.set(id, next);
     return ok(next);
   }
@@ -255,8 +282,10 @@ export const usage: TokenUsage = {
 export class StubLanguageModel implements ILanguageModel {
   readonly provider = "openai" as const;
   constructor(private readonly object: Record<string, string>) {}
-  async generateObject<T>(_input: GenerateObjectInput): Promise<Result<{ object: T; usage: TokenUsage }>> {
-    return ok({ object: this.object as T, usage });
+  async generateObject<T>(
+    _input: GenerateObjectInput,
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>> {
+    return ok({ object: this.object as T, usage, provider: this.provider, model: "stub-model" });
   }
   async streamText(): Promise<never> {
     throw new Error("unused");

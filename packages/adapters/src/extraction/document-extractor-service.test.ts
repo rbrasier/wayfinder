@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { DocumentExtractorService } from "./document-extractor-service";
-import type { IDocumentGenerator } from "@rbrasier/domain";
-import { ok, err, domainError } from "@rbrasier/domain";
+import type { IDocumentGenerator } from "@wayfinder/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const PDF_MIME = "application/pdf";

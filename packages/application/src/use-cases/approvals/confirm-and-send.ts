@@ -6,7 +6,7 @@ import {
   type IApprovalRepository,
   type IAuditLogger,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { IApprovalRequestedNotifier } from "../notifications/notify-on-approval-requested";
 
 export interface ConfirmAndSendInput {

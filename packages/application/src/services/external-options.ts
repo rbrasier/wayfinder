@@ -6,7 +6,7 @@ import {
   type IValueSetProvider,
   type TemplateField,
   type ValueSetEntry,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ExternalOptionsPreview {
   text: string;

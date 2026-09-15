@@ -7,9 +7,9 @@ import {
   SpreadsheetParser,
   UserPeopleDirectory,
   type RuntimeConfigStore,
-} from "@rbrasier/adapters";
-import { ImportHrDataset, SearchPeople, SetColumnMapping } from "@rbrasier/application";
-import type { IHrDatasetRepository, ILanguageModel, IUserRepository } from "@rbrasier/domain";
+} from "@wayfinder/adapters";
+import { ImportHrDataset, SearchPeople, SetColumnMapping } from "@wayfinder/application";
+import type { IHrDatasetRepository, ILanguageModel, IUserRepository } from "@wayfinder/domain";
 import type { ServerEnv } from "./env";
 
 interface PeopleDirectoryDependencies {

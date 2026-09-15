@@ -10,7 +10,7 @@ import {
   type SeedContextItem,
   type SeedReject,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { StartSession } from "../session/start-session";
 
 export interface StartTestRunInput {

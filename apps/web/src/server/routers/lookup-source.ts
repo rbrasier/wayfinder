@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { DEFAULT_CACHE_TTL_SECONDS, MATCH_CANDIDATE_LIMIT } from "@rbrasier/domain";
+import { DEFAULT_CACHE_TTL_SECONDS, MATCH_CANDIDATE_LIMIT } from "@wayfinder/domain";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 

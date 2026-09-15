@@ -7,7 +7,7 @@ import {
   type Organisation,
   type OrganisationUpdate,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { count, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_organisations, core_users } from "../db/schema/core";

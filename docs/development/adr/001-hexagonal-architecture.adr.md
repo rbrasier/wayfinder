@@ -46,6 +46,6 @@ Adopt **hexagonal architecture** as the foundational structural pattern.
 
 - ESLint `no-restricted-imports` blocks non-relative imports inside
   `packages/domain/src/**`.
-- ESLint blocks `@rbrasier/adapters/*`, ORM/SDK imports inside
+- ESLint blocks `@wayfinder/adapters/*`, ORM/SDK imports inside
   `packages/application/src/**`.
 - `validate.sh` greps `packages/domain/src` for any non-relative `from "…"`.

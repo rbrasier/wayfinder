@@ -29,4 +29,5 @@ export * from "./rate-limit/index";
 export * from "./skills/index";
 export * from "./mcp/index";
 export * from "./factory";
+export * from "./memory/index";
 export * from "./lookups/index";

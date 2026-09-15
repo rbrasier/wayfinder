@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { formatValueSetEntry, type ValueSetEntry } from "@rbrasier/domain";
+import { formatValueSetEntry, type ValueSetEntry } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/trpc/client";
 

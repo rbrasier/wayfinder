@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { RetrievalScope } from "@rbrasier/domain";
+import type { RetrievalScope } from "@wayfinder/domain";
 import { permissionProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 

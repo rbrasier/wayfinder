@@ -25,7 +25,7 @@ import {
   type ValueSetProbe,
   type ValueSetProbeInput,
   type ValueSetSearchInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { recordsToEntries, type ValueSetKindAdapter } from "./value-set-kind-adapter";
 
 export interface CachingValueSetProviderOptions {

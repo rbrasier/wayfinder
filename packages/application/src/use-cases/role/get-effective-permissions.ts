@@ -5,7 +5,7 @@ import {
   type IUserRoleRepository,
   type PermissionKey,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class GetEffectivePermissions {
   constructor(

@@ -6,7 +6,7 @@ import {
   type IMcpServerRepository,
   type McpServerWithTools,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Lists active servers with the tools they currently expose. A server that fails
 // to respond is returned with an empty tool list rather than failing the whole

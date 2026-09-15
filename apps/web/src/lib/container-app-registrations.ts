@@ -1,4 +1,4 @@
-import type { EntraCredentials } from "@rbrasier/domain";
+import type { EntraCredentials } from "@wayfinder/domain";
 import type { ServerEnv } from "./env";
 
 // The two Microsoft app registrations the environment can supply, read out of

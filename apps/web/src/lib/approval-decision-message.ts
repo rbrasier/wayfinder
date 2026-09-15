@@ -61,5 +61,32 @@ const VERB_PHRASE: Record<string, string> = {
     "rejected approval — the request was closed.",
 };
 
-export const decisionVerbPhrase = (outcome: string): string =>
-  VERB_PHRASE[outcome.trim()] ?? outcome;
+// The off-system line carries a date, so it cannot be a key in the map above.
+// Matched rather than listed, and matched first, so the feed reads as a verb
+// phrase after the approver's name like every other outcome does.
+const OFF_SYSTEM_OUTCOME = /^Approval granted — recorded off system \(approved on (.+)\)\.$/;
+
+export const decisionVerbPhrase = (outcome: string): string => {
+  const trimmed = outcome.trim();
+  const offSystem = OFF_SYSTEM_OUTCOME.exec(trimmed);
+  if (offSystem) return `granted approval off system (approved on ${offSystem[1]}).`;
+  return VERB_PHRASE[trimmed] ?? outcome;
+};
+
+// The outcomes that sign the document under review. Keyed on the sentence for
+// the same reason `VERB_PHRASE` is — the status is not in the persisted message
+// — and fails closed: an unrecognised sentence is not a grant, so a future
+// domain wording lands as a missing card rather than as a download offered
+// under a refusal.
+const GRANTED_OUTCOMES = new Set([
+  "Approval granted.",
+  "Approval granted, with edits made by the approver.",
+]);
+
+export const isApprovalGranted = (outcome: string): boolean => {
+  const trimmed = outcome.trim();
+  // An off-system decision is still `approved`, so `DecideApproval` applies the
+  // signature and there is a signed revision to download (ADR-055 §6).
+  if (OFF_SYSTEM_OUTCOME.test(trimmed)) return true;
+  return GRANTED_OUTCOMES.has(trimmed);
+};

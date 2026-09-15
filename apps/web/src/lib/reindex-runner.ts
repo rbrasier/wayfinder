@@ -1,8 +1,8 @@
 import type {
   ReindexAllDocumentsResult,
   ReindexProgress,
-} from "@rbrasier/application";
-import type { Result } from "@rbrasier/domain";
+} from "@wayfinder/application";
+import type { Result } from "@wayfinder/domain";
 
 export type ReindexRunStatus = "idle" | "running" | "complete" | "failed";
 

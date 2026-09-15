@@ -1,5 +1,5 @@
-import { findRecordCollections, ok } from "@rbrasier/domain";
-import type { IPeopleDirectory, Person, RecordCollection, Result } from "@rbrasier/domain";
+import { findRecordCollections, ok } from "@wayfinder/domain";
+import type { IPeopleDirectory, Person, RecordCollection, Result } from "@wayfinder/domain";
 import type { FetchRecordsInput, ValueSetKindAdapter } from "../lookups/value-set-kind-adapter";
 
 // How many people a listing pulls when there is no type-ahead term. Well above

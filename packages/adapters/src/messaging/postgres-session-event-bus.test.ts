@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SessionEvent } from "@rbrasier/domain";
+import type { SessionEvent } from "@wayfinder/domain";
 import {
   PostgresSessionEventBus,
   SessionEventFanout,

@@ -3,7 +3,10 @@ import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import { DocxGenerator } from "./docx-generator";
 
-const buildTemplateBuffer = (xmlContent: string): Buffer => {
+const buildTemplateBuffer = (
+  xmlContent: string,
+  extraParts: Record<string, string> = {},
+): Buffer => {
   const zip = new PizZip();
   zip.file(
     "[Content_Types].xml",
@@ -28,6 +31,9 @@ const buildTemplateBuffer = (xmlContent: string): Buffer => {
 </Relationships>`,
   );
   zip.file("word/document.xml", xmlContent);
+  for (const [name, content] of Object.entries(extraParts)) {
+    zip.file(name, content);
+  }
   return zip.generate({ type: "nodebuffer" }) as Buffer;
 };
 
@@ -664,4 +670,100 @@ describe("DocxGenerator", () => {
       expect(fields.data?.fields[0]).toMatchObject({ label: "Supplier Name", type: "text" });
     });
   });
+
+  // Issue #286: a template with one typo among a hundred tags was rejected with
+  // a single generic sentence, or — where the typo merged two tags into one —
+  // accepted with a silently wrong field list.
+  describe("malformed tags", () => {
+    const subjects = (result: { error?: { details?: readonly { subject: string }[] } }) =>
+      (result.error?.details ?? []).map((detail) => detail.subject).join(" | ");
+
+    it("names the text around a tag opened with the wrong bracket", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Supplier: {{ Supplier Name }} Extension Options: {[ Amount of extension options }}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Amount of extension options");
+    });
+
+    it("rejects an unclosed tag instead of merging it into the next one", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Hello {{ Client Name and {{ Other Field }}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.data?.tags).toBeUndefined();
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Client Name");
+    });
+
+    it("rejects a tag closed with the wrong bracket", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("Hello {{ Client Name }] and {{ Ok }}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.data?.tags).toBeUndefined();
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Client Name");
+    });
+
+    it("names a closing brace pair that never opened", () => {
+      const templateBytes = buildTemplateBuffer(simpleDocXml("Hello Client Name }} here"));
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Client Name");
+    });
+
+    it("lists every malformed tag in the document, not just the first", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("First {{ One }] then {{ Good }} then {[ Two }}"),
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error?.details?.length ?? 0).toBeGreaterThanOrEqual(2);
+      expect(subjects(result)).toContain("One");
+      expect(subjects(result)).toContain("Two");
+    });
+
+    it("finds a malformed tag in a header, naming the part it sits in", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{{ Good Tag }}"),
+        { "word/header1.xml": simpleDocXml("Ref: {[ Broken Header Tag }}") },
+      );
+
+      const result = generator.extractTags({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Broken Header Tag");
+    });
+
+    it("keeps the generic message when a corrupt file yields no per-tag detail", () => {
+      const result = generator.extractTags({ templateBytes: Buffer.from("not a valid docx file") });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(result.error?.details ?? []).toEqual([]);
+    });
+
+    it("lists every tag with an unknown annotation, not just the first", () => {
+      const templateBytes = buildTemplateBuffer(
+        simpleDocXml("{{ Name (frobnicate) }} {{ Age (wibble) }}"),
+      );
+
+      const result = generator.extractFields({ templateBytes });
+
+      expect(result.error?.code).toBe("VALIDATION_FAILED");
+      expect(subjects(result)).toContain("Name (frobnicate)");
+      expect(subjects(result)).toContain("Age (wibble)");
+    });
+  });
+
 });

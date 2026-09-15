@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   foreignKey,
   index,
   integer,
@@ -18,8 +19,8 @@ import {
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
-import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@rbrasier/domain";
-import type { AiTurnPayload, PendingExecutions, SeedContextItem, SeedStepOutput, SessionDocument, StepOutputField } from "@rbrasier/domain";
+import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@wayfinder/domain";
+import type { AiTurnPayload, PendingExecutions, SeedContextItem, SeedStepOutput, SessionDocument, StepOutputField } from "@wayfinder/domain";
 import { core_users } from "./core";
 
 type StoredContextDoc = {
@@ -183,6 +184,10 @@ export const app_sessions = pgTable(
     active_turn_claimed_at: timestamp("active_turn_claimed_at", { withTimezone: true }),
     // Optimistic-concurrency guard for non-lease writers (scaling wall #3).
     version: integer("version").notNull().default(1),
+    // The operator's own estimate, in minutes, of how long this case would have
+    // taken without Wayfinder. Captured once the session finishes; null when
+    // never asked or skipped. A flow's baseline is the median of these.
+    manual_estimate_minutes: integer("manual_estimate_minutes"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -452,6 +457,17 @@ export const app_session_approvals = pgTable(
     // same row — one column would have the decision overwrite the request.
     request_message: text("request_message"),
     record_snapshot: jsonb("record_snapshot").$type<Record<string, unknown>>(),
+    // Set only when the decision was recorded off system (ADR-055). A `date`
+    // rather than a timestamp: the evidence names a day, and a column that
+    // carried a clock time would invite one to be invented.
+    off_system_approved_on: date("off_system_approved_on"),
+    off_system_evidence_filename: text("off_system_evidence_filename"),
+    off_system_evidence_mime_type: text("off_system_evidence_mime_type"),
+    off_system_evidence_size_bytes: integer("off_system_evidence_size_bytes"),
+    off_system_evidence_storage_path: text("off_system_evidence_storage_path"),
+    // Who entered the nomination. Its foreign key is declared below by explicit
+    // name, for the same 63-character reason as suggested_approver_user_id.
+    off_system_nominated_by_user_id: uuid("off_system_nominated_by_user_id"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -465,6 +481,11 @@ export const app_session_approvals = pgTable(
       columns: [t.suggested_approver_user_id],
       foreignColumns: [core_users.id],
       name: "app_session_approvals_suggested_approver_user_id_fk",
+    }).onDelete("set null"),
+    off_system_nominator_fk: foreignKey({
+      columns: [t.off_system_nominated_by_user_id],
+      foreignColumns: [core_users.id],
+      name: "app_session_approvals_off_system_nominator_fk",
     }).onDelete("set null"),
   }),
 );

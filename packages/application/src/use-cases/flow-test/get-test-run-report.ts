@@ -13,7 +13,7 @@ import {
   type Result,
   type SessionMessage,
   type UsageEvent,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface GetTestRunReportInput {
   sessionId: string;

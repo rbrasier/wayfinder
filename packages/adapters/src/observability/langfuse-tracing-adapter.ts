@@ -1,4 +1,5 @@
 import type {
+  CalledModel,
   GenerateObjectInput,
   GenerateTextInput,
   ILanguageModel,
@@ -7,7 +8,7 @@ import type {
   StreamObjectInput,
   StreamTextInput,
   TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { Langfuse } from "langfuse";
 
 export interface LangfuseConfig {
@@ -40,7 +41,7 @@ export class LangfuseTracingAdapter implements ILanguageModel {
 
   async generateObject<T>(
     input: GenerateObjectInput,
-  ): Promise<Result<{ object: T; usage: TokenUsage }>> {
+  ): Promise<Result<{ object: T; usage: TokenUsage } & CalledModel>> {
     const trace = this.client.trace({
       name: "generateObject",
       input: { purpose: input.purpose, model: input.model, provider: this.provider },
@@ -63,7 +64,7 @@ export class LangfuseTracingAdapter implements ILanguageModel {
 
   async generateText(
     input: GenerateTextInput,
-  ): Promise<Result<{ text: string; usage: TokenUsage }>> {
+  ): Promise<Result<{ text: string; usage: TokenUsage } & CalledModel>> {
     const trace = this.client.trace({
       name: "generateText",
       input: { purpose: input.purpose, model: input.model, provider: this.provider },
@@ -86,7 +87,9 @@ export class LangfuseTracingAdapter implements ILanguageModel {
 
   async streamText(
     input: StreamTextInput,
-  ): Promise<Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> }>> {
+  ): Promise<
+    Result<{ textStream: AsyncIterable<string>; usage: Promise<TokenUsage> } & CalledModel>
+  > {
     const trace = this.client.trace({
       name: "streamText",
       input: { purpose: input.purpose, model: input.model, provider: this.provider },
@@ -113,11 +116,13 @@ export class LangfuseTracingAdapter implements ILanguageModel {
   async streamObject<T>(
     input: StreamObjectInput,
   ): Promise<
-    Result<{
-      partialObjectStream: AsyncIterable<Partial<T>>;
-      object: Promise<T>;
-      usage: Promise<TokenUsage>;
-    }>
+    Result<
+      {
+        partialObjectStream: AsyncIterable<Partial<T>>;
+        object: Promise<T>;
+        usage: Promise<TokenUsage>;
+      } & CalledModel
+    >
   > {
     const trace = this.client.trace({
       name: "streamObject",

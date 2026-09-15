@@ -11,7 +11,7 @@ export interface FlowSelectorFlow {
 
 const FLOW_CARD_THRESHOLD = 5;
 
-// Shared flow picker used by the Flow Usage and Flow Insights reports: shows up
+// Shared flow picker used by the Flow Health and Flow Reports pages: shows up
 // to five flow cards, then a search box once there are more flows than fit.
 export function FlowSelector({
   flows,

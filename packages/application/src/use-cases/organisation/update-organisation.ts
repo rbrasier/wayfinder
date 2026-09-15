@@ -4,7 +4,7 @@ import {
   type IOrganisationRepository,
   type Organisation,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { normaliseEmailDomain } from "./create-organisation";
 
 // Rename and/or edit the email domain. The slug stays stable so org-published

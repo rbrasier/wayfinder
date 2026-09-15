@@ -4,7 +4,7 @@ import {
   type PeopleSearchInput,
   type Person,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { GraphClient, GraphUser } from "./graph-client";
 
 export const graphUserToPerson = (user: GraphUser): Person | null => {

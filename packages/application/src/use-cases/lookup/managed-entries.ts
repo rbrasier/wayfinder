@@ -7,7 +7,7 @@ import {
   type LookupSource,
   type Result,
   type ValueSetEntry,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ManagedEntriesOptions {
   now?: () => Date;

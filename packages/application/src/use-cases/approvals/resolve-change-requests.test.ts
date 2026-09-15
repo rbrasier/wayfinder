@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { Approval, FlowNode, IApprovalRepository, IFlowNodeRepository } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { Approval, FlowNode, IApprovalRepository, IFlowNodeRepository } from "@wayfinder/domain";
 import { resolveChangeRequests } from "./resolve-change-requests";
 
 const makeApproval = (overrides: Partial<Approval>): Approval => ({

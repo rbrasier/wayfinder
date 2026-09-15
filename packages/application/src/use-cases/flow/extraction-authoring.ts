@@ -12,7 +12,7 @@ import {
   type IFlowRepository,
   type IFlowVersionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Creates a new extraction flow (flow_type = 'extraction'). Everything else
 // about ownership/visibility is identical to a guided flow (ADR-033 §1).

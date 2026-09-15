@@ -71,12 +71,16 @@ the version digits.
 Rules:
 
 1. **Fixing a bug or enhancing existing behaviour?** Branch from
-   `release/alpha-2` (name it `fix/<slug>` or `enhance/<slug>`) and open your
-   PR against `release/alpha-2`.
-2. **Building a new feature?** Branch from `main` (name it `feature/<slug>`)
-   and open your PR against `main`. New features never target a release
-   branch.
+   `release/alpha-2` (name it `bugfix/<slug>/claude-<username>` or
+   `enhance/<slug>/claude-<username>`) and open your PR against `release/alpha-2`.
+2. **Building a new feature?** Branch from `main` (name it
+   `feature/<slug>/claude-<username>`) and open your PR against `main`. New
+   features never target a release branch.
 3. **Not sure which one you have?** Open an issue first and ask.
+
+Branch names are `<changetype>/<slug>/claude-<username>` — the type of change,
+a short kebab-case description, and the author's GitHub login — so it is clear
+at a glance what a branch is for and who owns it.
 
 You never need to land the same change twice. Maintainers periodically merge
 the release branch forward into `main`, so a fix on the current line
@@ -102,9 +106,9 @@ framework it's talking to.
 
 ```
 packages/domain        entities + port interfaces. Zero external imports, relative imports only.
-packages/application   use cases. Imports @rbrasier/domain and @rbrasier/shared only — no frameworks, no ORMs, no AI SDKs.
+packages/application   use cases. Imports @wayfinder/domain and @wayfinder/shared only — no frameworks, no ORMs, no AI SDKs.
 packages/adapters       implements domain ports — Drizzle, Vercel AI SDK, LangGraph.js, Langfuse, Better Auth.
-apps/web / apps/api    imports @rbrasier/application and @rbrasier/adapters only. Wiring lives in lib/container.ts.
+apps/web / apps/api    imports @wayfinder/application and @wayfinder/adapters only. Wiring lives in lib/container.ts.
 ```
 
 This is enforced by ESLint and `validate.sh`, not just convention — a PR
@@ -149,6 +153,31 @@ that violates it won't pass checks. The rules that matter most day to day:
 ```
 
 All checks must pass before a PR can merge.
+
+## 5. Opening a pull request
+
+Every PR body follows
+[`.github/pull_request_template.md`](.github/pull_request_template.md), which
+GitHub pre-fills for you. Four sections, in order:
+
+1. **Summary** — one paragraph on what the change does and what it means for
+   the product.
+2. **Impact** — which features it touches, and every business rule it adds,
+   alters or removes, each stated with its trigger and resulting behaviour.
+3. **UI Impact** — how a user experiences the change, in their words.
+4. **Why this change is required** — the use case being served or the problem
+   being solved.
+
+Implementation detail — files, migrations, version bump, tests — goes in the
+collapsed block at the foot, so the business framing leads.
+
+If a section genuinely does not apply, replace its content with a one-line
+reason ("No UI impact — server-side only"). Don't delete the heading and don't
+leave a bare `N/A`: the reason is what tells a reviewer you considered it.
+
+The skills in `.claude/commands/` fill this same template, so a PR opened by
+`/build`, `/enhance`, `/bugfix` or `/release` reads the same as one you open by
+hand.
 
 ## Commit style
 

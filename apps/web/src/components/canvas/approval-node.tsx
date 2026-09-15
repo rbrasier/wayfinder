@@ -2,7 +2,7 @@
 
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { Stamp } from "lucide-react";
-import type { ApprovalSubject } from "@rbrasier/domain";
+import type { ApprovalSubject } from "@wayfinder/domain";
 import { cn } from "@/lib/utils";
 import { describeApprovalSubject } from "./approval-node-config";
 import { NodeTypeBadge } from "./node-styles";

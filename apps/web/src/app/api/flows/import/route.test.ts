@@ -1,4 +1,4 @@
-import { FLOW_ARCHIVE_LIMITS } from "@rbrasier/domain";
+import { FLOW_ARCHIVE_LIMITS } from "@wayfinder/domain";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

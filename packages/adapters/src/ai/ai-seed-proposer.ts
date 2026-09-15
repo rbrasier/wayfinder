@@ -11,7 +11,7 @@ import {
   type SeedStepOutput,
   type StepOutputField,
   type TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { z } from "zod";
 
 const proposalSchema = z.object({

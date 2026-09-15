@@ -35,6 +35,25 @@ If the prompt doesn't clearly match a skill, Claude asks:
 | Release                     | "cut the next alpha", "tag a build", "merge fixes forward"         | Release branch / tag / forward-merge (maintainers — see `managing-releases.md`) |
 | Publish                     | "publish the image", "push the release artifact"                   | A published `ghcr.io/rbrasier/wayfinder:<version>` image. Drives the CI workflow — never builds or pushes locally. `/release` hands off to it after tagging |
 
+## The pull request body
+
+`/build`, `/enhance`, `/bugfix` and `/release` all end by opening a PR, and all
+four fill the same file:
+[`.github/pull_request_template.md`](../../.github/pull_request_template.md).
+
+The template exists so a reviewer can tell what a change means for the product
+without reading the diff. Its four sections — Summary, Impact, UI Impact, Why
+this change is required — lead the body; files, migrations, version bump and
+test coverage sit in a collapsed block underneath.
+
+Each skill maps its own approved change summary onto those sections rather than
+composing a body of its own shape, so the structure holds across skills. The
+mapping table lives in each skill file, next to its PR step. A section that does
+not apply carries a one-line reason instead of being dropped.
+
+Change the template, and every skill's output changes with it — that is the
+point of having one file rather than four sets of prose.
+
 ## Adding a new skill
 
 1. Open `CLAUDE.md` and add a new `### Skill: <name>` section under

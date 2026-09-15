@@ -6,7 +6,7 @@ import {
   type ListErrorsInput,
   type LogErrorInput,
   type UpdateErrorStatusInput,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import type { Container } from "../container.js";
 import { validate } from "../middleware/validate.js";
 

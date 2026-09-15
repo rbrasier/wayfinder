@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   AnswerFeedback,
   FeedbackListFilter,
@@ -6,7 +6,7 @@ import type {
   IAnswerFeedbackRepository,
   NewAnswerFeedback,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { kb_answer_feedback } from "../db/schema/kb";
@@ -19,6 +19,7 @@ const toAnswerFeedback = (row: typeof kb_answer_feedback.$inferSelect): AnswerFe
   flaggedAnswer: row.flagged_answer,
   correctedText: row.corrected_text,
   reason: row.reason,
+  source: row.source,
   status: row.status,
   createdBy: row.created_by,
   createdAt: row.created_at,
@@ -38,6 +39,7 @@ export class DrizzleAnswerFeedbackRepository implements IAnswerFeedbackRepositor
           flagged_answer: feedback.flaggedAnswer,
           corrected_text: feedback.correctedText,
           reason: feedback.reason,
+          source: feedback.source ?? "frontline",
           created_by: feedback.createdBy,
         })
         .returning();

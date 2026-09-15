@@ -1,5 +1,5 @@
-import { ok, type ILanguageModel, type Result } from "@rbrasier/domain";
-import { fileGroupingSchema, type FileGroupingData } from "@rbrasier/shared";
+import { ok, type ILanguageModel, type Result } from "@wayfinder/domain";
+import { fileGroupingSchema, type FileGroupingData } from "@wayfinder/shared";
 
 // A file offered to the grouping pass: its id, display name, preserved tree path
 // (for folder criteria), and an optional lightweight content signal (headings /

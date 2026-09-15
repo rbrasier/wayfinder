@@ -71,8 +71,9 @@ export const validateTemplateFieldValue = (
   }
 
   // Reached only if a caller bypasses nodeFieldSet's filter. A signature typed
-  // by anyone other than the decision path is a forged signature.
-  if (field.type === "signature") {
+  // by anyone other than the decision path is a forged signature, and words put
+  // into an approver's mouth are no better.
+  if (field.type === "signature" || field.type === "approval_comment") {
     return err(
       domainError(
         "VALIDATION_FAILED",

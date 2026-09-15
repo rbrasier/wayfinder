@@ -1,5 +1,6 @@
 import type { RetrievedChunk } from "../entities/document-chunk";
 import type { ConversationalNodeConfig } from "../entities/flow-node";
+import type { ResolvedLesson } from "../entities/flow-lesson";
 import type { ResolvedSkill } from "../entities/skill";
 import type { TemplateField } from "../entities/template-field";
 import type { Result } from "../result";
@@ -41,6 +42,11 @@ export interface BuildSystemPromptInput {
   // Skills applied to this step (ADR-031), already resolved from skillRefs +
   // inlineSkill by the caller. Rendered as a cache-stable <skills> block.
   resolvedSkills?: ResolvedSkill[];
+  // Accepted flow-memory lessons for this step, resolved live rather than from
+  // the pinned version snapshot (ADR-058) and already filtered and capped by the
+  // caller. Rendered as a <learned_guidance> block in the same cache-stable
+  // region as <skills>; absent or empty renders nothing at all.
+  acceptedLessons?: ResolvedLesson[];
 }
 
 // `rule` is the author's stated condition for taking the branch, held on the

@@ -2,7 +2,7 @@ import {
   ORGANISATIONS_ENABLED_SETTING_KEY,
   parseOrganisationsEnabled,
   type OrganisationResolution,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { adminProcedure, authenticatedProcedure, router } from "../trpc";

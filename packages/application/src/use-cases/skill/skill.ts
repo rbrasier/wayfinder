@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   ConversationalNodeConfig,
   ISkillParser,
@@ -7,7 +7,7 @@ import type {
   ResolvedSkill,
   Result,
   Skill,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class CreateSkill {
   constructor(

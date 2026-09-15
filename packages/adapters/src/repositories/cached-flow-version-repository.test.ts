@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type FlowVersion, type IFlowVersionRepository } from "@rbrasier/domain";
+import { ok, type FlowVersion, type IFlowVersionRepository } from "@wayfinder/domain";
 import { TtlCache } from "../cache/ttl-cache";
 import { CachedFlowVersionRepository } from "./cached-flow-version-repository";
 

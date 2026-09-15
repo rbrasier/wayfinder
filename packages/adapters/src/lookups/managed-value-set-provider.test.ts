@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ok } from "@rbrasier/domain";
-import type { CachedValueSet, ILookupSourceRepository, Result } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
+import type { CachedValueSet, ILookupSourceRepository, Result } from "@wayfinder/domain";
 import {
   MANAGED_DISPLAY_FIELD,
   MANAGED_KEY_FIELD,

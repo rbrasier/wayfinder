@@ -15,7 +15,7 @@ import {
   type Result,
   type Session,
   type SessionMode,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface StartSessionInput {
   flowId: string;

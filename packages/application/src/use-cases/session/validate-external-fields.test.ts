@@ -10,7 +10,7 @@ import {
   type ValueSetListing,
   type ValueSetMatchInput,
   type ValueSetProbe,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { describeExternalFieldFlag, validateExternalFields } from "./validate-external-fields";
 
 const field = (rawTag: string): TemplateField => {

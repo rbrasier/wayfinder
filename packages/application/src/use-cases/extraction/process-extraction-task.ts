@@ -12,7 +12,7 @@ import {
   type ILanguageModel,
   type IObjectStorage,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { extractDocumentFields } from "./extract-document-fields";
 
 // A weakly-readable document has no text layer (e.g. a scanned PDF); it is
@@ -79,7 +79,7 @@ export class ProcessExtractionTask {
     const fields = await extractDocumentFields(this.languageModel, {
       fields: schema.fields,
       recordLabel: document.filename,
-      documentTexts: [{ filename: document.filename, text }],
+      documentTexts: [{ documentId: document.id, filename: document.filename, text }],
       contextDocs: schema.output.contextDocs,
       instruction: schema.input.guidance,
     });
