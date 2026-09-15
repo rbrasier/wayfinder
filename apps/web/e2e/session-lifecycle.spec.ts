@@ -157,9 +157,10 @@ test.describe('View as user', () => {
     await page.getByLabel('Search users').fill(REVOKE_TARGET_EMAIL);
     await page.getByRole('button', { name: new RegExp(REVOKE_TARGET_EMAIL, 'i') }).click();
 
-    // The start does a full document load, so the assertion is about what the
-    // server rendered for the new principal, not about a client-side swap.
-    await expect(page).toHaveURL(/\/chats/);
+    // NOT `toHaveURL(/chats/)` — the admin was already on /chats before
+    // clicking, so that assertion passes whether or not anything happened. The
+    // banner is the first thing that only exists if the server re-resolved the
+    // request as somebody else.
     const banner = page.getByTestId('impersonation-banner');
     await expect(banner).toBeVisible();
     await expect(banner).toContainText(REVOKE_TARGET_EMAIL);
@@ -180,6 +181,33 @@ test.describe('View as user', () => {
     // Proof the admin really is themselves again: the admin section admits them.
     await page.goto('/admin/users');
     await expect(page).toHaveURL(/\/admin\/users/);
+  });
+
+  // The bug this guards: the cookie was originally set inside a tRPC procedure,
+  // and the app's streaming tRPC link returns the response headers before any
+  // procedure body runs — so `Set-Cookie` was silently dropped and the whole
+  // feature was inert while every unit test passed.
+  test('starting a simulation actually sets the impersonation cookie', async ({
+    browser,
+    request,
+    page,
+  }) => {
+    const targetContext = await signedInContextFor(browser, request, REVOKE_TARGET_EMAIL);
+    await targetContext.close();
+
+    await page.goto('/chats');
+    await page.getByLabel('Account menu').click();
+    await page.getByTestId('view-as-user').click();
+    await page.getByLabel('Search users').fill(REVOKE_TARGET_EMAIL);
+    await page.getByRole('button', { name: new RegExp(REVOKE_TARGET_EMAIL, 'i') }).click();
+
+    await expect(page.getByTestId('impersonation-banner')).toBeVisible();
+
+    const cookies = await page.context().cookies();
+    expect(cookies.find((c) => c.name === 'wf.impersonation')?.value ?? '').not.toBe('');
+
+    await page.getByRole('button', { name: /return to your account/i }).click();
+    await expect(page.getByTestId('impersonation-banner')).toBeHidden();
   });
 
   test('a non-admin is never offered the entry point', async ({ browser, request }) => {

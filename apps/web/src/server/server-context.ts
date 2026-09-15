@@ -27,5 +27,13 @@ export const createServerTrpcContext = async (): Promise<TrpcContext> => {
 
   const permissions = await resolvePermissions(container, userId, isAdmin);
 
-  return { container, userId, isAdmin, impersonatorId, permissions, headers: new Headers() };
+  return {
+    container,
+    userId,
+    isAdmin,
+    impersonatorId,
+    impersonationCookie,
+    permissions,
+    headers: new Headers(),
+  };
 };

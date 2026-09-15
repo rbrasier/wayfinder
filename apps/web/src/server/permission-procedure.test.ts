@@ -24,6 +24,7 @@ const contextWith = (overrides: Partial<TrpcContext>): TrpcContext => ({
   userId: "user-1",
   isAdmin: false,
   impersonatorId: null,
+  impersonationCookie: null,
   permissions: new Set<PermissionKey>(),
   headers: new Headers(),
   ...overrides,

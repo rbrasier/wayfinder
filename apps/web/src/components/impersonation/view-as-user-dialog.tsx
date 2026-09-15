@@ -27,14 +27,33 @@ export function ViewAsUserDialog({ open, onOpenChange }: ViewAsUserDialogProps) 
     { search: search.trim() || undefined },
     { enabled: open },
   );
-  const startMutation = trpc.impersonation.start.useMutation({
-    onSuccess: () => {
+  const [startError, setStartError] = useState<string | null>(null);
+
+  // A REST route, not a tRPC mutation: the cookie it sets cannot ride the
+  // streamed tRPC response (see lib/impersonation-actions.ts).
+  const startViewingAs = async (userId: string): Promise<void> => {
+    setStartingFor(userId);
+    setStartError(null);
+    try {
+      const response = await fetch("/api/impersonation/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        setStartError(body.error ?? "Could not start viewing as that user.");
+        setStartingFor(null);
+        return;
+      }
       // A full load, not a router.push: every server component must re-render
       // under the new principal rather than replay a cached tree.
       window.location.href = "/chats";
-    },
-    onError: () => setStartingFor(null),
-  });
+    } catch {
+      setStartError("Could not start viewing as that user.");
+      setStartingFor(null);
+    }
+  };
 
   const targets = targetsQuery.data ?? [];
 
@@ -87,11 +106,8 @@ export function ViewAsUserDialog({ open, onOpenChange }: ViewAsUserDialogProps) 
                 <Button
                   variant="ghost"
                   className="h-auto w-full justify-start px-[10px] py-[8px] text-left"
-                  disabled={startMutation.isPending}
-                  onClick={() => {
-                    setStartingFor(target.id);
-                    startMutation.mutate({ userId: target.id });
-                  }}
+                  disabled={startingFor !== null}
+                  onClick={() => void startViewingAs(target.id)}
                 >
                   <span className="flex min-w-0 flex-col">
                     <span className="truncate text-[13px] font-medium">
@@ -110,9 +126,7 @@ export function ViewAsUserDialog({ open, onOpenChange }: ViewAsUserDialogProps) 
             ))}
           </ul>
 
-          {startMutation.isError && (
-            <p className="pt-3 text-sm text-destructive">{startMutation.error.message}</p>
-          )}
+          {startError && <p className="pt-3 text-sm text-destructive">{startError}</p>}
         </DialogBody>
       </DialogContent>
     </Dialog>

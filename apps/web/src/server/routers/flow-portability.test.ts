@@ -23,6 +23,7 @@ const contextFor = (container: Container, overrides: Partial<TrpcContext> = {}):
   userId: "user-1",
   isAdmin: false,
   impersonatorId: null,
+  impersonationCookie: null,
   permissions: new Set<PermissionKey>(),
   headers: new Headers(),
   ...overrides,

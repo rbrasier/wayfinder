@@ -94,6 +94,7 @@ const contextFor = (
   userId,
   isAdmin,
   impersonatorId: null,
+  impersonationCookie: null,
   permissions: new Set<PermissionKey>(),
   headers: new Headers(),
 });

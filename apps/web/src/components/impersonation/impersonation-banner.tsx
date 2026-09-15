@@ -19,16 +19,25 @@ export function ImpersonationBanner() {
   });
   const utils = trpc.useUtils();
 
-  const stopMutation = trpc.impersonation.stop.useMutation({
+  const [stopping, setStopping] = useState(false);
+  const [extending, setExtending] = useState(false);
+
+  // REST routes, not tRPC mutations: the cookies they set cannot ride the
+  // streamed tRPC response (see lib/impersonation-actions.ts).
+  const stop = async (): Promise<void> => {
+    setStopping(true);
+    await fetch("/api/impersonation/stop", { method: "POST" }).catch(() => undefined);
     // A full load for the same reason starting one is: the server must re-render
     // as the admin rather than replay the simulated tree.
-    onSettled: () => {
-      window.location.href = "/chats";
-    },
-  });
-  const extendMutation = trpc.impersonation.extend.useMutation({
-    onSuccess: () => utils.impersonation.current.invalidate(),
-  });
+    window.location.href = "/chats";
+  };
+
+  const extend = async (): Promise<void> => {
+    setExtending(true);
+    await fetch("/api/impersonation/extend", { method: "POST" }).catch(() => undefined);
+    await utils.impersonation.current.invalidate();
+    setExtending(false);
+  };
 
   const current = currentQuery.data;
 
@@ -70,19 +79,19 @@ export function ImpersonationBanner() {
         </span>
         <button
           type="button"
-          onClick={() => extendMutation.mutate()}
-          disabled={extendMutation.isPending}
+          onClick={() => void extend()}
+          disabled={extending}
           className="rounded-[6px] border border-[#c9b8f0] px-[8px] py-[2px] font-medium transition-colors hover:bg-[#e7dffb] disabled:opacity-60"
         >
-          {extendMutation.isPending ? "Extending…" : "Extend"}
+          {extending ? "Extending…" : "Extend"}
         </button>
         <button
           type="button"
-          onClick={() => stopMutation.mutate()}
-          disabled={stopMutation.isPending}
+          onClick={() => void stop()}
+          disabled={stopping}
           className="rounded-[6px] bg-[#5b4b8a] px-[9px] py-[2px] font-medium text-white transition-colors hover:bg-[#4c3d7a] disabled:opacity-60"
         >
-          {stopMutation.isPending ? "Returning…" : "Return to your account"}
+          {stopping ? "Returning…" : "Return to your account"}
         </button>
       </span>
     </div>

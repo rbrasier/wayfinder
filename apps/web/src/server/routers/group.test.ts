@@ -50,6 +50,7 @@ const contextFor = (
   userId: "dana",
   isAdmin: false,
   impersonatorId: null,
+  impersonationCookie: null,
   permissions: new Set<PermissionKey>(["group:manage_own"]),
   headers: new Headers(),
   ...overrides,

@@ -111,6 +111,31 @@ entry point. Written, not run — CI runs the suite.
 7. **Built on `claude/confident-newton-v8j4mb`**, not the skill's
    `feature/<slug>/claude-<username>`, because the session is pinned to that branch.
 
+## Post-merge fix — the cookie never reached the browser
+
+The first cut put `start`, `stop` and `extend` in the tRPC router and set the
+cookie with `cookies().set()`. Every test passed and the feature was completely
+inert: the mutation returned 200 and wrote its audit row, but no `Set-Cookie`
+ever reached the browser, so nothing was ever simulated.
+
+Cause: the app's tRPC client is `httpBatchStreamLink`. `resolveResponse` builds
+the response headers and returns `new Response(stream, { headers })` *before* any
+procedure body runs; Next merges `cookies().set()` mutations into the response it
+was handed, which by then has already gone. The write was dropped in silence.
+
+Fix: the three cookie-mutating operations are now REST routes under
+`/api/impersonation/*` that set the cookie on an explicit `NextResponse`
+(ADR-059 §6a). `listTargets` and `current` stay in tRPC as pure reads, and
+`current` takes the raw cookie from the tRPC context rather than calling
+`cookies()`, which is equally unreliable inside a streamed procedure.
+
+Why no test caught it: every test mocked the cookie store, so none of them
+exercised the one thing that was broken. `api/impersonation/route.test.ts` now
+asserts a real `Set-Cookie` header on the response, and the e2e spec asserts the
+cookie exists in the browser jar. The e2e spec also had a hollow assertion —
+`toHaveURL(/chats/)` after starting, when the admin was already on `/chats` — so
+it would have passed whether or not anything happened; it is gone.
+
 ## Known limitations
 
 - **RSC prefetches are not inside the audit actor scope.** `createServerHelpers`

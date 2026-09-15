@@ -17,6 +17,11 @@ export interface TrpcContext {
   // procedure may gate on it; `isAdmin` above already reflects the principal
   // actually in force.
   readonly impersonatorId: string | null;
+  // The raw impersonation cookie, read once when the context is built. Carried
+  // here so no procedure has to call `cookies()`: under httpBatchStreamLink a
+  // procedure body runs after the response has been handed back, and request
+  // APIs are not reliably available there.
+  readonly impersonationCookie: string | null;
   readonly permissions: Set<PermissionKey>;
   readonly headers: Headers;
 }
@@ -38,9 +43,11 @@ export const createTrpcContext = async (req: Request): Promise<TrpcContext> => {
   let isAdmin = false;
   let impersonatorId: string | null = null;
 
+  const impersonationCookie = getImpersonationCookieFromRequest(req);
+
   const token = getSessionTokenFromRequest(req);
   if (token) {
-    const session = await container.resolveSession(token, getImpersonationCookieFromRequest(req));
+    const session = await container.resolveSession(token, impersonationCookie);
     if (session) {
       userId = session.userId;
       isAdmin = session.isAdmin;
@@ -50,7 +57,15 @@ export const createTrpcContext = async (req: Request): Promise<TrpcContext> => {
 
   const permissions = await resolvePermissions(container, userId, isAdmin);
 
-  return { container, userId, isAdmin, impersonatorId, permissions, headers: req.headers };
+  return {
+    container,
+    userId,
+    isAdmin,
+    impersonatorId,
+    impersonationCookie,
+    permissions,
+    headers: req.headers,
+  };
 };
 
 const t = initTRPC.context<TrpcContext>().create({

@@ -105,6 +105,19 @@ shows one episode with explicit extensions rather than a start time that drifts.
 Extension is an admin action on the admin's own simulation and requires the same
 issuer binding as §2.
 
+**6a. A cookie write cannot ride a streamed response.** The web app's tRPC client
+is `httpBatchStreamLink`, and `resolveResponse` builds the response headers and
+returns `new Response(stream, { headers })` *before* any procedure body runs
+(verified in `@trpc/server@11.17.0`). Next merges `cookies().set()` mutations
+into the response it was handed, which by then has already gone. A cookie set
+inside a streamed procedure is therefore dropped in silence: the procedure
+succeeds, the audit row is written, and the browser never receives `Set-Cookie`.
+So starting, stopping and extending a simulation are REST routes under
+`/api/impersonation/*` that set the cookie on an explicit `NextResponse`, and
+only the reads (`listTargets`, `current`) stay in tRPC. For the same reason no
+procedure may call `cookies()`: the raw cookie is read once when the tRPC context
+is built and carried on the context.
+
 **7. Exit is a delete.** Returning to the admin's own account clears the
 impersonation cookie. Nothing else is touched, so the operation cannot fail in a
 way that costs the admin their session. This is the property that permits full
