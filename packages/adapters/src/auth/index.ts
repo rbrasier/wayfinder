@@ -7,6 +7,8 @@ export * from "./credential-accounts";
 export * from "./pki-cert-adapter";
 export * from "./seed-admin";
 export * from "./seed-roles";
+export * from "./impersonation-cookie";
+export * from "./impersonated-session-resolver";
 export * from "./session-resolver";
 export * from "./cached-session-resolver";
 export * from "./session-concurrency";

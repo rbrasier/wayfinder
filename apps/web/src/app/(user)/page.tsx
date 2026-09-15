@@ -1,20 +1,10 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getContainer } from "@/lib/container";
+import { resolveServerPrincipal } from "@/lib/server-principal";
 
 export default async function HomePage() {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore
-    .getAll()
-    .find((c) => c.name.endsWith(".session_token") || c.name === "better-auth.session_token");
+  const { principal } = await resolveServerPrincipal();
 
-  if (!sessionCookie?.value) {
-    redirect("/login");
-  }
-
-  const session = await getContainer().resolveSession(sessionCookie.value);
-
-  if (!session) {
+  if (!principal) {
     redirect("/login");
   }
 

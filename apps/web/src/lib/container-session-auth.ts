@@ -2,6 +2,7 @@ import {
   TtlCache,
   createCachedSessionResolver,
   createSessionRevocationRegistry,
+  resolveImpersonation,
   resolveSession,
   revokeUserSessions,
   type CachedPrincipal,
@@ -16,6 +17,10 @@ interface SessionAuthDeps {
   // Read per resolution rather than captured, so a policy saved in the admin
   // card applies on the next request with no redeploy (ADR-035 §4).
   getAuthConfig: () => Promise<AuthConfig>;
+  // Signs and verifies the impersonation cookie. The same secret Better Auth
+  // uses, but an independent signature — a flaw here must cost an admin their
+  // simulation, never their session (ADR-059 §1).
+  authSecret: string;
 }
 
 /**
@@ -32,6 +37,7 @@ export const buildSessionAuth = ({
   cacheTtlMs,
   cacheMaxEntries,
   getAuthConfig,
+  authSecret,
 }: SessionAuthDeps) => {
   // Short-TTL caches in front of the two hottest auth lookups (session +
   // permission resolution). Single-instance correct; promote to a shared store
@@ -46,13 +52,17 @@ export const buildSessionAuth = ({
   });
   const sessionRevocations = createSessionRevocationRegistry();
 
+  // The loader resolves the real session first, then layers any simulation over
+  // it. Both cookies are part of the cache key, so a simulated and a
+  // non-simulated request on the same token never share an entry (ADR-059 §3b).
   const resolveCachedSession = createCachedSessionResolver(
     db,
     sessionCache,
     sessionRevocations,
-    async (database, cookieValue) => {
+    async (database, cookieValue, impersonationCookie) => {
       const { sessionPolicy } = await getAuthConfig();
-      return resolveSession(database, cookieValue, sessionPolicy);
+      const selfSession = await resolveSession(database, cookieValue, sessionPolicy);
+      return resolveImpersonation(database, selfSession, impersonationCookie, authSecret);
     },
   );
 

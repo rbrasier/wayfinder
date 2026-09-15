@@ -2,7 +2,10 @@ import { NextResponse, type NextRequest } from "next/server";
 import { DocxGenerator, XlsxGenerator } from "@wayfinder/adapters";
 import type { DomainErrorDetail, IDocumentGenerator, TemplateField } from "@wayfinder/domain";
 import { getContainer, type Container } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import {
+  getImpersonationCookieFromRequest,
+  getSessionTokenFromRequest,
+} from "@/lib/session-token";
 
 export const MAX_TEMPLATE_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -38,7 +41,7 @@ export const authoriseTemplateNode = async (
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }
 
-  const session = await container.resolveSession(token);
+  const session = await container.resolveSession(token, getImpersonationCookieFromRequest(req));
   if (!session) {
     return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
   }

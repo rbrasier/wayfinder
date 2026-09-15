@@ -13,6 +13,7 @@ import {
   FlaskConical,
   Flag,
   GitBranch,
+  Eye,
   LogOut,
   Menu,
   MessageSquare,
@@ -40,6 +41,7 @@ import {
 } from "@/components/sidebar-model";
 import { UsageMeter, UsageRing } from "@/components/usage-meter";
 import { authClient } from "@/lib/auth-client";
+import { ViewAsUserDialog } from "@/components/impersonation/view-as-user-dialog";
 import { trpc } from "@/trpc/client";
 
 interface NavItem {
@@ -330,9 +332,14 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const { mobileOpen, openMobile, closeMobile } = useSidebar();
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [viewAsOpen, setViewAsOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
   const userQuery = trpc.user.me.useQuery();
+  // Drives both the "View as user" entry and the hiding of admin mode below:
+  // a simulated session is never an admin session (ADR-059 §3a).
+  const impersonationQuery = trpc.impersonation.current.useQuery();
+  const isSimulating = impersonationQuery.data != null;
   const sessionsQuery = trpc.session.list.useQuery(undefined, {
     enabled: !isAdmin,
   });
@@ -509,7 +516,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           Exit admin mode
         </button>
       )}
-      {!isAdmin && user?.isAdmin && (
+      {!isAdmin && user?.isAdmin && !isSimulating && (
         <button
           onClick={() => {
             closeMobile();
@@ -576,10 +583,28 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                 <LogOut className="h-[14px] w-[14px] shrink-0 text-[#5c574c]" />
                 Sign out
               </button>
+              {user.isAdmin && !isSimulating && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="view-as-user"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    closeMobile();
+                    setViewAsOpen(true);
+                  }}
+                  className="flex w-full items-center gap-[8px] border-t border-[#e7e3db] px-[12px] py-[7px] text-left text-[13px] text-[#1c1b19] hover:bg-[#efece5]"
+                >
+                  <Eye className="h-[14px] w-[14px] shrink-0 text-[#5c574c]" />
+                  View as user
+                </button>
+              )}
             </div>
           )}
         </div>
       )}
+
+      <ViewAsUserDialog open={viewAsOpen} onOpenChange={setViewAsOpen} />
     </div>
   );
 

@@ -58,7 +58,7 @@ describe("resolveSession", () => {
 
     const result = await resolveSession(db, signedValue);
 
-    expect(result).toEqual({ userId: "user-1", isAdmin: true });
+    expect(result).toEqual({ userId: "user-1", isAdmin: true, impersonatorId: null });
     // The eq() condition is passed positionally; we just need to assert the
     // helper was called (the actual token comparison runs against the DB row,
     // which our fake returns unconditionally).
@@ -74,7 +74,7 @@ describe("resolveSession", () => {
   it("handles unsigned tokens (e.g. dev-login) without modification", async () => {
     const db = buildDb([{ userId: "user-2", isAdmin: false }]);
     const result = await resolveSession(db, "rawhexdevlogintokenwithoutdots");
-    expect(result).toEqual({ userId: "user-2", isAdmin: false });
+    expect(result).toEqual({ userId: "user-2", isAdmin: false, impersonatorId: null });
   });
 });
 
@@ -86,7 +86,7 @@ describe("resolveSession — policy timeouts", () => {
 
     const result = await resolveSession(db, "token", DEFAULT_SESSION_POLICY, now);
 
-    expect(result).toEqual({ userId: "user-1", isAdmin: false });
+    expect(result).toEqual({ userId: "user-1", isAdmin: false, impersonatorId: null });
   });
 
   it("returns no principal for a session idle beyond the idle timeout", async () => {
@@ -143,7 +143,7 @@ describe("resolveSession — last-active stamping", () => {
 
     const result = await resolveSession(db, "token", DEFAULT_SESSION_POLICY, now);
 
-    expect(result).toEqual({ userId: "user-1", isAdmin: false });
+    expect(result).toEqual({ userId: "user-1", isAdmin: false, impersonatorId: null });
     expect(db.update).toHaveBeenCalledOnce();
     expect(db.set).toHaveBeenCalledWith({ last_active_at: now });
   });
@@ -184,6 +184,6 @@ describe("resolveSession — last-active stamping", () => {
     const result = await resolveSession(db, "token", DEFAULT_SESSION_POLICY, now);
 
     // A bookkeeping write must never sign a legitimate user out.
-    expect(result).toEqual({ userId: "user-1", isAdmin: false });
+    expect(result).toEqual({ userId: "user-1", isAdmin: false, impersonatorId: null });
   });
 });

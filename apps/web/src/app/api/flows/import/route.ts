@@ -1,7 +1,8 @@
 import { FLOW_ARCHIVE_LIMITS } from "@wayfinder/domain";
 import { NextResponse, type NextRequest } from "next/server";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { withPrincipal } from "@/lib/with-principal";
 import { statusForDomainError } from "@/lib/http-errors";
 
 // Both halves of inspect-then-commit live here, chosen by the `mode` field.
@@ -13,14 +14,9 @@ type ImportMode = "inspect" | "commit";
 const isImportMode = (value: unknown): value is ImportMode =>
   value === "inspect" || value === "commit";
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+async function handlePOST(req: NextRequest, principal: ResolvedSession): Promise<NextResponse> {
   const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const session = await container.resolveSession(token);
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const formData = await req.formData();
   const file = formData.get("file");
@@ -58,7 +54,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const imported = await container.useCases.importFlow.execute({
     archive,
-    importedByUserId: session.userId,
+    importedByUserId: principal.userId,
   });
   if (imported.error) {
     return NextResponse.json(
@@ -77,3 +73,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     { status: 201 },
   );
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const POST = (req: NextRequest): Promise<NextResponse> =>
+  withPrincipal(req, (principal) => handlePOST(req, principal));

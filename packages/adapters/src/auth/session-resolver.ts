@@ -11,6 +11,10 @@ import { core_sessions, core_users } from "../db/schema/core";
 export interface ResolvedSession {
   readonly userId: string;
   readonly isAdmin: boolean;
+  // The admin actually driving, when this principal is a simulated view of
+  // someone else (ADR-059). Null whenever the user is themselves. Attribution
+  // only — no authorisation check may read it (ADR-060 §6).
+  readonly impersonatorId: string | null;
 }
 
 // Better Auth writes the session cookie as `<token>.<base64-signature>` (signed
@@ -78,7 +82,7 @@ export const resolveSession = async (
       await stampLastActive(db, row.sessionId, now);
     }
 
-    return { userId: row.userId, isAdmin: row.isAdmin };
+    return { userId: row.userId, isAdmin: row.isAdmin, impersonatorId: null };
   } catch {
     return null;
   }
