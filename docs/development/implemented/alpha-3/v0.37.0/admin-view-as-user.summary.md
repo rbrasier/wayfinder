@@ -156,6 +156,34 @@ spec:
    not one of the six groups. The boundary itself is enforced server-side and
    tested there: the start route answers 403, `listTargets` answers FORBIDDEN.
 
+## Third CI round — cold compiles, and a shared allowance for them
+
+One hard failure (`welcome-tour`) and three flaky tests, only one of which was
+this feature's. The cause is the one `welcome-tour.spec.ts` already documented in
+its own comments: CI runs the app with `next dev`, so whichever spec reaches a
+route first pays its compile, and the app log shows single page compiles over
+eight seconds against a 5s assertion default.
+
+This PR aggravated it in two ways. Removing two specs in the previous round
+**resharded the suite**, moving which spec pays which compile — `welcome-tour`'s
+comment explicitly assumes it is "the first to visit /flows". And the
+impersonation banner added a ninth procedure to the batch that every first paint
+waits on, including the one that gates the tour modal.
+
+Fixes:
+
+- The cold-compile allowances moved out of `welcome-tour.spec.ts` into
+  `e2e/helpers/timeouts.ts` (`NAV_TIMEOUT`, `COLD_ROUTE_BUDGET`, `untilDom`), so
+  they are defined once rather than rediscovered per spec — which is the point,
+  since resharding moves which spec needs them.
+- `welcome-tour`'s first `toBeVisible` was the only assertion in that spec still
+  on the 5s default, and is exactly where it failed. It now uses `NAV_TIMEOUT`
+  like its siblings.
+- The view-as-user spec adopts those constants instead of the ad-hoc 30s it had,
+  covers the return navigation (which forces a full document load, so the banner
+  survives on the outgoing page until the new one paints), and drops its
+  full-page screenshot, which was pure cost in CI.
+
 ## Known limitations
 
 - **RSC prefetches are not inside the audit actor scope.** `createServerHelpers`

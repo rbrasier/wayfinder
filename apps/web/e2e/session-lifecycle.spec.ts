@@ -13,6 +13,7 @@
 import type { APIRequestContext, Browser, BrowserContext } from '@playwright/test';
 import { test, expect } from './helpers/base';
 import { openSettingsSection } from './helpers/settings';
+import { COLD_ROUTE_BUDGET, NAV_TIMEOUT, untilDom } from './helpers/timeouts';
 
 const REVOKE_TARGET_EMAIL = 'revoke-target@example.com';
 
@@ -152,11 +153,16 @@ test.describe('View as user', () => {
     request,
     page,
   }) => {
+    // Four navigations, two of which are full document loads the feature forces
+    // so the server re-renders under the new principal. Under `next dev` each
+    // can pay a route compile — see helpers/timeouts.ts.
+    test.setTimeout(COLD_ROUTE_BUDGET);
+
     // Give the picker somebody to find who is not the admin driving the test.
     const targetContext = await signedInContextFor(browser, request, REVOKE_TARGET_EMAIL);
     await targetContext.close();
 
-    await page.goto('/chats');
+    await page.goto('/chats', untilDom);
     await page.getByLabel('Account menu').click();
     await page.getByTestId('view-as-user').click();
 
@@ -167,12 +173,8 @@ test.describe('View as user', () => {
     // clicking, so that assertion passes whether or not anything happened. The
     // banner is the first thing that only exists if the server re-resolved the
     // request as somebody else.
-    //
-    // The generous timeout is for `next dev`, which compiles routes on demand:
-    // the first navigation of a run has been seen taking over eight seconds in
-    // CI, against a 5s default. Later assertions use the default.
     const banner = page.getByTestId('impersonation-banner');
-    await expect(banner).toBeVisible({ timeout: 30_000 });
+    await expect(banner).toBeVisible({ timeout: NAV_TIMEOUT });
     await expect(banner).toContainText(REVOKE_TARGET_EMAIL);
     await expect(page.getByTestId('impersonation-minutes')).toContainText(/\d+ min left/);
 
@@ -183,20 +185,17 @@ test.describe('View as user', () => {
     const cookies = await page.context().cookies();
     expect(cookies.find((c) => c.name === 'wf.impersonation')?.value ?? '').not.toBe('');
 
-    await page.screenshot({
-      path: 'screenshots/view-as-user-banner.png',
-      fullPage: true,
-    });
-
     // A simulated session is never an admin session, whoever is simulated.
-    await page.goto('/admin/users');
-    await expect(page).toHaveURL(/\/chats/);
+    await page.goto('/admin/users', untilDom);
+    await expect(page).toHaveURL(/\/chats/, { timeout: NAV_TIMEOUT });
 
+    // Returning forces a full document load too, so the banner survives on the
+    // outgoing page until the new one paints — the same cold-compile window.
     await page.getByRole('button', { name: /return to your account/i }).click();
+    await expect(banner).toBeHidden({ timeout: NAV_TIMEOUT });
 
-    await expect(banner).toBeHidden();
     // Proof the admin really is themselves again: the admin section admits them.
-    await page.goto('/admin/users');
-    await expect(page).toHaveURL(/\/admin\/users/);
+    await page.goto('/admin/users', untilDom);
+    await expect(page).toHaveURL(/\/admin\/users/, { timeout: NAV_TIMEOUT });
   });
 });

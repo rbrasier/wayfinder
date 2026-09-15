@@ -10,28 +10,12 @@
  */
 
 import { test, expect } from './helpers/base';
+import { COLD_ROUTE_BUDGET, NAV_TIMEOUT, untilDom } from './helpers/timeouts';
 
 const TOUR_EMAIL = 'welcome-tour@example.com';
 
-// CI serves the app with `next dev` (.github/workflows/e2e.yml), so every route
-// is compiled on its first request. This spec is the first to visit /flows, the
-// flow config canvas — the heaviest route in the app — and /settings, so each of
-// its hand-offs can pay a cold compile on top of a server render before the App
-// Router changes the URL. That, not anything in the tour, is what made this spec
-// flaky: the first attempt paid the compile and the retry found the route warm.
-const NAV_TIMEOUT = 45_000;
-
-// Three cold navigations and a mutation do not fit the 45s default from
-// playwright.config.ts. Matches the allowance fix-entra-admin-recovery.spec.ts
-// already makes for its own slow path.
-const COLD_ROUTE_BUDGET = 120_000;
-
-// `load` waits on every subresource and has timed out at 30s here under CI load.
-// Each step after a navigation is a retrying assertion, so the document being
-// parsed is a sufficient starting point — but anything that *clicks* must first
-// wait for a client-rendered element, or it races hydration and the click is
-// swallowed.
-const untilDom = { waitUntil: 'domcontentloaded' } as const;
+// The cold-compile allowances these navigations need live in one place, because
+// which spec pays the compile moves whenever the suite is resharded.
 
 test.describe('Welcome tour', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
@@ -61,7 +45,10 @@ test.describe('Welcome tour', () => {
     test.setTimeout(COLD_ROUTE_BUDGET);
     await page.goto('/chats', untilDom);
     const welcome = page.getByTestId('welcome-tour');
-    await expect(welcome).toBeVisible();
+    // The modal is client-rendered once `user.me` resolves, and that call rides
+    // the same batch as every other first-paint query. On the 5s default this is
+    // the assertion that fails when the shard is loaded.
+    await expect(welcome).toBeVisible({ timeout: NAV_TIMEOUT });
     await expect(welcome.getByRole('heading', { name: 'Start a chat' })).toBeVisible();
     await expect(welcome.getByRole('heading', { name: 'Build a flow' })).toBeVisible();
 
@@ -116,7 +103,10 @@ test.describe('Welcome tour', () => {
     test.setTimeout(COLD_ROUTE_BUDGET);
     await page.goto('/chats', untilDom);
     const welcome = page.getByTestId('welcome-tour');
-    await expect(welcome).toBeVisible();
+    // The modal is client-rendered once `user.me` resolves, and that call rides
+    // the same batch as every other first-paint query. On the 5s default this is
+    // the assertion that fails when the shard is loaded.
+    await expect(welcome).toBeVisible({ timeout: NAV_TIMEOUT });
     await welcome.getByRole('button', { name: 'Skip for now' }).click();
     await expect(welcome).toBeHidden();
 
