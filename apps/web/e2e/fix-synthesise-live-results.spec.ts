@@ -59,16 +59,29 @@ async function createSynthesis(page: Page, name: string): Promise<boolean> {
     timeout: ROUTE_COMPILE_TIMEOUT,
   });
 
-  // The heading lives in the page header, outside the editor's loading gate, so
-  // it appears while the body is still "Loading…" — and the editor is mounted
-  // under the `pending` seed key at that point. When the schema query settles
-  // the key flips and EditorCards remounts, discarding any state a test has
-  // already set. Waiting for the upload control, which only renders once the
-  // query has settled, means every case below starts from the final mount.
+  await waitForEditorReady(page);
+  return true;
+}
+
+/**
+ * Waits for the editor to reach its final mount.
+ *
+ * The "Edit synthesis" heading is in the page header, outside the editor's
+ * loading gate, so it appears while the body is still "Loading…" — and at that
+ * point EditorCards is mounted under the `pending` seed key. When the schema
+ * query settles the key flips and the component remounts, discarding any state
+ * set in the meantime: an unchecked Auto analyse goes back to checked, and an
+ * open output modal closes. Every entry into the editor has to wait for this,
+ * the reload half of the persistence case included — waiting on the heading
+ * alone is what left that case passing only on retry.
+ *
+ * The upload control renders only once the query has settled, so it is the
+ * signal that the final mount is in place.
+ */
+async function waitForEditorReady(page: Page): Promise<void> {
   await expect(page.getByText(/Upload documents or a zip/i)).toBeVisible({
     timeout: ROUTE_COMPILE_TIMEOUT,
   });
-  return true;
 }
 
 /**
@@ -132,6 +145,7 @@ test.describe('Synthesise Information — live results, editor persistence, toas
     await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible({
       timeout: ROUTE_COMPILE_TIMEOUT,
     });
+    await waitForEditorReady(page);
     await openOutputConfig(page);
 
     await expect(page.getByLabel('Field 1 label')).toHaveValue('Supplier Name');
