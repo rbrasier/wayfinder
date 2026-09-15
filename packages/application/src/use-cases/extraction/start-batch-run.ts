@@ -179,6 +179,10 @@ export class StartBatchRun {
   async startAnalysis(input: {
     flowId: string;
     userId: string;
+    // The editor's current setting, which may not be saved yet — the author can
+    // change the stepper and upload without pressing Save. Falls back to the
+    // saved config, then the default.
+    analyseSampleSize?: number;
   }): Promise<Result<ExtractionRun>> {
     const staged = await this.drafts.listForFlow(input.flowId);
     if (staged.error) return staged;
@@ -199,7 +203,10 @@ export class StartBatchRun {
       );
     }
 
-    const readCount = await this.analyseReadCount(input.flowId);
+    const readCount =
+      input.analyseSampleSize === undefined
+        ? await this.analyseReadCount(input.flowId)
+        : ok(input.analyseSampleSize);
     if (readCount.error) return readCount;
 
     const run = await this.runs.createRun({

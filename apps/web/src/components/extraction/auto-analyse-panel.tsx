@@ -1,6 +1,7 @@
 "use client";
 
 import { MAX_ANALYSE_DOCUMENTS } from "@wayfinder/domain";
+import { Loader2 } from "lucide-react";
 import { InlineStepper } from "./editor-cards-controls";
 import { resolveAnalysisState } from "./extraction-editor-model";
 
@@ -31,7 +32,8 @@ export function AnalysisState({
 
   if (state === "running") {
     return (
-      <p className="text-[12px] text-[#736d5f]" role="status">
+      <p className="flex items-center gap-2 text-[12px] text-[#736d5f]" role="status">
+        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#3a5fd9]" aria-hidden="true" />
         Analysing {analysis.totalCount} {documentWord(analysis.totalCount)}…
       </p>
     );

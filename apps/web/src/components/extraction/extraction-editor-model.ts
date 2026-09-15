@@ -190,18 +190,24 @@ export const resolveAnalysisState = (
   starting: boolean,
 ): AnalysisStateKind => {
   if (starting || analysis.status === "running") return "running";
-  if (analysis.status === "complete") return "drafted";
-  if (analysis.doneCount > 0) return "drafted_with_exceptions";
+  if (analysis.doneCount > 0) {
+    // A run can settle non-complete for reasons that cost it no documents — it
+    // was cancelled, or paused at the spend ceiling. Reporting "0 documents
+    // could not be read" in those cases is just noise, so the exception wording
+    // is reserved for a run that actually lost a document.
+    return analysis.unreadableCount > 0 ? "drafted_with_exceptions" : "drafted";
+  }
   // Nothing drafted: separate "we could not read your files" from "drafting
   // itself went wrong", because only the first tells the author what to change.
   return analysis.unreadableCount > 0 ? "unreadable" : "failed";
 };
 
-// Where the Run sample button lives. Auto analyse makes the output card
-// AI-drafted, so the author's next action belongs beside the documents they just
-// uploaded rather than across the editor (phase §7).
-export const runSampleBelongsInInputCard = (autoAnalyse: boolean, canAuthor: boolean): boolean =>
-  autoAnalyse && canAuthor;
+// The output is ready to run against once there is at least one field to pull
+// and, in template mode, a template to pull it into. Auto Analyse satisfies the
+// first on its own, which is why an author with it on never has to open the
+// output configuration by hand.
+export const outputIsConfigured = (fieldCount: number, hasTemplate: boolean): boolean =>
+  fieldCount > 0 && hasTemplate;
 
 // Whether the manual read-guidance and file-mapping questions render at all.
 // Auto analyse answers both, so they are unmounted rather than disabled.
@@ -216,3 +222,32 @@ export const showsAutoAnalyseControls = (canAuthor: boolean): boolean => canAuth
 // the user may author.
 export const uploadShouldStartAnalysis = (autoAnalyse: boolean, canAuthor: boolean): boolean =>
   autoAnalyse && canAuthor;
+
+// Folds the server's saved field set into the editor's live state after an
+// analysis settles.
+//
+// The analysis has already written these fields server-side, but this editor
+// seeds its form state at mount and the page's remount key does not change for a
+// flow that already had a schema. Without this the author sees "drafted fields"
+// over an unchanged form, and the next Save posts the stale set straight over
+// the AI's work.
+//
+// Append-only, by derived key, mirroring the server-side merge: a field the
+// author is editing locally is never replaced, and an unsaved local addition is
+// never dropped.
+export const adoptDraftedFields = (
+  current: ExtractionFieldModel[],
+  saved: ExtractionSchema | null,
+): ExtractionFieldModel[] => {
+  if (!saved) return current;
+
+  const held = new Set(current.map((field) => deriveFieldKey(field.label)));
+  const additions = schemaToFieldModels(saved, false).filter(
+    (field) => field.label.trim().length > 0 && !held.has(deriveFieldKey(field.label)),
+  );
+  if (additions.length === 0) return current;
+
+  // A single blank row is the editor's empty state, not a field the author typed.
+  const seeded = current.filter((field) => field.label.trim().length > 0);
+  return [...seeded, ...additions];
+};

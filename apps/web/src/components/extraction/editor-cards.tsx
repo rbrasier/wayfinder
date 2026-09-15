@@ -18,7 +18,6 @@ import {
   DialogBody,
   DialogCloseButton,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -26,17 +25,18 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
-import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
 import { UploadTree, type UploadedFile } from "./upload-tree";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
 import { FocusCard, Segmented, Switch } from "./editor-cards-controls";
 import { AnalyseControls, AnalysisState } from "./auto-analyse-panel";
+import { EditorDialogs } from "./editor-dialogs";
 import { usePermissions } from "@/lib/use-permissions";
 import {
   deriveOutputMode,
   emptyExtractionField,
   extractionFieldToDraft,
-  runSampleBelongsInInputCard,
+  adoptDraftedFields,
+  outputIsConfigured,
   schemaToFieldModels,
   showsAutoAnalyseControls,
   showsManualInputQuestions,
@@ -47,7 +47,6 @@ import {
 } from "./extraction-editor-model";
 
 type Cardinality = "one_per_file" | "many_per_record";
-type FocusedCard = "input" | "output";
 
 const readFileAsBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -75,7 +74,6 @@ export function EditorCards({
 
   const initialMode = deriveOutputMode(initialSchema);
 
-  const [focused, setFocused] = useState<FocusedCard>("input");
 
   // Auto analyse is an authoring act — it writes the field set — so a run-only
   // user never sees the control (033-extraction-flows.adr.md §7). Server-side
@@ -160,18 +158,30 @@ export function EditorCards({
     return () => clearInterval(timer);
   }, [analysisRunning, analysis?.runId]);
 
-  // The settled analysis has written fields into the draft, so the editor must
-  // re-read the schema rather than keep rendering the set it loaded with.
+  // A settled analysis has already written the fields into the draft server-side,
+  // so they are saved — but this component seeds its form state at mount and the
+  // page's remount key does not change for a flow that already had a schema. Left
+  // alone the author sees "drafted fields" over an unchanged editor, and the next
+  // Save posts the stale set straight over the AI's work. So the drafted fields
+  // are adopted into state directly, by the same append-and-fill rule the server
+  // merge uses: anything the author has typed locally wins, and nothing they have
+  // in flight is lost.
   const previousAnalysisStatus = useRef<string | null>(null);
   useEffect(() => {
     const status = analysis?.status ?? null;
-    if (previousAnalysisStatus.current === "running" && status !== "running") {
-      void utils.extraction.getSchema.invalidate({ flowId });
-      router.refresh();
-    }
+    const settled = previousAnalysisStatus.current === "running" && status !== "running";
     previousAnalysisStatus.current = status;
+    if (!settled) return;
+
+    void (async () => {
+      const saved = await utils.extraction.getSchema.fetch({ flowId });
+      if (!saved) return;
+
+      setManualFields((current) => adoptDraftedFields(current, saved));
+    })();
   }, [analysis?.status, flowId]);
 
+  const [outputOpen, setOutputOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -246,7 +256,8 @@ export function EditorCards({
       // The whole point of the feature: uploading is the trigger, not a button.
       // The server refuses a second analysis while one is live, so a burst of
       // uploads cannot start competing runs.
-      if (uploadShouldStartAnalysis(autoAnalyse, canAuthor)) startAnalysisMutation.mutate({ flowId });
+      if (uploadShouldStartAnalysis(autoAnalyse, canAuthor))
+        startAnalysisMutation.mutate({ flowId, analyseSampleSize });
     },
     onError: (error) => toast.error(error.message),
   });
@@ -363,12 +374,6 @@ export function EditorCards({
   };
 
   const sampleStarting = startSampleMutation.isPending || saveMutation.isPending;
-  const runSampleButton = (
-    <Button type="button" size="sm" onClick={handleRunSample} disabled={sampleStarting}>
-      {sampleStarting ? "Starting…" : "Run sample"}
-    </Button>
-  );
-
   const analyseControls = showsAutoAnalyseControls(canAuthor) ? (
     <AnalyseControls
       autoAnalyse={autoAnalyse}
@@ -378,10 +383,42 @@ export function EditorCards({
     />
   ) : null;
 
+  // The output is configured once there is a field to pull and, in template mode,
+  // a template to pull it into. Auto Analyse fills the first on its own, so an
+  // author with it on is never sent to the output panel by hand.
+  const outputReady = outputIsConfigured(
+    activeFields.filter((field) => field.label.trim().length > 0).length,
+    canSave,
+  );
+
+  const runControls = (
+    <div className="flex items-center gap-2">
+      {!outputReady && (
+        <span className="text-[11px] text-[#736d5f]">
+          {analysisRunning ? "Drafting the output…" : "Configure the output first"}
+        </span>
+      )}
+      {!outputReady && !analysisRunning && (
+        <Button type="button" variant="outline" size="sm" onClick={() => setOutputOpen(true)}>
+          Configure output
+        </Button>
+      )}
+      <Button
+        type="button"
+        size="sm"
+        onClick={handleRunSample}
+        disabled={sampleStarting || !outputReady}
+        title={outputReady ? undefined : "Add at least one output field before running."}
+      >
+        {sampleStarting ? "Starting…" : "Run sample"}
+      </Button>
+    </div>
+  );
+
   const inputHeaderActions = (
     <div className="flex items-center gap-2.5">
       {analyseControls}
-      {runSampleBelongsInInputCard(autoAnalyse, canAuthor) ? runSampleButton : null}
+      {runControls}
     </div>
   );
 
@@ -396,7 +433,6 @@ export function EditorCards({
       >
         <Eye size={15} />
       </button>
-      {runSampleBelongsInInputCard(autoAnalyse, canAuthor) ? null : runSampleButton}
     </div>
   );
 
@@ -464,12 +500,12 @@ export function EditorCards({
             <p className="text-[13px] text-[#736d5f]">Loading…</p>
           ) : (
             <>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="flex flex-col gap-4">
                 <FocusCard
                   side="input"
                   title="Input — documents"
-                  focused={focused === "input"}
-                  onFocus={() => setFocused("input")}
+                  focused
+                  onFocus={() => undefined}
                   headerAction={inputHeaderActions}
                 >
                   <div className="space-y-4">
@@ -540,19 +576,20 @@ export function EditorCards({
                       <AnalysisState
                         analysis={analysis}
                         starting={startAnalysisMutation.isPending}
-                        onRetry={() => startAnalysisMutation.mutate({ flowId })}
+                        onRetry={() => startAnalysisMutation.mutate({ flowId, analyseSampleSize })}
                       />
                     )}
                   </div>
                 </FocusCard>
 
-                <FocusCard
-                  side="output"
-                  title="Output — records"
-                  focused={focused === "output"}
-                  onFocus={() => setFocused("output")}
-                  headerAction={outputHeaderActions}
-                >
+                <Dialog open={outputOpen} onOpenChange={setOutputOpen}>
+                  <DialogContent className="max-w-3xl">
+                    <DialogHeader>
+                      <DialogTitle>Output — records</DialogTitle>
+                      {outputHeaderActions}
+                      <DialogCloseButton />
+                    </DialogHeader>
+                    <DialogBody className="max-h-[70vh] overflow-auto">
                   <div className="space-y-4">
                     <Segmented
                       label="Output"
@@ -713,8 +750,15 @@ export function EditorCards({
                       checked={generateSummary}
                       onChange={setGenerateSummary}
                     />
-                  </div>
-                </FocusCard>
+                      </div>
+                    </DialogBody>
+                    <DialogFooter>
+                      <Button type="button" onClick={() => setOutputOpen(false)}>
+                        Done
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
 
               <p className="mt-3 text-[12px] text-[#736d5f]">
@@ -728,61 +772,17 @@ export function EditorCards({
         </div>
       </div>
 
-      <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Extraction system prompt</DialogTitle>
-            <DialogCloseButton />
-          </DialogHeader>
-          <DialogBody className="max-h-[70vh] overflow-hidden">
-            {promptLoading ? (
-              <p className="text-[13px] text-[#736d5f]">Building…</p>
-            ) : promptError ? (
-              <p className="text-[13px] text-[#a8324c]">{promptError}</p>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <p className="text-[12px] text-[#666055]">
-                    System prompt given to the AI for each document extraction (read-only)
-                  </p>
-                  <CopyButton text={systemPrompt ?? ""} />
-                </div>
-                <pre className="max-h-[56vh] flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3 font-mono text-[12px] leading-[1.6] text-[#1c1b19]">
-                  {systemPrompt}
-                </pre>
-              </>
-            )}
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete this synthesis?</DialogTitle>
-            <DialogCloseButton />
-          </DialogHeader>
-          <DialogBody>
-            <DialogDescription>
-              This removes the synthesis and its schema. Past runs are retained but it can no longer be
-              edited or run. This cannot be undone.
-            </DialogDescription>
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate({ flowId })}
-            >
-              {deleteMutation.isPending ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditorDialogs
+        promptOpen={promptOpen}
+        onPromptOpenChange={setPromptOpen}
+        promptLoading={promptLoading}
+        promptError={promptError}
+        systemPrompt={systemPrompt}
+        deleteOpen={deleteOpen}
+        onDeleteOpenChange={setDeleteOpen}
+        onConfirmDelete={() => deleteMutation.mutate({ flowId })}
+        deletePending={deleteMutation.isPending}
+      />
     </div>
   );
 }

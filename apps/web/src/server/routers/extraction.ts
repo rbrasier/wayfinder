@@ -510,7 +510,13 @@ export const extractionRouter = router({
   // behind extraction:author, not extraction:run. A run-only user could
   // otherwise rewrite a flow's schema by uploading a file
   // (033-extraction-flows.adr.md §7).
-  startAnalysis: authorProcedure.input(flowIdInput).mutation(async ({ ctx, input }) => {
+  startAnalysis: authorProcedure
+    .input(
+      flowIdInput.extend({
+        analyseSampleSize: z.number().int().min(1).max(MAX_ANALYSE_DOCUMENTS).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
     if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
     }
@@ -518,6 +524,7 @@ export const extractionRouter = router({
     const result = await ctx.container.useCases.startBatchRun.startAnalysis({
       flowId: input.flowId,
       userId: ctx.userId,
+      analyseSampleSize: input.analyseSampleSize,
     });
     if (result.error) throw toTrpcError(result.error);
     return { runId: result.data.id, totalCount: result.data.totalCount };
