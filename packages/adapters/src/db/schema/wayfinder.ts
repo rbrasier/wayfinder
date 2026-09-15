@@ -602,13 +602,20 @@ export const app_extraction_runs = pgTable(
     flow_id: uuid("flow_id")
       .notNull()
       .references(() => app_flows.id, { onDelete: "cascade" }),
-    flow_version_id: uuid("flow_version_id")
-      .notNull()
-      .references(() => app_flow_versions.id, { onDelete: "restrict" }),
+    // Null for an analyse run, which drafts the schema the first version will be
+    // built from, so there is no version to pin it to (ADR-060 §2).
+    flow_version_id: uuid("flow_version_id").references(() => app_flow_versions.id, {
+      onDelete: "restrict",
+    }),
     initiated_by_user_id: uuid("initiated_by_user_id").references(() => core_users.id, {
       onDelete: "set null",
     }),
-    mode: text("mode", { enum: ["sample", "full"] }).notNull().default("full"),
+    mode: text("mode", { enum: ["sample", "full", "analyse"] }).notNull().default("full"),
+    // When a worker took this analyse run. Sample and full runs claim document
+    // rows instead and leave this null. A claim older than the engine's stale
+    // window is reclaimable, which is how a run survives the worker dying
+    // mid-analysis (ADR-060 §4).
+    analysis_claimed_at: timestamp("analysis_claimed_at", { withTimezone: true }),
     status: text("status", {
       enum: ["running", "paused_preview", "paused_cap", "complete", "partial", "cancelled"],
     })
