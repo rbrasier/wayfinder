@@ -57,7 +57,8 @@ drift.
 
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
-| `ExtractionInputConfig` | `packages/domain/src/entities/extraction-schema.ts` | existing, changed | Gains `autoAnalyse: boolean` and `analyseSampleSize: number` |
+| `ExtractionInputConfig` | `packages/domain/src/entities/extraction-schema.ts` | existing, changed | Gains `autoAnalyse: boolean` and `analyseSampleSize: number` (default 3, bounded by `MAX_ANALYSE_DOCUMENTS`) |
+| `MAX_ANALYSE_DOCUMENTS` | `packages/domain/src/entities/extraction-schema.ts` | new | `10` — the analysis read ceiling. Distinct from `SAMPLE_MAX_DOCUMENTS` (3), which sizes a sample *run* and is unchanged |
 | `RunMode` | `packages/domain/src/entities/extraction-run.ts` | existing, changed | Gains `"analyse"` |
 | `ExtractionRun` | `packages/domain/src/entities/extraction-run.ts` | existing, changed | `flowVersionId` becomes `string \| null` |
 | `IFieldProposer` | `packages/domain/src/ports/field-proposer.ts` | new | `propose()` → `Result<ExtractionFieldDraft[]>`, modelled on `ISeedProposer` |
@@ -132,6 +133,7 @@ The migration must carry the declaration:
 ## 10. Acceptance criteria
 
 - [ ] A new synthesis has `autoAnalyse` on and `analyseSampleSize` at 3 by default.
+- [ ] `MAX_ANALYSE_DOCUMENTS` is 10 and `SAMPLE_MAX_DOCUMENTS` is still 3 — raising one never moves the other.
 - [ ] Uploading at least one input document while Auto Analyse is on starts an analysis run
       without any further user action.
 - [ ] The analysis reads at most `analyseSampleSize` documents, and at most the number uploaded.
@@ -144,8 +146,8 @@ The migration must carry the declaration:
 - [ ] Turning Auto Analyse off restores the user's previously saved guidance and cardinality
       rather than blank values.
 - [ ] The read-guidance and file-mapping controls are absent from the DOM while the toggle is on.
-- [ ] The sample-size control accepts 1..`SAMPLE_MAX_DOCUMENTS` and rejects anything outside it,
-      server-side as well as in the UI.
+- [ ] The sample-size control accepts 1..`MAX_ANALYSE_DOCUMENTS` (10) and rejects anything outside
+      it, server-side as well as in the UI.
 - [ ] Only one analysis run per flow is live at a time; a second upload during analysis does not
       start a competing run.
 - [ ] An analysis run is subject to the same per-run cost ceiling as every other run mode.
@@ -173,6 +175,8 @@ The migration must carry the declaration:
   If that distinction is unreliable, the rule is unenforceable.
 - **A weakened invariant.** `flow_version_id` going nullable affects every reader of the run
   aggregate, not just the analysis path.
-- **Open question:** should `analyseSampleSize` be allowed above `SAMPLE_MAX_DOCUMENTS` (3) for
-  authors with genuinely heterogeneous document sets? This PRD caps it at 3; raising the cap is a
-  later decision.
+- **Cost scales with the ceiling.** `analyseSampleSize` may be raised to 10, so an author with a
+  heterogeneous document set can buy a wider field set. Ten documents of extracted text in one
+  proposal call is a large prompt, and the setting is the one place a user can materially increase
+  automatic, unprompted spend. The default stays at 3 and the per-run cost ceiling remains the
+  backstop.

@@ -50,7 +50,7 @@ Two settings join `ExtractionInputConfig` inside the flow snapshot — no author
 
 | Path | New / changed | Notes |
 | ---- | ------------- | ----- |
-| `packages/domain/src/entities/extraction-schema.ts` | changed | `autoAnalyse`, `analyseSampleSize` on `ExtractionInputConfig`; validation in `validateInputConfig` |
+| `packages/domain/src/entities/extraction-schema.ts` | changed | `autoAnalyse`, `analyseSampleSize` on `ExtractionInputConfig`; new `MAX_ANALYSE_DOCUMENTS = 10`; validation in `validateInputConfig` |
 | `packages/domain/src/entities/extraction-run.ts` | changed | `RunMode` gains `"analyse"`; `flowVersionId` becomes `string \| null`; `isAnalysisRun` helper |
 | `packages/domain/src/ports/field-proposer.ts` | new | `IFieldProposer`, mirroring `ISeedProposer` |
 | `packages/domain/src/entities/index.ts`, `ports/index.ts` | changed | Re-exports |
@@ -71,8 +71,8 @@ Two settings join `ExtractionInputConfig` inside the flow snapshot — no author
 
 1. **Domain — input config settings.** Extend `extraction-schema.test.ts` first: (a) a config with
    `autoAnalyse` true normalises `cardinality` to `one_per_file` and `selectionCriteria` to null;
-   (b) `analyseSampleSize` below 1 or above `SAMPLE_MAX_DOCUMENTS` is a `VALIDATION_FAILED`;
-   (c) an absent `analyseSampleSize` defaults to `SAMPLE_MAX_DOCUMENTS`; (d) `autoAnalyse` false
+   (b) `analyseSampleSize` below 1 or above `MAX_ANALYSE_DOCUMENTS` (10) is a `VALIDATION_FAILED`;
+   (c) an absent `analyseSampleSize` defaults to 3, **not** to the ceiling; (d) `autoAnalyse` false
    leaves the existing selection-criteria rules exactly as they are today. Then implement in
    `validateInputConfig`. Pure, no dependencies.
 
@@ -154,9 +154,14 @@ rather than blanks — the component holds them in state across the toggle, the 
 
 **Sample-size control — subtle by design.** Next to the toggle, rendered only while Auto analyse is
 on: a small inline stepper reading "reads 3 docs", muted (`text-[11px] text-[#736d5f]`), with the
-number the only interactive part. Bounded 1..`SAMPLE_MAX_DOCUMENTS`. It must not read as a primary
+number the only interactive part. Bounded 1..`MAX_ANALYSE_DOCUMENTS` (10). It must not read as a primary
 control — it sits at label weight beside the switch, not as a labelled form field, and it carries a
 `title` explaining that more documents means a wider field set at higher cost.
+
+`MAX_ANALYSE_DOCUMENTS` (10) is deliberately its own constant, not a raised `SAMPLE_MAX_DOCUMENTS`.
+The latter sizes a sample *run* — how many records an author previews before committing to a full
+batch — and has no business moving because the analysis read ceiling moved. Step 1(b) asserts both
+values independently so a future change to one cannot silently drag the other.
 
 **Card proportions.** The current even `lg:flex-row` split becomes roughly 60/40 in the Input card's
 favour, since the Output card is now AI-drafted. Both cards keep stacking vertically below `lg`.
