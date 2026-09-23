@@ -10,7 +10,9 @@ import {
   type ExtractionDocument,
   type ExtractionRun,
   type ExtractionSchema,
+  type FlowVersion,
   type IArchiveExtractor,
+  type IAuditLogger,
   type IDocumentExtractor,
   type IExtractionRunRepository,
   type IFlowVersionRepository,
@@ -70,8 +72,15 @@ const DEFAULT_MAX_FILES = 1000;
 // enough for a heading / first-paragraph cue without bloating the prompt.
 const CONTENT_SIGNAL_CHARS = 500;
 
-// Starts a durable full-batch run (ADR-033 §5-6, phase §3). Requires a published
-// extraction version (server-enforced), expands any zips through the safety
+// A full run's schema source: the open draft (promoted to a published version
+// once intake passes) or, when nothing was saved since, the latest published.
+type RunnableVersion =
+  | { source: "draft"; draft: FlowVersion; schema: ExtractionSchema }
+  | { source: "published"; versionId: string; schema: ExtractionSchema };
+
+// Starts a durable full-batch run (ADR-033 §5-6, phase §3). A full run is pinned
+// to an immutable published version; with no Publish control (#303) the run
+// promotes the author's saved draft itself. Expands any zips through the safety
 // guards, stores every file store-only in object storage, seeds the document
 // rows, then runs the first-stage grouping pass to materialise records before
 // any field extraction. The worker takes it from there.
@@ -86,6 +95,7 @@ export class StartBatchRun {
     private readonly archiveExtractor: IArchiveExtractor,
     private readonly languageModel: ILanguageModel,
     private readonly documentExtractor: IDocumentExtractor,
+    private readonly auditLogger: IAuditLogger,
     options: StartBatchRunOptions = {},
   ) {
     this.archiveLimits = options.archiveLimits ?? DEFAULT_ARCHIVE_LIMITS;
@@ -93,8 +103,8 @@ export class StartBatchRun {
   }
 
   async execute(input: StartBatchRunInput): Promise<Result<ExtractionRun>> {
-    const publishedSchema = await this.loadPublishedSchema(input.flowId);
-    if (publishedSchema.error) return publishedSchema;
+    const runnable = await this.resolveRunnableVersion(input.flowId);
+    if (runnable.error) return runnable;
 
     const archiveLimits = input.limits?.archiveLimits ?? this.archiveLimits;
     const maxFiles = input.limits?.maxFiles ?? this.maxFiles;
@@ -115,13 +125,17 @@ export class StartBatchRun {
       );
     }
 
+    // Promoted only after intake passes, so a rejected upload never mints a version.
+    const versionId = await this.pinVersion(runnable.data, input.flowId, input.userId);
+    if (versionId.error) return versionId;
+
     // The preview breakpoint is defined in records; documents approximate it
     // (exact under one-per-file). 0 disables the pause (phase §6).
     return this.materialiseRun({
       flowId: input.flowId,
       userId: input.userId,
-      schema: publishedSchema.data.schema,
-      versionId: publishedSchema.data.versionId,
+      schema: runnable.data.schema,
+      versionId: versionId.data,
       files,
       previewBoundary: shouldPreviewByDefault(files.length) ? PREVIEW_FILE_THRESHOLD : 0,
       mode: "full",
@@ -210,20 +224,57 @@ export class StartBatchRun {
     return ok({ schema: draft.data.snapshot.extraction, versionId: draft.data.id });
   }
 
-  private async loadPublishedSchema(
-    flowId: string,
-  ): Promise<Result<{ schema: ExtractionSchema; versionId: string }>> {
+  private async resolveRunnableVersion(flowId: string): Promise<Result<RunnableVersion>> {
+    const draft = await this.flowVersions.openDraft(flowId);
+    if (draft.error) return draft;
+    if (draft.data && isExtractionSnapshot(draft.data.snapshot)) {
+      return ok({ source: "draft", draft: draft.data, schema: draft.data.snapshot.extraction });
+    }
+
     const published = await this.flowVersions.latestPublished(flowId);
     if (published.error) return published;
-    if (!published.data || !isExtractionSnapshot(published.data.snapshot)) {
-      return err(
-        domainError(
-          "VALIDATION_FAILED",
-          "Publish the extraction flow before running a full batch.",
-        ),
-      );
+    if (published.data && isExtractionSnapshot(published.data.snapshot)) {
+      return ok({
+        source: "published",
+        versionId: published.data.id,
+        schema: published.data.snapshot.extraction,
+      });
     }
-    return ok({ schema: published.data.snapshot.extraction, versionId: published.data.id });
+
+    return err(
+      domainError("VALIDATION_FAILED", "Save the synthesis before running a full batch."),
+    );
+  }
+
+  private async pinVersion(
+    runnable: RunnableVersion,
+    flowId: string,
+    userId: string,
+  ): Promise<Result<string>> {
+    if (runnable.source === "published") return ok(runnable.versionId);
+
+    const promoted = await this.flowVersions.createPublished({
+      flowId,
+      snapshot: runnable.draft.snapshot,
+      publishedByUserId: userId,
+      changeSummary: null,
+    });
+    if (promoted.error) return promoted;
+
+    await this.auditLogger.log({
+      actorId: userId,
+      action: "flow.version.published",
+      resourceType: "flow",
+      resourceId: flowId,
+      metadata: {
+        versionId: promoted.data.id,
+        versionNumber: promoted.data.versionNumber,
+        changeSummary: promoted.data.changeSummary,
+        trigger: "batch_run",
+      },
+    });
+
+    return ok(promoted.data.id);
   }
 
   private async gatherFiles(
