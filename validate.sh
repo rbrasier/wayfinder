@@ -458,11 +458,13 @@ fi
 # ── 24. the primary colour is only ever a token ──────────────────────────────
 # An install's brand colour replaces the primary ramp by overriding its CSS
 # variables (ADR-060 §2). A hard-coded Wayfinder blue is a spot the brand never
-# reaches, so outside the token definitions, their TypeScript mirror and the
-# named data colours, the ramp must be referenced as a token.
+# reaches, so outside the token definitions, their TypeScript mirror, the named
+# data colours and test files (which render nothing), the ramp must be
+# referenced as a token.
 section "24. no primary-ramp colour literals in apps/web/src"
 RAMP_LITERALS=$(grep -rniE "#(2f56d3|1f3ea8|eaeefb|c3cef2)|rgba\(47, *86, *211" apps/web/src \
-    --include="*.ts" --include="*.tsx" --include="*.css" 2>/dev/null \
+    --include="*.ts" --include="*.tsx" --include="*.css" \
+    --exclude="*.test.ts" --exclude="*.test.tsx" 2>/dev/null \
   | grep -vE "^apps/web/src/lib/(design-tokens|data-colours)\.ts:" \
   | grep -vE "^apps/web/src/styles/globals\.css:[0-9]+:[[:space:]]*--(wf-primary|primary-hover|primary-light|primary-dim):" \
   || true)

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
+import { LoginNoticeGate } from "@/components/login-notice/login-notice-gate";
 import { SetupWizardMount } from "@/components/onboarding/setup-wizard-mount";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { createServerHelpers } from "@/trpc/server";
@@ -32,6 +33,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
   void trpc.user.me.prefetch();
   void trpc.settings.getBranding.prefetch();
+  void trpc.settings.getLoginNoticeStatus.prefetch();
   void trpc.flow.list.prefetch();
   void trpc.user.list.prefetch({});
   void trpc.usage.myUsage.prefetch();
@@ -45,6 +47,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             {children}
           </div>
           <SetupWizardMount />
+          {/* No organisation or welcome prompts here, so no SignInPromptsProvider:
+              the notice gate stands alone (ADR-060 §5). */}
+          <LoginNoticeGate />
         </div>
       </HydrateClient>
     </SidebarProvider>

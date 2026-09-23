@@ -6,6 +6,7 @@ import { SetupWizard } from "@/components/onboarding/setup-wizard";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
 import { AboutLinksCard } from "@/components/settings/about-links-card";
 import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
+import { BrandingCard } from "@/components/settings/branding-card";
 import { ChatDisclaimerCard } from "@/components/settings/chat-disclaimer-card";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
 import {
@@ -17,6 +18,7 @@ import { EmailCard } from "@/components/settings/email-card";
 import { EntraDirectoryCard } from "@/components/settings/entra-directory-card";
 import { GlobalInstructionsCard } from "@/components/settings/global-instructions-card";
 import { HrDataCard } from "@/components/settings/hr-data-card";
+import { LoginNoticeCard } from "@/components/settings/login-notice-card";
 import { N8nIntegrationCard } from "@/components/settings/n8n-integration-card";
 import { NotificationSettingsCard } from "@/components/settings/notification-settings-card";
 import { OrganisationsCard } from "@/components/settings/organisations-card";
@@ -65,11 +67,12 @@ export default function AppSettingsPage() {
           {rerunSetup && <SetupWizard forceOpen onClose={() => setRerunSetup(false)} />}
 
           <div className="space-y-4">
-            <CollapsibleSection title="General" description="Identity, access and organisations.">
+            <CollapsibleSection title="General" description="Identity, access, organisations and branding.">
               <OrganisationsCard />
               <RegistrationToggleCard />
               <AuthMethodsCard connectivity={connectivity} />
               <AboutLinksCard />
+              <BrandingCard />
             </CollapsibleSection>
 
             <CollapsibleSection
@@ -100,6 +103,7 @@ export default function AppSettingsPage() {
             <CollapsibleSection title="Notifications" description="How and when Wayfinder notifies people.">
               <NotificationSettingsCard />
               <ChatDisclaimerCard />
+              <LoginNoticeCard />
               <SiteBannerCard />
             </CollapsibleSection>
 
