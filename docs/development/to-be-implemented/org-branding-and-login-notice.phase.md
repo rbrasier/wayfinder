@@ -185,3 +185,44 @@ Also: confirm at build time that Better Auth's `core_sessions.id` is stable for
 the life of a sign-in session and isn't rotated when the session refreshes. If
 it is rotated, `every_sign_in` would re-prompt mid-session. Check this in
 `node_modules`, not from memory.
+
+## 10. Approved build summary (/build Step 0, 2026-09-23)
+
+Built as specified in §§1–9, with these build-time decisions:
+
+- **Branch / PR:** `claude/issue-304-triage-ngk6v0` → `release/alpha-2`
+  (maintainer override of `/build`'s `feature/…` off `main`).
+- **Session-id stability verified:** Better Auth 1.6.25 refreshes a session by
+  updating `expiresAt`/`updatedAt` keyed on the token, so `core_sessions.id` is
+  stable for the whole sign-in session (§9's open question is closed).
+- **Size ceilings:** `runtime-config-store.ts` (648 lines) and `container.ts`
+  (779) are near the 800-line limit, so the two new settings use a small
+  `config/cached-setting.ts` helper, and the wiring lives in
+  `lib/container-presentation.ts`.
+- **Web tests are pure model/state tests.** `apps/web` has no React testing
+  library, so the card, brand-mark and gate logic is extracted into
+  `*-model.ts` / `*-state.ts` files and unit-tested there, rather than with the
+  component tests §7 describes.
+- **Sign-in prompt ordering:** `sign-in-prompts.tsx` gains a
+  `loginNoticeCleared` flag, and the organisation and welcome gates wait on it.
+  ADR-060 records that it amends ADR-056 §4. The `(admin)` layout has no
+  organisation or welcome gate, so the notice gate mounts there on its own.
+- **E2E:** a new `branding.spec.ts` covers logo upload (policy group 3). The
+  sign-in notice gets **no** e2e, because turning it on applies install-wide
+  and would block every parallel spec on the shared CI database. It is covered
+  by the application use-case tests and `login-notice-state.test.ts`.
+
+Build order:
+1. contrast domain
+2. branding domain
+3. sign-in notice domain
+4. branding use cases
+5. notice use cases
+6. adapters
+7. web server wiring
+8. logo route
+9. palette injection and BrandMark
+10. token sweep and validate check
+11. settings cards
+12. notice gate and prompt ordering
+13. e2e and wrap-up
