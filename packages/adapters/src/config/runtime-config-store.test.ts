@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
@@ -20,6 +20,7 @@ import {
 } from "@wayfinder/shared";
 import { DOCUMENT_GENERATION_CONFIG_SETTING_KEY } from "@wayfinder/domain";
 import {
+  AI_CONFIG_CACHE_TTL_MS,
   DEFAULT_DOCUMENT_GENERATION_CONFIG,
   DEFAULT_MODELS_FOR,
   RuntimeConfigStore,
@@ -64,6 +65,70 @@ describe("RuntimeConfigStore — anthropic defaults", () => {
 
     expect(config.provider).toBe("anthropic");
     expect(config.models.documentGeneration).toBe("claude-opus-5");
+  });
+});
+
+// Every process (web replicas, the api worker that runs Synthesise and
+// automated steps) holds its own store, and a save only invalidates the one
+// that handled it. The TTL is what carries a saved model to the rest (#302).
+describe("RuntimeConfigStore — AI config cache expiry", () => {
+  const storedModels = (chatModel: string) =>
+    okResult(
+      JSON.stringify({
+        provider: "bedrock",
+        apiKeys: {},
+        models: { chat: chatModel, documentGeneration: chatModel, branching: chatModel },
+      }),
+    );
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("serves the cached AI config without re-reading within the TTL", async () => {
+    const repo = makeRepo(null);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getAiConfig();
+    vi.advanceTimersByTime(AI_CONFIG_CACHE_TTL_MS - 1);
+    await store.getAiConfig();
+
+    expect(repo.get).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-reads a model saved by another process once the TTL has elapsed", async () => {
+    const repo = makeRepo(null);
+    vi.mocked(repo.get)
+      .mockResolvedValueOnce(storedModels("anthropic.claude-sonnet-5"))
+      .mockResolvedValueOnce(storedModels("anthropic.claude-haiku-4-5"));
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    const before = await store.getAiConfig();
+    vi.advanceTimersByTime(AI_CONFIG_CACHE_TTL_MS);
+    const after = await store.getAiConfig();
+
+    expect(before.models.chat).toBe("anthropic.claude-sonnet-5");
+    expect(after.models.chat).toBe("anthropic.claude-haiku-4-5");
+    expect(repo.get).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the last good AI config when a refresh after the TTL fails", async () => {
+    const repo = makeRepo(null);
+    vi.mocked(repo.get)
+      .mockResolvedValueOnce(storedModels("anthropic.claude-sonnet-5"))
+      .mockResolvedValueOnce({ error: { code: "DB_ERROR", message: "connection reset" } } as never);
+    const store = new RuntimeConfigStore(repo, makeEnv());
+
+    await store.getAiConfig();
+    vi.advanceTimersByTime(AI_CONFIG_CACHE_TTL_MS);
+    const afterFailedRefresh = await store.getAiConfig();
+
+    expect(afterFailedRefresh.provider).toBe("bedrock");
+    expect(afterFailedRefresh.models.chat).toBe("anthropic.claude-sonnet-5");
   });
 });
 
