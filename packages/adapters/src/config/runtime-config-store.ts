@@ -97,8 +97,15 @@ import {
 // Re-exported so existing importers of the store keep working.
 export { DEFAULT_DOCUMENT_GENERATION_CONFIG, DEFAULT_EXTRACTION_CONFIG, DEFAULT_MODELS_FOR, MODEL_CONTEXT_WINDOWS, resolveContextWindow, type ContextWindowResolution, type EnvDefaults, type PkiEnvDefaults } from "./runtime-config-defaults";
 
+// Each process (web replicas, the api worker running Synthesise and automated
+// steps) holds its own store, and a save only invalidates the process that
+// handled it. Expiring the AI config bounds how long the others keep serving a
+// replaced model, without needing a cross-process broadcast (#302).
+export const AI_CONFIG_CACHE_TTL_MS = 30_000;
+
 export class RuntimeConfigStore {
   private aiCache: AiConfig | null = null;
+  private aiCachedAt = 0;
   private aiPending: Promise<AiConfig> | null = null;
   private storageCache: StorageConfig | null = null;
   private storagePending: Promise<StorageConfig> | null = null;
@@ -139,13 +146,20 @@ export class RuntimeConfigStore {
   ) {}
 
   async getAiConfig(): Promise<AiConfig> {
-    if (this.aiCache) return this.aiCache;
+    const aiCacheFresh = Date.now() - this.aiCachedAt < AI_CONFIG_CACHE_TTL_MS;
+    if (this.aiCache && aiCacheFresh) return this.aiCache;
     if (this.aiPending) return this.aiPending;
     this.aiPending = (async () => {
       const fallback = buildEnvAiConfig(this.envDefaults);
       const result = await this.settingsRepo.get(AI_CONFIG_SETTING_KEY);
-      const config = !result.error && result.data?.value ? parseAiConfig(result.data.value, fallback) : fallback;
+      // A read blip on a TTL refresh must not swap a saved model for the env
+      // defaults, so the last good value is held until the next refresh.
+      const readFailedWithCache = result.error ? this.aiCache : null;
+      const config =
+        readFailedWithCache ??
+        (!result.error && result.data?.value ? parseAiConfig(result.data.value, fallback) : fallback);
       this.aiCache = config;
+      this.aiCachedAt = Date.now();
       this.aiPending = null;
       return config;
     })();
