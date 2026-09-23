@@ -6,6 +6,8 @@ export * from "./onboarding/index";
 export * from "./session/index";
 export * from "./scheduling/index";
 export * from "./retention/index";
+export * from "./branding/index";
+export * from "./login-notice/index";
 export * from "./document/index";
 export * from "./extraction/index";
 export * from "./analytics/index";
