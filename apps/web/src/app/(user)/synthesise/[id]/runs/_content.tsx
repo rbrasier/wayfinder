@@ -73,7 +73,7 @@ export function RunsContent({ flowId }: { flowId: string }) {
           {startMutation.isPending ? "Starting…" : "Start run"}
         </Button>
         <span className="text-[12px] text-[#736d5f]">
-          Requires a published synthesis. Preview turns on by default above 5 files.
+          Preview turns on by default above 5 files.
         </span>
       </div>
 

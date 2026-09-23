@@ -17,7 +17,6 @@ export interface ExtractionRunSummary {
 export interface ExtractionFlowRow {
   id: string;
   name: string;
-  status: string;
   runs: ExtractionRunSummary[];
 }
 
@@ -33,18 +32,7 @@ function FlowRow({ flow, editHref }: { flow: ExtractionFlowRow; editHref: string
   return (
     <div className="rounded-[11px] border border-[#e7e3db] bg-white">
       <div className="flex items-center justify-between px-[16px] py-[12px]">
-        <div>
-          <h3 className="text-[14px] font-semibold text-[#1c1b19]">{flow.name}</h3>
-          <span
-            className={`mt-[2px] inline-block rounded-[5px] px-[6px] py-[1px] text-[10.5px] font-semibold uppercase tracking-[0.04em] ${
-              flow.status === "published"
-                ? "bg-[#e3efe5] text-[#1f6b4d]"
-                : "bg-[#f5f3ee] text-[#666055]"
-            }`}
-          >
-            {flow.status}
-          </span>
-        </div>
+        <h3 className="text-[14px] font-semibold text-[#1c1b19]">{flow.name}</h3>
         {editHref && (
           <Button asChild variant="outline" size="sm">
             <Link href={editHref}>Edit</Link>

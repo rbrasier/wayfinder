@@ -331,10 +331,6 @@ export function EditorCards({
           <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">Edit synthesis</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* Publish is intentionally disabled until its behaviour is defined. */}
-          <Button type="button" variant="outline" size="sm" disabled title="Publishing is not available yet">
-            Publish
-          </Button>
           <Button type="button" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
             {saveMutation.isPending ? "Saving…" : "Save"}
           </Button>
