@@ -1,6 +1,6 @@
 # Phase — Organisation Branding and Sign-in Notice
 
-- **Status**: Draft (run `/doc-review` before building)
+- **Status**: Implemented in 0.28.24 — see `org-branding-and-login-notice.summary.md` alongside
 - **Target version**: 0.28.24 — **PATCH** (0.28.23 → 0.28.24). No schema change.
 - **Base branch**: `release/alpha-2`. This is a **deliberate maintainer
   override** of CLAUDE.md's "new features land on `main`" rule. The feature has

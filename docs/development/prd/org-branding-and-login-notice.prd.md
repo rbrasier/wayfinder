@@ -1,6 +1,6 @@
 # PRD — Organisation Branding and Sign-in Notice
 
-- **Status**: Draft
+- **Status**: Accepted — implemented in 0.28.24
 - **Date**: 2026-09-23
 - **Author**: Claude Code (for @rbrasier), from issue #304 (split from #302)
 - **Target version**: 0.28.24 (bump: **PATCH** — see §9 and the phase doc for

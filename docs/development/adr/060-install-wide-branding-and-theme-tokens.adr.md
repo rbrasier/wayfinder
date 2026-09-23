@@ -1,9 +1,11 @@
 # ADR-060 — Install-wide Branding and Theme Tokens
 
-- **Status**: Proposed (scoped by `org-branding-and-login-notice.prd.md`)
+- **Status**: Accepted (scoped by `org-branding-and-login-notice.prd.md`)
 - **Date**: 2026-09-23
 - **Assumes**: ADR-041 (DB-first runtime config), ADR-038 (organisations as a
   sharing scope), ADR-033 (append-only, hash-chained audit log).
+- **Amends**: ADR-056 §4 — the sign-in notice now goes ahead of the
+  organisation and welcome-tour prompts (see §5).
 - **Numbering**: 060, not 057, because `main` already carries ADR-057–059 and
   this ADR forward-merges there from `release/alpha-2`.
 
@@ -89,6 +91,11 @@ magic bytes and accepts only PNG, JPEG and WebP up to 512 KB. It writes via
 the previous object, and stores `{ key, mimeType, version }` in the branding
 row. `DELETE` removes the object and nulls `logo`.
 
+The version is the upload time in milliseconds, not a counter. The logo URL is
+cached as immutable per version, and a counter would hand out a used number
+again after a remove and re-upload, so a browser would keep showing the old
+image.
+
 `GET /api/branding/logo` is public, because the sign-in page is signed-out. It
 reads the key from the branding config — never from the request — and streams
 the object. It sends the stored `Content-Type`, `X-Content-Type-Options:
@@ -121,10 +128,18 @@ render.
 `sessionId`. The session token is a bearer secret and never enters the audit
 log.
 
-The `LoginNoticeGate` mounts in both the `(user)` and `(admin)` layouts and
-renders ahead of the organisation and welcome-tour gates, which wait while it
-is open. It fetches status once per page load and holds the answer for the
-session, so the audit query runs at most once per sign-in session per tab.
+The `LoginNoticeGate` mounts in both the `(user)` and `(admin)` layouts. It
+checks the status once per full page load, and client navigation within the app
+reuses that answer. The layouts prefetch the status, so a due notice is in the
+first paint. When the notice is `off` the audit table is never queried. If the
+status lookup fails, the gate stands aside rather than locking everyone out.
+
+This amends ADR-056 §4. `SignInPromptsProvider` now holds a
+`loginNoticeCleared` flag as well as the organisation dismissal. The
+organisation gate and the welcome-tour gate both wait on it, so the order after
+sign-in is: notice, then organisation nomination, then welcome tour. The
+`(admin)` layout has neither of the later gates, so it mounts the notice gate
+without a provider, and the context default treats the notice as cleared.
 
 Rejected: a `core_users.login_notice_acknowledged_version` column (as ADR-056
 does for the tour). It is cheaper to read, but needs a migration, and it would
@@ -136,10 +151,14 @@ on every device.
 
 - An unbranded install renders identically to today; the token sweep is a pure
   refactor under the default palette.
-- The notice-status lookup scans `core_audit_log` by `actor_id` + `action`
-  without an index. That is fine at alpha volumes. A
+- The notice-status lookup scans `core_audit_log` by `actor_id` + `action` +
+  `resource_id` without an index. That is fine at alpha volumes. A
   `(actor_id, action)` index is the follow-up, and it is a MINOR (migration)
   change.
+- Some colours equal Wayfinder blue but encode data, not brand: the step colour
+  picker's "Indigo", the default step colour, and the categorical chart
+  palettes. They use a named `DATA_INDIGO` constant and do not follow the brand
+  colour.
 - Branding and notice config share ADR-041's per-process cache. A second
   replica serves the old brand until its cache is invalidated or restarted,
   the same as every other runtime setting.
