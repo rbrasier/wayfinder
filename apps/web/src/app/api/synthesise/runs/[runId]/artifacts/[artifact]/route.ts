@@ -71,6 +71,12 @@ export async function GET(
   const access = await authoriseRunAccess(container, request, runId);
   if (!access.ok) return NextResponse.json({ error: access.error }, { status: access.status });
 
+  // An analyse run drafts a field set rather than producing records, so it has no
+  // artifacts to download and no version to resolve them against (ADR-060 §2).
+  if (access.run.flowVersionId === null) {
+    return NextResponse.json({ error: "Unknown artifact" }, { status: 404 });
+  }
+
   const resolved = await resolveArtifact(container, runId, access.run.flowVersionId, artifact);
   if (!resolved) return NextResponse.json({ error: "Unknown artifact" }, { status: 404 });
 

@@ -1,6 +1,10 @@
 # ADR-052 — A Schema Proposal Is a Draft Artefact Requiring Explicit Activation
 
-- **Status**: Proposed (scoped by `collaborative-schema-definition.prd.md`)
+- **Status**: Superseded by ADR-059 (Auto Analyse writes into the draft field set)
+- **Superseded**: 2026-09-15 — the conversational, confirm-before-activation interaction this ADR
+  was designed around was replaced by automatic analysis on upload writing straight into the draft
+  field set. Its companion PRD and phase doc are retired with it. The propose/validate/report-rejects
+  discipline it took from `ISeedProposer` is unaffected and is still cited by ADR-057.
 - **Date**: 2026-08-24
 - **Builds on**: ADR-013 (template-field annotations as the lingua franca), ADR-033 (extraction
   authoring config inside the flow snapshot), ADR-038 (step output types)

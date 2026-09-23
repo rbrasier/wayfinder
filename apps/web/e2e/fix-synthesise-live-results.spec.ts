@@ -58,18 +58,58 @@ async function createSynthesis(page: Page, name: string): Promise<boolean> {
   await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible({
     timeout: ROUTE_COMPILE_TIMEOUT,
   });
+
+  await waitForEditorReady(page);
   return true;
 }
 
 /**
- * The editor's two cards trade focus through a frosted overlay button; the
- * unfocused card is `pointer-events-none`, so anything clickable has to be
- * brought forward first.
+ * Waits for the editor to reach its final mount.
+ *
+ * The "Edit synthesis" heading is in the page header, outside the editor's
+ * loading gate, so it appears while the body is still "Loading…" — and at that
+ * point EditorCards is mounted under the `pending` seed key. When the schema
+ * query settles the key flips and the component remounts, discarding any state
+ * set in the meantime: an unchecked Auto analyse goes back to checked, and an
+ * open output modal closes. Every entry into the editor has to wait for this,
+ * the reload half of the persistence case included — waiting on the heading
+ * alone is what left that case passing only on retry.
+ *
+ * The upload control renders only once the query has settled, so it is the
+ * signal that the final mount is in place.
  */
-async function focusOutputCard(page: Page): Promise<void> {
-  const overlay = page.getByRole('button', { name: /Configure output/i });
-  if (await overlay.isVisible().catch(() => false)) await overlay.click();
+async function waitForEditorReady(page: Page): Promise<void> {
+  await expect(page.getByText(/Upload documents or a zip/i)).toBeVisible({
+    timeout: ROUTE_COMPILE_TIMEOUT,
+  });
+}
+
+/**
+ * Output configuration moved into a modal when the editor became a single
+ * full-width input panel (v0.37.0). The control opening it is always present,
+ * reading "Configure output" until the output is valid and "Edit output" after.
+ */
+async function openOutputConfig(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /Configure output|Edit output/i }).click();
   await expect(page.getByLabel('Field 1 label')).toBeVisible();
+}
+
+/** Closes the output modal so the page header underneath is clickable again. */
+async function closeOutputConfig(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /^Done$/ }).click();
+  await expect(page.getByLabel('Field 1 label')).toBeHidden();
+}
+
+/**
+ * Auto Analyse is on by default and answers the manual input questions itself,
+ * so it hides them (ADR-059). The cases below are about the manual authoring
+ * path, so they turn it off rather than work around it.
+ */
+async function turnOffAutoAnalyse(page: Page): Promise<void> {
+  const toggle = page.getByLabel('Auto analyse');
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(page.getByLabel(/How should the AI read these documents\?/i)).toBeVisible();
 }
 
 test.describe('Synthesise Information — live results, editor persistence, toast stacking', () => {
@@ -79,12 +119,12 @@ test.describe('Synthesise Information — live results, editor persistence, toas
 
     const editorUrl = page.url();
 
-    // The input card holds focus on arrival.
+    await turnOffAutoAnalyse(page);
     await page
       .getByLabel(/How should the AI read these documents\?/i)
       .fill('Each file is one supplier response.');
 
-    await focusOutputCard(page);
+    await openOutputConfig(page);
     await page.getByLabel('Field 1 label').fill('Supplier Name');
     await page.getByLabel('Field 1 type').selectOption('text');
 
@@ -93,6 +133,7 @@ test.describe('Synthesise Information — live results, editor persistence, toas
     await page.getByLabel('Field 2 type').selectOption('currency');
 
     await page.getByLabel(/Output instructions/i).fill('One row per supplier.');
+    await closeOutputConfig(page);
 
     await page.getByRole('button', { name: /^Save$/ }).click();
     await expect(page.getByText(/^Saved$/)).toBeVisible();
@@ -104,12 +145,14 @@ test.describe('Synthesise Information — live results, editor persistence, toas
     await expect(page.getByRole('heading', { name: /Edit synthesis/i })).toBeVisible({
       timeout: ROUTE_COMPILE_TIMEOUT,
     });
-    await focusOutputCard(page);
+    await waitForEditorReady(page);
+    await openOutputConfig(page);
 
     await expect(page.getByLabel('Field 1 label')).toHaveValue('Supplier Name');
     await expect(page.getByLabel('Field 2 label')).toHaveValue('Contract Value');
     await expect(page.getByLabel('Field 2 type')).toHaveValue('currency');
     await expect(page.getByLabel(/Output instructions/i)).toHaveValue('One row per supplier.');
+    await closeOutputConfig(page);
     await expect(page.getByLabel(/How should the AI read these documents\?/i)).toHaveValue(
       'Each file is one supplier response.',
     );
@@ -120,6 +163,10 @@ test.describe('Synthesise Information — live results, editor persistence, toas
     page,
   }) => {
     if (!(await createSynthesis(page, 'E2E live results synthesis'))) return;
+
+    // This case is about the sample run, so the manual path keeps it free of an
+    // analysis starting on upload and drafting fields of its own.
+    await turnOffAutoAnalyse(page);
 
     // Three input documents, so a sample leaves work outstanding behind the
     // preview boundary.
@@ -133,8 +180,9 @@ test.describe('Synthesise Information — live results, editor persistence, toas
     );
     await expect(page.getByText('alpha.txt')).toBeVisible({ timeout: ROUTE_COMPILE_TIMEOUT });
 
-    await focusOutputCard(page);
+    await openOutputConfig(page);
     await page.getByLabel('Field 1 label').fill('Supplier Name');
+    await closeOutputConfig(page);
 
     // Count the results reads. httpBatchStreamLink puts the procedure names in
     // the URL, so a batched read still matches.

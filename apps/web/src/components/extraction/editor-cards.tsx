@@ -4,7 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Eye, MoreHorizontal, Upload } from "lucide-react";
-import { shouldPreviewByDefault, type ExtractionSchema, type FlowContextDoc } from "@wayfinder/domain";
+import {
+  analyseDocumentCount,
+  isAutoAnalyseOn,
+  shouldPreviewByDefault,
+  type ExtractionSchema,
+  type FlowContextDoc,
+} from "@wayfinder/domain";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +18,6 @@ import {
   DialogBody,
   DialogCloseButton,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -20,22 +25,28 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
-import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
 import { UploadTree, type UploadedFile } from "./upload-tree";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
 import { FocusCard, Segmented, Switch } from "./editor-cards-controls";
+import { AnalyseControls, AnalysisState } from "./auto-analyse-panel";
+import { EditorDialogs } from "./editor-dialogs";
+import { usePermissions } from "@/lib/use-permissions";
 import {
   deriveOutputMode,
   emptyExtractionField,
   extractionFieldToDraft,
+  adoptDraftedFields,
+  outputIsConfigured,
   schemaToFieldModels,
+  showsAutoAnalyseControls,
+  showsManualInputQuestions,
   templateFieldToModel,
+  uploadShouldStartAnalysis,
   type ExtractionFieldModel,
   type OutputMode,
 } from "./extraction-editor-model";
 
 type Cardinality = "one_per_file" | "many_per_record";
-type FocusedCard = "input" | "output";
 
 const readFileAsBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -63,7 +74,19 @@ export function EditorCards({
 
   const initialMode = deriveOutputMode(initialSchema);
 
-  const [focused, setFocused] = useState<FocusedCard>("input");
+
+  // Auto analyse is an authoring act — it writes the field set — so a run-only
+  // user never sees the control (033-extraction-flows.adr.md §7). Server-side
+  // startAnalysis enforces the same thing; this only keeps the UI honest.
+  const permissions = usePermissions();
+  const canAuthor = permissions.has("extraction:author");
+
+  const [autoAnalyse, setAutoAnalyse] = useState(
+    initialSchema ? isAutoAnalyseOn(initialSchema.input) : true,
+  );
+  const [analyseSampleSize, setAnalyseSampleSize] = useState(
+    initialSchema ? analyseDocumentCount(initialSchema.input) : 3,
+  );
 
   // Input config.
   const [guidance, setGuidance] = useState(initialSchema?.input.guidance ?? "");
@@ -113,6 +136,52 @@ export function EditorCards({
     [draftDocsQuery.data],
   );
 
+  // Poll while an analysis is live. Where a batch worker runs (apps/api with
+  // EXTRACTION_WORKER_ENABLED) it advances on its own; where none does, the tick
+  // below drives it exactly as a sample run is driven, so the editor being open
+  // is what makes progress. Reopening resumes rather than restarting.
+  const analysisQuery = trpc.extraction.analysisStatus.useQuery(
+    { flowId },
+    { refetchInterval: (query) => (query.state.data?.status === "running" ? 1500 : false) },
+  );
+  const analysis = analysisQuery.data ?? null;
+  const analysisRunning = analysis?.status === "running";
+
+  const tickMutation = trpc.extraction.tick.useMutation();
+  const startAnalysisMutation = trpc.extraction.startAnalysis.useMutation({
+    onSuccess: () => void analysisQuery.refetch(),
+  });
+
+  useEffect(() => {
+    if (!analysisRunning || !analysis) return;
+    const timer = setInterval(() => tickMutation.mutate({ runId: analysis.runId }), 1500);
+    return () => clearInterval(timer);
+  }, [analysisRunning, analysis?.runId]);
+
+  // A settled analysis has already written the fields into the draft server-side,
+  // so they are saved — but this component seeds its form state at mount and the
+  // page's remount key does not change for a flow that already had a schema. Left
+  // alone the author sees "drafted fields" over an unchanged editor, and the next
+  // Save posts the stale set straight over the AI's work. So the drafted fields
+  // are adopted into state directly, by the same append-and-fill rule the server
+  // merge uses: anything the author has typed locally wins, and nothing they have
+  // in flight is lost.
+  const previousAnalysisStatus = useRef<string | null>(null);
+  useEffect(() => {
+    const status = analysis?.status ?? null;
+    const settled = previousAnalysisStatus.current === "running" && status !== "running";
+    previousAnalysisStatus.current = status;
+    if (!settled) return;
+
+    void (async () => {
+      const saved = await utils.extraction.getSchema.fetch({ flowId });
+      if (!saved) return;
+
+      setManualFields((current) => adoptDraftedFields(current, saved));
+    })();
+  }, [analysis?.status, flowId]);
+
+  const [outputOpen, setOutputOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
@@ -144,6 +213,8 @@ export function EditorCards({
       cardinality,
       selectionCriteria: cardinality === "many_per_record" ? selectionCriteria : null,
       guidance,
+      autoAnalyse,
+      analyseSampleSize,
     },
     output: {
       format: outputMode === "template" ? templateFormat : ("xlsx" as const),
@@ -180,7 +251,14 @@ export function EditorCards({
   const invalidateDraftDocs = () => void utils.extraction.listDraftDocuments.invalidate({ flowId });
 
   const uploadDraftMutation = trpc.extraction.uploadDraftDocuments.useMutation({
-    onSuccess: invalidateDraftDocs,
+    onSuccess: () => {
+      invalidateDraftDocs();
+      // The whole point of the feature: uploading is the trigger, not a button.
+      // The server refuses a second analysis while one is live, so a burst of
+      // uploads cannot start competing runs.
+      if (uploadShouldStartAnalysis(autoAnalyse, canAuthor))
+        startAnalysisMutation.mutate({ flowId, analyseSampleSize });
+    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -296,10 +374,53 @@ export function EditorCards({
   };
 
   const sampleStarting = startSampleMutation.isPending || saveMutation.isPending;
-  const runSampleButton = (
-    <Button type="button" size="sm" onClick={handleRunSample} disabled={sampleStarting}>
-      {sampleStarting ? "Starting…" : "Run sample"}
-    </Button>
+  const analyseControls = showsAutoAnalyseControls(canAuthor) ? (
+    <AnalyseControls
+      autoAnalyse={autoAnalyse}
+      onAutoAnalyseChange={setAutoAnalyse}
+      sampleSize={analyseSampleSize}
+      onSampleSizeChange={setAnalyseSampleSize}
+    />
+  ) : null;
+
+  // The output is configured once there is a field to pull and, in template mode,
+  // a template to pull it into. Auto Analyse fills the first on its own, so an
+  // author with it on is never sent to the output panel by hand.
+  const outputReady = outputIsConfigured(
+    activeFields.filter((field) => field.label.trim().length > 0).length,
+    canSave,
+  );
+
+  const runControls = (
+    <div className="flex items-center gap-2">
+      {!outputReady && (
+        <span className="text-[11px] text-[#736d5f]">
+          {analysisRunning ? "Drafting the output…" : "Configure the output first"}
+        </span>
+      )}
+      {/* Always reachable. Gating this on !outputReady left an author who had
+          configured the output with no way back into it — the fields became
+          uneditable the moment they were valid. */}
+      <Button type="button" variant="outline" size="sm" onClick={() => setOutputOpen(true)}>
+        {outputReady ? "Edit output" : "Configure output"}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        onClick={handleRunSample}
+        disabled={sampleStarting || !outputReady}
+        title={outputReady ? undefined : "Add at least one output field before running."}
+      >
+        {sampleStarting ? "Starting…" : "Run sample"}
+      </Button>
+    </div>
+  );
+
+  const inputHeaderActions = (
+    <div className="flex items-center gap-2.5">
+      {analyseControls}
+      {runControls}
+    </div>
   );
 
   const outputHeaderActions = (
@@ -313,7 +434,6 @@ export function EditorCards({
       >
         <Eye size={15} />
       </button>
-      {runSampleButton}
     </div>
   );
 
@@ -381,36 +501,45 @@ export function EditorCards({
             <p className="text-[13px] text-[#736d5f]">Loading…</p>
           ) : (
             <>
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="flex flex-col gap-4">
                 <FocusCard
                   side="input"
                   title="Input — documents"
-                  focused={focused === "input"}
-                  onFocus={() => setFocused("input")}
+                  focused
+                  onFocus={() => undefined}
+                  headerAction={inputHeaderActions}
                 >
                   <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="read-instructions">How should the AI read these documents?</Label>
-                      <Textarea
-                        id="read-instructions"
-                        value={guidance}
-                        onChange={(event) => setGuidance(event.target.value)}
-                        placeholder="e.g. Each file is one supplier's tender response."
-                        rows={2}
+                    {/* Auto analyse answers both of these from the documents, so
+                        they leave the default path entirely rather than sitting
+                        disabled. The author's values are held in state, so
+                        turning the toggle off brings them back as they were. */}
+                    {showsManualInputQuestions(autoAnalyse) && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="read-instructions">How should the AI read these documents?</Label>
+                        <Textarea
+                          id="read-instructions"
+                          value={guidance}
+                          onChange={(event) => setGuidance(event.target.value)}
+                          placeholder="e.g. Each file is one supplier's tender response."
+                          rows={2}
+                        />
+                      </div>
+                    )}
+
+                    {showsManualInputQuestions(autoAnalyse) && (
+                      <Segmented
+                        label="How do files map to records?"
+                        value={cardinality}
+                        onChange={(value) => setCardinality(value as Cardinality)}
+                        options={[
+                          { value: "one_per_file", label: "One file → one record" },
+                          { value: "many_per_record", label: "Many files → one record" },
+                        ]}
                       />
-                    </div>
+                    )}
 
-                    <Segmented
-                      label="How do files map to records?"
-                      value={cardinality}
-                      onChange={(value) => setCardinality(value as Cardinality)}
-                      options={[
-                        { value: "one_per_file", label: "One file → one record" },
-                        { value: "many_per_record", label: "Many files → one record" },
-                      ]}
-                    />
-
-                    {cardinality === "many_per_record" && (
+                    {showsManualInputQuestions(autoAnalyse) && cardinality === "many_per_record" && (
                       <div className="space-y-1.5">
                         <Label htmlFor="selection-criteria">Which files make up one record?</Label>
                         <Textarea
@@ -443,16 +572,25 @@ export function EditorCards({
                       </label>
                       <UploadTree files={uploads} onRemove={handleRemoveDraft} />
                     </div>
+
+                    {uploadShouldStartAnalysis(autoAnalyse, canAuthor) && uploads.length > 0 && analysis && (
+                      <AnalysisState
+                        analysis={analysis}
+                        starting={startAnalysisMutation.isPending}
+                        onRetry={() => startAnalysisMutation.mutate({ flowId, analyseSampleSize })}
+                      />
+                    )}
                   </div>
                 </FocusCard>
 
-                <FocusCard
-                  side="output"
-                  title="Output — records"
-                  focused={focused === "output"}
-                  onFocus={() => setFocused("output")}
-                  headerAction={outputHeaderActions}
-                >
+                <Dialog open={outputOpen} onOpenChange={setOutputOpen}>
+                  <DialogContent className="max-w-3xl">
+                    <DialogHeader>
+                      <DialogTitle>Output — records</DialogTitle>
+                      {outputHeaderActions}
+                      <DialogCloseButton />
+                    </DialogHeader>
+                    <DialogBody className="max-h-[70vh] overflow-auto">
                   <div className="space-y-4">
                     <Segmented
                       label="Output"
@@ -613,8 +751,15 @@ export function EditorCards({
                       checked={generateSummary}
                       onChange={setGenerateSummary}
                     />
-                  </div>
-                </FocusCard>
+                      </div>
+                    </DialogBody>
+                    <DialogFooter>
+                      <Button type="button" onClick={() => setOutputOpen(false)}>
+                        Done
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
 
               <p className="mt-3 text-[12px] text-[#736d5f]">
@@ -628,61 +773,17 @@ export function EditorCards({
         </div>
       </div>
 
-      <Dialog open={promptOpen} onOpenChange={setPromptOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Extraction system prompt</DialogTitle>
-            <DialogCloseButton />
-          </DialogHeader>
-          <DialogBody className="max-h-[70vh] overflow-hidden">
-            {promptLoading ? (
-              <p className="text-[13px] text-[#736d5f]">Building…</p>
-            ) : promptError ? (
-              <p className="text-[13px] text-[#a8324c]">{promptError}</p>
-            ) : (
-              <>
-                <div className="flex items-center justify-between">
-                  <p className="text-[12px] text-[#666055]">
-                    System prompt given to the AI for each document extraction (read-only)
-                  </p>
-                  <CopyButton text={systemPrompt ?? ""} />
-                </div>
-                <pre className="max-h-[56vh] flex-1 overflow-y-auto whitespace-pre-wrap rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] p-3 font-mono text-[12px] leading-[1.6] text-[#1c1b19]">
-                  {systemPrompt}
-                </pre>
-              </>
-            )}
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete this synthesis?</DialogTitle>
-            <DialogCloseButton />
-          </DialogHeader>
-          <DialogBody>
-            <DialogDescription>
-              This removes the synthesis and its schema. Past runs are retained but it can no longer be
-              edited or run. This cannot be undone.
-            </DialogDescription>
-          </DialogBody>
-          <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => setDeleteOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate({ flowId })}
-            >
-              {deleteMutation.isPending ? "Deleting…" : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EditorDialogs
+        promptOpen={promptOpen}
+        onPromptOpenChange={setPromptOpen}
+        promptLoading={promptLoading}
+        promptError={promptError}
+        systemPrompt={systemPrompt}
+        deleteOpen={deleteOpen}
+        onDeleteOpenChange={setDeleteOpen}
+        onConfirmDelete={() => deleteMutation.mutate({ flowId })}
+        deletePending={deleteMutation.isPending}
+      />
     </div>
   );
 }

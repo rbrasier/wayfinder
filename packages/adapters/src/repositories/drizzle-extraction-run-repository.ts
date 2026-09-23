@@ -1,4 +1,5 @@
 import {
+  type AnalysisOutcome,
   aggregateConfidenceByKind,
   domainError,
   err,
@@ -16,7 +17,7 @@ import {
   type RunStatus,
   type RunStatusCounts,
 } from "@wayfinder/domain";
-import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {
   app_extraction_documents,
@@ -101,6 +102,7 @@ export class DrizzleExtractionRunRepository implements IExtractionRunRepository 
           initiated_by_user_id: input.initiatedByUserId,
           mode: input.mode,
           preview_boundary: input.previewBoundary,
+          total_count: input.totalCount ?? 0,
         })
         .returning();
       return ok(toRun(row!));
@@ -120,6 +122,75 @@ export class DrizzleExtractionRunRepository implements IExtractionRunRepository 
       return ok(toRun(row));
     } catch (cause) {
       return this.fail("Failed to load the extraction run.", cause);
+    }
+  }
+
+  // Claims an analyse run for this worker with a conditional update, which is the
+  // run-level equivalent of the document path's FOR UPDATE SKIP LOCKED: the row
+  // is claimed only if nobody holds it or the holder's claim has gone stale, so
+  // two overlapping ticks never both run the analysis and double-spend
+  // (ADR-060 §4). A null result means someone else has it — not an error.
+  async claimAnalysisRun(
+    runId: string,
+    staleAfterMs: number,
+  ): Promise<Result<ExtractionRun | null>> {
+    try {
+      const staleBefore = new Date(Date.now() - staleAfterMs);
+      const [row] = await this.db
+        .update(app_extraction_runs)
+        .set({ analysis_claimed_at: new Date(), updated_at: new Date() })
+        .where(
+          and(
+            eq(app_extraction_runs.id, runId),
+            eq(app_extraction_runs.mode, "analyse"),
+            eq(app_extraction_runs.status, "running"),
+            or(
+              isNull(app_extraction_runs.analysis_claimed_at),
+              lt(app_extraction_runs.analysis_claimed_at, staleBefore),
+            ),
+          ),
+        )
+        .returning();
+      return ok(row ? toRun(row) : null);
+    } catch (cause) {
+      return this.fail("Failed to claim the analysis run.", cause);
+    }
+  }
+
+  async settleAnalysisRun(
+    runId: string,
+    outcome: AnalysisOutcome,
+    costUsdDelta: number,
+  ): Promise<Result<ExtractionRun>> {
+    try {
+      const [row] = await this.db
+        .update(app_extraction_runs)
+        .set({
+          status: outcome.status,
+          done_count: outcome.documentsRead,
+          unreadable_count: outcome.documentsUnreadable,
+          cost_usd: sql`${app_extraction_runs.cost_usd} + ${costUsdDelta}`,
+          analysis_claimed_at: null,
+          updated_at: new Date(),
+        })
+        .where(eq(app_extraction_runs.id, runId))
+        .returning();
+      if (!row) return err(domainError("NOT_FOUND", "Extraction run not found."));
+      return ok(toRun(row));
+    } catch (cause) {
+      return this.fail("Failed to settle the analysis run.", cause);
+    }
+  }
+
+  async releaseAnalysisClaim(runId: string): Promise<Result<void>> {
+    try {
+      await this.db
+        .update(app_extraction_runs)
+        .set({ analysis_claimed_at: null, updated_at: new Date() })
+        .where(eq(app_extraction_runs.id, runId));
+      return ok(undefined);
+    } catch (cause) {
+      return this.fail("Failed to release the analysis claim.", cause);
     }
   }
 

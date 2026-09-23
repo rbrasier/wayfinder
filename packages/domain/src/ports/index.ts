@@ -82,3 +82,4 @@ export * from "./lesson-distiller";
 export * from "./value-set-provider";
 export * from "./value-set-shortlister";
 export * from "./lookup-source-repository";
+export * from "./field-proposer";

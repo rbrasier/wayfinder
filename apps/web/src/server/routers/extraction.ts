@@ -1,4 +1,8 @@
-import { buildExtractionField, type ExtractionSchemaDraft } from "@wayfinder/domain";
+import {
+  buildExtractionField,
+  MAX_ANALYSE_DOCUMENTS,
+  type ExtractionSchemaDraft,
+} from "@wayfinder/domain";
 import { buildExtractionSystemPrompt } from "@wayfinder/application";
 import { DocumentGeneratorRouter, DocxGenerator, XlsxGenerator } from "@wayfinder/adapters";
 import type { Container } from "@/lib/container";
@@ -98,6 +102,10 @@ const schemaInput: z.ZodType<ExtractionSchemaDraft> = z.object({
     cardinality: z.enum(["one_per_file", "many_per_record"]),
     selectionCriteria: z.string().nullable(),
     guidance: z.string(),
+    autoAnalyse: z.boolean().optional(),
+    // Bounded here as well as in the domain: the stepper is a convenience, not
+    // the enforcement point.
+    analyseSampleSize: z.number().int().min(1).max(MAX_ANALYSE_DOCUMENTS).optional(),
   }),
   output: z.object({
     format: z.enum(["docx", "xlsx"]),
@@ -498,6 +506,54 @@ export const extractionRouter = router({
 
   // Starts a durable full-batch run (ADR-033 §5-6, Phase 2). Requires a
   // published extraction version — enforced server-side inside StartBatchRun.
+  // Auto Analyse drafts the field set, which is an authoring act — so this sits
+  // behind extraction:author, not extraction:run. A run-only user could
+  // otherwise rewrite a flow's schema by uploading a file
+  // (033-extraction-flows.adr.md §7).
+  startAnalysis: authorProcedure
+    .input(
+      flowIdInput.extend({
+        analyseSampleSize: z.number().int().min(1).max(MAX_ANALYSE_DOCUMENTS).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
+    }
+
+    const result = await ctx.container.useCases.startBatchRun.startAnalysis({
+      flowId: input.flowId,
+      userId: ctx.userId,
+      analyseSampleSize: input.analyseSampleSize,
+    });
+    if (result.error) throw toTrpcError(result.error);
+    return { runId: result.data.id, totalCount: result.data.totalCount };
+  }),
+
+  // Reading an analysis's progress is not an authoring act, so a viewer may poll
+  // it — the editor that started it is the only caller in practice.
+  analysisStatus: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
+    }
+
+    const runs = await ctx.container.repos.extractionRuns.listRunsForFlow(input.flowId);
+    if (runs.error) throw toTrpcError(runs.error);
+
+    // listRunsForFlow is newest-first, so the first analyse row is the current
+    // one. Null means this flow has never been analysed.
+    const latest = runs.data.find((run) => run.mode === "analyse");
+    if (!latest) return null;
+
+    return {
+      runId: latest.id,
+      status: latest.status,
+      totalCount: latest.totalCount,
+      doneCount: latest.doneCount,
+      unreadableCount: latest.unreadableCount,
+    };
+  }),
+
   startBatch: runProcedure
     .input(
       z.object({
@@ -603,7 +659,9 @@ export const extractionRouter = router({
     }
     const runs = await ctx.container.repos.extractionRuns.listRunsForFlow(input.flowId);
     if (runs.error) throw toTrpcError(runs.error);
-    return runs.data;
+    // Run history means extraction runs. An analysis drafts the field set and
+    // produces no records, so listing it here would only puzzle the reader.
+    return runs.data.filter((run) => run.mode !== "analyse");
   }),
 
   // The results viewer's data (phase §4): the run, its output records (with
