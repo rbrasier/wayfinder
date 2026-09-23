@@ -18,13 +18,13 @@ const buildResolver = (
 
 describe("createCachedSessionResolver", () => {
   it("returns the resolved session and stores it for subsequent reads", async () => {
-    const { loader, resolve } = buildResolver({ userId: "user-1", isAdmin: true });
+    const { loader, resolve } = buildResolver({ sessionId: "session-user-1", userId: "user-1", isAdmin: true });
 
     const first = await resolve("token-abc.signature");
     const second = await resolve("token-abc.signature");
 
-    expect(first).toEqual({ userId: "user-1", isAdmin: true });
-    expect(second).toEqual({ userId: "user-1", isAdmin: true });
+    expect(first).toEqual({ sessionId: "session-user-1", userId: "user-1", isAdmin: true });
+    expect(second).toEqual({ sessionId: "session-user-1", userId: "user-1", isAdmin: true });
     // The second call is served from cache, sparing a DB round-trip on the hot path.
     expect(loader).toHaveBeenCalledOnce();
   });
@@ -43,7 +43,7 @@ describe("createCachedSessionResolver", () => {
 
   it("re-queries the database when the cache is disabled with a zero TTL", async () => {
     const { loader, resolve } = buildResolver(
-      { userId: "user-1", isAdmin: false },
+      { sessionId: "session-user-1", userId: "user-1", isAdmin: false },
       { ttlMs: 0, maxEntries: 10 },
     );
 

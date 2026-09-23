@@ -27,6 +27,7 @@ const makeContainer = (overrides: { advanceOne?: ReturnType<typeof vi.fn> } = {}
 const contextWith = (container: Container, isAdmin = true): TrpcContext => ({
   container,
   userId: "user-1",
+  authSessionId: null,
   isAdmin,
   permissions: new Set(["extraction:run" as never]),
   headers: new Headers(),

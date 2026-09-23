@@ -3,6 +3,9 @@ import type { Database } from "../db/client";
 import { core_sessions, core_users } from "../db/schema/core";
 
 export interface ResolvedSession {
+  // core_sessions.id: identifies one sign-in without exposing the token, which
+  // is a bearer secret (ADR-060 §5).
+  readonly sessionId: string;
   readonly userId: string;
   readonly isAdmin: boolean;
 }
@@ -28,7 +31,11 @@ export const resolveSession = async (
   const token = stripCookieSignature(cookieValue);
   try {
     const [row] = await db
-      .select({ userId: core_sessions.user_id, isAdmin: core_users.is_admin })
+      .select({
+        sessionId: core_sessions.id,
+        userId: core_sessions.user_id,
+        isAdmin: core_users.is_admin,
+      })
       .from(core_sessions)
       .innerJoin(core_users, eq(core_sessions.user_id, core_users.id))
       .where(and(eq(core_sessions.token, token), gt(core_sessions.expires_at, new Date())))
