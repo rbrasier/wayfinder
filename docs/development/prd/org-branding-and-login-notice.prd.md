@@ -1,9 +1,9 @@
 # PRD — Organisation Branding and Sign-in Notice
 
-- **Status**: Accepted — implemented in 0.28.24
+- **Status**: Accepted — implemented in 0.28.25
 - **Date**: 2026-09-23
 - **Author**: Claude Code (for @rbrasier), from issue #304 (split from #302)
-- **Target version**: 0.28.24 (bump: **PATCH** — see §9 and the phase doc for
+- **Target version**: 0.28.25 (bump: **PATCH** — see §9 and the phase doc for
   why this ships on `release/alpha-2` rather than `main`)
 
 ## 1. Problem
@@ -120,7 +120,7 @@ binary lives in object storage behind `IObjectStorage`. No migration.
   acknowledgement via the audit log).
 - **Release-line override:** CLAUDE.md routes new features to `main`. The
   maintainer has deliberately chosen to ship this on `release/alpha-2` as a
-  PATCH (0.28.23 → 0.28.24), because it has no schema change and trial
+  PATCH (0.28.24 → 0.28.25), because it has no schema change and trial
   organisations on alpha-2 need it. It reaches `main` through the normal
   forward-merge.
 

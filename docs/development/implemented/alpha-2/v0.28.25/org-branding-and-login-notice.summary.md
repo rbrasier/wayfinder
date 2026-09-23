@@ -1,8 +1,9 @@
-# Implementation Summary — Organisation Branding and Sign-in Notice (v0.28.24)
+# Implementation Summary — Organisation Branding and Sign-in Notice (v0.28.25)
 
-- **Version**: 0.28.24 — **PATCH**. The maintainer chose PATCH on the alpha-2
+- **Version**: 0.28.25 — **PATCH**. The maintainer chose PATCH on the alpha-2
   line over the MINOR on `main` that the branching rules would normally give a
-  new feature. There is no schema change.
+  new feature. There is no schema change. It was planned as 0.28.24; #303 merged
+  into `release/alpha-2` first and took that number, so this ships as 0.28.25.
 - **Base branch**: `release/alpha-2` (alpha-2 line)
 - **Phase doc**: [`org-branding-and-login-notice.phase.md`](./org-branding-and-login-notice.phase.md)
 - **PRD**: `docs/development/prd/org-branding-and-login-notice.prd.md`

@@ -1,12 +1,12 @@
 # Phase — Organisation Branding and Sign-in Notice
 
-- **Status**: Implemented in 0.28.24 — see `org-branding-and-login-notice.summary.md` alongside
-- **Target version**: 0.28.24 — **PATCH** (0.28.23 → 0.28.24). No schema change.
+- **Status**: Implemented in 0.28.25 — see `org-branding-and-login-notice.summary.md` alongside
+- **Target version**: 0.28.25 — **PATCH** (0.28.24 → 0.28.25). No schema change.
 - **Base branch**: `release/alpha-2`. This is a **deliberate maintainer
   override** of CLAUDE.md's "new features land on `main`" rule. The feature has
   no schema impact, and trial organisations on alpha-2 need it. It reaches
   `main` by the normal forward-merge. When built, it is filed under
-  `docs/development/implemented/alpha-2/v0.28.24/`.
+  `docs/development/implemented/alpha-2/v0.28.25/`.
 - **PRD**: `docs/development/prd/org-branding-and-login-notice.prd.md`
 - **ADR**: `docs/development/adr/060-install-wide-branding-and-theme-tokens.adr.md`
 - **Depends on**: ADR-041 (DB-first runtime config), ADR-038, ADR-033.
@@ -29,7 +29,7 @@ choose one brand colour that recolours the whole UI. The colour is checked for
 contrast before it can be saved. The same settings area also gets a blocking
 sign-in notice, which the admin can set to show once per notice version or on
 every sign-in. Each acknowledgement is written to the audit log. There's one
-brand for the whole install and no schema change, planned as patch 0.28.24 on
+brand for the whole install and no schema change, planned as patch 0.28.25 on
 `release/alpha-2`.
 
 **Note applied at approval:** the sign-in notice defaults to `mode: "off"`.
@@ -141,7 +141,7 @@ Rules:
 6. Token sweep (§5), then the `validate.sh` literal check.
 7. Settings cards.
 8. `LoginNoticeGate` in both layouts.
-9. `./validate.sh` green. Bump `VERSION` and root `package.json` to `0.28.24`.
+9. `./validate.sh` green. Bump `VERSION` and root `package.json` to `0.28.25`.
 
 ## 7. Test plan
 
