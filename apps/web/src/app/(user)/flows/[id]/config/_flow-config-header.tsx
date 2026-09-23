@@ -388,7 +388,7 @@ function GroupVisibilityDialog({
                       id={`group-${group.id}`}
                       checked={selected.includes(group.id)}
                       onChange={() => toggle(group.id)}
-                      className="h-4 w-4 accent-[#2f56d3]"
+                      className="h-4 w-4 accent-wf-primary"
                     />
                     {group.name}
                   </label>

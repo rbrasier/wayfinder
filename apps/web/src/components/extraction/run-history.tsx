@@ -20,7 +20,7 @@ const STATUS_LABEL: Record<RunStatus, string> = {
 };
 
 const STATUS_TONE: Record<RunStatus, string> = {
-  running: "bg-[#eaeefb] text-[#2f56d3]",
+  running: "bg-wf-primary-light text-wf-primary",
   paused_preview: "bg-[#f6e9d8] text-[#8a5a1d]",
   paused_cap: "bg-[#f6e9d8] text-[#8a5a1d]",
   complete: "bg-[#e9f5ee] text-[#2f9e6b]",
@@ -73,7 +73,7 @@ export function RunHistory({ flowId }: RunHistoryProps) {
               <td className="px-[12px] py-[8px] text-right">
                 <Link
                   href={`/synthesise/${flowId}/runs/${run.id}`}
-                  className="text-[12px] font-medium text-[#2f56d3] hover:underline"
+                  className="text-[12px] font-medium text-wf-primary hover:underline"
                 >
                   Open →
                 </Link>

@@ -74,7 +74,7 @@ export function DocumentCard({
           <DocumentInfoModal confidence={documentGenerationConfidence} />
         )}
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#eaeefb] text-[#2f56d3]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-wf-primary-light text-wf-primary">
             <FileText className="h-[18px] w-[18px] stroke-[1.8]" />
           </div>
           <div className="min-w-0 flex-1">

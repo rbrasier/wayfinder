@@ -113,7 +113,7 @@ export function AnnotationReference() {
                 {group.entries.map((entry) => (
                   <tr key={entry.syntax} className="border-b border-[#f0eee9] last:border-0">
                     <td className="w-1/2 py-1.5 pr-4 align-top">
-                      <code className="whitespace-nowrap font-mono text-[#2f56d3]">
+                      <code className="whitespace-nowrap font-mono text-wf-primary">
                         {entry.syntax}
                       </code>
                     </td>

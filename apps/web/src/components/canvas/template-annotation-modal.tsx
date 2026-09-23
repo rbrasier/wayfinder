@@ -399,7 +399,7 @@ function FoundFields({
       <div className="grid grid-cols-1 gap-x-6 gap-y-1 rounded-[9px] border border-[#ebe8e0] bg-[#faf9f7] p-3 sm:grid-cols-2">
         {fields.map((row) => (
           <div key={row.id} className="flex items-baseline gap-1.5 text-[12px]">
-            <span className="text-[#2f56d3]">•</span>
+            <span className="text-wf-primary">•</span>
             <span className="truncate text-[#1c1b19]">{row.model.label || row.line}</span>
             <span className="shrink-0 text-[#666055]">({rowTypeLabel(row)})</span>
           </div>
@@ -433,7 +433,7 @@ function NoFieldsYet({ onOpenReference }: { onOpenReference: () => void }) {
         Every kind of field is listed in the{" "}
         <button
           type="button"
-          className="font-medium text-[#2f56d3] underline hover:text-[#1f3ea8]"
+          className="font-medium text-wf-primary underline hover:text-wf-primary-hover"
           onClick={onOpenReference}
         >
           complete list of annotations
@@ -459,7 +459,7 @@ function ReuploadPanel({
       </p>
       <button
         type="button"
-        className="flex w-full flex-col items-center gap-2 rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-6 text-center text-[13px] text-[#666055] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] hover:text-[#2f56d3]"
+        className="flex w-full flex-col items-center gap-2 rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-6 text-center text-[13px] text-[#666055] transition-colors hover:border-wf-primary-dim hover:bg-wf-primary-light hover:text-wf-primary"
         onClick={() => inputRef.current?.click()}
       >
         <Upload size={20} />
@@ -543,7 +543,7 @@ function ReviewRow({
           <span>{warning.message}</span>
           <button
             type="button"
-            className="shrink-0 font-medium text-[#2f56d3] hover:text-[#1f3ea8]"
+            className="shrink-0 font-medium text-wf-primary hover:text-wf-primary-hover"
             onClick={() => onAcceptCorrection(warning.correctedLine)}
           >
             Fix

@@ -40,7 +40,7 @@ type StatusFilter = "all" | "complete" | "active" | "abandoned";
 const STORAGE_PREFIX = "wayfinder:field-report";
 
 const selectStyle =
-  "h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19] outline-none focus:border-[#2f56d3] focus:bg-white";
+  "h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19] outline-none focus:border-wf-primary focus:bg-white";
 
 const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#666055] mb-1";
 
@@ -446,7 +446,7 @@ export function FieldReportSection({
             <button
               type="button"
               onClick={handleReset}
-              className="text-[12px] text-[#2f56d3] hover:underline"
+              className="text-[12px] text-wf-primary hover:underline"
             >
               Reset filters
             </button>

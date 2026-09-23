@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
 import type { FieldValueSource } from "@rbrasier/domain";
 import type { NodeConfigValues } from "./node-config-modal";
+import { DATA_INDIGO } from "@/lib/data-colours";
 
 export const COLOURS = [
-  { hex: "#2f56d3", label: "Indigo" },
+  { hex: DATA_INDIGO, label: "Indigo" },
   { hex: "#1f6b4d", label: "Green" },
   { hex: "#8a5a1d", label: "Amber" },
   { hex: "#a8324c", label: "Rose" },

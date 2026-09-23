@@ -54,7 +54,7 @@ function WizardStepRail({ current }: { current: StepIndex }) {
                   isComplete
                     ? "bg-[#1f6b4d] text-white"
                     : isCurrent
-                      ? "border-[1.5px] border-[#2f56d3] text-[#2f56d3]"
+                      ? "border-[1.5px] border-wf-primary text-wf-primary"
                       : "border-[1.5px] border-[#dedad2] text-[#736d5f]"
                 }`}
               >
@@ -62,7 +62,7 @@ function WizardStepRail({ current }: { current: StepIndex }) {
               </span>
               <span
                 className={`text-[11.5px] ${
-                  isCurrent ? "font-semibold text-[#2f56d3]" : "text-[#736d5f]"
+                  isCurrent ? "font-semibold text-wf-primary" : "text-[#736d5f]"
                 }`}
               >
                 {title}

@@ -23,7 +23,7 @@ interface RewindForkModalProps {
 
 const CARD_BASE =
   "w-full rounded-[10px] border-[1.5px] px-4 py-3 text-left text-[13px] transition-colors";
-const CARD_SELECTED = "border-[#2f56d3] bg-[#eaeefb] text-[#1c1b19]";
+const CARD_SELECTED = "border-wf-primary bg-wf-primary-light text-[#1c1b19]";
 const CARD_IDLE = "border-[#e7e3db] text-[#5c574c] hover:bg-[#f5f3ee]";
 
 export function RewindForkModal({

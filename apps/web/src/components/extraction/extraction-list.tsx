@@ -68,7 +68,7 @@ function FlowRow({ flow, editHref }: { flow: ExtractionFlowRow; editHref: string
         <div className="border-t border-[#f5f3ee] px-[16px] py-[8px] text-[13px]">
           <button
             type="button"
-            className="text-[#2f56d3] hover:underline"
+            className="text-wf-primary hover:underline"
             onClick={() => setShowAll((value) => !value)}
           >
             {showAll ? "Hide older runs" : `Show ${olderRuns.length} older run${olderRuns.length === 1 ? "" : "s"}`}

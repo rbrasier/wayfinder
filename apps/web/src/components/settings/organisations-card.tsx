@@ -37,7 +37,7 @@ export function OrganisationsCard() {
         ) : (
           <p className="text-xs text-muted-foreground">
             Each member is grounded in their own organisation. Name and assign them under{" "}
-            <Link href="/admin/organisations" className="text-[#2f56d3] hover:underline">
+            <Link href="/admin/organisations" className="text-wf-primary hover:underline">
               Organisations
             </Link>
             .

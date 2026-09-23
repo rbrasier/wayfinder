@@ -9,7 +9,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "border border-[#2f56d3] bg-[#2f56d3] text-white hover:border-[#1f3ea8] hover:bg-[#1f3ea8]",
+          "border border-wf-primary bg-wf-primary text-wf-primary-contrast hover:border-wf-primary-hover hover:bg-wf-primary-hover",
         destructive:
           "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         danger:
@@ -20,7 +20,7 @@ const buttonVariants = cva(
           "border border-[#e7e3db] bg-white text-[#1c1b19] hover:bg-[#f5f3ee]",
         ghost:
           "border border-[#e7e3db] bg-transparent text-[#1c1b19] hover:bg-[#f5f3ee]",
-        link: "text-[#2f56d3] underline-offset-4 hover:underline",
+        link: "text-wf-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "px-4 py-2",

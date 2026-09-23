@@ -54,19 +54,19 @@ export function StepsAnimation() {
               fill="#fff"
               stroke="#c3cee9"
             />
-            <rect x={node.x + 10} y={NODE_Y + 12} width={12} height={12} rx={3} fill="#2f56d3" />
+            <rect className="fill-wf-primary" x={node.x + 10} y={NODE_Y + 12} width={12} height={12} rx={3} />
             <text x={node.x + 28} y={NODE_Y + 22} fontSize="10.5" fontWeight="600" fill="#1c1b19">
               {node.name}
             </text>
             <text x={node.x + 10} y={NODE_Y + 40} fontSize="9.5" fill="#666055">
               {node.hint}
             </text>
-            <circle cx={node.x} cy={DOT_Y} r={4.5} fill="#2f56d3" stroke="#fff" strokeWidth={1.5} />
-            <circle
+            <circle className="fill-wf-primary" cx={node.x} cy={DOT_Y} r={4.5} stroke="#fff" strokeWidth={1.5} />
+            <circle className="fill-wf-primary"
               cx={node.x + NODE_WIDTH}
               cy={DOT_Y}
               r={4.5}
-              fill="#2f56d3"
+             
               stroke="#fff"
               strokeWidth={1.5}
             />
@@ -86,11 +86,11 @@ export function StepsAnimation() {
                 y1={DOT_Y}
                 x2={to.x}
                 y2={DOT_Y}
-                stroke="#2f56d3"
+               
                 strokeWidth={2}
                 strokeLinecap="round"
                 strokeDasharray={GAP}
-                className="transition-[stroke-dashoffset] duration-700 ease-in-out"
+                className="transition-[stroke-dashoffset] duration-700 ease-in-out stroke-wf-primary"
                 style={{ strokeDashoffset: joined ? 0 : GAP }}
               />
               <g
@@ -113,9 +113,9 @@ export function StepsAnimation() {
                 cy={DOT_Y}
                 r={7}
                 fill="none"
-                stroke="#2f56d3"
+               
                 strokeWidth={1.5}
-                className="transition-all duration-300"
+                className="transition-all duration-300 stroke-wf-primary"
                 style={{ opacity: joined ? 0.5 : 0, transform: joined ? "scale(1)" : "scale(0.5)", transformBox: "fill-box", transformOrigin: "center" }}
               />
             </g>

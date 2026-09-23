@@ -441,7 +441,7 @@ export function KnowledgeContent() {
                         </span>
                         <button
                           type="button"
-                          className="text-[10px] font-medium text-[#2f56d3] hover:underline"
+                          className="text-[10px] font-medium text-wf-primary hover:underline"
                           onClick={() =>
                             revertMutation.mutate({ chunkId: drawerChunk.id, versionId: version.id })
                           }

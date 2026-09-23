@@ -31,6 +31,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const { trpc, HydrateClient } = await createServerHelpers();
 
   void trpc.user.me.prefetch();
+  void trpc.settings.getBranding.prefetch();
   void trpc.flow.list.prefetch();
   void trpc.user.list.prefetch({});
   void trpc.usage.myUsage.prefetch();

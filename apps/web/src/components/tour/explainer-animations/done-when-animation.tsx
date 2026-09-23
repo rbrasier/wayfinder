@@ -16,7 +16,7 @@ export function DoneWhenAnimation() {
       <Reveal on className="absolute left-4 top-4 w-[300px]">
         <div className="rounded-[10px] border border-[#c3cee9] bg-white p-3 shadow-sm">
           <div className="mb-2 flex items-center gap-2">
-            <span className="h-3.5 w-3.5 rounded-[3px] bg-[#2f56d3]" />
+            <span className="h-3.5 w-3.5 rounded-[3px] bg-wf-primary" />
             <span className="text-[11.5px] font-semibold text-[#1c1b19]">Gather the leave dates</span>
           </div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.04em] text-[#666055]">
@@ -52,17 +52,17 @@ export function DoneWhenAnimation() {
       </Reveal>
 
       <svg viewBox="0 0 60 12" className="absolute left-[316px] top-[66px] h-3 w-[60px]">
-        <circle cx={4} cy={6} r={4} fill="#2f56d3" stroke="#fff" strokeWidth={1.5} />
+        <circle className="fill-wf-primary" cx={4} cy={6} r={4} stroke="#fff" strokeWidth={1.5} />
         <line
           x1={4}
           y1={6}
           x2={56}
           y2={6}
-          stroke="#2f56d3"
+         
           strokeWidth={2}
           strokeLinecap="round"
           strokeDasharray={52}
-          className="transition-[stroke-dashoffset] duration-700 ease-in-out"
+          className="transition-[stroke-dashoffset] duration-700 ease-in-out stroke-wf-primary"
           style={{ strokeDashoffset: beat >= 4 ? 0 : 52 }}
         />
       </svg>

@@ -1,4 +1,5 @@
 import { MessageSquare, Plug, Stamp, Timer, Zap } from "lucide-react";
+import { DATA_INDIGO } from "@/lib/data-colours";
 
 export type StepType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
 
@@ -6,7 +7,7 @@ export type StepType = "conversational" | "auto" | "scheduled" | "approval" | "m
 // modal so a step's type reads the same everywhere: conversational = blue,
 // automated (n8n) = purple, scheduled = green, approval = amber, MCP = teal.
 export const STEP_TYPE_ACCENT: Record<StepType, string> = {
-  conversational: "#2f56d3",
+  conversational: DATA_INDIGO,
   auto: "#5b3fa8",
   scheduled: "#1f6b4d",
   approval: "#d97706",

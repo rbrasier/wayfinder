@@ -34,7 +34,7 @@ export function PublishAnimation() {
               <div
                 className={cn(
                   "px-2.5 py-1 transition-colors duration-300",
-                  beat >= 2 ? "bg-[#eaeefb] text-[#2f56d3]" : "text-[#1c1b19]",
+                  beat >= 2 ? "bg-wf-primary-light text-wf-primary" : "text-[#1c1b19]",
                 )}
               >
                 Publish privately (only you)
@@ -64,14 +64,14 @@ export function PublishAnimation() {
           </div>
           <div className="p-2.5">
             <Reveal on={beat >= 5}>
-              <div className="rounded-[8px] border-[1.5px] border-[#c3cef2] bg-[#eaeefb] px-2.5 py-2">
+              <div className="rounded-[8px] border-[1.5px] border-wf-primary-dim bg-wf-primary-light px-2.5 py-2">
                 <div className="flex items-center gap-2 text-[11px] font-semibold text-[#1c1b19]">
                   <span className="flex h-6 w-6 items-center justify-center rounded-[6px] bg-white text-[13px]">
                     🌴
                   </span>
                   Leave request
                 </div>
-                <div className="mt-1 text-[10.5px] font-semibold text-[#2f56d3]">Start →</div>
+                <div className="mt-1 text-[10.5px] font-semibold text-wf-primary">Start →</div>
               </div>
             </Reveal>
           </div>

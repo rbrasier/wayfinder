@@ -8,8 +8,8 @@ export function NewFlowStepCallout() {
       data-testid="new-flow-step-callout"
       className="wf-tour-callout absolute inset-x-0 bottom-[calc(100%+40px)] lg:inset-x-auto lg:bottom-auto lg:right-[calc(100%+64px)] lg:top-0 lg:w-[300px]"
     >
-      <div className="rounded-[14px] border border-[#c3cef2] bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,.10)]">
-        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-[#2f56d3]">
+      <div className="rounded-[14px] border border-wf-primary-dim bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,.10)]">
+        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-wf-primary">
           Step 1 of 2 · Name your flow
         </div>
         <p className="mb-3 text-[12.5px] leading-[1.5] text-[#5c574c]">
@@ -49,20 +49,20 @@ export function NewFlowStepCallout() {
         viewBox="0 0 64 16"
         className="absolute left-full top-7 hidden h-4 w-16 lg:block"
       >
-        <circle cx={3} cy={8} r={3} fill="#2f56d3" />
+        <circle className="fill-wf-primary" cx={3} cy={8} r={3} />
         <line
-          className="wf-tour-connector"
+          className="wf-tour-connector stroke-wf-primary"
           x1={3}
           y1={8}
           x2={56}
           y2={8}
-          stroke="#2f56d3"
+         
           strokeWidth={2}
           strokeLinecap="round"
           strokeDasharray={53}
           style={{ "--wf-dash": 53 } as React.CSSProperties}
         />
-        <circle className="wf-tour-connector-end" cx={59} cy={8} r={4} fill="#2f56d3" stroke="#fff" strokeWidth={1.5} />
+        <circle className="wf-tour-connector-end fill-wf-primary" cx={59} cy={8} r={4} stroke="#fff" strokeWidth={1.5} />
       </svg>
 
       {/* Vertical tether for the stacked layout. */}
@@ -72,20 +72,20 @@ export function NewFlowStepCallout() {
         viewBox="0 0 16 40"
         className="absolute left-8 top-full h-10 w-4 lg:hidden"
       >
-        <circle cx={8} cy={3} r={3} fill="#2f56d3" />
+        <circle className="fill-wf-primary" cx={8} cy={3} r={3} />
         <line
-          className="wf-tour-connector"
+          className="wf-tour-connector stroke-wf-primary"
           x1={8}
           y1={3}
           x2={8}
           y2={33}
-          stroke="#2f56d3"
+         
           strokeWidth={2}
           strokeLinecap="round"
           strokeDasharray={30}
           style={{ "--wf-dash": 30 } as React.CSSProperties}
         />
-        <circle className="wf-tour-connector-end" cx={8} cy={36} r={4} fill="#2f56d3" stroke="#fff" strokeWidth={1.5} />
+        <circle className="wf-tour-connector-end fill-wf-primary" cx={8} cy={36} r={4} stroke="#fff" strokeWidth={1.5} />
       </svg>
     </aside>
   );

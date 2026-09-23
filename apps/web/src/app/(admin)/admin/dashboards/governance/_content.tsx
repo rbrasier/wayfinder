@@ -15,8 +15,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SpendCapsCard } from "@/components/admin/spend-caps-card";
 import { trpc } from "@/trpc/client";
+import { DATA_INDIGO } from "@/lib/data-colours";
 
-const BAR_COLOURS = ["#2f56d3", "#1f6b4d", "#d98a3a", "#8a4fd9", "#d93a6f", "#3ab6d9", "#9ea83a"];
+const BAR_COLOURS = [DATA_INDIGO, "#1f6b4d", "#d98a3a", "#8a4fd9", "#d93a6f", "#3ab6d9", "#9ea83a"];
 const AXIS_STYLE = { fontSize: 11, fill: "#736d5f" };
 
 const money = (value: number): string => `$${value.toFixed(2)}`;
