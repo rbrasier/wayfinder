@@ -19,6 +19,7 @@ import { toForkHistory } from "@/lib/chat/fork-history";
 import { ConfirmStepCard } from "@/components/chat/confirm-step-card";
 import { hasPendingDocumentGeneration } from "@/components/chat/document-poll-state";
 import { MessageFeed } from "@/components/chat/message-feed";
+import { shouldResyncStreamedMessages } from "@/components/chat/stream-resync";
 import { AppHeader } from "@/components/layout/app-header";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
@@ -98,6 +99,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [rewindOpen, setRewindOpen] = useState(false);
   const kickoffSentRef = useRef(false);
+  // Stamped when a turn is sent and when it settles: only session data fetched
+  // after it is trusted to re-sync the streamed list (see stream-resync.ts).
+  const turnBoundaryAtRef = useRef(0);
 
   const renameMutation = trpc.session.rename.useMutation({
     onSuccess: () => {
@@ -257,9 +261,11 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       messages: msgs.slice(-20),
     }),
     onFinish: () => {
+      turnBoundaryAtRef.current = Date.now();
       void utils.session.get.invalidate({ sessionId });
     },
     onError: () => {
+      turnBoundaryAtRef.current = Date.now();
       void utils.session.get.invalidate({ sessionId });
     },
   });
@@ -272,18 +278,22 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   // stream only ever carries the reply itself — gap follow-ups, cross-check
   // notes and next-step openers are persisted server-side — so without this the
   // next turn's streaming view renders an older history and messages appear to
-  // vanish mid-turn. Skipped while a turn is in flight, and while the refetch
-  // still lags the streamed list, so a finished turn is never clobbered by
-  // stale data.
+  // vanish mid-turn. Skipped while a turn is in flight, after an errored turn,
+  // and until a refetch from after the turn lands, so a finished turn is never
+  // clobbered by stale data.
+  const persistedFetchedAt = sessionQuery.dataUpdatedAt;
   useEffect(() => {
-    if (isLoading) return;
-    if (dbMessages.length < messages.length) return;
-    const inSync =
-      dbMessages.length === messages.length &&
-      dbMessages.every((m, index) => m.id === messages[index]?.id);
-    if (inSync) return;
+    const shouldResync = shouldResyncStreamedMessages({
+      isTurnInFlight: isLoading,
+      lastTurnErrored: Boolean(error),
+      lastTurnBoundaryAt: turnBoundaryAtRef.current,
+      persistedFetchedAt,
+      persistedIds: dbMessages.map((message) => message.id),
+      streamedIds: messages.map((message) => message.id),
+    });
+    if (!shouldResync) return;
     setMessages(toUiMessages(dbMessages));
-  }, [isLoading, dbMessages, messages, setMessages]);
+  }, [isLoading, error, persistedFetchedAt, dbMessages, messages, setMessages]);
 
   // A freshly created session has no messages yet. Auto-send a generic kickoff
   // message as the user so the agent responds immediately, instead of leaving
@@ -300,6 +310,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     if (isLoading) return;
 
     kickoffSentRef.current = true;
+    turnBoundaryAtRef.current = Date.now();
 
     const flowName = sessionData.flow.name;
     const firstStepName = currentNode?.name?.trim();
@@ -398,7 +409,16 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
+    turnBoundaryAtRef.current = Date.now();
+    // A new message after a failed turn drops what that turn left unsaved; kept,
+    // it would offset the feed's streamed tail and repeat a reply (#308).
+    if (error) setMessages(toUiMessages(dbMessages));
     handleSubmit();
+  };
+
+  const handleRetry = () => {
+    turnBoundaryAtRef.current = Date.now();
+    void reload();
   };
 
   const handleRegenerateDocument = useCallback(async (messageId: string) => {
@@ -493,7 +513,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         isStreaming={isLoading}
         isComplete={session.status === "complete"}
         error={error ?? null}
-        onRetry={() => void reload()}
+        onRetry={handleRetry}
         onRegenerateDocument={handleRegenerateDocument}
         canEditDocuments={session.status === "active" && !isReadOnly && !isFlowDeleted}
         isOnApprovalNode={isApprovalGate}
