@@ -348,18 +348,6 @@ export const extractionRouter = router({
       };
     }),
 
-  publish: authorProcedure.input(flowIdInput).mutation(async ({ ctx, input }) => {
-    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "You cannot publish this flow." });
-    }
-    const result = await ctx.container.useCases.publishFlowVersion.execute({
-      flowId: input.flowId,
-      publishedByUserId: ctx.userId,
-    });
-    if (result.error) throw toTrpcError(result.error);
-    return { versionId: result.data.id, versionNumber: result.data.versionNumber };
-  }),
-
   // Synchronous sample/preview extraction against the flow's authored (draft)
   // schema — 2-3 documents (ADR-033 §8 / phase §8). Full batch is Phase 2.
   runSample: runProcedure
@@ -504,8 +492,6 @@ export const extractionRouter = router({
       return { runId: result.data.id, totalCount: result.data.totalCount };
     }),
 
-  // Starts a durable full-batch run (ADR-033 §5-6, Phase 2). Requires a
-  // published extraction version — enforced server-side inside StartBatchRun.
   // Auto Analyse drafts the field set, which is an authoring act — so this sits
   // behind extraction:author, not extraction:run. A run-only user could
   // otherwise rewrite a flow's schema by uploading a file
@@ -554,6 +540,8 @@ export const extractionRouter = router({
     };
   }),
 
+  // Starts a durable full-batch run (ADR-033 §5-6, Phase 2). StartBatchRun pins
+  // it to a published version, promoting the saved draft when there is one.
   startBatch: runProcedure
     .input(
       z.object({

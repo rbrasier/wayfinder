@@ -17,6 +17,7 @@ import {
   type GenerateObjectInput,
   type IArchiveExtractor,
   type ExtractionDraftDocument,
+  type IAuditLogger,
   type IDocumentExtractor,
   type IExtractionRunRepository,
   type IFlowVersionRepository,
@@ -415,6 +416,9 @@ class FakeArchiveExtractor implements IArchiveExtractor {
 
 class FakeFlowVersionRepository implements Partial<IFlowVersionRepository> {
   constructor(private readonly published: FlowVersion | null) {}
+  async openDraft(): Promise<Result<FlowVersion | null>> {
+    return ok(null);
+  }
   async latestPublished(): Promise<Result<FlowVersion | null>> {
     return ok(this.published);
   }
@@ -437,6 +441,8 @@ const flowVersionsWith = (schema: ExtractionSchema | null): IFlowVersionReposito
     schema ? publishedVersion(schema) : null,
   ) as unknown as IFlowVersionRepository;
 
+const auditLogger: IAuditLogger = { log: async () => ok(true as const) };
+
 const uploadedFile = (filename: string, treePath: string) => ({
   filename,
   treePath,
@@ -447,7 +453,7 @@ const uploadedFile = (filename: string, treePath: string) => ({
 // ── StartBatchRun ─────────────────────────────────────────────────────────────
 
 describe("StartBatchRun", () => {
-  it("refuses to run a full batch without a published version", async () => {
+  it("refuses to run a full batch with no saved or published schema", async () => {
     const runs = new InMemoryExtractionRunRepository();
     const start = new StartBatchRun(
       flowVersionsWith(null),
@@ -457,6 +463,7 @@ describe("StartBatchRun", () => {
       new FakeLanguageModel(),
       new FakeDocumentExtractor(),
       new FakeDraftDocuments(),
+      auditLogger,
     );
 
     const result = await start.execute({
@@ -467,7 +474,7 @@ describe("StartBatchRun", () => {
     });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
-    expect(result.error?.message).toContain("Publish the extraction flow");
+    expect(result.error?.message).toContain("Save the synthesis");
   });
 
   it("seeds one record per file under one-per-file and stores every document", async () => {
@@ -481,6 +488,7 @@ describe("StartBatchRun", () => {
       new FakeLanguageModel(),
       new FakeDocumentExtractor(),
       new FakeDraftDocuments(),
+      auditLogger,
     );
 
     const result = await start.execute({
@@ -508,6 +516,7 @@ describe("StartBatchRun", () => {
       new FakeLanguageModel(),
       new FakeDocumentExtractor(),
       new FakeDraftDocuments(),
+      auditLogger,
     );
     const files = Array.from({ length: 6 }, (_, index) =>
       uploadedFile(`f${index}.txt`, `f${index}.txt`),
@@ -536,6 +545,7 @@ describe("StartBatchRun", () => {
       model,
       new FakeDocumentExtractor(),
       new FakeDraftDocuments(),
+      auditLogger,
     );
 
     const result = await start.execute({

@@ -113,6 +113,7 @@ export const buildExtractionModule = ({
         languageModel,
         documentExtractor,
         extractionDrafts,
+        auditLogger,
       ),
       processExtractionTask,
       advanceBatchRuns: new AdvanceBatchRuns(
