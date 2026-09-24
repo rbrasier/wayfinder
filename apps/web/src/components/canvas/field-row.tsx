@@ -61,7 +61,7 @@ export function FieldRow({
         aria-label={`Field ${index + 1} type`}
         value={model.type}
         onChange={(event) => onChangeType(event.target.value as FieldRowType)}
-        className="h-10 shrink-0 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+        className="h-10 shrink-0 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
       >
         {typeOptions.map((option) => (
           <option key={option.value} value={option.value}>
@@ -76,7 +76,7 @@ export function FieldRow({
         title={configured ? "Options set" : "Field settings"}
         className={`shrink-0 rounded-md p-1.5 transition-colors ${
           configured
-            ? "text-[#2f56d3] hover:bg-[#eaeefb] hover:text-[#1f3ea8]"
+            ? "text-wf-primary hover:bg-wf-primary-light hover:text-wf-primary-hover"
             : "text-[#666055] hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
         }`}
         onClick={onOpenConfig}
@@ -159,7 +159,7 @@ export function FieldConfigModal({
                   id="field-signature"
                   value={model.signatureLabel ?? ""}
                   onChange={(event) => onChange({ signatureLabel: event.target.value })}
-                  className="h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+                  className="h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
                 >
                   <option value="">Choose a signature…</option>
                   {signatureOptions.map((label) => (
@@ -226,7 +226,7 @@ export function FieldConfigModal({
                 value={model.instruction ?? ""}
                 onChange={(event) => onChange({ instruction: event.target.value })}
                 placeholder="e.g. The background to this procurement — what prompted it, what has been tried, and why it matters now"
-                className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+                className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
               />
               <p className="text-[12px] text-[#666055]">
                 The AI uses this to explain to the person what the field needs, ask for anything
@@ -273,7 +273,7 @@ export function FieldConfigModal({
                   })
                 }
                 placeholder={"Approved\nRejected\nPending"}
-                className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+                className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
               />
               <p className="text-[12px] text-[#666055]">
                 Commas are not allowed inside a choice — put each choice on its own line.

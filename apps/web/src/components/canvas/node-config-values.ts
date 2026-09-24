@@ -6,6 +6,7 @@ import type {
   ScheduleWhen,
 } from "./scheduled-node-config";
 import { TEMPLATE_COMPLETE_SENTINEL, type OutputType } from "./output-type";
+import { DATA_INDIGO } from "@/lib/data-colours";
 
 // The modal's whole form state, and the values an unconfigured step opens on.
 // Extracted from node-config-modal.tsx so that file stays under the source-size
@@ -79,7 +80,7 @@ export interface NodeConfigValues {
 
 export const DEFAULT_VALUES: NodeConfigValues = {
   name: "",
-  colour: "#2f56d3",
+  colour: DATA_INDIGO,
   type: "conversational",
   aiInstruction: "",
   // Producing a document is what most steps are for, so the modal opens on it

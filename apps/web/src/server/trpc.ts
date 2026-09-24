@@ -9,6 +9,8 @@ import { causeToMetadata } from "./error-metadata";
 export interface TrpcContext {
   readonly container: Container;
   readonly userId: string | null;
+  // core_sessions.id of the current sign-in, never the token (ADR-060 §5).
+  readonly authSessionId: string | null;
   readonly isAdmin: boolean;
   readonly permissions: Set<PermissionKey>;
   readonly headers: Headers;
@@ -28,6 +30,7 @@ export const createTrpcContext = async (req: Request): Promise<TrpcContext> => {
   const container = getContainer();
 
   let userId: string | null = null;
+  let authSessionId: string | null = null;
   let isAdmin = false;
 
   const token = getSessionTokenFromRequest(req);
@@ -35,13 +38,14 @@ export const createTrpcContext = async (req: Request): Promise<TrpcContext> => {
     const session = await container.resolveSession(token);
     if (session) {
       userId = session.userId;
+      authSessionId = session.sessionId;
       isAdmin = session.isAdmin;
     }
   }
 
   const permissions = await resolvePermissions(container, userId, isAdmin);
 
-  return { container, userId, isAdmin, permissions, headers: req.headers };
+  return { container, userId, authSessionId, isAdmin, permissions, headers: req.headers };
 };
 
 const t = initTRPC.context<TrpcContext>().create({

@@ -48,12 +48,12 @@ export function AnnotationTypingDemo() {
           return (
             <p key={line.caption} className="flex items-baseline gap-2 text-[12px]">
               <span className="w-[7.5rem] shrink-0 text-[#5c574c]">{line.caption}</span>
-              <span className="min-w-0 font-mono text-[#2f56d3]">
+              <span className="min-w-0 font-mono text-wf-primary">
                 {typed}
                 {isTyping && (
                   <span
                     aria-hidden
-                    className="ml-px inline-block h-[1em] w-[1px] animate-pulse bg-[#2f56d3] align-text-bottom"
+                    className="ml-px inline-block h-[1em] w-[1px] animate-pulse bg-wf-primary align-text-bottom"
                   />
                 )}
               </span>

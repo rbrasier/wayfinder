@@ -46,7 +46,7 @@ export function ApprovalDetailContent({ approvalId }: { approvalId: string }) {
         <p className="mt-1 text-[13px] text-[#666055]">
           {approvalQuery.error?.message ?? "It may have been removed."}
         </p>
-        <Link href="/approvals" className="mt-3 inline-block text-[13px] font-medium text-[#2f56d3]">
+        <Link href="/approvals" className="mt-3 inline-block text-[13px] font-medium text-wf-primary">
           Back to approvals
         </Link>
       </div>
@@ -130,7 +130,7 @@ export function ApprovalDetailContent({ approvalId }: { approvalId: string }) {
             </p>
             <Link
               href={`/chats/${approval.sessionId}`}
-              className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-[#2f56d3]"
+              className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-medium text-wf-primary"
             >
               <MessageSquare className="h-4 w-4" />
               Open the session

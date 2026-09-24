@@ -13,7 +13,7 @@ export function BusyOverlay({ label }: { label: string }) {
       className="fixed inset-0 z-[200] flex items-center justify-center bg-[rgba(20,18,15,0.45)] backdrop-blur-sm"
     >
       <div className="flex items-center gap-2.5 rounded-[12px] bg-white px-5 py-3.5 shadow-[0_4px_24px_rgba(0,0,0,.13),0_20px_60px_rgba(0,0,0,.10)]">
-        <Spinner className="h-4 w-4 text-[#2f56d3]" />
+        <Spinner className="h-4 w-4 text-wf-primary" />
         <span className="text-[13px] font-medium text-[#1c1b19]">{label}</span>
       </div>
     </div>

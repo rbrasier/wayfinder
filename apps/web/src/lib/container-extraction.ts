@@ -98,6 +98,7 @@ export const buildExtractionModule = ({
         archiveExtractor,
         languageModel,
         documentExtractor,
+        auditLogger,
       ),
       processExtractionTask,
       advanceBatchRuns: new AdvanceBatchRuns(extractionRuns, flowVersions, processExtractionTask, {

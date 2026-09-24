@@ -44,9 +44,17 @@
     --bg2:           #f5f3ee;
     --bg3:           #ebe8e0;
     --surface:       #ffffff;
+    /* The primary ramp. An install's brand colour overrides all of these, plus
+       --primary / --ring / --primary-foreground, from a <style> block the root
+       layout renders (ADR-060 §2) — so components reference the tokens, never
+       the hex. validate.sh fails on a primary-ramp literal anywhere else. */
     --wf-primary:    #2f56d3;
+    --primary-hover: #1f3ea8;
     --primary-light: #eaeefb;
     --primary-dim:   #c3cef2;
+    /* Text on a primary fill. White for Wayfinder blue; a brand colour gets
+       whichever of white / near-black reads better on it. */
+    --primary-contrast: #ffffff;
     --wf-border:     #e7e3db;
     --border-strong: #dedad2;
     --border-dashed: #d8d3c7;
@@ -155,7 +163,7 @@
   background: linear-gradient(
     90deg,
     transparent,
-    color-mix(in srgb, var(--primary, #2f56d3) 28%, transparent),
+    color-mix(in srgb, var(--wf-primary) 28%, transparent),
     transparent
   );
   animation: run-progress-sweep 1.8s ease-in-out infinite;
@@ -310,10 +318,10 @@
 @keyframes wf-tour-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(47, 86, 211, 0.55);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--wf-primary) 55%, transparent);
   }
   60% {
-    box-shadow: 0 0 0 14px rgba(47, 86, 211, 0);
+    box-shadow: 0 0 0 14px color-mix(in srgb, var(--wf-primary) 0%, transparent);
   }
 }
 

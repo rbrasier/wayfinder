@@ -17,7 +17,6 @@ export interface ExtractionRunSummary {
 export interface ExtractionFlowRow {
   id: string;
   name: string;
-  status: string;
   runs: ExtractionRunSummary[];
 }
 
@@ -33,18 +32,7 @@ function FlowRow({ flow, editHref }: { flow: ExtractionFlowRow; editHref: string
   return (
     <div className="rounded-[11px] border border-[#e7e3db] bg-white">
       <div className="flex items-center justify-between px-[16px] py-[12px]">
-        <div>
-          <h3 className="text-[14px] font-semibold text-[#1c1b19]">{flow.name}</h3>
-          <span
-            className={`mt-[2px] inline-block rounded-[5px] px-[6px] py-[1px] text-[10.5px] font-semibold uppercase tracking-[0.04em] ${
-              flow.status === "published"
-                ? "bg-[#e3efe5] text-[#1f6b4d]"
-                : "bg-[#f5f3ee] text-[#666055]"
-            }`}
-          >
-            {flow.status}
-          </span>
-        </div>
+        <h3 className="text-[14px] font-semibold text-[#1c1b19]">{flow.name}</h3>
         {editHref && (
           <Button asChild variant="outline" size="sm">
             <Link href={editHref}>Edit</Link>
@@ -68,7 +56,7 @@ function FlowRow({ flow, editHref }: { flow: ExtractionFlowRow; editHref: string
         <div className="border-t border-[#f5f3ee] px-[16px] py-[8px] text-[13px]">
           <button
             type="button"
-            className="text-[#2f56d3] hover:underline"
+            className="text-wf-primary hover:underline"
             onClick={() => setShowAll((value) => !value)}
           >
             {showAll ? "Hide older runs" : `Show ${olderRuns.length} older run${olderRuns.length === 1 ? "" : "s"}`}

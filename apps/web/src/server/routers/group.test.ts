@@ -48,6 +48,7 @@ const contextFor = (
 ): TrpcContext => ({
   container: containerFor(memberships),
   userId: "dana",
+  authSessionId: null,
   isAdmin: false,
   permissions: new Set<PermissionKey>(["group:manage_own"]),
   headers: new Headers(),

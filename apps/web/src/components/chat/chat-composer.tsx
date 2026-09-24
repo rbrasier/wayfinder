@@ -144,7 +144,7 @@ export function ChatComposer({
           </div>
         )}
 
-        <div className="flex items-end gap-[10px] rounded-[14px] border border-[#dedad2] bg-white px-[12px] py-[10px] shadow-[0_6px_18px_-14px_rgba(28,27,25,0.4)] focus-within:border-[#c3cef2]">
+        <div className="flex items-end gap-[10px] rounded-[14px] border border-[#dedad2] bg-white px-[12px] py-[10px] shadow-[0_6px_18px_-14px_rgba(28,27,25,0.4)] focus-within:border-wf-primary-dim">
           <input
             ref={fileInputRef}
             type="file"
@@ -177,7 +177,7 @@ export function ChatComposer({
             aria-label="Send message"
             onClick={onSubmit}
             disabled={!value.trim() || disabled}
-            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-[#2f56d3] text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-wf-primary text-wf-primary-contrast transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ArrowUp className="h-[15px] w-[15px]" />
           </button>

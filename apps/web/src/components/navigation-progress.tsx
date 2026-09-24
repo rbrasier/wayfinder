@@ -76,7 +76,7 @@ export function NavigationProgress() {
       style={{ opacity: active ? 1 : 0, transition: "opacity 200ms ease 150ms" }}
     >
       <div
-        className="h-full bg-[#2f56d3]"
+        className="h-full bg-wf-primary"
         style={{ width: `${width}%`, transition: "width 200ms ease" }}
       />
     </div>

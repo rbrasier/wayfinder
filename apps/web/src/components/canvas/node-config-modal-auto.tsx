@@ -69,7 +69,7 @@ export interface NodeConfigModalAutoProps {
 }
 
 const EXECUTOR_SELECT_CLASS =
-  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none";
+  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none";
 
 export function NodeConfigModalAuto({
   values,
@@ -194,7 +194,7 @@ export function NodeConfigModalAuto({
                     {schema && !schema.hasExecutions ? " (it hasn't run yet)" : ""}.{" "}
                     <button
                       type="button"
-                      className="font-medium text-[#2f56d3] underline"
+                      className="font-medium text-wf-primary underline"
                       onClick={() => openInfo("inputs")}
                     >
                       More info
@@ -229,7 +229,7 @@ export function NodeConfigModalAuto({
                 ))}
                 <button
                   type="button"
-                  className="text-[13px] font-medium text-[#2f56d3] hover:underline"
+                  className="text-[13px] font-medium text-wf-primary hover:underline"
                   onClick={addCustomField}
                 >
                   + Add field
@@ -263,7 +263,7 @@ export function NodeConfigModalAuto({
                 {schema && !schema.hasExecutions ? " (it hasn't run yet)" : ""}.{" "}
                 <button
                   type="button"
-                  className="font-medium text-[#2f56d3] underline"
+                  className="font-medium text-wf-primary underline"
                   onClick={() => openInfo("outputs")}
                 >
                   More info

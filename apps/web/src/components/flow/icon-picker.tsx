@@ -166,7 +166,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
           setQuery("");
           setOpen((prev) => !prev);
         }}
-        className="text-[12px] font-medium text-[#2f56d3] transition-colors hover:text-[#1f3ea8]"
+        className="text-[12px] font-medium text-wf-primary transition-colors hover:text-wf-primary-hover"
       >
         More…
       </button>
@@ -189,7 +189,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search icons…"
-              className="h-8 w-full rounded-[8px] border border-[#e7e3db] bg-[#faf9f7] pl-7 pr-2 text-[12px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+              className="h-8 w-full rounded-[8px] border border-[#e7e3db] bg-[#faf9f7] pl-7 pr-2 text-[12px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
             />
           </div>
           {results.length === 0 ? (
@@ -206,7 +206,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
                     setOpen(false);
                   }}
                   className={`flex h-8 w-8 items-center justify-center rounded-[8px] text-lg transition-colors ${
-                    value === entry.icon ? "bg-[#eaeefb] ring-1 ring-[#2f56d3]" : "hover:bg-[#f5f3ee]"
+                    value === entry.icon ? "bg-wf-primary-light ring-1 ring-wf-primary" : "hover:bg-[#f5f3ee]"
                   }`}
                 >
                   {entry.icon}

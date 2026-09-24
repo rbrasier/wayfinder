@@ -331,10 +331,6 @@ export function EditorCards({
           <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">Edit synthesis</h1>
         </div>
         <div className="flex items-center gap-2">
-          {/* Publish is intentionally disabled until its behaviour is defined. */}
-          <Button type="button" variant="outline" size="sm" disabled title="Publishing is not available yet">
-            Publish
-          </Button>
           <Button type="button" size="sm" onClick={handleSave} disabled={saveMutation.isPending}>
             {saveMutation.isPending ? "Saving…" : "Save"}
           </Button>
@@ -468,7 +464,7 @@ export function EditorCards({
                       <ExtractionFieldEditor fields={manualFields} onChange={setManualFields} />
                     ) : (
                       <div className="space-y-3">
-                        <p className="rounded-[9px] border border-[#c3cef2] bg-[#eaeefb] px-3 py-2 text-[12px] text-[#2f56d3]">
+                        <p className="rounded-[9px] border border-wf-primary-dim bg-wf-primary-light px-3 py-2 text-[12px] text-wf-primary">
                           Spreadsheets should include a header row naming each field. Word templates use{" "}
                           <code className="font-mono">{"{{ tags }}"}</code>. Those become the fields to extract.
                         </p>
@@ -515,7 +511,7 @@ export function EditorCards({
                         ) : (
                           <button
                             type="button"
-                            className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-4 text-center text-[13px] text-[#666055] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] hover:text-[#2f56d3] disabled:opacity-50"
+                            className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-4 text-center text-[13px] text-[#666055] transition-colors hover:border-wf-primary-dim hover:bg-wf-primary-light hover:text-wf-primary disabled:opacity-50"
                             onClick={() => templateInputRef.current?.click()}
                             disabled={parseTemplateMutation.isPending}
                           >
@@ -588,7 +584,7 @@ export function EditorCards({
                       )}
                       <button
                         type="button"
-                        className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-3 text-center text-[13px] text-[#666055] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] hover:text-[#2f56d3] disabled:opacity-50"
+                        className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-3 text-center text-[13px] text-[#666055] transition-colors hover:border-wf-primary-dim hover:bg-wf-primary-light hover:text-wf-primary disabled:opacity-50"
                         onClick={() => contextInputRef.current?.click()}
                         disabled={parseContextDocMutation.isPending}
                       >

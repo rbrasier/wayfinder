@@ -66,7 +66,7 @@ function ApprovalRow({
           <p className="mt-[3px] truncate text-[12.5px] text-[#666055]">
             {approval.originatorName ? <>From {approval.originatorName} · </> : null}
             Raised {new Date(approval.approval.createdAt).toLocaleString()} ·{" "}
-            <Link href={`/chats/${approval.sessionId}`} className="font-medium text-[#2f56d3]">
+            <Link href={`/chats/${approval.sessionId}`} className="font-medium text-wf-primary">
               Open session
             </Link>
           </p>
@@ -157,7 +157,7 @@ export function ApprovalsContent() {
             aria-current={tab === key ? "page" : undefined}
             className={`px-3 py-[10px] text-[13px] font-medium transition-colors ${
               tab === key
-                ? "border-b-2 border-[#2f56d3] text-[#2f56d3]"
+                ? "border-b-2 border-wf-primary text-wf-primary"
                 : "text-[#666055] hover:text-[#5c574c]"
             }`}
           >

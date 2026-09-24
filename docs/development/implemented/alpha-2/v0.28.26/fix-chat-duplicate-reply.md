@@ -82,5 +82,5 @@ leftovers before the next message goes out.
   `apps/web/src/app/(user)/chats/[sessionId]/_content.tsx`.
 - **Database**: none.
 - **Tests**: regression unit test first; no e2e.
-- **Version**: 0.28.23 → 0.28.24; branch `bugfix/chat-duplicate-reply/claude-rbrasier` → PR into `release/alpha-2`.
+- **Version**: 0.28.25 → 0.28.26; branch `bugfix/chat-duplicate-reply/claude-rbrasier` → PR into `release/alpha-2`.
 - **Out of scope**: the server's retry dedupe (intended), the triage comment's id-tail proposal.

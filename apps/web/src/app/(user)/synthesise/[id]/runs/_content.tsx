@@ -47,12 +47,12 @@ export function RunsContent({ flowId }: { flowId: string }) {
     <div className="mx-auto max-w-[1100px] px-[20px] py-[28px]">
       <div className="mb-[20px] flex items-center justify-between">
         <div>
-          <Link href="/synthesise" className="text-[12px] text-[#2f56d3] hover:underline">
+          <Link href="/synthesise" className="text-[12px] text-wf-primary hover:underline">
             ← Back to Synthesise Information
           </Link>
           <h1 className="mt-[4px] text-[20px] font-bold text-[#1c1b19]">Runs</h1>
         </div>
-        <Link href={`/synthesise/${flowId}/edit`} className="text-[12px] text-[#2f56d3] hover:underline">
+        <Link href={`/synthesise/${flowId}/edit`} className="text-[12px] text-wf-primary hover:underline">
           Edit synthesis
         </Link>
       </div>
@@ -73,7 +73,7 @@ export function RunsContent({ flowId }: { flowId: string }) {
           {startMutation.isPending ? "Starting…" : "Start run"}
         </Button>
         <span className="text-[12px] text-[#736d5f]">
-          Requires a published synthesis. Preview turns on by default above 5 files.
+          Preview turns on by default above 5 files.
         </span>
       </div>
 

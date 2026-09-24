@@ -83,7 +83,7 @@ export function SummaryPreview({ markdown, downloadHref }: SummaryPreviewProps) 
             onClick={() => setExpanded((open) => !open)}
             aria-expanded={expanded}
             data-testid="summary-toggle"
-            className="text-[12px] font-medium text-[#2f56d3] hover:underline"
+            className="text-[12px] font-medium text-wf-primary hover:underline"
           >
             {expanded ? "Show less" : "Show more"}
           </button>

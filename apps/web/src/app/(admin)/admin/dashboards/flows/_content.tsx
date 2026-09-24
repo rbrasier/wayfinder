@@ -12,12 +12,13 @@ import {
 } from "@/components/ui/table";
 import { trpc } from "@/trpc/client";
 import { FlowSelector } from "@/components/admin/flow-selector";
+import { DATA_INDIGO } from "@/lib/data-colours";
 
 // A step that loses this many sessions is worth flagging rather than leaving the
 // reader to spot it in the table.
 const PROBLEM_THRESHOLD = 10;
 
-const CONTINUED = "#2f56d3";
+const CONTINUED = DATA_INDIGO;
 const ABANDONED = "#a8324c";
 const STALLED = "#b8651a";
 

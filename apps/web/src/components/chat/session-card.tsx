@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  active: "bg-[#eaeefb] text-[#2f56d3] border border-[#c3cef2]",
+  active: "bg-wf-primary-light text-wf-primary border border-wf-primary-dim",
   complete: "bg-[#e3efe5] text-[#1f6b4d] border border-[#c0e8d5]",
   abandoned: "bg-[#f5f3ee] text-[#666055] border border-[#e7e3db]",
 };
@@ -70,10 +70,10 @@ export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }:
 
   return (
     <Link href={`/chats/${session.id}`} className="block w-full">
-      <div className="flex cursor-pointer items-center gap-[14px] rounded-[14px] border-[1.5px] border-[#e7e3db] bg-white p-[16px_18px] transition-[border-color,box-shadow] hover:border-[#2f56d3] hover:shadow-[0_2px_8px_rgba(0,0,0,.09),0_12px_36px_rgba(0,0,0,.07)]">
+      <div className="flex cursor-pointer items-center gap-[14px] rounded-[14px] border-[1.5px] border-[#e7e3db] bg-white p-[16px_18px] transition-[border-color,box-shadow] hover:border-wf-primary hover:shadow-[0_2px_8px_rgba(0,0,0,.09),0_12px_36px_rgba(0,0,0,.07)]">
 
         {/* Icon */}
-        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#eaeefb] text-[18px]">
+        <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-wf-primary-light text-[18px]">
           {flow?.icon ?? "💬"}
         </div>
 
@@ -84,7 +84,7 @@ export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }:
           </p>
           <p className="mt-[3px] truncate text-[12.5px] leading-[1.4] text-[#666055]">
             {flow && (
-              <span className="font-medium text-[#2f56d3]">{flow.name}</span>
+              <span className="font-medium text-wf-primary">{flow.name}</span>
             )}
             {flow && lastMessage && <span className="text-[#726f6b]"> · </span>}
             {lastMessage && <span>{lastMessage}</span>}
@@ -117,7 +117,7 @@ export function SessionCard({ session, flow, userBadge, stepInfo, lastMessage }:
                     className="h-full rounded-full transition-all"
                     style={{
                       width: `${progress}%`,
-                      backgroundColor: progress === 100 ? "#1f6b4d" : progress >= 60 ? "#2f56d3" : "#d97706",
+                      backgroundColor: progress === 100 ? "#1f6b4d" : progress >= 60 ? "var(--wf-primary)" : "#d97706",
                     }}
                   />
                 )}

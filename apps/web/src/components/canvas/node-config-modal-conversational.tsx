@@ -121,14 +121,14 @@ export function NodeConfigModalConversational({
               return (
                 <span
                   key={id}
-                  className="inline-flex items-center gap-1 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-2 py-0.5 text-[11px] text-[#2f56d3]"
+                  className="inline-flex items-center gap-1 rounded-full border border-wf-primary-dim bg-wf-primary-light px-2 py-0.5 text-[11px] text-wf-primary"
                 >
                   <Sparkles size={10} />
                   {skill?.name ?? "Skill"}
                   <button
                     type="button"
                     aria-label={`Remove ${skill?.name ?? "skill"}`}
-                    className="text-[#2f56d3] hover:text-[#25439c]"
+                    className="text-wf-primary hover:text-[#25439c]"
                     onClick={() => removeSkill(id)}
                   >
                     <X size={11} />
@@ -177,7 +177,7 @@ export function NodeConfigModalConversational({
               key={option.value}
               className={`flex flex-1 cursor-pointer items-center justify-center rounded-[9px] border px-3 py-2 text-center text-[13px] transition-colors ${
                 values.outputType === option.value
-                  ? "border-[#2f56d3] bg-[#eaeefb] font-medium text-[#2f56d3]"
+                  ? "border-wf-primary bg-wf-primary-light font-medium text-wf-primary"
                   : "border-[#e7e3db] text-[#5c574c] hover:bg-[#f5f3ee]"
               }`}
             >
@@ -264,7 +264,7 @@ export function NodeConfigModalConversational({
                 {onEditTemplateFields && (
                   <button
                     type="button"
-                    className="flex items-center gap-1 text-[12px] text-[#2f56d3] transition-colors hover:text-[#1f3ea8]"
+                    className="flex items-center gap-1 text-[12px] text-wf-primary transition-colors hover:text-wf-primary-hover"
                     onClick={onEditTemplateFields}
                     disabled={isUploading}
                   >
@@ -274,7 +274,7 @@ export function NodeConfigModalConversational({
                 {templateDownloadUrl && (
                   <a
                     href={templateDownloadUrl}
-                    className="flex items-center gap-1 text-[12px] text-[#666055] transition-colors hover:text-[#2f56d3]"
+                    className="flex items-center gap-1 text-[12px] text-[#666055] transition-colors hover:text-wf-primary"
                   >
                     <Download size={13} /> Keep your master copy in sync
                   </a>
@@ -284,7 +284,7 @@ export function NodeConfigModalConversational({
           ) : (
             <button
               type="button"
-              className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-4 text-center text-[13px] text-[#666055] transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] hover:text-[#2f56d3] disabled:opacity-50"
+              className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-4 text-center text-[13px] text-[#666055] transition-colors hover:border-wf-primary-dim hover:bg-wf-primary-light hover:text-wf-primary disabled:opacity-50"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
             >
@@ -365,7 +365,7 @@ export function NodeConfigModalConversationalAdvanced({
         <Label htmlFor="done-when-mode">Done when…</Label>
         <select
           id="done-when-mode"
-          className="flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+          className="flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
           value={doneWhenMode}
           onChange={(e) => handleDoneWhenModeChange(e.target.value)}
         >
@@ -386,7 +386,7 @@ export function NodeConfigModalConversationalAdvanced({
           />
         )}
         {doneWhenMode === "template" && (
-          <p className="rounded-[9px] border border-[#c3cef2] bg-[#eaeefb] px-3 py-2 text-[12px] text-[#2f56d3]">
+          <p className="rounded-[9px] border border-wf-primary-dim bg-wf-primary-light px-3 py-2 text-[12px] text-wf-primary">
             This step is complete when all required fields have been gathered from the user.
           </p>
         )}

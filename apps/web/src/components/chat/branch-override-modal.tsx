@@ -53,7 +53,7 @@ export function BranchOverrideModal({
                 onClick={() => setSelected(branch.nodeId)}
                 className={`rounded-[10px] border-[1.5px] px-4 py-3 text-left text-[13px] transition-colors ${
                   selected === branch.nodeId
-                    ? "border-[#2f56d3] bg-[#eaeefb] text-[#1c1b19]"
+                    ? "border-wf-primary bg-wf-primary-light text-[#1c1b19]"
                     : "border-[#e7e3db] text-[#5c574c] hover:bg-[#f5f3ee]"
                 }`}
               >

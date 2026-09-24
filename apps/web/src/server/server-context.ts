@@ -8,17 +8,19 @@ export const createServerTrpcContext = async (): Promise<TrpcContext> => {
   const container = getContainer();
 
   let userId: string | null = null;
+  let authSessionId: string | null = null;
   let isAdmin = false;
 
   if (token) {
     const session = await container.resolveSession(token);
     if (session) {
       userId = session.userId;
+      authSessionId = session.sessionId;
       isAdmin = session.isAdmin;
     }
   }
 
   const permissions = await resolvePermissions(container, userId, isAdmin);
 
-  return { container, userId, isAdmin, permissions, headers: new Headers() };
+  return { container, userId, authSessionId, isAdmin, permissions, headers: new Headers() };
 };

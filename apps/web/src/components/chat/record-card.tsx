@@ -40,7 +40,7 @@ export function RecordCard({ messageId, canEdit = false, onEdited }: RecordCardP
         className="w-full max-w-sm rounded-[10px] border border-[#e7e3db] bg-white p-[12px_14px] shadow-[0_1px_3px_rgba(0,0,0,.06),0_4px_14px_rgba(0,0,0,.05)]"
       >
         <div className="flex items-start gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#eaeefb] text-[#2f56d3]">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-wf-primary-light text-wf-primary">
             <ClipboardList className="h-[18px] w-[18px] stroke-[1.8]" />
           </div>
           <div className="min-w-0 flex-1">

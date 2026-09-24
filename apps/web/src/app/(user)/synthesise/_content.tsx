@@ -39,7 +39,6 @@ export function SynthesiseContent() {
   const rows: ExtractionFlowRow[] = (flowsQuery.data ?? []).map((flow) => ({
     id: flow.id,
     name: flow.name,
-    status: flow.status,
     runs: [],
   }));
 

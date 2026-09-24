@@ -3,6 +3,7 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { cn } from "@/lib/utils";
 import { NodeTypeBadge } from "./node-styles";
+import { DATA_INDIGO } from "@/lib/data-colours";
 
 export interface ConversationalNodeData {
   name: string;
@@ -12,7 +13,7 @@ export interface ConversationalNodeData {
   [key: string]: unknown;
 }
 
-const DEFAULT_COLOUR = "#2f56d3";
+const DEFAULT_COLOUR = DATA_INDIGO;
 
 export function ConversationalNode({ data, selected }: NodeProps) {
   const nodeData = data as ConversationalNodeData;

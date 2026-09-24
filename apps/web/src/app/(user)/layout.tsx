@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
+import { LoginNoticeGate } from "@/components/login-notice/login-notice-gate";
 import { OrganisationSignInGate } from "@/components/organisation/organisation-sign-in-gate";
 import { SignInPromptsProvider } from "@/components/layout/sign-in-prompts";
 import { SidebarProvider } from "@/components/sidebar-context";
@@ -27,6 +28,8 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
   const { trpc, HydrateClient } = await createServerHelpers();
 
   void trpc.user.me.prefetch();
+  void trpc.settings.getBranding.prefetch();
+  void trpc.settings.getLoginNoticeStatus.prefetch();
   void trpc.session.list.prefetch();
   void trpc.session.listPublishedFlows.prefetch();
   void trpc.usage.myUsage.prefetch();
@@ -41,6 +44,7 @@ export default async function UserLayout({ children }: { children: ReactNode }) 
             {children}
           </div>
           <SignInPromptsProvider>
+            <LoginNoticeGate />
             <OrganisationSignInGate />
             <WelcomeTourGate />
           </SignInPromptsProvider>

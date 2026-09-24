@@ -3,9 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { TOKENS } from "@/lib/design-tokens";
 
-// The tab icon is the header brand mark. Both are hand-written in two places —
-// an SVG file and a Tailwind class on sidebar.tsx — so these assertions are what
-// stops one from drifting away from the other.
+// The tab icon is the unbranded header brand mark. The icon is an SVG file and
+// the mark's colour is the --wf-primary default in globals.css (an install's
+// brand colour overrides the token, not the icon — ADR-060), so these assertions
+// are what stops the two defaults drifting apart.
 const readAppFile = (relativePath: string): Buffer =>
   readFileSync(resolve(__dirname, relativePath));
 
@@ -33,12 +34,14 @@ describe("app icons", () => {
     expect(height).toBe(180);
   });
 
-  it("the header brand mark uses the same primary as the icon", () => {
-    const sidebar = readFileSync(
-      resolve(__dirname, "../components/sidebar.tsx"),
+  it("the unbranded header brand mark uses the same primary as the icon", () => {
+    const brandMark = readFileSync(
+      resolve(__dirname, "../components/branding/brand-mark.tsx"),
       "utf-8",
     );
+    const globals = readFileSync(resolve(__dirname, "../styles/globals.css"), "utf-8");
 
-    expect(sidebar).toContain(`bg-[${TOKENS.primary}]`);
+    expect(brandMark).toContain("bg-wf-primary ");
+    expect(globals).toMatch(new RegExp(`--wf-primary:\\s+${TOKENS.primary};`));
   });
 });

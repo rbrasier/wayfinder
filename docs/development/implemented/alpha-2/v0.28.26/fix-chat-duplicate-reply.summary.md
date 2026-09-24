@@ -1,6 +1,6 @@
 # Implementation summary — the latest reply no longer shows twice in a chat
 
-- **Version**: 0.28.23 → **0.28.24** (PATCH — no schema change, no migration)
+- **Version**: 0.28.25 → **0.28.26** (PATCH — no schema change, no migration)
 - **Base branch**: `release/alpha-2`
 - **Bug-fix doc**: [`fix-chat-duplicate-reply.md`](./fix-chat-duplicate-reply.md) (this folder)
 - **Source issue**: [#308](https://github.com/rbrasier/wayfinder/issues/308)
@@ -42,7 +42,7 @@ None. Client-side list reconciliation falls in none of the six groups in
 
 ## Deviations from the approved summary
 
-None.
+Version is 0.28.26, not the approved 0.28.24 — release/alpha-2 moved to 0.28.25 while this was in review.
 
 ## Known limitations
 

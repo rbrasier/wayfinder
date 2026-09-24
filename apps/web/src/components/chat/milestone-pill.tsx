@@ -46,7 +46,7 @@ export function MilestonePill({
   if (documentState === "generating") {
     return (
       <div className="my-3 flex justify-center">
-        <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-3 py-1 text-[11px] font-semibold text-[#2f56d3]">
+        <div className="inline-flex items-center gap-1.5 rounded-full border border-wf-primary-dim bg-wf-primary-light px-3 py-1 text-[11px] font-semibold text-wf-primary">
           <Spinner />
           <span>Generating document — {nodeName}</span>
         </div>
@@ -95,7 +95,7 @@ export function CrossCheckingBadge({ documents = [] }: { documents?: string[] })
 
   return (
     <div className="my-3 flex justify-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-3 py-1 text-[11px] font-semibold text-[#2f56d3]">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-wf-primary-dim bg-wf-primary-light px-3 py-1 text-[11px] font-semibold text-wf-primary">
         <Spinner />
         <span>{label}</span>
       </div>
@@ -110,7 +110,7 @@ export function CrossCheckingBadge({ documents = [] }: { documents?: string[] })
 export function GeneratingDocumentBadge() {
   return (
     <div className="my-3 flex justify-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-3 py-1 text-[11px] font-semibold text-[#2f56d3]">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-wf-primary-dim bg-wf-primary-light px-3 py-1 text-[11px] font-semibold text-wf-primary">
         <Spinner />
         <span>Generating document…</span>
       </div>
@@ -125,7 +125,7 @@ export function GeneratingDocumentBadge() {
 export function AdvancingBadge() {
   return (
     <div className="my-3 flex justify-center">
-      <div className="inline-flex items-center gap-1.5 rounded-full border border-[#c3cef2] bg-[#eaeefb] px-3 py-1 text-[11px] font-semibold text-[#2f56d3]">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-wf-primary-dim bg-wf-primary-light px-3 py-1 text-[11px] font-semibold text-wf-primary">
         <Spinner />
         <span>Advancing…</span>
       </div>

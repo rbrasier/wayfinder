@@ -5,7 +5,7 @@ import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/
 import { Input } from "@/components/ui/input";
 
 const SELECT_CLASS =
-  "flex h-9 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-1.5 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none";
+  "flex h-9 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-1.5 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none";
 
 export const encodeSource = (source: FieldValueSource): string => {
   if (source.kind === "ai") return "ai";

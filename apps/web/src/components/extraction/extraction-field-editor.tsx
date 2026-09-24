@@ -94,7 +94,7 @@ export function ExtractionFieldEditor({ fields, onChange, derived = false }: Ext
               value={field.type}
               disabled={field.locked}
               onChange={(event) => changeType(index, event.target.value as ExtractionFieldType)}
-              className="h-10 shrink-0 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none disabled:cursor-default disabled:text-[#736d5f]"
+              className="h-10 shrink-0 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none disabled:cursor-default disabled:text-[#736d5f]"
             >
               {EXTRACTION_TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -127,7 +127,7 @@ export function ExtractionFieldEditor({ fields, onChange, derived = false }: Ext
       {!derived && (
         <button
           type="button"
-          className="mt-1 flex items-center gap-1 text-[12px] text-[#2f56d3] transition-colors hover:text-[#1f3ea8]"
+          className="mt-1 flex items-center gap-1 text-[12px] text-wf-primary transition-colors hover:text-wf-primary-hover"
           onClick={addRow}
         >
           <Plus size={13} /> Add field
@@ -264,7 +264,7 @@ function FieldSettingsModal({
                   onChange({ options: event.target.value.split("\n").map((line) => line.replace(/,/g, " ")) })
                 }
                 placeholder={"Approved\nRejected\nPending"}
-                className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+                className="w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
               />
               <p className="text-[12px] text-[#666055]">
                 Commas are not allowed inside a choice — put each choice on its own line.

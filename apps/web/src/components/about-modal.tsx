@@ -20,7 +20,7 @@ function AboutLinkButton({ link }: { link: AboutLink }) {
     <a
       href={expandAboutLinkUrl(link.url, APP_VERSION)}
       {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-      className="flex items-center gap-2 rounded-[8px] border border-[#e7e3db] bg-white px-3 py-2 text-[13px] font-medium text-[#1c1b19] transition-colors hover:border-[#2f56d3] hover:bg-[#eaeefb] hover:text-[#2f56d3]"
+      className="flex items-center gap-2 rounded-[8px] border border-[#e7e3db] bg-white px-3 py-2 text-[13px] font-medium text-[#1c1b19] transition-colors hover:border-wf-primary hover:bg-wf-primary-light hover:text-wf-primary"
     >
       <Icon className="h-[14px] w-[14px] shrink-0 text-[#666055]" />
       {link.label}
@@ -40,7 +40,7 @@ export function AboutModal({ open, onClose }: { open: boolean; onClose: () => vo
         </DialogHeader>
         <DialogBody>
           <div className="flex items-center gap-3">
-            <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-[#2f56d3] text-[18px] font-bold text-white">
+            <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-[11px] bg-wf-primary text-[18px] font-bold text-wf-primary-contrast">
               W
             </div>
             <div>

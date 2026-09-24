@@ -99,7 +99,7 @@ export function FlowExplainerCarousel({ open, hasSteps, onClose, onFinish }: Flo
                   onClick={() => setIndex(dotIndex)}
                   className={cn(
                     "h-2 rounded-full transition-all duration-300",
-                    dotIndex === index ? "w-5 bg-[#2f56d3]" : "w-2 bg-[#ddd8d0] hover:bg-[#b9b4ab]",
+                    dotIndex === index ? "w-5 bg-wf-primary" : "w-2 bg-[#ddd8d0] hover:bg-[#b9b4ab]",
                   )}
                 />
               ))}

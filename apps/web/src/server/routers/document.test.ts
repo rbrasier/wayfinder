@@ -89,6 +89,7 @@ const denyAccess = (container: Container): void => {
 const contextWith = (container: Container): TrpcContext => ({
   container,
   userId: "user-1",
+  authSessionId: null,
   isAdmin: false,
   permissions: new Set(),
   headers: new Headers(),

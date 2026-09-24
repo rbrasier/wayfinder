@@ -335,7 +335,7 @@ function PendingRow({ document, columnCount }: { document: ResultDocument; colum
           <span className="line-clamp-3 min-w-0 break-words" title={document.treePath}>
             {document.filename}
           </span>
-          <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#eaeefb] px-[5px] py-[1px] text-[10px] font-semibold text-[#2f56d3]">
+          <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-wf-primary-light px-[5px] py-[1px] text-[10px] font-semibold text-wf-primary">
             {extracting ? "Processing" : "Queued"}
           </span>
         </div>
@@ -501,7 +501,7 @@ function RecordDetail({
                     href={options.documentHref(document.id)}
                     download
                     aria-label={`Download ${document.filename}`}
-                    className="text-[#736d5f] hover:text-[#2f56d3]"
+                    className="text-[#736d5f] hover:text-wf-primary"
                   >
                     <Download className="h-[12px] w-[12px]" />
                   </a>

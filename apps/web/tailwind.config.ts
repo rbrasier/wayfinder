@@ -62,6 +62,8 @@ const config: Config = {
           rule: "var(--rule)",
           dot: "var(--dot)",
           primary: "var(--wf-primary)",
+          "primary-hover": "var(--primary-hover)",
+          "primary-contrast": "var(--primary-contrast)",
           "primary-light": "var(--primary-light)",
           "primary-dim": "var(--primary-dim)",
           success: "var(--success)",
