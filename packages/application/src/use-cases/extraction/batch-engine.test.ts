@@ -16,6 +16,7 @@ import {
   type FlowVersion,
   type GenerateObjectInput,
   type IArchiveExtractor,
+  type ExtractionDraftDocument,
   type IDocumentExtractor,
   type IExtractionRunRepository,
   type IFlowVersionRepository,
@@ -326,6 +327,25 @@ class FakeObjectStorage implements IObjectStorage {
   }
 }
 
+// StartBatchRun needs a draft-document repository for startAnalysis. The batch
+// paths exercised here never read it, but it is a required dependency and an
+// undefined one would only surface as a crash the day someone adds a case.
+class FakeDraftDocuments {
+  constructor(private readonly documents: ExtractionDraftDocument[] = []) {}
+  async listForFlow(): Promise<Result<ExtractionDraftDocument[]>> {
+    return ok(this.documents);
+  }
+  async add(): Promise<Result<ExtractionDraftDocument[]>> {
+    return ok([]);
+  }
+  async getById(): Promise<Result<ExtractionDraftDocument | null>> {
+    return ok(null);
+  }
+  async remove(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+}
+
 class FakeDocumentExtractor implements IDocumentExtractor {
   constructor(private readonly text: string = "extracted body text") {}
   async extract(): Promise<Result<string>> {
@@ -436,6 +456,7 @@ describe("StartBatchRun", () => {
       new FakeArchiveExtractor(),
       new FakeLanguageModel(),
       new FakeDocumentExtractor(),
+      new FakeDraftDocuments(),
     );
 
     const result = await start.execute({
@@ -459,6 +480,7 @@ describe("StartBatchRun", () => {
       new FakeArchiveExtractor(),
       new FakeLanguageModel(),
       new FakeDocumentExtractor(),
+      new FakeDraftDocuments(),
     );
 
     const result = await start.execute({
@@ -485,6 +507,7 @@ describe("StartBatchRun", () => {
       new FakeArchiveExtractor(),
       new FakeLanguageModel(),
       new FakeDocumentExtractor(),
+      new FakeDraftDocuments(),
     );
     const files = Array.from({ length: 6 }, (_, index) =>
       uploadedFile(`f${index}.txt`, `f${index}.txt`),
@@ -512,6 +535,7 @@ describe("StartBatchRun", () => {
       archive,
       model,
       new FakeDocumentExtractor(),
+      new FakeDraftDocuments(),
     );
 
     const result = await start.execute({

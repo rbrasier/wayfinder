@@ -13,6 +13,7 @@ import {
   ListExtractionFlowsForUser,
   MarkRunComplete,
   ProcessExtractionTask,
+  ProposeExtractionFields,
   RemoveDraftDocument,
   RetryFailed,
   RunSampleExtraction,
@@ -21,6 +22,7 @@ import {
   UploadDraftDocuments,
 } from "@wayfinder/application";
 import {
+  AiFieldProposer,
   CsvWriter,
   DrizzleExtractionDraftRepository,
   DrizzleExtractionRunRepository,
@@ -73,6 +75,16 @@ export const buildExtractionModule = ({
   const archiveExtractor = new ZipIngestor();
   const spreadsheetWriter = new XlsxWriter();
   const csvWriter = new CsvWriter();
+  const proposeExtractionFields = new ProposeExtractionFields(
+    extractionRuns,
+    extractionDrafts,
+    flowVersions,
+    new SaveExtractionSchema(flows, flowVersions),
+    objectStorage,
+    documentExtractor,
+    new AiFieldProposer(languageModel),
+  );
+
   const processExtractionTask = new ProcessExtractionTask(
     extractionRuns,
     objectStorage,
@@ -100,11 +112,16 @@ export const buildExtractionModule = ({
         archiveExtractor,
         languageModel,
         documentExtractor,
+        extractionDrafts,
       ),
       processExtractionTask,
-      advanceBatchRuns: new AdvanceBatchRuns(extractionRuns, flowVersions, processExtractionTask, {
-        resolveCostCeilingUsd,
-      }),
+      advanceBatchRuns: new AdvanceBatchRuns(
+        extractionRuns,
+        flowVersions,
+        processExtractionTask,
+        { resolveCostCeilingUsd },
+        proposeExtractionFields,
+      ),
       cancelRun: new CancelRun(extractionRuns),
       retryFailed: new RetryFailed(extractionRuns),
       continueRun: new ContinueRun(extractionRuns),

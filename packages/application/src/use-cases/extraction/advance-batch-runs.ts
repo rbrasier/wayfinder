@@ -3,6 +3,7 @@ import {
   err,
   hasReachedPreviewBoundary,
   isExtractionSnapshot,
+  isAnalysisRun,
   isRunActive,
   isTerminalRun,
   ok,
@@ -16,6 +17,7 @@ import {
   type Result,
 } from "@wayfinder/domain";
 import { ProcessExtractionTask } from "./process-extraction-task";
+import type { ProposeExtractionFields } from "./propose-extraction-fields";
 
 export interface AdvanceBatchRunsOptions {
   // How many document rows one tick claims per run (phase §5: bounded concurrency
@@ -28,6 +30,10 @@ export interface AdvanceBatchRunsOptions {
   // change is picked up without recompiling the static option. Takes precedence
   // over costCeilingUsd when provided.
   resolveCostCeilingUsd?: () => Promise<number>;
+  // How long an analyse run's claim is honoured before another worker may take
+  // it. Bounds how long a run stays stuck when the worker dies mid-analysis
+  // (ADR-060 §4).
+  analysisClaimStaleAfterMs?: number;
 }
 
 export interface AdvanceBatchRunsResult {
@@ -35,6 +41,7 @@ export interface AdvanceBatchRunsResult {
 }
 
 const DEFAULT_CLAIM_BATCH_SIZE = 10;
+const DEFAULT_ANALYSIS_CLAIM_STALE_AFTER_MS = 5 * 60_000;
 const DEFAULT_COST_CEILING_USD = 0;
 
 // One tick of the batch engine (ADR-033 §6, phase §5). For every claimable run
@@ -44,6 +51,7 @@ const DEFAULT_COST_CEILING_USD = 0;
 // tick moves on to the next so one stuck run never stalls the engine.
 export class AdvanceBatchRuns {
   private readonly claimBatchSize: number;
+  private readonly analysisClaimStaleAfterMs: number;
   private readonly staticCostCeilingUsd: number;
   private readonly resolveCostCeilingUsd?: () => Promise<number>;
 
@@ -52,8 +60,13 @@ export class AdvanceBatchRuns {
     private readonly flowVersions: IFlowVersionRepository,
     private readonly processTask: ProcessExtractionTask,
     options: AdvanceBatchRunsOptions = {},
+    // Absent where analysis is not wired (the API container wires it; a caller
+    // that does not simply never advances an analyse run).
+    private readonly proposeFields?: ProposeExtractionFields,
   ) {
     this.claimBatchSize = options.claimBatchSize ?? DEFAULT_CLAIM_BATCH_SIZE;
+    this.analysisClaimStaleAfterMs =
+      options.analysisClaimStaleAfterMs ?? DEFAULT_ANALYSIS_CLAIM_STALE_AFTER_MS;
     this.staticCostCeilingUsd = options.costCeilingUsd ?? DEFAULT_COST_CEILING_USD;
     this.resolveCostCeilingUsd = options.resolveCostCeilingUsd;
   }
@@ -93,6 +106,11 @@ export class AdvanceBatchRuns {
       return this.runs.updateRunStatus(runId, "paused_preview");
     }
 
+    // An analyse run has no document rows, so the document-claim path below would
+    // settle it complete having done nothing. It claims the run itself instead
+    // (ADR-060 §4) — the ceiling check above already applies.
+    if (isAnalysisRun(run)) return this.advanceAnalysis(run);
+
     const schema = await this.loadSchema(run.flowVersionId);
     if (schema.error) return schema;
 
@@ -101,6 +119,26 @@ export class AdvanceBatchRuns {
     if (claimed.data.length === 0) return this.settleIfDrained(runId);
 
     return this.processBatch(runId, schema.data, claimed.data, ceiling);
+  }
+
+  // Runs one analysis end to end under a single claim: the reads and the one
+  // proposal call over them are indivisible, so there is nothing smaller to
+  // claim. A null claim means another worker holds it — not an error, just
+  // nothing to do this tick. A failure releases the claim rather than leaving the
+  // run stuck until it goes stale.
+  private async advanceAnalysis(run: ExtractionRun): Promise<Result<void>> {
+    if (!this.proposeFields) return ok(undefined);
+
+    const claimed = await this.runs.claimAnalysisRun(run.id, this.analysisClaimStaleAfterMs);
+    if (claimed.error) return claimed;
+    if (!claimed.data) return ok(undefined);
+
+    const proposed = await this.proposeFields.execute(claimed.data);
+    if (proposed.error) {
+      await this.runs.releaseAnalysisClaim(run.id);
+      return proposed;
+    }
+    return ok(undefined);
   }
 
   // Bound the claim so a run with a preview breakpoint never processes past it
@@ -159,7 +197,13 @@ export class AdvanceBatchRuns {
     return this.runs.updateRunStatus(runId, settledRunStatus(run.data));
   }
 
-  private async loadSchema(versionId: string): Promise<Result<ExtractionSchema>> {
+  // Never called for an analyse run — advanceOne branches away before this — but
+  // the null is in the type, so it is rejected here rather than assumed away.
+  private async loadSchema(versionId: string | null): Promise<Result<ExtractionSchema>> {
+    if (versionId === null) {
+      return err(domainError("VALIDATION_FAILED", "This run has no version to read a schema from."));
+    }
+
     const version = await this.flowVersions.getById(versionId);
     if (version.error) return version;
     if (!version.data || !isExtractionSnapshot(version.data.snapshot)) {

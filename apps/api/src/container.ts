@@ -17,6 +17,8 @@ import {
   LogAuditEvent,
   LogError,
   AdvanceBatchRuns,
+  ProposeExtractionFields,
+  SaveExtractionSchema,
   NotifyOnSessionComplete,
   NotifyOnStepComplete,
   PingJob,
@@ -31,6 +33,7 @@ import {
   DistilFlowLessons,
 } from "@wayfinder/application";
 import {
+  AiFieldProposer,
   AiHealthChecker,
   CompositeHealthChecker,
   DbHealthChecker,
@@ -43,6 +46,7 @@ import {
   HttpSiemForwarder,
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
+  DrizzleExtractionDraftRepository,
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
@@ -304,8 +308,19 @@ export const buildContainer = (env: Env) => {
   // automatically. Only started when enabled.
   const flowVersions = new DrizzleFlowVersionRepository(db);
   const extractionRuns = new DrizzleExtractionRunRepository(db);
+  const extractionDrafts = new DrizzleExtractionDraftRepository(db);
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const documentExtractor = new DocumentExtractorService(new DocxGenerator());
+  const proposeExtractionFields = new ProposeExtractionFields(
+    extractionRuns,
+    extractionDrafts,
+    flowVersions,
+    new SaveExtractionSchema(flows, flowVersions),
+    objectStorage,
+    documentExtractor,
+    new AiFieldProposer(llm),
+  );
+
   const advanceBatchRuns = new AdvanceBatchRuns(
     extractionRuns,
     flowVersions,
@@ -313,6 +328,7 @@ export const buildContainer = (env: Env) => {
     // The per-run cost ceiling is the admin ExtractionConfig value (resolved each
     // tick from system_settings), not an env var.
     { resolveCostCeilingUsd: () => runtimeConfig.getExtractionConfig().then((c) => c.perRunCostCeilingUsd) },
+    proposeExtractionFields,
   );
   const extractionWorkers = env.EXTRACTION_WORKER_ENABLED
     ? [
