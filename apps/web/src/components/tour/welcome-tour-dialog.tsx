@@ -58,7 +58,7 @@ export function WelcomeTourDialog({
               className="flex flex-col gap-3 border-b border-[#e7e3db] px-[22px] py-5 md:border-b-0 md:border-r"
             >
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-[#eaeefb] text-[18px]">
+                <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-wf-primary-light text-[18px]">
                   💬
                 </div>
                 <h3 id="welcome-chat-heading" className="text-[15px] font-bold text-[#1c1b19]">
@@ -82,7 +82,7 @@ export function WelcomeTourDialog({
                         type="button"
                         onClick={() => onStartChat(flow.id)}
                         disabled={isStartingChat}
-                        className="flex w-full items-center gap-3 rounded-[10px] border-[1.5px] border-[#e7e3db] px-3 py-2.5 text-left transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] disabled:cursor-not-allowed disabled:opacity-50"
+                        className="flex w-full items-center gap-3 rounded-[10px] border-[1.5px] border-[#e7e3db] px-3 py-2.5 text-left transition-colors hover:border-wf-primary-dim hover:bg-wf-primary-light disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#f5f3ee] text-[16px]">
                           {flow.icon ?? "💬"}
@@ -97,7 +97,7 @@ export function WelcomeTourDialog({
                             </span>
                           )}
                         </span>
-                        <span className="shrink-0 text-[12px] font-semibold text-[#2f56d3]">
+                        <span className="shrink-0 text-[12px] font-semibold text-wf-primary">
                           Start →
                         </span>
                       </button>
@@ -112,7 +112,7 @@ export function WelcomeTourDialog({
               className="flex flex-col gap-3 px-[22px] py-5"
             >
               <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-[#eaeefb] text-[18px]">
+                <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-wf-primary-light text-[18px]">
                   🗂️
                 </div>
                 <h3 id="welcome-flow-heading" className="text-[15px] font-bold text-[#1c1b19]">
@@ -126,11 +126,11 @@ export function WelcomeTourDialog({
               </p>
               <ol className="space-y-1.5 text-[12.5px] leading-[1.5] text-[#5c574c]">
                 <li className="flex gap-2">
-                  <span className="font-semibold text-[#2f56d3]">1.</span>
+                  <span className="font-semibold text-wf-primary">1.</span>
                   Name your flow and say who the AI should be.
                 </li>
                 <li className="flex gap-2">
-                  <span className="font-semibold text-[#2f56d3]">2.</span>
+                  <span className="font-semibold text-wf-primary">2.</span>
                   See how steps, templates and rules fit together, then add your first step.
                 </li>
               </ol>

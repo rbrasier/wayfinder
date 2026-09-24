@@ -119,7 +119,7 @@ export function TemplateFieldEditor({
       </div>
       <button
         type="button"
-        className="mt-1 flex items-center gap-1 text-[12px] text-[#2f56d3] transition-colors hover:text-[#1f3ea8]"
+        className="mt-1 flex items-center gap-1 text-[12px] text-wf-primary transition-colors hover:text-wf-primary-hover"
         onClick={addRow}
       >
         <Plus size={13} /> Add field

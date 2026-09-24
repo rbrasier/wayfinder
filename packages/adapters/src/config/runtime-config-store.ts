@@ -25,6 +25,14 @@ import {
   parseAboutLinksConfig,
   ABOUT_LINKS_SETTING_KEY,
   CHAT_DISCLAIMER_CONFIG_SETTING_KEY,
+  BRANDING_CONFIG_SETTING_KEY,
+  LOGIN_NOTICE_CONFIG_SETTING_KEY,
+  createDefaultBrandingConfig,
+  createDefaultLoginNoticeConfig,
+  parseBrandingConfig,
+  parseLoginNoticeConfig,
+  type BrandingConfig,
+  type LoginNoticeConfig,
   createDefaultChatDisclaimerConfig,
   parseChatDisclaimerConfig,
   createDefaultEmailConfig,
@@ -93,6 +101,7 @@ import {
   type ContextWindowResolution,
   type EnvDefaults,
 } from "./runtime-config-defaults";
+import { CachedSetting } from "./cached-setting";
 
 // Re-exported so existing importers of the store keep working.
 export { DEFAULT_DOCUMENT_GENERATION_CONFIG, DEFAULT_EXTRACTION_CONFIG, DEFAULT_MODELS_FOR, MODEL_CONTEXT_WINDOWS, resolveContextWindow, type ContextWindowResolution, type EnvDefaults, type PkiEnvDefaults } from "./runtime-config-defaults";
@@ -139,11 +148,33 @@ export class RuntimeConfigStore {
   private siemPending: Promise<SiemConfig> | null = null;
   private organisationResolutionCache: OrganisationResolution | null = null;
   private organisationResolutionPending: Promise<OrganisationResolution> | null = null;
+  private readonly branding: CachedSetting<BrandingConfig>;
+  private readonly loginNotice: CachedSetting<LoginNoticeConfig>;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
     private readonly envDefaults: EnvDefaults,
-  ) {}
+  ) {
+    this.branding = new CachedSetting(settingsRepo, BRANDING_CONFIG_SETTING_KEY, parseBrandingConfig, createDefaultBrandingConfig);
+    this.loginNotice = new CachedSetting(settingsRepo, LOGIN_NOTICE_CONFIG_SETTING_KEY, parseLoginNoticeConfig, createDefaultLoginNoticeConfig);
+  }
+
+  // Read on every page render (ADR-060), so these go through CachedSetting.
+  getBrandingConfig(): Promise<BrandingConfig> {
+    return this.branding.get();
+  }
+
+  invalidateBranding(): void {
+    this.branding.invalidate();
+  }
+
+  getLoginNoticeConfig(): Promise<LoginNoticeConfig> {
+    return this.loginNotice.get();
+  }
+
+  invalidateLoginNotice(): void {
+    this.loginNotice.invalidate();
+  }
 
   async getAiConfig(): Promise<AiConfig> {
     const aiCacheFresh = Date.now() - this.aiCachedAt < AI_CONFIG_CACHE_TTL_MS;

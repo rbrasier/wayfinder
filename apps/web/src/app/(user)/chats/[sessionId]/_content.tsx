@@ -428,7 +428,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-4">
         <p className="text-[14px] font-semibold text-[#1c1b19]">Session not found</p>
-        <Link href="/chats" className="text-[13px] text-[#2f56d3] underline">
+        <Link href="/chats" className="text-[13px] text-wf-primary underline">
           Back to My Chats
         </Link>
       </main>

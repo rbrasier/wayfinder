@@ -29,7 +29,7 @@ export function ConversationAnimation() {
 
       <Reveal on={beat >= 5} className="absolute inset-x-3 bottom-3">
         <div className="flex items-center gap-3 rounded-[10px] border border-[#e7e3db] bg-white px-3 py-2 shadow-md">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-[#eaeefb] text-[#2f56d3]">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-wf-primary-light text-wf-primary">
             <FileText size={16} />
           </span>
           <div className="min-w-0 flex-1">
@@ -41,13 +41,13 @@ export function ConversationAnimation() {
                 <Check size={11} /> Ready to download
               </div>
             ) : (
-              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-[#eaeefb]">
-                <div className="wf-tour-progress h-full rounded-full bg-[#2f56d3]" />
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-wf-primary-light">
+                <div className="wf-tour-progress h-full rounded-full bg-wf-primary" />
               </div>
             )}
           </div>
           <Reveal on={beat >= 6}>
-            <span className="flex items-center gap-1 rounded-[7px] border border-[#2f56d3] bg-[#2f56d3] px-2 py-1 text-[10.5px] font-semibold text-white">
+            <span className="flex items-center gap-1 rounded-[7px] border border-wf-primary bg-wf-primary px-2 py-1 text-[10.5px] font-semibold text-wf-primary-contrast">
               <Download size={11} /> Download
             </span>
           </Reveal>

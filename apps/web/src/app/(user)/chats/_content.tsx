@@ -56,7 +56,7 @@ export function ChatsContent() {
             onClick={() => setTab(key)}
             className={`px-3 py-[10px] text-[13px] font-medium transition-colors ${
               tab === key
-                ? "border-b-2 border-[#2f56d3] text-[#2f56d3]"
+                ? "border-b-2 border-wf-primary text-wf-primary"
                 : "text-[#666055] hover:text-[#5c574c]"
             }`}
           >

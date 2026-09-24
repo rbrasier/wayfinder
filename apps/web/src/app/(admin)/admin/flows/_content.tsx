@@ -169,7 +169,7 @@ export function AdminFlowsContent() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#eaeefb] text-xs font-medium text-[#2f56d3]">
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-wf-primary-light text-xs font-medium text-wf-primary">
                             {getOwnerInitials(flow)}
                           </span>
                           <span className="text-[13px]">{getOwnerName(flow)}</span>
@@ -263,7 +263,7 @@ export function AdminFlowsContent() {
                     <Label htmlFor="owner-select">Select user</Label>
                     <select
                       id="owner-select"
-                      className="flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-[#2f56d3] focus:bg-white focus:outline-none"
+                      className="flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
                       value={assignOwner.userId}
                       onChange={(e) => setAssignOwner({ ...assignOwner, userId: e.target.value })}
                     >

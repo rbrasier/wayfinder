@@ -59,7 +59,7 @@ export function ChatBubble({
           "max-w-[82%] rounded-[12px] px-3 py-1.5 text-[11.5px] leading-[1.45] shadow-sm",
           side === "ai"
             ? "rounded-bl-[4px] border border-[#e7e3db] bg-white text-[#1c1b19]"
-            : "rounded-br-[4px] bg-[#2f56d3] text-white",
+            : "rounded-br-[4px] bg-wf-primary text-wf-primary-contrast",
         )}
       >
         {children}
@@ -86,7 +86,7 @@ export function StepCard({
     <Reveal on={on} className={className}>
       <div className="relative w-[150px] rounded-[8px] border border-[#c3cee9] bg-white px-2.5 py-2 shadow-sm">
         <div className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 shrink-0 rounded-[3px] bg-[#2f56d3]" />
+          <span className="h-3.5 w-3.5 shrink-0 rounded-[3px] bg-wf-primary" />
           <span className="truncate text-[11px] font-semibold text-[#1c1b19]">{name}</span>
         </div>
         {hint && <div className="mt-1 truncate text-[10px] text-[#666055]">{hint}</div>}

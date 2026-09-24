@@ -84,10 +84,10 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
                   type="button"
                   onClick={() => handleStart(flow.id)}
                   disabled={createMutation.isPending}
-                  className="flex flex-col items-start gap-2 rounded-[10px] border-[1.5px] border-[#e7e3db] p-[12px_14px] text-left transition-colors hover:border-[#c3cef2] hover:bg-[#eaeefb] disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex flex-col items-start gap-2 rounded-[10px] border-[1.5px] border-[#e7e3db] p-[12px_14px] text-left transition-colors hover:border-wf-primary-dim hover:bg-wf-primary-light disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-[#eaeefb] text-[18px]">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-wf-primary-light text-[18px]">
                       {flow.icon ?? "💬"}
                     </div>
                     <span className="text-[13px] font-semibold text-[#1c1b19]">{flow.name}</span>
@@ -100,7 +100,7 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
                   <span className="text-[10.5px] font-medium uppercase tracking-[0.04em] text-[#726f6a]">
                     {flow.visibility.kind === "global" ? "Everyone" : "Only you"}
                   </span>
-                  <span className="mt-auto text-[12px] font-semibold text-[#2f56d3]">Start →</span>
+                  <span className="mt-auto text-[12px] font-semibold text-wf-primary">Start →</span>
                 </button>
               ))}
             </div>

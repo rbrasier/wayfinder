@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Figtree, JetBrains_Mono } from "next/font/google";
+import { connection } from "next/server";
 import { Toaster } from "sonner";
 import { NavigationProgress } from "@/components/navigation-progress";
 import { SiteBanner } from "@/components/site-banner";
+import { buildBrandStyleSheet } from "@/lib/brand-style";
+import { getContainer } from "@/lib/container";
 import { TrpcProvider } from "@/trpc/Provider";
 import "@/styles/globals.css";
 
@@ -26,13 +29,23 @@ export const metadata: Metadata = {
   description: "AI-guided workflow agent for document-heavy processes",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // The brand is admin-configured at runtime (ADR-060), so the layout must render
+  // per request rather than be prerendered with whatever was set at build time.
+  await connection();
+  const brandStyleSheet = buildBrandStyleSheet(
+    await getContainer().runtimeConfig.getBrandingConfig(),
+  );
+
   return (
     <html
       lang="en"
       suppressHydrationWarning
       className={`${figtree.variable} ${jetBrainsMono.variable}`}
     >
+      {/* In the server-rendered head so the brand colour is in the first paint;
+          a client fetch would flash Wayfinder blue on every page load. */}
+      <head>{brandStyleSheet && <style id="wf-brand-palette">{brandStyleSheet}</style>}</head>
       {/* A flex column so the site banner subtracts from the viewport instead
           of adding to it — the route layouts below fill the remaining space
           rather than each claiming a full screen height. */}

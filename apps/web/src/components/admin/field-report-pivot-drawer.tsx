@@ -29,17 +29,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DATA_INDIGO } from "@/lib/data-colours";
 
 type MeasureKind = "count" | "sum" | "avg";
 
 const selectStyle =
-  "h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19] outline-none focus:border-[#2f56d3] focus:bg-white";
+  "h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19] outline-none focus:border-wf-primary focus:bg-white";
 
 const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#666055] mb-1";
 
 const AXIS_STYLE = { fontSize: 11, fill: "#736d5f" };
 
-const SERIES_COLOURS = ["#2f56d3", "#1f6b4d", "#d98a3a", "#a8324c", "#7c5cbf", "#2f9bb3"];
+const SERIES_COLOURS = [DATA_INDIGO, "#1f6b4d", "#d98a3a", "#a8324c", "#7c5cbf", "#2f9bb3"];
 
 const groupLabel = (value: string): string => (value === "" ? "(none)" : value);
 
@@ -228,7 +229,7 @@ export function FieldReportPivotDrawer({
                         />
                       ))
                     ) : (
-                      <Bar dataKey="value" name={measureHeading} fill="#2f56d3" radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="value" name={measureHeading} fill={DATA_INDIGO} radius={[3, 3, 0, 0]} />
                     )}
                     {pivot.secondaryGroups && <Legend wrapperStyle={{ fontSize: 11 }} />}
                   </BarChart>

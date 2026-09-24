@@ -116,7 +116,7 @@ function FeedDivider({ label }: { label: string }) {
 
 function AgentMark({ initials }: { initials: string }) {
   return (
-    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] bg-[#2f56d3] text-[11px] font-semibold text-white">
+    <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[8px] bg-wf-primary text-[11px] font-semibold text-wf-primary-contrast">
       {initials}
     </div>
   );

@@ -158,7 +158,7 @@ export function FlowCanvasViewport({
             <button
               type="button"
               onClick={onShowExplainer}
-              className="pointer-events-auto flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[12px] text-[#666055] underline-offset-4 transition-colors hover:text-[#2f56d3] hover:underline"
+              className="pointer-events-auto flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[12px] text-[#666055] underline-offset-4 transition-colors hover:text-wf-primary hover:underline"
             >
               <PlayCircle size={13} />
               Watch how flows work

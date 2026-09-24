@@ -1,7 +1,10 @@
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   ABOUT_LINKS_SETTING_KEY,
   ABOUT_LINK_ICONS,
+  LOGIN_NOTICE_MODES,
+  LOGIN_NOTICE_TEXT_MAX_LENGTH,
   CHAT_DISCLAIMER_CONFIG_SETTING_KEY,
   CHAT_DISCLAIMER_MODAL_MODES,
   SITE_BANNER_CONFIG_SETTING_KEY,
@@ -10,8 +13,14 @@ import {
   normaliseAboutLinkUrl,
   normaliseSiteBannerLinkUrl,
 } from "@rbrasier/domain";
-import { adminProcedure, authenticatedProcedure, publicProcedure } from "../trpc";
+import {
+  adminProcedure,
+  authenticatedProcedure,
+  publicProcedure,
+  type TrpcContext,
+} from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { toPublicBranding } from "@/lib/public-branding";
 
 // The admin-authored copy that renders around the product: the site banner, the
 // About links, and the two chat disclaimers. All three are the same shape of
@@ -71,7 +80,72 @@ export const chatDisclaimerConfigInputSchema = z.object({
   modalText: z.string().max(1000),
 });
 
+// Length and shape only: the readable-colour rule and the display-name limit are
+// the domain's (ADR-060 §3), so the message an admin sees comes from one place.
+export const brandingInputSchema = z.object({
+  displayName: z.string().max(200),
+  primaryColour: z.string().max(20).nullable(),
+});
+
+export const loginNoticeInputSchema = z.object({
+  mode: z.enum(LOGIN_NOTICE_MODES),
+  text: z.string().max(LOGIN_NOTICE_TEXT_MAX_LENGTH),
+});
+
+// adminProcedure proves the caller is an admin but does not narrow userId, which
+// the audit trail needs.
+const requireActorId = (ctx: TrpcContext): string => {
+  if (!ctx.userId) {
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "Authentication required." });
+  }
+  return ctx.userId;
+};
+
 export const presentationSettingsProcedures = {
+  // Public: the sign-in page shows the brand before anyone is signed in.
+  getBranding: publicProcedure.query(async ({ ctx }) => {
+    return toPublicBranding(await ctx.container.runtimeConfig.getBrandingConfig());
+  }),
+
+  setBranding: adminProcedure.input(brandingInputSchema).mutation(async ({ ctx, input }) => {
+    const result = await ctx.container.useCases.setBranding.execute(input, requireActorId(ctx));
+    if (result.error) throw toTrpcError(result.error);
+    ctx.container.runtimeConfig.invalidateBranding();
+    return toPublicBranding(result.data);
+  }),
+
+  getLoginNotice: adminProcedure.query(async ({ ctx }) => {
+    return ctx.container.runtimeConfig.getLoginNoticeConfig();
+  }),
+
+  setLoginNotice: adminProcedure.input(loginNoticeInputSchema).mutation(async ({ ctx, input }) => {
+    const result = await ctx.container.useCases.setLoginNotice.execute(input, requireActorId(ctx));
+    if (result.error) throw toTrpcError(result.error);
+    ctx.container.runtimeConfig.invalidateLoginNotice();
+    return result.data;
+  }),
+
+  getLoginNoticeStatus: authenticatedProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.getLoginNoticeStatus.execute(
+      ctx.userId,
+      ctx.authSessionId,
+    );
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  acknowledgeLoginNotice: authenticatedProcedure
+    .input(z.object({ version: z.number().int().min(0) }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.acknowledgeLoginNotice.execute(
+        ctx.userId,
+        ctx.authSessionId,
+        input.version,
+      );
+      if (result.error) throw toTrpcError(result.error);
+      return { ok: true };
+    }),
+
   // Public: the login and register pages need the banner too, and a site
   // warning carries no secret material.
   getSiteBanner: publicProcedure.query(async ({ ctx }) => {

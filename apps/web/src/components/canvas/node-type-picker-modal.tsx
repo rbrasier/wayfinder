@@ -77,7 +77,7 @@ function PrimaryCard({
     <button
       type="button"
       onClick={() => onSelect(type)}
-      className="flex flex-col items-start gap-2.5 rounded-[9px] border border-[#e7e3db] bg-white p-3 text-left transition-colors hover:border-[#c3cef2] hover:bg-[#f7f8fc]"
+      className="flex flex-col items-start gap-2.5 rounded-[9px] border border-[#e7e3db] bg-white p-3 text-left transition-colors hover:border-wf-primary-dim hover:bg-[#f7f8fc]"
     >
       <span
         aria-hidden
@@ -106,7 +106,7 @@ function AdvancedCard({
     <button
       type="button"
       onClick={() => onSelect(type)}
-      className="flex w-full items-center gap-2.5 rounded-[8px] border border-[#e7e3db] bg-white px-3 py-2.5 text-left transition-colors hover:border-[#c3cef2] hover:bg-[#f7f8fc]"
+      className="flex w-full items-center gap-2.5 rounded-[8px] border border-[#e7e3db] bg-white px-3 py-2.5 text-left transition-colors hover:border-wf-primary-dim hover:bg-[#f7f8fc]"
     >
       <span
         aria-hidden

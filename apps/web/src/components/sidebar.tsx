@@ -29,6 +29,8 @@ import {
   Building2,
   X,
 } from "lucide-react";
+import { BrandName, BrandTile } from "@/components/branding/brand-mark";
+import { brandMarkView } from "@/components/branding/brand-mark-model";
 import { HelpMenu } from "@/components/help-menu";
 import { NewChatModal } from "@/components/chat/new-chat-modal";
 import { useSidebar } from "@/components/sidebar-context";
@@ -260,14 +262,14 @@ function NavGroups({
                       <span
                         aria-hidden="true"
                         className={`h-[6px] w-[6px] shrink-0 rounded-full ${
-                          active ? "bg-[#2f56d3]" : "bg-[#c9c3b5]"
+                          active ? "bg-wf-primary" : "bg-[#c9c3b5]"
                         }`}
                       />
                     )}
                     {rowMark === "plus" && (
                       <span
                         aria-hidden="true"
-                        className="flex h-[6px] w-[6px] shrink-0 items-center justify-center text-[15px] leading-none text-[#2f56d3]"
+                        className="flex h-[6px] w-[6px] shrink-0 items-center justify-center text-[15px] leading-none text-wf-primary"
                       >
                         +
                       </span>
@@ -416,6 +418,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
         setNewChatOpen(true);
       });
   const homeHref = isAdmin ? "/admin/flows" : "/chats";
+  const brandingQuery = trpc.settings.getBranding.useQuery(undefined, {
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  });
+  const brandView = brandMarkView(brandingQuery.data);
 
   const recentChats = isAdmin
     ? []
@@ -450,12 +457,10 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
 
   const brand = (trailing?: React.ReactNode) => (
     <div className="flex shrink-0 items-center gap-[9px] px-[6px]">
-      <Link href={homeHref} onClick={closeMobile} aria-label="Wayfinder home">
-        <div className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[7px] bg-[#2f56d3] text-[13px] font-bold text-white">
-          W
-        </div>
+      <Link href={homeHref} onClick={closeMobile} aria-label={`${brandView.name} home`}>
+        <BrandTile view={brandView} size="sidebar" />
       </Link>
-      <span className="text-[15px] font-semibold tracking-[-0.01em] text-[#1c1b19]">Wayfinder</span>
+      <BrandName view={brandView} size="sidebar" />
       <span className="rounded-[4px] border border-[#dedad2] px-[5px] py-[2px] font-mono text-[9px] uppercase tracking-[0.1em] text-[#736d5f]">
         {isAdmin ? "Admin" : "Alpha"}
       </span>

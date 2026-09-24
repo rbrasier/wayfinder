@@ -17,7 +17,7 @@ export function WelcomeTourGate() {
   const router = useRouter();
   const utils = trpc.useUtils();
   const permissions = usePermissions();
-  const { organisationPromptDismissed } = useSignInPrompts();
+  const { loginNoticeCleared, organisationPromptDismissed } = useSignInPrompts();
   const busy = useNavigationBusy();
   const [busyLabel, setBusyLabel] = useState("Starting your chat…");
 
@@ -56,7 +56,7 @@ export function WelcomeTourGate() {
     },
   });
 
-  const show = shouldShowWelcomeTour({
+  const show = loginNoticeCleared && shouldShowWelcomeTour({
     welcomeTourPending: meQuery.data?.welcomeTourPending,
     organisationSignInStatus: signInState.data?.status,
     organisationPromptDismissed,

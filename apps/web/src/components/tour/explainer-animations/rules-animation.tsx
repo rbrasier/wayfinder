@@ -25,13 +25,13 @@ export function RulesAnimation() {
               traced ? "border-[#e7c200] bg-[#fff8e1] text-[#7a5b00]" : "border-[#e7e3db] bg-[#faf9f7] text-[#1c1b19]",
             )}
           >
-            <FileText size={11} className="text-[#2f56d3]" />
+            <FileText size={11} className="text-wf-primary" />
             Onboarding policy.pdf
             {beat >= 2 ? (
               <Check size={11} className="text-[#2a7a4b]" />
             ) : (
-              <span className="h-1 w-8 overflow-hidden rounded-full bg-[#eaeefb]">
-                <span className="wf-tour-progress block h-full bg-[#2f56d3]" />
+              <span className="h-1 w-8 overflow-hidden rounded-full bg-wf-primary-light">
+                <span className="wf-tour-progress block h-full bg-wf-primary" />
               </span>
             )}
           </span>

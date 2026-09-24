@@ -32,7 +32,7 @@ export function FocusCard({
     <section
       className={`relative rounded-[14px] border bg-white transition-all duration-200 ${
         focused
-          ? `z-20 flex-[1.75] border-[#c3cef2] shadow-[0_12px_36px_rgba(58,95,217,0.14)] ${overlapClass}`
+          ? `z-20 flex-[1.75] border-wf-primary-dim shadow-[0_12px_36px_rgba(58,95,217,0.14)] ${overlapClass}`
           : "z-10 flex-[1] border-[#e7e3db] shadow-sm"
       }`}
     >
@@ -87,7 +87,7 @@ export function Segmented({
               onClick={() => onChange(option.value)}
               className={`flex flex-1 items-center justify-center rounded-[9px] border px-3 py-2 text-center text-[13px] transition-colors ${
                 active
-                  ? "border-[#2f56d3] bg-[#eaeefb] font-medium text-[#2f56d3]"
+                  ? "border-wf-primary bg-wf-primary-light font-medium text-wf-primary"
                   : "border-[#e7e3db] text-[#5c574c] hover:bg-[#f5f3ee]"
               }`}
             >

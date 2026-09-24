@@ -260,7 +260,7 @@ export function AdminValueDashboard() {
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
                         {row.avoidedMinutes === null ? (
-                          <span className="text-[12px] font-normal text-[#2f56d3]">
+                          <span className="text-[12px] font-normal text-wf-primary">
                             collecting estimates
                           </span>
                         ) : (
