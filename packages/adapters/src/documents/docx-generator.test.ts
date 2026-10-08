@@ -326,6 +326,17 @@ describe("DocxGenerator", () => {
       expect(result.error).toBeDefined();
     });
 
+    it("reads text that shares a run with a tab, without markup or entities", () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document ${NS}>
+  <w:body><w:p><w:r><w:tab/><w:t xml:space="preserve">Smith &amp; Co {{ Ref }}</w:t></w:r></w:p></w:body>
+</w:document>`;
+
+      const result = generator.extractFullText({ templateBytes: buildTemplateBuffer(xml) });
+
+      expect(result.data?.text).toBe("Smith & Co {{ Ref }}");
+    });
+
     it("handles split runs and still preserves placeholder text", () => {
       const templateBytes = buildTemplateBuffer(
         splitRunDocXml("Name: {{", "full_name", "}}"),
@@ -497,6 +508,76 @@ describe("DocxGenerator", () => {
       expect(result.error).toBeDefined();
     });
 
+    // Issue #312: every run without text in a tagged paragraph was dropped.
+    describe("keeps what surrounds a tag in its paragraph", () => {
+      const paragraphDocXml = (paragraphBody: string) =>
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document ${NS}>
+  <w:body><w:p>${paragraphBody}</w:p></w:body>
+</w:document>`;
+
+      const generatedXmlOf = (paragraphBody: string, data: Record<string, unknown>): string => {
+        const result = generator.generate({
+          templateBytes: buildTemplateBuffer(paragraphDocXml(paragraphBody)),
+          data,
+        });
+        expect(result.error).toBeUndefined();
+        return new PizZip(result.data!.bytes).file("word/document.xml")!.asText();
+      };
+
+      it("keeps a logo and tab runs beside the tags", () => {
+        const drawing = '<w:drawing><wp:inline><a:graphic>logo</a:graphic></wp:inline></w:drawing>';
+        const outputXml = generatedXmlOf(
+          `<w:r>${drawing}</w:r><w:r><w:tab/></w:r><w:r><w:tab/></w:r>` +
+            '<w:r><w:t xml:space="preserve">{{ ATM Reference }} | {{ Procurement Title }}</w:t></w:r>',
+          { atm_reference: "ATM-0042", procurement_title: "Office Fit-out" },
+        );
+
+        expect(outputXml).toContain(drawing);
+        expect(outputXml.match(/<w:tab\/>/g)).toHaveLength(2);
+        expect(outputXml).toContain("ATM-0042 | Office Fit-out");
+        expect(outputXml.indexOf("<w:drawing>")).toBeLessThan(outputXml.indexOf("ATM-0042"));
+      });
+
+      it("keeps a tab that shares a run with the tag", () => {
+        const outputXml = generatedXmlOf(
+          '<w:r><w:rPr><w:b/></w:rPr><w:tab/><w:t>{{ ATM Reference }}</w:t></w:r>',
+          { atm_reference: "ATM-0042" },
+        );
+
+        expect(outputXml).toContain("<w:tab/>");
+        expect(outputXml).not.toContain("&lt;w:t");
+        expect(outputXml).toMatch(/<w:b\/><\/w:rPr><w:tab\/><w:t[^>]*>ATM-0042<\/w:t>/);
+      });
+
+      it("keeps line breaks and bookmarks between runs", () => {
+        const outputXml = generatedXmlOf(
+          '<w:r><w:t xml:space="preserve">Ref: </w:t></w:r>' +
+            '<w:bookmarkStart w:id="0" w:name="ref"/>' +
+            '<w:r><w:t>{{ Ref</w:t></w:r><w:r><w:t>erence }}</w:t></w:r>' +
+            '<w:bookmarkEnd w:id="0"/><w:r><w:br/></w:r><w:r><w:t>Next line</w:t></w:r>',
+          { reference: "R-7" },
+        );
+
+        expect(outputXml).toContain('<w:bookmarkStart w:id="0" w:name="ref"/>');
+        expect(outputXml).toContain('<w:bookmarkEnd w:id="0"/>');
+        expect(outputXml).toContain("<w:br/>");
+        expect(outputXml).toContain("R-7");
+        expect(outputXml).toContain("Next line");
+      });
+
+      it("does not double-escape special characters beside a tag", () => {
+        const outputXml = generatedXmlOf(
+          '<w:r><w:t xml:space="preserve">Smith &amp; Co &lt;Pty&gt; </w:t></w:r><w:r><w:t>{{ Name }}</w:t></w:r>',
+          { name: "Ann" },
+        );
+
+        expect(outputXml).toContain("Smith &amp; Co &lt;Pty&gt; ");
+        expect(outputXml).not.toContain("&amp;amp;");
+        expect(outputXml).toContain("Ann");
+      });
+    });
+
     it("produces valid DOCX bytes that re-parse without error", () => {
       const templateBytes = buildTemplateBuffer(
         simpleDocXml("Hello {{name}}"),
@@ -610,6 +691,36 @@ describe("DocxGenerator", () => {
       const annotatedXml = documentXmlOf(result.data!.bytes);
       const placeholderRun = annotatedXml.match(/<w:r>(?:(?!<\/w:r>)[\s\S])*Supplier Name[\s\S]*?<\/w:r>/);
       expect(placeholderRun?.[0]).toContain("<w:b/>");
+    });
+
+    it("keeps tabs and line breaks in the paragraph it edits", () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document ${NS}>
+  <w:body><w:p><w:r><w:tab/></w:r><w:r><w:tab/><w:t xml:space="preserve">Supplier: Acme Pty Ltd</w:t></w:r><w:r><w:br/></w:r><w:r><w:t>Tail</w:t></w:r></w:p></w:body>
+</w:document>`;
+
+      const result = generator.annotate({
+        templateBytes: buildTemplateBuffer(xml),
+        edits: [{ find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name }}" }],
+      });
+
+      expect(result.data?.appliedCount).toBe(1);
+      const annotatedXml = documentXmlOf(result.data!.bytes);
+      expect(annotatedXml.match(/<w:tab\/>/g)).toHaveLength(2);
+      expect(annotatedXml).toContain("<w:br/>");
+      expect(annotatedXml).toContain("Supplier: {{ Supplier Name }}");
+    });
+
+    it("matches and writes text containing special characters", () => {
+      const templateBytes = buildTemplateBuffer(simpleDocXml("Supplier: Smith &amp; Co"));
+
+      const result = generator.annotate({
+        templateBytes,
+        edits: [{ find: "Smith & Co", occurrence: 0, replacement: "{{ Supplier <Name> }}" }],
+      });
+
+      expect(result.data?.appliedCount).toBe(1);
+      expect(documentXmlOf(result.data!.bytes)).toContain("Supplier: {{ Supplier &lt;Name&gt; }}");
     });
 
     it("reports an edit whose text is absent rather than dropping it", () => {
