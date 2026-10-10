@@ -6,12 +6,21 @@ import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFi
 import type { DomainError, DomainErrorDetail, Result } from "@wayfinder/domain";
 import { detailsFromCause, detailsFromTagContent, headlineFor, tagSyntaxIssues } from "./tag-syntax";
 
-interface RunInfo {
+// One <w:t> element. Offsets: xml* within its run's XML, *Index within the
+// paragraph's decoded text.
+interface TextElementInfo {
   xml: string;
-  rPrXml: string;
   text: string;
   startIndex: number;
   endIndex: number;
+  xmlStart: number;
+  xmlEnd: number;
+}
+
+interface RunInfo {
+  xml: string;
+  text: string;
+  textElements: TextElementInfo[];
   xmlStart: number;
   xmlEnd: number;
 }
@@ -21,8 +30,30 @@ interface SpanReplacement {
   start: number;
   end: number;
   text: string;
-  rPrXml: string;
 }
+
+// `(?:\s[^>]*)?` stops a bare `<w:t` prefix matching `<w:tab/>`.
+const TEXT_ELEMENT_PATTERN = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g;
+
+const XML_ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+};
+
+const decodeXmlText = (xmlText: string): string =>
+  xmlText.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (entity, name: string) => {
+    if (name.startsWith("#x") || name.startsWith("#X")) {
+      return String.fromCodePoint(Number.parseInt(name.slice(2), 16));
+    }
+    if (name.startsWith("#")) return String.fromCodePoint(Number.parseInt(name.slice(1), 10));
+    return XML_ENTITIES[name] ?? entity;
+  });
+
+const escapeXmlText = (text: string): string =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 const INVALID_DOCX_MESSAGE =
   "Failed to parse DOCX template. Ensure the file is a valid .docx and all {{tags}} are correctly formed.";
@@ -215,8 +246,7 @@ export class DocxGenerator implements IDocumentGenerator {
       if (replacements.length === 0) return paragraph;
 
       changed = true;
-      const newRuns = this.buildNewRuns(runs, replacements, fullText);
-      return this.replaceParagraphRuns(paragraph, runs, newRuns);
+      return this.applyReplacements(paragraph, runs, replacements);
     });
 
     return changed ? rewritten : null;
@@ -256,13 +286,12 @@ export class DocxGenerator implements IDocumentGenerator {
           start,
           end: start + find.length,
           text: edit.replacement,
-          rPrXml: this.rPrXmlForPosition(runs, start),
         });
         pending.push(edit);
       }
     }
 
-    // buildNewRuns walks left to right and assumes replacements never overlap;
+    // applyReplacements walks left to right and assumes replacements never overlap;
     // two edits claiming the same characters would corrupt the paragraph, so the
     // later one is left unapplied and reported as unmatched.
     const ordered = candidates
@@ -346,12 +375,10 @@ export class DocxGenerator implements IDocumentGenerator {
         start: matchStart,
         end: matchStart + match[0].length,
         text: `{{${this.normalizeTagName(match[1] ?? "")}}}`,
-        rPrXml: this.rPrXmlForPosition(runs, matchStart),
       };
     });
 
-    const newRuns = this.buildNewRuns(runs, replacements, fullText);
-    return this.replaceParagraphRuns(paragraph, runs, newRuns);
+    return this.applyReplacements(paragraph, runs, replacements);
   }
 
   private extractRuns(paragraph: string): RunInfo[] {
@@ -362,15 +389,13 @@ export class DocxGenerator implements IDocumentGenerator {
 
     while ((match = runPattern.exec(paragraph)) !== null) {
       const runXml = match[0];
-      const rPrMatch = runXml.match(/<w:rPr>[\s\S]*?<\/w:rPr>/);
-      const text = this.extractRunText(runXml);
+      const textElements = this.extractTextElements(runXml, textOffset);
+      const text = textElements.map((element) => element.text).join("");
 
       runs.push({
         xml: runXml,
-        rPrXml: rPrMatch ? rPrMatch[0] : "",
         text,
-        startIndex: textOffset,
-        endIndex: textOffset + text.length,
+        textElements,
         xmlStart: match.index,
         xmlEnd: match.index + runXml.length,
       });
@@ -380,72 +405,74 @@ export class DocxGenerator implements IDocumentGenerator {
     return runs;
   }
 
-  private extractRunText(runXml: string): string {
-    const matches = [...runXml.matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)];
-    return matches.map((match) => match[1]).join("");
+  private extractTextElements(runXml: string, textOffset: number): TextElementInfo[] {
+    const elements: TextElementInfo[] = [];
+    let startIndex = textOffset;
+    for (const match of runXml.matchAll(TEXT_ELEMENT_PATTERN)) {
+      const text = decodeXmlText(match[1] ?? "");
+      const xmlStart = match.index ?? 0;
+      elements.push({
+        xml: match[0],
+        text,
+        startIndex,
+        endIndex: startIndex + text.length,
+        xmlStart,
+        xmlEnd: xmlStart + match[0].length,
+      });
+      startIndex += text.length;
+    }
+    return elements;
   }
 
-  private rPrXmlForPosition(runs: RunInfo[], position: number): string {
-    const run = runs.find((run) => run.startIndex <= position && run.endIndex > position);
-    return run?.rPrXml ?? "";
-  }
-
-  private buildNewRuns(
+  // Only the <w:t> elements a replacement touches are rewritten; every other
+  // byte — drawings, tabs, breaks, fields, bookmarks, hyperlink wrappers — is
+  // copied through, so the template's layout survives tag normalisation.
+  private applyReplacements(
+    paragraph: string,
     runs: RunInfo[],
     replacements: SpanReplacement[],
-    fullText: string,
-  ): string[] {
-    const newRuns: string[] = [];
-    let position = 0;
-
-    for (const replacement of replacements) {
-      if (position < replacement.start) {
-        const runsInRange = runs.filter(
-          (run) => run.endIndex > position && run.startIndex < replacement.start,
-        );
-        for (const run of runsInRange) {
-          const sliceStart = Math.max(run.startIndex, position);
-          const sliceEnd = Math.min(run.endIndex, replacement.start);
-          const text = run.text.slice(sliceStart - run.startIndex, sliceEnd - run.startIndex);
-          if (text) newRuns.push(this.buildRun(run.rPrXml, text));
-        }
-      }
-
-      newRuns.push(this.buildRun(replacement.rPrXml, replacement.text));
-      position = replacement.end;
-    }
-
-    if (position < fullText.length) {
-      const runsInRange = runs.filter((run) => run.endIndex > position);
-      for (const run of runsInRange) {
-        const sliceStart = Math.max(run.startIndex, position);
-        const text = run.text.slice(sliceStart - run.startIndex);
-        if (text) newRuns.push(this.buildRun(run.rPrXml, text));
-      }
-    }
-
-    return newRuns;
-  }
-
-  private replaceParagraphRuns(
-    paragraph: string,
-    originalRuns: RunInfo[],
-    newRuns: string[],
   ): string {
-    const firstRun = originalRuns.at(0);
-    const lastRun = originalRuns.at(-1);
-    if (!firstRun || !lastRun) return paragraph;
-    return (
-      paragraph.slice(0, firstRun.xmlStart) +
-      newRuns.join("") +
-      paragraph.slice(lastRun.xmlEnd)
-    );
+    let output = "";
+    let cursor = 0;
+    for (const run of runs) {
+      output += paragraph.slice(cursor, run.xmlStart) + this.rewriteRun(run, replacements);
+      cursor = run.xmlEnd;
+    }
+    return output + paragraph.slice(cursor);
   }
 
-  private buildRun(rPrXml: string, text: string): string {
-    const escapedText = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    const spacePreserve = text.startsWith(" ") || text.endsWith(" ") ? ' xml:space="preserve"' : "";
-    return `<w:r>${rPrXml}<w:t${spacePreserve}>${escapedText}</w:t></w:r>`;
+  private rewriteRun(run: RunInfo, replacements: SpanReplacement[]): string {
+    let output = "";
+    let cursor = 0;
+    for (const element of run.textElements) {
+      output += run.xml.slice(cursor, element.xmlStart) + this.rewriteTextElement(element, replacements);
+      cursor = element.xmlEnd;
+    }
+    return output + run.xml.slice(cursor);
+  }
+
+  // A replacement's text lands in the element holding its first character; the
+  // rest of the span is removed from whichever elements it runs through.
+  private rewriteTextElement(element: TextElementInfo, replacements: SpanReplacement[]): string {
+    const overlapping = replacements.filter(
+      (replacement) => replacement.start < element.endIndex && replacement.end > element.startIndex,
+    );
+    if (overlapping.length === 0) return element.xml;
+
+    let text = "";
+    let position = element.startIndex;
+    for (const replacement of overlapping) {
+      if (replacement.start >= element.startIndex) {
+        text += element.text.slice(position - element.startIndex, replacement.start - element.startIndex);
+        text += replacement.text;
+      }
+      position = Math.min(replacement.end, element.endIndex);
+    }
+    text += element.text.slice(position - element.startIndex);
+
+    if (!text) return "";
+    const spacePreserve = /^\s|\s$/.test(text) ? ' xml:space="preserve"' : "";
+    return `<w:t${spacePreserve}>${escapeXmlText(text)}</w:t>`;
   }
 
   private extractParagraphTexts(xml: string): string[] {
@@ -453,8 +480,8 @@ export class DocxGenerator implements IDocumentGenerator {
     const paragraphPattern = /<w:p[ >][\s\S]*?<\/w:p>/g;
     let match;
     while ((match = paragraphPattern.exec(xml)) !== null) {
-      const textMatches = [...match[0].matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)];
-      paragraphs.push(textMatches.map((m) => m[1]).join(""));
+      const textMatches = [...match[0].matchAll(TEXT_ELEMENT_PATTERN)];
+      paragraphs.push(textMatches.map((textMatch) => decodeXmlText(textMatch[1] ?? "")).join(""));
     }
     return paragraphs;
   }

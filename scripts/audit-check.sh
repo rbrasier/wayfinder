@@ -20,7 +20,7 @@ cd "$ROOT"
 # list as short as it can possibly be — an entry here is a security gate held
 # open, and anything not listed still fails.
 #
-# Empty: GHSA-mh99-v99m-4gvg (brace-expansion DoS) was waived here because the
+# History: GHSA-mh99-v99m-4gvg (brace-expansion DoS) was waived here because the
 # advisory patched only >=5.0.8 and brace-expansion@5 exports an object rather
 # than the callable minimatch@3 requires, so the 1.x chain under eslint had
 # nowhere to go. Upstream has since backported to 1.1.17 and 2.1.3, which is the
@@ -29,7 +29,18 @@ cd "$ROOT"
 # Do not add an entry without stating what it is, why it cannot be fixed, and
 # the condition that removes it — an entry here is a security gate held open,
 # and anything not listed still fails.
-ALLOWED_ADVISORIES=()
+#
+# GHSA-vfj7-8cjw-p6xm — braces stack-exhaustion DoS on deeply nested patterns.
+#   WHY: no patched release exists (advisory lists none; 3.0.3 is the latest),
+#   and micromatch@4.0.8 / fast-glob@3.3.3 — its only consumers — are also at
+#   their latest. It reaches us solely through build and dev tooling
+#   (tailwindcss, eslint-config-next, @changesets/cli), which expand globs the
+#   repository itself writes, never user input; no runtime code imports it.
+#   REMOVE WHEN: braces (or micromatch moving off it) publishes a patched
+#   release — then pin it in the root package.json overrides instead.
+ALLOWED_ADVISORIES=(
+  "GHSA-vfj7-8cjw-p6xm"
+)
 
 # ── Run the audit ─────────────────────────────────────────────────────────────
 AUDIT_JSON=$(pnpm audit --audit-level=high --json 2>&1)
@@ -48,7 +59,7 @@ if echo "$AUDIT_JSON" | grep -qiE 'ERR_PNPM_AUDIT_BAD_RESPONSE|being retired|aud
 fi
 
 # ── Filter the findings against the allowlist ─────────────────────────────────
-# Guarded expansion: the allowlist is empty, and on bash 3.2 (macOS) expanding
+# Guarded expansion: the allowlist can be empty, and on bash 3.2 (macOS) expanding
 # an empty array under `set -u` aborts the script rather than yielding nothing.
 ALLOWED_CSV=$(IFS=,; echo "${ALLOWED_ADVISORIES[@]+${ALLOWED_ADVISORIES[*]}}")
 
