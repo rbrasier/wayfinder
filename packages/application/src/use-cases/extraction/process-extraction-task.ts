@@ -56,6 +56,7 @@ export class ProcessExtractionTask {
     const extracted = await this.extractor.extract({
       buffer: bytes.data,
       mimeType: document.mimeType,
+      filename: document.filename,
     });
     const text = extracted.error ? "" : extracted.data;
 

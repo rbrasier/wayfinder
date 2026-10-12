@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+// Claude in tool mode sometimes returns a nested array or object as a JSON
+// string ("fileIds": "[\"f1\"]"). Parsing it back before validation keeps one
+// stringified value from rejecting the whole reply; a string that is not JSON is
+// passed through untouched so the schema still rejects it.
+const parseStringifiedJson = (value: unknown): unknown => {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+};
+
+// Models do not reliably honour "a whole number 0-100": they return 87.5, a 0-1
+// fraction, or a value just outside the band. Rejecting the reply over that
+// discards every other field of the record, so the number is coerced instead —
+// a fraction below 1 is read as a 0-1 score, then rounded and clamped. Whole
+// numbers (including 1) are left alone.
+const toPercentConfidence = (confidence: number): number => {
+  const scaled = confidence > 0 && confidence < 1 ? confidence * 100 : confidence;
+  return Math.min(100, Math.max(0, Math.round(scaled)));
+};
+
 // One scored field pulled for one record. Confidence is 0-100 (matching the
 // self-assessment pattern used by turnResponseSchema / the doc-gen gate); the
 // application normalises it to the domain's 0..1 band scale. The value + its
@@ -12,9 +35,7 @@ export const extractionFieldResultSchema = z.object({
     ),
   confidence: z
     .number()
-    .int()
-    .min(0)
-    .max(100)
+    .transform(toPercentConfidence)
     .describe(
       "Confidence 0-100 that this value is correct and grounded in the source documents (0 when the value is absent).",
     ),
@@ -31,25 +52,32 @@ export const extractionFieldResultSchema = z.object({
   // "here is what I copied" are the same act. A reference without a quote could
   // never be verified, and a half-claim would only be re-interpreted downstream
   // as the containment guess this schema exists to replace.
+  //
+  // A model asked to omit the reference often sends `null` instead; that means
+  // the same thing, so it is read as absent rather than rejecting the record.
   sourceRef: z
-    .object({
-      document: z
-        .string()
-        .describe(
-          "The source document the value was read from, named exactly as it appears in the record source documents.",
-        ),
-      locator: z
-        .string()
-        .describe(
-          "Where inside that document the value sits — a page number, a section heading, a table cell reference or a line.",
-        ),
-      quote: z
-        .string()
-        .describe(
-          "The exact characters copied from that document, reproduced byte for byte — same spelling, case, spacing and punctuation. It must contain the value and must appear in the document verbatim. Return a short surrounding phrase rather than paraphrasing, and omit the whole sourceRef if you composed or reformatted the value rather than copying it.",
-        ),
-    })
-    .optional()
+    .preprocess(
+      (value) => (value === null ? undefined : value),
+      z
+        .object({
+          document: z
+            .string()
+            .describe(
+              "The source document the value was read from, named exactly as it appears in the record source documents.",
+            ),
+          locator: z
+            .string()
+            .describe(
+              "Where inside that document the value sits — a page number, a section heading, a table cell reference or a line.",
+            ),
+          quote: z
+            .string()
+            .describe(
+              "The exact characters copied from that document, reproduced byte for byte — same spelling, case, spacing and punctuation. It must contain the value and must appear in the document verbatim. Return a short surrounding phrase rather than paraphrasing, and omit the whole sourceRef if you composed or reformatted the value rather than copying it.",
+            ),
+        })
+        .optional(),
+    )
     .describe(
       "Where this value was read from, and the exact text it was copied from. Omit it entirely when you cannot point to a specific place, or when you composed or reformatted the value rather than copying it; never invent one.",
     ),
@@ -67,7 +95,8 @@ export const extractionResultSchema = z.record(extractionFieldResultSchema);
 export const buildExtractionResultSchema = (
   keys: string[],
 ): z.ZodType<Record<string, ExtractionFieldResultData>> => {
-  const shape = Object.fromEntries(keys.map((key) => [key, extractionFieldResultSchema]));
+  const tolerantField = z.preprocess(parseStringifiedJson, extractionFieldResultSchema);
+  const shape = Object.fromEntries(keys.map((key) => [key, tolerantField]));
   return z.object(shape) as z.ZodType<Record<string, ExtractionFieldResultData>>;
 };
 
@@ -76,15 +105,20 @@ export const buildExtractionResultSchema = (
 // (over-matching is allowed) and files in no record are exceptions.
 export const fileGroupingSchema = z.object({
   records: z
-    .array(
-      z.object({
-        label: z
-          .string()
-          .describe("Short label for this record — e.g. the shared filename prefix or sub-folder."),
-        fileIds: z
-          .array(z.string())
-          .describe("Ids of the input files that together make up this record."),
-      }),
+    .preprocess(
+      parseStringifiedJson,
+      z.array(
+        z.object({
+          label: z
+            .string()
+            .describe(
+              "Short label for this record — e.g. the shared filename prefix or sub-folder.",
+            ),
+          fileIds: z
+            .preprocess(parseStringifiedJson, z.array(z.string()))
+            .describe("Ids of the input files that together make up this record."),
+        }),
+      ),
     )
     .describe("The records the input files group into, per the selection criteria."),
 });

@@ -425,12 +425,15 @@ export const extractionRouter = router({
         },
       });
       if (result.error) throw toTrpcError(result.error);
-      return result.data.map((document) => ({
-        id: document.id,
-        filename: document.filename,
-        treePath: document.treePath,
-        mimeType: document.mimeType,
-      }));
+      return {
+        documents: result.data.documents.map((document) => ({
+          id: document.id,
+          filename: document.filename,
+          treePath: document.treePath,
+          mimeType: document.mimeType,
+        })),
+        skipped: result.data.skipped,
+      };
     }),
 
   // Removes one staged input document (the author corrected a mistake).

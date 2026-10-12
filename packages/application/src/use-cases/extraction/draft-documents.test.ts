@@ -3,6 +3,7 @@ import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   ExtractionDraftDocument,
   IArchiveExtractor,
+  IDocumentTypeDetector,
   IExtractionDraftDocumentRepository,
   IObjectStorage,
 } from "@wayfinder/domain";
@@ -12,9 +13,19 @@ const archiveLimits = { maxEntries: 500, maxEntryBytes: 1000, maxTotalBytes: 100
 
 const makeArchive = (overrides: Partial<IArchiveExtractor> = {}) =>
   ({
-    expand: vi.fn().mockResolvedValue(ok([])),
+    expand: vi.fn().mockResolvedValue(ok({ entries: [], skipped: [] })),
     ...overrides,
   }) as unknown as IArchiveExtractor;
+
+// Mirrors the adapter's content sniffing closely enough for these tests: a PDF by
+// its extension, Markdown by its extension, anything else unsupported.
+const makeDetector = (): IDocumentTypeDetector => ({
+  detect: vi.fn((_buffer: Buffer, filename: string) => {
+    if (filename.endsWith(".pdf")) return ok("application/pdf");
+    if (filename.endsWith(".md")) return ok("text/markdown");
+    return ok(null);
+  }),
+});
 
 const draftDoc = (overrides: Partial<ExtractionDraftDocument> = {}): ExtractionDraftDocument => ({
   id: "doc-1",
@@ -47,7 +58,7 @@ describe("UploadDraftDocuments", () => {
   it("stores each file's bytes then records the rows", async () => {
     const repo = makeRepo();
     const storage = makeStorage();
-    const useCase = new UploadDraftDocuments(repo, storage, makeArchive());
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -73,13 +84,16 @@ describe("UploadDraftDocuments", () => {
     const storage = makeStorage();
     const archive = makeArchive({
       expand: vi.fn().mockResolvedValue(
-        ok([
-          { filename: "one.pdf", treePath: "bundle/one.pdf", mimeType: "application/pdf", buffer: Buffer.from("1") },
-          { filename: "two.pdf", treePath: "bundle/sub/two.pdf", mimeType: "application/pdf", buffer: Buffer.from("2") },
-        ]),
+        ok({
+          entries: [
+            { filename: "one.pdf", treePath: "bundle/one.pdf", mimeType: "application/pdf", buffer: Buffer.from("1") },
+            { filename: "two.pdf", treePath: "bundle/sub/two.pdf", mimeType: "application/pdf", buffer: Buffer.from("2") },
+          ],
+          skipped: [{ filename: "budget.xls", treePath: "bundle/budget.xls", reason: "Skipped: .xls files are not supported." }],
+        }),
       ),
     });
-    const useCase = new UploadDraftDocuments(repo, storage, archive);
+    const useCase = new UploadDraftDocuments(repo, storage, archive, makeDetector());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -97,6 +111,66 @@ describe("UploadDraftDocuments", () => {
       expect.objectContaining({ filename: "one.pdf", treePath: "bundle/one.pdf" }),
       expect.objectContaining({ filename: "two.pdf", treePath: "bundle/sub/two.pdf" }),
     ]);
+    expect(result.data!.skipped).toEqual([
+      { filename: "budget.xls", treePath: "bundle/budget.xls", reason: "Skipped: .xls files are not supported." },
+    ]);
+  });
+
+  it("types a loose file from its content and name, not the browser-reported type", async () => {
+    const repo = makeRepo();
+    const storage = makeStorage();
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector());
+
+    await useCase.execute({
+      flowId: "flow-1",
+      archiveLimits,
+      files: [
+        { filename: "notes.md", treePath: "notes.md", mimeType: "application/octet-stream", buffer: Buffer.from("# Notes") },
+      ],
+    });
+
+    const [, , mime] = (storage.put as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(mime).toBe("text/markdown");
+    expect(repo.add).toHaveBeenCalledWith("flow-1", [
+      expect.objectContaining({ filename: "notes.md", mimeType: "text/markdown" }),
+    ]);
+  });
+
+  it("skips an unsupported loose file with a reason instead of staging it", async () => {
+    const repo = makeRepo();
+    const storage = makeStorage();
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector());
+
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      archiveLimits,
+      files: [
+        { filename: "a.pdf", treePath: "a.pdf", mimeType: "application/pdf", buffer: Buffer.from("a") },
+        { filename: "photo.png", treePath: "vendor/photo.png", mimeType: "image/png", buffer: Buffer.from("p") },
+      ],
+    });
+
+    expect(storage.put).toHaveBeenCalledTimes(1);
+    expect(result.data!.skipped).toEqual([
+      { filename: "photo.png", treePath: "vendor/photo.png", reason: "Skipped: .png files are not supported." },
+    ]);
+  });
+
+  it("does not write rows when every file was skipped", async () => {
+    const repo = makeRepo();
+    const useCase = new UploadDraftDocuments(repo, makeStorage(), makeArchive(), makeDetector());
+
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      archiveLimits,
+      files: [{ filename: "photo.png", treePath: "photo.png", mimeType: "image/png", buffer: Buffer.from("p") }],
+    });
+
+    expect(repo.add).not.toHaveBeenCalled();
+    expect(result.data).toEqual({
+      documents: [],
+      skipped: [{ filename: "photo.png", treePath: "photo.png", reason: "Skipped: .png files are not supported." }],
+    });
   });
 
   it("aborts when a zip cannot be safely expanded", async () => {
@@ -105,7 +179,7 @@ describe("UploadDraftDocuments", () => {
     const archive = makeArchive({
       expand: vi.fn().mockResolvedValue(err(domainError("VALIDATION_FAILED", "zip bomb"))),
     });
-    const useCase = new UploadDraftDocuments(repo, storage, archive);
+    const useCase = new UploadDraftDocuments(repo, storage, archive, makeDetector());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -123,7 +197,7 @@ describe("UploadDraftDocuments", () => {
     const storage = makeStorage({
       put: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "disk full"))),
     });
-    const useCase = new UploadDraftDocuments(repo, storage, makeArchive());
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector());
 
     const result = await useCase.execute({
       flowId: "flow-1",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTemplateField, type ExtractionSchema } from "@wayfinder/domain";
+import { parseTemplateField, SUPPORTED_UPLOAD_EXTENSIONS, type ExtractionSchema } from "@wayfinder/domain";
 import {
   deriveOutputMode,
   emptyExtractionField,
@@ -8,6 +8,7 @@ import {
   schemaSeedKey,
   schemaToFieldModels,
   templateFieldToModel,
+  UPLOAD_ACCEPT_FILTER,
   type ExtractionFieldModel,
 } from "./extraction-editor-model";
 
@@ -138,5 +139,13 @@ describe("schemaSeedKey", () => {
 
   it("is stable once the query has settled, so a background refetch does not reset the form", () => {
     expect(schemaSeedKey(null, false)).toBe(schemaSeedKey(null, false));
+  });
+});
+
+describe("UPLOAD_ACCEPT_FILTER", () => {
+  it("offers every type extraction can read, plus zip archives", () => {
+    const offered = UPLOAD_ACCEPT_FILTER.split(",");
+    for (const extension of SUPPORTED_UPLOAD_EXTENSIONS) expect(offered).toContain(`.${extension}`);
+    expect(offered).toContain(".zip");
   });
 });

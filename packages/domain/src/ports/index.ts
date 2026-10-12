@@ -44,6 +44,7 @@ export * from "./document-storage";
 export * from "./document-generator";
 export * from "./object-storage";
 export * from "./document-extractor";
+export * from "./document-type-detector";
 export * from "./email-sender";
 export * from "./embeddings";
 export * from "./document-chunk-repository";

@@ -15,7 +15,7 @@ import {
   type StreamTextInput,
   type TokenUsage,
 } from "@wayfinder/domain";
-import { generateObject, generateText, streamObject, streamText } from "ai";
+import { NoObjectGeneratedError, generateObject, generateText, streamObject, streamText } from "ai";
 import { resolveModel, type ProviderCredentials } from "./providers";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
 import { LlmCallGovernor } from "./llm-concurrency";
@@ -56,6 +56,39 @@ const resolveForCall = (
   return { provider, model, credentials };
 };
 
+// Enough of the raw reply to see where it went wrong (a cut-off tail, a string
+// where a number belongs) without writing whole documents into admin_errors.
+const RESPONSE_TEXT_LOG_LIMIT = 2000;
+
+interface FailureDiagnostics {
+  detail: string;
+  metadata: Record<string, unknown>;
+}
+
+// A reply that "did not match schema" cannot be diagnosed from its message
+// alone. The SDK's error also carries why the model stopped, what it spent, the
+// validation failure and the text it actually produced; all of it is logged.
+const rejectedReplyDiagnostics = (cause: NoObjectGeneratedError): FailureDiagnostics => {
+  const usage = cause.usage ?? null;
+  const tokens = usage
+    ? `; prompt tokens: ${usage.promptTokens}, completion tokens: ${usage.completionTokens}`
+    : "";
+  return {
+    detail: `${cause.message} (finish reason: ${cause.finishReason ?? "unknown"}${tokens})`,
+    metadata: {
+      finishReason: cause.finishReason ?? null,
+      usage,
+      validationError: cause.cause instanceof Error ? cause.cause.message : null,
+      responseText: cause.text?.slice(0, RESPONSE_TEXT_LOG_LIMIT) ?? null,
+    },
+  };
+};
+
+const failureDiagnostics = (cause: unknown): FailureDiagnostics => {
+  if (NoObjectGeneratedError.isInstance(cause)) return rejectedReplyDiagnostics(cause);
+  return { detail: cause instanceof Error ? cause.message : String(cause), metadata: {} };
+};
+
 export class LanguageModelAdapter implements ILanguageModel {
   constructor(
     public readonly provider: ProviderName,
@@ -86,14 +119,14 @@ export class LanguageModelAdapter implements ILanguageModel {
     cause: unknown,
   ): void {
     if (!this.errorLogger) return;
-    const detail = cause instanceof Error ? cause.message : String(cause);
+    const { detail, metadata } = failureDiagnostics(cause);
     void this.errorLogger
       .log({
         level: "error",
         message: `LLM ${method} call failed${provider && model ? ` (${provider}:${model})` : ""}: ${detail}`,
         stack: cause instanceof Error ? (cause.stack ?? null) : null,
         page: "ai/language-model-adapter",
-        metadata: { method, provider: provider ?? null, model: model ?? null },
+        metadata: { method, provider: provider ?? null, model: model ?? null, ...metadata },
       })
       .catch(() => {});
   }

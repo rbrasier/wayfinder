@@ -30,7 +30,7 @@ describe("ZipIngestor.expand", () => {
     const result = await new ZipIngestor().expand(archive, limits());
 
     expect(result.error).toBeUndefined();
-    const entries = result.data ?? [];
+    const entries = result.data?.entries ?? [];
     const byPath = new Map(entries.map((entry) => [entry.treePath, entry]));
     expect(byPath.get("supplier-a/response.pdf")?.filename).toBe("response.pdf");
     expect(byPath.get("supplier-a/response.pdf")?.mimeType).toBe("application/pdf");
@@ -45,7 +45,44 @@ describe("ZipIngestor.expand", () => {
 
     const result = await new ZipIngestor().expand(archive, limits());
 
-    expect(result.data?.map((entry) => entry.filename)).toEqual(["response.pdf"]);
+    expect(result.data?.entries.map((entry) => entry.filename)).toEqual(["response.pdf"]);
+  });
+
+  it("reports each skipped entry with its path and a reason, instead of dropping it silently", async () => {
+    const archive = buildZip({
+      "vendor-a/response.pdf": pdfBytes("content"),
+      "vendor-a/pricing.xls": Buffer.from("legacy workbook"),
+    });
+
+    const result = await new ZipIngestor().expand(archive, limits());
+
+    expect(result.data?.skipped).toEqual([
+      { filename: "pricing.xls", treePath: "vendor-a/pricing.xls", reason: "Skipped: .xls files are not supported." },
+    ]);
+  });
+
+  it("drops operating-system metadata without reporting it as a skipped document", async () => {
+    const archive = buildZip({
+      "vendor-a/response.pdf": pdfBytes("content"),
+      "__MACOSX/vendor-a/._response.pdf": Buffer.from("resource fork"),
+      "vendor-a/.DS_Store": Buffer.from("finder"),
+    });
+
+    const result = await new ZipIngestor().expand(archive, limits());
+
+    expect(result.data?.entries.map((entry) => entry.treePath)).toEqual(["vendor-a/response.pdf"]);
+    expect(result.data?.skipped).toEqual([]);
+  });
+
+  it("expands an .xlsx workbook as a supported document", async () => {
+    const workbook = buildZip({ "xl/workbook.xml": "<workbook/>" });
+    const archive = buildZip({ "vendor-a/compliance.xlsx": workbook });
+
+    const result = await new ZipIngestor().expand(archive, limits());
+
+    expect(result.data?.entries.map((entry) => entry.mimeType)).toEqual([
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ]);
   });
 
   it("rejects an archive with more entries than allowed", async () => {

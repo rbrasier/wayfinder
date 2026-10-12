@@ -353,7 +353,7 @@ export class StartBatchRun {
     for (const archive of input.archives) {
       const expanded = await this.archiveExtractor.expand(archive.buffer, archiveLimits);
       if (expanded.error) return expanded;
-      for (const entry of expanded.data) {
+      for (const entry of expanded.data.entries) {
         files.push({
           filename: entry.filename,
           treePath: entry.treePath,
@@ -422,6 +422,7 @@ export class StartBatchRun {
     const extracted = await this.documentExtractor.extract({
       buffer: file.buffer,
       mimeType: file.mimeType,
+      filename: file.filename,
     });
     if (extracted.error) return undefined;
     return extracted.data.slice(0, CONTENT_SIGNAL_CHARS) || undefined;
