@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { ok, err, domainError } from "@rbrasier/domain";
 import type { ExtractionField, ILanguageModel } from "@rbrasier/domain";
 import type { ExtractionResultData } from "@rbrasier/shared";
-import { extractDocumentFields, UNREADABLE_RATIONALE } from "./extract-document-fields";
+import {
+  extractDocumentFields,
+  extractionOutputBudget,
+  UNREADABLE_RATIONALE,
+} from "./extract-document-fields";
 
 const usage = {
   promptTokens: 10,
@@ -192,5 +196,36 @@ describe("extractDocumentFields", () => {
     });
 
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+});
+
+describe("extractDocumentFields — output budget", () => {
+  it("gives the model an output budget scaled to the field count", async () => {
+    const model = makeModel({
+      supplier_name: { value: "Acme", confidence: 80, rationale: "x" },
+      contract_value: { value: "", confidence: 0, rationale: "absent" },
+    });
+
+    await extractDocumentFields(model, {
+      fields: [supplierName, contractValue],
+      recordLabel: "Acme response",
+      documentTexts: [{ filename: "acme.pdf", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+    });
+
+    const call = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.maxTokens).toBe(extractionOutputBudget(2));
+  });
+});
+
+describe("extractionOutputBudget", () => {
+  it("never drops below the provider default and never exceeds 8192", () => {
+    expect(extractionOutputBudget(1)).toBe(4096);
+    expect(extractionOutputBudget(500)).toBe(8192);
+  });
+
+  it("raises the budget above the 4096 default for a 13-field schema", () => {
+    expect(extractionOutputBudget(13)).toBeGreaterThan(4096);
   });
 });

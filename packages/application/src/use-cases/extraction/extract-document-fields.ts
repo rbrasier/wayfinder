@@ -9,6 +9,7 @@ import {
 } from "@rbrasier/domain";
 import { buildExtractionResultSchema, type ExtractionResultData } from "@rbrasier/shared";
 import { buildExtractionSystemPrompt } from "./build-extraction-prompt";
+import { clampOutputBudget } from "./output-budget";
 
 // Shown when a record's source documents carry no readable text (e.g. a scanned
 // PDF with no text layer). The value is left blank rather than letting the model
@@ -55,6 +56,14 @@ const buildDocumentsSection = (documentTexts: RecordDocumentText[]): string =>
 // every field's value, a 0-100 confidence, and a rationale in one call; results
 // are mapped back in schema order, best-effort — a missing key becomes a blank,
 // zero-confidence result rather than failing the extraction.
+// Each field returns a value, a confidence and a rationale, so the reply grows
+// with the field count rather than with the length of the documents.
+const TOKENS_PER_FIELD = 300;
+const REPLY_OVERHEAD_TOKENS = 1024;
+
+export const extractionOutputBudget = (fieldCount: number): number =>
+  clampOutputBudget(REPLY_OVERHEAD_TOKENS + TOKENS_PER_FIELD * fieldCount);
+
 export const extractDocumentFields = async (
   languageModel: ILanguageModel,
   input: ExtractDocumentFieldsInput,
@@ -86,6 +95,7 @@ export const extractDocumentFields = async (
     // An explicit keyed schema (every field required) forces a complete result —
     // a free-form record let the model silently drop fields it was unsure of.
     schema: buildExtractionResultSchema(keys),
+    maxTokens: extractionOutputBudget(keys.length),
   });
   if (result.error) return result;
 
