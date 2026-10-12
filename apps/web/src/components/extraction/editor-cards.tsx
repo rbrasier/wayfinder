@@ -4,7 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Eye, MoreHorizontal, Upload } from "lucide-react";
-import { shouldPreviewByDefault, type ExtractionSchema, type FlowContextDoc } from "@rbrasier/domain";
+import {
+  shouldPreviewByDefault,
+  type ExtractionSchema,
+  type FlowContextDoc,
+  type SkippedUpload,
+} from "@rbrasier/domain";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +26,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/trpc/client";
 import { CopyButton } from "@/components/canvas/node-config-modal-helpers";
+import { SkippedUploadsNotice } from "./skipped-uploads-notice";
 import { UploadTree, type UploadedFile } from "./upload-tree";
 import { ExtractionFieldEditor } from "./extraction-field-editor";
 import { FocusCard, Segmented, Switch } from "./editor-cards-controls";
@@ -30,6 +36,7 @@ import {
   extractionFieldToDraft,
   schemaToFieldModels,
   templateFieldToModel,
+  UPLOAD_ACCEPT_FILTER,
   type ExtractionFieldModel,
   type OutputMode,
 } from "./extraction-editor-model";
@@ -179,8 +186,13 @@ export function EditorCards({
 
   const invalidateDraftDocs = () => void utils.extraction.listDraftDocuments.invalidate({ flowId });
 
+  const [skippedUploads, setSkippedUploads] = useState<SkippedUpload[]>([]);
+
   const uploadDraftMutation = trpc.extraction.uploadDraftDocuments.useMutation({
-    onSuccess: invalidateDraftDocs,
+    onSuccess: ({ skipped }) => {
+      setSkippedUploads(skipped);
+      invalidateDraftDocs();
+    },
     onError: (error) => toast.error(error.message),
   });
 
@@ -428,15 +440,20 @@ export function EditorCards({
                         <span className="text-[13px] font-medium text-[#5c574c]">
                           Upload documents or a zip
                         </span>
-                        <span className="text-[11px] text-[#736d5f]">Folder structure is preserved.</span>
+                        <span className="text-[11px] text-[#736d5f]">
+                          PDF, Word (.docx), Excel (.xlsx), text, Markdown or CSV — or a zip of them.
+                          Folder structure is preserved.
+                        </span>
                         <input
                           id="sample-upload"
                           type="file"
                           multiple
+                          accept={UPLOAD_ACCEPT_FILTER}
                           className="sr-only"
                           onChange={(event) => void handleUploadSamples(event.target.files)}
                         />
                       </label>
+                      <SkippedUploadsNotice skipped={skippedUploads} onDismiss={() => setSkippedUploads([])} />
                       <UploadTree files={uploads} onRemove={handleRemoveDraft} />
                     </div>
                   </div>

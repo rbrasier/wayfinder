@@ -1,3 +1,4 @@
+import type { SkippedUpload } from "../entities/extraction-draft-document";
 import type { Result } from "../result";
 
 // One sanitised entry pulled from an uploaded archive. `treePath` preserves the
@@ -20,10 +21,16 @@ export interface ArchiveLimits {
   maxTotalBytes: number;
 }
 
+// The supported entries of an archive, plus every entry left out and why.
+export interface ExpandedArchive {
+  entries: ArchiveEntry[];
+  skipped: SkippedUpload[];
+}
+
 // Expands an uploaded zip into sanitised, tree-preserving entries. Enforces
 // entry-count, per-entry-size, decompression-bomb, and zip-slip guards, and
 // sniffs MIME from content rather than trusting the extension (ADR-033, phase
 // §2/§5). Never throws — a malformed or unsafe archive returns a DomainError.
 export interface IArchiveExtractor {
-  expand(archive: Buffer, limits: ArchiveLimits): Promise<Result<ArchiveEntry[]>>;
+  expand(archive: Buffer, limits: ArchiveLimits): Promise<Result<ExpandedArchive>>;
 }

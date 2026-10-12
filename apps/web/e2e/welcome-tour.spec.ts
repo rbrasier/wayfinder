@@ -55,8 +55,10 @@ test.describe('Welcome tour', () => {
     await welcome.getByRole('button', { name: /build a flow/i }).click();
 
     // First hand-off: the flows page opens the dialog and its callout on load.
+    // The URL changes before the page has compiled and hydrated, so the callout
+    // — client-rendered — gets the same cold-compile allowance as the URL.
     await expect(page).toHaveURL(/\/flows\?tour=new-flow$/, { timeout: NAV_TIMEOUT });
-    await expect(page.getByTestId('new-flow-step-callout')).toBeVisible();
+    await expect(page.getByTestId('new-flow-step-callout')).toBeVisible({ timeout: NAV_TIMEOUT });
     await expect(page.getByText('Step 1 of 2')).toBeVisible();
     await page.locator('#flow-name').fill('Tour leave request');
     await page.locator('#flow-expert-role').fill('HR advisor');
@@ -67,7 +69,7 @@ test.describe('Welcome tour', () => {
       timeout: NAV_TIMEOUT,
     });
     const explainer = page.getByTestId('flow-explainer');
-    await expect(explainer).toBeVisible();
+    await expect(explainer).toBeVisible({ timeout: NAV_TIMEOUT });
     await expect(
       explainer.getByRole('heading', { name: 'A flow is a guided conversation, not a form' }),
     ).toBeVisible();

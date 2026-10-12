@@ -1,6 +1,7 @@
 import {
   deriveFieldKey,
   parseTemplateField,
+  SUPPORTED_UPLOAD_EXTENSIONS,
   templateFieldToLine,
   type ExtractionFieldDraft,
   type ExtractionSchema,
@@ -165,3 +166,11 @@ export const annotationToField = (line: string): TemplateField | null => {
   const parsed = parseTemplateField(line);
   return parsed.error ? null : parsed.data;
 };
+
+// The input picker's filter: every type extraction can read, plus zip archives
+// of them. Derived from the domain list so the picker never offers a type the
+// server would skip, nor hides one it would read.
+export const UPLOAD_ACCEPT_FILTER = [...SUPPORTED_UPLOAD_EXTENSIONS, "zip"]
+  .map((extension) => `.${extension}`)
+  .join(",");
+
