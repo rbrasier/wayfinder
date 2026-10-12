@@ -1,6 +1,13 @@
 import PizZip from "pizzip";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { ArchiveEntry, ArchiveLimits, IArchiveExtractor, Result } from "@rbrasier/domain";
+import { domainError, err, isSystemFile, ok, unsupportedFileReason } from "@rbrasier/domain";
+import type {
+  ArchiveEntry,
+  ArchiveLimits,
+  ExpandedArchive,
+  IArchiveExtractor,
+  Result,
+  SkippedUpload,
+} from "@rbrasier/domain";
 import { sniffMimeType } from "./mime-sniff";
 
 // PizZip exposes the central-directory uncompressed size on a private field. We
@@ -45,10 +52,10 @@ const bomb = (limit: number): Result<never> =>
 // Safe, tree-preserving zip expansion (ADR-033 §5, phase §2). Enforces the four
 // hard guards — entry count, per-entry size, decompression bomb, and zip-slip —
 // and sniffs MIME from content. Unrecognised entries are skipped rather than
-// trusted. Never throws: a malformed or unsafe archive comes back as a
+// trusted, and each skip is reported with its reason. Never throws: a malformed or unsafe archive comes back as a
 // DomainError.
 export class ZipIngestor implements IArchiveExtractor {
-  async expand(archive: Buffer, limits: ArchiveLimits): Promise<Result<ArchiveEntry[]>> {
+  async expand(archive: Buffer, limits: ArchiveLimits): Promise<Result<ExpandedArchive>> {
     let zip: PizZip;
     try {
       zip = new PizZip(archive, { checkCRC32: false });
@@ -72,6 +79,7 @@ export class ZipIngestor implements IArchiveExtractor {
     if (declaredGuard.error) return declaredGuard;
 
     const entries: ArchiveEntry[] = [];
+    const skipped: SkippedUpload[] = [];
     let totalBytes = 0;
     for (const entry of files) {
       if (isUnsafePath(entry.name)) {
@@ -91,7 +99,11 @@ export class ZipIngestor implements IArchiveExtractor {
       const treePath = entry.name.replace(/\\/g, "/");
       const filename = treePath.split("/").pop() ?? treePath;
       const mimeType = sniffMimeType(buffer, filename);
-      if (!mimeType) continue;
+      if (!mimeType) {
+        if (isSystemFile(treePath)) continue;
+        skipped.push({ filename, treePath, reason: unsupportedFileReason(filename) });
+        continue;
+      }
 
       entries.push({ filename, treePath, mimeType, buffer });
     }
@@ -100,12 +112,12 @@ export class ZipIngestor implements IArchiveExtractor {
       return err(
         domainError(
           "VALIDATION_FAILED",
-          "The archive contained no supported documents (PDF, DOCX, or text).",
+          "The archive contained no supported documents (PDF, DOCX, XLSX, or text).",
         ),
       );
     }
 
-    return ok(entries);
+    return ok({ entries, skipped });
   }
 
   // Rejects an oversized or bomb archive from the central directory's declared

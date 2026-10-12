@@ -1,6 +1,6 @@
 # Implementation summary — Round and clamp chat and doc-gen confidences
 
-- **Version**: 0.28.29 → **0.28.30** (PATCH — no schema change, no migration). Assumes #316 lands as 0.28.29.
+- **Version**: 0.28.29 → **0.28.30** (PATCH — no schema change, no migration).
 - **Root cause**: `turnResponseSchema.stepCompleteConfidence` and the two alignment
   confidences in `documentGenerationConfidenceSchema` / `preGenerationEvaluationSchema`
   were `z.number().int().min(0).max(100)`, so a model reply of `87.5`, `0.85` or `140`

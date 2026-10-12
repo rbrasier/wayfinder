@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   type CalledModel,
   domainError,
@@ -6,6 +6,7 @@ import {
   ok,
   type ArchiveEntry,
   type ArchiveLimits,
+  type ExpandedArchive,
   type CreateRunInput,
   type DocumentOutcome,
   type ExtractionDocument,
@@ -389,8 +390,8 @@ class FakeLanguageModel implements ILanguageModel {
 
 class FakeArchiveExtractor implements IArchiveExtractor {
   constructor(private readonly entries: ArchiveEntry[] = []) {}
-  async expand(_archive: Buffer, _limits: ArchiveLimits): Promise<Result<ArchiveEntry[]>> {
-    return ok(this.entries.map((entry) => ({ ...entry })));
+  async expand(_archive: Buffer, _limits: ArchiveLimits): Promise<Result<ExpandedArchive>> {
+    return ok({ entries: this.entries.map((entry) => ({ ...entry })), skipped: [] });
   }
 }
 
@@ -585,6 +586,22 @@ describe("ProcessExtractionTask", () => {
     expect(result.data?.doneCount).toBe(1);
     const record = runs.recordById(recordId);
     expect(record?.fields[0]).toMatchObject({ key: "supplier_name", value: "Globex" });
+  });
+
+  it("passes the stored file name so a browser-typed document can still be read", async () => {
+    const runs = new InMemoryExtractionRunRepository();
+    const storage = new FakeObjectStorage();
+    await storage.put("key-a", Buffer.from("pdf bytes"));
+    const { document } = await seedClaimedDocument(runs);
+    const extractor = new FakeDocumentExtractor("full readable text");
+    const extract = vi.spyOn(extractor, "extract");
+
+    await new ProcessExtractionTask(runs, storage, extractor, new FakeLanguageModel()).execute({
+      document,
+      schema: buildSchema(),
+    });
+
+    expect(extract).toHaveBeenCalledWith(expect.objectContaining({ filename: "a.pdf" }));
   });
 
   it("classifies an empty-text document as unreadable without calling the model", async () => {
