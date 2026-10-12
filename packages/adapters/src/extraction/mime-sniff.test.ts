@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DOCX_MIME, PDF_MIME, sniffMimeType } from "./mime-sniff";
+import { DOCX_MIME, PDF_MIME, XLSX_MIME, sniffMimeType } from "./mime-sniff";
 
 const withMagic = (magic: number[], tail = "rest of file"): Buffer =>
   Buffer.concat([Buffer.from(magic), Buffer.from(tail)]);
@@ -15,6 +15,11 @@ describe("sniffMimeType", () => {
     const zip = withMagic([0x50, 0x4b, 0x03, 0x04]);
     expect(sniffMimeType(zip, "response.docx")).toBe(DOCX_MIME);
     expect(sniffMimeType(zip, "archive.zip")).toBeNull();
+  });
+
+  it("trusts a zip signature as XLSX when the name is .xlsx", () => {
+    const zip = withMagic([0x50, 0x4b, 0x03, 0x04]);
+    expect(sniffMimeType(zip, "Compliance Workbook.XLSX")).toBe(XLSX_MIME);
   });
 
   it("falls back to the extension for text formats", () => {

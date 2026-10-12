@@ -1,6 +1,7 @@
 import {
   analyseDocumentCount,
   buildExtractionField,
+  chooseAnalysisSample,
   domainError,
   err,
   isExtractionSnapshot,
@@ -81,12 +82,12 @@ export class ProposeExtractionFields {
     if (staged.error) return staged;
 
     const limit = analyseDocumentCount(existing.data.input);
-    const selected = staged.data.slice(0, limit);
-    if (selected.length === 0) {
+    const candidates = chooseAnalysisSample(staged.data);
+    if (candidates.length === 0) {
       return this.settle(run.id, { status: "partial", documentsRead: 0, documentsUnreadable: 0 });
     }
 
-    const read = await this.readDocuments(selected);
+    const read = await this.readDocuments(candidates, limit);
     if (read.documents.length === 0) {
       return this.settle(run.id, {
         status: "partial",
@@ -129,32 +130,44 @@ export class ProposeExtractionFields {
     return this.runs.settleAnalysisRun(runId, outcome, this.costPerAnalysisUsd);
   }
 
+  // Reads candidates in sample order until `limit` of them yield text. An
+  // unreadable one (a scanned PDF, missing bytes) is counted and the next
+  // candidate takes its place, so the proposer still sees a full sample; reading
+  // text costs no model call.
   private async readDocuments(
-    staged: { filename: string; storageKey: string; mimeType: string }[],
+    candidates: { filename: string; storageKey: string; mimeType: string }[],
+    limit: number,
   ): Promise<{ documents: ProposalDocument[]; unreadable: number }> {
     const documents: ProposalDocument[] = [];
     let unreadable = 0;
 
-    for (const document of staged) {
-      const bytes = await this.storage.get(document.storageKey);
-      if (bytes.error) {
+    for (const document of candidates) {
+      if (documents.length >= limit) break;
+      const text = await this.readText(document);
+      if (text === null) {
         unreadable += 1;
         continue;
       }
-
-      const text = await this.extractor.extract({
-        buffer: bytes.data,
-        mimeType: document.mimeType,
-      });
-      if (text.error || text.data.trim().length === 0) {
-        unreadable += 1;
-        continue;
-      }
-
-      documents.push({ filename: document.filename, text: text.data });
+      documents.push({ filename: document.filename, text });
     }
 
     return { documents, unreadable };
+  }
+
+  private async readText(document: {
+    filename: string;
+    storageKey: string;
+    mimeType: string;
+  }): Promise<string | null> {
+    const bytes = await this.storage.get(document.storageKey);
+    if (bytes.error) return null;
+    const text = await this.extractor.extract({
+      buffer: bytes.data,
+      mimeType: document.mimeType,
+      filename: document.filename,
+    });
+    if (text.error || text.data.trim().length === 0) return null;
+    return text.data;
   }
 
   private async loadDraftFieldSet(flowId: string): Promise<Result<DraftFieldSet>> {

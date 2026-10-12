@@ -27,6 +27,13 @@ const stagedDocument = (name: string) => ({
   mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
 });
 
+const stagedFile = (treePath: string) => ({
+  ...stagedDocument(treePath),
+  filename: treePath.split("/").pop()!,
+  treePath,
+  storageKey: `key-${treePath}`,
+});
+
 const proposal = (label: string): ExtractionFieldDraft => ({
   label,
   annotation: `${label} (text)`,
@@ -137,6 +144,41 @@ describe("ProposeExtractionFields", () => {
 
     // The fixture's saved config sets analyseSampleSize to 2.
     expect(harness.readKeys).toEqual(["key-a", "key-b"]);
+  });
+
+  it("spreads the sample across vendors' sub-folders rather than reading only the first", async () => {
+    const harness = buildHarness({
+      staged: [stagedFile("acme/proposal.docx"), stagedFile("acme/cover.docx"), stagedFile("globex/proposal.docx")],
+      existingFields: [],
+    });
+
+    await harness.useCase.execute(analysisRun());
+
+    expect(harness.readKeys).toEqual(["key-acme/proposal.docx", "key-globex/proposal.docx"]);
+  });
+
+  it("does not spend the sample on a file type extraction cannot read", async () => {
+    const harness = buildHarness({
+      staged: [stagedFile("acme/compliance.xls"), stagedFile("acme/proposal.docx")],
+      existingFields: [],
+    });
+
+    await harness.useCase.execute(analysisRun());
+
+    expect(harness.readKeys).toEqual(["key-acme/proposal.docx"]);
+  });
+
+  it("reads the next candidate when a sampled document turns out unreadable", async () => {
+    const harness = buildHarness({
+      staged: [stagedDocument("a"), stagedDocument("b"), stagedDocument("c")],
+      unreadableKeys: ["key-a"],
+      existingFields: [],
+    });
+
+    await harness.useCase.execute(analysisRun());
+
+    expect(harness.readKeys).toEqual(["key-a", "key-b", "key-c"]);
+    expect(harness.settled[0]).toEqual({ status: "partial", documentsRead: 2, documentsUnreadable: 1 });
   });
 
   it("reads all staged documents when there are fewer than the configured count", async () => {

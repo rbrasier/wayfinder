@@ -3,6 +3,7 @@ import { ok, err, domainError } from "@wayfinder/domain";
 import type { ILanguageModel } from "@wayfinder/domain";
 import type { FileGroupingData } from "@wayfinder/shared";
 import {
+  groupingOutputBudget,
   oneRecordPerFile,
   selectRecordFiles,
   type SelectableFile,
@@ -125,5 +126,63 @@ describe("selectRecordFiles", () => {
     const result = await selectRecordFiles(model, { files, selectionCriteria: "x" });
 
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+
+  it("gives the model an output budget scaled to the file count", async () => {
+    const model = makeModel({ records: [{ label: "Acme", fileIds: ["f1"] }] });
+
+    await selectRecordFiles(model, { files, selectionCriteria: "x" });
+
+    const call = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.maxTokens).toBe(groupingOutputBudget(files.length));
+  });
+
+  it("retries once when the first grouping reply is rejected", async () => {
+    const generateObject = vi
+      .fn()
+      .mockResolvedValueOnce(err(domainError("AI_PROVIDER_FAILED", "generateObject failed.")))
+      .mockResolvedValueOnce(ok({ object: { records: [{ label: "Acme", fileIds: ["f1"] }] }, usage }));
+    const model = { provider: "anthropic", generateObject } as unknown as ILanguageModel;
+
+    const result = await selectRecordFiles(model, { files, selectionCriteria: "x" });
+
+    expect(generateObject).toHaveBeenCalledTimes(2);
+    expect(result.data!.groups).toEqual([{ label: "Acme", fileIds: ["f1"] }]);
+  });
+
+  it("fails with a plain-English message after the retry also fails", async () => {
+    const generateObject = vi
+      .fn()
+      .mockResolvedValue(err(domainError("AI_PROVIDER_FAILED", "generateObject failed.")));
+    const model = { provider: "anthropic", generateObject } as unknown as ILanguageModel;
+
+    const result = await selectRecordFiles(model, { files, selectionCriteria: "x" });
+
+    expect(generateObject).toHaveBeenCalledTimes(2);
+    expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+    expect(result.error?.message).toContain("could not group the files into records");
+  });
+
+  it("does not retry a quota refusal", async () => {
+    const generateObject = vi
+      .fn()
+      .mockResolvedValue(err(domainError("QUOTA_EXCEEDED", "Monthly budget reached.")));
+    const model = { provider: "anthropic", generateObject } as unknown as ILanguageModel;
+
+    const result = await selectRecordFiles(model, { files, selectionCriteria: "x" });
+
+    expect(generateObject).toHaveBeenCalledTimes(1);
+    expect(result.error?.code).toBe("QUOTA_EXCEEDED");
+  });
+});
+
+describe("groupingOutputBudget", () => {
+  it("never drops below the provider default and never exceeds 8192", () => {
+    expect(groupingOutputBudget(1)).toBe(4096);
+    expect(groupingOutputBudget(10_000)).toBe(8192);
+  });
+
+  it("grows with the file count in between", () => {
+    expect(groupingOutputBudget(80)).toBeGreaterThan(groupingOutputBudget(40));
   });
 });

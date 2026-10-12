@@ -3,7 +3,8 @@ import type { AiConfig } from "@wayfinder/domain";
 import { LanguageModelAdapter } from "./language-model-adapter";
 import type { RuntimeConfigStore } from "../config/runtime-config-store";
 
-vi.mock("ai", () => ({
+vi.mock("ai", async (importOriginal) => ({
+  NoObjectGeneratedError: (await importOriginal<typeof import("ai")>()).NoObjectGeneratedError,
   generateObject: vi.fn(),
   generateText: vi.fn(),
   streamText: vi.fn(),
@@ -14,7 +15,7 @@ vi.mock("./providers", () => ({
   resolveModel: vi.fn(() => ({ __mockedModel: true })),
 }));
 
-import { generateObject, generateText, streamObject, streamText } from "ai";
+import { NoObjectGeneratedError, generateObject, generateText, streamObject, streamText } from "ai";
 import { resolveModel } from "./providers";
 
 const openaiConfig: AiConfig = {
@@ -560,6 +561,42 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
         metadata: expect.objectContaining({ method: "generateObject" }),
       }),
     );
+  });
+
+  it("logs why a structured reply was rejected: finish reason, usage, validation error and raw text", async () => {
+    const rawReply = `{"supplier":{"value":"Acme","confidence":87.5,"rationale":"${"x".repeat(5000)}`;
+    vi.mocked(generateObject).mockRejectedValue(
+      new NoObjectGeneratedError({
+        message: "No object generated: response did not match schema.",
+        cause: new Error("Expected integer, received float at supplier.confidence"),
+        text: rawReply,
+        response: { id: "r1", timestamp: new Date(0), modelId: "gpt-6-turbo" },
+        usage: { promptTokens: 12000, completionTokens: 4096, totalTokens: 16096 },
+        finishReason: "length",
+      }),
+    );
+    const errorLogger = makeErrorLogger();
+    const adapter = new LanguageModelAdapter(
+      "openai",
+      makeConfigStore(openaiConfig),
+      undefined,
+      errorLogger,
+    );
+
+    await adapter.generateObject({ purpose: "chat", schema, prompt: "x" });
+
+    const entry = errorLogger.log.mock.calls[0]![0];
+    expect(entry.message).toContain("finish reason: length");
+    expect(entry.message).toContain("completion tokens: 4096");
+    expect(entry.metadata).toEqual(
+      expect.objectContaining({
+        finishReason: "length",
+        usage: { promptTokens: 12000, completionTokens: 4096, totalTokens: 16096 },
+        validationError: "Expected integer, received float at supplier.confidence",
+      }),
+    );
+    expect(entry.metadata.responseText).toHaveLength(2000);
+    expect(rawReply.startsWith(entry.metadata.responseText)).toBe(true);
   });
 
   it("logs a streamText/streamObject setup failure (thrown before any stream exists)", async () => {

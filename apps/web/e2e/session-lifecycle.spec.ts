@@ -50,17 +50,19 @@ test.describe('Session lifecycle: revoke a user everywhere', () => {
     request,
     page,
   }) => {
+    // Three navigations across two browsers, any of which may compile its route.
+    test.setTimeout(COLD_ROUTE_BUDGET);
     const targetContext = await signedInContextFor(browser, request, REVOKE_TARGET_EMAIL);
     const targetPage = await targetContext.newPage();
 
     // Establish that the target really is signed in, so the assertion after the
     // revoke is about the revoke and not about a session that never worked.
-    await targetPage.goto('/');
+    await targetPage.goto('/', untilDom);
     await expect(targetPage).not.toHaveURL(/login/);
 
-    await page.goto('/admin/users');
+    await page.goto('/admin/users', untilDom);
     const revokeButton = page.getByTestId(`revoke-sessions-${REVOKE_TARGET_EMAIL}`);
-    await expect(revokeButton).toBeVisible();
+    await expect(revokeButton).toBeVisible({ timeout: NAV_TIMEOUT });
     await revokeButton.click();
 
     await page.getByTestId('revoke-sessions-confirm').click();
@@ -68,8 +70,8 @@ test.describe('Session lifecycle: revoke a user everywhere', () => {
     await page.screenshot({ path: 'screenshots/session-lifecycle-revoked.png', fullPage: true });
 
     // The revoked browser still holds its cookie; the session behind it is gone.
-    await targetPage.goto('/');
-    await targetPage.waitForURL(/\/login/, { timeout: 15_000 });
+    await targetPage.goto('/', untilDom);
+    await targetPage.waitForURL(/\/login/, { timeout: NAV_TIMEOUT });
 
     await targetContext.close();
   });
