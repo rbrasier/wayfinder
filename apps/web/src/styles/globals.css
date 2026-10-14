@@ -1,4 +1,7 @@
-@import 'tailwindcss';
+/* Scan src/ only, as v3's `content` did. v4's default scans all of apps/web,
+   so the e2e suite's session and seed files (written mid-run) triggered CSS
+   rebuilds and hot reloads that interrupted pages under test. */
+@import 'tailwindcss' source('..');
 @import 'tw-animate-css';
 
 @custom-variant dark (&:is(.dark *));
