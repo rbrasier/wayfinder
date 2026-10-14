@@ -88,7 +88,7 @@ export function RewindForkModal({
                   >
                     <span className="block font-medium">{fork.forkNodeName}</span>
                     <span
-                      className={`mt-1 block text-[12px] leading-[1.5] ${
+                      className={`mt-1 block text-[12px] leading-normal ${
                         selectedForkId === fork.forkNodeId ? "text-[#3d4a70]" : "text-[#736d5f]"
                       }`}
                     >
@@ -120,7 +120,7 @@ export function RewindForkModal({
                       </span>
                       {branch.rule && (
                         <span
-                          className={`mt-1 block text-[12px] leading-[1.5] ${
+                          className={`mt-1 block text-[12px] leading-normal ${
                             selectedBranchId === branch.nodeId ? "text-[#3d4a70]" : "text-[#736d5f]"
                           }`}
                         >

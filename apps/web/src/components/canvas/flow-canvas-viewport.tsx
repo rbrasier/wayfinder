@@ -124,7 +124,7 @@ export function FlowCanvasViewport({
               <Button
                 variant="outline"
                 onClick={() => onAddNextStep(nextStepAnchor)}
-                className="pointer-events-auto border-dashed opacity-70 shadow-sm transition-opacity hover:opacity-100 focus-visible:opacity-100"
+                className="pointer-events-auto border-dashed opacity-70 shadow-xs transition-opacity hover:opacity-100 focus-visible:opacity-100"
               >
                 + Create the next step in your workflow
               </Button>

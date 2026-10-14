@@ -44,11 +44,11 @@ export function FlowExplainerCarousel({ open, hasSteps, onClose, onFinish }: Flo
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogPortal>
-        <DialogOverlay className="bg-[rgba(20,18,15,0.5)] backdrop-blur-sm" />
+        <DialogOverlay className="bg-[rgba(20,18,15,0.5)] backdrop-blur-xs" />
         <DialogPrimitive.Content
           data-testid="flow-explainer"
           onKeyDown={onKeyDown}
-          className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+          className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 focus:outline-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
         >
           <ArrowButton
             direction="previous"
@@ -63,7 +63,7 @@ export function FlowExplainerCarousel({ open, hasSteps, onClose, onFinish }: Flo
 
           <div className="overflow-hidden rounded-[18px] bg-white shadow-[0_4px_24px_rgba(0,0,0,.13),0_20px_60px_rgba(0,0,0,.10)]">
             <div className="flex items-center justify-between px-[22px] pb-3 pt-4">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#666055]">
                 How flows work · {index + 1} of {EXPLAINER_CARDS.length}
               </span>
               <DialogPrimitive.Close className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-[#f5f3ee] text-[#5c574c] transition-colors hover:bg-[#ebe8e0]">

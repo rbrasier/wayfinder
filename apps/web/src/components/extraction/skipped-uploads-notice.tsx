@@ -34,7 +34,7 @@ export function SkippedUploadsNotice({
       </div>
       <ul className="mt-1 space-y-0.5">
         {skipped.map((file) => (
-          <li key={file.treePath} className="break-words">
+          <li key={file.treePath} className="wrap-break-word">
             <span className="font-mono">{file.treePath}</span> — {file.reason}
           </li>
         ))}

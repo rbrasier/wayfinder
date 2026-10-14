@@ -88,7 +88,7 @@ export function N8nExtractionInfoDialog({ open, onClose, variant }: N8nExtractio
                 </span>
                 <div className="min-w-0">
                   <p className="text-[13px] font-medium text-[#1c1b19]">{method.title}</p>
-                  <p className="text-[12px] leading-[1.5] text-[#5c574c]">{method.detail}</p>
+                  <p className="text-[12px] leading-normal text-[#5c574c]">{method.detail}</p>
                 </div>
               </li>
             ))}

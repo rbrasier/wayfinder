@@ -152,7 +152,7 @@ export function UserFlowsContent() {
                       <TableCell className="text-[13px] text-[#666055]">
                         {new Date(flow.updatedAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="space-x-2 text-right">
+                      <TableCell className="text-right [&>*+*]:ml-2">
                         <Button
                           size="sm"
                           variant="outline"

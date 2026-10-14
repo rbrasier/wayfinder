@@ -37,7 +37,7 @@ export function WelcomeTourDialog({
       <DialogContent className="max-w-3xl" data-testid="welcome-tour">
         <DialogHeader>
           <div>
-            <div className="mb-[3px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
+            <div className="mb-[3px] text-[11px] font-semibold uppercase tracking-wider text-[#666055]">
               Welcome to Wayfinder
             </div>
             <DialogTitle>What would you like to do first?</DialogTitle>
@@ -124,7 +124,7 @@ export function WelcomeTourDialog({
                 asks, the rules it follows and the template it fills in. No code, no prompts —
                 we&apos;ll walk you through it.
               </p>
-              <ol className="space-y-1.5 text-[12.5px] leading-[1.5] text-[#5c574c]">
+              <ol className="space-y-1.5 text-[12.5px] leading-normal text-[#5c574c]">
                 <li className="flex gap-2">
                   <span className="font-semibold text-wf-primary">1.</span>
                   Name your flow and say who the AI should be.

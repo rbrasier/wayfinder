@@ -97,7 +97,7 @@ export function ManualEstimateModal({
                 onClick={() => setDraft({ ...EMPTY_DRAFT, mode: tab.id })}
                 className={`flex-1 rounded-md px-3 py-1.5 text-sm transition-colors ${
                   draft.mode === tab.id
-                    ? "bg-background font-medium text-foreground shadow-sm"
+                    ? "bg-background font-medium text-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >

@@ -108,7 +108,7 @@ function ValueCell({
   }
   return (
     <div className="flex min-w-0 items-start justify-between gap-[8px]">
-      <span className="line-clamp-3 min-w-0 break-words" title={field.value || undefined}>
+      <span className="line-clamp-3 min-w-0 wrap-break-word" title={field.value || undefined}>
         {field.value || <span className="text-[#c9c3b5]">—</span>}
       </span>
       <span className="mt-[4px]">
@@ -212,7 +212,7 @@ export function ResultGrid({
           data-testid="results-table"
         >
           <thead>
-            <tr className="border-b border-[#e7e3db] text-left text-[11px] uppercase tracking-[0.05em] text-[#666055]">
+            <tr className="border-b border-[#e7e3db] text-left text-[11px] uppercase tracking-wider text-[#666055]">
               <th scope="col" className="w-[36px] px-[8px] py-[8px]">
                 <span className="sr-only">Expand</span>
               </th>
@@ -332,10 +332,10 @@ function PendingRow({ document, columnCount }: { document: ResultDocument; colum
           spans them rather than trailing a row of em-dashes. */}
       <td colSpan={columnCount - 1} className="px-[12px] py-[6px] align-top text-[#666055]">
         <div className="flex min-w-0 items-start gap-[6px]">
-          <span className="line-clamp-3 min-w-0 break-words" title={document.treePath}>
+          <span className="line-clamp-3 min-w-0 wrap-break-word" title={document.treePath}>
             {document.filename}
           </span>
-          <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-wf-primary-light px-[5px] py-[1px] text-[10px] font-semibold text-wf-primary">
+          <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-wf-primary-light px-[5px] py-px text-[10px] font-semibold text-wf-primary">
             {extracting ? "Processing" : "Queued"}
           </span>
         </div>
@@ -393,11 +393,11 @@ function ResultRow({
         </td>
         <td className="px-[12px] py-[6px] align-top font-medium text-[#3d382f]">
           <div className="flex min-w-0 items-start gap-[6px]">
-            <span className="line-clamp-3 min-w-0 break-words" title={record.label}>
+            <span className="line-clamp-3 min-w-0 wrap-break-word" title={record.label}>
               {record.label}
             </span>
             {isException ? (
-              <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#f6e9d8] px-[5px] py-[1px] text-[10px] font-semibold text-[#8a5a1d]">
+              <span className="mt-[2px] inline-block shrink-0 rounded-[4px] bg-[#f6e9d8] px-[5px] py-px text-[10px] font-semibold text-[#8a5a1d]">
                 Exception
               </span>
             ) : null}
@@ -459,7 +459,7 @@ function RecordDetail({
   return (
     <div className="flex flex-col gap-[14px]">
       <div className="flex flex-wrap items-baseline gap-x-[10px] gap-y-[2px]">
-        <h4 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
+        <h4 className="text-[12px] font-semibold uppercase tracking-wider text-[#666055]">
           {record.label}
         </h4>
         <span className="text-[11px] text-[#736d5f]">
@@ -472,7 +472,7 @@ function RecordDetail({
           data-testid="record-exception-detail"
           className="rounded-[8px] border border-[#f0d9ae] bg-[#fdf8ee] px-[12px] py-[10px]"
         >
-          <h5 className="flex items-center gap-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#8a5a1d]">
+          <h5 className="flex items-center gap-[6px] text-[11px] font-semibold uppercase tracking-wider text-[#8a5a1d]">
             <AlertTriangle className="h-[12px] w-[12px] shrink-0" />
             Why this is an exception
           </h5>
@@ -485,7 +485,7 @@ function RecordDetail({
       ) : null}
 
       <div>
-        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#736d5f]">
+        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-wider text-[#736d5f]">
           Source files
         </h5>
         {sources.length === 0 ? (
@@ -507,12 +507,12 @@ function RecordDetail({
                   </a>
                 ) : null}
                 {!document.readable ? (
-                  <span className="rounded-[4px] bg-[#fbecea] px-[5px] py-[1px] text-[10px] font-semibold text-[#b23b30]">
+                  <span className="rounded-[4px] bg-[#fbecea] px-[5px] py-px text-[10px] font-semibold text-[#b23b30]">
                     Unreadable
                   </span>
                 ) : null}
                 {exceptionFileIds.includes(document.id) ? (
-                  <span className="rounded-[4px] bg-[#f6e9d8] px-[5px] py-[1px] text-[10px] font-semibold text-[#8a5a1d]">
+                  <span className="rounded-[4px] bg-[#f6e9d8] px-[5px] py-px text-[10px] font-semibold text-[#8a5a1d]">
                     No record
                   </span>
                 ) : null}
@@ -523,7 +523,7 @@ function RecordDetail({
       </div>
 
       <div>
-        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#736d5f]">
+        <h5 className="mb-[6px] text-[11px] font-semibold uppercase tracking-wider text-[#736d5f]">
           Extracted fields
         </h5>
         <div className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-[12px] gap-y-[6px] sm:grid-cols-[max-content_minmax(0,1fr)_max-content_minmax(0,1fr)]">
@@ -595,7 +595,7 @@ function DetailField({
         <span className="mt-[4px]">
           <ConfidenceDot field={field} recordLabel={record.label} onInfo={() => onInfo(field)} />
         </span>
-        <span className="min-w-0 break-words">
+        <span className="min-w-0 wrap-break-word">
           {field.value || <span className="text-[#c9c3b5]">—</span>}
         </span>
         {options.editing ? (

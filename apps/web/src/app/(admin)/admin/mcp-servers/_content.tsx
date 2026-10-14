@@ -101,7 +101,7 @@ export function AdminMcpServersContent() {
                 <Label htmlFor="mcp-transport">Transport</Label>
                 <select
                   id="mcp-transport"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
                   value={transport}
                   onChange={(event) => setTransport(event.target.value as "sse" | "streamable-http")}
                 >
@@ -200,7 +200,7 @@ export function AdminMcpServersContent() {
                           </span>
                         ) : null}
                       </TableCell>
-                      <TableCell className="space-x-2 text-right">
+                      <TableCell className="text-right [&>*+*]:ml-2">
                         <Button
                           variant="outline"
                           size="sm"

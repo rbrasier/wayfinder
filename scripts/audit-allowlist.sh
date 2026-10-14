@@ -19,12 +19,16 @@
 #
 # GHSA-vfj7-8cjw-p6xm — braces stack-exhaustion DoS on deeply nested patterns.
 #   WHY: no patched release exists (advisory lists none; 3.0.3 is the latest),
-#   and micromatch@4.0.8 / fast-glob@3.3.3 — its only consumers — are also at
-#   their latest. It reaches us solely through build and dev tooling
-#   (tailwindcss, eslint-config-next, @changesets/cli), which expand globs the
-#   repository itself writes, never user input; no runtime code imports it.
+#   and micromatch@4.0.8 / fast-glob@3.3.x — its only consumers — are also at
+#   their latest. It reaches us solely through lint and release tooling:
+#   eslint-config-next (@next/eslint-plugin-next's fast-glob, and the
+#   @typescript-eslint v7 parser it pins) and @changesets/cli. Tailwind used
+#   to be a third path; the move to Tailwind 4 removed it. All of them expand
+#   globs the repository itself writes, never user input; no runtime code
+#   imports it.
 #   REMOVE WHEN: braces (or micromatch moving off it) publishes a patched
-#   release — then pin it in the root package.json overrides instead.
+#   release — then pin it in the root package.json overrides instead — or
+#   both eslint-config-next and @changesets/cli stop depending on micromatch@4.
 # shellcheck disable=SC2034 # read by the scripts that source this file
 ALLOWED_ADVISORIES=(
   "GHSA-vfj7-8cjw-p6xm"

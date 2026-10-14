@@ -106,7 +106,7 @@ function FeedDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3 py-[2px]">
       <span className="h-px flex-1 bg-[#e7e3db]" />
-      <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[#736d5f]">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-[#736d5f]">
         {label}
       </span>
       <span className="h-px flex-1 bg-[#e7e3db]" />
@@ -353,7 +353,7 @@ export function MessageFeed({
                     title={senderName ?? undefined}
                     className="max-w-[460px] rounded-[14px] rounded-br-[4px] bg-[#ebe8e0] px-4 py-3"
                   >
-                    <p className="whitespace-pre-wrap text-[14px] leading-[1.5] text-[#1c1b19]">
+                    <p className="whitespace-pre-wrap text-[14px] leading-normal text-[#1c1b19]">
                       {displayContent}
                     </p>
                     <p
@@ -488,7 +488,7 @@ export function MessageFeed({
                 msg.role === "user" ? (
                   <div key={segmentIndex} className="flex justify-end" data-chat-message="user">
                     <div className="max-w-[460px] rounded-[14px] rounded-br-[4px] bg-[#ebe8e0] px-4 py-3">
-                      <p className="whitespace-pre-wrap text-[14px] leading-[1.5] text-[#1c1b19]">
+                      <p className="whitespace-pre-wrap text-[14px] leading-normal text-[#1c1b19]">
                         {segment}
                       </p>
                     </div>

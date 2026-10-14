@@ -356,7 +356,7 @@ function TemplateErrorPanel({ error }: { error: TemplateError }) {
         <ul className="mt-2 space-y-1.5">
           {error.details.map((detail) => (
             <li key={`${detail.subject} ${detail.message}`} className="border-l-2 border-[#e0a9b8] pl-2">
-              <code className="block break-words font-mono text-[11px] text-[#7d2338]">
+              <code className="block wrap-break-word font-mono text-[11px] text-[#7d2338]">
                 {detail.subject}
               </code>
               <span className="text-[11px] text-[#a8324c]">{detail.message}</span>
