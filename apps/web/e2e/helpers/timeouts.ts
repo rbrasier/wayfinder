@@ -10,6 +10,10 @@
  *
  * Which spec pays the cost moves whenever the suite is resharded, so these live
  * in one place instead of being rediscovered per spec.
+ *
+ * CI now compiles the routes in warm-routes.txt before the suite starts, so a
+ * route listed there should not need these. They remain for routes that are
+ * not, and for a local `next dev` run, which has no warm-up.
  */
 
 /** A single navigation that may compile the route it lands on. */
