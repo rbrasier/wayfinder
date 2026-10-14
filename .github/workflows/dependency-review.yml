@@ -1,0 +1,33 @@
+name: Dependency review
+
+# Blocks a PR that *introduces* a dependency with a known high or critical
+# advisory. The lockfile gates in ci.yml judge the whole tree; this judges only
+# the change, so it names the PR that brought a vulnerability in.
+on:
+  pull_request:
+    branches: [main, "release/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the shared advisory allowlist
+        id: allowlist
+        run: |
+          source scripts/audit-allowlist.sh
+          echo "ghsas=$(IFS=,; echo "${ALLOWED_ADVISORIES[@]+${ALLOWED_ADVISORIES[*]}}")" >> "$GITHUB_OUTPUT"
+
+      # Pinned by commit SHA: a security gate is the last place to take a moved
+      # tag. Dependabot's github-actions updates keep the pin current.
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          # Read from scripts/audit-allowlist.sh so every gate waives the same set.
+          allow-ghsas: ${{ steps.allowlist.outputs.ghsas }}
+          comment-summary-in-pr: never

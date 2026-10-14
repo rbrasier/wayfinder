@@ -66,6 +66,18 @@ ENV RUN_MIGRATIONS_ON_START=false
 # ended up. Tell it explicitly rather than have it guess.
 ENV MIGRATIONS_DIR=/app/packages/adapters/drizzle
 
+# The upstream node image lags Debian's security fixes, and the npm CLI it
+# bundles carries its own vulnerable dependency tree (tar, minimatch, glob, …).
+# Nothing here runs npm — the entrypoint uses pnpm via corepack — so it goes
+# rather than being patched. Both are what the Trivy gate in CI and publish
+# would otherwise block on. SECURITY_REFRESH (CI passes today's date) busts the
+# layer cache daily, so a cached upgrade never outlives Debian's next fix.
+ARG SECURITY_REFRESH
+RUN apt-get update --error-on=any \
+  && apt-get upgrade -y --no-install-recommends \
+  && rm -rf /var/lib/apt/lists/* \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 COPY --from=build /app /app
 
 # web, api. Only web is normally published; the api takes almost no ingress.

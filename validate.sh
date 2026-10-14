@@ -206,6 +206,22 @@ else
   pass "no blocking high/critical vulnerabilities"
 fi
 
+# ── 11b. OSV-Scanner on the lockfile ──────────────────────────────────────────
+# Same rule and allowlist as section 11, independent advisory database. CI is
+# cleared because CI's blocking OSV run is the security job, which installs the
+# scanner; the validate job does not, and must skip rather than fail.
+section "11b. OSV-Scanner (high + critical vulnerabilities)"
+OSV_OUTPUT=$(CI= ./scripts/osv-check.sh 2>&1)
+OSV_STATUS=$?
+echo "$OSV_OUTPUT"
+if [ "$OSV_STATUS" -ne 0 ]; then
+  fail "high or critical vulnerabilities found — run './scripts/osv-check.sh' for details"
+elif echo "$OSV_OUTPUT" | grep -q "^SKIP —"; then
+  skip "OSV-Scanner not installed or advisory database unreachable — OSV scan not run"
+else
+  pass "no blocking high/critical vulnerabilities"
+fi
+
 # ── 12. test files exist in domain and application ────────────────────────────
 section "12. domain and application packages have tests"
 DOMAIN_TESTS=$(find packages/domain/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')
