@@ -85,7 +85,7 @@ const buildUserNav = (
         label: "New chat",
         mark: "plus",
         trailing: (
-          <kbd className="rounded-[4px] border border-[#e7e3db] bg-[#f5f3ee] px-[4px] py-[1px] font-mono text-[10px] font-normal text-[#736d5f]">
+          <kbd className="rounded-[4px] border border-[#e7e3db] bg-[#f5f3ee] px-[4px] py-px font-mono text-[10px] font-normal text-[#736d5f]">
             ⌘K
           </kbd>
         ),
@@ -188,7 +188,7 @@ interface AppSidebarProps {
 type NavMark = "dot" | "icon" | "plus";
 
 const SECTION_LABEL_CLASS =
-  "px-[10px] pb-[6px] pt-[8px] font-mono text-[10px] uppercase tracking-[0.1em] text-[#736d5f]";
+  "px-[10px] pb-[6px] pt-[8px] font-mono text-[10px] uppercase tracking-widest text-[#736d5f]";
 
 function NavGroups({
   groups,
@@ -461,7 +461,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
         <BrandTile view={brandView} size="sidebar" />
       </Link>
       <BrandName view={brandView} size="sidebar" />
-      <span className="rounded-[4px] border border-[#dedad2] px-[5px] py-[2px] font-mono text-[9px] uppercase tracking-[0.1em] text-[#736d5f]">
+      <span className="rounded-[4px] border border-[#dedad2] px-[5px] py-[2px] font-mono text-[9px] uppercase tracking-widest text-[#736d5f]">
         {isAdmin ? "Admin" : "Alpha"}
       </span>
       {trailing ?? <HelpMenu className="ml-auto" />}

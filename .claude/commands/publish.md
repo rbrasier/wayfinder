@@ -149,6 +149,19 @@ Watch the run to completion (`gh run watch <id> --exit-status`). On success:
 2. For a release-line build, confirm `latest` now resolves to the same digest.
 3. **Fill the real digest into the Release** you created in Step 3
    (`gh release edit v$(cat VERSION) --notes-file <notes>`).
+4. **Make sure the SBOM is on the Release.** The run attaches
+   `wayfinder-<version>.cdx.json` itself when the Release already existed; when it
+   ran first, the run summary's *SBOM on Release* row reads `false` and the file
+   is only on the run's artifacts. Then attach it:
+
+   ```bash
+   gh run download <id> -n sbom-$(cat VERSION)
+   gh release upload v$(cat VERSION) wayfinder-$(cat VERSION).cdx.json --clobber
+   ```
+
+A run that fails at **Scan image for CVEs (Trivy)** published nothing. Fix the
+finding (or waive it in `.trivyignore` with its justification) in a new PATCH
+version — do not re-dispatch the same tag hoping for a different result.
 
 Report: the image reference, the digest (the only durable identifier — tags can
 in principle be moved, digests cannot), whether `latest` moved, and the

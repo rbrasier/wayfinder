@@ -32,7 +32,7 @@ export function AnnotationTypingDemo() {
   }, [state]);
 
   return (
-    <div className="overflow-hidden rounded-[9px] border border-[#e7e3db] bg-white shadow-sm">
+    <div className="overflow-hidden rounded-[9px] border border-[#e7e3db] bg-white shadow-xs">
       <div className="flex items-center gap-1.5 border-b border-[#ebe8e0] bg-[#faf9f7] px-3 py-1.5">
         <span className="h-2 w-2 rounded-full bg-[#e7e3db]" />
         <span className="h-2 w-2 rounded-full bg-[#e7e3db]" />
@@ -47,13 +47,13 @@ export function AnnotationTypingDemo() {
           const isTyping = animate && index === state.lineIndex;
           return (
             <p key={line.caption} className="flex items-baseline gap-2 text-[12px]">
-              <span className="w-[7.5rem] shrink-0 text-[#5c574c]">{line.caption}</span>
+              <span className="w-30 shrink-0 text-[#5c574c]">{line.caption}</span>
               <span className="min-w-0 font-mono text-wf-primary">
                 {typed}
                 {isTyping && (
                   <span
                     aria-hidden
-                    className="ml-px inline-block h-[1em] w-[1px] animate-pulse bg-wf-primary align-text-bottom"
+                    className="ml-px inline-block h-[1em] w-px animate-pulse bg-wf-primary align-text-bottom"
                   />
                 )}
               </span>

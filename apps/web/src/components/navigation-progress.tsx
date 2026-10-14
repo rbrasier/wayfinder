@@ -72,7 +72,7 @@ export function NavigationProgress() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-[2px]"
+      className="pointer-events-none fixed inset-x-0 top-0 z-100 h-[2px]"
       style={{ opacity: active ? 1 : 0, transition: "opacity 200ms ease 150ms" }}
     >
       <div

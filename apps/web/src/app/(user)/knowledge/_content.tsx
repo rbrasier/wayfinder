@@ -359,7 +359,7 @@ export function KnowledgeContent() {
                       <TableCell>
                         <Badge variant="outline">{item.reason}</Badge>
                       </TableCell>
-                      <TableCell className="space-x-2 text-right">
+                      <TableCell className="text-right [&>*+*]:ml-2">
                         <Button
                           size="sm"
                           variant="outline"

@@ -28,7 +28,7 @@ export function MissingBranchRulesWarning({ forks }: { forks: ForkMissingBranchR
     <div role="status" data-missing-branch-rules={missingTotal}>
       {forks.length > 0 && (
         <div className="rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2.5 shadow-md">
-          <p className="text-left text-[12px] leading-[1.5] text-[#886b00]">
+          <p className="text-left text-[12px] leading-normal text-[#886b00]">
             ⚠ {forks.length === 1 ? "A step splits" : `${forks.length} steps split`} into several
             next steps without saying when to take each one: {describeForks(forks)}.{" "}
             {missingTotal === 1 ? "One connector is" : `${missingTotal} connectors are`} marked with{" "}

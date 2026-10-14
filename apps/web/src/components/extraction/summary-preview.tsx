@@ -53,7 +53,7 @@ export function SummaryPreview({ markdown, downloadHref }: SummaryPreviewProps) 
   return (
     <section className="rounded-[10px] border border-[#e7e3db] bg-white p-[16px]">
       <div className="mb-[8px] flex items-center justify-between">
-        <h2 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
+        <h2 className="text-[12px] font-semibold uppercase tracking-wider text-[#666055]">
           Summary
         </h2>
         {downloadHref ? (
@@ -73,7 +73,7 @@ export function SummaryPreview({ markdown, downloadHref }: SummaryPreviewProps) 
           {renderMarkdown(markdown)}
         </div>
         {collapsed ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[28px] bg-gradient-to-t from-white to-transparent" />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[28px] bg-linear-to-t from-white to-transparent" />
         ) : null}
       </div>
       {overflows ? (

@@ -40,7 +40,7 @@ type StatusFilter = "all" | "complete" | "active" | "abandoned";
 const STORAGE_PREFIX = "wayfinder:field-report";
 
 const selectStyle =
-  "h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19] outline-none focus:border-wf-primary focus:bg-white";
+  "h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 text-[13px] text-[#1c1b19] outline-hidden focus:border-wf-primary focus:bg-white";
 
 const labelStyle = "block text-[11px] font-medium uppercase tracking-wide text-[#666055] mb-1";
 

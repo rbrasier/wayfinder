@@ -29,7 +29,7 @@ function AnnotationTable({ rows }: { rows: AnnotationRow[] }) {
               <td className="w-[42%] whitespace-nowrap bg-[#faf9f7] px-3 py-2 align-top font-mono text-[#1c1b19]">
                 {row.annotation}
               </td>
-              <td className="px-3 py-2 align-top leading-[1.5] text-[#5c574c]">{row.meaning}</td>
+              <td className="px-3 py-2 align-top leading-normal text-[#5c574c]">{row.meaning}</td>
             </tr>
           ))}
         </tbody>

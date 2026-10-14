@@ -34,7 +34,7 @@ export function ScheduledNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        "relative w-56 rounded-lg border-2 border-dashed bg-white shadow-sm transition-shadow",
+        "relative w-56 rounded-lg border-2 border-dashed bg-white shadow-xs transition-shadow",
         selected ? "border-green-500 shadow-md ring-2 ring-green-200" : "border-green-200",
       )}
     >
@@ -42,7 +42,7 @@ export function ScheduledNode({ data, selected }: NodeProps) {
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-3 !w-3 !border-2 !border-white !bg-gray-400"
+        className="h-3! w-3! border-2! border-white! bg-gray-400!"
       />
 
       <div className="flex items-start gap-3 p-3 pr-8">
@@ -61,7 +61,7 @@ export function ScheduledNode({ data, selected }: NodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-4 !w-4 !border-2 !border-white !bg-green-500 hover:!bg-green-600"
+        className="h-4! w-4! border-2! border-white! bg-green-500! hover:bg-green-600!"
         style={{ right: -8 }}
       />
     </div>

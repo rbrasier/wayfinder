@@ -6,7 +6,7 @@ import { groupPriorStepFields } from "./field-value-selector";
 import type { ScheduleModifier, ScheduleUnit } from "./scheduled-node-config";
 
 const SELECT_CLASS =
-  "flex h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2.5 py-1.5 text-[13px] text-[#1c1b19] focus:border-[#1f6b4d] focus:bg-white focus:outline-none";
+  "flex h-9 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2.5 py-1.5 text-[13px] text-[#1c1b19] focus:border-[#1f6b4d] focus:bg-white focus:outline-hidden";
 
 const UNITS: { value: ScheduleUnit; label: string }[] = [
   { value: "m", label: "minutes" },

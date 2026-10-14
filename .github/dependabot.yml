@@ -1,0 +1,36 @@
+# Dependabot — security updates for the lockfile, version updates for the
+# things pinned by hand (action SHAs, the base image) so they do not rot.
+#
+# npm version updates are off (limit 0): routine bumps are taken deliberately,
+# not as a stream of PRs. Security updates ignore that limit and still open,
+# once "Dependabot security updates" is enabled in the repository's Code
+# security settings. Dependabot always targets the default branch; a fix the
+# current release line also needs is carried there by /bugfix.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Majors are a Node runtime upgrade, taken deliberately rather than by bot.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ["version-update:semver-major"]

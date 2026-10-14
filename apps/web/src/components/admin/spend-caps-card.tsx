@@ -252,7 +252,7 @@ export function SpendCapsCard() {
                   <TableCell className="text-right">{money(budget.limitUsd)}</TableCell>
                   <TableCell className="text-right">{budget.warnThresholdPct}%</TableCell>
                   <TableCell>{budget.enabled ? <Badge>on</Badge> : "off"}</TableCell>
-                  <TableCell className="space-x-2 text-right">
+                  <TableCell className="text-right [&>*+*]:ml-2">
                     <Button
                       variant="outline"
                       size="sm"

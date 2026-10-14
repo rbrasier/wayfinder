@@ -138,7 +138,7 @@ export function UsageMeter() {
           style={{ width, backgroundColor: ringArcColour(primary.status) }}
         />
       </div>
-      <div className="mt-[8px] text-[10.5px] leading-[1.5] text-[#666055]">
+      <div className="mt-[8px] text-[10.5px] leading-normal text-[#666055]">
         <PeriodBreakdown periods={periods} />
       </div>
     </div>

@@ -17,7 +17,7 @@ export default async function AuthLayout({ children }: { children: ReactNode }) 
       <div className="flex items-center gap-[10px]">
         <BrandTile view={brandView} size="auth" />
         <BrandName view={brandView} size="auth" />
-        <span className="rounded-[4px] border border-[#dedad2] px-[5px] py-[2px] font-mono text-[9px] uppercase tracking-[0.1em] text-[#736d5f]">
+        <span className="rounded-[4px] border border-[#dedad2] px-[5px] py-[2px] font-mono text-[9px] uppercase tracking-widest text-[#736d5f]">
           Alpha
         </span>
       </div>
