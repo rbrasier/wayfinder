@@ -110,11 +110,11 @@ jobs:
       BASE_URL: http://localhost:3000
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: pnpm
@@ -125,7 +125,7 @@ jobs:
       # Restore the embedding model across runs; the warm-up step below only
       # pays the download on a cache miss. Key is bumped when the model id changes.
       - name: Cache embedding model
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.hf-cache
           key: hf-embeddings-onnx-all-MiniLM-L6-v2-v1
@@ -233,7 +233,7 @@ jobs:
 
       - name: Upload blob report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: blob-report-${{ matrix.shard }}
           path: apps/web/e2e/blob-report/
@@ -241,7 +241,7 @@ jobs:
 
       - name: Upload traces and videos (failures only)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-test-results-shard-${{ matrix.shard }}-${{ github.run_number }}
           path: apps/web/e2e/test-results/
@@ -299,11 +299,11 @@ jobs:
       BASE_URL: http://localhost:3000
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: pnpm
@@ -355,7 +355,7 @@ jobs:
 
       - name: Upload blob report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: blob-report-pki
           path: apps/web/e2e/blob-report/
@@ -369,7 +369,7 @@ jobs:
 
       - name: Upload traces and videos (failures only)
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-pki-results-${{ github.run_number }}
           path: apps/web/e2e/test-results/
@@ -383,11 +383,11 @@ jobs:
     needs: [e2e, e2e-pki]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: pnpm
@@ -398,7 +398,7 @@ jobs:
         working-directory: apps/web/e2e
 
       - name: Download all blob reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: apps/web/e2e/all-blob-reports
           pattern: blob-report-*
@@ -584,7 +584,7 @@ jobs:
       # whether a Netlify report link is available.
       - name: Comment results on PR
         if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
@@ -637,7 +637,7 @@ jobs:
 
       - name: Upload merged Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report-${{ github.run_number }}
           path: apps/web/e2e/playwright-report/
@@ -649,7 +649,7 @@ jobs:
       # from is not uploaded anywhere.
       - name: Upload skipped-test list
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: skipped-tests-${{ github.run_number }}
           path: apps/web/e2e/skipped-tests.md
