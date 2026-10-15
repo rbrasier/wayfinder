@@ -1,0 +1,10 @@
+# .trivyignore — CVEs exempt from the Trivy image gate (ci.yml docker-image job
+# and publish.yml). One CVE or GHSA ID per line.
+#
+# Every entry must state what it is, why it cannot be fixed, and the condition
+# that removes it again — the same rule as scripts/audit-allowlist.sh. An entry
+# here is a security gate held open; keep this list as short as it can be.
+#
+# Unfixed CVEs need no entry: the gate runs with ignore-unfixed, because there is
+# nothing to upgrade to. Only a *fixable* finding that genuinely cannot take the
+# fix belongs here.

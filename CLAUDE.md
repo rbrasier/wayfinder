@@ -24,6 +24,7 @@ code, run `./validate.sh` and fix all failures before declaring done.
 | Implement a phase, build a spec, write code                | `/build`       |
 | Change or extend existing functionality                    | `/enhance`     |
 | Fix something broken or not working                        | `/bugfix`      |
+| Fix failing Dependabot / dependency-update PRs             | `/fixbot`      |
 | Cut the next release line, forward-merge fixes             | `/release`     |
 | Tag, release & publish a build (container image, later npm) | `/publish`     |
 | Anything else                                              | Answer directly |
@@ -133,6 +134,7 @@ from this line.
 |---|---|
 | `/new-feature`, `/build` | `main` |
 | `/bugfix`, `/enhance` | Current release branch — unless the change only affects unreleased work, then `main` |
+| `/fixbot` | None — commits to the open dependency PR's own head branch, whatever its base; never opens a PR |
 | `/release` | Operates on `main` and release branches directly (maintainers only) |
 
 Implemented phase docs go to `docs/development/implemented/<release line>/v<version>/`,

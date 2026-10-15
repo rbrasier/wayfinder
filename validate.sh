@@ -206,6 +206,22 @@ else
   pass "no blocking high/critical vulnerabilities"
 fi
 
+# ── 11b. OSV-Scanner on the lockfile ──────────────────────────────────────────
+# Same rule and allowlist as section 11, independent advisory database. CI is
+# cleared because CI's blocking OSV run is the security job, which installs the
+# scanner; the validate job does not, and must skip rather than fail.
+section "11b. OSV-Scanner (high + critical vulnerabilities)"
+OSV_OUTPUT=$(CI= ./scripts/osv-check.sh 2>&1)
+OSV_STATUS=$?
+echo "$OSV_OUTPUT"
+if [ "$OSV_STATUS" -ne 0 ]; then
+  fail "high or critical vulnerabilities found — run './scripts/osv-check.sh' for details"
+elif echo "$OSV_OUTPUT" | grep -q "^SKIP —"; then
+  skip "OSV-Scanner not installed or advisory database unreachable — OSV scan not run"
+else
+  pass "no blocking high/critical vulnerabilities"
+fi
+
 # ── 12. test files exist in domain and application ────────────────────────────
 section "12. domain and application packages have tests"
 DOMAIN_TESTS=$(find packages/domain/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')
@@ -534,6 +550,25 @@ if [ -z "$RAMP_LITERALS" ]; then
 else
   fail "primary-ramp literals found — use the wf-primary* tokens so the brand colour reaches them:"
   echo "$RAMP_LITERALS" | sed 's/^/  /'
+fi
+
+# ── 28. dependabot targets the current release branch ────────────────────────
+# Dependency bumps are fixes, so they belong on the release line. Cutting a new
+# line moves the CLAUDE.md pointer; this catches a dependabot.yml left behind.
+section "28. dependabot target-branch matches the current release branch"
+CURRENT_RELEASE_BRANCH=$(sed -nE 's/^\*\*Current release branch: `([^`]+)`.*/\1/p' CLAUDE.md)
+STALE_TARGETS=$(grep -nE '^[[:space:]]*target-branch:' .github/dependabot.yml \
+  | grep -vE "target-branch:[[:space:]]*\"?${CURRENT_RELEASE_BRANCH}\"?[[:space:]]*$" || true)
+TARGET_COUNT=$(grep -cE '^[[:space:]]*target-branch:' .github/dependabot.yml || true)
+if [ -z "$CURRENT_RELEASE_BRANCH" ]; then
+  fail "could not read the 'Current release branch:' pointer from CLAUDE.md"
+elif [ "$TARGET_COUNT" = "0" ]; then
+  fail ".github/dependabot.yml sets no target-branch — version updates would open against main"
+elif [ -n "$STALE_TARGETS" ]; then
+  fail "every target-branch in .github/dependabot.yml must be $CURRENT_RELEASE_BRANCH:"
+  echo "$STALE_TARGETS" | sed 's/^/  /'
+else
+  pass "dependabot targets $CURRENT_RELEASE_BRANCH"
 fi
 
 echo "──────────────────────────────────────────"

@@ -1,9 +1,17 @@
 import { z } from "zod";
 
+// Models do not reliably honour "a whole number 0-100" — they return 87.5 or a
+// value just outside the band — and rejecting the reply fails the whole turn or
+// gate. These confidences decide whether a step advances or a document is
+// generated, so a 0-1 fraction is deliberately NOT scaled up: reading 0.85 as 85
+// could skip a step, while reading it as 1 costs at most one extra turn.
+const toBoundedPercentConfidence = (confidence: number): number =>
+  Math.min(100, Math.max(0, Math.round(confidence)));
+
 export const turnResponseSchema = z.object({
   response: z.string().describe("Conversational reply to the user"),
   rationale: z.string().describe("Why you are asking this or why the step is complete"),
-  stepCompleteConfidence: z.number().int().min(0).max(100).describe("Confidence 0-100 that completion criteria are fully met"),
+  stepCompleteConfidence: z.number().transform(toBoundedPercentConfidence).describe("Confidence 0-100 that completion criteria are fully met"),
   contextGathered: z.array(
     z.object({
       key: z.string().describe("Descriptive label for the information"),
@@ -20,18 +28,14 @@ export const branchChoiceSchema = z.object({
 export const documentGenerationConfidenceSchema = z.object({
   guidanceAlignmentConfidence: z
     .number()
-    .int()
-    .min(0)
-    .max(100)
+    .transform(toBoundedPercentConfidence)
     .describe("Confidence 0-100 that the generated document aligns with the flow's guidance documentation"),
   guidanceAlignmentRationale: z
     .string()
     .describe("Why the generated document does or does not align with the flow's guidance documentation"),
   criteriaAlignmentConfidence: z
     .number()
-    .int()
-    .min(0)
-    .max(100)
+    .transform(toBoundedPercentConfidence)
     .describe("Confidence 0-100 that the generated document satisfies the step's completion criteria"),
   criteriaAlignmentRationale: z
     .string()

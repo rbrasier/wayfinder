@@ -24,13 +24,13 @@ export function UnclaimedSignaturesWarning({ slots }: { slots: UnclaimedSignatur
     <div role="status" data-unclaimed-signatures={slots.length}>
       {slots.length > 0 && (
         <div className="rounded-[9px] border border-[#e7c200] bg-[#fff8e1] px-4 py-2.5 shadow-md">
-          <p className="text-left text-[12px] leading-[1.5] text-[#886b00]">
+          <p className="text-left text-[12px] leading-normal text-[#886b00]">
             ⚠ {slots.length === 1 ? "A signature has" : `${slots.length} signatures have`} nobody to
             sign {slots.length === 1 ? "it" : "them"}: {describeSlots(slots)}.{" "}
             {slots.length === 1 ? "This slot" : "These slots"} will render blank on the finished
             document.
           </p>
-          <p className="mt-1 text-left text-[12px] leading-[1.5] text-[#886b00]">
+          <p className="mt-1 text-left text-[12px] leading-normal text-[#886b00]">
             To fix: add an <strong>Approval</strong> step after that step, open it, set{" "}
             <em>What is being approved?</em> to the step holding the signature, then choose the
             signature under <em>Which signature does this step sign?</em>. Each signature needs its

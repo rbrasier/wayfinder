@@ -84,6 +84,11 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # Busts the cached apt-get upgrade layer once a day (see the Dockerfile).
+      - name: Security refresh key
+        id: refresh
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
       - name: Build image
         uses: docker/build-push-action@v6
         with:
@@ -91,8 +96,23 @@ jobs:
           push: false
           load: true
           tags: wayfinder:ci
+          build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The lockfile gates in the security job never see the image: the base
+      # image's Debian packages, the Node runtime and anything it bundles only
+      # exist here. Same bar as publish.yml, so a PR that would block a release
+      # goes red first. Unfixed CVEs are ignored — there is nothing to upgrade
+      # to; waivers live in .trivyignore with their justification.
+      - name: Scan image for CVEs (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wayfinder:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
 
       - name: Report image size
         run: |
@@ -365,6 +385,27 @@ jobs:
             echo "::warning title=Dependency audit skipped::pnpm audit endpoint unavailable (npm retired the legacy audit API); dependency audit not run."
           fi
           exit "$status"
+
+      - name: Install OSV-Scanner
+        # Pinned binary with its published checksum, not a moving action tag: a
+        # security gate is the last place to take an unreviewed upstream change.
+        env:
+          OSV_SCANNER_VERSION: v2.7.0
+          OSV_SCANNER_SHA256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          curl -fsSL -o "$RUNNER_TEMP/bin/osv-scanner" \
+            "https://github.com/google/osv-scanner/releases/download/${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SCANNER_SHA256}  $RUNNER_TEMP/bin/osv-scanner" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/bin/osv-scanner"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      - name: Dependency scan (OSV-Scanner)
+        # Same rule and allowlist as the audit above, against an independent
+        # advisory database. Unlike the audit it never skips in CI: when the
+        # audit endpoint is down, this is the lockfile check that still runs.
+        run: ./scripts/osv-check.sh
 
       - name: Static security scan (Semgrep)
         uses: semgrep/semgrep-action@v1

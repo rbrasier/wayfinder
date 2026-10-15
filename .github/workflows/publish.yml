@@ -21,7 +21,8 @@ jobs:
     name: Build and push to GHCR
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      # write: attaches the SBOM to the tag's GitHub Release.
+      contents: write
       packages: write
 
     steps:
@@ -65,6 +66,12 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
+      # Busts the cached apt-get upgrade layer once a day (see the Dockerfile).
+      # Both builds below pass the same key, so the push reuses the scanned one.
+      - name: Security refresh key
+        id: refresh
+        run: echo "date=$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -72,17 +79,78 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Build and scan before anything is pushed: an image that fails the scan
+      # never reaches GHCR. The push below reuses this build from the cache.
+      - name: Build image for scanning
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: wayfinder:scan
+          build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Same bar as the CI docker-image job: fixable HIGH/CRITICAL blocks the
+      # release; waivers live in .trivyignore with their justification.
+      - name: Scan image for CVEs (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wayfinder:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+
+      - name: Generate SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wayfinder:scan
+          format: cyclonedx
+          output: wayfinder-${{ steps.resolve.outputs.version }}.cdx.json
+          skip-setup-trivy: true
+
+      - name: Upload SBOM as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ steps.resolve.outputs.version }}
+          path: wayfinder-${{ steps.resolve.outputs.version }}.cdx.json
+
       - name: Build and push
         id: push
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          # Also attaches BuildKit's own SBOM as an attestation on the pushed
+          # image, so registry-side scanners can read it without the release.
+          sbom: true
+          build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
           tags: |
             ghcr.io/rbrasier/wayfinder:${{ steps.resolve.outputs.version }}
             ${{ steps.resolve.outputs.publish_latest == 'true' && 'ghcr.io/rbrasier/wayfinder:latest' || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # The Release is created by /publish after the tag is pushed, so on a tag
+      # push it may not exist yet. Then the SBOM stays on the workflow run, and
+      # /publish attaches it when it fills in the digest.
+      - name: Attach SBOM to the GitHub Release
+        id: sbom
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          GIT_TAG: v${{ steps.resolve.outputs.version }}
+          SBOM_FILE: wayfinder-${{ steps.resolve.outputs.version }}.cdx.json
+        run: |
+          if ! gh release view "$GIT_TAG" > /dev/null 2>&1; then
+            echo "::notice title=SBOM not attached::No GitHub Release for $GIT_TAG yet; the SBOM is on this run's artifacts."
+            echo "attached=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh release upload "$GIT_TAG" "$SBOM_FILE" --clobber
+          echo "attached=true" >> "$GITHUB_OUTPUT"
 
       - name: Summarise
         run: |
@@ -94,6 +162,7 @@ jobs:
             echo "| Version | \`${{ steps.resolve.outputs.version }}\` |"
             echo "| Digest | \`${{ steps.push.outputs.digest }}\` |"
             echo "| Moved \`latest\` | ${{ steps.resolve.outputs.publish_latest }} |"
+            echo "| SBOM on Release | ${{ steps.sbom.outputs.attached }} |"
             echo ""
             echo "\`\`\`bash"
             echo "docker pull ghcr.io/rbrasier/wayfinder:${{ steps.resolve.outputs.version }}"

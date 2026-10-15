@@ -9,10 +9,10 @@ export function NewFlowStepCallout() {
       className="wf-tour-callout absolute inset-x-0 bottom-[calc(100%+40px)] lg:inset-x-auto lg:bottom-auto lg:right-[calc(100%+64px)] lg:top-0 lg:w-[300px]"
     >
       <div className="rounded-[14px] border border-wf-primary-dim bg-white p-4 shadow-[0_4px_24px_rgba(0,0,0,.10)]">
-        <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.05em] text-wf-primary">
+        <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-wf-primary">
           Step 1 of 2 · Name your flow
         </div>
-        <p className="mb-3 text-[12.5px] leading-[1.5] text-[#5c574c]">
+        <p className="mb-3 text-[12.5px] leading-normal text-[#5c574c]">
           A flow is a guided conversation your team can run. Start by telling Wayfinder what it is
           and who the AI should be while running it.
         </p>

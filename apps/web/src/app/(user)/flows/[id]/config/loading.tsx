@@ -15,7 +15,7 @@ export default function Loading() {
           <div className="h-[28px] w-[32px] animate-pulse rounded-[9px] bg-[#edeae3]" />
         </div>
       </div>
-      <div className="relative flex-1 bg-[radial-gradient(#ddd8d0_1px,transparent_1px)] [background-size:16px_16px]">
+      <div className="relative flex-1 bg-[radial-gradient(#ddd8d0_1px,transparent_1px)] bg-size-[16px_16px]">
         <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-8">
           {[0, 1, 2].map((step) => (
             <div

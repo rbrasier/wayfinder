@@ -22,7 +22,7 @@ export function FlowMemoryToggle({ proposedCount, onReopen }: FlowMemoryTogglePr
       type="button"
       variant="outline"
       size="icon"
-      className="pointer-events-auto relative shadow-sm"
+      className="pointer-events-auto relative shadow-xs"
       aria-label={label}
       title={label}
       onClick={onReopen}

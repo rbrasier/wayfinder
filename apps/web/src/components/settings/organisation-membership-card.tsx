@@ -33,7 +33,7 @@ export function OrganisationMembershipCard() {
           </p>
 
           <div className="space-y-1.5">
-            <p className="text-xs font-medium uppercase tracking-[0.05em] text-muted-foreground">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Current organisation
             </p>
             <p className="text-sm text-[#1c1b19]">

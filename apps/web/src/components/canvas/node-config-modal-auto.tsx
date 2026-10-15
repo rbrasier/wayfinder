@@ -69,7 +69,7 @@ export interface NodeConfigModalAutoProps {
 }
 
 const EXECUTOR_SELECT_CLASS =
-  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none";
+  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-hidden";
 
 export function NodeConfigModalAuto({
   values,

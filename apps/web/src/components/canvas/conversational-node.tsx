@@ -28,7 +28,7 @@ export function ConversationalNode({ data, selected }: NodeProps) {
   return (
     <div
       className={cn(
-        "relative w-56 rounded-lg border bg-white shadow-sm transition-shadow",
+        "relative w-56 rounded-lg border bg-white shadow-xs transition-shadow",
         selected ? "border-blue-500 shadow-md ring-2 ring-blue-200" : "border-blue-200",
       )}
     >
@@ -36,7 +36,7 @@ export function ConversationalNode({ data, selected }: NodeProps) {
       <Handle
         type="target"
         position={Position.Left}
-        className="!h-3 !w-3 !border-2 !border-white !bg-gray-400"
+        className="h-3! w-3! border-2! border-white! bg-gray-400!"
       />
 
       <div className="flex items-start gap-3 p-3 pr-8">
@@ -56,7 +56,7 @@ export function ConversationalNode({ data, selected }: NodeProps) {
       <Handle
         type="source"
         position={Position.Right}
-        className="!h-4 !w-4 !border-2 !border-white !bg-indigo-500 hover:!bg-indigo-600"
+        className="h-4! w-4! border-2! border-white! bg-indigo-500! hover:bg-indigo-600!"
         style={{ right: -8 }}
       />
     </div>

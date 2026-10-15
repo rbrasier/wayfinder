@@ -62,7 +62,7 @@ export function WheelPicker({ options, value, onChange, ariaLabel }: WheelPicker
       <div
         ref={listRef}
         onScroll={handleScroll}
-        className="h-full snap-y snap-mandatory overflow-y-auto scroll-smooth text-center [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="h-full snap-y snap-mandatory overflow-y-auto scroll-smooth text-center scrollbar-none [&::-webkit-scrollbar]:hidden"
         style={{ paddingTop: padding, paddingBottom: padding }}
       >
         {options.map((option) => (

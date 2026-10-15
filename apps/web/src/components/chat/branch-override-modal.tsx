@@ -60,7 +60,7 @@ export function BranchOverrideModal({
                 <span className="block font-medium">{branch.nodeName}</span>
                 {branch.rule && (
                   <span
-                    className={`mt-1 block text-[12px] leading-[1.5] ${
+                    className={`mt-1 block text-[12px] leading-normal ${
                       selected === branch.nodeId ? "text-[#3d4a70]" : "text-[#736d5f]"
                     }`}
                   >

@@ -150,7 +150,7 @@ export function AdminUsersContent() {
                   <TableCell className="text-muted-foreground">
                     {new Date(u.createdAt).toLocaleDateString()}
                   </TableCell>
-                  <TableCell className="space-x-2 text-right">
+                  <TableCell className="text-right [&>*+*]:ml-2">
                     <Button
                       size="sm"
                       variant="outline"

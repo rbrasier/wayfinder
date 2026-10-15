@@ -193,7 +193,7 @@ export function AdminFlowsContent() {
                       <TableCell className="text-[13px] text-[#666055]">
                         {new Date(flow.updatedAt).toLocaleDateString()}
                       </TableCell>
-                      <TableCell className="space-x-2 text-right">
+                      <TableCell className="text-right [&>*+*]:ml-2">
                         <Button
                           size="sm"
                           variant="secondary"
@@ -294,7 +294,7 @@ export function AdminFlowsContent() {
                     <Label htmlFor="owner-select">Select user</Label>
                     <select
                       id="owner-select"
-                      className="flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
+                      className="flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-hidden"
                       value={assignOwner.userId}
                       onChange={(e) => setAssignOwner({ ...assignOwner, userId: e.target.value })}
                     >
