@@ -32,7 +32,7 @@ If the prompt doesn't clearly match a skill, Claude asks:
 | Build — New Phase / Feature | "implement phase X", "build the spec"                              | Code + moved phase doc + impl summary    |
 | Enhancement / Revision      | "change…", "extend…", "tweak…"                                     | Updated phase doc → routed to Review     |
 | Bug Fix                     | "broken", "not working", "should be doing"                         | Fix doc + code + impl summary + PATCH    |
-| Dependabot fix              | "fix the dependabot PRs", "the dependency bump is failing CI"       | Fix commits + an explanatory comment on each failing dependency PR, watched until green. Never opens or merges a PR — the merge is left to a maintainer |
+| Fixbot (dependency PRs)     | "fix the dependabot PRs", "the dependency bump is failing CI"       | Fix commits + an explanatory comment on each failing dependency PR, watched until green. Asks only when there is a genuine choice; every fix is a PATCH bump. Never opens or merges a PR — the merge is left to a maintainer |
 | Release                     | "cut the next alpha", "tag a build", "merge fixes forward"         | Release branch / tag / forward-merge (maintainers — see `managing-releases.md`) |
 | Publish                     | "publish the image", "push the release artifact"                   | A published `ghcr.io/rbrasier/wayfinder:<version>` image. Drives the CI workflow — never builds or pushes locally. `/release` hands off to it after tagging |
 

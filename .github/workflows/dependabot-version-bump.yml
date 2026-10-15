@@ -12,7 +12,7 @@ name: Bump PATCH on Dependabot PRs
 #
 # Once this commit lands, Dependabot stops rebasing the branch. If a sibling PR
 # merges first and `VERSION` conflicts, merge the base in and take the next
-# PATCH — /dependabot does this when it runs.
+# PATCH — /fixbot does this when it runs.
 #
 # Runs on pull_request_target so the token can push. It never executes code
 # from the PR: it only rewrites two version strings with sed.

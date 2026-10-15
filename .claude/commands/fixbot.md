@@ -1,12 +1,12 @@
-# /dependabot — Fix Failing Dependency PRs
+# /fixbot — Fix Failing Dependency PRs
 
 Use this skill when the user asks to fix, resolve or get green the pull requests
 Dependabot (or the release-port workflow acting for it) has opened. It works on
 **those PRs' own branches**: it never opens a new PR, and it never merges. It
 stops once every fixed PR is green, leaving the review and merge to a maintainer.
 
-Invoked bare (`/dependabot`) it sweeps every open dependency PR. Invoked with
-numbers (`/dependabot 322 323`) it works only on those.
+Invoked bare (`/fixbot`) it sweeps every open dependency PR. Invoked with
+numbers (`/fixbot 322 323`) it works only on those.
 
 ---
 
@@ -22,9 +22,9 @@ and give it its PATCH bump.
 |---|---|---|---|---|
 | Release-port PR — a non-major npm security fix rebuilt on the release line | `dependabot-port/<release branch>/npm_and_yarn/…` | current release branch | `github-actions[bot]` | That PR's branch |
 | Version update for Actions or the Docker base image | `dependabot/github_actions/…`, `dependabot/docker/…` | current release branch | `dependabot[bot]` | That PR's branch |
-| Major npm bump the port workflow left on `main` (it commented "major version bump") | `dependabot/npm_and_yarn/…` | `main` | `dependabot[bot]` | Question 2 below decides |
+| Major npm bump the port workflow left on `main` (it commented "major version bump") | `dependabot/npm_and_yarn/…` | `main` | `dependabot[bot]` | That PR's branch — unless a same-line patch exists (see **When to ask**) |
 | npm bump the port workflow **could not** rebuild (it commented "Could not port") | `dependabot/npm_and_yarn/…` | `main` | `dependabot[bot]` | Not this skill — offer `/bugfix` on the release branch, as the comment says |
-| npm PR on `main` with no port-workflow comment (opened before the workflow existed) | `dependabot/npm_and_yarn/…` | `main` | `dependabot[bot]` | Not this skill — closing and reopening it runs the port workflow; offer that to the user, never do it unasked |
+| npm PR on `main` with no port-workflow comment (opened before the workflow existed) | `dependabot/npm_and_yarn/…` | `main` | `dependabot[bot]` | Not this skill — closing and reopening it runs the port workflow; ask before doing it (see **When to ask**) |
 
 A PR is **superseded** when an open, non-bot PR already carries the same bump
 (search open PRs for the package name — a `/bugfix` backport like
@@ -54,20 +54,33 @@ touched: fixing both would land the bump twice.
 Output a triage table to chat: PR link, package and versions, base, status, and
 the failing check names.
 
-## Required Clarifying Questions
+## When to ask
 
-Ask via `AskUserQuestion`, in one call, after the triage table:
+**Default: no questions.** Fix every red and conflicted PR in scope (all of
+them on a bare `/fixbot`, only the named ones otherwise) and carry on to the
+end. If nothing is red or conflicted, report the triage table and stop.
 
-1. Which red or conflicted PRs should I fix? (`multiSelect`, all red and
-   conflicted PRs pre-listed.) Skip this question when the user named PR
-   numbers.
-2. Only for each selected **major bump on `main`**: is a same-line patch
-   available on the current release line that fixes the same advisory? If one is
-   (as Next 15.5.28 was for the 16.4.1 major), recommend **Carry the patch to
-   the release branch with `/bugfix` and leave the major for the next line**.
-   Otherwise offer **Fix the major on its own PR** or **Leave it for now**.
+Use `AskUserQuestion` only when the problem has a genuine choice in it or stays
+unclear after diagnosis. These are the cases:
 
-If nothing is red or conflicted, report the triage table and stop.
+- **A major bump on `main` with a same-line patch.** The current release line
+  has a patch that fixes the same advisory, as Next 15.5.28 did for the 16.4.1
+  major. Two sound routes exist: carry the patch with `/bugfix`
+  (recommended), or fix the major on its own PR. Without such a patch there
+  is no choice; fix the major.
+- **More than one sound fix with a real trade-off.** For example, adapting the
+  call sites versus changing a config default. When one fix is plainly the
+  minimal one, take it without asking.
+- **The root cause can't be pinned down** after Step 2: the logs and the local
+  reproduction disagree, or the failure doesn't reproduce.
+- **The fix outgrows a dependency fix:** a multi-package refactor, a schema
+  change, or new behaviour. Ask whether to hand it to `/enhance` or `/build`
+  on its own branch, or to leave the PR.
+- **An outward-facing action** that this skill doesn't otherwise take, such as
+  closing and reopening a pre-workflow PR to run the port workflow.
+
+Collect every question across all PRs into one `AskUserQuestion` call, made
+after diagnosis. Keep working on the PRs that need no answer.
 
 ---
 
@@ -108,12 +121,12 @@ causes.
   the root cause with the log line that shows it, how it was reproduced, and the
   fix plan. `<slug>` names the package, e.g. `next-16-build-failure`.
 
-## Change Summary — before any code is written
+## Change Summary
 
-Output one summary to chat per PR, as regular markdown (not inside
-`AskUserQuestion`). **Headline first**: 2–3 lines of plain prose naming what
-fails and what the fix does. Then these `###` sections, at most 5 bullets each,
-omitting any that do not apply:
+Output one summary to chat per PR as regular markdown, then go straight on to
+the fix. It is a record, not an approval gate. **Headline first:** 2–3 lines of
+plain prose naming what fails and what the fix does. Then these `###` sections,
+at most 5 bullets each, omitting any that do not apply:
 
 | Section | What it covers |
 |---|---|
@@ -125,20 +138,6 @@ omitting any that do not apply:
 | Version & branch | The PR's PATCH bump (already present, or added by this fix), and the head branch the fix is pushed to |
 | Risks | What else the bump or the fix could break |
 | Out of scope | Failures diagnosed as not this PR's, and anything deferred |
-
-### Approval gate
-
-Then use `AskUserQuestion` offering exactly three routes:
-
-- **Approve** — fix as summarised.
-- **Approve with notes** — fix immediately, applying the notes. Do not re-show
-  the summary.
-- **Amend** — revise against the feedback and show it again, looping until an
-  approving route is chosen.
-
-A fix that needs a multi-package refactor, a schema change, or new behaviour is
-not a dependency fix: stop and say it belongs to `/enhance` or `/build` on its
-own branch.
 
 ---
 
@@ -159,6 +158,9 @@ own branch.
   update the unit test at the layer that owns that logic first. Never skip,
   disable or quarantine a test to get green.
 - The architecture and code-writing rules in `CLAUDE.md` apply unchanged.
+- **Every dependency update is a PATCH increment.** That holds whatever the
+  base branch and however big the bump, including a major on `main`. Never
+  MINOR or MAJOR.
 - The PR should already carry one **PATCH** bump over its base:
   `dependabot-release-port.yml` puts it in the port commit, and
   `dependabot-version-bump.yml` adds it to every other Dependabot PR. Compare
@@ -202,7 +204,7 @@ rather than editing the earlier one, so the history of what was tried stays on
 the PR.
 
 ```markdown
-<!-- wayfinder-dependabot-fix:v1 -->
+<!-- wayfinder-fixbot:v1 -->
 ## Fix for the failing checks
 
 **What failed:** `<check name>` — <the first real error, in one line>.
