@@ -6,7 +6,7 @@ answers a different question, so a finding one misses another can catch.
 | Check | Where | Looks at | Blocks on |
 |---|---|---|---|
 | `pnpm audit` | CI `security` job, `validate.sh` §11 — `scripts/audit-check.sh` | `pnpm-lock.yaml`, npm's advisory database | HIGH / CRITICAL (GitHub label) |
-| OSV-Scanner | CI `security` job, `validate.sh` §11b — `scripts/osv-check.sh` | `pnpm-lock.yaml`, the OSV database | HIGH / CRITICAL (GitHub label; CVSS ≥ 7.0 when unlabelled) |
+| OSV-Scanner | CI `security` job, `validate.sh` §11b — `scripts/osv-check.sh` | Every lockfile git tracks, the OSV database | HIGH / CRITICAL (GitHub label; CVSS ≥ 7.0 when unlabelled) |
 | `npm audit` | CI `deploy-lambda` job — `npm run audit` in `deploy/lambda` | `deploy/lambda/package-lock.json`, npm's advisory database | HIGH / CRITICAL |
 | Trivy | CI `docker-image` job, `publish.yml` before the push | The built container image — Debian packages, the Node runtime, everything in `node_modules` | Fixable HIGH / CRITICAL |
 | Dependency review | `dependency-review.yml` on every PR | Only the dependencies the PR adds or changes | HIGH / CRITICAL |
@@ -26,15 +26,15 @@ the job. That way an outage cannot quietly mean "no CVE check ran". Locally,
 ## Lockfiles outside the workspace
 
 `deploy/lambda` (ADR-056 §2) and `apps/web/e2e` each resolve their own
-dependencies with npm, outside the pnpm workspace, so none of the three
-workspace lockfile gates can see them — they read `pnpm-lock.yaml`.
-`deploy/lambda`'s `npm audit` runs in the CI job that already installs it, on
-the same HIGH / CRITICAL bar, and waives nothing — there is no counterpart to
-`scripts/audit-allowlist.sh`, so every blocking advisory there has to be fixed.
-`apps/web/e2e/package-lock.json` has no gate on `main` yet: the fix that widens
-OSV-Scanner to every lockfile git tracks lands on the release line (#326) and
-reaches `main` at the next forward merge. `.github/dependabot.yml` covers
-neither, so a bump in either is found by a gate and taken by hand.
+dependencies with npm, outside the pnpm workspace, so `pnpm audit` cannot see
+their lockfiles. OSV-Scanner is the gate that covers them: `osv-check.sh` scans
+every lockfile git tracks, and prints each one it scanned — OSV reports nothing
+for a clean lockfile, which would otherwise read the same as one never scanned.
+Each finding names the lockfile it came from. `deploy/lambda` also has its own
+`npm audit` in the CI job that installs it, on the same HIGH / CRITICAL bar,
+which waives nothing. A vulnerable transitive is fixed with an `overrides`
+entry in that directory's `package.json`, as the e2e one does for `wait-on`'s
+`axios`, `form-data` and `joi`. Dependabot does not cover these lockfiles.
 
 ## Waiving a finding
 
