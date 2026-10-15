@@ -23,15 +23,18 @@ the job. That way an outage cannot quietly mean "no CVE check ran". Locally,
 §11b skips if `osv-scanner` is not installed —
 [install it](https://google.github.io/osv-scanner/installation/) to run it.
 
-## The second lockfile
+## Lockfiles outside the workspace
 
-`deploy/lambda` sits outside the pnpm workspace (ADR-056 §2) and resolves its own
-dependencies with npm, so none of the three workspace lockfile gates can see it —
-they read `pnpm-lock.yaml`. Its `npm audit` runs in the CI job that already
-installs it, on the same HIGH / CRITICAL bar, and waives nothing — there is no
-counterpart to `scripts/audit-allowlist.sh`, so every blocking advisory there has
-to be fixed. `.github/dependabot.yml` does not cover it either, so a bump is
-found by that gate and taken by hand.
+`deploy/lambda` (ADR-056 §2) and `apps/web/e2e` each resolve their own
+dependencies with npm, outside the pnpm workspace, so none of the three
+workspace lockfile gates can see them — they read `pnpm-lock.yaml`.
+`deploy/lambda`'s `npm audit` runs in the CI job that already installs it, on
+the same HIGH / CRITICAL bar, and waives nothing — there is no counterpart to
+`scripts/audit-allowlist.sh`, so every blocking advisory there has to be fixed.
+`apps/web/e2e/package-lock.json` has no gate on `main` yet: the fix that widens
+OSV-Scanner to every lockfile git tracks lands on the release line (#326) and
+reaches `main` at the next forward merge. `.github/dependabot.yml` covers
+neither, so a bump in either is found by a gate and taken by hand.
 
 ## Waiving a finding
 
