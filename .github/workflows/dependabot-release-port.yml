@@ -5,7 +5,8 @@ name: Port Dependabot fix to release branch
 # on the current release line (CONTRIBUTING.md §2). Changing the PR's base
 # would drag every main-only commit into it, so instead this re-applies the
 # same bump on a branch cut from the release branch, opens that PR, and closes
-# Dependabot's. The fix reaches `main` through the usual forward-merge.
+# Dependabot's. The fix reaches `main` through the usual forward-merge. The port
+# commit also carries a PATCH bump of VERSION and root package.json.
 #
 # Majors stay on `main`: a major is new-line work, not a release-line fix. A
 # bump that cannot be rebuilt cleanly on the release branch also stays, with a
@@ -142,9 +143,20 @@ jobs:
           RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
           PORT_BRANCH: ${{ steps.release.outputs.port_branch }}
         run: |
+          # Every shipped change carries a PATCH bump; Dependabot's commit never
+          # touches VERSION, so the release branch's version is the base.
+          IFS=. read -r MAJOR MINOR PATCH <<< "$(tr -d '[:space:]' < VERSION)"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "$NEW_VERSION" > VERSION
+          sed -i -E "0,/^  \"version\": \"[^\"]+\",/s//  \"version\": \"$NEW_VERSION\",/" package.json
+          if ! grep -q "^  \"version\": \"$NEW_VERSION\"," package.json; then
+            echo "::error::could not set the root package.json version to $NEW_VERSION"
+            exit 1
+          fi
+
           git add -A
           git commit --author "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>" \
-            -m "$PR_TITLE" -m "Ported from #$PR_NUMBER onto $RELEASE_BRANCH, lockfile rebuilt against the release branch."
+            -m "$PR_TITLE" -m "Ported from #$PR_NUMBER onto $RELEASE_BRANCH, lockfile rebuilt against the release branch. Version bumped to $NEW_VERSION."
           git push --force origin "$PORT_BRANCH"
 
           PORT_PR_URL=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$PORT_BRANCH" --state open --json url --jq '.[0].url')

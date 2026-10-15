@@ -1,0 +1,99 @@
+name: Bump PATCH on Dependabot PRs
+
+# Every change that ships carries a PATCH bump (CLAUDE.md → Versioning), but
+# Dependabot only edits manifests and lockfiles. This adds the bump as a second
+# commit on the PR's own branch: `VERSION` and root `package.json` `version`
+# both move to the base branch's version plus one PATCH.
+#
+# Covers the PRs that stay where Dependabot opened them: version updates against
+# a release branch (Actions, Docker) and majors left on `main`. Non-major npm
+# security PRs on `main` are skipped: dependabot-release-port.yml closes them
+# and carries the bump in its own port commit.
+#
+# Once this commit lands, Dependabot stops rebasing the branch. If a sibling PR
+# merges first and `VERSION` conflicts, merge the base in and take the next
+# PATCH — /dependabot does this when it runs.
+#
+# Runs on pull_request_target so the token can push. It never executes code
+# from the PR: it only rewrites two version strings with sed.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+    branches: [main, "release/**"]
+
+concurrency:
+  group: dependabot-version-bump-${{ github.event.pull_request.number }}
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  bump:
+    name: Bump PATCH version
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Decide whether this PR keeps its branch
+        id: scope
+        env:
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          if [ "$BASE_REF" = "main" ] && [[ "$HEAD_REF" == dependabot/npm_and_yarn/* ]] \
+            && [ "$UPDATE_TYPE" != "version-update:semver-major" ]; then
+            echo "Ported to the release branch by dependabot-release-port.yml, which bumps there."
+            exit 0
+          fi
+          echo "bump=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.scope.outputs.bump == 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Commit the PATCH bump
+        id: commit
+        if: steps.scope.outputs.bump == 'true'
+        run: |
+          git fetch origin "$BASE_REF"
+          BASE_VERSION=$(git show "origin/$BASE_REF:VERSION" | tr -d '[:space:]')
+          HEAD_VERSION=$(tr -d '[:space:]' < VERSION)
+          if [ "$HEAD_VERSION" != "$BASE_VERSION" ]; then
+            echo "Already bumped ($BASE_VERSION → $HEAD_VERSION)."
+            exit 0
+          fi
+
+          IFS=. read -r MAJOR MINOR PATCH <<< "$BASE_VERSION"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "$NEW_VERSION" > VERSION
+          sed -i -E "0,/^  \"version\": \"[^\"]+\",/s//  \"version\": \"$NEW_VERSION\",/" package.json
+          if ! grep -q "^  \"version\": \"$NEW_VERSION\"," package.json; then
+            echo "::error::could not set the root package.json version to $NEW_VERSION"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(release): bump version to $NEW_VERSION"
+          git push origin "HEAD:$HEAD_REF"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      # A push made with GITHUB_TOKEN starts no pull_request workflows, so the
+      # checks are dispatched on the branch; they report on its new head.
+      - name: Run CI on the bumped head
+        if: steps.commit.outputs.pushed == 'true'
+        run: |
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+          gh workflow run e2e.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"

@@ -9,6 +9,9 @@
 # entry stops its settings (the security group below) applying to them — so the
 # npm entry carries none. workflows/dependabot-release-port.yml rebuilds each
 # non-major security PR on the current release branch and closes the `main` one.
+# workflows/dependabot-version-bump.yml adds a PATCH bump to every other
+# Dependabot PR (the port commit carries its own), and /dependabot fixes the
+# ones whose CI goes red.
 #
 # Version updates are fixes, so they open against the current release branch.
 # Every `target-branch` must equal the `Current release branch:` pointer in
