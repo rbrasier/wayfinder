@@ -491,6 +491,25 @@ else
   echo "$RAMP_LITERALS" | sed 's/^/  /'
 fi
 
+# ── 25. dependabot targets the current release branch ────────────────────────
+# Dependency bumps are fixes, so they belong on the release line. Cutting a new
+# line moves the CLAUDE.md pointer; this catches a dependabot.yml left behind.
+section "25. dependabot target-branch matches the current release branch"
+CURRENT_RELEASE_BRANCH=$(sed -nE 's/^\*\*Current release branch: `([^`]+)`.*/\1/p' CLAUDE.md)
+STALE_TARGETS=$(grep -nE '^[[:space:]]*target-branch:' .github/dependabot.yml \
+  | grep -vE "target-branch:[[:space:]]*\"?${CURRENT_RELEASE_BRANCH}\"?[[:space:]]*$" || true)
+TARGET_COUNT=$(grep -cE '^[[:space:]]*target-branch:' .github/dependabot.yml || true)
+if [ -z "$CURRENT_RELEASE_BRANCH" ]; then
+  fail "could not read the 'Current release branch:' pointer from CLAUDE.md"
+elif [ "$TARGET_COUNT" = "0" ]; then
+  fail ".github/dependabot.yml sets no target-branch — version updates would open against main"
+elif [ -n "$STALE_TARGETS" ]; then
+  fail "every target-branch in .github/dependabot.yml must be $CURRENT_RELEASE_BRANCH:"
+  echo "$STALE_TARGETS" | sed 's/^/  /'
+else
+  pass "dependabot targets $CURRENT_RELEASE_BRANCH"
+fi
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 echo
 echo "──────────────────────────────────────────"

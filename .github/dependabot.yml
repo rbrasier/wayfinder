@@ -4,8 +4,17 @@
 # npm version updates are off (limit 0): routine bumps are taken deliberately,
 # not as a stream of PRs. Security updates ignore that limit and still open,
 # once "Dependabot security updates" is enabled in the repository's Code
-# security settings. Dependabot always targets the default branch; a fix the
-# current release line also needs is carried there by /bugfix.
+# security settings. GitHub always opens security updates against the default
+# branch, whatever `target-branch` says — and setting `target-branch` on an
+# entry stops its settings (the security group below) applying to them — so the
+# npm entry carries none; a fix the current release line also needs is carried
+# there by /bugfix.
+#
+# Version updates are fixes, so they open against the current release branch.
+# Every `target-branch` must equal the `Current release branch:` pointer in
+# CLAUDE.md — validate.sh section 25 enforces it, and /release moves both when a
+# new line is cut. Dependabot reads this file from `main` only, so a change here
+# takes effect once it is forward-merged.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -20,6 +29,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
+    target-branch: release/alpha-2
     schedule:
       interval: weekly
     groups:
@@ -29,6 +39,7 @@ updates:
   # Majors are a Node runtime upgrade, taken deliberately rather than by bot.
   - package-ecosystem: docker
     directory: /
+    target-branch: release/alpha-2
     schedule:
       interval: weekly
     ignore:

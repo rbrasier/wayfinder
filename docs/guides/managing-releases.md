@@ -185,7 +185,9 @@ When `main` is feature-complete for the current line:
    `CLAUDE.md` (both the `Current release branch` and `Next release line`
    lines, and its mirror in `AGENTS.md`), the branch table in
    `CONTRIBUTING.md`, and the **Quickstart** in `README.md` (the "Current
-   release" line and the `git clone --branch` argument).
+   release" line and the `git clone --branch` argument), and every
+   `target-branch` in `.github/dependabot.yml` — `validate.sh` fails until it
+   matches the `CLAUDE.md` pointer.
 
 6. **Create the next line's docs folder**:
    `docs/development/implemented/<next line>/`.
