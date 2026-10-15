@@ -197,8 +197,14 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=10240
         run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
 
+      # Warming the heavy routes here, rather than giving specs longer waits: the
+      # first spec to reach a route pays its compile, which spec that is moves
+      # with every reshard, and the flow canvas has taken longer to compile than
+      # any spec timeout. See warm-routes.sh for how, warm-routes.txt for which.
       - name: Wait for app to be ready
-        run: ./node_modules/.bin/wait-on http://localhost:3000 --timeout 120000
+        run: |
+          ./node_modules/.bin/wait-on http://localhost:3000 --timeout 120000
+          ./warm-routes.sh
         working-directory: apps/web/e2e
 
       # `|| true`: this also fires when the failure was infrastructural (a
