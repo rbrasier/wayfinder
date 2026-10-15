@@ -7,8 +7,8 @@
 # security settings. GitHub always opens security updates against the default
 # branch, whatever `target-branch` says — and setting `target-branch` on an
 # entry stops its settings (the security group below) applying to them — so the
-# npm entry carries none; a fix the current release line also needs is carried
-# there by /bugfix.
+# npm entry carries none. workflows/dependabot-release-port.yml rebuilds each
+# non-major security PR on the current release branch and closes the `main` one.
 #
 # Version updates are fixes, so they open against the current release branch.
 # Every `target-branch` must equal the `Current release branch:` pointer in

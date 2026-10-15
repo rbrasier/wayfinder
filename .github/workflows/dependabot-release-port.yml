@@ -1,0 +1,163 @@
+name: Port Dependabot fix to release branch
+
+# Dependabot security updates always open against the default branch (`main`),
+# whatever `target-branch` says in dependabot.yml, but dependency fixes belong
+# on the current release line (CONTRIBUTING.md §2). Changing the PR's base
+# would drag every main-only commit into it, so instead this re-applies the
+# same bump on a branch cut from the release branch, opens that PR, and closes
+# Dependabot's. The fix reaches `main` through the usual forward-merge.
+#
+# Majors stay on `main`: a major is new-line work, not a release-line fix. A
+# bump that cannot be rebuilt cleanly on the release branch also stays, with a
+# comment saying why, for /bugfix to carry by hand.
+#
+# Runs on pull_request_target so the token can push and open PRs (Dependabot's
+# own pull_request runs get a read-only token). It never executes code from the
+# PR: fetch-metadata verifies the commit is Dependabot's, and the lockfile is
+# rebuilt with scripts and pnpmfiles disabled. To re-run it on a PR opened
+# before this workflow existed, close and reopen the PR.
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+    branches: [main]
+
+concurrency:
+  group: dependabot-release-port-${{ github.event.pull_request.number }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  port:
+    name: Port to release branch
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      startsWith(github.event.pull_request.head.ref, 'dependabot/npm_and_yarn/')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Leave majors on main
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+            "Not ported to the release branch: this is a major version bump, which is new-line work rather than a release-line fix. It stays on \`main\`."
+
+      - uses: actions/checkout@v4
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Resolve the current release branch
+        id: release
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: |
+          RELEASE_BRANCH=$(sed -nE 's/^\*\*Current release branch: `([^`]+)`.*/\1/p' CLAUDE.md)
+          if [ -z "$RELEASE_BRANCH" ]; then
+            echo "::error::could not read the 'Current release branch:' pointer from CLAUDE.md"
+            exit 1
+          fi
+          echo "branch=$RELEASE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "port_branch=dependabot-port/$RELEASE_BRANCH/${PR_HEAD_REF#dependabot/}" >> "$GITHUB_OUTPUT"
+
+      - name: Apply the bump on the release branch
+        id: apply
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        env:
+          RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+          PORT_BRANCH: ${{ steps.release.outputs.port_branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$RELEASE_BRANCH" "refs/pull/$PR_NUMBER/head"
+          git checkout -B "$PORT_BRANCH" "origin/$RELEASE_BRANCH"
+
+          # The lockfile is regenerated below, so only conflicts elsewhere are fatal.
+          if ! git cherry-pick --no-commit "$PR_HEAD_SHA"; then
+            CONFLICTED=$(git diff --name-only --diff-filter=U)
+            if [ "$CONFLICTED" != "pnpm-lock.yaml" ]; then
+              echo "reason=the change conflicts with the release branch in: $(echo $CONFLICTED)" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git checkout --ours pnpm-lock.yaml
+            git add pnpm-lock.yaml
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - uses: pnpm/action-setup@v4
+        if: steps.apply.outputs.ok == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.apply.outputs.ok == 'true'
+        with:
+          node-version: 20
+
+      # `pnpm install --lockfile-only` re-resolves only what package.json
+      # changed; `pnpm update` would also re-resolve unrelated peers.
+      - name: Rebuild the lockfile and confirm the fixed versions landed
+        id: verify
+        if: steps.apply.outputs.ok == 'true'
+        env:
+          UPDATED_DEPENDENCIES: ${{ steps.metadata.outputs.updated-dependencies-json }}
+        run: |
+          pnpm install --lockfile-only --ignore-scripts --ignore-pnpmfile
+          MISSING=""
+          while IFS=$'\t' read -r DEPENDENCY_NAME NEW_VERSION; do
+            if ! grep -qE "^  '?${DEPENDENCY_NAME}@${NEW_VERSION}'?:" pnpm-lock.yaml; then
+              MISSING="$MISSING ${DEPENDENCY_NAME}@${NEW_VERSION}"
+            fi
+          done < <(echo "$UPDATED_DEPENDENCIES" | jq -r '.[] | [.dependencyName, .newVersion] | @tsv')
+          if [ -n "$MISSING" ]; then
+            echo "reason=rebuilding the release branch lockfile did not resolve:$MISSING" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Explain why the fix stays on main
+        if: >-
+          steps.metadata.outputs.update-type != 'version-update:semver-major' &&
+          steps.verify.outputs.ok != 'true'
+        env:
+          REASON: ${{ steps.verify.outputs.reason || steps.apply.outputs.reason }}
+          RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+            "Could not port this to \`$RELEASE_BRANCH\` automatically: $REASON. Carry it to the release branch with /bugfix."
+
+      - name: Open the release-branch PR and close this one
+        if: steps.verify.outputs.ok == 'true'
+        env:
+          RELEASE_BRANCH: ${{ steps.release.outputs.branch }}
+          PORT_BRANCH: ${{ steps.release.outputs.port_branch }}
+        run: |
+          git add -A
+          git commit --author "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>" \
+            -m "$PR_TITLE" -m "Ported from #$PR_NUMBER onto $RELEASE_BRANCH, lockfile rebuilt against the release branch."
+          git push --force origin "$PORT_BRANCH"
+
+          PORT_PR_URL=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$PORT_BRANCH" --state open --json url --jq '.[0].url')
+          if [ -z "$PORT_PR_URL" ]; then
+            PORT_PR_URL=$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$RELEASE_BRANCH" --head "$PORT_BRANCH" \
+              --title "$PR_TITLE" --label dependencies \
+              --body "Dependabot opened #$PR_NUMBER against \`main\`; dependency fixes land on the release line, so this applies the same bump to \`$RELEASE_BRANCH\` with its lockfile rebuilt there. It reaches \`main\` through the forward-merge.")
+          fi
+
+          # A push or PR made with GITHUB_TOKEN starts no pull_request workflows,
+          # so the checks are dispatched on the branch; they report on its head.
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$PORT_BRANCH"
+          gh workflow run e2e.yml --repo "$GITHUB_REPOSITORY" --ref "$PORT_BRANCH"
+
+          gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --comment \
+            "Ported to \`$RELEASE_BRANCH\` in $PORT_PR_URL — dependency fixes land on the release line and reach \`main\` through the forward-merge."
