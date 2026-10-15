@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# osv-check.sh — OSV-Scanner gate on pnpm-lock.yaml, shared by validate.sh and CI.
+# osv-check.sh — OSV-Scanner gate on every lockfile, shared by validate.sh and CI.
 #
 # A second, independent advisory source next to scripts/audit-check.sh: when the
 # npm audit endpoint is down that gate skips, and this one is what still runs.
@@ -38,11 +38,28 @@ if ! command -v osv-scanner > /dev/null 2>&1; then
   unavailable "osv-scanner is not installed (https://google.github.io/osv-scanner/installation/)"
 fi
 
+# Every lockfile git tracks, not just the workspace's. apps/web/e2e resolves its
+# own dependencies with npm outside the pnpm workspace, and went unscanned while
+# this named pnpm-lock.yaml alone; listing them here means the next one is
+# covered the day it lands. OSV reports nothing for a clean lockfile, which reads
+# the same as one never scanned, so the list is printed.
+LOCKFILE_ARGS=()
+while IFS= read -r lockfile; do
+  [ -n "$lockfile" ] || continue
+  LOCKFILE_ARGS+=(--lockfile "$lockfile")
+  echo "Scanning $lockfile"
+done < <(git ls-files 2> /dev/null | grep -E '(^|/)(pnpm-lock\.yaml|package-lock\.json)$')
+
+if [ "${#LOCKFILE_ARGS[@]}" -eq 0 ]; then
+  echo "No lockfiles found to scan — run from a git checkout of the repository."
+  exit 1
+fi
+
 # Offline mode downloads the npm advisory database as one archive rather than
 # querying api.osv.dev per package, so it works behind proxies that allow plain
 # HTTPS downloads but not the API.
 OSV_JSON=$(osv-scanner scan source \
-  --lockfile pnpm-lock.yaml \
+  ${LOCKFILE_ARGS[@]+"${LOCKFILE_ARGS[@]}"} \
   --offline-vulnerabilities \
   --download-offline-databases \
   --format json 2> /dev/null)
@@ -62,7 +79,7 @@ fi
 # an empty array under `set -u` aborts the script rather than yielding nothing.
 ALLOWED_CSV=$(IFS=,; echo "${ALLOWED_ADVISORIES[@]+${ALLOWED_ADVISORIES[*]}}")
 
-REPORT=$(ALLOWED="$ALLOWED_CSV" node -e '
+REPORT=$(ALLOWED="$ALLOWED_CSV" ROOT="$ROOT" node -e '
 const allowed = new Set((process.env.ALLOWED || "").split(",").filter(Boolean));
 
 let input = "";
@@ -83,18 +100,20 @@ process.stdin.on("end", () => {
     return parseFloat(group?.max_severity || "0") >= 7 ? "high" : "unrated";
   };
 
-  const findings = (parsed.results || [])
-    .flatMap((result) => result.packages || [])
-    .flatMap(({ package: pkg, vulnerabilities = [], groups = [] }) =>
-      vulnerabilities.map((vulnerability) => ({ pkg, vulnerability, severity: severityOf(vulnerability, groups) })),
+  const root = process.env.ROOT + "/";
+  const findings = (parsed.results || []).flatMap((result) => {
+    const lockfile = String(result.source?.path || "").replace(root, "");
+    return (result.packages || []).flatMap(({ package: pkg, vulnerabilities = [], groups = [] }) =>
+      vulnerabilities.map((vulnerability) => ({ lockfile, pkg, vulnerability, severity: severityOf(vulnerability, groups) })),
     );
+  });
 
   const lines = new Set();
-  for (const { pkg, vulnerability, severity } of findings) {
+  for (const { lockfile, pkg, vulnerability, severity } of findings) {
     if (!["high", "critical"].includes(severity)) continue;
     const ids = [vulnerability.id, ...(vulnerability.aliases || [])];
     const verdict = ids.some((id) => allowed.has(id)) ? "WAIVED" : "BLOCK";
-    lines.add(`${verdict} ${severity} — ${pkg.name}@${pkg.version} — ${vulnerability.id} — ${vulnerability.summary || ""}`);
+    lines.add(`${verdict} ${severity} — ${lockfile}: ${pkg.name}@${pkg.version} — ${vulnerability.id} — ${vulnerability.summary || ""}`);
   }
   for (const line of lines) console.log(line);
 });

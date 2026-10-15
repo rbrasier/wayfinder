@@ -6,10 +6,10 @@ answers a different question, so a finding one misses another can catch.
 | Check | Where | Looks at | Blocks on |
 |---|---|---|---|
 | `pnpm audit` | CI `security` job, `validate.sh` §11 — `scripts/audit-check.sh` | `pnpm-lock.yaml`, npm's advisory database | HIGH / CRITICAL (GitHub label) |
-| OSV-Scanner | CI `security` job, `validate.sh` §11b — `scripts/osv-check.sh` | `pnpm-lock.yaml`, the OSV database | HIGH / CRITICAL (GitHub label; CVSS ≥ 7.0 when unlabelled) |
+| OSV-Scanner | CI `security` job, `validate.sh` §11b — `scripts/osv-check.sh` | Every lockfile git tracks, the OSV database | HIGH / CRITICAL (GitHub label; CVSS ≥ 7.0 when unlabelled) |
 | Trivy | CI `docker-image` job, `publish.yml` before the push | The built container image — Debian packages, the Node runtime, everything in `node_modules` | Fixable HIGH / CRITICAL |
 | Dependency review | `dependency-review.yml` on every PR | Only the dependencies the PR adds or changes | HIGH / CRITICAL |
-| Dependabot | GitHub, continuously | The lockfile, against GitHub's advisory database | Nothing — opens security-fix PRs against `main` |
+| Dependabot | GitHub, continuously | `pnpm-lock.yaml`, against GitHub's advisory database | Nothing — opens security-fix PRs against `main` |
 
 Moderate and low advisories never block. They still show in each tool's output.
 
@@ -21,6 +21,18 @@ an independent database and **never skips in CI**: an unreachable database fails
 the job. That way an outage cannot quietly mean "no CVE check ran". Locally,
 §11b skips if `osv-scanner` is not installed —
 [install it](https://google.github.io/osv-scanner/installation/) to run it.
+
+## Lockfiles outside the workspace
+
+`apps/web/e2e` resolves its own dependencies with npm, outside the pnpm
+workspace, so `pnpm audit` cannot see `apps/web/e2e/package-lock.json`.
+OSV-Scanner is the gate that covers it: `osv-check.sh` scans every lockfile git
+tracks, and prints each one it scanned — OSV reports nothing for a clean
+lockfile, which would otherwise read the same as one never scanned. Each
+finding names the lockfile it came from. A vulnerable transitive is fixed with
+an `overrides` entry in that directory's `package.json`, as the e2e one does for
+`wait-on`'s `axios`, `form-data` and `joi`. Dependabot does not cover these
+lockfiles.
 
 ## Waiving a finding
 
