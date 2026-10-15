@@ -30,8 +30,22 @@ if [ "$AUDIT_STATUS" -eq 0 ]; then
 fi
 
 # npm retired the legacy audit API that `pnpm audit` calls, so the endpoint can
-# answer 410 for everyone. A registry-side outage is not a code failure.
-if echo "$AUDIT_JSON" | grep -qiE 'ERR_PNPM_AUDIT_BAD_RESPONSE|being retired|audit endpoint|410|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN'; then
+# answer 410 for everyone. A registry-side outage is not a code failure. Only an
+# answer that is not an audit report counts: advisory text carries commit hashes
+# and URLs, so a real report can contain "410" and must never read as an outage.
+IS_AUDIT_REPORT=$(node -e '
+let input = "";
+process.stdin.on("data", (chunk) => { input += chunk; });
+process.stdin.on("end", () => {
+  try {
+    console.log(JSON.parse(input).advisories ? "yes" : "no");
+  } catch {
+    console.log("no");
+  }
+});
+' <<< "$AUDIT_JSON")
+
+if [ "$IS_AUDIT_REPORT" != "yes" ] && echo "$AUDIT_JSON" | grep -qiE 'ERR_PNPM_AUDIT_BAD_RESPONSE|being retired|audit endpoint|410|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN'; then
   echo "SKIP — pnpm audit endpoint unavailable; dependency audit not run."
   exit 0
 fi
