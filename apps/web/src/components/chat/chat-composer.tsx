@@ -169,7 +169,7 @@ export function ChatComposer({
             onKeyDown={handleKeyDown}
             disabled={disabled}
             placeholder="Message Wayfinder…"
-            className="flex-1 resize-none border-none bg-transparent py-[5px] text-[14px] leading-[1.45] text-[#1c1b19] outline-none placeholder:text-[#736d5f] disabled:cursor-not-allowed"
+            className="flex-1 resize-none border-none bg-transparent py-[5px] text-[14px] leading-[1.45] text-[#1c1b19] outline-hidden placeholder:text-[#736d5f] disabled:cursor-not-allowed"
             style={{ minHeight: "30px", maxHeight: "120px", overflowY: "auto" }}
           />
           <button

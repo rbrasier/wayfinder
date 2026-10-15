@@ -1,6 +1,137 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Scan src/ only, as v3's `content` did. v4's default scans all of apps/web,
+   so the e2e suite's session and seed files (written mid-run) triggered CSS
+   rebuilds and hot reloads that interrupted pages under test. */
+@import 'tailwindcss' source('..');
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 1rem;
+  @media (width >= --theme(--breakpoint-sm)) {
+    max-width: none;
+  }
+  @media (width >= 1280px) {
+    max-width: 1280px;
+  }
+}
+
+@theme {
+  --font-sans:
+    var(--font-figtree), -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:
+    var(--font-jetbrains-mono), ui-monospace, 'Courier New', monospace;
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-wf-bg: var(--bg);
+  --color-wf-rail: var(--bg2);
+  --color-wf-inset: var(--bg3);
+  --color-wf-surface: var(--surface);
+  --color-wf-line: var(--wf-border);
+  --color-wf-line-strong: var(--border-strong);
+  --color-wf-line-dashed: var(--border-dashed);
+  --color-wf-text: var(--wf-text);
+  --color-wf-text-2: var(--text2);
+  --color-wf-text-3: var(--text3);
+  --color-wf-text-4: var(--text4);
+  --color-wf-rule: var(--rule);
+  --color-wf-dot: var(--dot);
+  --color-wf-primary: var(--wf-primary);
+  --color-wf-primary-hover: var(--primary-hover);
+  --color-wf-primary-contrast: var(--primary-contrast);
+  --color-wf-primary-light: var(--primary-light);
+  --color-wf-primary-dim: var(--primary-dim);
+  --color-wf-success: var(--success);
+  --color-wf-success-bg: var(--success-bg);
+  --color-wf-success-line: var(--success-border);
+  --color-wf-warning: var(--warning);
+  --color-wf-warning-bg: var(--warning-bg);
+  --color-wf-warning-line: var(--warning-border);
+  --color-wf-rose: var(--rose);
+  --color-wf-rose-bg: var(--rose-bg);
+  --color-wf-teal: var(--teal);
+  --color-wf-teal-bg: var(--teal-bg);
+  --color-wf-purple: var(--purple);
+  --color-wf-purple-light: var(--purple-light);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-wf: var(--radius);
+  --radius-wf-sm: var(--wf-radius-sm);
+  --radius-wf-lg: var(--wf-radius-lg);
+  --radius-wf-xl: var(--wf-radius-xl);
+
+  --shadow-wf: var(--sh);
+  --shadow-wf-md: var(--sh-md);
+  --shadow-wf-xl: var(--sh-xl);
+
+  /* v3 line heights were absolute rems; v4's are unitless ratios, which a
+     child with a smaller font (an 11px badge or label inside text-sm) rescales
+     to its own size, so rows and form fields shrank. Pinned to the v3 values. */
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* v4 also dropped the pointer cursor on buttons and moved placeholders to
+     50% of the text colour; both pinned back to their v3 look. */
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+}
 
 @layer base {
   :root {
@@ -45,7 +176,7 @@
     --bg3:           #ebe8e0;
     --surface:       #ffffff;
     /* The primary ramp. An install's brand colour overrides all of these, plus
-       --primary / --ring / --primary-foreground, from a <style> block the root
+       --primary / --ring / --primary-foreground, from a \3c style> block the root
        layout renders (ADR-061 §2) — so components reference the tokens, never
        the hex. validate.sh fails on a primary-ramp literal anywhere else. */
     --wf-primary:    #2f56d3;
@@ -87,9 +218,9 @@
     --sh-md:         0 2px 6px rgba(28,27,25,.06), 0 12px 28px -18px rgba(28,27,25,.30);
     --sh-xl:         0 4px 16px rgba(28,27,25,.08), 0 32px 64px -28px rgba(28,27,25,.36);
     /* Radii */
-    --radius-sm:     7px;
-    --radius-lg:     14px;
-    --radius-xl:     18px;
+    --wf-radius-sm:  7px;
+    --wf-radius-lg:  14px;
+    --wf-radius-xl:  18px;
   }
 
 }

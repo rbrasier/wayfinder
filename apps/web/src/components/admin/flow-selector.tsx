@@ -129,7 +129,7 @@ function FlowSearchInput({
           if (event.key === "Escape") onDismiss();
         }}
         placeholder="Search flows…"
-        className="rounded-[9px] border border-wf-primary bg-white px-3 py-2 text-[13px] text-[#1c1b19] outline-none placeholder:text-[#726f6b]"
+        className="rounded-[9px] border border-wf-primary bg-white px-3 py-2 text-[13px] text-[#1c1b19] outline-hidden placeholder:text-[#726f6b]"
       />
       {filtered.length > 0 && (
         <ul className="absolute left-0 top-full z-10 mt-1 w-[240px] overflow-hidden rounded-[9px] border border-[#e7e3db] bg-white shadow-md">

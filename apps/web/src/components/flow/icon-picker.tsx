@@ -189,7 +189,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search icons…"
-              className="h-8 w-full rounded-[8px] border border-[#e7e3db] bg-[#faf9f7] pl-7 pr-2 text-[12px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-none"
+              className="h-8 w-full rounded-[8px] border border-[#e7e3db] bg-[#faf9f7] pl-7 pr-2 text-[12px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-hidden"
             />
           </div>
           {results.length === 0 ? (

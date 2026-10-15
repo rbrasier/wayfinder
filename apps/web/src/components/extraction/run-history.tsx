@@ -47,7 +47,7 @@ export function RunHistory({ flowId }: RunHistoryProps) {
     <div className="overflow-x-auto rounded-[10px] border border-[#e7e3db] bg-white">
       <table className="w-full border-collapse text-[13px]">
         <thead>
-          <tr className="border-b border-[#e7e3db] text-left text-[11px] uppercase tracking-[0.05em] text-[#666055]">
+          <tr className="border-b border-[#e7e3db] text-left text-[11px] uppercase tracking-wider text-[#666055]">
             <th scope="col" className="px-[12px] py-[8px]">Status</th>
             <th scope="col" className="px-[12px] py-[8px]">Processed</th>
             <th scope="col" className="px-[12px] py-[8px]">Exceptions</th>

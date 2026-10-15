@@ -14,7 +14,7 @@ export function DoneWhenAnimation() {
   return (
     <Stage>
       <Reveal on className="absolute left-4 top-4 w-[300px]">
-        <div className="rounded-[10px] border border-[#c3cee9] bg-white p-3 shadow-sm">
+        <div className="rounded-[10px] border border-[#c3cee9] bg-white p-3 shadow-xs">
           <div className="mb-2 flex items-center gap-2">
             <span className="h-3.5 w-3.5 rounded-[3px] bg-wf-primary" />
             <span className="text-[11.5px] font-semibold text-[#1c1b19]">Gather the leave dates</span>

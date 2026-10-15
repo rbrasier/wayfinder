@@ -119,6 +119,7 @@ variables.
 | AWS (ECS Fargate + RDS + S3) | [`docs/guides/setup-aws.md`](docs/guides/setup-aws.md) |
 | Azure (Container Apps + Flexible Server) | [`docs/guides/setup-azure.md`](docs/guides/setup-azure.md) |
 | Upgrading an existing deployment | [`docs/guides/upgrading.md`](docs/guides/upgrading.md) |
+| CVE scanning and the per-release SBOM | [`docs/guides/security-scanning.md`](docs/guides/security-scanning.md) |
 
 ## Locked out of admin
 

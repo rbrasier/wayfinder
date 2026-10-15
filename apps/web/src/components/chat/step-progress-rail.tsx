@@ -41,7 +41,7 @@ export function StepProgressRail({
   return (
     <div
       data-testid={isInline ? "step-rail-inline" : "step-rail-band"}
-      className={`flex shrink-0 items-center gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+      className={`flex shrink-0 items-center gap-3 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden ${
         isInline ? "" : "border-b border-[#e7e3db] bg-white px-4 py-[10px]"
       }`}
     >

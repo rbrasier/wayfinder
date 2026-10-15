@@ -47,13 +47,13 @@ export function RunReport({ runId, live = false }: RunReportProps) {
 
   return (
     <section className="flex flex-col gap-[8px]">
-      <h2 className="text-[12px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
+      <h2 className="text-[12px] font-semibold uppercase tracking-wider text-[#666055]">
         Field report
       </h2>
       <div className="overflow-x-auto rounded-[10px] border border-[#e7e3db] bg-white">
         <table className="w-full border-collapse text-[13px]">
           <thead>
-            <tr className="border-b border-[#e7e3db] text-left text-[11px] uppercase tracking-[0.05em] text-[#666055]">
+            <tr className="border-b border-[#e7e3db] text-left text-[11px] uppercase tracking-wider text-[#666055]">
               <th scope="col" className="px-[12px] py-[8px]">Record</th>
               {report.columns.map((column) => (
                 <th key={column.fieldKey} scope="col" className="px-[12px] py-[8px]">

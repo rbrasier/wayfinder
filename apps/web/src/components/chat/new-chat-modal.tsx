@@ -59,7 +59,7 @@ export function NewChatModal({ open, onClose, publishedFlows }: NewChatModalProp
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <div>
-            <div className="mb-[3px] text-[11px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
+            <div className="mb-[3px] text-[11px] font-semibold uppercase tracking-wider text-[#666055]">
               New Chat Session
             </div>
             <DialogTitle>Choose a workflow</DialogTitle>

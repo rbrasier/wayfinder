@@ -18,7 +18,7 @@ export function TemplateAnimation() {
   const beat = useTourBeat(BEATS);
   return (
     <Stage>
-      <div className="absolute left-4 top-4 w-[240px] rounded-[6px] border border-[#e7e3db] bg-white p-3 shadow-sm">
+      <div className="absolute left-4 top-4 w-[240px] rounded-[6px] border border-[#e7e3db] bg-white p-3 shadow-xs">
         <div className="mb-1 text-[11.5px] font-bold text-[#1c1b19]">Leave request</div>
         <div className="mb-2 h-1.5 w-2/3 rounded-full bg-[#ddd8d0]" />
         <dl className="space-y-1.5 text-[10.5px] leading-[1.4]">

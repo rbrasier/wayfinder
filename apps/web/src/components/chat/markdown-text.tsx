@@ -32,7 +32,7 @@ function InlineNodes({ nodes }: { nodes: readonly InlineNode[] }) {
             </s>
           )}
           {node.type === "code" && (
-            <code className="rounded-[4px] bg-black/10 px-[4px] py-[1px] font-mono text-[0.92em]">
+            <code className="rounded-[4px] bg-black/10 px-[4px] py-px font-mono text-[0.92em]">
               {node.value}
             </code>
           )}

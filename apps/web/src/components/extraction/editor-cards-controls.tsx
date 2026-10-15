@@ -33,7 +33,7 @@ export function FocusCard({
       className={`relative rounded-[14px] border bg-white transition-all duration-200 ${
         focused
           ? `z-20 flex-[1.75] border-wf-primary-dim shadow-[0_12px_36px_rgba(58,95,217,0.14)] ${overlapClass}`
-          : "z-10 flex-[1] border-[#e7e3db] shadow-sm"
+          : "z-10 flex-1 border-[#e7e3db] shadow-xs"
       }`}
     >
       <div className="flex items-center justify-between border-b border-[#f5f3ee] px-5 py-3.5">

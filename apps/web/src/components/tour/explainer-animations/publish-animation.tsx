@@ -13,7 +13,7 @@ export function PublishAnimation() {
   const published = beat >= 3;
   return (
     <Stage>
-      <div className="absolute left-3 top-3 w-[250px] rounded-[10px] border border-[#e7e3db] bg-white shadow-sm">
+      <div className="absolute left-3 top-3 w-[250px] rounded-[10px] border border-[#e7e3db] bg-white shadow-xs">
         <div className="flex items-center gap-2 border-b border-[#e7e3db] px-2.5 py-2">
           <span className="text-[11px] font-semibold text-[#1c1b19]">🌴 Leave request</span>
           <span
@@ -28,7 +28,7 @@ export function PublishAnimation() {
             <MoreHorizontal size={11} />
           </span>
         </div>
-        <div className="relative h-[112px] bg-[radial-gradient(#ddd8d0_1px,transparent_1px)] [background-size:12px_12px]">
+        <div className="relative h-[112px] bg-[radial-gradient(#ddd8d0_1px,transparent_1px)] bg-size-[12px_12px]">
           <Reveal on={beat >= 1 && beat < 3} className="absolute right-2 top-1 w-[150px]">
             <div className="rounded-[8px] border border-[#e7e3db] bg-white py-1 text-[10.5px] shadow-md">
               <div
@@ -57,7 +57,7 @@ export function PublishAnimation() {
       <Reveal on={beat >= 4} className="absolute right-3 top-3 w-[230px]">
         <div className="rounded-[10px] border border-[#e7e3db] bg-white shadow-md">
           <div className="border-b border-[#e7e3db] px-3 py-2">
-            <div className="text-[9px] font-semibold uppercase tracking-[0.05em] text-[#666055]">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-[#666055]">
               New chat
             </div>
             <div className="text-[11.5px] font-bold text-[#1c1b19]">Choose a workflow</div>
