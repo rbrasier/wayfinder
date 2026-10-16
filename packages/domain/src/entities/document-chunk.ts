@@ -29,6 +29,9 @@ export interface NewDocumentChunk {
   chunkIndex: number;
   chunkText: string;
   embedding: number[];
+  // "provider:model" that produced `embedding`; null only for rows written before
+  // the label existed and not yet stamped at startup.
+  embeddingModel: string | null;
 }
 
 // What retrieval returns: the chunk text plus the metadata needed to attribute

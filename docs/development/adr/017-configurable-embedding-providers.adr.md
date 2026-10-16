@@ -1,6 +1,6 @@
 # ADR-017 — Configurable Embedding Providers (local + OpenAI), 384 dimensions
 
-- **Status**: Accepted
+- **Status**: Accepted — amended 2026-10-16 (v0.38.0, see "Amendment" below)
 - **Date**: 2026-06-02
 - **Revises**: ADR-016 Decision 2 (single OpenAI provider, 1536 dims) and the
   fixed index dimensionality in Decision 3.
@@ -76,3 +76,31 @@ Therefore:
 - 384-d embeddings (both providers) trade a little retrieval quality for schema
   uniformity vs OpenAI's native 1536.
 - Switching providers in an existing deployment requires a one-off re-embed.
+
+## Amendment (v0.38.0) — admin-selectable models, 1024-wide column, per-chunk model stamp
+
+Source: issue #336. Phase doc:
+`docs/development/implemented/alpha-3/v0.38.0/admin-embedding-models.phase.md`.
+
+**Decision 1 is widened.** The providers are `local`, `openai`, `mistral` and
+`bedrock`, and an admin chooses the **model** as well as the provider, from a
+curated catalogue (`EMBEDDINGS_MODELS` in `@wayfinder/shared`). Hosted providers
+use the key saved for that provider in the AI provider settings
+(`AiConfig.apiKeys`, already env-backed), resolved per call; the separate
+`OPENAI_API_KEY`-only path for embeddings is gone. Cohere on Bedrock is excluded:
+`@ai-sdk/amazon-bedrock` 1.x sends Titan's request body for every model id.
+
+**Decision 2 is superseded.** The stored column is `vector(1024)`. Each model
+declares its native width; narrower vectors (local MiniLM, OpenAI 3-small, both
+384) are zero-padded to 1024, which leaves cosine similarity between padded
+vectors unchanged. OpenAI 3-small deliberately stays at 384 so vectors stored
+before the widening keep matching — the upgrade migration pads existing rows in
+place and needs no re-index. A provider returning a vector of the wrong width is
+an error, never a stored row.
+
+**Decision 3 gains a record.** Every chunk and chunk version carries
+`embedding_model` (`"provider:model"`), written in the same call that produced
+the vector. Rows from before the column existed are stamped with the active model
+at first boot. Documents with an active chunk embedded by any other model are
+counted and shown to admins (RAG Embeddings card, Configuration nav dot) until a
+re-index clears them. Re-indexing remains an explicit admin action.

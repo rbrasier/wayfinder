@@ -16,4 +16,10 @@ export interface IDocumentChunkRepository {
   insertMany(chunks: NewDocumentChunk[]): Promise<Result<void>>;
   deleteByStoragePath(storagePath: string): Promise<Result<void>>;
   search(input: DocumentChunkSearch): Promise<Result<RetrievedChunk[]>>;
+  // Distinct source documents with an active chunk not embedded by `modelKey` —
+  // those that will not match queries until re-indexed.
+  countDocumentsEmbeddedWithOtherModel(modelKey: string): Promise<Result<number>>;
+  // Stamps `modelKey` on chunks and chunk versions written before the label
+  // existed. Idempotent: labelled rows are left alone.
+  labelUnlabelledEmbeddings(modelKey: string): Promise<Result<void>>;
 }

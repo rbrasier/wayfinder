@@ -372,6 +372,13 @@
       "when": 1789465869869,
       "tag": "0052_eminent_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1792178694441,
+      "tag": "0053_admin_embedding_models",
+      "breakpoints": true
     }
   ]
 }

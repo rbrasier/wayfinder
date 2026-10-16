@@ -59,6 +59,7 @@ const toChunkVersion = (row: typeof kb_chunk_versions.$inferSelect): ChunkVersio
   chunkId: row.chunk_id,
   chunkText: row.chunk_text,
   embedding: row.embedding,
+  embeddingModel: row.embedding_model,
   editedBy: row.edited_by,
   reason: row.reason,
   createdAt: row.created_at,
@@ -109,6 +110,7 @@ export class DrizzleChunkCurationRepository implements IChunkCurationRepository 
           .select({
             chunk_text: kb_document_chunks.chunk_text,
             embedding: kb_document_chunks.embedding,
+            embedding_model: kb_document_chunks.embedding_model,
           })
           .from(kb_document_chunks)
           .where(eq(kb_document_chunks.id, edit.chunkId))
@@ -119,13 +121,19 @@ export class DrizzleChunkCurationRepository implements IChunkCurationRepository 
           chunk_id: edit.chunkId,
           chunk_text: current.chunk_text,
           embedding: current.embedding,
+          embedding_model: current.embedding_model,
           edited_by: edit.editedBy,
           reason: edit.reason,
         });
 
         const [row] = await tx
           .update(kb_document_chunks)
-          .set({ chunk_text: edit.newText, embedding: edit.newEmbedding, updated_at: new Date() })
+          .set({
+            chunk_text: edit.newText,
+            embedding: edit.newEmbedding,
+            embedding_model: edit.newEmbeddingModel,
+            updated_at: new Date(),
+          })
           .where(eq(kb_document_chunks.id, edit.chunkId))
           .returning(curatedColumns);
         return row ?? null;
@@ -146,6 +154,7 @@ export class DrizzleChunkCurationRepository implements IChunkCurationRepository 
           .select({
             chunk_text: kb_chunk_versions.chunk_text,
             embedding: kb_chunk_versions.embedding,
+            embedding_model: kb_chunk_versions.embedding_model,
           })
           .from(kb_chunk_versions)
           .where(
@@ -158,6 +167,7 @@ export class DrizzleChunkCurationRepository implements IChunkCurationRepository 
           .select({
             chunk_text: kb_document_chunks.chunk_text,
             embedding: kb_document_chunks.embedding,
+            embedding_model: kb_document_chunks.embedding_model,
           })
           .from(kb_document_chunks)
           .where(eq(kb_document_chunks.id, input.chunkId))
@@ -169,13 +179,19 @@ export class DrizzleChunkCurationRepository implements IChunkCurationRepository 
           chunk_id: input.chunkId,
           chunk_text: current.chunk_text,
           embedding: current.embedding,
+          embedding_model: current.embedding_model,
           edited_by: input.editedBy,
           reason: "revert",
         });
 
         const [row] = await tx
           .update(kb_document_chunks)
-          .set({ chunk_text: version.chunk_text, embedding: version.embedding, updated_at: new Date() })
+          .set({
+            chunk_text: version.chunk_text,
+            embedding: version.embedding,
+            embedding_model: version.embedding_model,
+            updated_at: new Date(),
+          })
           .where(eq(kb_document_chunks.id, input.chunkId))
           .returning(curatedColumns);
         return { row };

@@ -32,7 +32,7 @@ export class DocumentIndexingService implements IDocumentIndexer {
     const newChunks: NewDocumentChunk[] = [];
     for (let chunkIndex = 0; chunkIndex < pieces.length; chunkIndex += 1) {
       const chunkContent = pieces[chunkIndex]!;
-      const embeddingResult = await this.embeddings.embed(chunkContent);
+      const embeddingResult = await this.embeddings.embedForStorage(chunkContent);
       if (embeddingResult.error) return err(embeddingResult.error);
       newChunks.push({
         flowId: input.flowId,
@@ -42,7 +42,8 @@ export class DocumentIndexingService implements IDocumentIndexer {
         filename: input.filename,
         chunkIndex,
         chunkText: chunkContent,
-        embedding: embeddingResult.data,
+        embedding: embeddingResult.data.vector,
+        embeddingModel: embeddingResult.data.model,
       });
     }
 
