@@ -33,6 +33,8 @@ import { ExtractionFieldEditor } from "./extraction-field-editor";
 import { FocusCard, Segmented, Switch } from "./editor-cards-controls";
 import { AnalyseControls, AnalysisState } from "./auto-analyse-panel";
 import { EditorDialogs } from "./editor-dialogs";
+import { RunFitNotices, useRunFit } from "./run-fit-notice";
+import { useSystemPromptPreview } from "./use-system-prompt-preview";
 import { usePermissions } from "@/lib/use-permissions";
 import {
   deriveOutputMode,
@@ -129,6 +131,7 @@ export function EditorCards({
   // Input documents are persisted server-side (progressive upload), so the tree
   // reflects the saved intake rather than transient in-memory state.
   const draftDocsQuery = trpc.extraction.listDraftDocuments.useQuery({ flowId });
+  const runFit = useRunFit(flowId, draftDocsQuery.data?.length ?? 0);
   const uploads: UploadedFile[] = useMemo(
     () =>
       (draftDocsQuery.data ?? []).map((document) => ({
@@ -191,10 +194,6 @@ export function EditorCards({
   const [outputOpen, setOutputOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [promptOpen, setPromptOpen] = useState(false);
-  const [systemPrompt, setSystemPrompt] = useState<string | null>(null);
-  const [promptError, setPromptError] = useState<string | null>(null);
-  const [promptLoading, setPromptLoading] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const templateInputRef = useRef<HTMLInputElement | null>(null);
   const contextInputRef = useRef<HTMLInputElement | null>(null);
@@ -233,9 +232,12 @@ export function EditorCards({
     },
   });
 
+  const promptPreview = useSystemPromptPreview(flowId, buildSchemaInput);
+
   const saveMutation = trpc.extraction.saveSchema.useMutation({
     onSuccess: () => {
       void utils.extraction.getSchema.invalidate({ flowId });
+      void runFit.refresh();
       toast.success("Saved");
     },
     onError: (error) => toast.error(error.message),
@@ -362,26 +364,13 @@ export function EditorCards({
     // input documents; the run screen shows progress and the results.
     saveMutation.mutate(
       { flowId, schema: buildSchemaInput() },
-      { onSuccess: () => startSampleMutation.mutate({ flowId }) },
+      {
+        onSuccess: async () => {
+          if (await runFit.blocksRun()) return;
+          startSampleMutation.mutate({ flowId });
+        },
+      },
     );
-  };
-
-  const handleViewSystemPrompt = async (): Promise<void> => {
-    setPromptOpen(true);
-    setPromptError(null);
-    setSystemPrompt(null);
-    setPromptLoading(true);
-    try {
-      const result = await utils.extraction.previewSystemPrompt.fetch({
-        flowId,
-        schema: buildSchemaInput(),
-      });
-      setSystemPrompt(result.systemPrompt);
-    } catch (error) {
-      setPromptError(error instanceof Error ? error.message : "Could not build the system prompt.");
-    } finally {
-      setPromptLoading(false);
-    }
   };
 
   const sampleStarting = startSampleMutation.isPending || saveMutation.isPending;
@@ -441,7 +430,7 @@ export function EditorCards({
         type="button"
         aria-label="View system prompt"
         title="View the system prompt each extraction is given"
-        onClick={() => void handleViewSystemPrompt()}
+        onClick={() => void promptPreview.view()}
         className="rounded-md p-1 text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
       >
         <Eye size={15} />
@@ -583,6 +572,7 @@ export function EditorCards({
                         />
                       </label>
                       <SkippedUploadsNotice skipped={skippedUploads} onDismiss={() => setSkippedUploads([])} />
+                      <RunFitNotices notices={runFit.notices} />
                       <UploadTree files={uploads} onRemove={handleRemoveDraft} />
                     </div>
 
@@ -787,11 +777,11 @@ export function EditorCards({
       </div>
 
       <EditorDialogs
-        promptOpen={promptOpen}
-        onPromptOpenChange={setPromptOpen}
-        promptLoading={promptLoading}
-        promptError={promptError}
-        systemPrompt={systemPrompt}
+        promptOpen={promptPreview.open}
+        onPromptOpenChange={promptPreview.setOpen}
+        promptLoading={promptPreview.loading}
+        promptError={promptPreview.error}
+        systemPrompt={promptPreview.systemPrompt}
         deleteOpen={deleteOpen}
         onDeleteOpenChange={setDeleteOpen}
         onConfirmDelete={() => deleteMutation.mutate({ flowId })}

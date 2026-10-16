@@ -185,13 +185,13 @@ export const extractionPromptCeiling = (
 
 // Below this much room for document text a split would need an unreasonable
 // number of calls, so the instructions themselves are what has to change.
-const MIN_DOCUMENT_TOKENS_PER_PART = 1_000;
+export const MIN_DOCUMENT_TOKENS_PER_PART = 1_000;
 
 // Room for a label line around each segment ("\n[name (n)]\n" plus a joining
 // newline), so a packed part never overshoots the space it was planned for.
-const SEGMENT_LABEL_OVERHEAD_CHARS = 16;
+export const SEGMENT_LABEL_OVERHEAD_CHARS = 16;
 
-const DEFAULT_PROMPT_BUDGET: ExtractionPromptBudget = {
+export const DEFAULT_PROMPT_BUDGET: ExtractionPromptBudget = {
   contextBudgetChars: DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_TOKENS * DOCUMENT_GENERATION_CHARS_PER_TOKEN,
   maxPromptTokens: DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
   contextWindowTokens: Number.POSITIVE_INFINITY,
@@ -260,6 +260,39 @@ const labelWithPart = (results: ExtractionFieldResult[], part: DocumentPart): Ex
 // zero-confidence result rather than failing the extraction. A record too large
 // for one call is read in parts and merged by ADR-033's many-per-record rule,
 // so the best-supported answer wins and an earlier part keeps a tie (issue #335).
+export interface DocumentRoomInput {
+  fields: ExtractionField[];
+  instruction: string;
+  contextDocs: FlowContextDoc[];
+  recordLabel: string;
+  budget: ExtractionPromptBudget;
+}
+
+interface CallSizing {
+  system: string;
+  roomTokens: number;
+}
+
+// The one sizing both the extraction call and the pre-run estimate use, so the
+// warning an author sees and the split a run makes cannot drift apart.
+const sizeCall = (input: DocumentRoomInput): CallSizing => {
+  const keys = input.fields.map((field) => field.field.key);
+  const system = buildExtractionSystemPrompt({
+    fields: input.fields,
+    guidance: input.instruction,
+    contextDocs: input.contextDocs,
+    contextBudgetChars: input.budget.contextBudgetChars,
+  });
+  // Sized with a part note in place so a split call can never outgrow its plan.
+  const promptShell = buildUserPrompt(input.recordLabel, keys, "", { index: 1, total: 1 });
+  const roomTokens =
+    extractionPromptCeiling(input.budget, keys.length) - estimateTokens(system) - estimateTokens(promptShell);
+  return { system, roomTokens };
+};
+
+// Tokens left for document text in one extraction call.
+export const documentRoomTokens = (input: DocumentRoomInput): number => sizeCall(input).roomTokens;
+
 export const extractDocumentFields = async (
   languageModel: ILanguageModel,
   input: ExtractDocumentFieldsInput,
@@ -267,19 +300,7 @@ export const extractDocumentFields = async (
   const hasReadableText = input.documentTexts.some((document) => document.text.trim().length > 0);
   if (!hasReadableText) return ok(unreadableResults(input.fields));
 
-  const budget = input.budget ?? DEFAULT_PROMPT_BUDGET;
-  const keys = input.fields.map((field) => field.field.key);
-  const system = buildExtractionSystemPrompt({
-    fields: input.fields,
-    guidance: input.instruction,
-    contextDocs: input.contextDocs,
-    contextBudgetChars: budget.contextBudgetChars,
-  });
-
-  // Sized with a part note in place so a split call can never outgrow its plan.
-  const promptShell = buildUserPrompt(input.recordLabel, keys, "", { index: 1, total: 1 });
-  const roomTokens =
-    extractionPromptCeiling(budget, keys.length) - estimateTokens(system) - estimateTokens(promptShell);
+  const { system, roomTokens } = sizeCall({ ...input, budget: input.budget ?? DEFAULT_PROMPT_BUDGET });
   if (roomTokens < MIN_DOCUMENT_TOKENS_PER_PART) {
     return err(domainError("VALIDATION_FAILED", TOO_LARGE_MESSAGE));
   }

@@ -7,53 +7,16 @@ import { DocumentGeneratorRouter, DocxGenerator, XlsxGenerator } from "@wayfinde
 import type { Container } from "@/lib/container";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, router } from "../trpc";
+import { router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import {
+  authorProcedure,
+  extractionEnabled,
+  runProcedure,
+  viewProcedure,
+} from "./extraction-procedures";
+import { extractionSizeLimitProcedures } from "./extraction-size-limits";
 import { canEditFlow } from "./flow";
-
-// Every procedure re-checks the extraction_flows flag server-side — the client
-// gate is never the enforcement point (ADR-033 §7).
-const extractionEnabled = authenticatedProcedure.use(async ({ ctx, next }) => {
-  const enabled = await ctx.container.useCases.isFeatureEnabledForUser.execute(
-    ctx.userId,
-    "extraction_flows",
-    ctx.isAdmin,
-  );
-  if (enabled.error) throw toTrpcError(enabled.error);
-  if (!enabled.data) {
-    throw new TRPCError({
-      code: "FORBIDDEN",
-      message: "Synthesise Information is not enabled for you.",
-    });
-  }
-  return next();
-});
-
-const authorProcedure = extractionEnabled.use(({ ctx, next }) => {
-  if (!ctx.isAdmin && !ctx.permissions.has("extraction:author")) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "You cannot author extraction flows." });
-  }
-  return next();
-});
-
-const runProcedure = extractionEnabled.use(({ ctx, next }) => {
-  if (!ctx.isAdmin && !ctx.permissions.has("extraction:run")) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "You cannot run extraction flows." });
-  }
-  return next();
-});
-
-// Listing/viewing is allowed to either an author or a runner.
-const viewProcedure = extractionEnabled.use(({ ctx, next }) => {
-  if (
-    !ctx.isAdmin &&
-    !ctx.permissions.has("extraction:author") &&
-    !ctx.permissions.has("extraction:run")
-  ) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view extraction flows." });
-  }
-  return next();
-});
 
 // Template parsing routes docx vs xlsx by the file's bytes (ADR-039), so a
 // single router instance handles both without the caller pre-selecting a format.
@@ -390,15 +353,7 @@ export const extractionRouter = router({
       return result.data;
     }),
 
-  // The admin-configured limits the authoring UI bounds its controls by, so a
-  // stepper never offers a value the server will reject.
-  getLimits: viewProcedure.query(async ({ ctx }) => {
-    const config = await ctx.container.runtimeConfig.getExtractionConfig();
-    return {
-      sampleMaxDocuments: config.sampleMaxDocuments,
-      maxAnalyseDocuments: config.maxAnalyseDocuments,
-    };
-  }),
+  ...extractionSizeLimitProcedures,
 
   // The input documents staged against the flow's draft (progressive upload).
   listDraftDocuments: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
