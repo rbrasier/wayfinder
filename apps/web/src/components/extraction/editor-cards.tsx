@@ -7,6 +7,7 @@ import { ChevronLeft, Eye, MoreHorizontal, Upload } from "lucide-react";
 import {
   analyseDocumentCount,
   isAutoAnalyseOn,
+  MAX_ANALYSE_DOCUMENTS,
   shouldPreviewByDefault,
   type ExtractionSchema,
   type FlowContextDoc,
@@ -149,6 +150,9 @@ export function EditorCards({
   );
   const analysis = analysisQuery.data ?? null;
   const analysisRunning = analysis?.status === "running";
+
+  const limitsQuery = trpc.extraction.getLimits.useQuery();
+  const maxAnalyseDocuments = limitsQuery.data?.maxAnalyseDocuments ?? MAX_ANALYSE_DOCUMENTS;
 
   const tickMutation = trpc.extraction.tick.useMutation();
   const startAnalysisMutation = trpc.extraction.startAnalysis.useMutation({
@@ -387,6 +391,7 @@ export function EditorCards({
       onAutoAnalyseChange={setAutoAnalyse}
       sampleSize={analyseSampleSize}
       onSampleSizeChange={setAnalyseSampleSize}
+      maxSampleSize={maxAnalyseDocuments}
     />
   ) : null;
 

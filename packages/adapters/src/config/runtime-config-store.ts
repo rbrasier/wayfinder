@@ -56,6 +56,7 @@ import {
   type ResolvedDocumentGenerationBudget,
   type SessionUploadConfig,
   type ExtractionConfig,
+  type ExtractionPromptBudget,
   type SiemConfig,
   type SiteBannerConfig,
   type AboutLinksConfig,
@@ -308,6 +309,18 @@ export class RuntimeConfigStore {
       return config;
     })();
     return this.documentGenerationPending;
+  }
+
+  // Extraction calls resolve to the chat model (see language-model-adapter's
+  // resolvePurpose), so its window is the one an extraction prompt must fit.
+  async resolveExtractionPromptBudget(): Promise<ExtractionPromptBudget> {
+    const config = await this.getExtractionConfig();
+    const aiConfig = await this.getAiConfig();
+    const contextWindow = resolveContextWindow(aiConfig.provider, aiConfig.models.chat);
+    return {
+      contextBudgetChars: config.contextBudgetTokens * DOCUMENT_GENERATION_CHARS_PER_TOKEN,
+      maxPromptTokens: Math.min(config.maxPromptTokens, contextWindow.tokens),
+    };
   }
 
   // Resolves the stored budget mode against the configured document-generation

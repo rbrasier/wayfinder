@@ -40,6 +40,8 @@ export interface RunSampleExtractionInput {
   documents: SampleInputDocument[];
   userId?: string | null;
   flowId?: string | null;
+  // The admin-configured sample ceiling (issue #335); the code default otherwise.
+  maxDocuments?: number;
 }
 
 export interface SampleExtractionResult {
@@ -73,11 +75,12 @@ export class RunSampleExtraction {
     if (input.documents.length === 0) {
       return err(domainError("VALIDATION_FAILED", "Upload at least one document to sample."));
     }
-    if (input.documents.length > SAMPLE_MAX_DOCUMENTS) {
+    const maxDocuments = input.maxDocuments ?? SAMPLE_MAX_DOCUMENTS;
+    if (input.documents.length > maxDocuments) {
       return err(
         domainError(
           "VALIDATION_FAILED",
-          `A sample runs over at most ${SAMPLE_MAX_DOCUMENTS} documents. Reduce the selection, then run the full batch (coming in Phase 2).`,
+          `A sample runs over at most ${maxDocuments} documents. Reduce the selection, then run the full batch.`,
         ),
       );
     }

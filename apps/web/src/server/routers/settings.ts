@@ -115,6 +115,11 @@ export const extractionConfigInputSchema = z.object({
   maxArchiveEntryBytes: z.number().int().positive(),
   maxArchiveTotalBytes: z.number().int().positive(),
   perRunCostCeilingUsd: z.number().nonnegative(),
+  sampleMaxDocuments: z.number().int().positive(),
+  maxAnalyseDocuments: z.number().int().positive(),
+  summaryRecordCap: z.number().int().positive(),
+  contextBudgetTokens: z.number().int().positive(),
+  maxPromptTokens: z.number().int().positive(),
 });
 
 export const documentGenerationConfigInputSchema = z.object({

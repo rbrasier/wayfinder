@@ -1,6 +1,7 @@
 import {
   analyseDocumentCount,
   DEFAULT_ANALYSE_DOCUMENTS,
+  MAX_ANALYSE_DOCUMENTS,
   domainError,
   err,
   isExtractionSnapshot,
@@ -156,6 +157,8 @@ export class StartBatchRun {
     userId: string;
     files: UploadedFile[];
     sampleSize?: number;
+    // The admin-configured default when the author picked no size (issue #335).
+    sampleMaxDocuments?: number;
   }): Promise<Result<ExtractionRun>> {
     const draftSchema = await this.loadDraftSchema(input.flowId);
     if (draftSchema.error) return draftSchema;
@@ -172,7 +175,7 @@ export class StartBatchRun {
       );
     }
 
-    const sampleSize = input.sampleSize ?? SAMPLE_MAX_DOCUMENTS;
+    const sampleSize = input.sampleSize ?? input.sampleMaxDocuments ?? SAMPLE_MAX_DOCUMENTS;
     return this.materialiseRun({
       flowId: input.flowId,
       userId: input.userId,
@@ -197,7 +200,19 @@ export class StartBatchRun {
     // change the stepper and upload without pressing Save. Falls back to the
     // saved config, then the default.
     analyseSampleSize?: number;
+    // The admin-configured ceiling on that count (issue #335).
+    maxAnalyseDocuments?: number;
   }): Promise<Result<ExtractionRun>> {
+    const ceiling = input.maxAnalyseDocuments ?? MAX_ANALYSE_DOCUMENTS;
+    if (input.analyseSampleSize !== undefined && input.analyseSampleSize > ceiling) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `Auto analyse reads between 1 and ${ceiling} documents; ${input.analyseSampleSize} is outside that range.`,
+        ),
+      );
+    }
+
     const staged = await this.drafts.listForFlow(input.flowId);
     if (staged.error) return staged;
     if (staged.data.length === 0) {

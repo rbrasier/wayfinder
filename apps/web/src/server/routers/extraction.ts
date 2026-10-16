@@ -1,6 +1,5 @@
 import {
   buildExtractionField,
-  MAX_ANALYSE_DOCUMENTS,
   type ExtractionSchemaDraft,
 } from "@wayfinder/domain";
 import { buildExtractionSystemPrompt } from "@wayfinder/application";
@@ -103,9 +102,9 @@ const schemaInput: z.ZodType<ExtractionSchemaDraft> = z.object({
     selectionCriteria: z.string().nullable(),
     guidance: z.string(),
     autoAnalyse: z.boolean().optional(),
-    // Bounded here as well as in the domain: the stepper is a convenience, not
-    // the enforcement point.
-    analyseSampleSize: z.number().int().min(1).max(MAX_ANALYSE_DOCUMENTS).optional(),
+    // The upper bound is the admin's (issue #335), so the domain enforces it on
+    // save against the resolved ExtractionConfig rather than a constant here.
+    analyseSampleSize: z.number().int().min(1).optional(),
   }),
   output: z.object({
     format: z.enum(["docx", "xlsx"]),
@@ -209,9 +208,11 @@ export const extractionRouter = router({
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
       }
+      const config = await ctx.container.runtimeConfig.getExtractionConfig();
       const result = await ctx.container.useCases.saveExtractionSchema.execute({
         flowId: input.flowId,
         schema: input.schema,
+        limits: { maxAnalyseDocuments: config.maxAnalyseDocuments },
       });
       if (result.error) throw toTrpcError(result.error);
       return { versionId: result.data.id };
@@ -374,15 +375,27 @@ export const extractionRouter = router({
         buffer: Buffer.from(document.contentBase64, "base64"),
       }));
 
+      const config = await ctx.container.runtimeConfig.getExtractionConfig();
       const result = await ctx.container.useCases.runSampleExtraction.execute({
         schema: schemaResult.data,
         documents,
         userId: ctx.userId,
         flowId: input.flowId,
+        maxDocuments: config.sampleMaxDocuments,
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
+
+  // The admin-configured limits the authoring UI bounds its controls by, so a
+  // stepper never offers a value the server will reject.
+  getLimits: viewProcedure.query(async ({ ctx }) => {
+    const config = await ctx.container.runtimeConfig.getExtractionConfig();
+    return {
+      sampleMaxDocuments: config.sampleMaxDocuments,
+      maxAnalyseDocuments: config.maxAnalyseDocuments,
+    };
+  }),
 
   // The input documents staged against the flow's draft (progressive upload).
   listDraftDocuments: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
@@ -485,11 +498,13 @@ export const extractionRouter = router({
         });
       }
 
+      const config = await ctx.container.runtimeConfig.getExtractionConfig();
       const result = await ctx.container.useCases.startBatchRun.startSample({
         flowId: input.flowId,
         userId: ctx.userId,
         files,
         sampleSize: input.sampleSize,
+        sampleMaxDocuments: config.sampleMaxDocuments,
       });
       if (result.error) throw toTrpcError(result.error);
       return { runId: result.data.id, totalCount: result.data.totalCount };
@@ -502,7 +517,7 @@ export const extractionRouter = router({
   startAnalysis: authorProcedure
     .input(
       flowIdInput.extend({
-        analyseSampleSize: z.number().int().min(1).max(MAX_ANALYSE_DOCUMENTS).optional(),
+        analyseSampleSize: z.number().int().min(1).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -510,10 +525,12 @@ export const extractionRouter = router({
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
     }
 
+    const config = await ctx.container.runtimeConfig.getExtractionConfig();
     const result = await ctx.container.useCases.startBatchRun.startAnalysis({
       flowId: input.flowId,
       userId: ctx.userId,
       analyseSampleSize: input.analyseSampleSize,
+      maxAnalyseDocuments: config.maxAnalyseDocuments,
     });
     if (result.error) throw toTrpcError(result.error);
     return { runId: result.data.id, totalCount: result.data.totalCount };
