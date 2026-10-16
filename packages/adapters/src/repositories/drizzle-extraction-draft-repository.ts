@@ -13,13 +13,14 @@ import { app_extraction_draft_documents } from "../db/schema/wayfinder";
 
 type DraftRow = typeof app_extraction_draft_documents.$inferSelect;
 
-const toDraftDocument = (row: DraftRow): ExtractionDraftDocument => ({
+export const toDraftDocument = (row: DraftRow): ExtractionDraftDocument => ({
   id: row.id,
   flowId: row.flow_id,
   filename: row.filename,
   treePath: row.tree_path,
   storageKey: row.storage_key,
   mimeType: row.mime_type,
+  textLength: row.text_length,
 });
 
 export class DrizzleExtractionDraftRepository implements IExtractionDraftDocumentRepository {
@@ -40,6 +41,7 @@ export class DrizzleExtractionDraftRepository implements IExtractionDraftDocumen
             tree_path: document.treePath,
             storage_key: document.storageKey,
             mime_type: document.mimeType,
+            text_length: document.textLength,
           })),
         )
         .returning();

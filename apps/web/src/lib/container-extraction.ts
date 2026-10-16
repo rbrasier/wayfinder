@@ -103,6 +103,7 @@ export const buildExtractionModule = ({
         objectStorage,
         archiveExtractor,
         new SniffingDocumentTypeDetector(),
+        documentExtractor,
       ),
       listDraftDocuments: new ListDraftDocuments(extractionDrafts),
       removeDraftDocument: new RemoveDraftDocument(extractionDrafts, objectStorage),
