@@ -721,6 +721,7 @@ export const extractionRouter = router({
       runId: input.runId,
       userId: ctx.userId,
       costCeilingUsd: config.perRunCostCeilingUsd,
+      summaryRecordCap: config.summaryRecordCap,
     });
     if (result.error) throw toTrpcError(result.error);
     return result.data;

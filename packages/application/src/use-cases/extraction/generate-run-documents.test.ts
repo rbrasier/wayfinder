@@ -69,11 +69,15 @@ const buildSchema = (output: Partial<ExtractionOutputConfig>): ExtractionSchema 
   },
 });
 
-const buildDeps = (output: Partial<ExtractionOutputConfig>, run: ExtractionRun = baseRun) => {
+const buildDeps = (
+  output: Partial<ExtractionOutputConfig>,
+  run: ExtractionRun = baseRun,
+  runRecords: ExtractionRecord[] = records,
+) => {
   const stored: Array<{ key: string; data: Buffer; mime: string }> = [];
   const runs = {
     getRun: vi.fn(async (): Promise<Result<ExtractionRun>> => ok(run)),
-    listRecords: vi.fn(async (): Promise<Result<ExtractionRecord[]>> => ok(records)),
+    listRecords: vi.fn(async (): Promise<Result<ExtractionRecord[]>> => ok(runRecords)),
   };
   const flowVersions = {
     getById: vi.fn(async (): Promise<Result<FlowVersion | null>> =>
@@ -157,6 +161,32 @@ describe("GenerateRunDocuments", () => {
     expect(summary).toContain("Supplier");
     expect(summary).toContain("1/2");
     expect(summary).toContain("A concise narrative.");
+  });
+
+  it("reads only the configured number of records and says the summary is partial (issue #335)", async () => {
+    const manyRecords = Array.from({ length: 5 }, (_, index) => ({
+      ...records[0]!,
+      id: `record-${index}`,
+      label: `Record ${index}`,
+    }));
+    const deps = buildDeps({ generateSummary: true }, baseRun, manyRecords);
+
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1", costCeilingUsd: 0, summaryRecordCap: 3 });
+
+    const prompt = (deps.languageModel.generateText.mock.calls[0] as unknown as [{ prompt: string }])[0].prompt;
+    expect(prompt).toContain("Record 2");
+    expect(prompt).not.toContain("Record 3");
+    const summary = deps.stored.find((entry) => entry.key.endsWith("summary.md"))!.data.toString("utf8");
+    expect(summary).toContain("Based on the first 3 of 5 records.\n\nA concise narrative.");
+  });
+
+  it("adds no partial-coverage note when every record fits under the cap", async () => {
+    const deps = buildDeps({ generateSummary: true });
+
+    await deps.useCase.execute({ runId: "run-1", userId: "user-1", costCeilingUsd: 0, summaryRecordCap: 50 });
+
+    const summary = deps.stored.find((entry) => entry.key.endsWith("summary.md"))!.data.toString("utf8");
+    expect(summary).not.toContain("Based on the first");
   });
 
   it("respects the run cost ceiling: no AI narrative when the run has reached it", async () => {
