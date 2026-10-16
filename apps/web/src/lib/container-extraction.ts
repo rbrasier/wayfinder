@@ -32,6 +32,7 @@ import {
   createDatabase,
 } from "@wayfinder/adapters";
 import type {
+  ExtractionPromptBudget,
   IAuditLogger,
   IDocumentExtractor,
   IDocumentGenerator,
@@ -55,6 +56,8 @@ interface ExtractionDependencies {
   // Resolved per tick from the admin ExtractionConfig so a caller-driven tick
   // honours the same per-run spend cap as the background worker (ADR-033 §9).
   resolveCostCeilingUsd: () => Promise<number>;
+  // The admin size limits resolved against the extraction model (issue #335).
+  resolvePromptBudget: () => Promise<ExtractionPromptBudget>;
 }
 
 // The extraction-flow ("Synthesise Information") module (ADR-033), factored out
@@ -70,6 +73,7 @@ export const buildExtractionModule = ({
   objectStorage,
   auditLogger,
   resolveCostCeilingUsd,
+  resolvePromptBudget,
 }: ExtractionDependencies) => {
   const extractionRuns = new DrizzleExtractionRunRepository(db);
   const extractionDrafts = new DrizzleExtractionDraftRepository(db);
@@ -91,6 +95,7 @@ export const buildExtractionModule = ({
     objectStorage,
     documentExtractor,
     languageModel,
+    { resolvePromptBudget },
   );
 
   return {

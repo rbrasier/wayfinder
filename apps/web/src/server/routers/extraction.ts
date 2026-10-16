@@ -193,11 +193,13 @@ export const extractionRouter = router({
         const built = buildExtractionField(field);
         if (!built.error) fields.push(built.data);
       }
+      const budget = await ctx.container.runtimeConfig.resolveExtractionPromptBudget();
       return {
         systemPrompt: buildExtractionSystemPrompt({
           fields,
           guidance: input.schema.input.guidance,
           contextDocs: input.schema.output.contextDocs,
+          contextBudgetChars: budget.contextBudgetChars,
         }),
       };
     }),
@@ -382,6 +384,7 @@ export const extractionRouter = router({
         userId: ctx.userId,
         flowId: input.flowId,
         maxDocuments: config.sampleMaxDocuments,
+        budget: await ctx.container.runtimeConfig.resolveExtractionPromptBudget(),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

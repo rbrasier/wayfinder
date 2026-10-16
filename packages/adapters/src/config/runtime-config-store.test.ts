@@ -1203,15 +1203,19 @@ describe("RuntimeConfigStore.getExtractionConfig — size limits (issue #335)", 
 });
 
 describe("RuntimeConfigStore.resolveExtractionPromptBudget", () => {
-  it("converts the context budget to characters and keeps the admin ceiling when the window is larger", async () => {
+  it("converts the context budget to characters and carries the chat model's window", async () => {
     const store = new RuntimeConfigStore(makeRepo(null), makeEnv({ provider: "anthropic" }));
 
     const budget = await store.resolveExtractionPromptBudget();
 
-    expect(budget).toEqual({ contextBudgetChars: 400_000, maxPromptTokens: 180_000 });
+    expect(budget).toEqual({
+      contextBudgetChars: 400_000,
+      maxPromptTokens: 180_000,
+      contextWindowTokens: 1_000_000,
+    });
   });
 
-  it("caps the prompt ceiling at the extraction model's context window", async () => {
+  it("resolves the window from the configured provider's chat model", async () => {
     const store = new RuntimeConfigStore(
       makeKeyedRepo({
         [EXTRACTION_CONFIG_SETTING_KEY]: JSON.stringify({
@@ -1224,6 +1228,7 @@ describe("RuntimeConfigStore.resolveExtractionPromptBudget", () => {
 
     const budget = await store.resolveExtractionPromptBudget();
 
-    expect(budget.maxPromptTokens).toBe(128_000);
+    expect(budget.maxPromptTokens).toBe(500_000);
+    expect(budget.contextWindowTokens).toBe(128_000);
   });
 });

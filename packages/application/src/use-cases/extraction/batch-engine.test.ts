@@ -682,6 +682,31 @@ describe("ProcessExtractionTask", () => {
     expect(result.data?.failedCount).toBe(1);
   });
 
+  it("reads a document too large for one call in parts, sized by the resolved budget (issue #335)", async () => {
+    const runs = new InMemoryExtractionRunRepository();
+    const storage = new FakeObjectStorage();
+    await storage.put("key-a", Buffer.from("feed bytes"));
+    const { document, recordId } = await seedClaimedDocument(runs);
+    const longFeed = Array.from({ length: 2000 }, (_, index) => `Entry ${index}: ${"reading ".repeat(10)}`).join("\n\n");
+    const model = new FakeLanguageModel({ fieldValue: "Globex", fieldConfidence: 88 });
+    const generateObject = vi.spyOn(model, "generateObject");
+    const resolvePromptBudget = vi.fn().mockResolvedValue({
+      contextBudgetChars: 400_000,
+      maxPromptTokens: 30_000,
+      contextWindowTokens: 1_000_000,
+    });
+
+    const result = await new ProcessExtractionTask(runs, storage, new FakeDocumentExtractor(longFeed), model, {
+      resolvePromptBudget,
+    }).execute({ document, schema: buildSchema() });
+
+    expect(result.error).toBeUndefined();
+    expect(resolvePromptBudget).toHaveBeenCalled();
+    expect(generateObject.mock.calls.length).toBeGreaterThan(1);
+    expect(runs.documentById(document.id)?.status).toBe("complete");
+    expect(runs.recordById(recordId)?.fields[0]).toMatchObject({ value: "Globex" });
+  });
+
   it("returns a document to the queue and surfaces the error on a quota breach", async () => {
     const runs = new InMemoryExtractionRunRepository();
     const storage = new FakeObjectStorage();
@@ -814,7 +839,7 @@ const advancerFor = (
     storage,
     new FakeDocumentExtractor("readable body"),
     new FakeLanguageModel({ fieldValue: "Acme", fieldConfidence: 80 }),
-    options.costPerCallUsd ?? 0,
+    { costPerCallUsd: options.costPerCallUsd ?? 0 },
   );
   return new AdvanceBatchRuns(runs, flowVersionsWith(buildSchema()), processTask, {
     costCeilingUsd: options.costCeilingUsd,

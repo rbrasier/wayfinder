@@ -4,6 +4,7 @@ import {
   statusAfterFailure,
   type DocumentOutcome,
   type ExtractionDocument,
+  type ExtractionPromptBudget,
   type ExtractionFieldResult,
   type ExtractionRun,
   type ExtractionSchema,
@@ -30,6 +31,13 @@ export interface ProcessExtractionTaskInput {
 // decorated model; refining this per-call figure is deferred.
 const DEFAULT_COST_PER_CALL_USD = 0;
 
+export interface ProcessExtractionTaskOptions {
+  costPerCallUsd?: number;
+  // Resolved per document so an admin's limit change applies to the next claim
+  // without a worker restart (issue #335). Omitted means the code defaults.
+  resolvePromptBudget?: () => Promise<ExtractionPromptBudget>;
+}
+
 // Processes one claimed document (phase §5): fetch its bytes, extract text,
 // classify unreadable, else pull the schema's fields and merge them into the
 // owning record. On a provider quota breach the document is returned to the
@@ -42,7 +50,7 @@ export class ProcessExtractionTask {
     private readonly storage: IObjectStorage,
     private readonly extractor: IDocumentExtractor,
     private readonly languageModel: ILanguageModel,
-    private readonly costPerCallUsd: number = DEFAULT_COST_PER_CALL_USD,
+    private readonly options: ProcessExtractionTaskOptions = {},
   ) {}
 
   async execute(input: ProcessExtractionTaskInput): Promise<Result<ExtractionRun>> {
@@ -83,6 +91,7 @@ export class ProcessExtractionTask {
       documentTexts: [{ documentId: document.id, filename: document.filename, text }],
       contextDocs: schema.output.contextDocs,
       instruction: schema.input.guidance,
+      budget: await this.options.resolvePromptBudget?.(),
     });
     if (fields.error) {
       // A cap breach is not a document failure: leave the document re-claimable
@@ -102,7 +111,7 @@ export class ProcessExtractionTask {
     return this.runs.settleDocument(
       document.id,
       { status: "complete", error: null },
-      this.costPerCallUsd,
+      this.options.costPerCallUsd ?? DEFAULT_COST_PER_CALL_USD,
     );
   }
 

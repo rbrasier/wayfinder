@@ -319,7 +319,8 @@ export class RuntimeConfigStore {
     const contextWindow = resolveContextWindow(aiConfig.provider, aiConfig.models.chat);
     return {
       contextBudgetChars: config.contextBudgetTokens * DOCUMENT_GENERATION_CHARS_PER_TOKEN,
-      maxPromptTokens: Math.min(config.maxPromptTokens, contextWindow.tokens),
+      maxPromptTokens: config.maxPromptTokens,
+      contextWindowTokens: contextWindow.tokens,
     };
   }
 

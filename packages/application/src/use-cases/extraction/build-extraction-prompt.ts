@@ -12,6 +12,9 @@ export interface BuildExtractionSystemPromptInput {
   // Flow-level context material that guides extraction (the equivalent of the
   // conversational node's whole-flow context) — grounded on, never questioned.
   contextDocs: FlowContextDoc[];
+  // Characters of context material injected; the shared default when omitted,
+  // as the authoring preview does (issue #335).
+  contextBudgetChars?: number;
 }
 
 const buildFieldInstructionsBlock = (fields: ExtractionField[]): string =>
@@ -76,7 +79,7 @@ ${buildFieldConstraintsText(templateFields)}
   - Do not paraphrase a value you could copy. Where the source already carries the value in the required format, return those exact characters — an unnecessary rewording loses the record that the value was read rather than composed.
 </extraction_rules>`;
 
-  const contextBlock = buildContextDocsSection(input.contextDocs);
+  const contextBlock = buildContextDocsSection(input.contextDocs, input.contextBudgetChars);
   const contextSection = contextBlock ? `\n${contextBlock}` : "";
 
   return `${roleBlock}${guidanceBlock}${fieldFormatsBlock}${instructionsBlock}${rulesBlock}${contextSection}`;

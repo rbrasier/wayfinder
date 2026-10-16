@@ -102,12 +102,13 @@ export interface ExtractionConfig {
   maxPromptTokens: number;
 }
 
-// The concrete numbers an extraction call consumes, after resolving the config
-// against the extraction model's context window. maxPromptTokens is already the
-// lower of the admin ceiling and that window.
+// The concrete numbers an extraction call consumes. The window is carried
+// separately from the admin ceiling because the reply has to fit inside the
+// window too, and only the caller knows how large the reply will be.
 export interface ExtractionPromptBudget {
   contextBudgetChars: number;
   maxPromptTokens: number;
+  contextWindowTokens: number;
 }
 
 // How the document-generation context budget is expressed: a fixed token cap,

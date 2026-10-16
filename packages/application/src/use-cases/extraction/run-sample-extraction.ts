@@ -3,6 +3,7 @@ import {
   err,
   ok,
   SAMPLE_MAX_DOCUMENTS,
+  type ExtractionPromptBudget,
   type ExtractionRecord,
   type ExtractionSchema,
   type IDocumentExtractor,
@@ -42,6 +43,7 @@ export interface RunSampleExtractionInput {
   flowId?: string | null;
   // The admin-configured sample ceiling (issue #335); the code default otherwise.
   maxDocuments?: number;
+  budget?: ExtractionPromptBudget;
 }
 
 export interface SampleExtractionResult {
@@ -164,6 +166,7 @@ export class RunSampleExtraction {
         instruction: input.schema.input.guidance,
         userId: input.userId,
         flowId: input.flowId,
+        budget: input.budget,
       });
       if (fields.error) return fields;
 
