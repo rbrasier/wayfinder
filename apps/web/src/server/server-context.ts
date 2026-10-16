@@ -1,10 +1,11 @@
 import { cookies } from "next/headers";
 import { getContainer } from "@/lib/container";
+import { getSessionTokenFromCookieStore } from "@/lib/session-token";
 import { resolvePermissions, type TrpcContext } from "./trpc";
 
 export const createServerTrpcContext = async (): Promise<TrpcContext> => {
   const cookieStore = await cookies();
-  const token = cookieStore.get("better-auth.session_token")?.value ?? null;
+  const token = getSessionTokenFromCookieStore(cookieStore);
   const container = getContainer();
 
   let userId: string | null = null;
