@@ -1,6 +1,6 @@
 # Phase — Synthesise Size Limits and Pre-Run Fit Check
 
-- **Status**: Approved for build
+- **Status**: Implemented (v0.38.0)
 - **Type**: Enhancement (`/enhance`)
 - **Target version**: 0.38.0 (bump: **MINOR** — one additive column on
   `app_extraction_draft_documents`, see §6)
@@ -12,6 +12,16 @@
 - **ADRs**: ADR-033 (extraction flows — batch engine, per-run ceilings, many-per-record merge),
   ADR-059 / ADR-060 (Auto Analyse read count). No new ADR: the merge rule reused here is
   ADR-033's existing many-per-record rule.
+
+## Approved change summary
+
+Synthesise stops failing on documents too big for one model call: each is read in parts and the
+parts' answers are merged per field, keeping the best-supported value. The hardcoded limits
+(sample size, Auto Analyse read count, summary record cap, context-material budget, per-call
+prompt ceiling) move into the existing **Extraction** admin card with defaults equal to today's
+numbers. Each staged file's readable text length is measured at upload, so the setup screen gives
+an accurate pre-run size check: it stops a run only when the flow's own instructions and context
+material leave no room for a document; everything else is a note. One additive column → MINOR.
 
 ## 1. Problem
 
