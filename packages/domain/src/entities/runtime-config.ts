@@ -208,7 +208,7 @@ export const isEmailConfigured = (config: EmailConfig): boolean => {
 };
 
 export interface EmbeddingsConfig {
-  // "local" | "openai" — kept as a plain string here so the domain entity stays
+  // "local" | "openai" | "mistral" | "bedrock" — a plain string here so the domain entity stays
   // free of the shared enum; validated at the config-store boundary.
   provider: string;
   model: string;

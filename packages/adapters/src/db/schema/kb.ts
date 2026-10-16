@@ -63,9 +63,12 @@ export const kb_document_chunks = pgTable(
     filename: text("filename").notNull(),
     chunk_index: integer("chunk_index").notNull(),
     chunk_text: text("chunk_text").notNull(),
-    // 384 dims (ADR-017): shared by the local all-MiniLM model and OpenAI
-    // text-embedding-3-small reduced via its `dimensions` parameter.
-    embedding: vector("embedding", { dimensions: 384 }).notNull(),
+    // 1024 dims (ADR-017, amended): every catalogue model's vector, zero-padded
+    // when the model is narrower, so switching model never needs DDL.
+    embedding: vector("embedding", { dimensions: 1024 }).notNull(),
+    // "provider:model" that produced `embedding`; compared with the configured
+    // model to tell admins which documents need re-indexing.
+    embedding_model: text("embedding_model"),
     // Curation lifecycle (ADR-028). Inference retrieval filters to `active`;
     // archived chunks are retained for audit but never retrieved.
     status: text("status", { enum: ["active", "archived", "draft"] }).notNull().default("active"),
@@ -84,6 +87,7 @@ export const kb_document_chunks = pgTable(
     by_session: index("kb_document_chunks_session_id_idx").on(t.session_id),
     by_storage_path: index("kb_document_chunks_storage_path_idx").on(t.storage_path),
     by_status: index("kb_document_chunks_status_idx").on(t.status),
+    by_embedding_model: index("kb_document_chunks_embedding_model_idx").on(t.embedding_model),
     embedding_hnsw: index("kb_document_chunks_embedding_hnsw_idx")
       .using("hnsw", t.embedding.op("vector_cosine_ops"))
       .with({ m: 16, ef_construction: 64 }),
@@ -108,7 +112,8 @@ export const kb_chunk_versions = pgTable(
       .notNull()
       .references(() => kb_document_chunks.id, { onDelete: "cascade" }),
     chunk_text: text("chunk_text").notNull(),
-    embedding: vector("embedding", { dimensions: 384 }).notNull(),
+    embedding: vector("embedding", { dimensions: 1024 }).notNull(),
+    embedding_model: text("embedding_model"),
     edited_by: uuid("edited_by").references(() => core_users.id, { onDelete: "set null" }),
     reason: text("reason"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

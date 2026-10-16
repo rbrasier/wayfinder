@@ -1,6 +1,6 @@
 # Implementation Summary — Synthesise Size Limits and Pre-Run Fit Check
 
-- **Version**: 0.38.0 (bump: **MINOR** — one additive column, `app_extraction_draft_documents.text_length`)
+- **Version**: 0.39.0 (bump: **MINOR** — one additive column, `app_extraction_draft_documents.text_length`)
 - **Base branch**: `main` (release line `alpha-3`)
 - **Type**: `/enhance`
 - **Source issue**: #335 (split from #332, part C)
@@ -63,7 +63,7 @@ only — under grouping the record count is not known before the run) and docume
   `extraction/draft-documents.ts`, `extraction/process-extraction-task.ts`,
   `extraction/run-sample-extraction.ts`, `extraction/start-batch-run.ts`,
   `extraction/generate-run-documents.ts`, `flow/extraction-authoring.ts`
-- **adapters**: `db/schema/wayfinder.ts`, migration `drizzle/0053_nosy_darkstar.sql`,
+- **adapters**: `db/schema/wayfinder.ts`, migration `drizzle/0054_mixed_iron_patriot.sql`,
   `repositories/drizzle-extraction-draft-repository.ts`, `config/runtime-config-defaults.ts`,
   `config/runtime-config-store.ts`
 - **apps/web**: `server/routers/extraction.ts`, new `server/routers/extraction-procedures.ts`,
@@ -77,7 +77,7 @@ only — under grouping the record count is not known before the run) and docume
 
 ## Migration
 
-`0053_nosy_darkstar.sql` — `ALTER TABLE "app_extraction_draft_documents" ADD COLUMN
+`0054_mixed_iron_patriot.sql` — `ALTER TABLE "app_extraction_draft_documents" ADD COLUMN
 "text_length" integer;`. Nullable, no default, no backfill: existing rows read as "size unknown".
 Not one of the operations that require a `-- data-impact:` declaration.
 

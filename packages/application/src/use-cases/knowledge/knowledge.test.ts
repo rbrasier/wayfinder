@@ -44,7 +44,10 @@ const curationRepo = (overrides: Partial<IChunkCurationRepository>): IChunkCurat
   }) as unknown as IChunkCurationRepository;
 
 const embeddingsReturning = (vector: number[]): IEmbeddingsProvider =>
-  ({ embed: vi.fn().mockResolvedValue(ok(vector)) }) as unknown as IEmbeddingsProvider;
+  ({
+    embed: vi.fn().mockResolvedValue(ok(vector)),
+    embedForStorage: vi.fn().mockResolvedValue(ok({ vector, model: "mistral:mistral-embed" })),
+  }) as unknown as IEmbeddingsProvider;
 
 describe("ListCuratedChunks", () => {
   it("passes the filter to the repository", async () => {
@@ -59,7 +62,7 @@ describe("ListCuratedChunks", () => {
 });
 
 describe("EditChunk", () => {
-  it("re-embeds the trimmed text and applies the edit", async () => {
+  it("re-embeds the trimmed text and applies the edit with the model that embedded it", async () => {
     const embeddings = embeddingsReturning([0.1, 0.2]);
     const applyEdit = vi.fn().mockResolvedValue(ok(chunk));
     const repository = curationRepo({ applyEdit });
@@ -71,11 +74,12 @@ describe("EditChunk", () => {
       reason: "updated",
     });
 
-    expect(embeddings.embed).toHaveBeenCalledWith("Lead time is two weeks.");
+    expect(embeddings.embedForStorage).toHaveBeenCalledWith("Lead time is two weeks.");
     expect(applyEdit).toHaveBeenCalledWith({
       chunkId: "chunk-1",
       newText: "Lead time is two weeks.",
       newEmbedding: [0.1, 0.2],
+      newEmbeddingModel: "mistral:mistral-embed",
       editedBy: "user-1",
       reason: "updated",
     });
@@ -94,13 +98,13 @@ describe("EditChunk", () => {
     });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
-    expect(embeddings.embed).not.toHaveBeenCalled();
+    expect(embeddings.embedForStorage).not.toHaveBeenCalled();
     expect(applyEdit).not.toHaveBeenCalled();
   });
 
   it("surfaces an embedding failure without touching the repository", async () => {
     const embeddings = {
-      embed: vi.fn().mockResolvedValue(err(domainError("AI_PROVIDER_FAILED", "no model"))),
+      embedForStorage: vi.fn().mockResolvedValue(err(domainError("AI_PROVIDER_FAILED", "no model"))),
     } as unknown as IEmbeddingsProvider;
     const applyEdit = vi.fn();
 

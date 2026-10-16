@@ -101,7 +101,7 @@ const serverEnvSchema = z.object({
   AWS_BEDROCK_SECRET_ACCESS_KEY: z.string().optional(),
   // Embeddings (ADR-017): default provider + local-model controls. The admin
   // setting overrides EMBEDDINGS_PROVIDER at runtime.
-  EMBEDDINGS_PROVIDER: z.enum(["local", "openai"]).default("local"),
+  EMBEDDINGS_PROVIDER: z.enum(["local", "openai", "mistral", "bedrock"]).default("local"),
   EMBEDDINGS_LOCAL_MODEL_PATH: z.string().optional(),
   EMBEDDINGS_ALLOW_REMOTE_MODELS: z.enum(["true", "false"]).optional(),
   EMBEDDINGS_CACHE_DIR: z.string().optional(),

@@ -1,9 +1,19 @@
 import type { Result } from "../result";
 
+// A vector bound for storage, with the "provider:model" key of the model that
+// produced it. Resolved in the same call so a concurrent settings change cannot
+// mislabel a stored chunk (ADR-017, as amended for per-chunk model stamps).
+export interface StoredEmbedding {
+  vector: number[];
+  model: string;
+}
+
 // Turns text into a dense vector for similarity search. Implemented by an
-// adapter over the configured embedding model (see ADR-016: text-embedding-3-small,
-// 1536 dimensions). The returned vector length must match the embedding column's
-// declared dimensionality.
+// adapter over the admin-selected embedding model (ADR-017). Every returned
+// vector is padded to the embedding column's declared dimensionality.
 export interface IEmbeddingsProvider {
+  // Query-side: compared against stored vectors, never persisted.
   embed(text: string): Promise<Result<number[]>>;
+  // Write-side: the vector plus the model label stored alongside it.
+  embedForStorage(text: string): Promise<Result<StoredEmbedding>>;
 }

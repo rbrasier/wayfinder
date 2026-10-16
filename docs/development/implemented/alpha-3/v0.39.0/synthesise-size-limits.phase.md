@@ -1,8 +1,8 @@
 # Phase — Synthesise Size Limits and Pre-Run Fit Check
 
-- **Status**: Implemented (v0.38.0)
+- **Status**: Implemented (v0.39.0)
 - **Type**: Enhancement (`/enhance`)
-- **Target version**: 0.38.0 (bump: **MINOR** — one additive column on
+- **Target version**: 0.39.0 (bump: **MINOR** — one additive column on
   `app_extraction_draft_documents`, see §6)
 - **Base branch**: `main` (release line `alpha-3`)
 - **Source issue**: rbrasier/wayfinder#335 (split from #332, part C)

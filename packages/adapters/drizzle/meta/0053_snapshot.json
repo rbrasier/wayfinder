@@ -1,5 +1,5 @@
 {
-  "id": "21cd8e8b-1ff2-4bdd-959c-15b547926bcf",
+  "id": "ed8764dd-1578-4dd2-9d57-4307396bbf4a",
   "prevId": "f7d138e7-d064-4721-86ec-d6f7dd9885ff",
   "version": "7",
   "dialect": "postgresql",
@@ -2956,12 +2956,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        },
-        "text_length": {
-          "name": "text_length",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -5946,9 +5940,15 @@
         },
         "embedding": {
           "name": "embedding",
-          "type": "vector(384)",
+          "type": "vector(1024)",
           "primaryKey": false,
           "notNull": true
+        },
+        "embedding_model": {
+          "name": "embedding_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "edited_by": {
           "name": "edited_by",
@@ -6186,9 +6186,15 @@
         },
         "embedding": {
           "name": "embedding",
-          "type": "vector(384)",
+          "type": "vector(1024)",
           "primaryKey": false,
           "notNull": true
+        },
+        "embedding_model": {
+          "name": "embedding_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",
@@ -6299,6 +6305,21 @@
           "columns": [
             {
               "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "kb_document_chunks_embedding_model_idx": {
+          "name": "kb_document_chunks_embedding_model_idx",
+          "columns": [
+            {
+              "expression": "embedding_model",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

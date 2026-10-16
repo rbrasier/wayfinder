@@ -33,9 +33,12 @@ import {
   type RetentionTargetKey,
 } from "@wayfinder/domain";
 import {
-  EMBEDDINGS_DEFAULT_MODELS,
+  EMBEDDINGS_DEFAULT_PROVIDER,
   EMBEDDINGS_DIMENSION,
+  EMBEDDINGS_MODELS,
   EMBEDDINGS_PROVIDERS,
+  findEmbeddingsModel,
+  isEmbeddingsProvider,
 } from "@wayfinder/shared";
 import {
   DEFAULT_MODELS_FOR,
@@ -49,6 +52,9 @@ import { authSettingsProcedures } from "./settings-auth";
 import { directorySettingsProcedures } from "./settings-directory";
 import { apiKeyState } from "./settings-secrets";
 import {
+  countStaleEmbeddedDocuments,
+  embeddingsKeyStatus,
+  embeddingsModelRejection,
   embeddingsProviderOptions,
   embeddingsProviderUnavailableReason,
 } from "./settings-embeddings";
@@ -374,15 +380,26 @@ export const settingsRouter = router({
 
   getEmbeddingsConfig: adminProcedure.query(async ({ ctx }) => {
     const config = await ctx.container.runtimeConfig.getEmbeddingsConfig();
+    const provider = isEmbeddingsProvider(config.provider) ? config.provider : EMBEDDINGS_DEFAULT_PROVIDER;
+    const staleDocumentCount = await countStaleEmbeddedDocuments(ctx.container);
     return {
       ...config,
       dimension: EMBEDDINGS_DIMENSION,
+      nativeDimension: findEmbeddingsModel(provider, config.model)?.nativeDimension ?? null,
       providers: embeddingsProviderOptions(isLocalEmbeddingsAvailable()),
+      models: EMBEDDINGS_MODELS,
+      keyStatus: embeddingsKeyStatus(provider, await ctx.container.runtimeConfig.getAiConfig()),
+      staleDocumentCount,
     };
   }),
 
+  // Cheap enough for the admin sidebar: drives its "needs re-index" dot.
+  embeddingsAttention: adminProcedure.query(async ({ ctx }) => ({
+    staleDocumentCount: await countStaleEmbeddedDocuments(ctx.container),
+  })),
+
   setEmbeddingsConfig: adminProcedure
-    .input(z.object({ provider: z.enum(EMBEDDINGS_PROVIDERS) }))
+    .input(z.object({ provider: z.enum(EMBEDDINGS_PROVIDERS), model: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       // A disabled control in the UI is a courtesy; this is the guard. A
       // deployment packaged without a provider cannot serve it whatever the
@@ -394,10 +411,14 @@ export const settingsRouter = router({
       if (unavailableReason) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: unavailableReason });
       }
+      const modelRejection = embeddingsModelRejection(input.provider, input.model);
+      if (modelRejection) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: modelRejection });
+      }
 
-      // Model is derived from the provider; switching providers requires
-      // re-indexing existing documents (ADR-017 Decision 3).
-      const config = { provider: input.provider, model: EMBEDDINGS_DEFAULT_MODELS[input.provider] };
+      // Switching model requires re-indexing existing documents (ADR-017
+      // Decision 3); the per-chunk model stamp is what flags them as stale.
+      const config = { provider: input.provider, model: input.model };
       const result = await ctx.container.repos.systemSettings.set(
         EMBEDDINGS_CONFIG_SETTING_KEY,
         JSON.stringify(config),
