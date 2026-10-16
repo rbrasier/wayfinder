@@ -64,6 +64,7 @@ import {
   DOCUMENT_GENERATION_DEFAULT_FIELD_BATCH_SIZE,
   DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
   EMBEDDINGS_DEFAULT_MODELS,
+  isEmbeddingsModel,
   isEmbeddingsProvider,
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
@@ -392,12 +393,12 @@ export const parseEmbeddingsConfig = (raw: string, fallback: EmbeddingsConfig): 
     const parsed = JSON.parse(raw);
     if (!isObject(parsed)) return fallback;
     const provider = isEmbeddingsProvider(parsed.provider) ? parsed.provider : fallback.provider;
-    const model =
-      typeof parsed.model === "string" && parsed.model.trim().length > 0
-        ? parsed.model
-        : isEmbeddingsProvider(provider)
-          ? EMBEDDINGS_DEFAULT_MODELS[provider]
-          : fallback.model;
+    // A model outside the provider's catalogue cannot be built by the adapter, so
+    // a hand-edited or legacy row falls back rather than breaking indexing.
+    if (typeof parsed.model === "string" && isEmbeddingsModel(provider, parsed.model)) {
+      return { provider, model: parsed.model };
+    }
+    const model = isEmbeddingsProvider(provider) ? EMBEDDINGS_DEFAULT_MODELS[provider] : fallback.model;
     return { provider, model };
   } catch {
     return fallback;

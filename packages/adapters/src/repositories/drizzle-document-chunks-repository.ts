@@ -6,9 +6,22 @@ import type {
   Result,
   RetrievedChunk,
 } from "@wayfinder/domain";
-import { and, cosineDistance, desc, eq, gte, inArray, or, sql, type SQL } from "drizzle-orm";
+import {
+  and,
+  cosineDistance,
+  countDistinct,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
 import type { Database } from "../db/client";
-import { kb_document_chunks } from "../db/schema/kb";
+import { kb_chunk_versions, kb_document_chunks } from "../db/schema/kb";
 import { logRepoError } from "./log-repo-error";
 
 const FLOW_SCOPED_SOURCES = ["flow_context_doc", "template"] as const;
@@ -29,6 +42,7 @@ export class DrizzleDocumentChunksRepository implements IDocumentChunkRepository
           chunk_index: chunk.chunkIndex,
           chunk_text: chunk.chunkText,
           embedding: chunk.embedding,
+          embedding_model: chunk.embeddingModel,
         })),
       );
       return ok(undefined);
@@ -104,6 +118,43 @@ export class DrizzleDocumentChunksRepository implements IDocumentChunkRepository
     } catch (cause) {
       logRepoError("DrizzleDocumentChunksRepository.search", cause);
       return err(domainError("INFRA_FAILURE", "Failed to search document chunks.", cause));
+    }
+  }
+
+  async countDocumentsEmbeddedWithOtherModel(modelKey: string): Promise<Result<number>> {
+    try {
+      const [row] = await this.db
+        .select({ count: countDistinct(kb_document_chunks.storage_path) })
+        .from(kb_document_chunks)
+        .where(
+          and(
+            eq(kb_document_chunks.status, "active"),
+            or(isNull(kb_document_chunks.embedding_model), ne(kb_document_chunks.embedding_model, modelKey)),
+          ),
+        );
+      return ok(Number(row?.count ?? 0));
+    } catch (cause) {
+      logRepoError("DrizzleDocumentChunksRepository.countDocumentsEmbeddedWithOtherModel", cause);
+      return err(domainError("INFRA_FAILURE", "Failed to count stale document embeddings.", cause));
+    }
+  }
+
+  async labelUnlabelledEmbeddings(modelKey: string): Promise<Result<void>> {
+    try {
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(kb_document_chunks)
+          .set({ embedding_model: modelKey })
+          .where(isNull(kb_document_chunks.embedding_model));
+        await tx
+          .update(kb_chunk_versions)
+          .set({ embedding_model: modelKey })
+          .where(isNull(kb_chunk_versions.embedding_model));
+      });
+      return ok(undefined);
+    } catch (cause) {
+      logRepoError("DrizzleDocumentChunksRepository.labelUnlabelledEmbeddings", cause);
+      return err(domainError("INFRA_FAILURE", "Failed to label document embeddings.", cause));
     }
   }
 

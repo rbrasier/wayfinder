@@ -45,6 +45,7 @@ import { UsageMeter, UsageRing } from "@/components/usage-meter";
 import { authClient } from "@/lib/auth-client";
 import { ViewAsUserDialog } from "@/components/impersonation/view-as-user-dialog";
 import { trpc } from "@/trpc/client";
+import { staleDocumentsMessage } from "./settings/embeddings-provider-state";
 
 interface NavItem {
   // Omitted for an action row (New chat), which opens a modal rather than
@@ -56,6 +57,9 @@ interface NavItem {
   // Count of items awaiting the user on that surface. Rendered as a pill on the
   // right of the link; omitted or zero renders nothing.
   badgeCount?: number;
+  // Something on that surface needs an admin's action; rendered as an amber dot
+  // with this text as its accessible label.
+  attention?: string | null;
   // Overrides the group's mark for this row alone — New chat takes a plus where
   // its siblings take dots.
   mark?: NavMark;
@@ -108,6 +112,7 @@ interface AdminNavContext {
   readonly canCurate: boolean;
   readonly organisationsEnabled: boolean;
   readonly extractionEnabled: boolean;
+  readonly configurationAttention: string | null;
 }
 
 const buildAdminNav = ({
@@ -116,6 +121,7 @@ const buildAdminNav = ({
   canCurate,
   organisationsEnabled,
   extractionEnabled,
+  configurationAttention,
 }: AdminNavContext): NavGroup[] => {
   // Skills + MCP Servers are hidden when their feature flag is disabled — an
   // admin who turned the flag off should not see the surface it controls.
@@ -139,7 +145,12 @@ const buildAdminNav = ({
         ...(extractionEnabled
           ? [{ href: "/admin/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
           : []),
-        { href: "/admin/settings", icon: Settings, label: "Configuration" },
+        {
+          href: "/admin/settings",
+          icon: Settings,
+          label: "Configuration",
+          attention: configurationAttention,
+        },
       ],
     },
     {
@@ -248,7 +259,7 @@ function NavGroups({
 
             {!isCollapsed &&
               group.items.map((item) => {
-                const { href, onSelect, icon: Icon, label, badgeCount, trailing } = item;
+                const { href, onSelect, icon: Icon, label, badgeCount, attention, trailing } = item;
                 const active = href !== undefined && href === activeHref;
                 const rowMark = item.mark ?? mark;
 
@@ -289,6 +300,15 @@ function NavGroups({
                       >
                         {badgeCount > 99 ? "99+" : badgeCount}
                       </span>
+                    )}
+                    {attention && (
+                      <span
+                        role="img"
+                        aria-label={attention}
+                        title={attention}
+                        data-testid="nav-attention"
+                        className="h-[7px] w-[7px] shrink-0 rounded-full bg-amber-500"
+                      />
                     )}
                     {trailing}
                   </>
@@ -411,12 +431,19 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     key: "extraction_flows",
   });
   const extractionEnabled = extractionFlagQuery.data ?? false;
+  // Documents embedded by a model other than the configured one stop matching
+  // queries until re-indexed, so the admin is pointed at Configuration.
+  const embeddingsAttentionQuery = trpc.settings.embeddingsAttention.useQuery(undefined, {
+    enabled: isAdmin,
+    staleTime: 60_000,
+  });
   const adminNav = buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
     canCurate,
     organisationsEnabled: organisationsEnabledQuery.data ?? false,
     extractionEnabled,
+    configurationAttention: staleDocumentsMessage(embeddingsAttentionQuery.data?.staleDocumentCount ?? 0),
   });
   const nav: NavGroup[] = isAdmin
     ? adminNav

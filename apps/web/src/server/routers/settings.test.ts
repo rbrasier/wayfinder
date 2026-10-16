@@ -7,6 +7,8 @@ import {
 } from "./settings";
 import {
   UNAVAILABLE_LOCAL_EMBEDDINGS_REASON,
+  embeddingsKeyStatus,
+  embeddingsModelRejection,
   embeddingsProviderOptions,
   embeddingsProviderUnavailableReason,
 } from "./settings-embeddings";
@@ -453,12 +455,14 @@ describe("settings router — session policy", () => {
 });
 
 describe("settings router — embeddings provider availability", () => {
-  it("offers both providers when the local runtime is present", () => {
+  it("offers every provider when the local runtime is present", () => {
     const options = embeddingsProviderOptions(true);
 
     expect(options).toEqual([
       { provider: "local", available: true, unavailableReason: null },
       { provider: "openai", available: true, unavailableReason: null },
+      { provider: "mistral", available: true, unavailableReason: null },
+      { provider: "bedrock", available: true, unavailableReason: null },
     ]);
   });
 
@@ -487,5 +491,38 @@ describe("settings router — embeddings provider availability", () => {
     expect(embeddingsProviderUnavailableReason("local", false)).toBe(
       UNAVAILABLE_LOCAL_EMBEDDINGS_REASON,
     );
+  });
+});
+
+describe("settings router — embeddings model validation", () => {
+  it("accepts a model from the provider's catalogue", () => {
+    expect(embeddingsModelRejection("mistral", "mistral-embed")).toBeNull();
+  });
+
+  it("rejects a model that belongs to another provider", () => {
+    expect(embeddingsModelRejection("openai", "mistral-embed")).toBe(
+      '"mistral-embed" is not an available OpenAI embedding model.',
+    );
+  });
+});
+
+describe("settings router — embeddings key status", () => {
+  const aiKeys = (apiKeys: Partial<AiConfig["apiKeys"]>): AiConfig =>
+    ({ apiKeys: { anthropic: null, openai: null, mistral: null, bedrock: null, ...apiKeys } }) as AiConfig;
+
+  it("needs no key for the local model", () => {
+    expect(embeddingsKeyStatus("local", aiKeys({}))).toBe("not-needed");
+  });
+
+  it("reports the OpenAI key saved in the AI provider settings as configured", () => {
+    expect(embeddingsKeyStatus("openai", aiKeys({ openai: "sk-openai" }))).toBe("configured");
+  });
+
+  it("reports a provider with no saved key as missing", () => {
+    expect(embeddingsKeyStatus("mistral", aiKeys({ openai: "sk-openai" }))).toBe("missing");
+  });
+
+  it("reports saved Bedrock credentials as configured", () => {
+    expect(embeddingsKeyStatus("bedrock", aiKeys({ bedrock: stored.bedrock }))).toBe("configured");
   });
 });

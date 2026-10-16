@@ -31,7 +31,6 @@ const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): Connectivit
   emailSender: { isConfigured: async () => false, testConnectivity: async () => ok(true as const) },
   graphClient: { isConfigured: async () => false, get: vi.fn() },
   embeddingsProvider: { embed: async () => ok([0.1]) },
-  openaiApiKey: null,
   credentialAccounts: { countAccountsWithPassword: async () => 1 },
   fetchFn: vi.fn().mockResolvedValue({ ok: true, status: 200 } as unknown as Response),
   minioClientFactory: () => ({ bucketExists: async () => true }),
@@ -47,6 +46,33 @@ describe("CompositeConnectivityTester", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data).toMatchObject({ target: "storage", ok: true });
+  });
+
+  it("tests embeddings with the key saved in the AI provider settings", async () => {
+    const base = buildDeps();
+    const embed = vi.fn(async () => ok([0.1]));
+    const tester = new CompositeConnectivityTester(
+      buildDeps({
+        embeddingsProvider: { embed },
+        runtimeConfig: {
+          ...base.runtimeConfig,
+          getAiConfig: async (): Promise<AiConfig> => ({
+            provider: "anthropic",
+            apiKeys: { anthropic: "sk-ant", openai: "sk-from-settings", mistral: null, bedrock: null },
+            models: { chat: "c", documentGeneration: "d", branching: "b" },
+          }),
+          getEmbeddingsConfig: async (): Promise<EmbeddingsConfig> => ({
+            provider: "openai",
+            model: "text-embedding-3-small",
+          }),
+        },
+      }),
+    );
+
+    const result = await tester.test("embeddings");
+
+    expect(result.data).toMatchObject({ target: "embeddings", ok: true });
+    expect(embed).toHaveBeenCalled();
   });
 
   it("flags unconfigured targets as skipped rather than failed", async () => {

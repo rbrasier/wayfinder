@@ -176,7 +176,6 @@ import {
   LangGraphAgentRunner,
   LanguageModelAdapter,
   LlmCallGovernor,
-  createEmbeddingsProvider,
   MinioStorageAdapter,
   N8nHttpWorkflowDirectory,
   NodemailerEmailSender,
@@ -222,6 +221,7 @@ import {
 } from "./cached-admin-settings";
 import { serverEnv } from "./env";
 import { getScriptedLanguageModel } from "./scripted-llm";
+import { buildEmbeddings } from "./container-embeddings";
 
 const globalForContainer = globalThis as typeof globalThis & {
   _wayfinder_container: ReturnType<typeof build> | undefined;
@@ -509,14 +509,7 @@ const build = () => {
   // Flow memory and the retention settings governing its evidence (ADR-057).
   const flowMemory = buildFlowMemory({ db, flows, analytics: analyticsRepo, answerFeedback, auditLogger, systemSettings });
   const hybridRetriever = new DrizzleHybridRetriever(db);
-  const embeddings = createEmbeddingsProvider(() => runtimeConfig.getEmbeddingsConfig(), {
-    openaiApiKey: env.OPENAI_API_KEY ?? null,
-    localEnvOptions: {
-      allowRemoteModels: env.EMBEDDINGS_ALLOW_REMOTE_MODELS === "false" ? false : undefined,
-      localModelPath: env.EMBEDDINGS_LOCAL_MODEL_PATH,
-      cacheDir: env.EMBEDDINGS_CACHE_DIR,
-    },
-  });
+  const embeddings = buildEmbeddings({ env, runtimeConfig, documentChunks, logger });
   const documentIndexer = new DocumentIndexingService(embeddings, documentChunks);
   const reindexSource = new DrizzleReindexSourceRepository(db);
   const connectivityTester = new CompositeConnectivityTester({
@@ -524,7 +517,6 @@ const build = () => {
     emailSender,
     graphClient,
     embeddingsProvider: embeddings,
-    openaiApiKey: env.OPENAI_API_KEY ?? null,
     entraAuthority: env.ENTRA_AUTHORITY,
     credentialAccounts: createCredentialAccountProbe(db),
   });

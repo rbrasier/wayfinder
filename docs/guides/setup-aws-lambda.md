@@ -156,7 +156,7 @@ supply.
 |---|---|---|
 | `DATABASE_URL` | RDS **Proxy** endpoint | Set by the stack |
 | `DATABASE_LISTEN_URL` | **Direct** instance endpoint | The `LISTEN` subscription needs session mode, which RDS Proxy does not provide |
-| `EMBEDDINGS_PROVIDER` | `openai` | Mandatory here — see §7 |
+| `EMBEDDINGS_PROVIDER` | `openai`, `mistral` or `bedrock` | Mandatory here — see §7 |
 | `MINIO_BUCKET` | Your bucket name | The adapter speaks S3; the name is historical |
 | `MINIO_REGION` | The bucket's region | Required on real S3 |
 | `MINIO_PATH_STYLE` | `false` | Path style is a MinIO-ism; real S3 signs virtual-hosted style |
@@ -231,8 +231,10 @@ a configuration option.
 ### Hosted embeddings only
 
 This deployment ships without `onnxruntime-node`, which is what keeps cold starts
-sane and allows a zip-based artefact. `EMBEDDINGS_PROVIDER` must be `openai` (or
-a Bedrock embeddings adapter).
+sane and allows a zip-based artefact. `EMBEDDINGS_PROVIDER` must be a hosted
+provider — `openai`, `mistral` or `bedrock` (Titan v2). Embeddings use the key
+saved for that provider under **Admin → Settings → AI provider**, falling back to
+its environment variable, and the model is chosen in **RAG Embeddings**.
 
 The application knows this about itself. The local option is **disabled** in
 Admin → Settings, and the server rejects it even if the request is made

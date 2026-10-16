@@ -156,13 +156,13 @@ describe("probeN8nConnectivity", () => {
 });
 
 describe("probeEmbeddingsConnectivity", () => {
-  const embeddingsProvider = (result: Result<number[]>) => ({ embed: async () => result });
+  const embeddingsProvider = (result: Result<number[]>) => ({ embed: vi.fn(async () => result) });
 
   it("loads the local model by embedding a tiny string", async () => {
     const provider = embeddingsProvider(ok([0.1, 0.2]));
     const result = await probeEmbeddingsConnectivity(
       { provider: "local", model: "local-model" } as EmbeddingsConfig,
-      { embeddingsProvider: provider, openaiApiKey: null },
+      { embeddingsProvider: provider, credentials: null },
     );
 
     expect(result.ok).toBe(true);
@@ -173,31 +173,53 @@ describe("probeEmbeddingsConnectivity", () => {
     const provider = embeddingsProvider(err(domainError("AI_PROVIDER_FAILED", "Local embedding generation failed.")));
     const result = await probeEmbeddingsConnectivity(
       { provider: "local", model: "local-model" } as EmbeddingsConfig,
-      { embeddingsProvider: provider, openaiApiKey: null },
+      { embeddingsProvider: provider, credentials: null },
     );
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain("Local embedding");
   });
 
-  it("auth-pings OpenAI models when the provider is openai", async () => {
-    const fetchFn = vi.fn().mockResolvedValue(okResponse());
+  it("embeds through the hosted provider when its key is configured", async () => {
+    const provider = embeddingsProvider(ok([0.1]));
     const result = await probeEmbeddingsConnectivity(
-      { provider: "openai", model: "text-embedding-3-small" } as EmbeddingsConfig,
-      { embeddingsProvider: embeddingsProvider(ok([])), openaiApiKey: "sk-openai", fetchFn },
+      { provider: "mistral", model: "mistral-embed" } as EmbeddingsConfig,
+      { embeddingsProvider: provider, credentials: "mistral-key" },
     );
 
     expect(result.ok).toBe(true);
-    expect(fetchFn.mock.calls[0][0]).toContain("api.openai.com");
+    expect(provider.embed).toHaveBeenCalled();
   });
 
-  it("skips openai embeddings when no OpenAI key is configured", async () => {
+  it("skips OpenAI embeddings when no OpenAI key is saved or in the environment", async () => {
+    const provider = embeddingsProvider(ok([]));
     const result = await probeEmbeddingsConnectivity(
       { provider: "openai", model: "text-embedding-3-small" } as EmbeddingsConfig,
-      { embeddingsProvider: embeddingsProvider(ok([])), openaiApiKey: null },
+      { embeddingsProvider: provider, credentials: null },
     );
 
     expect(result.skipped).toBe(true);
+    expect(result.message).toBe("No OpenAI API key configured");
+    expect(provider.embed).not.toHaveBeenCalled();
+  });
+
+  it("skips Mistral embeddings when no Mistral key is configured", async () => {
+    const result = await probeEmbeddingsConnectivity(
+      { provider: "mistral", model: "mistral-embed" } as EmbeddingsConfig,
+      { embeddingsProvider: embeddingsProvider(ok([])), credentials: null },
+    );
+
+    expect(result.message).toBe("No Mistral API key configured");
+  });
+
+  it("still tries Bedrock without saved credentials, since the server's AWS environment may supply them", async () => {
+    const provider = embeddingsProvider(ok([0.1]));
+    const result = await probeEmbeddingsConnectivity(
+      { provider: "bedrock", model: "amazon.titan-embed-text-v2:0" } as EmbeddingsConfig,
+      { embeddingsProvider: provider, credentials: null },
+    );
+
+    expect(result.ok).toBe(true);
   });
 });
 

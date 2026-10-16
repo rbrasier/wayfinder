@@ -497,6 +497,28 @@ describe("RuntimeConfigStore — embeddings config", () => {
     expect(config.model).toBe("text-embedding-3-small");
   });
 
+  it("returns a stored Mistral model", async () => {
+    const store = new RuntimeConfigStore(
+      makeRepo(JSON.stringify({ provider: "mistral", model: "mistral-embed" })),
+      makeEnv(),
+    );
+
+    const config = await store.getEmbeddingsConfig();
+
+    expect(config).toEqual({ provider: "mistral", model: "mistral-embed" });
+  });
+
+  it("falls back to the provider's default model when the stored model is not in its catalogue", async () => {
+    const store = new RuntimeConfigStore(
+      makeRepo(JSON.stringify({ provider: "openai", model: "mistral-embed" })),
+      makeEnv(),
+    );
+
+    const config = await store.getEmbeddingsConfig();
+
+    expect(config).toEqual({ provider: "openai", model: "text-embedding-3-small" });
+  });
+
   it("caches until invalidated", async () => {
     const repo = makeRepo(null);
     const store = new RuntimeConfigStore(repo, makeEnv());

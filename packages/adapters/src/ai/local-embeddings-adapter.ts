@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { domainError, err, ok, type IEmbeddingsProvider, type Result } from "@wayfinder/domain";
+import { domainError, err, ok, type Result } from "@wayfinder/domain";
 
 // Whether this artefact can run the local provider at all. A Lambda zip ships
 // without onnxruntime-node so that cold starts stay sane (ADR-056 §4), which
@@ -64,7 +64,7 @@ export const createTransformersExtractorFactory = (
 
 // In-process embeddings (ADR-017) — no external API, works air-gapped. The
 // pipeline is built once on first use and reused.
-export class LocalEmbeddingsAdapter implements IEmbeddingsProvider {
+export class LocalEmbeddingsAdapter {
   private extractor: Promise<FeatureExtractor> | null = null;
 
   constructor(

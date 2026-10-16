@@ -4,6 +4,7 @@ import { minioClientOptions } from "../storage/minio-client-options";
 import type {
   AiConfig,
   AuthConfig,
+  BedrockCredentials,
   ConnectivityResult,
   EmbeddingsConfig,
   EntraCredentials,
@@ -199,12 +200,19 @@ export const probeN8nConnectivity = async (
 };
 
 export interface EmbeddingsProbeDeps {
-  embeddingsProvider: IEmbeddingsProvider;
-  openaiApiKey: string | null;
-  fetchFn?: typeof fetch;
+  embeddingsProvider: Pick<IEmbeddingsProvider, "embed">;
+  // The configured provider's key from the AI provider settings (env-backed).
+  credentials: string | BedrockCredentials | null;
   timeoutMs?: number;
 }
 
+const EMBEDDINGS_PROVIDERS_REQUIRING_API_KEY: Record<string, string> = {
+  openai: "OpenAI",
+  mistral: "Mistral",
+};
+
+// Embeds a tiny string through the configured provider: proves the model loads
+// (local) or that the key is accepted (hosted) on the exact path indexing uses.
 export const probeEmbeddingsConnectivity = async (
   config: EmbeddingsConfig,
   deps: EmbeddingsProbeDeps,
@@ -212,22 +220,11 @@ export const probeEmbeddingsConnectivity = async (
   const target = "embeddings" as const;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
 
-  if (config.provider === "openai") {
-    if (!deps.openaiApiKey) {
-      return { target, ok: false, skipped: true, message: "No OpenAI API key configured" };
-    }
-    const fetchFn = deps.fetchFn ?? globalThis.fetch;
-    const start = Date.now();
-    const outcome = await probeHttp({
-      url: "https://api.openai.com/v1/models",
-      headers: { Authorization: `Bearer ${deps.openaiApiKey}` },
-      fetchFn,
-      timeoutMs,
-    });
-    return withMessage({ target, ok: outcome.ok, latencyMs: Date.now() - start }, outcome.message);
+  const providerLabel = EMBEDDINGS_PROVIDERS_REQUIRING_API_KEY[config.provider];
+  if (providerLabel && !deps.credentials) {
+    return { target, ok: false, skipped: true, message: `No ${providerLabel} API key configured` };
   }
 
-  // Local provider: an in-process model load/health check by embedding a tiny string.
   const start = Date.now();
   try {
     const result = await withTimeout(deps.embeddingsProvider.embed("connectivity probe"), timeoutMs);
