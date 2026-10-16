@@ -274,7 +274,10 @@ interface CallSizing {
 }
 
 // The one sizing both the extraction call and the pre-run estimate use, so the
-// warning an author sees and the split a run makes cannot drift apart.
+// warning an author sees and the split a run makes cannot drift apart. The room
+// left for document text is what the ceiling leaves after the system prompt —
+// which carries the flow context material on every call, every part included —
+// so a heavier context makes each part smaller rather than being dropped.
 const sizeCall = (input: DocumentRoomInput): CallSizing => {
   const keys = input.fields.map((field) => field.field.key);
   const system = buildExtractionSystemPrompt({

@@ -19,6 +19,11 @@ rule — human > grounded copy > higher confidence; an earlier part keeps a tie)
 is prefixed `[Part i of n]`. Source references and verbatim checks resolve against the part the
 model was shown.
 
+Parts are sized from both the context material and the documents: the room for document text in a
+call is the ceiling less the system prompt, and the system prompt carries the flow context material
+on every call — every part of a split record included. More context therefore means smaller parts,
+never a part read without its context.
+
 When the system prompt alone (instructions + context material) leaves under 1,000 tokens for
 document text, extraction returns `VALIDATION_FAILED` without a model call.
 
@@ -80,8 +85,8 @@ Not one of the operations that require a `-- data-impact:` declaration.
 
 Written before each implementation:
 `split-document-text.test.ts`, `estimate-run-fit.test.ts`, `extract-document-fields.test.ts`
-(one call / split within ceiling / merge by confidence with part label / too-large refusal /
-context budget), `batch-engine.test.ts` (worker resolves the budget and splits),
+(one call / split within ceiling / merge by confidence with part label / context on every part /
+more context means more parts / too-large refusal / context budget), `batch-engine.test.ts` (worker resolves the budget and splits),
 `run-sample-extraction.test.ts`, `start-batch-run.test.ts`, `extraction-authoring.test.ts`,
 `draft-documents.test.ts`, `generate-run-documents.test.ts`, `extraction-schema.test.ts`,
 `runtime-config-store.test.ts`, `drizzle-extraction-draft-repository.test.ts`,

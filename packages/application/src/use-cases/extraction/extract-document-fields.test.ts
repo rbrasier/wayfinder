@@ -728,6 +728,65 @@ describe("extractDocumentFields — documents larger than one call (issue #335)"
     expect(result.data![0]!.rationale).toBe(`[Part 2 of ${partCount}] Signature block.`);
   });
 
+  it("sends the flow context material with every part, so no part is read without it", async () => {
+    const model = makeModel({ supplier_name: { value: "", confidence: 0, rationale: "absent" } });
+    const context = {
+      id: "ctx-1",
+      filename: "glossary.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 1,
+      storagePath: "ctx/glossary.pdf",
+      extractedText: "GLOSSARY: a supplier is the party named on the cover page.",
+      extractionStatus: "complete" as const,
+    };
+
+    await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Feed",
+      documentTexts: [{ documentId: "doc-feed", filename: "feed.txt", text: longFeed }],
+      contextDocs: [context],
+      instruction: "",
+      budget: budget(30_000),
+    });
+
+    const calls = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.length).toBeGreaterThan(1);
+    for (const [call] of calls) {
+      expect(call.system).toContain("[glossary.pdf]");
+      expect(call.system).toContain(context.extractedText);
+    }
+  });
+
+  it("sizes each part by the context material as well as the document, so more context means more parts", async () => {
+    const contextOf = (chars: number) => ({
+      id: "ctx-1",
+      filename: "manual.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 1,
+      storagePath: "ctx/manual.pdf",
+      extractedText: "m".repeat(chars),
+      extractionStatus: "complete" as const,
+    });
+    const callsWith = async (contextChars: number): Promise<number[]> => {
+      const model = makeModel({ supplier_name: { value: "", confidence: 0, rationale: "absent" } });
+      await extractDocumentFields(model, {
+        fields: [supplierName],
+        recordLabel: "Feed",
+        documentTexts: [{ documentId: "doc-feed", filename: "feed.txt", text: longFeed }],
+        contextDocs: [contextOf(contextChars)],
+        instruction: "",
+        budget: budget(30_000),
+      });
+      return callPromptTokens(model);
+    };
+
+    const lightContext = await callsWith(1_000);
+    const heavyContext = await callsWith(60_000);
+
+    expect(heavyContext.length).toBeGreaterThan(lightContext.length);
+    for (const tokens of [...lightContext, ...heavyContext]) expect(tokens).toBeLessThanOrEqual(30_000);
+  });
+
   it("refuses without calling the model when the instructions and context alone fill the ceiling", async () => {
     const model = makeModel({ supplier_name: { value: "Acme", confidence: 80, rationale: "x" } });
     const hugeContext = {
