@@ -1,6 +1,6 @@
 # Phase — Read-Only Public-Data MCP Servers in Flows
 
-- **Status**: To be implemented
+- **Status**: Implemented (v0.39.0) — see `public-data-mcp-servers.summary.md`
 - **Target version**: 0.39.0 (bump: MINOR — schema change: `admin_mcp_servers` classification,
   timeout and encrypted secrets; `admin_mcp_tools` per-tool settings; new `job_mcp_calls` queue)
 - **Base branch**: `main` (release line `alpha-3`)

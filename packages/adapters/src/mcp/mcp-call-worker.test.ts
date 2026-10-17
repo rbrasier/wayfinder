@@ -56,9 +56,33 @@ describe("McpCallWorker", () => {
     expect(runner.execute).toHaveBeenLastCalledWith({ limit: 1 });
 
     finish();
-    await completion;
+    // The count drops once the call's bookkeeping settles, a few hops after it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await worker.tick();
     expect(runner.execute).toHaveBeenLastCalledWith({ limit: 4 });
+  });
+
+  it("drains: one tick, then waits for every call it started, for hosts that freeze between invocations", async () => {
+    let finish: () => void = () => undefined;
+    const completion = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const runner: McpCallTickRunner = {
+      execute: vi.fn().mockResolvedValue(ok({ started: 1, failedStale: 0, completion })),
+    };
+    const worker = new McpCallWorker(runner, makeJobs(), noopLogger);
+    let drained = false;
+
+    const draining = worker.drain().then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(drained).toBe(false);
+
+    finish();
+    await draining;
+    expect(drained).toBe(true);
   });
 
   it("records a job failure when the tick returns an error", async () => {

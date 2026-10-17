@@ -211,6 +211,16 @@ export class WayfinderLambdaStack extends Stack {
     });
     grantSecrets(extractionTick);
 
+    // Long enough for the longest MCP call (every page, ADR-062 §3) to finish
+    // inside the invocation that started it.
+    const mcpCallTick = new nodejs.NodejsFunction(this, "McpCallTickFunction", {
+      ...defaults,
+      entry: join(handlersDirectory, "tick-mcp-calls.ts"),
+      memorySize: 512,
+      timeout: Duration.minutes(11),
+    });
+    grantSecrets(mcpCallTick);
+
     const retentionTick = new nodejs.NodejsFunction(this, "RetentionTickFunction", {
       ...defaults,
       entry: join(handlersDirectory, "tick-retention.ts"),
@@ -224,6 +234,11 @@ export class WayfinderLambdaStack extends Stack {
     new events.Rule(this, "ExtractionTickRule", {
       schedule: events.Schedule.rate(Duration.minutes(1)),
       targets: [new targets.LambdaFunction(extractionTick)],
+    });
+
+    new events.Rule(this, "McpCallTickRule", {
+      schedule: events.Schedule.rate(Duration.minutes(1)),
+      targets: [new targets.LambdaFunction(mcpCallTick)],
     });
 
     new events.Rule(this, "RetentionSweepRule", {

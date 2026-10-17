@@ -82,6 +82,15 @@ describe("tick handlers", () => {
     expect(await jobRow("retention_worker")).toHaveLength(1);
   });
 
+  it("registers the MCP call job and drains an empty queue", async () => {
+    const { handler } = await import("./tick-mcp-calls.js");
+
+    const outcome = await handler();
+
+    expect(outcome).toEqual({ job: "mcp_call_worker", ticked: true });
+    expect(await jobRow("mcp_call_worker")).toHaveLength(1);
+  });
+
   it("records a run time, so job health reflects a tick that actually happened", async () => {
     const { handler } = await import("./tick-extraction.js");
     await handler();

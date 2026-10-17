@@ -26,6 +26,7 @@ export class McpCallWorker {
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
   private inFlight = 0;
+  private readonly completions = new Set<Promise<void>>();
 
   constructor(
     private readonly tickRunner: McpCallTickRunner,
@@ -51,6 +52,14 @@ export class McpCallWorker {
     }
   }
 
+  // One tick, then every call it (or an earlier tick) started. For a host that
+  // freezes the process between invocations — a Lambda tick — where a call left
+  // running past the return would be suspended mid-request.
+  async drain(): Promise<void> {
+    await this.tick();
+    await Promise.all([...this.completions]);
+  }
+
   async tick(): Promise<void> {
     if (this.running) return;
     this.running = true;
@@ -64,9 +73,17 @@ export class McpCallWorker {
       }
       const { started, completion } = result.data;
       this.inFlight += started;
-      void completion.finally(() => {
-        this.inFlight -= started;
-      });
+      const settled = completion
+        .catch((cause: unknown) => {
+          this.logger.error("A queued MCP call threw.", {
+            reason: cause instanceof Error ? cause.message : String(cause),
+          });
+        })
+        .finally(() => {
+          this.inFlight -= started;
+          this.completions.delete(settled);
+        });
+      this.completions.add(settled);
       await this.jobs.ping(MCP_CALL_JOB_NAME, new Date(Date.now() + this.intervalMs));
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Unknown MCP call error.";
