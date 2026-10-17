@@ -89,6 +89,18 @@ describe("WayfinderLambdaStack", () => {
     });
   });
 
+  it("drains queued MCP calls every minute, with time for the longest call to finish", () => {
+    const [mcpFunctionId] = Object.keys(
+      template.findResources("AWS::Lambda::Function", { Properties: { Timeout: 660 } }),
+    );
+    expect(mcpFunctionId).toBeDefined();
+    const rules = Object.values(template.findResources("AWS::Events::Rule"));
+    const mcpRule = rules.find((rule) =>
+      JSON.stringify(rule.Properties?.Targets ?? []).includes(`"${mcpFunctionId}"`),
+    );
+    expect(mcpRule?.Properties?.ScheduleExpression).toBe("rate(1 minute)");
+  });
+
   it("sweeps retention daily", () => {
     template.hasResourceProperties("AWS::Events::Rule", {
       ScheduleExpression: "rate(1 day)",

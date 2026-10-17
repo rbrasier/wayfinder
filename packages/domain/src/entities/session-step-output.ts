@@ -1,5 +1,6 @@
 import type { FieldValueSnapshot } from "./lookup-source";
 import type { TemplateFieldType } from "./template-field";
+import type { ToolRecordCitation } from "./tool-citation";
 
 export interface StepOutputField {
   key: string;
@@ -21,6 +22,9 @@ export interface StepOutputField {
   // Which source version validated `value`. Written once and never rewritten, so
   // a later rename of the underlying record does not change history.
   sourceRef?: FieldValueSnapshot;
+  // The source records behind a value captured from an MCP tool result
+  // (ADR-062 §6). Additive on the existing jsonb, so no migration.
+  citations?: ToolRecordCitation[];
 }
 
 export interface SessionStepOutput {

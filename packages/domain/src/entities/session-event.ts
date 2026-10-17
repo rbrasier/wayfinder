@@ -38,7 +38,21 @@ export interface SessionTypingEvent {
   userName: string | null;
 }
 
+// A tool call is in flight (ADR-062 §4). Published when it starts, when each
+// further page is requested, every 5 s while it is still waiting, and once when
+// it ends. Ephemeral like `typing`: never persisted, never replayed.
+export interface SessionToolProgressEvent {
+  type: "tool.progress";
+  callId: string;
+  toolTitle: string;
+  serverLabel: string;
+  page: number;
+  elapsedMs: number;
+  state: "running" | "done";
+}
+
 export type SessionEvent =
+  | SessionToolProgressEvent
   | SessionTurnClaimedEvent
   | SessionTurnReleasedEvent
   | SessionMessageCreatedEvent
@@ -70,7 +84,16 @@ const KNOWN_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   "message.created",
   "session.updated",
   "typing",
+  "tool.progress",
 ]);
+
+const isToolProgressShape = (event: Record<string, unknown>): boolean =>
+  typeof event.callId === "string" &&
+  typeof event.toolTitle === "string" &&
+  typeof event.serverLabel === "string" &&
+  typeof event.page === "number" &&
+  typeof event.elapsedMs === "number" &&
+  (event.state === "running" || event.state === "done");
 
 // Parse a NOTIFY payload back into an envelope, returning null on anything
 // malformed so a bad publish (or a payload from an older/newer schema) can never
@@ -93,6 +116,9 @@ export const parseSessionNotifyPayload = (raw: string): SessionEventEnvelope | n
     return null;
   }
   if (event.type === "message.created" && typeof event.seq !== "number") return null;
+  if (event.type === "tool.progress" && !isToolProgressShape(candidate.event as Record<string, unknown>)) {
+    return null;
+  }
 
   return { sessionId: candidate.sessionId, event: candidate.event as SessionEvent };
 };

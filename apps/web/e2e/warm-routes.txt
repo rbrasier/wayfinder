@@ -13,6 +13,12 @@
 GET /flows/:id/config
 GET /admin/flows
 
+# Outlasted the 30s navigation timeout in session-lifecycle.spec.ts, and the
+# Admin Sessions smoke check flaked on its first compile (runs 38996160595,
+# 39000120304).
+GET /admin/users
+GET /admin/sessions
+
 # 17.9s and 7.3s — the chat list and session pages.
 GET /chats
 GET /chats/:id

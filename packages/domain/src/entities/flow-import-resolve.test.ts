@@ -78,7 +78,7 @@ describe("resolveFlowDependencies — MCP tools", () => {
   it("resolves an MCP tool by its server label", () => {
     const outcome = resolveFlowDependencies(
       [toolDependency("Finance")],
-      candidates({ servers: [{ id: "local-server", label: "Finance", communicatesExternally: false }] }),
+      candidates({ servers: [{ id: "local-server", label: "Finance", dataClassification: "internal" }] }),
     );
 
     expect(outcome.resolved[0]!.localId).toBe("local-server");
@@ -97,8 +97,8 @@ describe("resolveFlowDependencies — MCP tools", () => {
       [toolDependency("Finance")],
       candidates({
         servers: [
-          { id: "server-a", label: "Finance", communicatesExternally: false },
-          { id: "server-b", label: "Finance", communicatesExternally: false },
+          { id: "server-a", label: "Finance", dataClassification: "internal" },
+          { id: "server-b", label: "Finance", dataClassification: "internal" },
         ],
       }),
     );
@@ -107,12 +107,23 @@ describe("resolveFlowDependencies — MCP tools", () => {
     expect(outcome.warnings[0]).toContain("Finance");
   });
 
-  it("does not resolve to a server that communicates outside Wayfinder, and warns why", () => {
+  it("resolves to a public-data reader", () => {
+    const dependency = toolDependency("Legislation");
+
+    const outcome = resolveFlowDependencies(
+      [dependency],
+      candidates({ servers: [{ id: "local-server", label: "Legislation", dataClassification: "public-read" }] }),
+    );
+
+    expect(outcome.resolved).toEqual([{ dependency, localId: "local-server" }]);
+  });
+
+  it("does not resolve to a server that sends records outside Wayfinder, and warns why", () => {
     const dependency = toolDependency("Finance");
 
     const outcome = resolveFlowDependencies(
       [dependency],
-      candidates({ servers: [{ id: "local-server", label: "Finance", communicatesExternally: true }] }),
+      candidates({ servers: [{ id: "local-server", label: "Finance", dataClassification: "external-write" }] }),
     );
 
     expect(outcome.resolved).toEqual([]);

@@ -365,13 +365,20 @@ const skill = (id: string, name: string): Skill => ({
   updatedAt: new Date("2026-01-01"),
 });
 
-const server = (id: string, label: string, communicatesExternally = false): McpServer => ({
+const server = (
+  id: string,
+  label: string,
+  dataClassification: McpServer["dataClassification"] = "internal",
+): McpServer => ({
   id,
   label,
   transport: "sse",
   url: "https://example.invalid/mcp",
-  credentialRef: null,
-  communicatesExternally,
+  dataClassification,
+  verbatimOnly: false,
+  callTimeoutMs: 30_000,
+  hasCredential: false,
+  customHeaderNames: [],
   status: "active",
   createdByUserId: null,
   createdAt: new Date("2026-01-01"),

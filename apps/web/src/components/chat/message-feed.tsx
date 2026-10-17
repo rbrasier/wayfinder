@@ -20,6 +20,7 @@ import {
 } from "./milestone-pill";
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
+import { CitedSources } from "./cited-sources";
 import {
   decisionVerbPhrase,
   isApprovalGranted,
@@ -86,6 +87,20 @@ interface MessageFeedProps {
   // recomputes its branch): shows a generic "Advancing…" badge so the operator
   // sees the step is progressing rather than a frozen screen.
   pendingStepAdvance?: boolean;
+  // "Calling <tool>…" beside the typing dots while the turn's tools run
+  // (ADR-062 §4).
+  toolProgressLabel?: string | null;
+  // A queued MCP step is waiting on its source after the turn ended: the dots
+  // and this label stay up until the worker posts the outcome.
+  waitingOnToolLabel?: string | null;
+}
+
+function ToolProgressText({ label }: { label: string }) {
+  return (
+    <span className="ml-2 text-[12px] text-[#736d5f]" data-tool-progress aria-live="polite">
+      {label}
+    </span>
+  );
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -208,6 +223,8 @@ export function MessageFeed({
   currentUserId,
   pendingDocumentGeneration,
   pendingStepAdvance,
+  toolProgressLabel,
+  waitingOnToolLabel,
 }: MessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
@@ -372,6 +389,7 @@ export function MessageFeed({
                       content={displayContent}
                       className="text-[14px] leading-[1.6] text-[#26241f]"
                     />
+                    <CitedSources sources={msg.aiPayload?.citations} />
                     <div className="mt-[6px] flex items-center gap-3">
                       <span data-message-time className="font-mono text-[10px] text-[#736d5f]">
                         {formatRelativeTime(msg.createdAt)}
@@ -527,6 +545,17 @@ export function MessageFeed({
           <AgentMark initials={botInitials} />
           <div className="flex items-center">
             <TypingIndicator />
+            {toolProgressLabel ? <ToolProgressText label={toolProgressLabel} /> : null}
+          </div>
+        </div>
+      )}
+
+      {!isStreaming && waitingOnToolLabel && (
+        <div className="flex gap-[14px]">
+          <AgentMark initials={botInitials} />
+          <div className="flex items-center">
+            <TypingIndicator />
+            <ToolProgressText label={waitingOnToolLabel} />
           </div>
         </div>
       )}

@@ -479,6 +479,9 @@ const build = () => {
     sessions,
     languageModel: llm,
     sessionStepOutputs,
+    encryption: settingsEncryption,
+    auditLogger,
+    logger,
   });
   const { graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver, useCases: peopleUseCases } =
     buildPeopleDirectory({ env, hrDatasets, users, runtimeConfig, languageModel: llm });

@@ -1,34 +1,92 @@
-import { domainError, err, isValidMcpCredentialRef, MCP_CREDENTIAL_ENV_PREFIX, ok } from "@wayfinder/domain";
+import {
+  domainError,
+  err,
+  isFlowUsableClassification,
+  isValidMcpCallTimeout,
+  MAX_MCP_CALL_TIMEOUT_MS,
+  MIN_MCP_CALL_TIMEOUT_MS,
+  ok,
+  validateMcpCustomHeaders,
+  validateMcpToolSettings,
+} from "@wayfinder/domain";
 import type {
+  CachedMcpTool,
   IMcpClient,
   IMcpServerDirectory,
   IMcpServerRepository,
+  IMcpServerSecretStore,
+  IMcpToolRepository,
   ListMcpServersInput,
+  McpDataClassification,
   McpServer,
+  McpServerSecretsPatch,
   McpServerWithTools,
   McpTool,
   McpToolRef,
+  McpToolSettings,
   McpTransport,
   Result,
 } from "@wayfinder/domain";
 
-const credentialRefError = domainError(
+const timeoutError = domainError(
   "VALIDATION_FAILED",
-  `Credential reference must name an environment variable in the ${MCP_CREDENTIAL_ENV_PREFIX} namespace.`,
+  `The call timeout must be between ${MIN_MCP_CALL_TIMEOUT_MS / 1000} and ${MAX_MCP_CALL_TIMEOUT_MS / 1000} seconds.`,
 );
 
-export class RegisterMcpServer {
-  constructor(private readonly servers: IMcpServerRepository) {}
+// Secrets travel on the request as write-only inputs: `undefined` leaves them
+// unchanged, `null` (or a blank token) clears them.
+interface McpServerSecretsInput {
+  bearerToken?: string | null;
+  customHeaders?: Record<string, string> | null;
+}
 
-  async execute(input: {
-    label: string;
-    url: string;
-    transport?: McpTransport;
-    communicatesExternally?: boolean;
-    verbatimOnly?: boolean;
-    credentialRef?: string | null;
-    createdByUserId?: string | null;
-  }): Promise<Result<McpServer>> {
+const normaliseToken = (token: string | null | undefined): string | null | undefined => {
+  if (token === undefined) return undefined;
+  const trimmed = token?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+// Validates the secrets as they will stand after the write — an Authorization
+// header is refused only while a bearer token will also be set.
+const buildSecretsPatch = (
+  input: McpServerSecretsInput,
+  currentlyHasCredential: boolean,
+): Result<McpServerSecretsPatch> => {
+  const bearerToken = normaliseToken(input.bearerToken);
+  const willHaveToken = bearerToken === undefined ? currentlyHasCredential : bearerToken !== null;
+  if (!input.customHeaders) return ok({ bearerToken, headers: input.customHeaders });
+  const headers = validateMcpCustomHeaders(input.customHeaders, willHaveToken);
+  if (headers.error) return err(headers.error);
+  return ok({ bearerToken, headers: headers.data });
+};
+
+const hasSecretChanges = (patch: McpServerSecretsPatch): boolean =>
+  patch.bearerToken !== undefined || patch.headers !== undefined;
+
+const reload = async (servers: IMcpServerRepository, id: string): Promise<Result<McpServer>> => {
+  const found = await servers.findById(id);
+  if (found.error) return err(found.error);
+  if (!found.data) return err(domainError("NOT_FOUND", "MCP server not found."));
+  return ok(found.data);
+};
+
+export class RegisterMcpServer {
+  constructor(
+    private readonly servers: IMcpServerRepository,
+    private readonly secrets: IMcpServerSecretStore,
+  ) {}
+
+  async execute(
+    input: {
+      label: string;
+      url: string;
+      transport?: McpTransport;
+      dataClassification?: McpDataClassification;
+      verbatimOnly?: boolean;
+      callTimeoutMs?: number;
+      createdByUserId?: string | null;
+    } & McpServerSecretsInput,
+  ): Promise<Result<McpServer>> {
     const label = input.label.trim();
     const url = input.url.trim();
     if (label.length === 0) {
@@ -37,52 +95,69 @@ export class RegisterMcpServer {
     if (!isHttpUrl(url)) {
       return err(domainError("VALIDATION_FAILED", "Server URL must be a valid http(s) URL."));
     }
-    const credentialRef = input.credentialRef?.trim() ? input.credentialRef.trim() : null;
-    if (credentialRef !== null && !isValidMcpCredentialRef(credentialRef)) {
-      return err(credentialRefError);
+    if (input.callTimeoutMs !== undefined && !isValidMcpCallTimeout(input.callTimeoutMs)) {
+      return err(timeoutError);
     }
-    return this.servers.create({
+    const secretsPatch = buildSecretsPatch(input, false);
+    if (secretsPatch.error) return err(secretsPatch.error);
+
+    const created = await this.servers.create({
       label,
       url,
       transport: input.transport,
-      communicatesExternally: input.communicatesExternally,
+      dataClassification: input.dataClassification,
       verbatimOnly: input.verbatimOnly,
-      credentialRef,
+      callTimeoutMs: input.callTimeoutMs,
       createdByUserId: input.createdByUserId ?? null,
     });
+    if (created.error || !hasSecretChanges(secretsPatch.data)) return created;
+
+    const stored = await this.secrets.set(created.data.id, secretsPatch.data);
+    if (stored.error) return err(stored.error);
+    return reload(this.servers, created.data.id);
   }
 }
 
 export class UpdateMcpServer {
-  constructor(private readonly servers: IMcpServerRepository) {}
+  constructor(
+    private readonly servers: IMcpServerRepository,
+    private readonly secrets: IMcpServerSecretStore,
+  ) {}
 
-  async execute(input: {
-    id: string;
-    label?: string;
-    url?: string;
-    communicatesExternally?: boolean;
-    verbatimOnly?: boolean;
-    credentialRef?: string | null;
-  }): Promise<Result<McpServer>> {
+  async execute(
+    input: {
+      id: string;
+      label?: string;
+      url?: string;
+      dataClassification?: McpDataClassification;
+      verbatimOnly?: boolean;
+      callTimeoutMs?: number;
+    } & McpServerSecretsInput,
+  ): Promise<Result<McpServer>> {
     if (input.url !== undefined && !isHttpUrl(input.url.trim())) {
       return err(domainError("VALIDATION_FAILED", "Server URL must be a valid http(s) URL."));
     }
-    const credentialRef =
-      input.credentialRef === undefined
-        ? undefined
-        : input.credentialRef?.trim()
-          ? input.credentialRef.trim()
-          : null;
-    if (credentialRef && !isValidMcpCredentialRef(credentialRef)) {
-      return err(credentialRefError);
+    if (input.callTimeoutMs !== undefined && !isValidMcpCallTimeout(input.callTimeoutMs)) {
+      return err(timeoutError);
     }
-    return this.servers.update(input.id, {
+    const current = await reload(this.servers, input.id);
+    if (current.error) return current;
+
+    const secretsPatch = buildSecretsPatch(input, current.data.hasCredential);
+    if (secretsPatch.error) return err(secretsPatch.error);
+
+    const updated = await this.servers.update(input.id, {
       label: input.label?.trim(),
       url: input.url?.trim(),
-      communicatesExternally: input.communicatesExternally,
+      dataClassification: input.dataClassification,
       verbatimOnly: input.verbatimOnly,
-      credentialRef,
+      callTimeoutMs: input.callTimeoutMs,
     });
+    if (updated.error || !hasSecretChanges(secretsPatch.data)) return updated;
+
+    const stored = await this.secrets.set(input.id, secretsPatch.data);
+    if (stored.error) return err(stored.error);
+    return reload(this.servers, input.id);
   }
 }
 
@@ -125,20 +200,62 @@ export interface TestMcpServerOutput {
 
 // Connection test: resolves the server and lists its tools. Surfaces a typed
 // error rather than throwing so the admin UI can show why a server is unreachable.
+// A successful listing also refreshes the tool cache — it is the same answer.
 export class TestMcpServer {
   constructor(
     private readonly servers: IMcpServerRepository,
     private readonly client: IMcpClient,
+    private readonly tools: IMcpToolRepository,
   ) {}
 
   async execute(id: string): Promise<Result<TestMcpServerOutput>> {
-    const found = await this.servers.findById(id);
-    if (found.error) return err(found.error);
-    if (!found.data) return err(domainError("NOT_FOUND", "MCP server not found."));
+    const server = await reload(this.servers, id);
+    if (server.error) return err(server.error);
 
-    const tools = await this.client.listTools(found.data);
-    if (tools.error) return err(tools.error);
-    return ok({ toolCount: tools.data.length, tools: tools.data });
+    const listed = await this.client.listTools(server.data);
+    if (listed.error) return err(listed.error);
+    await this.tools.replaceForServer(id, listed.data);
+    return ok({ toolCount: listed.data.length, tools: listed.data });
+  }
+}
+
+// Re-reads a server's tools into the `admin_mcp_tools` cache (ADR-062 §5).
+export class RefreshMcpTools {
+  constructor(
+    private readonly servers: IMcpServerRepository,
+    private readonly client: IMcpClient,
+    private readonly tools: IMcpToolRepository,
+  ) {}
+
+  async execute(serverId: string): Promise<Result<CachedMcpTool[]>> {
+    const server = await reload(this.servers, serverId);
+    if (server.error) return err(server.error);
+
+    const listed = await this.client.listTools(server.data);
+    if (listed.error) return err(listed.error);
+    return this.tools.replaceForServer(serverId, listed.data);
+  }
+}
+
+export class ListMcpTools {
+  constructor(private readonly tools: IMcpToolRepository) {}
+
+  async execute(serverId: string): Promise<Result<CachedMcpTool[]>> {
+    return this.tools.listByServer(serverId);
+  }
+}
+
+export class UpdateMcpToolSettings {
+  constructor(private readonly tools: IMcpToolRepository) {}
+
+  async execute(input: {
+    serverId: string;
+    toolName: string;
+    settings: McpToolSettings;
+  }): Promise<Result<CachedMcpTool>> {
+    const validated = validateMcpToolSettings(input.settings);
+    if (validated.error) return err(validated.error);
+    return this.tools.updateSettings(input.serverId, input.toolName, validated.data);
   }
 }
 
@@ -178,9 +295,9 @@ export class ResolveStepTools {
 
     for (const ref of refs) {
       const server = activeById.get(ref.serverId);
-      // Externally-communicating servers are not usable in flows at this stage —
+      // A server that sends records out is never usable in a flow (ADR-062 §1) —
       // drop the ref so a reclassified server can never reach the tool-loop.
-      if (!server || server.communicatesExternally) continue;
+      if (!server || !isFlowUsableClassification(server.dataClassification)) continue;
       keptRefs.push(ref);
       usedServers.set(server.id, server);
     }

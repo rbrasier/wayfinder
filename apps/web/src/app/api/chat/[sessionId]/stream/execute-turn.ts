@@ -6,6 +6,7 @@ import type {
   ConversationalNodeConfig,
   Flow,
   FlowNode,
+  NumberedCitation,
   PromptUserProfile,
   ResolvedDocumentGenerationBudget,
   Session,
@@ -17,6 +18,7 @@ import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@wayf
 import type { Container } from "@/lib/container";
 import { shouldComputeBranchChoice } from "./branch-gate";
 import { countGateHoldsOnNode } from "./gate-holds";
+import { citedSourcesFor } from "./mcp-turn-helpers";
 import type { ModelMessage } from "./model-messages";
 import { shouldEvaluateStepReadiness } from "./readiness-gate";
 import { streamTurn } from "./stream-turn";
@@ -75,6 +77,9 @@ export interface ExecuteTurnInput {
   isAdmin: boolean;
   // The raw text the user typed (the persisted user message; used for the title).
   lastUserMessage: string;
+  // The source records the tool pre-pass showed the model, by marker; the reply's
+  // markers resolve against these into the turn's citations (ADR-062 §6).
+  numberedCitations: NumberedCitation[];
 }
 
 // The chat turn's business orchestration, extracted verbatim from the stream
@@ -166,6 +171,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     rationale: turnResult.rationale,
     stepCompleteConfidence: turnResult.stepCompleteConfidence,
     contextGathered: turnResult.contextGathered,
+    citations: citedSourcesFor(turnResult.response, input.numberedCitations),
   };
 
   writer.writeAnnotation({

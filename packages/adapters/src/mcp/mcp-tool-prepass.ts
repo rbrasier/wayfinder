@@ -1,20 +1,25 @@
 import {
   domainError,
+  EMPTY_MCP_TOOL_SETTINGS,
   err,
+  mcpToolDisplayTitle,
   ok,
+  startToolProgress,
+  type CachedMcpTool,
+  type IMcpClient,
+  type IMcpToolRepository,
+  type IntervalScheduler,
+  type IUsageRepository,
+  type McpCallContext,
   type McpServer,
+  type McpTool,
+  type McpToolCallOutput,
   type McpToolCallRecord,
   type ProviderName,
-  type IUsageRepository,
   type Result,
+  type SessionToolProgressEvent,
 } from "@wayfinder/domain";
-import {
-  experimental_createMCPClient,
-  generateText,
-  type LanguageModelV1,
-  type ToolSet,
-} from "ai";
-import { buildMcpTransport } from "./ai-sdk-mcp-client";
+import { generateText, jsonSchema, tool, type LanguageModelV1, type ToolSet } from "ai";
 import { recordTokenUsage } from "../observability/usage-tracking-adapter";
 import type { QuotaEnforcer } from "../observability/quota-enforcing-adapter";
 
@@ -32,14 +37,14 @@ export interface McpToolPrepassInput {
   // never assembled into the toolset).
   allowedToolNamesByServer: Record<string, string[]>;
   maxSteps?: number;
-  // Whole-pre-pass wall-clock budget. A hung MCP server must not hold the turn
-  // lease open indefinitely, so the tool loop is aborted past this deadline.
-  timeoutMs?: number;
   userId?: string | null;
   flowId?: string | null;
   sessionId?: string | null;
+  nodeId?: string | null;
   // Usage-record label; defaults to the pre-pass purpose.
   purpose?: string;
+  // Fires as each call starts, pages, heartbeats and ends (ADR-062 §4).
+  onToolProgress?: (event: SessionToolProgressEvent) => void;
 }
 
 export interface McpToolPrepassResult {
@@ -47,45 +52,46 @@ export interface McpToolPrepassResult {
   // structured turn's context.
   summary: string;
   toolCallCount: number;
-  // Structured record of every call for the audit trail (ADR-032).
+  // Structured record of every call, kept on the turn for review and for later
+  // turns to re-read.
   toolCalls: McpToolCallRecord[];
 }
 
-// Default whole-pre-pass budget. The tool loop can make several sequential model
-// + tool round-trips, so this is generous relative to a single node call.
-const DEFAULT_PREPASS_TIMEOUT_MS = 15_000;
+const DEFAULT_MAX_STEPS = 4;
+// The whole pre-pass, every model step and tool call included, never holds the
+// turn longer than this.
+const PREPASS_MAX_BUDGET_MS = 120_000;
+// The record keeps a tool's whole result up to this ceiling, and marks a cut
+// past it — later turns re-read the record, so a silent cut here would be a
+// silent cut in everything that follows (ADR-062 §7).
+export const PREPASS_RESULT_MAX_CHARS = 200_000;
+// Arguments are capped on the turn; the audit log keeps them at a larger cap.
+const RECORD_ARGUMENTS_MAX_CHARS = 1_000;
 
-// Per-value cap on persisted call arguments/results so one large tool payload
-// can never bloat the stored turn.
-const AUDIT_ARGUMENTS_MAX_CHARS = 1_000;
-const AUDIT_RESULT_MAX_CHARS = 4_000;
+const intervalScheduler: IntervalScheduler = {
+  every: (intervalMs, run) => {
+    const timer = setInterval(run, intervalMs);
+    return () => clearInterval(timer);
+  },
+};
 
-const truncate = (value: string, max: number): string =>
-  value.length > max ? `${value.slice(0, max)}… [truncated]` : value;
+export const prepassBudgetMs = (servers: readonly McpServer[], maxSteps: number): number => {
+  const slowest = Math.max(0, ...servers.map((server) => server.callTimeoutMs));
+  return Math.min(maxSteps * slowest, PREPASS_MAX_BUDGET_MS);
+};
 
-// Deny-by-default tool selection. Exported for unit testing without a live
-// server (ADR-032 testing notes).
-export function selectAllowedTools(allTools: ToolSet, allowedNames: string[]): ToolSet {
+// Deny-by-default tool selection.
+export function selectAllowedTools<T extends Pick<McpTool, "name">>(listed: readonly T[], allowedNames: string[]): T[] {
   const allow = new Set(allowedNames);
-  const selected: ToolSet = {};
-  for (const [name, tool] of Object.entries(allTools)) {
-    if (allow.has(name)) selected[name] = tool;
-  }
-  return selected;
+  return listed.filter((entry) => allow.has(entry.name));
 }
 
 // Namespaced tool key. Two allowed servers can expose the same tool name; a flat
 // name-keyed toolset silently shadows one with the other, so every tool is keyed
-// by its server as well (refs are already (serverId, toolName)). Exported for
-// unit testing the collision rule.
+// by its server as well (refs are already (serverId, toolName)).
 export function prefixToolName(serverLabel: string, toolName: string): string {
   const slug = serverLabel.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "server";
   return `${slug}__${toolName}`;
-}
-
-interface ToolOrigin {
-  serverLabel: string;
-  toolName: string;
 }
 
 // Guards against two servers whose labels slug to the same prefix by suffixing a
@@ -97,18 +103,114 @@ function uniqueKey(base: string, taken: Set<string>): string {
   return `${base}_${suffix}`;
 }
 
-// The conversational tool-loop, run as a non-streaming pre-pass (ADR-032). It lets
-// the model call the step's allowed MCP tools, then returns the gathered text for
+const capArguments = (args: Record<string, unknown>): string => {
+  const text = JSON.stringify(args) ?? "{}";
+  return text.length > RECORD_ARGUMENTS_MAX_CHARS ? `${text.slice(0, RECORD_ARGUMENTS_MAX_CHARS)}… [truncated]` : text;
+};
+
+const failureText = (message: string): string => `The tool call failed: ${message}`;
+
+export interface CallOrigin {
+  serverId: string;
+  serverLabel: string;
+  toolName: string;
+}
+
+export const buildCallRecord = (
+  origin: CallOrigin,
+  args: Record<string, unknown>,
+  result: Result<McpToolCallOutput>,
+  now: () => Date = () => new Date(),
+): McpToolCallRecord => {
+  const text = result.error ? failureText(result.error.message) : result.data.output;
+  return {
+    ...origin,
+    arguments: capArguments(args),
+    result: text.slice(0, PREPASS_RESULT_MAX_CHARS),
+    truncated: text.length > PREPASS_RESULT_MAX_CHARS,
+    calledAt: now().toISOString(),
+    pagesFetched: result.data?.pagesFetched ?? 0,
+    sourceStatus: result.data?.sourceStatus ?? null,
+    citations: result.data?.citations ?? [],
+  };
+};
+
+export interface BuildPrepassToolsInput {
+  servers: readonly McpServer[];
+  toolsByServer: ReadonlyMap<string, readonly CachedMcpTool[]>;
+  allowedToolNamesByServer: Record<string, string[]>;
+  client: IMcpClient;
+  context: McpCallContext;
+  onToolProgress?: (event: SessionToolProgressEvent) => void;
+  scheduler?: IntervalScheduler;
+  now?: () => Date;
+}
+
+// Builds the model's toolset from the cached tool schemas. Every `execute` goes
+// through the (audited) MCP client with the tool's own settings, so pagination,
+// status mapping and citations apply here exactly as they do to an MCP node.
+export const buildPrepassTools = (input: BuildPrepassToolsInput): { tools: ToolSet; records: McpToolCallRecord[] } => {
+  const tools: ToolSet = {};
+  const records: McpToolCallRecord[] = [];
+  const takenKeys = new Set<string>();
+  const now = input.now ?? (() => new Date());
+
+  for (const server of input.servers) {
+    const allowed = input.allowedToolNamesByServer[server.id] ?? [];
+    const listed = input.toolsByServer.get(server.id) ?? [];
+    for (const cachedTool of selectAllowedTools(listed, allowed)) {
+      const key = uniqueKey(prefixToolName(server.label, cachedTool.name), takenKeys);
+      takenKeys.add(key);
+      const origin = { serverId: server.id, serverLabel: server.label, toolName: cachedTool.name };
+      tools[key] = tool({
+        description: cachedTool.description ?? mcpToolDisplayTitle(cachedTool),
+        parameters: jsonSchema<Record<string, unknown>>(
+          (cachedTool.inputSchema ?? { type: "object", properties: {} }) as Parameters<typeof jsonSchema>[0],
+        ),
+        execute: async (args: Record<string, unknown>, options: { toolCallId: string }) => {
+          const progress = startToolProgress({
+            callId: options.toolCallId,
+            toolTitle: mcpToolDisplayTitle(cachedTool),
+            serverLabel: server.label,
+            now: () => now().getTime(),
+            scheduler: input.scheduler ?? intervalScheduler,
+            emit: (event) => input.onToolProgress?.(event),
+          });
+          const result = await input.client.callTool(server, cachedTool.name, args, {
+            settings: {
+              pagination: cachedTool.pagination,
+              status: cachedTool.status,
+              citation: cachedTool.citation,
+            },
+            context: input.context,
+            onPage: progress.page,
+          });
+          progress.stop();
+          records.push(buildCallRecord(origin, args, result, now));
+          return result.error ? failureText(result.error.message) : result.data.output;
+        },
+      });
+    }
+  }
+  return { tools, records };
+};
+
+const asCachedTools = (serverId: string, listed: McpTool[]): CachedMcpTool[] =>
+  listed.map((entry) => ({ ...entry, ...EMPTY_MCP_TOOL_SETTINGS, serverId, lastSyncedAt: new Date() }));
+
+// The conversational tool-loop, run as a non-streaming pre-pass. It lets the
+// model call the step's allowed MCP tools, then returns the gathered text for
 // the caller to fold into the structured turn's context — leaving the streaming
 // structured turn untouched. Runs through the governance building blocks the port
 // decorators use for direct-SDK calls: the quota check short-circuits a blocked
 // user before any spend, and token usage is recorded so the tokens are tracked
-// and count against caps. Live behaviour is a staging smoke test; tool selection,
-// name prefixing, and audit extraction are unit-tested.
+// and count against caps.
 export class McpToolPrepass {
   constructor(
     private readonly usageRepo: IUsageRepository,
     private readonly quotaEnforcer: QuotaEnforcer,
+    private readonly client: IMcpClient,
+    private readonly toolCache: IMcpToolRepository,
   ) {}
 
   async run(input: McpToolPrepassInput): Promise<Result<McpToolPrepassResult>> {
@@ -117,37 +219,38 @@ export class McpToolPrepass {
     const gate = await this.quotaEnforcer.check(input.userId);
     if (gate.error) return err(gate.error);
 
-    const clients: Awaited<ReturnType<typeof experimental_createMCPClient>>[] = [];
+    const maxSteps = input.maxSteps ?? DEFAULT_MAX_STEPS;
+    const usedServers = input.servers.filter((server) => (input.allowedToolNamesByServer[server.id] ?? []).length > 0);
+    const toolsByServer = new Map<string, CachedMcpTool[]>();
+    for (const server of usedServers) toolsByServer.set(server.id, await this.toolsFor(server));
+
+    const built = buildPrepassTools({
+      servers: usedServers,
+      toolsByServer,
+      allowedToolNamesByServer: input.allowedToolNamesByServer,
+      client: this.client,
+      context: {
+        actorId: input.userId ?? null,
+        sessionId: input.sessionId ?? null,
+        flowId: input.flowId ?? null,
+        nodeId: input.nodeId ?? null,
+        path: "prepass",
+      },
+      onToolProgress: input.onToolProgress,
+    });
+    if (Object.keys(built.tools).length === 0) {
+      return ok({ summary: "", toolCallCount: 0, toolCalls: [] });
+    }
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? DEFAULT_PREPASS_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), prepassBudgetMs(usedServers, maxSteps));
     try {
-      let tools: ToolSet = {};
-      const origins = new Map<string, ToolOrigin>();
-      const takenKeys = new Set<string>();
-      for (const server of input.servers) {
-        const allowed = input.allowedToolNamesByServer[server.id] ?? [];
-        if (allowed.length === 0) continue;
-        const client = await experimental_createMCPClient({ transport: buildMcpTransport(server) });
-        clients.push(client);
-        const serverTools = (await client.tools()) as ToolSet;
-        for (const [name, tool] of Object.entries(selectAllowedTools(serverTools, allowed))) {
-          const key = uniqueKey(prefixToolName(server.label, name), takenKeys);
-          takenKeys.add(key);
-          tools[key] = tool;
-          origins.set(key, { serverLabel: server.label, toolName: name });
-        }
-      }
-
-      if (Object.keys(tools).length === 0) {
-        return ok({ summary: "", toolCallCount: 0, toolCalls: [] });
-      }
-
       const result = await generateText({
         model: input.model,
         system: input.system,
         messages: input.messages,
-        tools,
-        maxSteps: input.maxSteps ?? 4,
+        tools: built.tools,
+        maxSteps,
         abortSignal: controller.signal,
       });
 
@@ -169,61 +272,25 @@ export class McpToolPrepass {
         },
       );
 
-      const toolCalls = extractToolCalls(result.steps, origins);
-      return ok({ summary: result.text.trim(), toolCallCount: toolCalls.length, toolCalls });
+      return ok({ summary: result.text.trim(), toolCallCount: built.records.length, toolCalls: built.records });
     } catch (cause) {
       return err(domainError("AGENT_FAILED", "MCP tool pre-pass failed.", cause));
     } finally {
       clearTimeout(timeout);
-      for (const client of clients) {
-        try {
-          await client.close();
-        } catch {
-          // best-effort close
-        }
-      }
     }
   }
-}
 
-interface StepLike {
-  toolCalls: { toolCallId: string; toolName: string; args: unknown }[];
-  toolResults: { toolCallId: string; result: unknown }[];
-}
-
-// Pairs each tool call with its result (by call id) into an audit record.
-// Exported for unit testing without a live model.
-export function extractToolCalls(
-  steps: readonly StepLike[],
-  origins: Map<string, { serverLabel: string; toolName: string }>,
-  now: () => Date = () => new Date(),
-): McpToolCallRecord[] {
-  const records: McpToolCallRecord[] = [];
-  for (const step of steps) {
-    const resultById = new Map(step.toolResults.map((entry) => [entry.toolCallId, entry.result]));
-    for (const call of step.toolCalls) {
-      const origin = origins.get(call.toolName);
-      const rawResult = resultById.get(call.toolCallId);
-      records.push({
-        serverLabel: origin?.serverLabel ?? "unknown",
-        toolName: origin?.toolName ?? call.toolName,
-        arguments: truncate(stringify(call.args), AUDIT_ARGUMENTS_MAX_CHARS),
-        result: rawResult === undefined ? "" : truncate(stringify(rawResult), AUDIT_RESULT_MAX_CHARS),
-        calledAt: now().toISOString(),
-      });
-    }
+  // The cache answers first; an empty cache falls back to a live listing, which
+  // is then cached so the next turn does not list again.
+  private async toolsFor(server: McpServer): Promise<CachedMcpTool[]> {
+    const cached = await this.toolCache.listByServer(server.id);
+    if (!cached.error && cached.data.length > 0) return cached.data;
+    const listed = await this.client.listTools(server);
+    if (listed.error) return [];
+    const stored = await this.toolCache.replaceForServer(server.id, listed.data);
+    return stored.error ? asCachedTools(server.id, listed.data) : stored.data;
   }
-  return records;
 }
-
-const stringify = (value: unknown): string => {
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return String(value);
-  }
-};
 
 interface AnthropicCacheMeta {
   cacheReadInputTokens?: number;

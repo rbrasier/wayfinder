@@ -1,4 +1,5 @@
 import type { FlowExportDependency, ResolvedFlowDependency } from "./flow-export";
+import { isFlowUsableClassification, type McpDataClassification } from "./mcp-server";
 
 // The local records a dependency can match, narrowed to what matching needs.
 // The caller lists only what is selectable in a flow — active skills, active
@@ -6,7 +7,7 @@ import type { FlowExportDependency, ResolvedFlowDependency } from "./flow-export
 // import.
 export interface DependencyCandidates {
   skills: { id: string; name: string }[];
-  servers: { id: string; label: string; communicatesExternally: boolean }[];
+  servers: { id: string; label: string; dataClassification: McpDataClassification }[];
 }
 
 export interface DependencyResolutionOutcome {
@@ -72,13 +73,12 @@ export const resolveFlowDependencies = (
       continue;
     }
 
-    // A server classified as communicating outside Wayfinder is not selectable
-    // in a flow (ADR-032), and `RunMcpNode` refuses one at execution time.
-    // Resolving to it would produce a flow that looks complete and fails on the
-    // first run.
-    if (server.communicatesExternally) {
+    // A server that sends records out is not selectable in a flow (ADR-062 §1),
+    // and `RunMcpNode` refuses one at execution time. Resolving to it would
+    // produce a flow that looks complete and fails on the first run.
+    if (!isFlowUsableClassification(server.dataClassification)) {
       warnings.push(
-        `The server labelled "${dependency.name}" communicates outside Wayfinder and cannot be used in a flow, so ${describeDependency(dependency)} was left unresolved.`,
+        `The server labelled "${dependency.name}" sends records outside Wayfinder and cannot be used in a flow, so ${describeDependency(dependency)} was left unresolved.`,
       );
       unresolved.push(dependency);
       continue;

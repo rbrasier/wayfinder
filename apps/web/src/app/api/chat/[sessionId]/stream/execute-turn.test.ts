@@ -97,6 +97,8 @@ const buildScenario = (options: {
   confidence?: number;
   evaluation?: Evaluation | null;
   quotaBlocked?: boolean;
+  reply?: string;
+  numberedCitations?: ExecuteTurnInput["numberedCitations"];
 } = {}) => {
   const confidence = options.confidence ?? 95;
   const session = {
@@ -128,7 +130,7 @@ const buildScenario = (options: {
     error: null,
   }));
   const evaluate = vi.fn(async () => ({ data: options.evaluation, error: null }));
-  const llm = fakeLlm("Here is the plan.", confidence);
+  const llm = fakeLlm(options.reply ?? "Here is the plan.", confidence);
 
   const container = {
     useCases: {
@@ -197,6 +199,7 @@ const buildScenario = (options: {
     userId: "user-1",
     isAdmin: false,
     lastUserMessage: "hi",
+    numberedCitations: options.numberedCitations ?? [],
   };
 
   return { input, container, writer, ops, texts, annotations, create, persistAssistantTurn, evaluate };
@@ -227,6 +230,32 @@ describe("executeTurn", () => {
     expect(scenario.ops).not.toContain("annotation:cross-checking");
     expect(scenario.evaluate).not.toHaveBeenCalled();
     expect(scenario.persistAssistantTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("stores the source records the reply cited on the assistant turn", async () => {
+    const citation = {
+      serverId: "mcp-1",
+      serverLabel: "Legislation",
+      toolName: "search",
+      locator: "act-1",
+      title: "Water Act",
+      url: "https://legislation.example/act-1",
+      recordedAt: null,
+    };
+    const scenario = buildScenario({
+      confidence: 40,
+      evaluation: null,
+      reply: "The Water Act [S1] applies.",
+      numberedCitations: [{ marker: "S1", citation }],
+    });
+
+    await executeTurn(scenario.input);
+
+    expect(scenario.persistAssistantTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiPayload: expect.objectContaining({ citations: [{ ...citation, marker: "S1" }] }),
+      }),
+    );
   });
 
   it("on a cross-check PASS, streams the pass note as a new bubble and persists it after the assistant turn", async () => {
