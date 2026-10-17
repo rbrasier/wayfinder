@@ -1,6 +1,5 @@
 "use client";
 
-import { MAX_ANALYSE_DOCUMENTS } from "@wayfinder/domain";
 import { Loader2 } from "lucide-react";
 import { InlineStepper } from "./editor-cards-controls";
 import { resolveAnalysisState } from "./extraction-editor-model";
@@ -84,11 +83,14 @@ export function AnalyseControls({
   onAutoAnalyseChange,
   sampleSize,
   onSampleSizeChange,
+  maxSampleSize,
 }: {
   autoAnalyse: boolean;
   onAutoAnalyseChange: (value: boolean) => void;
   sampleSize: number;
   onSampleSizeChange: (value: number) => void;
+  // The admin-configured Auto Analyse ceiling the server validates against.
+  maxSampleSize: number;
 }) {
   return (
     <div className="flex items-center gap-2.5">
@@ -96,7 +98,7 @@ export function AnalyseControls({
         id="analyse-sample-size"
         value={sampleSize}
         min={1}
-        max={MAX_ANALYSE_DOCUMENTS}
+        max={maxSampleSize}
         onChange={onSampleSizeChange}
         formatLabel={(count) => `reads ${count} ${count === 1 ? "doc" : "docs"}`}
         title="How many uploaded documents the AI reads when drafting fields. More documents means a wider field set, at higher cost."

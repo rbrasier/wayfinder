@@ -1,4 +1,5 @@
 import {
+  DEFAULT_SUMMARY_RECORD_CAP,
   fieldCompleteness,
   ok,
   runCompleteness,
@@ -25,6 +26,9 @@ export interface GenerateRunDocumentsInput {
   // The AI-composed summary narrative is a metered call and is skipped once the
   // run has reached this ceiling (phase §5 — summary-document cost).
   costCeilingUsd: number;
+  // How many records the narrative reads, from the admin ExtractionConfig
+  // (issue #335); the code default when omitted.
+  summaryRecordCap?: number;
 }
 
 export interface GenerateRunDocumentsOutput {
@@ -190,8 +194,9 @@ export class GenerateRunDocuments {
   ): Promise<string> {
     if (wouldExceedCostCeiling(run, input.costCeilingUsd)) return "";
 
+    const cap = input.summaryRecordCap ?? DEFAULT_SUMMARY_RECORD_CAP;
     const digest = records
-      .slice(0, 50)
+      .slice(0, cap)
       .map((record) => {
         const values = record.fields.map((field) => `${field.key}=${field.value || "—"}`).join("; ");
         return `- ${record.label}: ${values}`;
@@ -208,7 +213,12 @@ export class GenerateRunDocuments {
       prompt: `Instruction: ${schema.output.instruction || "Summarise the extracted records."}\n\nRecords:\n${digest}`,
     });
 
-    return result.error ? "" : result.data.text.trim();
+    if (result.error) return "";
+    // Said in the summary itself, not only the UI, because the narrative is the
+    // part a reader quotes onward without the record counts beside it.
+    const coverage =
+      records.length > cap ? `Based on the first ${cap} of ${records.length} records.\n\n` : "";
+    return `${coverage}${result.data.text.trim()}`;
   }
 
   private summaryMarkdown(

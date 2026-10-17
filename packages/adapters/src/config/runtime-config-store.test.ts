@@ -3,8 +3,12 @@ import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
   DEFAULT_SESSION_POLICY,
+  DEFAULT_SUMMARY_RECORD_CAP,
   DIRECTORY_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
+  EXTRACTION_CONFIG_SETTING_KEY,
+  MAX_ANALYSE_DOCUMENTS,
+  SAMPLE_MAX_DOCUMENTS,
   SITE_BANNER_MAX_TEXT_SIZE_PT,
   createDefaultChatDisclaimerConfig,
   createDefaultDirectoryConfig,
@@ -22,6 +26,7 @@ import { DOCUMENT_GENERATION_CONFIG_SETTING_KEY } from "@wayfinder/domain";
 import {
   AI_CONFIG_CACHE_TTL_MS,
   DEFAULT_DOCUMENT_GENERATION_CONFIG,
+  DEFAULT_EXTRACTION_CONFIG,
   DEFAULT_MODELS_FOR,
   RuntimeConfigStore,
   resolveContextWindow,
@@ -1166,5 +1171,86 @@ describe("RuntimeConfigStore — getDirectoryCredentials", () => {
       clientId: "email-client",
       clientSecret: "rotated-secret",
     });
+  });
+});
+
+describe("RuntimeConfigStore.getExtractionConfig — size limits (issue #335)", () => {
+  it("defaults every size limit to the value that was hardcoded before", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv());
+
+    const config = await store.getExtractionConfig();
+
+    expect(config).toMatchObject({
+      sampleMaxDocuments: SAMPLE_MAX_DOCUMENTS,
+      maxAnalyseDocuments: MAX_ANALYSE_DOCUMENTS,
+      summaryRecordCap: DEFAULT_SUMMARY_RECORD_CAP,
+      contextBudgetTokens: 100_000,
+      maxPromptTokens: 180_000,
+    });
+  });
+
+  it("keeps the defaults for a config stored before the size limits existed", async () => {
+    const stored = JSON.stringify({ ...DEFAULT_EXTRACTION_CONFIG, maxFilesPerRun: 20 });
+    const legacy = JSON.parse(stored) as Record<string, unknown>;
+    delete legacy.sampleMaxDocuments;
+    delete legacy.summaryRecordCap;
+    const store = new RuntimeConfigStore(makeRepo(JSON.stringify(legacy)), makeEnv());
+
+    const config = await store.getExtractionConfig();
+
+    expect(config.maxFilesPerRun).toBe(20);
+    expect(config.sampleMaxDocuments).toBe(SAMPLE_MAX_DOCUMENTS);
+    expect(config.summaryRecordCap).toBe(DEFAULT_SUMMARY_RECORD_CAP);
+  });
+
+  it("reads stored size limits and rejects non-positive ones field by field", async () => {
+    const stored = JSON.stringify({
+      ...DEFAULT_EXTRACTION_CONFIG,
+      sampleMaxDocuments: 8,
+      maxAnalyseDocuments: 0,
+      summaryRecordCap: 200,
+      contextBudgetTokens: 50_000,
+      maxPromptTokens: -1,
+    });
+    const store = new RuntimeConfigStore(makeRepo(stored), makeEnv());
+
+    const config = await store.getExtractionConfig();
+
+    expect(config.sampleMaxDocuments).toBe(8);
+    expect(config.maxAnalyseDocuments).toBe(MAX_ANALYSE_DOCUMENTS);
+    expect(config.summaryRecordCap).toBe(200);
+    expect(config.contextBudgetTokens).toBe(50_000);
+    expect(config.maxPromptTokens).toBe(180_000);
+  });
+});
+
+describe("RuntimeConfigStore.resolveExtractionPromptBudget", () => {
+  it("converts the context budget to characters and carries the chat model's window", async () => {
+    const store = new RuntimeConfigStore(makeRepo(null), makeEnv({ provider: "anthropic" }));
+
+    const budget = await store.resolveExtractionPromptBudget();
+
+    expect(budget).toEqual({
+      contextBudgetChars: 400_000,
+      maxPromptTokens: 180_000,
+      contextWindowTokens: 1_000_000,
+    });
+  });
+
+  it("resolves the window from the configured provider's chat model", async () => {
+    const store = new RuntimeConfigStore(
+      makeKeyedRepo({
+        [EXTRACTION_CONFIG_SETTING_KEY]: JSON.stringify({
+          ...DEFAULT_EXTRACTION_CONFIG,
+          maxPromptTokens: 500_000,
+        }),
+      }),
+      makeEnv({ provider: "openai" }),
+    );
+
+    const budget = await store.resolveExtractionPromptBudget();
+
+    expect(budget.maxPromptTokens).toBe(500_000);
+    expect(budget.contextWindowTokens).toBe(128_000);
   });
 });

@@ -7,6 +7,9 @@ import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
   DEFAULT_SIEM_CONFIG,
+  DEFAULT_SUMMARY_RECORD_CAP,
+  MAX_ANALYSE_DOCUMENTS,
+  SAMPLE_MAX_DOCUMENTS,
   DEFAULT_USAGE_LIMITS_CONFIG,
   SIEM_CONFIG_SETTING_KEY,
   parseSiemConfig,
@@ -244,10 +247,20 @@ export const DEFAULT_EXTRACTION_CONFIG: ExtractionConfig = {
   maxArchiveEntryBytes: 25 * 1024 * 1024,
   maxArchiveTotalBytes: 500 * 1024 * 1024,
   perRunCostCeilingUsd: 0,
+  sampleMaxDocuments: SAMPLE_MAX_DOCUMENTS,
+  maxAnalyseDocuments: MAX_ANALYSE_DOCUMENTS,
+  summaryRecordCap: DEFAULT_SUMMARY_RECORD_CAP,
+  // Extraction shares document generation's defaults so the 400k-char context
+  // cut and the 180k-token guard it always meant to have stay where they were.
+  contextBudgetTokens: DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_TOKENS,
+  maxPromptTokens: DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
 };
 
 export const isNonNegativeNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+const positiveIntegerOr = (value: unknown, fallback: number): number =>
+  isPositiveInteger(value) ? value : fallback;
 
 export const parseExtractionConfig = (raw: string, fallback: ExtractionConfig): ExtractionConfig => {
   try {
@@ -269,6 +282,11 @@ export const parseExtractionConfig = (raw: string, fallback: ExtractionConfig): 
       perRunCostCeilingUsd: isNonNegativeNumber(parsed.perRunCostCeilingUsd)
         ? parsed.perRunCostCeilingUsd
         : fallback.perRunCostCeilingUsd,
+      sampleMaxDocuments: positiveIntegerOr(parsed.sampleMaxDocuments, fallback.sampleMaxDocuments),
+      maxAnalyseDocuments: positiveIntegerOr(parsed.maxAnalyseDocuments, fallback.maxAnalyseDocuments),
+      summaryRecordCap: positiveIntegerOr(parsed.summaryRecordCap, fallback.summaryRecordCap),
+      contextBudgetTokens: positiveIntegerOr(parsed.contextBudgetTokens, fallback.contextBudgetTokens),
+      maxPromptTokens: positiveIntegerOr(parsed.maxPromptTokens, fallback.maxPromptTokens),
     };
   } catch {
     return fallback;

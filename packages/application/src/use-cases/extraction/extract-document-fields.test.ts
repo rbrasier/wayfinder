@@ -5,6 +5,7 @@ import type { ExtractionResultData } from "@wayfinder/shared";
 import {
   extractDocumentFields,
   extractionOutputBudget,
+  extractionPromptCeiling,
   UNREADABLE_RATIONALE,
 } from "./extract-document-fields";
 
@@ -642,5 +643,213 @@ describe("extractionOutputBudget", () => {
 
   it("raises the budget above the 4096 default for a 13-field schema", () => {
     expect(extractionOutputBudget(13)).toBeGreaterThan(4096);
+  });
+});
+
+describe("extractDocumentFields — documents larger than one call (issue #335)", () => {
+  const budget = (maxPromptTokens: number, contextBudgetChars = 400_000) => ({
+    contextBudgetChars,
+    maxPromptTokens,
+    contextWindowTokens: 1_000_000,
+  });
+
+  // ~200k characters of feed entries — far beyond a 30k-token ceiling.
+  const longFeed = Array.from({ length: 2000 }, (_, index) => `Entry ${index}: ${"reading ".repeat(10)}`).join("\n\n");
+
+  const callPromptTokens = (model: ILanguageModel): number[] =>
+    (model.generateObject as ReturnType<typeof vi.fn>).mock.calls.map(([call]) =>
+      Math.ceil((call.system.length + call.prompt.length) / 4),
+    );
+
+  it("makes exactly one call when the prompt fits the ceiling", async () => {
+    const model = makeModel({ supplier_name: { value: "Acme", confidence: 80, rationale: "x" } });
+
+    await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.txt", text: "Acme Ltd" }],
+      contextDocs: [],
+      instruction: "",
+      budget: budget(30_000),
+    });
+
+    expect(model.generateObject).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads an oversized document in parts, each within the ceiling", async () => {
+    const model = makeModel({ supplier_name: { value: "", confidence: 0, rationale: "absent" } });
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Feed",
+      documentTexts: [{ documentId: "doc-feed", filename: "feed.txt", text: longFeed }],
+      contextDocs: [],
+      instruction: "",
+      budget: budget(30_000),
+    });
+
+    expect(result.error).toBeUndefined();
+    const prompts = callPromptTokens(model);
+    expect(prompts.length).toBeGreaterThan(1);
+    for (const tokens of prompts) {
+      expect(tokens).toBeLessThanOrEqual(30_000);
+    }
+    const firstPrompt = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0].prompt;
+    expect(firstPrompt).toMatch(new RegExp(`part 1 of ${prompts.length}`, "i"));
+  });
+
+  it("keeps the higher-confidence answer across parts and says which part it came from", async () => {
+    const replies = [
+      { supplier_name: { value: "Acme", confidence: 55, rationale: "Mentioned in passing." } },
+      { supplier_name: { value: "Acme Holdings Ltd", confidence: 92, rationale: "Signature block." } },
+    ];
+    let callIndex = 0;
+    const model = {
+      provider: "anthropic",
+      generateObject: vi.fn().mockImplementation(() =>
+        Promise.resolve(ok({ object: replies[Math.min(callIndex++, 1)] ?? replies[1], usage })),
+      ),
+      generateText: vi.fn(),
+      streamText: vi.fn(),
+      streamObject: vi.fn(),
+    } as unknown as ILanguageModel;
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Feed",
+      documentTexts: [{ documentId: "doc-feed", filename: "feed.txt", text: longFeed }],
+      contextDocs: [],
+      instruction: "",
+      budget: budget(30_000),
+    });
+
+    const partCount = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(result.data![0]).toMatchObject({ value: "Acme Holdings Ltd", confidence: 0.92 });
+    expect(result.data![0]!.rationale).toBe(`[Part 2 of ${partCount}] Signature block.`);
+  });
+
+  it("sends the flow context material with every part, so no part is read without it", async () => {
+    const model = makeModel({ supplier_name: { value: "", confidence: 0, rationale: "absent" } });
+    const context = {
+      id: "ctx-1",
+      filename: "glossary.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 1,
+      storagePath: "ctx/glossary.pdf",
+      extractedText: "GLOSSARY: a supplier is the party named on the cover page.",
+      extractionStatus: "complete" as const,
+    };
+
+    await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Feed",
+      documentTexts: [{ documentId: "doc-feed", filename: "feed.txt", text: longFeed }],
+      contextDocs: [context],
+      instruction: "",
+      budget: budget(30_000),
+    });
+
+    const calls = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls.length).toBeGreaterThan(1);
+    for (const [call] of calls) {
+      expect(call.system).toContain("[glossary.pdf]");
+      expect(call.system).toContain(context.extractedText);
+    }
+  });
+
+  it("sizes each part by the context material as well as the document, so more context means more parts", async () => {
+    const contextOf = (chars: number) => ({
+      id: "ctx-1",
+      filename: "manual.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 1,
+      storagePath: "ctx/manual.pdf",
+      extractedText: "m".repeat(chars),
+      extractionStatus: "complete" as const,
+    });
+    const callsWith = async (contextChars: number): Promise<number[]> => {
+      const model = makeModel({ supplier_name: { value: "", confidence: 0, rationale: "absent" } });
+      await extractDocumentFields(model, {
+        fields: [supplierName],
+        recordLabel: "Feed",
+        documentTexts: [{ documentId: "doc-feed", filename: "feed.txt", text: longFeed }],
+        contextDocs: [contextOf(contextChars)],
+        instruction: "",
+        budget: budget(30_000),
+      });
+      return callPromptTokens(model);
+    };
+
+    const lightContext = await callsWith(1_000);
+    const heavyContext = await callsWith(60_000);
+
+    expect(heavyContext.length).toBeGreaterThan(lightContext.length);
+    for (const tokens of [...lightContext, ...heavyContext]) expect(tokens).toBeLessThanOrEqual(30_000);
+  });
+
+  it("refuses without calling the model when the instructions and context alone fill the ceiling", async () => {
+    const model = makeModel({ supplier_name: { value: "Acme", confidence: 80, rationale: "x" } });
+    const hugeContext = {
+      id: "ctx-1",
+      filename: "manual.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 1,
+      storagePath: "ctx/manual.pdf",
+      extractedText: "policy ".repeat(40_000),
+      extractionStatus: "complete" as const,
+    };
+
+    const result = await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.txt", text: "Acme Ltd" }],
+      contextDocs: [hugeContext],
+      instruction: "",
+      budget: budget(30_000),
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toMatch(/context material/i);
+    expect(model.generateObject).not.toHaveBeenCalled();
+  });
+
+  it("cuts the flow context material to the configured budget", async () => {
+    const model = makeModel({ supplier_name: { value: "Acme", confidence: 80, rationale: "x" } });
+    const context = {
+      id: "ctx-1",
+      filename: "manual.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 1,
+      storagePath: "ctx/manual.pdf",
+      extractedText: "A".repeat(5_000),
+      extractionStatus: "complete" as const,
+    };
+
+    await extractDocumentFields(model, {
+      fields: [supplierName],
+      recordLabel: "Acme",
+      documentTexts: [{ documentId: "doc-a", filename: "a.txt", text: "Acme Ltd" }],
+      contextDocs: [context],
+      instruction: "",
+      budget: budget(180_000, 1_000),
+    });
+
+    const system = (model.generateObject as ReturnType<typeof vi.fn>).mock.calls[0]![0].system as string;
+    expect(system).toContain("A".repeat(1_000));
+    expect(system).not.toContain("A".repeat(1_001));
+  });
+});
+
+describe("extractionPromptCeiling", () => {
+  it("is the admin ceiling when the window has room for it and the reply", () => {
+    expect(
+      extractionPromptCeiling({ contextBudgetChars: 0, maxPromptTokens: 180_000, contextWindowTokens: 1_000_000 }, 1),
+    ).toBe(180_000);
+  });
+
+  it("is the window less the reply when the window is the tighter limit", () => {
+    expect(
+      extractionPromptCeiling({ contextBudgetChars: 0, maxPromptTokens: 180_000, contextWindowTokens: 128_000 }, 1),
+    ).toBe(128_000 - extractionOutputBudget(1));
   });
 });

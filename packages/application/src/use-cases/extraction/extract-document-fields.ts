@@ -1,9 +1,13 @@
 import {
   applyConfidenceFloor,
+  domainError,
+  err,
+  mergeFieldResults,
   ok,
   verifyVerbatim,
   type ExtractionField,
   type ExtractionFieldResult,
+  type ExtractionPromptBudget,
   type FieldSourceRef,
   type FlowContextDoc,
   type ILanguageModel,
@@ -11,11 +15,16 @@ import {
 } from "@wayfinder/domain";
 import {
   buildExtractionResultSchema,
+  DOCUMENT_GENERATION_CHARS_PER_TOKEN,
+  DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_TOKENS,
+  DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
   type ExtractionFieldResultData,
   type ExtractionResultData,
 } from "@wayfinder/shared";
+import { estimateTokens } from "../document/structured-fields";
 import { buildExtractionSystemPrompt } from "./build-extraction-prompt";
 import { clampOutputBudget } from "./output-budget";
+import { splitDocumentText } from "./split-document-text";
 
 // Shown when a record's source documents carry no readable text (e.g. a scanned
 // PDF with no text layer). The value is left blank rather than letting the model
@@ -46,6 +55,9 @@ export interface ExtractDocumentFieldsInput {
   instruction: string;
   userId?: string | null;
   flowId?: string | null;
+  // Resolved from the admin ExtractionConfig against the extraction model
+  // (issue #335). Omitted means the code defaults with no window limit.
+  budget?: ExtractionPromptBudget;
 }
 
 const unreadableResults = (fields: ExtractionField[]): ExtractionFieldResult[] =>
@@ -148,11 +160,6 @@ const buildDocumentsSection = (
     )
     .join("\n");
 
-// Extracts one record's fields against the schema (phase §8). Empty-text records
-// are flagged unreadable up front (no model call). Otherwise the model returns
-// every field's value, a 0-100 confidence, and a rationale in one call; results
-// are mapped back in schema order, best-effort — a missing key becomes a blank,
-// zero-confidence result rather than failing the extraction.
 // Each field returns a value, a confidence, a rationale and often a quoted
 // source reference, so the reply grows with the field count rather than with
 // the length of the documents.
@@ -162,6 +169,133 @@ const REPLY_OVERHEAD_TOKENS = 1024;
 export const extractionOutputBudget = (fieldCount: number): number =>
   clampOutputBudget(REPLY_OVERHEAD_TOKENS + TOKENS_PER_FIELD * fieldCount);
 
+// Which slice of an oversized record one call reads (issue #335).
+interface DocumentPart {
+  index: number;
+  total: number;
+}
+
+// The reply has to fit in the model's window alongside the prompt; the admin
+// ceiling is a prompt-only guard, the same as document generation's.
+export const extractionPromptCeiling = (
+  budget: ExtractionPromptBudget,
+  fieldCount: number,
+): number =>
+  Math.min(budget.maxPromptTokens, budget.contextWindowTokens - extractionOutputBudget(fieldCount));
+
+// Below this much room for document text a split would need an unreasonable
+// number of calls, so the instructions themselves are what has to change.
+export const MIN_DOCUMENT_TOKENS_PER_PART = 1_000;
+
+// Room for a label line around each segment ("\n[name (n)]\n" plus a joining
+// newline), so a packed part never overshoots the space it was planned for.
+export const SEGMENT_LABEL_OVERHEAD_CHARS = 16;
+
+export const DEFAULT_PROMPT_BUDGET: ExtractionPromptBudget = {
+  contextBudgetChars: DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_TOKENS * DOCUMENT_GENERATION_CHARS_PER_TOKEN,
+  maxPromptTokens: DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
+  contextWindowTokens: Number.POSITIVE_INFINITY,
+};
+
+const TOO_LARGE_MESSAGE =
+  "The flow's instructions and context material alone exceed the model's limit, leaving no room for the documents. Trim the context material or raise the extraction limits.";
+
+const partNote = (part: DocumentPart | null): string =>
+  part
+    ? `\nThis is part ${part.index} of ${part.total} of the record's source documents, split because they are too long to read at once. Extract only what this part supports, and leave a field blank when this part does not contain it.`
+    : "";
+
+const buildUserPrompt = (
+  recordLabel: string,
+  keys: string[],
+  documentsSection: string,
+  part: DocumentPart | null,
+): string =>
+  [
+    `Extract the fields for the record "${recordLabel}".`,
+    `Return a JSON object whose keys are exactly: ${JSON.stringify(keys)}.`,
+    `For each key return { value, confidence (0-100), rationale }, plus sourceRef when you can point to where the value came from, following the extraction rules and field formats in your instructions.${partNote(part)}`,
+    `\nRecord source documents:\n${documentsSection}`,
+  ].join("\n");
+
+const segmentsOf = (documentTexts: RecordDocumentText[], maxChars: number): RecordDocumentText[] =>
+  documentTexts.flatMap((document) =>
+    splitDocumentText(document.text, maxChars - document.filename.length - SEGMENT_LABEL_OVERHEAD_CHARS).map(
+      (text) => ({ ...document, text }),
+    ),
+  );
+
+const segmentSize = (segment: RecordDocumentText): number =>
+  segment.filename.length + SEGMENT_LABEL_OVERHEAD_CHARS + segment.text.length;
+
+// Packs segments, in document order, into as few parts as fit `maxChars` each.
+const planParts = (documentTexts: RecordDocumentText[], maxChars: number): RecordDocumentText[][] => {
+  const parts: RecordDocumentText[][] = [];
+  let current: RecordDocumentText[] = [];
+  let used = 0;
+  for (const segment of segmentsOf(documentTexts, maxChars)) {
+    const size = segmentSize(segment);
+    if (current.length > 0 && used + size > maxChars) {
+      parts.push(current);
+      current = [];
+      used = 0;
+    }
+    current.push(segment);
+    used += size;
+  }
+  if (current.length > 0) parts.push(current);
+  return parts;
+};
+
+const labelWithPart = (results: ExtractionFieldResult[], part: DocumentPart): ExtractionFieldResult[] =>
+  results.map((result) => ({
+    ...result,
+    rationale: `[Part ${part.index} of ${part.total}] ${result.rationale}`,
+  }));
+
+// Extracts one record's fields against the schema (phase §8). Empty-text records
+// are flagged unreadable up front (no model call). Otherwise the model returns
+// every field's value, a 0-100 confidence, and a rationale; results are mapped
+// back in schema order, best-effort — a missing key becomes a blank,
+// zero-confidence result rather than failing the extraction. A record too large
+// for one call is read in parts and merged by ADR-033's many-per-record rule,
+// so the best-supported answer wins and an earlier part keeps a tie (issue #335).
+export interface DocumentRoomInput {
+  fields: ExtractionField[];
+  instruction: string;
+  contextDocs: FlowContextDoc[];
+  recordLabel: string;
+  budget: ExtractionPromptBudget;
+}
+
+interface CallSizing {
+  system: string;
+  roomTokens: number;
+}
+
+// The one sizing both the extraction call and the pre-run estimate use, so the
+// warning an author sees and the split a run makes cannot drift apart. The room
+// left for document text is what the ceiling leaves after the system prompt —
+// which carries the flow context material on every call, every part included —
+// so a heavier context makes each part smaller rather than being dropped.
+const sizeCall = (input: DocumentRoomInput): CallSizing => {
+  const keys = input.fields.map((field) => field.field.key);
+  const system = buildExtractionSystemPrompt({
+    fields: input.fields,
+    guidance: input.instruction,
+    contextDocs: input.contextDocs,
+    contextBudgetChars: input.budget.contextBudgetChars,
+  });
+  // Sized with a part note in place so a split call can never outgrow its plan.
+  const promptShell = buildUserPrompt(input.recordLabel, keys, "", { index: 1, total: 1 });
+  const roomTokens =
+    extractionPromptCeiling(input.budget, keys.length) - estimateTokens(system) - estimateTokens(promptShell);
+  return { system, roomTokens };
+};
+
+// Tokens left for document text in one extraction call.
+export const documentRoomTokens = (input: DocumentRoomInput): number => sizeCall(input).roomTokens;
+
 export const extractDocumentFields = async (
   languageModel: ILanguageModel,
   input: ExtractDocumentFieldsInput,
@@ -169,21 +303,46 @@ export const extractDocumentFields = async (
   const hasReadableText = input.documentTexts.some((document) => document.text.trim().length > 0);
   if (!hasReadableText) return ok(unreadableResults(input.fields));
 
+  const { system, roomTokens } = sizeCall({ ...input, budget: input.budget ?? DEFAULT_PROMPT_BUDGET });
+  if (roomTokens < MIN_DOCUMENT_TOKENS_PER_PART) {
+    return err(domainError("VALIDATION_FAILED", TOO_LARGE_MESSAGE));
+  }
+
+  const roomChars = roomTokens * DOCUMENT_GENERATION_CHARS_PER_TOKEN;
+  const wholeSection = buildDocumentsSection(input.documentTexts, documentLabels(input.documentTexts));
+  if (wholeSection.length <= roomChars) {
+    return extractPart(languageModel, input, system, input.documentTexts, null);
+  }
+
+  const parts = planParts(input.documentTexts, roomChars);
+  let merged: ExtractionFieldResult[] = [];
+  for (const [offset, documentTexts] of parts.entries()) {
+    const part = { index: offset + 1, total: parts.length };
+    const extracted = await extractPart(languageModel, input, system, documentTexts, part);
+    if (extracted.error) return extracted;
+    merged = mergeFieldResults(merged, labelWithPart(extracted.data, part));
+  }
+  return ok(merged);
+};
+
+// One model call over one set of document texts — the whole record, or one part
+// of it. Source references and verbatim checks resolve against this call's own
+// texts, which is what the model was shown.
+const extractPart = async (
+  languageModel: ILanguageModel,
+  input: ExtractDocumentFieldsInput,
+  system: string,
+  documentTexts: RecordDocumentText[],
+  part: DocumentPart | null,
+): Promise<Result<ExtractionFieldResult[]>> => {
   const keys = input.fields.map((field) => field.field.key);
-  const labelByDocumentId = documentLabels(input.documentTexts);
-
-  const prompt = [
-    `Extract the fields for the record "${input.recordLabel}".`,
-    `Return a JSON object whose keys are exactly: ${JSON.stringify(keys)}.`,
-    `For each key return { value, confidence (0-100), rationale }, plus sourceRef when you can point to where the value came from, following the extraction rules and field formats in your instructions.`,
-    `\nRecord source documents:\n${buildDocumentsSection(input.documentTexts, labelByDocumentId)}`,
-  ].join("\n");
-
-  const system = buildExtractionSystemPrompt({
-    fields: input.fields,
-    guidance: input.instruction,
-    contextDocs: input.contextDocs,
-  });
+  const labelByDocumentId = documentLabels(documentTexts);
+  const prompt = buildUserPrompt(
+    input.recordLabel,
+    keys,
+    buildDocumentsSection(documentTexts, labelByDocumentId),
+    part,
+  );
 
   const result = await languageModel.generateObject<ExtractionResultData>({
     purpose: "extractionFieldExtraction",
@@ -203,7 +362,7 @@ export const extractDocumentFields = async (
   // the model named, since one that verifies against a different document of the
   // record establishes nothing about where this value came from.
   const textByDocumentId = new Map(
-    input.documentTexts.map((document) => [document.documentId, document.text]),
+    documentTexts.map((document) => [document.documentId, document.text]),
   );
   const documentIdByLabel = invert(labelByDocumentId);
 

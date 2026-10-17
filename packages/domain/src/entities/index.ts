@@ -71,6 +71,7 @@ export * from "./effort";
 export * from "./field-report-view";
 export * from "./field-report-pivot";
 export * from "./system-setting";
+export * from "./run-fit";
 export * from "./runtime-config";
 export * from "./session-policy";
 export * from "./site-banner";

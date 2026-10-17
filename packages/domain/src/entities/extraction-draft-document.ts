@@ -10,6 +10,11 @@ export interface ExtractionDraftDocument {
   treePath: string;
   storageKey: string;
   mimeType: string;
+  // Characters of readable text, measured once at upload so the run setup can
+  // estimate size before anything is sent to a model (issue #335). 0 means no
+  // readable text; null means unknown — staged before this was recorded, or the
+  // extractor failed.
+  textLength: number | null;
 }
 
 export interface NewExtractionDraftDocument {
@@ -17,6 +22,7 @@ export interface NewExtractionDraftDocument {
   treePath: string;
   storageKey: string;
   mimeType: string;
+  textLength: number | null;
 }
 
 // A file the intake declined to stage, kept so the author is told what was left
