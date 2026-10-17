@@ -32,6 +32,11 @@ export const DEFAULT_MCP_CALL_TIMEOUT_MS = 30_000;
 export const MIN_MCP_CALL_TIMEOUT_MS = 1_000;
 export const MAX_MCP_CALL_TIMEOUT_MS = 120_000;
 
+// `callTimeoutMs` bounds each request; a paginated call makes one per page, so
+// the whole call — every page — is also capped, which is what lets a worker tell
+// a slow call from one whose worker died.
+export const MAX_MCP_CALL_TOTAL_MS = 600_000;
+
 export const isValidMcpCallTimeout = (timeoutMs: number): boolean =>
   Number.isInteger(timeoutMs) &&
   timeoutMs >= MIN_MCP_CALL_TIMEOUT_MS &&

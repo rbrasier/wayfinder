@@ -379,6 +379,20 @@
       "when": 1792178694441,
       "tag": "0053_admin_embedding_models",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1792205842739,
+      "tag": "0054_mcp_public_data_readers",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1792205853102,
+      "tag": "0055_mcp_drop_legacy_credentials",
+      "breakpoints": true
     }
   ]
 }

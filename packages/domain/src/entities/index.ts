@@ -100,6 +100,7 @@ export * from "./mcp-server";
 export * from "./mcp-tool-result";
 export * from "./mcp-call-job";
 export * from "./tool-citation";
+export * from "./tool-progress";
 export * from "./extraction-run";
 export * from "./extraction-document";
 export * from "./flow-observation";

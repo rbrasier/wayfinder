@@ -2,14 +2,16 @@ import {
   EMPTY_MCP_TOOL_SETTINGS,
   err,
   isFlowUsableClassification,
-  MAX_MCP_CALL_TIMEOUT_MS,
+  MAX_MCP_CALL_TOTAL_MS,
   mcpToolDisplayTitle,
   ok,
+  startToolProgress,
   type IFlowNodeRepository,
   type IMcpCallQueue,
   type IMcpClient,
   type IMcpServerRepository,
   type IMcpToolRepository,
+  type IntervalScheduler,
   type ISessionEventBus,
   type ISessionMessageRepository,
   type McpCallJob,
@@ -21,13 +23,9 @@ import {
 } from "@wayfinder/domain";
 import type { ApplyAutoNodeResult } from "../session/apply-auto-node-result";
 
-const DEFAULT_BATCH_SIZE = 5;
-// How often a still-running call re-announces itself, so the person waiting sees
-// the elapsed time move rather than a frozen label (ADR-062 §4).
-const PROGRESS_HEARTBEAT_MS = 5_000;
-// A running row older than the longest allowed call plus a grace period belongs
-// to a worker that died mid-call; nothing else will ever finish it.
-const STALE_AFTER_MS = MAX_MCP_CALL_TIMEOUT_MS + 60_000;
+// A running row older than the longest allowed call (every page) plus a grace
+// period belongs to a worker that died mid-call; nothing else will finish it.
+const STALE_AFTER_MS = MAX_MCP_CALL_TOTAL_MS + 60_000;
 
 export interface ExecuteQueuedMcpCallsDeps {
   queue: IMcpCallQueue;
@@ -39,12 +37,23 @@ export interface ExecuteQueuedMcpCallsDeps {
   sessionMessages: ISessionMessageRepository;
   sessionEvents: ISessionEventBus;
   clock?: { now(): Date };
-  batchSize?: number;
+  scheduler?: IntervalScheduler;
 }
 
+const intervalScheduler: IntervalScheduler = {
+  every: (intervalMs, run) => {
+    const timer = setInterval(run, intervalMs);
+    return () => clearInterval(timer);
+  },
+};
+
 export interface ExecuteQueuedMcpCallsOutput {
-  processed: number;
+  started: number;
   failedStale: number;
+  // Settles when every call started by this tick has finished. The tick itself
+  // returns as soon as the calls are under way, so one slow source never stops
+  // the worker claiming the next call.
+  completion: Promise<void>;
 }
 
 interface ToolDescriptor {
@@ -58,9 +67,9 @@ const STATUS_NOTES: Partial<Record<McpSourceStatus["kind"], string>> = {
 };
 
 // Drains the `job_mcp_calls` queue (ADR-062 §3): one tick fails calls a dead
-// worker abandoned, then claims a batch and runs it concurrently — each call
-// can take tens of seconds, so running them one after another would make the
-// last in the batch wait for all the others.
+// worker abandoned, then claims up to `limit` calls and starts them all at once —
+// each can take tens of seconds, so running them one after another would make
+// the last wait for all the others.
 export class ExecuteQueuedMcpCalls {
   private readonly clock: { now(): Date };
 
@@ -68,7 +77,7 @@ export class ExecuteQueuedMcpCalls {
     this.clock = deps.clock ?? { now: () => new Date() };
   }
 
-  async execute(): Promise<Result<ExecuteQueuedMcpCallsOutput>> {
+  async execute(input: { limit: number }): Promise<Result<ExecuteQueuedMcpCallsOutput>> {
     const staleBefore = new Date(this.clock.now().getTime() - STALE_AFTER_MS);
     const stale = await this.deps.queue.listStaleRunning(staleBefore);
     if (stale.error) return err(stale.error);
@@ -76,11 +85,12 @@ export class ExecuteQueuedMcpCalls {
       await this.fail(job, await this.nodeName(job), "the call did not finish");
     }
 
-    const claimed = await this.deps.queue.claimPending(this.deps.batchSize ?? DEFAULT_BATCH_SIZE);
+    if (input.limit <= 0) return ok({ started: 0, failedStale: stale.data.length, completion: Promise.resolve() });
+    const claimed = await this.deps.queue.claimPending(input.limit);
     if (claimed.error) return err(claimed.error);
-    await Promise.all(claimed.data.map((job) => this.run(job)));
+    const completion = Promise.all(claimed.data.map((job) => this.run(job))).then(() => undefined);
 
-    return ok({ processed: claimed.data.length, failedStale: stale.data.length });
+    return ok({ started: claimed.data.length, failedStale: stale.data.length, completion });
   }
 
   private async run(job: McpCallJob): Promise<void> {
@@ -92,7 +102,14 @@ export class ExecuteQueuedMcpCalls {
     }
 
     const tool = await this.toolDescriptor(job);
-    const progress = this.startProgress(job, server, tool.title);
+    const progress = startToolProgress({
+      callId: job.id,
+      toolTitle: tool.title,
+      serverLabel: server.label,
+      now: () => this.clock.now().getTime(),
+      scheduler: this.deps.scheduler ?? intervalScheduler,
+      emit: (event) => void this.publish(job.sessionId, event),
+    });
     const called = await this.deps.client.callTool(server, job.toolName, job.arguments, {
       settings: tool.settings,
       context: {
@@ -104,7 +121,7 @@ export class ExecuteQueuedMcpCalls {
       },
       onPage: progress.page,
     });
-    await progress.stop();
+    progress.stop();
 
     if (called.error) {
       await this.fail(job, nodeName, called.error.message);
@@ -155,35 +172,6 @@ export class ExecuteQueuedMcpCalls {
   private async nodeName(job: McpCallJob): Promise<string> {
     const found = await this.deps.flowNodes.findById(job.nodeId);
     return found.error || !found.data ? "MCP step" : found.data.name;
-  }
-
-  private startProgress(job: McpCallJob, server: McpServer, toolTitle: string) {
-    const startedAt = this.clock.now().getTime();
-    let currentPage = 1;
-    const publish = (state: "running" | "done") =>
-      this.publish(job.sessionId, {
-        type: "tool.progress",
-        callId: job.id,
-        toolTitle,
-        serverLabel: server.label,
-        page: currentPage,
-        elapsedMs: this.clock.now().getTime() - startedAt,
-        state,
-      });
-
-    publish("running");
-    const heartbeat = setInterval(() => publish("running"), PROGRESS_HEARTBEAT_MS);
-    return {
-      page: (page: number) => {
-        if (page <= currentPage) return;
-        currentPage = page;
-        publish("running");
-      },
-      stop: async () => {
-        clearInterval(heartbeat);
-        await publish("done");
-      },
-    };
   }
 
   // Clears the pending execution through the same path a failed n8n callback

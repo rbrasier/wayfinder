@@ -177,9 +177,11 @@ describe("ExecuteQueuedMcpCalls", () => {
   it("calls the tool with its settings and applies the result with its citations", async () => {
     const harness = build({});
 
-    const result = await harness.useCase.execute();
+    const result = await harness.useCase.execute({ limit: 5 });
+    await result.data?.completion;
 
-    expect(result.data).toEqual({ processed: 1, failedStale: 0 });
+    expect(result.data).toMatchObject({ started: 1, failedStale: 0 });
+    expect(harness.queue.claimPending).toHaveBeenCalledWith(5);
     expect(harness.client.callTool).toHaveBeenCalledWith(
       server,
       "search_tenders",
@@ -207,7 +209,7 @@ describe("ExecuteQueuedMcpCalls", () => {
   it("keeps a verbatim-only server's result verbatim", async () => {
     const harness = build({ serverRow: { ...server, verbatimOnly: true } });
 
-    await harness.useCase.execute();
+    await (await harness.useCase.execute({ limit: 5 })).data?.completion;
 
     expect(harness.applyResult.execute).toHaveBeenCalledWith(expect.objectContaining({ verbatim: true }));
   });
@@ -225,10 +227,10 @@ describe("ExecuteQueuedMcpCalls", () => {
     );
     const harness = build({ callTool });
 
-    const running = harness.useCase.execute();
+    const started = await harness.useCase.execute({ limit: 5 });
     await vi.advanceTimersByTimeAsync(11_000);
     finish(ok(output()));
-    await running;
+    await started.data?.completion;
 
     const progress = harness.events.filter((event) => event.type === "tool.progress");
     expect(progress.map((event) => event.type === "tool.progress" && [event.state, event.page, event.elapsedMs])).toEqual([
@@ -248,7 +250,7 @@ describe("ExecuteQueuedMcpCalls", () => {
       ),
     });
 
-    await harness.useCase.execute();
+    await (await harness.useCase.execute({ limit: 5 })).data?.completion;
 
     expect(harness.applyResult.execute).toHaveBeenCalledWith(expect.objectContaining({ status: "completed" }));
     expect(messageContents(harness.messages)).toEqual([
@@ -267,7 +269,7 @@ describe("ExecuteQueuedMcpCalls", () => {
       ),
     });
 
-    await harness.useCase.execute();
+    await (await harness.useCase.execute({ limit: 5 })).data?.completion;
 
     expect(harness.applyResult.execute).toHaveBeenCalledWith(
       expect.objectContaining({ status: "failed", correlationId: "corr-1" }),
@@ -283,7 +285,7 @@ describe("ExecuteQueuedMcpCalls", () => {
       callTool: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "MCP operation timed out after 30000ms"))),
     });
 
-    await harness.useCase.execute();
+    await (await harness.useCase.execute({ limit: 5 })).data?.completion;
 
     expect(harness.applyResult.execute).toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }));
     expect(harness.queue.markFailed).toHaveBeenCalledWith("job-1", "MCP operation timed out after 30000ms");
@@ -299,7 +301,7 @@ describe("ExecuteQueuedMcpCalls", () => {
     ]) {
       const harness = build({ serverRow });
 
-      await harness.useCase.execute();
+      await (await harness.useCase.execute({ limit: 5 })).data?.completion;
 
       expect(harness.client.callTool).not.toHaveBeenCalled();
       expect(harness.applyResult.execute).toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }));
@@ -310,12 +312,21 @@ describe("ExecuteQueuedMcpCalls", () => {
   it("fails calls a dead worker left running", async () => {
     const harness = build({ claimed: [], stale: [job({ id: "job-stale" })] });
 
-    const result = await harness.useCase.execute();
+    const result = await harness.useCase.execute({ limit: 5 });
 
-    expect(result.data).toEqual({ processed: 0, failedStale: 1 });
-    expect(harness.queue.listStaleRunning).toHaveBeenCalledWith(new Date(now.getTime() - 180_000));
+    expect(result.data).toMatchObject({ started: 0, failedStale: 1 });
+    expect(harness.queue.listStaleRunning).toHaveBeenCalledWith(new Date(now.getTime() - 660_000));
     expect(harness.queue.markFailed).toHaveBeenCalledWith("job-stale", "the call did not finish");
     expect(harness.applyResult.execute).toHaveBeenCalledWith(expect.objectContaining({ status: "failed" }));
+  });
+
+  it("claims nothing when the worker has no room", async () => {
+    const harness = build({});
+
+    const result = await harness.useCase.execute({ limit: 0 });
+
+    expect(result.data).toMatchObject({ started: 0 });
+    expect(harness.queue.claimPending).not.toHaveBeenCalled();
   });
 
   it("surfaces a queue failure", async () => {
@@ -324,7 +335,7 @@ describe("ExecuteQueuedMcpCalls", () => {
       err(domainError("INFRA_FAILURE", "db down")),
     );
 
-    const result = await harness.useCase.execute();
+    const result = await harness.useCase.execute({ limit: 5 });
 
     expect(result.error?.code).toBe("INFRA_FAILURE");
   });
