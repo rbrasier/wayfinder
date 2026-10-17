@@ -43,6 +43,36 @@ describe("session-event NOTIFY codec", () => {
   });
 });
 
+describe("tool.progress events", () => {
+  const event: SessionEvent = {
+    type: "tool.progress",
+    callId: "call-1",
+    toolTitle: "Search legislation",
+    serverLabel: "Legislation",
+    page: 2,
+    elapsedMs: 5000,
+    state: "running",
+  };
+
+  it("round-trips through the wire payload", () => {
+    expect(parseSessionNotifyPayload(toSessionNotifyPayload("s", event))).toEqual({ sessionId: "s", event });
+  });
+
+  it("rejects a progress event missing its fields or with an unknown state", () => {
+    const missingTitle = JSON.stringify({ sessionId: "s", event: { ...event, toolTitle: undefined } });
+    const badState = JSON.stringify({ sessionId: "s", event: { ...event, state: "paused" } });
+    const badPage = JSON.stringify({ sessionId: "s", event: { ...event, page: "2" } });
+
+    expect(parseSessionNotifyPayload(missingTitle)).toBeNull();
+    expect(parseSessionNotifyPayload(badState)).toBeNull();
+    expect(parseSessionNotifyPayload(badPage)).toBeNull();
+  });
+
+  it("never advances the replay cursor", () => {
+    expect(isDurableSessionEvent(event)).toBe(false);
+  });
+});
+
 describe("isDurableSessionEvent", () => {
   it("marks only message.created as advancing the replay cursor", () => {
     expect(isDurableSessionEvent({ type: "message.created", seq: 1 })).toBe(true);

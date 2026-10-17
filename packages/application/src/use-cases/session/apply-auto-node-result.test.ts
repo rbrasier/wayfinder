@@ -182,6 +182,61 @@ describe("ApplyAutoNodeResult", () => {
     expect(persisted.fields[0].value).toBe("  Acme \n");
   });
 
+  it("attaches the tool's source records to every field it captured", async () => {
+    const session = makeSession(pending());
+    const { repo: sessions } = makeSessions(session);
+    const stepOutputs = makeStepOutputs();
+    const citation = {
+      serverId: "mcp-1",
+      serverLabel: "Legislation",
+      toolName: "search_legislation",
+      locator: "act-1",
+      title: "Water Act",
+      url: "https://legislation.example/act-1",
+      recordedAt: "2026-01-02",
+    };
+
+    await new ApplyAutoNodeResult(
+      sessions,
+      makeNodes(),
+      makeEdges([edge("node-1", "node-2")]),
+      stepOutputs,
+    ).execute({
+      sessionId: "sess-1",
+      correlationId: "corr-1",
+      nodeId: "node-1",
+      status: "completed",
+      data: { vendor: "Acme" },
+      citations: [citation],
+    });
+
+    const persisted = (stepOutputs.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(persisted.fields[0].citations).toEqual([citation]);
+  });
+
+  it("adds no citations member when the result carried none", async () => {
+    const session = makeSession(pending());
+    const { repo: sessions } = makeSessions(session);
+    const stepOutputs = makeStepOutputs();
+
+    await new ApplyAutoNodeResult(
+      sessions,
+      makeNodes(),
+      makeEdges([edge("node-1", "node-2")]),
+      stepOutputs,
+    ).execute({
+      sessionId: "sess-1",
+      correlationId: "corr-1",
+      nodeId: "node-1",
+      status: "completed",
+      data: { vendor: "Acme" },
+      citations: [],
+    });
+
+    const persisted = (stepOutputs.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(persisted.fields[0]).not.toHaveProperty("citations");
+  });
+
   it("completes the session when the auto node has no outgoing edge", async () => {
     const session = makeSession(pending());
     const { repo: sessions, updates } = makeSessions(session);

@@ -1,12 +1,13 @@
 import {
   domainError,
   err,
+  isFlowUsableClassification,
   ok,
   verbatimTransformViolations,
   type Flow,
   type FlowNode,
   type ILanguageModel,
-  type IMcpClient,
+  type IMcpCallQueue,
   type IMcpServerRepository,
   type ISessionRepository,
   type ISessionStepOutputRepository,
@@ -27,18 +28,13 @@ export interface RunMcpNodeInput {
   userId: string;
 }
 
+// The call itself is queued (ADR-062 §3): the worker makes it and applies the
+// result — the tool's text under the `output` key, persisted verbatim when the
+// server is verbatim-only (ADR-053 §5) — so this turn never waits on the source.
 export interface RunMcpNodeOutput {
   correlationId: string;
-  status: NodeExecutionOutput["status"];
-  message?: string;
-  // The tool result is exposed under the `output` key, so a response field with
-  // key `output` captures it (ADR-032). Synchronous — always "completed" on success.
-  data: Record<string, unknown>;
-  // The connection is one an administrator marked verbatim-only, so the caller
-  // must persist `output` as the bytes it arrived as (ADR-053 §5). Carried on the
-  // result rather than re-read downstream: this is the only place that already
-  // holds the server row.
-  verbatim: boolean;
+  jobId: string;
+  status: Extract<NodeExecutionOutput["status"], "pending">;
 }
 
 export interface RunMcpNodeClock {
@@ -58,15 +54,15 @@ const buildTranscript = (messages: SessionMessage[]): string =>
     .join("\n\n")
     .slice(0, 8000);
 
-// A deterministic single-tool MCP call (ADR-032). Mirrors RunAutoNode: resolves
-// request fields, records a pending execution, calls the tool, and returns a
-// synchronous completion whose result the caller applies via ApplyAutoNodeResult.
+// A deterministic single-tool MCP call. Mirrors RunAutoNode: resolves request
+// fields, records a pending execution and queues the call; ExecuteQueuedMcpCalls
+// makes it and applies the result via ApplyAutoNodeResult (ADR-062 §3).
 export class RunMcpNode {
   constructor(
     private readonly sessions: ISessionRepository,
     private readonly languageModel: ILanguageModel,
     private readonly mcpServers: IMcpServerRepository,
-    private readonly mcpClient: IMcpClient,
+    private readonly mcpCallQueue: IMcpCallQueue,
     private readonly sessionStepOutputs: ISessionStepOutputRepository,
     private readonly clock: RunMcpNodeClock = defaultClock,
   ) {}
@@ -86,17 +82,17 @@ export class RunMcpNode {
     if (serverResult.data.status !== "active") {
       return err(domainError("VALIDATION_FAILED", "The MCP server for this step is disabled."));
     }
-    // Backstop: externally-communicating servers are not permitted in flows at
-    // this stage, even if an older node config still references one.
-    if (serverResult.data.communicatesExternally) {
+    // Backstop: a server that sends records out is never permitted in a flow
+    // (ADR-062 §1), even if an older node config still references one.
+    if (!isFlowUsableClassification(serverResult.data.dataClassification)) {
       return err(
-        domainError("VALIDATION_FAILED", "This MCP server communicates outside Wayfinder and cannot run in a flow."),
+        domainError("VALIDATION_FAILED", "This MCP server sends records outside Wayfinder and cannot run in a flow."),
       );
     }
     // Backstop for the publish-time gate: a verbatim-only connection may not be
     // run by a step whose response fields cannot return what the tool sent.
-    // Refused before the call so a governed source is never even queried by a
-    // step that would then reshape its answer.
+    // Refused before the call is queued so a governed source is never even queried
+    // by a step that would then reshape its answer.
     if (serverResult.data.verbatimOnly) {
       const violations = verbatimTransformViolations(config.responseFields ?? []);
       if (violations.length > 0) {
@@ -136,21 +132,24 @@ export class RunMcpNode {
     });
     if (recorded.error) return err(recorded.error);
 
-    const called = await this.mcpClient.callTool(serverResult.data, config.toolName, fieldsResult.data);
-    // The call is synchronous, so a failure leaves nothing for a callback to
-    // clear — ApplyAutoNodeResult only runs on the success path. Drop the pending
-    // entry here or it accumulates on the session forever.
-    if (called.error) {
+    const queued = await this.mcpCallQueue.enqueue({
+      sessionId: input.session.id,
+      flowId: input.flow.id,
+      nodeId: input.node.id,
+      correlationId,
+      serverId: serverResult.data.id,
+      toolName: config.toolName,
+      arguments: fieldsResult.data,
+      actorId: input.userId,
+    });
+    // Nothing will ever run a call that was never queued, so nothing would ever
+    // clear its pending entry. Drop it here or it holds the step forever.
+    if (queued.error) {
       await this.clearPending(input.session.id, correlationId);
-      return err(called.error);
+      return err(queued.error);
     }
 
-    return ok({
-      correlationId,
-      status: "completed",
-      data: { output: called.data.output },
-      verbatim: serverResult.data.verbatimOnly,
-    });
+    return ok({ correlationId, jobId: queued.data.id, status: "pending" });
   }
 
   // Best-effort removal of a single pending execution. Re-reads so it modifies the

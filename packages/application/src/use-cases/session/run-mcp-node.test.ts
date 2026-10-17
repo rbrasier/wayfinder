@@ -4,11 +4,13 @@ import type {
   Flow,
   FlowNode,
   ILanguageModel,
-  IMcpClient,
+  IMcpCallQueue,
   IMcpServerRepository,
   ISessionRepository,
   ISessionStepOutputRepository,
+  McpCallJob,
   McpServer,
+  NewMcpCallJob,
   Session,
   SessionMessage,
 } from "@wayfinder/domain";
@@ -97,9 +99,11 @@ const activeServer: McpServer = {
   label: "Search",
   transport: "sse",
   url: "https://mcp.example.com/sse",
-  credentialRef: null,
-  communicatesExternally: false,
+  dataClassification: "internal",
   verbatimOnly: false,
+  callTimeoutMs: 30_000,
+  hasCredential: false,
+  customHeaderNames: [],
   status: "active",
   createdByUserId: null,
   createdAt: new Date(),
@@ -115,9 +119,24 @@ const makeServers = (server: McpServer | null): IMcpServerRepository =>
     setStatus: vi.fn(),
   }) as unknown as IMcpServerRepository;
 
-const makeClient = (overrides: Partial<IMcpClient> = {}): IMcpClient => ({
-  listTools: vi.fn().mockResolvedValue(ok([])),
-  callTool: vi.fn().mockResolvedValue(ok({ output: "tool says hi" })),
+const makeQueue = (overrides: Partial<IMcpCallQueue> = {}): IMcpCallQueue => ({
+  enqueue: vi.fn().mockImplementation(async (job: NewMcpCallJob) =>
+    ok({
+      ...job,
+      id: "job-1",
+      status: "pending",
+      attempts: 0,
+      lastError: null,
+      claimedAt: null,
+      finishedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } satisfies McpCallJob),
+  ),
+  claimPending: vi.fn(),
+  markSucceeded: vi.fn(),
+  markFailed: vi.fn(),
+  listStaleRunning: vi.fn(),
   ...overrides,
 });
 
@@ -132,154 +151,104 @@ const baseConfig = {
 const clock = { generateCorrelationId: () => "corr-1", now: () => new Date("2026-06-30T00:00:00.000Z") };
 
 describe("RunMcpNode", () => {
-  it("resolves fields, records a pending execution, calls the tool, and returns its output", async () => {
-    const session = makeSession();
-    const sessions = makeSessions(session);
-    const client = makeClient();
-
-    const result = await new RunMcpNode(
-      sessions,
+  const run = (options: {
+    session?: Session;
+    sessions?: ISessionRepository;
+    server?: McpServer | null;
+    queue?: IMcpCallQueue;
+    config?: Record<string, unknown>;
+  }) => {
+    const session = options.session ?? makeSession();
+    return new RunMcpNode(
+      options.sessions ?? makeSessions(session),
       makeLanguageModel(),
-      makeServers(activeServer),
-      client,
+      makeServers(options.server === undefined ? activeServer : options.server),
+      options.queue ?? makeQueue(),
       makeStepOutputs(),
       clock,
-    ).execute({ session, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+    ).execute({
+      session,
+      flow: makeFlow(),
+      node: makeNode(options.config ?? baseConfig),
+      messages: makeMessages(),
+      userId: "user-1",
+    });
+  };
+
+  it("resolves fields, records a pending execution and queues the call without making it", async () => {
+    const session = makeSession();
+    const sessions = makeSessions(session);
+    const queue = makeQueue();
+
+    const result = await run({ session, sessions, queue });
 
     expect(result.error).toBeUndefined();
-    expect(result.data?.status).toBe("completed");
-    expect(result.data?.data).toEqual({ output: "tool says hi" });
-    expect(client.callTool).toHaveBeenCalledWith(activeServer, "search", { query: "X" });
+    expect(result.data).toEqual({ correlationId: "corr-1", jobId: "job-1", status: "pending" });
     expect(sessions.update).toHaveBeenCalledWith("sess-1", {
       pendingExecutions: { "corr-1": { nodeId: "node-1", status: "pending", sentAt: "2026-06-30T00:00:00.000Z" } },
     });
+    expect(queue.enqueue).toHaveBeenCalledWith({
+      sessionId: "sess-1",
+      flowId: "flow-1",
+      nodeId: "node-1",
+      correlationId: "corr-1",
+      serverId: "mcp-1",
+      toolName: "search",
+      arguments: { query: "X" },
+      actorId: "user-1",
+    });
+  });
+
+  it("queues a call to a public-data reader", async () => {
+    const result = await run({ server: { ...activeServer, dataClassification: "public-read" } });
+
+    expect(result.data?.status).toBe("pending");
   });
 
   it("fails when no server/tool is configured", async () => {
-    const result = await new RunMcpNode(
-      makeSessions(makeSession()),
-      makeLanguageModel(),
-      makeServers(activeServer),
-      makeClient(),
-      makeStepOutputs(),
-      clock,
-    ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode({ instruction: "x" }), messages: makeMessages(), userId: "user-1" });
+    const result = await run({ config: { instruction: "x" } });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
   it("fails when the referenced server no longer exists", async () => {
-    const result = await new RunMcpNode(
-      makeSessions(makeSession()),
-      makeLanguageModel(),
-      makeServers(null),
-      makeClient(),
-      makeStepOutputs(),
-      clock,
-    ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+    const result = await run({ server: null });
 
     expect(result.error?.code).toBe("NOT_FOUND");
   });
 
-  it("refuses to call a disabled server", async () => {
-    const result = await new RunMcpNode(
-      makeSessions(makeSession()),
-      makeLanguageModel(),
-      makeServers({ ...activeServer, status: "disabled" }),
-      makeClient(),
-      makeStepOutputs(),
-      clock,
-    ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+  it("refuses to queue a call to a disabled server", async () => {
+    const queue = makeQueue();
+    const result = await run({ server: { ...activeServer, status: "disabled" }, queue });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(queue.enqueue).not.toHaveBeenCalled();
   });
 
-  it("refuses to call an externally-communicating server", async () => {
-    const result = await new RunMcpNode(
-      makeSessions(makeSession()),
-      makeLanguageModel(),
-      makeServers({ ...activeServer, communicatesExternally: true }),
-      makeClient(),
-      makeStepOutputs(),
-      clock,
-    ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+  it("refuses to queue a call to a server that sends records out", async () => {
+    const queue = makeQueue();
+    const result = await run({ server: { ...activeServer, dataClassification: "external-write" }, queue });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
-  });
-
-  it("does not claim verbatim handling for an ordinary connection", async () => {
-    const session = makeSession();
-    const result = await new RunMcpNode(
-      makeSessions(session),
-      makeLanguageModel(),
-      makeServers(activeServer),
-      makeClient(),
-      makeStepOutputs(),
-      clock,
-    ).execute({ session, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
-
-    expect(result.data?.data).toEqual({ output: "tool says hi" });
-    expect(result.data?.verbatim).toBe(false);
-  });
-
-  it("passes a verbatim-only server's result through unmodified and tells the caller to keep it that way", async () => {
-    const session = makeSession();
-    const client = makeClient({ callTool: vi.fn().mockResolvedValue(ok({ output: "  4.25 \n" })) });
-
-    const result = await new RunMcpNode(
-      makeSessions(session),
-      makeLanguageModel(),
-      makeServers({ ...activeServer, verbatimOnly: true }),
-      client,
-      makeStepOutputs(),
-      clock,
-    ).execute({ session, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
-
-    expect(result.error).toBeUndefined();
-    expect(result.data?.data).toEqual({ output: "  4.25 \n" });
-    expect(result.data?.verbatim).toBe(true);
+    expect(queue.enqueue).not.toHaveBeenCalled();
   });
 
   it("refuses a verbatim-only server whose step is configured to reshape the result", async () => {
-    const session = makeSession();
-    const client = makeClient();
+    const queue = makeQueue();
     const config = {
       ...baseConfig,
       responseFields: [{ key: "rate", label: "Rate", type: "currency", optional: false, raw: "Rate" }],
     };
 
-    const result = await new RunMcpNode(
-      makeSessions(session),
-      makeLanguageModel(),
-      makeServers({ ...activeServer, verbatimOnly: true }),
-      client,
-      makeStepOutputs(),
-      clock,
-    ).execute({ session, flow: makeFlow(), node: makeNode(config), messages: makeMessages(), userId: "user-1" });
+    const result = await run({ server: { ...activeServer, verbatimOnly: true }, queue, config });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(result.error?.message).toContain("rate");
-    // Refused before the tool is reached — nothing is called and nothing pends.
-    expect(client.callTool).not.toHaveBeenCalled();
+    // Refused before the call is queued — nothing is called and nothing pends.
+    expect(queue.enqueue).not.toHaveBeenCalled();
   });
 
-  it("propagates a tool-call failure", async () => {
-    const client = makeClient({
-      callTool: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "unreachable"))),
-    });
-    const result = await new RunMcpNode(
-      makeSessions(makeSession()),
-      makeLanguageModel(),
-      makeServers(activeServer),
-      client,
-      makeStepOutputs(),
-      clock,
-    ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
-
-    expect(result.error?.code).toBe("INFRA_FAILURE");
-  });
-
-  it("clears the pending execution when the tool call fails", async () => {
+  it("clears the pending execution when the call cannot be queued", async () => {
     // A stateful sessions repo so the cleanup's re-read sees the recorded entry.
     let current = makeSession();
     const sessions = {
@@ -292,21 +261,13 @@ describe("RunMcpNode", () => {
         return ok(current);
       }),
     } as unknown as ISessionRepository;
-    const client = makeClient({
-      callTool: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "unreachable"))),
+    const queue = makeQueue({
+      enqueue: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "queue down"))),
     });
 
-    const result = await new RunMcpNode(
-      sessions,
-      makeLanguageModel(),
-      makeServers(activeServer),
-      client,
-      makeStepOutputs(),
-      clock,
-    ).execute({ session: current, flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
+    const result = await run({ session: current, sessions, queue });
 
     expect(result.error?.code).toBe("INFRA_FAILURE");
-    // The recorded pending entry must not survive the failed call.
     expect(current.pendingExecutions).toEqual({});
   });
 });

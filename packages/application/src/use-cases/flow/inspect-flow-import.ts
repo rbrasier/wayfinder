@@ -35,7 +35,7 @@ export const loadDependencyCandidates = async (
       .map((server) => ({
         id: server.id,
         label: server.label,
-        communicatesExternally: server.communicatesExternally,
+        dataClassification: server.dataClassification,
       })),
   });
 };

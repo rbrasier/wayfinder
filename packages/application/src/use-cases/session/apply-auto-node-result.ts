@@ -12,6 +12,8 @@ import {
   type Result,
   type Session,
   type SessionUpdate,
+  type StepOutputField,
+  type ToolRecordCitation,
 } from "@wayfinder/domain";
 import { coerceStructuredFields, coerceVerbatimFields } from "../document/structured-fields";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
@@ -28,7 +30,18 @@ export interface ApplyAutoNodeResultInput {
   // (ADR-053 §5). The ordinary coercion trims, which is itself a
   // transformation, so the guarantee has to reach as far as the write.
   verbatim?: boolean;
+  // The source records an MCP result pointed at (ADR-062 §6), stamped on every
+  // field captured from it so a document built from the step can be traced back.
+  citations?: ToolRecordCitation[];
 }
+
+const withCitations = (
+  fields: StepOutputField[],
+  citations: ToolRecordCitation[] | undefined,
+): StepOutputField[] => {
+  if (!citations || citations.length === 0) return fields;
+  return fields.map((field) => ({ ...field, citations }));
+};
 
 export interface ApplyAutoNodeResultOutput {
   applied: boolean;
@@ -133,7 +146,7 @@ export class ApplyAutoNodeResult {
       flowId,
       nodeId: input.nodeId,
       messageId: null,
-      fields,
+      fields: withCitations(fields, input.citations),
     });
   }
 
