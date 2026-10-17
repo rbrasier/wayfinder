@@ -55,12 +55,18 @@ test.describe('Session lifecycle: revoke a user everywhere', () => {
     const targetContext = await signedInContextFor(browser, request, REVOKE_TARGET_EMAIL);
     const targetPage = await targetContext.newPage();
 
+    // `/` always redirects (to /chats, or /login once revoked), so it cannot be
+    // warmed before the suite, and /login cannot be warmed with a session at
+    // all. These navigations get the cold-compile allowance rather than the
+    // config's 30s default, which runs 38996160595 and 39000120304 outlasted.
+    const coldNavigation = { ...untilDom, timeout: NAV_TIMEOUT };
+
     // Establish that the target really is signed in, so the assertion after the
     // revoke is about the revoke and not about a session that never worked.
-    await targetPage.goto('/', untilDom);
+    await targetPage.goto('/', coldNavigation);
     await expect(targetPage).not.toHaveURL(/login/);
 
-    await page.goto('/admin/users', untilDom);
+    await page.goto('/admin/users', coldNavigation);
     const revokeButton = page.getByTestId(`revoke-sessions-${REVOKE_TARGET_EMAIL}`);
     await expect(revokeButton).toBeVisible({ timeout: NAV_TIMEOUT });
     await revokeButton.click();
@@ -70,7 +76,7 @@ test.describe('Session lifecycle: revoke a user everywhere', () => {
     await page.screenshot({ path: 'screenshots/session-lifecycle-revoked.png', fullPage: true });
 
     // The revoked browser still holds its cookie; the session behind it is gone.
-    await targetPage.goto('/', untilDom);
+    await targetPage.goto('/', coldNavigation);
     await targetPage.waitForURL(/\/login/, { timeout: NAV_TIMEOUT });
 
     await targetContext.close();
