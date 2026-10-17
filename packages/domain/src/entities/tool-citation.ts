@@ -60,3 +60,32 @@ export const resolveCitedSources = (
   }
   return cited;
 };
+
+// The records a captured value actually came from (ADR-062 §6): a field cites a
+// record only when its value names that record — its locator, link or title.
+// A blank value, or one built from none of them, cites nothing, so a field
+// never claims a source it does not draw on.
+export const citationsForValue = (
+  value: string,
+  citations: readonly ToolRecordCitation[],
+): ToolRecordCitation[] => {
+  if (value.trim().length === 0) return [];
+  const lowerValue = value.toLowerCase();
+  return citations.filter((citation) =>
+    [citation.locator, citation.url, citation.title].some((marker) => mentions(lowerValue, marker)),
+  );
+};
+
+const ALPHANUMERIC = /[a-z0-9]/;
+
+// Bounded so locator `act-1` is not found inside `act-12`.
+const mentions = (lowerValue: string, marker: string | null): boolean => {
+  const needle = marker?.trim().toLowerCase();
+  if (!needle) return false;
+  for (let index = lowerValue.indexOf(needle); index !== -1; index = lowerValue.indexOf(needle, index + 1)) {
+    const before = lowerValue[index - 1] ?? "";
+    const after = lowerValue[index + needle.length] ?? "";
+    if (!ALPHANUMERIC.test(before) && !ALPHANUMERIC.test(after)) return true;
+  }
+  return false;
+};

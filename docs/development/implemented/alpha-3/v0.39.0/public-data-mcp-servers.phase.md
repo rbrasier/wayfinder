@@ -304,8 +304,9 @@ failStale }`.
   `job_registry` name `mcp_call_worker`. Rows `running` longer than `callTimeoutMs + 60 s` are
   failed by `failStale` (the session's pending entry is cleared through the same failure path).
 - `ApplyAutoNodeResultInput` gains optional `citations?: ToolRecordCitation[]`; when present,
-  `persistStepOutput` attaches them to every field it captured from the result. ADR-053
-  verbatim coercion is unchanged.
+  `persistStepOutput` gives each captured field only the records its own value names (locator,
+  URL or title, matched on word boundaries — `citationsForValue`); a blank field, or one that
+  names no record, carries none. ADR-053 verbatim coercion is unchanged.
 - `apps/api/src/container.ts` wires the worker, the session event bus, the MCP client stack and
   the audit logger (the job row carries the actor id).
 

@@ -182,19 +182,21 @@ describe("ApplyAutoNodeResult", () => {
     expect(persisted.fields[0].value).toBe("  Acme \n");
   });
 
-  it("attaches the tool's source records to every field it captured", async () => {
+  it("gives each captured field only the source records its own value draws on", async () => {
     const session = makeSession(pending());
     const { repo: sessions } = makeSessions(session);
     const stepOutputs = makeStepOutputs();
-    const citation = {
+    const source = (locator: string, title: string) => ({
       serverId: "mcp-1",
-      serverLabel: "Legislation",
-      toolName: "search_legislation",
-      locator: "act-1",
-      title: "Water Act",
-      url: "https://legislation.example/act-1",
-      recordedAt: "2026-01-02",
-    };
+      serverLabel: "Suppliers",
+      toolName: "search_suppliers",
+      locator,
+      title,
+      url: `https://suppliers.example/${locator}`,
+      recordedAt: null,
+    });
+    const acme = source("sup-1", "Acme");
+    const globex = source("sup-2", "Globex");
 
     await new ApplyAutoNodeResult(
       sessions,
@@ -206,12 +208,14 @@ describe("ApplyAutoNodeResult", () => {
       correlationId: "corr-1",
       nodeId: "node-1",
       status: "completed",
+      // `tier` came back blank, so it has nothing to cite.
       data: { vendor: "Acme" },
-      citations: [citation],
+      citations: [acme, globex],
     });
 
     const persisted = (stepOutputs.create as ReturnType<typeof vi.fn>).mock.calls[0]![0];
-    expect(persisted.fields[0].citations).toEqual([citation]);
+    expect(persisted.fields[0].citations).toEqual([acme]);
+    expect(persisted.fields[1]).not.toHaveProperty("citations");
   });
 
   it("adds no citations member when the result carried none", async () => {

@@ -141,7 +141,9 @@ export interface ToolRecordCitation {
 is added as `StepOutputField.citations?` and `AiTurnPayload.citations?`. Both are additive
 members of existing jsonb columns, so no migration. In chat, the records in `<tool_results>` are
 numbered `[S1]…[Sn]`, the model is asked to cite with those markers, and the markers in the
-persisted reply resolve to the turn's `citations`. ADR-053's extraction provenance is unchanged.
+persisted reply resolve to the turn's `citations`. A step-output field carries only the records
+its own value names — by locator, URL or title — so a blank field, or one built from no record,
+claims no source. ADR-053's extraction provenance is unchanged.
 
 ### 7. Every call is audited, with the full result kept on the turn
 

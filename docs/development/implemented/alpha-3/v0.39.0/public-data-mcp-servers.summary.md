@@ -30,7 +30,8 @@ when each page is requested and every 5 seconds while the call is still waiting.
 
 Replies cite source records: the records in `<tool_results>` are numbered `[S1]…[Sn]`, the model is
 asked to cite them, and a reply's markers become a **Sources** list under the message, with links.
-Fields an MCP node captures carry the records they came from. Every tool call writes one
+Each field an MCP node captures carries only the records its own value names (by locator, URL or
+title); a blank field, or one that names no record, carries none. Every tool call writes one
 `mcp.tool.called` row to `core_audit_log` with the arguments sent. Bearer tokens and custom
 headers are stored encrypted per server and never shown again. The `admin_mcp_tools` cache now
 drives tool titles, input schemas (the editor pre-fills request fields from them) and the per-tool

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numberCitations, resolveCitedSources, type ToolRecordCitation } from "./tool-citation";
+import { citationsForValue, numberCitations, resolveCitedSources, type ToolRecordCitation } from "./tool-citation";
 
 const citation = (locator: string, toolName = "search"): ToolRecordCitation => ({
   serverId: "server-1",
@@ -42,5 +42,28 @@ describe("resolveCitedSources", () => {
 
   it("ignores markers that name no record", () => {
     expect(resolveCitedSources("Nothing at [S9] or [s1].", numbered)).toEqual([]);
+  });
+});
+
+describe("citationsForValue", () => {
+  const water = { ...citation("act-1"), title: "Water Act", url: "https://legislation.example/act-1" };
+  const fire = { ...citation("act-2"), title: "Fire Act", url: "https://legislation.example/act-2" };
+  const roads = { ...citation("act-3"), title: null, url: null };
+
+  it("keeps only the records the value mentions, by locator, URL or title", () => {
+    expect(citationsForValue('{"id":"act-1"}', [water, fire, roads])).toEqual([water]);
+    expect(citationsForValue("See https://legislation.example/act-2", [water, fire])).toEqual([fire]);
+    expect(citationsForValue("Governed by the water act.", [water, fire])).toEqual([water]);
+  });
+
+  it("does not mistake one locator for the start of a longer one", () => {
+    const tenth = { ...citation("act-1"), title: null, url: null };
+
+    expect(citationsForValue('{"id":"act-12"}', [tenth])).toEqual([]);
+  });
+
+  it("cites nothing for a blank value or one that mentions no record", () => {
+    expect(citationsForValue("   ", [water, fire])).toEqual([]);
+    expect(citationsForValue("12 results", [water, fire, roads])).toEqual([]);
   });
 });

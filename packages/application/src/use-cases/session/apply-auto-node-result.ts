@@ -1,4 +1,5 @@
 import {
+  citationsForValue,
   domainError,
   err,
   ok,
@@ -30,8 +31,10 @@ export interface ApplyAutoNodeResultInput {
   // (ADR-053 §5). The ordinary coercion trims, which is itself a
   // transformation, so the guarantee has to reach as far as the write.
   verbatim?: boolean;
-  // The source records an MCP result pointed at (ADR-062 §6), stamped on every
-  // field captured from it so a document built from the step can be traced back.
+  // The source records an MCP result pointed at (ADR-062 §6). Each captured
+  // field carries only the records its own value draws on, so a document built
+  // from the step can be traced back without a field claiming a source it never
+  // used.
   citations?: ToolRecordCitation[];
 }
 
@@ -40,7 +43,10 @@ const withCitations = (
   citations: ToolRecordCitation[] | undefined,
 ): StepOutputField[] => {
   if (!citations || citations.length === 0) return fields;
-  return fields.map((field) => ({ ...field, citations }));
+  return fields.map((field) => {
+    const relevant = citationsForValue(field.value, citations);
+    return relevant.length > 0 ? { ...field, citations: relevant } : field;
+  });
 };
 
 export interface ApplyAutoNodeResultOutput {
