@@ -1,16 +1,12 @@
 // Mock MCP server — Streamable HTTP transport, mounted at /mcp on the shared
-// mocks server. Stateful sessions (verified against @modelcontextprotocol/sdk
-// 1.29 that stateless mode returns 500 for `notifications/initialized`).
+// mocks server. Stateful: one session per client, so any number of clients can
+// connect (see stateful-http.mjs).
 
-import { randomUUID } from "node:crypto";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMockMcpServer } from "./tools.mjs";
-
-const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: () => randomUUID() });
-await createMockMcpServer().connect(transport);
+import { statefulStreamableHttpHandler } from "./stateful-http.mjs";
 
 export const mock = {
   path: "/mcp",
   label: "mcp-tools (streamable-http)",
-  handle: (req, res) => transport.handleRequest(req, res),
+  handle: statefulStreamableHttpHandler(createMockMcpServer),
 };
