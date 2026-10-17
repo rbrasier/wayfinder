@@ -504,6 +504,7 @@ const build = () => {
     auditLogger,
     resolveCostCeilingUsd: async () =>
       (await runtimeConfig.getExtractionConfig()).perRunCostCeilingUsd,
+    resolvePromptBudget: () => runtimeConfig.resolveExtractionPromptBudget(),
   });
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);

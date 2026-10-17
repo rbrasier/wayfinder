@@ -5,9 +5,11 @@ import {
   type ArchiveLimits,
   type ExtractionDraftDocument,
   type IArchiveExtractor,
+  type IDocumentExtractor,
   type IDocumentTypeDetector,
   type IExtractionDraftDocumentRepository,
   type IObjectStorage,
+  type NewExtractionDraftDocument,
   type Result,
   type SkippedUpload,
 } from "@wayfinder/domain";
@@ -53,7 +55,9 @@ const isArchive = (file: DraftDocumentUpload): boolean =>
 // lands as the individual files (folder structure preserved) rather than a
 // single opaque archive. Loose files are typed from their content and name, not
 // the browser-reported type, and a file extraction cannot read is skipped with a
-// reason rather than staged to fail later. Best-effort atomic: a storage or
+// reason rather than staged to fail later. Each staged file's readable text
+// length is measured once here, so the run setup can size a run up front
+// (issue #335). Best-effort atomic: a storage or
 // expansion failure aborts before any row is written.
 export class UploadDraftDocuments {
   constructor(
@@ -61,6 +65,7 @@ export class UploadDraftDocuments {
     private readonly storage: IObjectStorage,
     private readonly archiveExtractor: IArchiveExtractor,
     private readonly typeDetector: IDocumentTypeDetector,
+    private readonly documentExtractor: IDocumentExtractor,
   ) {}
 
   async execute(input: UploadDraftDocumentsInput): Promise<Result<UploadDraftDocumentsResult>> {
@@ -69,7 +74,7 @@ export class UploadDraftDocuments {
     const { files, skipped } = resolved.data;
     if (files.length === 0) return ok({ documents: [], skipped });
 
-    const stored: { filename: string; treePath: string; storageKey: string; mimeType: string }[] = [];
+    const stored: NewExtractionDraftDocument[] = [];
     for (const file of files) {
       const storageKey = `extraction-drafts/${input.flowId}/${crypto.randomUUID()}-${file.filename}`;
       const put = await this.storage.put(storageKey, file.buffer, file.mimeType);
@@ -79,11 +84,24 @@ export class UploadDraftDocuments {
         treePath: file.treePath,
         storageKey,
         mimeType: file.mimeType,
+        textLength: await this.measureText(file),
       });
     }
     const added = await this.drafts.add(input.flowId, stored);
     if (added.error) return added;
     return ok({ documents: added.data, skipped });
+  }
+
+  // Size only feeds a pre-run estimate, so a file the extractor chokes on is
+  // still staged — the worker reports the real failure when it gets there.
+  private async measureText(file: DraftDocumentUpload): Promise<number | null> {
+    const extracted = await this.documentExtractor.extract({
+      buffer: file.buffer,
+      mimeType: file.mimeType,
+      filename: file.filename,
+    });
+    if (extracted.error) return null;
+    return extracted.data.trim().length === 0 ? 0 : extracted.data.length;
   }
 
   private async resolveUploads(

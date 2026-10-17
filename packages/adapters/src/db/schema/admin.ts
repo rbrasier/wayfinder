@@ -177,7 +177,7 @@ export const admin_mcp_servers = pgTable("admin_mcp_servers", {
   transport: text("transport", { enum: ["sse", "streamable-http"] }).notNull().default("sse"),
   url: text("url").notNull(),
   // What the server does with data (ADR-062 §1). Rows that predate it were
-  // carried across from the dropped `communicates_externally` (0054).
+  // carried across from the dropped `communicates_externally` (0055).
   data_classification: text("data_classification", {
     enum: ["internal", "public-read", "external-write"],
   })

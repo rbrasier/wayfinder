@@ -150,6 +150,16 @@ describe("SaveExtractionSchema", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
+  it("validates the Auto Analyse read count against the admin-configured ceiling", async () => {
+    const schema = { ...draft, input: { ...draft.input, autoAnalyse: true, analyseSampleSize: 12 } };
+
+    const rejected = await useCase.execute({ flowId: "flow-1", schema });
+    expect(rejected.error?.code).toBe("VALIDATION_FAILED");
+
+    const accepted = await useCase.execute({ flowId: "flow-1", schema, limits: { maxAnalyseDocuments: 15 } });
+    expect(accepted.error).toBeUndefined();
+  });
+
   it("returns NOT_FOUND for an unknown flow", async () => {
     const result = await useCase.execute({ flowId: "ghost", schema: draft });
 

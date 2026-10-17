@@ -1,3 +1,0 @@
--- data-impact: destructive, approved — communicates_externally was carried into data_classification by 0054; credential_ref is dropped and servers that named an MCP_CRED_* environment variable must have their token re-entered as an encrypted credential on the MCP server screen (ADR-062 §8)
-ALTER TABLE "admin_mcp_servers" DROP COLUMN "credential_ref";--> statement-breakpoint
-ALTER TABLE "admin_mcp_servers" DROP COLUMN "communicates_externally";

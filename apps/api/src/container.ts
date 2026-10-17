@@ -334,7 +334,9 @@ export const buildContainer = (env: Env) => {
   const advanceBatchRuns = new AdvanceBatchRuns(
     extractionRuns,
     flowVersions,
-    new ProcessExtractionTask(extractionRuns, objectStorage, documentExtractor, llm),
+    new ProcessExtractionTask(extractionRuns, objectStorage, documentExtractor, llm, {
+      resolvePromptBudget: () => runtimeConfig.resolveExtractionPromptBudget(),
+    }),
     // The per-run cost ceiling is the admin ExtractionConfig value (resolved each
     // tick from system_settings), not an env var.
     { resolveCostCeilingUsd: () => runtimeConfig.getExtractionConfig().then((c) => c.perRunCostCeilingUsd) },

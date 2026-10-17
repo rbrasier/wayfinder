@@ -1,0 +1,1 @@
+ALTER TABLE "app_extraction_draft_documents" ADD COLUMN "text_length" integer;

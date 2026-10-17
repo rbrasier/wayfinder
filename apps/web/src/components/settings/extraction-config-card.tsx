@@ -10,6 +10,56 @@ import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 
 const BYTES_PER_MB = 1024 * 1024;
+
+type SizeLimitKey =
+  | "sampleMaxDocuments"
+  | "maxAnalyseDocuments"
+  | "summaryRecordCap"
+  | "contextBudgetTokens"
+  | "maxPromptTokens";
+
+// The size limits that were hardcoded until issue #335. Each is a positive
+// whole number, so they share one input, one display row and one check.
+const SIZE_LIMITS: { key: SizeLimitKey; label: string; help: string; placeholder: string }[] = [
+  {
+    key: "sampleMaxDocuments",
+    label: "Sample size (documents)",
+    help: "How many documents a sample run reads before it pauses for review.",
+    placeholder: "3",
+  },
+  {
+    key: "maxAnalyseDocuments",
+    label: "Auto Analyse maximum (documents)",
+    help: "The most documents an author can ask Auto Analyse to read when proposing fields.",
+    placeholder: "10",
+  },
+  {
+    key: "summaryRecordCap",
+    label: "Run summary record cap",
+    help: "The run summary reads this many records; it says so when a run has more.",
+    placeholder: "50",
+  },
+  {
+    key: "contextBudgetTokens",
+    label: "Context material budget (tokens)",
+    help: "Reference material beyond this is cut from every extraction prompt.",
+    placeholder: "100000",
+  },
+  {
+    key: "maxPromptTokens",
+    label: "Max prompt per call (tokens)",
+    help: "A document too large for one call is read in parts. Never exceeds the model's own window.",
+    placeholder: "180000",
+  },
+];
+
+const emptySizeLimits = (): Record<SizeLimitKey, string> => ({
+  sampleMaxDocuments: "",
+  maxAnalyseDocuments: "",
+  summaryRecordCap: "",
+  contextBudgetTokens: "",
+  maxPromptTokens: "",
+});
 const toMb = (bytes: number): string => String(Math.round((bytes / BYTES_PER_MB) * 100) / 100);
 
 // Admin config for the extraction batch engine (ADR-033): ingestion caps (the
@@ -33,6 +83,7 @@ export function ExtractionConfigCard() {
   const [maxEntryMb, setMaxEntryMb] = useState("25");
   const [maxTotalMb, setMaxTotalMb] = useState("500");
   const [costCeiling, setCostCeiling] = useState("0");
+  const [sizeLimits, setSizeLimits] = useState(emptySizeLimits);
 
   const config = configQuery.data;
 
@@ -43,6 +94,13 @@ export function ExtractionConfigCard() {
     setMaxEntryMb(toMb(config.maxArchiveEntryBytes));
     setMaxTotalMb(toMb(config.maxArchiveTotalBytes));
     setCostCeiling(String(config.perRunCostCeilingUsd));
+    setSizeLimits({
+      sampleMaxDocuments: String(config.sampleMaxDocuments),
+      maxAnalyseDocuments: String(config.maxAnalyseDocuments),
+      summaryRecordCap: String(config.summaryRecordCap),
+      contextBudgetTokens: String(config.contextBudgetTokens),
+      maxPromptTokens: String(config.maxPromptTokens),
+    });
   }, [open, config]);
 
   const handleSave = () => {
@@ -64,8 +122,20 @@ export function ExtractionConfigCard() {
       toast.error("Cost ceiling must be zero or a positive amount");
       return;
     }
+    const parsedSizeLimits = {
+      sampleMaxDocuments: Number(sizeLimits.sampleMaxDocuments),
+      maxAnalyseDocuments: Number(sizeLimits.maxAnalyseDocuments),
+      summaryRecordCap: Number(sizeLimits.summaryRecordCap),
+      contextBudgetTokens: Number(sizeLimits.contextBudgetTokens),
+      maxPromptTokens: Number(sizeLimits.maxPromptTokens),
+    };
+    if (!Object.values(parsedSizeLimits).every((value) => Number.isInteger(value) && value > 0)) {
+      toast.error("Size limits must be positive whole numbers");
+      return;
+    }
 
     saveMutation.mutate({
+      ...parsedSizeLimits,
       maxFilesPerRun: files,
       maxArchiveEntries: entries,
       maxArchiveEntryBytes: Math.round(entryMb * BYTES_PER_MB),
@@ -84,7 +154,7 @@ export function ExtractionConfigCard() {
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <p className="text-muted-foreground">
-          Ingestion safety caps and the per-run spend ceiling for extraction batch runs.
+          Ingestion safety caps, the per-run spend ceiling and the size limits for extraction runs.
         </p>
         {!config ? (
           <p className="text-muted-foreground">Loading…</p>
@@ -113,6 +183,12 @@ export function ExtractionConfigCard() {
                   : "None"}
               </span>
             </div>
+            {SIZE_LIMITS.map((limit) => (
+              <div key={limit.key} className="flex justify-between">
+                <span className="text-muted-foreground">{limit.label}</span>
+                <span className="font-mono text-xs">{config[limit.key].toLocaleString()}</span>
+              </div>
+            ))}
           </>
         )}
       </CardContent>
@@ -123,7 +199,7 @@ export function ExtractionConfigCard() {
             <DialogTitle>Edit extraction limits</DialogTitle>
             <DialogCloseButton />
           </DialogHeader>
-          <DialogBody className="space-y-4">
+          <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
             <div className="space-y-1">
               <Label htmlFor="extraction-max-files">Max files per run</Label>
               <p className="text-xs text-muted-foreground">
@@ -184,6 +260,18 @@ export function ExtractionConfigCard() {
                 placeholder="0"
               />
             </div>
+            {SIZE_LIMITS.map((limit) => (
+              <div key={limit.key} className="space-y-1">
+                <Label htmlFor={`extraction-${limit.key}`}>{limit.label}</Label>
+                <p className="text-xs text-muted-foreground">{limit.help}</p>
+                <Input
+                  id={`extraction-${limit.key}`}
+                  value={sizeLimits[limit.key]}
+                  onChange={(e) => setSizeLimits((current) => ({ ...current, [limit.key]: e.target.value }))}
+                  placeholder={limit.placeholder}
+                />
+              </div>
+            ))}
           </DialogBody>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>

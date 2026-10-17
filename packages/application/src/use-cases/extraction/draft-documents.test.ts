@@ -3,6 +3,7 @@ import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   ExtractionDraftDocument,
   IArchiveExtractor,
+  IDocumentExtractor,
   IDocumentTypeDetector,
   IExtractionDraftDocumentRepository,
   IObjectStorage,
@@ -27,6 +28,14 @@ const makeDetector = (): IDocumentTypeDetector => ({
   }),
 });
 
+// Returns each buffer's own bytes as its text, so a file's text length is its
+// byte length unless a test says otherwise.
+const makeExtractor = (overrides: Partial<IDocumentExtractor> = {}): IDocumentExtractor =>
+  ({
+    extract: vi.fn(({ buffer }: { buffer: Buffer }) => Promise.resolve(ok(buffer.toString()))),
+    ...overrides,
+  }) as unknown as IDocumentExtractor;
+
 const draftDoc = (overrides: Partial<ExtractionDraftDocument> = {}): ExtractionDraftDocument => ({
   id: "doc-1",
   flowId: "flow-1",
@@ -34,6 +43,7 @@ const draftDoc = (overrides: Partial<ExtractionDraftDocument> = {}): ExtractionD
   treePath: "acme.pdf",
   storageKey: "extraction-drafts/flow-1/x-acme.pdf",
   mimeType: "application/pdf",
+  textLength: 1,
   ...overrides,
 });
 
@@ -58,7 +68,7 @@ describe("UploadDraftDocuments", () => {
   it("stores each file's bytes then records the rows", async () => {
     const repo = makeRepo();
     const storage = makeStorage();
-    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector());
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector(), makeExtractor());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -93,7 +103,7 @@ describe("UploadDraftDocuments", () => {
         }),
       ),
     });
-    const useCase = new UploadDraftDocuments(repo, storage, archive, makeDetector());
+    const useCase = new UploadDraftDocuments(repo, storage, archive, makeDetector(), makeExtractor());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -119,7 +129,7 @@ describe("UploadDraftDocuments", () => {
   it("types a loose file from its content and name, not the browser-reported type", async () => {
     const repo = makeRepo();
     const storage = makeStorage();
-    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector());
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector(), makeExtractor());
 
     await useCase.execute({
       flowId: "flow-1",
@@ -139,7 +149,7 @@ describe("UploadDraftDocuments", () => {
   it("skips an unsupported loose file with a reason instead of staging it", async () => {
     const repo = makeRepo();
     const storage = makeStorage();
-    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector());
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector(), makeExtractor());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -158,7 +168,7 @@ describe("UploadDraftDocuments", () => {
 
   it("does not write rows when every file was skipped", async () => {
     const repo = makeRepo();
-    const useCase = new UploadDraftDocuments(repo, makeStorage(), makeArchive(), makeDetector());
+    const useCase = new UploadDraftDocuments(repo, makeStorage(), makeArchive(), makeDetector(), makeExtractor());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -179,7 +189,7 @@ describe("UploadDraftDocuments", () => {
     const archive = makeArchive({
       expand: vi.fn().mockResolvedValue(err(domainError("VALIDATION_FAILED", "zip bomb"))),
     });
-    const useCase = new UploadDraftDocuments(repo, storage, archive, makeDetector());
+    const useCase = new UploadDraftDocuments(repo, storage, archive, makeDetector(), makeExtractor());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -197,7 +207,7 @@ describe("UploadDraftDocuments", () => {
     const storage = makeStorage({
       put: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "disk full"))),
     });
-    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector());
+    const useCase = new UploadDraftDocuments(repo, storage, makeArchive(), makeDetector(), makeExtractor());
 
     const result = await useCase.execute({
       flowId: "flow-1",
@@ -207,6 +217,46 @@ describe("UploadDraftDocuments", () => {
 
     expect(result.error?.code).toBe("INFRA_FAILURE");
     expect(repo.add).not.toHaveBeenCalled();
+  });
+});
+
+describe("UploadDraftDocuments — text length (issue #335)", () => {
+  const upload = (filename: string, text: string) => ({
+    filename,
+    treePath: filename,
+    mimeType: "application/pdf",
+    buffer: Buffer.from(text),
+  });
+
+  it("records each staged file's readable text length", async () => {
+    const repo = makeRepo();
+    const useCase = new UploadDraftDocuments(repo, makeStorage(), makeArchive(), makeDetector(), makeExtractor());
+
+    await useCase.execute({
+      flowId: "flow-1",
+      archiveLimits,
+      files: [upload("long.pdf", "x".repeat(1234)), upload("blank.pdf", "   ")],
+    });
+
+    expect(repo.add).toHaveBeenCalledWith("flow-1", [
+      expect.objectContaining({ filename: "long.pdf", textLength: 1234 }),
+      expect.objectContaining({ filename: "blank.pdf", textLength: 0 }),
+    ]);
+  });
+
+  it("stages a file whose text cannot be read, recording its size as unknown", async () => {
+    const repo = makeRepo();
+    const extractor = makeExtractor({
+      extract: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "parser crashed"))),
+    });
+    const useCase = new UploadDraftDocuments(repo, makeStorage(), makeArchive(), makeDetector(), extractor);
+
+    const result = await useCase.execute({ flowId: "flow-1", archiveLimits, files: [upload("odd.pdf", "a")] });
+
+    expect(result.error).toBeUndefined();
+    expect(repo.add).toHaveBeenCalledWith("flow-1", [
+      expect.objectContaining({ filename: "odd.pdf", textLength: null }),
+    ]);
   });
 });
 

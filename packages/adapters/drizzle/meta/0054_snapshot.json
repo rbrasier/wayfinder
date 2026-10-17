@@ -1,5 +1,5 @@
 {
-  "id": "56de5584-4470-4094-ac34-b6a4905fda0c",
+  "id": "7e02c09a-e8db-41c3-a299-145dbebc9f62",
   "prevId": "ed8764dd-1578-4dd2-9d57-4307396bbf4a",
   "version": "7",
   "dialect": "postgresql",
@@ -1097,38 +1097,12 @@
           "notNull": true,
           "default": false
         },
-        "data_classification": {
-          "name": "data_classification",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'internal'"
-        },
         "verbatim_only": {
           "name": "verbatim_only",
           "type": "boolean",
           "primaryKey": false,
           "notNull": true,
           "default": false
-        },
-        "call_timeout_ms": {
-          "name": "call_timeout_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 30000
-        },
-        "credential_ciphertext": {
-          "name": "credential_ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "custom_headers_ciphertext": {
-          "name": "custom_headers_ciphertext",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "status": {
           "name": "status",
@@ -1209,32 +1183,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "input_schema": {
           "name": "input_schema",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pagination_config": {
-          "name": "pagination_config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status_config": {
-          "name": "status_config",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "citation_config": {
-          "name": "citation_config",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
@@ -2678,182 +2628,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.job_mcp_calls": {
-      "name": "job_mcp_calls",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "session_id": {
-          "name": "session_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "flow_id": {
-          "name": "flow_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "node_id": {
-          "name": "node_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "correlation_id": {
-          "name": "correlation_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "server_id": {
-          "name": "server_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tool_name": {
-          "name": "tool_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "arguments": {
-          "name": "arguments",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "actor_id": {
-          "name": "actor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "last_error": {
-          "name": "last_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "claimed_at": {
-          "name": "claimed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "finished_at": {
-          "name": "finished_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "job_mcp_calls_status_created_at_idx": {
-          "name": "job_mcp_calls_status_created_at_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "job_mcp_calls_session_id_app_sessions_id_fk": {
-          "name": "job_mcp_calls_session_id_app_sessions_id_fk",
-          "tableFrom": "job_mcp_calls",
-          "tableTo": "app_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "job_mcp_calls_server_id_admin_mcp_servers_id_fk": {
-          "name": "job_mcp_calls_server_id_admin_mcp_servers_id_fk",
-          "tableFrom": "job_mcp_calls",
-          "tableTo": "admin_mcp_servers",
-          "columnsFrom": [
-            "server_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "job_mcp_calls_actor_id_core_users_id_fk": {
-          "name": "job_mcp_calls_actor_id_core_users_id_fk",
-          "tableFrom": "job_mcp_calls",
-          "tableTo": "core_users",
-          "columnsFrom": [
-            "actor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.job_registry": {
       "name": "job_registry",
       "schema": "",
@@ -3182,6 +2956,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "text_length": {
+          "name": "text_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",

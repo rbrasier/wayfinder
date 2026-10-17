@@ -119,6 +119,31 @@ describe("RunSampleExtraction — one_per_file", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
+  it("checks the sample size against the admin-configured maximum when one is given", async () => {
+    const useCase = new RunSampleExtraction(extractionModel(), extractorReturning({}));
+    const documents = [doc("d1", "a.pdf"), doc("d2", "b.pdf"), doc("d3", "c.pdf"), doc("d4", "d.pdf")];
+
+    const raised = await useCase.execute({ schema: schema("one_per_file"), documents, maxDocuments: 5 });
+    expect(raised.error).toBeUndefined();
+
+    const lowered = await useCase.execute({ schema: schema("one_per_file"), documents, maxDocuments: 2 });
+    expect(lowered.error?.message).toMatch(/at most 2 documents/);
+  });
+
+  it("sizes its extraction calls by the budget it is given (issue #335)", async () => {
+    const model = extractionModel();
+    const useCase = new RunSampleExtraction(model, extractorReturning({ "feed.txt": "line\n\n".repeat(60_000) }));
+
+    const result = await useCase.execute({
+      schema: schema("one_per_file"),
+      documents: [doc("d1", "feed.txt")],
+      budget: { contextBudgetChars: 400_000, maxPromptTokens: 30_000, contextWindowTokens: 1_000_000 },
+    });
+
+    expect(result.error).toBeUndefined();
+    expect((model.generateObject as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(1);
+  });
+
   it("rejects an empty sample", async () => {
     const useCase = new RunSampleExtraction(extractionModel(), extractorReturning({}));
 

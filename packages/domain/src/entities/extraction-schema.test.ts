@@ -247,6 +247,26 @@ describe("auto analyse input config", () => {
     expect(result.data!.input.analyseSampleSize).toBe(MAX_ANALYSE_DOCUMENTS);
   });
 
+  it("checks the read count against an admin-configured ceiling when one is given", () => {
+    const draft = {
+      fields: oneField,
+      input: { ...onePerFileInput, autoAnalyse: true, analyseSampleSize: 12 },
+      output,
+    };
+
+    expect(parseExtractionSchema(draft).error?.code).toBe("VALIDATION_FAILED");
+
+    const raised = parseExtractionSchema(draft, { maxAnalyseDocuments: 15 });
+    expect(raised.error).toBeUndefined();
+    expect(raised.data!.input.analyseSampleSize).toBe(12);
+
+    const lowered = parseExtractionSchema(
+      { ...draft, input: { ...draft.input, analyseSampleSize: 5 } },
+      { maxAnalyseDocuments: 4 },
+    );
+    expect(lowered.error?.message).toMatch(/between 1 and 4/i);
+  });
+
   it("leaves the existing selection-criteria rules untouched when auto analyse is off", () => {
     const missingCriteria = parseExtractionSchema({
       fields: oneField,

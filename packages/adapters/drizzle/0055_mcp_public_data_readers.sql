@@ -1,4 +1,4 @@
--- data-impact: preserved — adds columns with defaults and a new empty table; every server that had communicates_externally = true is carried into data_classification = 'external-write' below, before 0055 drops the old column (ADR-062 §1)
+-- data-impact: preserved — adds columns with defaults and a new empty table; every server that had communicates_externally = true is carried into data_classification = 'external-write' below, before 0056 drops the old column (ADR-062 §1)
 CREATE TABLE "job_mcp_calls" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"session_id" uuid NOT NULL,
@@ -19,7 +19,7 @@ CREATE TABLE "job_mcp_calls" (
 );
 --> statement-breakpoint
 ALTER TABLE "admin_mcp_servers" ADD COLUMN "data_classification" text DEFAULT 'internal' NOT NULL;--> statement-breakpoint
--- Hand-added: carry the old classification across before 0055 drops it.
+-- Hand-added: carry the old classification across before 0056 drops it.
 UPDATE "admin_mcp_servers" SET "data_classification" = 'external-write' WHERE "communicates_externally" = true;--> statement-breakpoint
 ALTER TABLE "admin_mcp_servers" ADD COLUMN "call_timeout_ms" integer DEFAULT 30000 NOT NULL;--> statement-breakpoint
 ALTER TABLE "admin_mcp_servers" ADD COLUMN "credential_ciphertext" text;--> statement-breakpoint

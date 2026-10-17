@@ -156,6 +156,11 @@ describe("settings router — extractionConfigInputSchema", () => {
     maxArchiveEntryBytes: 25 * 1024 * 1024,
     maxArchiveTotalBytes: 500 * 1024 * 1024,
     perRunCostCeilingUsd: 0,
+    sampleMaxDocuments: 3,
+    maxAnalyseDocuments: 10,
+    summaryRecordCap: 50,
+    contextBudgetTokens: 100_000,
+    maxPromptTokens: 180_000,
   };
 
   it("accepts a valid configuration", () => {
@@ -169,6 +174,19 @@ describe("settings router — extractionConfigInputSchema", () => {
     expect(
       extractionConfigInputSchema.safeParse({ ...valid, perRunCostCeilingUsd: -1 }).success,
     ).toBe(false);
+  });
+
+  it("rejects a non-positive or fractional size limit", () => {
+    for (const key of [
+      "sampleMaxDocuments",
+      "maxAnalyseDocuments",
+      "summaryRecordCap",
+      "contextBudgetTokens",
+      "maxPromptTokens",
+    ] as const) {
+      expect(extractionConfigInputSchema.safeParse({ ...valid, [key]: 0 }).success).toBe(false);
+      expect(extractionConfigInputSchema.safeParse({ ...valid, [key]: 2.5 }).success).toBe(false);
+    }
   });
 
   it("rejects a non-positive file or entry cap", () => {

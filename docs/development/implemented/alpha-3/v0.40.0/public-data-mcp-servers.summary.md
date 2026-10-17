@@ -1,6 +1,6 @@
-# Implementation Summary — Read-Only Public-Data MCP Servers in Flows (v0.39.0)
+# Implementation Summary — Read-Only Public-Data MCP Servers in Flows (v0.40.0)
 
-- **Version**: 0.38.0 → **0.39.0** (MINOR — schema change)
+- **Version**: 0.39.0 → **0.40.0** (MINOR — schema change)
 - **Phase doc**: `public-data-mcp-servers.phase.md` (this folder)
 - **ADRs**: ADR-062 (new; the first written MCP ADR — the "ADR-032" code comments cited for MCP
   has no file)
@@ -48,7 +48,7 @@ settings.
   `mcp/mcp-fixture-server.test-support.ts` (stateless, stateful and SSE fixtures),
   repositories `drizzle-mcp-server-secret-store.ts`, `drizzle-mcp-tool-repository.ts`,
   `drizzle-mcp-call-queue.ts` (each with a test), `mcp/mcp-server-directory.test.ts`
-- Migrations: `drizzle/0054_mcp_public_data_readers.sql`, `drizzle/0055_mcp_drop_legacy_credentials.sql`
+- Migrations: `drizzle/0055_mcp_public_data_readers.sql`, `drizzle/0056_mcp_drop_legacy_credentials.sql`
   (+ snapshots and journal)
 - Web: `components/admin/mcp-server-form-model.ts` (+ test), `components/admin/mcp-tools-panel.tsx`,
   `components/chat/tool-progress-label-model.ts` (+ test), `components/chat/cited-sources-model.ts`
@@ -79,10 +79,10 @@ settings.
 
 ## Migrations
 
-- `0054_mcp_public_data_readers.sql`:
+- `0055_mcp_public_data_readers.sql`:
   - **What it does:** adds `data_classification`, `call_timeout_ms` and the two ciphertext columns to `admin_mcp_servers`, adds `title` and three settings columns to `admin_mcp_tools`, and creates `job_mcp_calls`. A hand-added `UPDATE` carries `communicates_externally = true` into `'external-write'`.
   - **Data impact:** `-- data-impact: preserved — …`
-- `0055_mcp_drop_legacy_credentials.sql`:
+- `0056_mcp_drop_legacy_credentials.sql`:
   - **What it does:** drops `credential_ref` and `communicates_externally`.
   - **Data impact:** `-- data-impact: destructive, approved — … MCP_CRED_* secrets must be re-entered …`
 
@@ -105,8 +105,8 @@ settings.
 ## Deviations from the approved summary
 
 1. **Two migrations, not one.** `drizzle-kit generate` prompts interactively when a table drops a
-   column and adds one in the same change. 0054 adds the columns and carries the data across;
-   0055 drops the old columns. Both are generated.
+   column and adds one in the same change. 0055 adds the columns and carries the data across;
+   0056 drops the old columns. Both are generated.
 2. **Field citations live on `StepOutputField`**, not on ADR-053's `FieldSourceRef`: `FieldSourceRef`
    belongs to extraction records, which no MCP result reaches. Agreed during the build. ADR-053 is
    unchanged.

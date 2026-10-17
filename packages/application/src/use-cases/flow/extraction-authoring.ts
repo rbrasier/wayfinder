@@ -7,6 +7,7 @@ import {
   parseExtractionSchema,
   type ExtractionSchema,
   type ExtractionSchemaDraft,
+  type ExtractionSchemaLimits,
   type Flow,
   type FlowVersion,
   type IFlowRepository,
@@ -40,6 +41,7 @@ export class SaveExtractionSchema {
   async execute(input: {
     flowId: string;
     schema: ExtractionSchemaDraft;
+    limits?: ExtractionSchemaLimits;
   }): Promise<Result<FlowVersion>> {
     const flowResult = await this.flows.findById(input.flowId);
     if (flowResult.error) return flowResult;
@@ -48,7 +50,7 @@ export class SaveExtractionSchema {
       return err(domainError("VALIDATION_FAILED", "This flow is not an extraction flow."));
     }
 
-    const parsed = parseExtractionSchema(input.schema);
+    const parsed = parseExtractionSchema(input.schema, input.limits);
     if (parsed.error) return parsed;
 
     const snapshot = buildExtractionSnapshot(flowResult.data, parsed.data);

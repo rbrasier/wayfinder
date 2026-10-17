@@ -91,6 +91,24 @@ export interface ExtractionConfig {
   // Per-run spend ceiling in USD, checked worker-side before each claim; 0
   // disables it (ADR-033 §9).
   perRunCostCeilingUsd: number;
+  // Size limits that were hardcoded until issue #335; each defaults to the old
+  // constant so behaviour is unchanged until an admin edits it.
+  sampleMaxDocuments: number;
+  maxAnalyseDocuments: number;
+  summaryRecordCap: number;
+  // Flow context material injected into every extraction prompt, in tokens.
+  contextBudgetTokens: number;
+  // Ceiling on one extraction call's prompt; a larger document is read in parts.
+  maxPromptTokens: number;
+}
+
+// The concrete numbers an extraction call consumes. The window is carried
+// separately from the admin ceiling because the reply has to fit inside the
+// window too, and only the caller knows how large the reply will be.
+export interface ExtractionPromptBudget {
+  contextBudgetChars: number;
+  maxPromptTokens: number;
+  contextWindowTokens: number;
 }
 
 // How the document-generation context budget is expressed: a fixed token cap,

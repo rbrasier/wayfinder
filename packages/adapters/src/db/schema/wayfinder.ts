@@ -675,6 +675,9 @@ export const app_extraction_draft_documents = pgTable(
     tree_path: text("tree_path").notNull(),
     storage_key: text("storage_key").notNull(),
     mime_type: text("mime_type").notNull(),
+    // Readable text characters measured at upload (issue #335). Null for rows
+    // staged before it was recorded, or when extraction failed at upload.
+    text_length: integer("text_length"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

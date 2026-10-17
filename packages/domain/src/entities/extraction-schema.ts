@@ -20,6 +20,9 @@ export const PREVIEW_FILE_THRESHOLD = 5;
 export const MAX_ANALYSE_DOCUMENTS = 10;
 export const DEFAULT_ANALYSE_DOCUMENTS = 3;
 
+// How many records the run summary reads by default; the admin can change it.
+export const DEFAULT_SUMMARY_RECORD_CAP = 50;
+
 export const shouldPreviewByDefault = (inputFileCount: number): boolean =>
   inputFileCount > PREVIEW_FILE_THRESHOLD;
 
@@ -129,22 +132,28 @@ export const buildExtractionField = (draft: ExtractionFieldDraft): Result<Extrac
   });
 };
 
-const validateInputConfig = (input: ExtractionInputConfig): Result<ExtractionInputConfig> => {
+// Admin-tunable bounds the schema is validated against (issue #335). Omitted
+// means the code default, so a caller without runtime config behaves as before.
+export interface ExtractionSchemaLimits {
+  maxAnalyseDocuments: number;
+}
+
+const validateInputConfig = (
+  input: ExtractionInputConfig,
+  limits: ExtractionSchemaLimits,
+): Result<ExtractionInputConfig> => {
   const criteria = input.selectionCriteria?.trim() ?? "";
   const autoAnalyse = isAutoAnalyseOn(input);
   const analyseSampleSize = analyseDocumentCount(input);
+  const ceiling = limits.maxAnalyseDocuments;
 
   // Checked whether or not auto analyse is currently on, so a bad value cannot
   // sit dormant in the config and surface the moment the author toggles it back.
-  if (
-    !Number.isInteger(analyseSampleSize) ||
-    analyseSampleSize < 1 ||
-    analyseSampleSize > MAX_ANALYSE_DOCUMENTS
-  ) {
+  if (!Number.isInteger(analyseSampleSize) || analyseSampleSize < 1 || analyseSampleSize > ceiling) {
     return err(
       domainError(
         "VALIDATION_FAILED",
-        `Auto analyse reads between 1 and ${MAX_ANALYSE_DOCUMENTS} documents; ${analyseSampleSize} is outside that range.`,
+        `Auto analyse reads between 1 and ${ceiling} documents; ${analyseSampleSize} is outside that range.`,
       ),
     );
   }
@@ -199,7 +208,10 @@ const normaliseOutputConfig = (output: ExtractionOutputConfig): ExtractionOutput
   contextDocs: output.contextDocs,
 });
 
-export const parseExtractionSchema = (draft: ExtractionSchemaDraft): Result<ExtractionSchema> => {
+export const parseExtractionSchema = (
+  draft: ExtractionSchemaDraft,
+  limits: ExtractionSchemaLimits = { maxAnalyseDocuments: MAX_ANALYSE_DOCUMENTS },
+): Result<ExtractionSchema> => {
   if (draft.fields.length === 0) {
     return err(
       domainError("VALIDATION_FAILED", "An extraction flow needs at least one field to pull."),
@@ -225,7 +237,7 @@ export const parseExtractionSchema = (draft: ExtractionSchemaDraft): Result<Extr
     fields.push(built.data);
   }
 
-  const input = validateInputConfig(draft.input);
+  const input = validateInputConfig(draft.input, limits);
   if (input.error) return input;
 
   return ok({ fields, input: input.data, output: normaliseOutputConfig(draft.output) });

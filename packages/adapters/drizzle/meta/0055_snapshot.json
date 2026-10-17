@@ -1,6 +1,6 @@
 {
-  "id": "b5545c2a-5b71-4106-838a-5672833104b1",
-  "prevId": "56de5584-4470-4094-ac34-b6a4905fda0c",
+  "id": "a54bf49a-a42e-4661-9c85-1e5c2f2b3020",
+  "prevId": "7e02c09a-e8db-41c3-a299-145dbebc9f62",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1083,6 +1083,19 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "credential_ref": {
+          "name": "credential_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "communicates_externally": {
+          "name": "communicates_externally",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "data_classification": {
           "name": "data_classification",
@@ -3169,6 +3182,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "text_length": {
+          "name": "text_length",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
