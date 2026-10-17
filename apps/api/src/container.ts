@@ -31,6 +31,7 @@ import {
   SweepFlowMemory,
   CaptureSessionObservations,
   DistilFlowLessons,
+  ExecuteQueuedMcpCalls,
 } from "@wayfinder/application";
 import {
   AiFieldProposer,
@@ -82,6 +83,14 @@ import {
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
+  AuditingMcpClient,
+  DrizzleMcpCallQueue,
+  DrizzleMcpServerRepository,
+  DrizzleMcpServerSecretStore,
+  DrizzleMcpToolRepository,
+  McpCallWorker,
+  McpSdkClient,
+  createPostgresSessionEventBus,
 } from "@wayfinder/adapters";
 import { HttpTickFirer } from "./scheduler/http-tick-firer.js";
 import { EMBEDDINGS_DEFAULT_PROVIDER } from "@wayfinder/shared";
@@ -103,9 +112,10 @@ export const buildContainer = (env: Env) => {
   const featureFlags = new DrizzleFeatureFlagRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
+  const settingsEncryption = new SettingsEncryptionService(createSettingsEncryptionKey(env.SETTINGS_ENCRYPTION_KEY));
   const systemSettings = new EncryptedSystemSettingsRepository(
     new DrizzleSystemSettingsRepository(db),
-    new SettingsEncryptionService(createSettingsEncryptionKey(env.SETTINGS_ENCRYPTION_KEY)),
+    settingsEncryption,
   );
   const sessions = new DrizzleSessionRepository(db);
   const flows = new DrizzleFlowRepository(db);
@@ -338,6 +348,37 @@ export const buildContainer = (env: Env) => {
       ]
     : [];
 
+  // Queued MCP node calls (ADR-062 §3). The worker publishes on the same session
+  // event bus the web app listens on, so every open window sees the progress.
+  const applyAutoNodeResult = new ApplyAutoNodeResult(
+    sessions,
+    flowNodes,
+    flowEdges,
+    sessionStepOutputs,
+    notifyOnSessionComplete,
+    notifyOnStepComplete,
+  );
+  const mcpServerSecrets = new DrizzleMcpServerSecretStore(db, settingsEncryption);
+  const mcpCallWorkers = env.MCP_CALL_WORKER_ENABLED
+    ? [
+        new McpCallWorker(
+          new ExecuteQueuedMcpCalls({
+            queue: new DrizzleMcpCallQueue(db),
+            servers: new DrizzleMcpServerRepository(db, settingsEncryption),
+            tools: new DrizzleMcpToolRepository(db),
+            client: new AuditingMcpClient(new McpSdkClient(mcpServerSecrets), auditLogger, logger),
+            applyResult: applyAutoNodeResult,
+            flowNodes,
+            sessionMessages,
+            sessionEvents: createPostgresSessionEventBus(env.DATABASE_URL),
+          }),
+          jobRepo,
+          logger,
+          { tickIntervalMs: env.MCP_CALL_TICK_MS, maxInFlight: env.MCP_CALL_MAX_IN_FLIGHT },
+        ),
+      ]
+    : [];
+
   return {
     env,
     db,
@@ -347,10 +388,11 @@ export const buildContainer = (env: Env) => {
     retentionWorkers,
     flowMemoryWorkers,
     extractionWorkers,
+    mcpCallWorkers,
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {
-      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete, notifyOnStepComplete),
+      applyAutoNodeResult,
       createUser: new CreateUser(users),
       updateUser: new UpdateUser(users),
       deleteUser: new DeleteUser(users),

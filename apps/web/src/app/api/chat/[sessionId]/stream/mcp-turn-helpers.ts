@@ -1,10 +1,15 @@
 import {
+  numberCitations,
+  resolveCitedSources,
   type AiTurnPayload,
+  type CitedSource,
   type ConversationalNodeConfig,
   type Flow,
   type FlowNode,
   type McpToolCallRecord,
+  type NumberedCitation,
   type Session,
+  type SessionEvent,
   type SessionMessage,
 } from "@wayfinder/domain";
 import { resolveModel } from "@wayfinder/adapters";
@@ -21,8 +26,9 @@ export interface DispatchMcpNodeInput {
   userId: string;
 }
 
-// Runs a deterministic MCP node: calls the configured tool synchronously, then
-// applies the result through the shared auto-node-result path (persist + advance).
+// Starts a deterministic MCP node. The call itself is queued (ADR-062 §3): the
+// turn posts that the step is waiting and ends, and the apps/api worker makes
+// the call, applies the result and posts the outcome.
 export async function dispatchMcpNode(input: DispatchMcpNodeInput): Promise<void> {
   const { container, session, flow, node, messages, userId } = input;
   try {
@@ -34,22 +40,9 @@ export async function dispatchMcpNode(input: DispatchMcpNodeInput): Promise<void
       userId,
     });
 
-    if (!result.error && result.data.status === "completed") {
-      await container.useCases.applyAutoNodeResult.execute({
-        sessionId: session.id,
-        correlationId: result.data.correlationId,
-        nodeId: node.id,
-        status: "completed",
-        data: result.data.data,
-        // A verbatim-only connection's result must reach storage as the bytes it
-        // arrived as; the ordinary coercion would trim it (ADR-053 §5).
-        verbatim: result.data.verbatim,
-      });
-    }
-
     const content = result.error
       ? `This tool step (${node.name}) could not run: ${result.error.message}`
-      : `Completed tool step: ${node.name}.`;
+      : `Waiting on the source for step: ${node.name}.`;
 
     await container.repos.sessionMessages.create({
       sessionId: session.id,
@@ -90,6 +83,15 @@ export interface RunMcpToolPrepassInput {
   sessionId: string;
   // The node this turn runs on; the persisted tool-call audit is anchored to it.
   nodeId: string | null;
+  // Carries `tool.progress` to every open window while a tool runs (ADR-062 §4).
+  publishEvent: (event: SessionEvent) => void;
+}
+
+export interface McpToolPrepassOutcome {
+  gatheredContext: string;
+  // The source records the model was shown, by marker, for resolving the
+  // citations in its reply.
+  numberedCitations: NumberedCitation[];
 }
 
 // Collects every tool call already made earlier in the visible window so the
@@ -98,29 +100,86 @@ export interface RunMcpToolPrepassInput {
 const collectPriorToolCalls = (messages: SessionMessage[]): McpToolCallRecord[] =>
   messages.flatMap((message) => message.aiPayload?.toolCalls ?? []);
 
-const renderToolResults = (records: McpToolCallRecord[]): string =>
-  records.map((record) => `- ${record.toolName}: ${record.result}`).join("\n");
+// The prompt budget for every tool result re-injected into a turn. Past it, the
+// oldest results are cut first and the cut is stated, so the model knows to call
+// the tool again rather than reading a cut result as the whole answer.
+export const TOOL_RESULTS_PROMPT_BUDGET_CHARS = 60_000;
 
-// Runs the conversational tool-loop pre-pass (ADR-032) when a step allows MCP
-// tools, returning the step's gathered context with tool results appended. The
-// `mcp` flag is the runtime kill switch: with it off, no tools run even for an
-// already-authored flow. Returns the context unchanged when the flag is off, no
+const CITATION_INSTRUCTION =
+  "When a statement relies on a source record, cite it with its marker, e.g. [S1].";
+
+const fitToBudget = (records: readonly McpToolCallRecord[]): string[] => {
+  let remaining = TOOL_RESULTS_PROMPT_BUDGET_CHARS;
+  const fitted: string[] = new Array(records.length);
+  for (let index = records.length - 1; index >= 0; index--) {
+    const result = records[index]!.result;
+    const kept = result.slice(0, Math.max(0, remaining));
+    remaining -= kept.length;
+    const omitted = result.length - kept.length;
+    fitted[index] =
+      omitted > 0 ? `${kept}\n[${omitted} characters omitted — call the tool again for the full result]` : kept;
+  }
+  return fitted;
+};
+
+const describeCitation = (entry: NumberedCitation): string => {
+  const { title, locator, url } = entry.citation;
+  const label = title ? `${title} — ${locator}` : locator;
+  return `    [${entry.marker}] ${label}${url ? ` (${url})` : ""}`;
+};
+
+export const renderToolResults = (
+  records: readonly McpToolCallRecord[],
+): { text: string; numbered: NumberedCitation[] } => {
+  const numbered = numberCitations(records.flatMap((record) => record.citations ?? []));
+  const markerByLocator = new Map(
+    numbered.map((entry) => [`${entry.citation.serverId}|${entry.citation.toolName}|${entry.citation.locator}`, entry]),
+  );
+  const results = fitToBudget(records);
+  const lines = records.map((record, index) => {
+    const parts = [`- ${record.toolName} (${record.serverLabel}): ${results[index]}`];
+    if (record.truncated) parts.push("  [The stored result was cut at its size limit.]");
+    const sources = (record.citations ?? [])
+      .map((citation) => markerByLocator.get(`${citation.serverId}|${citation.toolName}|${citation.locator}`))
+      .filter((entry): entry is NumberedCitation => entry !== undefined);
+    if (sources.length > 0) parts.push("  Sources:", ...[...new Set(sources)].map(describeCitation));
+    return parts.join("\n");
+  });
+  if (numbered.length > 0) lines.push(CITATION_INSTRUCTION);
+  return { text: lines.join("\n"), numbered };
+};
+
+// The records the reply cited, or undefined so a payload that cited nothing
+// carries no empty member.
+export const citedSourcesFor = (
+  response: string,
+  numbered: readonly NumberedCitation[],
+): CitedSource[] | undefined => {
+  const cited = resolveCitedSources(response, numbered);
+  return cited.length > 0 ? cited : undefined;
+};
+
+// Runs the conversational tool-loop pre-pass (ADR-062) when a step allows MCP
+// tools, returning the step's gathered context with tool results appended and
+// the source records it numbered for citation. The `mcp` flag is the runtime
+// kill switch: with it off, no tools run even for an already-authored flow. Returns the context unchanged when the flag is off, no
 // tools are allowed, none resolve, or the pre-pass fails — a tool problem must
 // never block the turn.
-export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<string> {
+export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<McpToolPrepassOutcome> {
   const { container, nodeConfig, dbMessages, lastUserMessage, gatheredContext } = input;
+  const unchanged: McpToolPrepassOutcome = { gatheredContext, numberedCitations: [] };
   const allowed = nodeConfig.allowedMcpToolRefs ?? [];
-  if (allowed.length === 0) return gatheredContext;
+  if (allowed.length === 0) return unchanged;
 
   const flag = await container.useCases.isFeatureEnabledForUser.execute(
     input.userId,
     "mcp",
     input.isAdmin,
   );
-  if (flag.error || flag.data !== true) return gatheredContext;
+  if (flag.error || flag.data !== true) return unchanged;
 
   const resolved = await container.useCases.resolveStepTools.execute(allowed);
-  if (resolved.error || resolved.data.refs.length === 0) return gatheredContext;
+  if (resolved.error || resolved.data.refs.length === 0) return unchanged;
 
   const allowedToolNamesByServer: Record<string, string[]> = {};
   for (const ref of resolved.data.refs) {
@@ -145,7 +204,7 @@ export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<
   const priorToolCalls = collectPriorToolCalls(dbMessages);
   const priorResultsBlock =
     priorToolCalls.length > 0
-      ? `\n\nInformation already gathered via tools earlier in this step (do not call a tool again for anything already answered here):\n${renderToolResults(priorToolCalls)}`
+      ? `\n\nInformation already gathered via tools earlier in this step (do not call a tool again for anything already answered here):\n${renderToolResults(priorToolCalls).text}`
       : "";
 
   const prepass = await container.services.mcpToolPrepass.run({
@@ -161,6 +220,8 @@ export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<
     userId: input.userId,
     flowId: input.flowId,
     sessionId: input.sessionId,
+    nodeId: input.nodeId,
+    onToolProgress: input.publishEvent,
   });
 
   const newToolCalls = prepass.error ? [] : prepass.data.toolCalls;
@@ -171,9 +232,13 @@ export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<
   // Combine prior + new results so the structured turn retains everything the
   // step gathered, not only what was fetched on this turn.
   const combined = [...priorToolCalls, ...newToolCalls];
-  if (combined.length === 0) return gatheredContext;
+  if (combined.length === 0) return unchanged;
 
-  return `${gatheredContext}\n\n<tool_results>\n${renderToolResults(combined)}\n</tool_results>`;
+  const rendered = renderToolResults(combined);
+  return {
+    gatheredContext: `${gatheredContext}\n\n<tool_results>\n${rendered.text}\n</tool_results>`,
+    numberedCitations: rendered.numbered,
+  };
 }
 
 // Persists the pre-pass tool calls as the audit trail: the transcript carries a
@@ -189,7 +254,7 @@ async function persistToolCallAudit(
   const content = `Consulted ${toolCalls.length} tool call${toolCalls.length === 1 ? "" : "s"} (${names.join(", ")}).`;
   const aiPayload: AiTurnPayload = {
     response: summary,
-    rationale: "MCP tool pre-pass (ADR-032).",
+    rationale: "MCP tool pre-pass (ADR-062).",
     stepCompleteConfidence: 0,
     contextGathered: [],
     toolCalls,

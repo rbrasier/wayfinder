@@ -12,6 +12,7 @@ const makeHost = (overrides: Partial<WorkerHost> = {}): WorkerHost => ({
   retentionWorkers: [],
   extractionWorkers: [],
   flowMemoryWorkers: [],
+  mcpCallWorkers: [],
   ...overrides,
 });
 
@@ -20,6 +21,7 @@ const allEnabled: WorkerToggles = {
   RETENTION_ENABLED: true,
   EXTRACTION_WORKER_ENABLED: true,
   FLOW_MEMORY_ENABLED: true,
+  MCP_CALL_WORKER_ENABLED: true,
 };
 
 let logged: string[];
@@ -56,6 +58,27 @@ describe("startWorkers", () => {
       "[api] retention worker started (1 worker(s))",
       "[api] extraction worker started (1 worker(s))",
     ]);
+  });
+
+  it("starts the MCP call worker, and stops it with the rest", () => {
+    const mcpCall = makeWorker();
+    const host = makeHost({ mcpCallWorkers: [mcpCall] });
+
+    startWorkers(host, allEnabled);
+    stopWorkers(host);
+
+    expect(mcpCall.start).toHaveBeenCalledOnce();
+    expect(mcpCall.stop).toHaveBeenCalledOnce();
+    expect(logged).toEqual(["[api] MCP call worker started (1 worker(s))"]);
+  });
+
+  it("leaves the MCP call worker off when its toggle is off", () => {
+    const mcpCall = makeWorker();
+    const host = makeHost({ mcpCallWorkers: [mcpCall] });
+
+    startWorkers(host, { ...allEnabled, MCP_CALL_WORKER_ENABLED: false });
+
+    expect(mcpCall.start).not.toHaveBeenCalled();
   });
 
   it("reports the worker count when a group runs more than one worker", () => {

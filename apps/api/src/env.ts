@@ -133,6 +133,14 @@ const envSchema = z.object({
     .optional()
     .transform((value) => value !== "false"),
   EXTRACTION_TICK_MS: z.coerce.number().int().positive().default(5000),
+  // Queued MCP node calls (ADR-062 §3). On by default: nothing else runs them, so
+  // an MCP step would wait forever without it. Set it to "false" to opt out.
+  MCP_CALL_WORKER_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== "false"),
+  MCP_CALL_TICK_MS: z.coerce.number().int().positive().default(2000),
+  MCP_CALL_MAX_IN_FLIGHT: z.coerce.number().int().positive().default(10),
   // Operational/telemetry tables get finite defaults. Audit and conversation
   // history default to 0 (keep forever) — deleting them is a deliberate,
   // compliance-sensitive choice the operator must make.

@@ -185,7 +185,7 @@ async function handlePOST(
   // Conversational tool-loop (ADR-032): when a step allows MCP tools, let the model
   // call them in a non-streaming pre-pass and fold the gathered results into the
   // step context, leaving the structured streaming turn below untouched.
-  const gatheredContextWithTools = await runMcpToolPrepass({
+  const toolPrepass = await runMcpToolPrepass({
     container,
     nodeConfig,
     dbMessages,
@@ -196,6 +196,7 @@ async function handlePOST(
     flowId: flow.id,
     sessionId,
     nodeId: session.currentNodeId,
+    publishEvent,
   });
 
   // The lease is claimed; tell every open window whose turn it now is so they
@@ -215,7 +216,7 @@ async function handlePOST(
     templateFields,
     retrievedChunks,
     sessionUploads,
-    gatheredContext: gatheredContextWithTools,
+    gatheredContext: toolPrepass.gatheredContext,
     workflowName: flow.name,
     organisationName,
     globalInstructions,
@@ -293,6 +294,7 @@ async function handlePOST(
           userId: principal.userId,
           isAdmin: principal.isAdmin,
           lastUserMessage,
+          numberedCitations: toolPrepass.numberedCitations,
         });
       } finally {
         clearInterval(heartbeat);

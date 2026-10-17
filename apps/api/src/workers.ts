@@ -18,6 +18,7 @@ export interface WorkerHost {
   readonly retentionWorkers: readonly TickWorker[];
   readonly extractionWorkers: readonly TickWorker[];
   readonly flowMemoryWorkers: readonly TickWorker[];
+  readonly mcpCallWorkers: readonly TickWorker[];
 }
 
 export interface WorkerToggles {
@@ -25,6 +26,7 @@ export interface WorkerToggles {
   readonly RETENTION_ENABLED: boolean;
   readonly EXTRACTION_WORKER_ENABLED: boolean;
   readonly FLOW_MEMORY_ENABLED: boolean;
+  readonly MCP_CALL_WORKER_ENABLED: boolean;
 }
 
 const startGroup = (
@@ -64,6 +66,10 @@ export const startWorkers = (host: WorkerHost, toggles: WorkerToggles): void => 
   if (toggles.EXTRACTION_WORKER_ENABLED && host.extractionWorkers.length > 0) {
     startGroup(host, host.extractionWorkers, "extraction worker", "Extraction worker failed to start.");
   }
+
+  if (toggles.MCP_CALL_WORKER_ENABLED && host.mcpCallWorkers.length > 0) {
+    startGroup(host, host.mcpCallWorkers, "MCP call worker", "MCP call worker failed to start.");
+  }
 };
 
 export const stopWorkers = (host: WorkerHost): void => {
@@ -71,4 +77,5 @@ export const stopWorkers = (host: WorkerHost): void => {
   for (const worker of host.retentionWorkers) worker.stop();
   for (const worker of host.flowMemoryWorkers) worker.stop();
   for (const worker of host.extractionWorkers) worker.stop();
+  for (const worker of host.mcpCallWorkers) worker.stop();
 };
