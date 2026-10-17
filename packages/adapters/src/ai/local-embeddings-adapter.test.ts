@@ -68,24 +68,39 @@ describe("LocalEmbeddingsAdapter", () => {
 });
 
 describe("isLocalEmbeddingsAvailable", () => {
+  const TRANSFORMERS_ENTRY = "/store/@huggingface/transformers/dist/index.js";
+
   it("is true when both the pipeline package and the native runtime resolve", () => {
-    const resolve = vi.fn();
+    const resolve = vi.fn(() => TRANSFORMERS_ENTRY);
 
     expect(isLocalEmbeddingsAvailable(resolve)).toBe(true);
-    expect(resolve).toHaveBeenCalledWith("@huggingface/transformers");
-    expect(resolve).toHaveBeenCalledWith("onnxruntime-node");
+    expect(resolve).toHaveBeenCalledWith("@huggingface/transformers", undefined);
+    expect(resolve).toHaveBeenCalledWith("onnxruntime-node", TRANSFORMERS_ENTRY);
+  });
+
+  // pnpm links only direct dependencies beside a package: onnxruntime-node
+  // belongs to transformers, so it is reachable from there and not from adapters.
+  it("is true under a strict pnpm layout where the native runtime is reachable only from transformers", () => {
+    const resolve = (specifier: string, fromPath?: string) => {
+      if (specifier === "@huggingface/transformers") return TRANSFORMERS_ENTRY;
+      if (fromPath === TRANSFORMERS_ENTRY) return "/store/onnxruntime-node/dist/index.js";
+      throw new Error("Cannot find module");
+    };
+
+    expect(isLocalEmbeddingsAvailable(resolve)).toBe(true);
   });
 
   it("is false when the native runtime is missing, as in a Lambda zip", () => {
     const resolve = (specifier: string) => {
       if (specifier === "onnxruntime-node") throw new Error("Cannot find module");
+      return TRANSFORMERS_ENTRY;
     };
 
     expect(isLocalEmbeddingsAvailable(resolve)).toBe(false);
   });
 
   it("is false when the pipeline package itself is missing", () => {
-    const resolve = () => {
+    const resolve = (): string => {
       throw new Error("Cannot find module");
     };
 
