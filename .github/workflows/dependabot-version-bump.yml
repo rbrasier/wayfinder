@@ -57,7 +57,7 @@ jobs:
           fi
           echo "bump=true" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.scope.outputs.bump == 'true'
         with:
           ref: ${{ github.event.pull_request.head.ref }}
