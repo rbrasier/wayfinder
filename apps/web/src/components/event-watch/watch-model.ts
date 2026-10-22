@@ -188,32 +188,48 @@ export const conditionOfKind = (kind: WatchCondition["kind"], current: WatchCond
   return { kind, fieldPath, from: null, to: "" };
 };
 
-// Which field the tree is filling. The items list is picked from the whole
-// response; everything else is relative to one item.
-export type PickTarget =
-  | { kind: "items" }
-  | { kind: "item_id" }
-  | { kind: "condition" }
-  | { kind: "input"; key: string };
+// What a field dropdown lists (ADR-063 §2). The list of items is chosen from
+// the whole response; every other field is relative to one item, so it lists
+// the first item's paths.
+export type SampleFieldKind = "items" | "item_value" | "item_any";
 
-export const picksFromItem = (target: PickTarget): boolean => target.kind !== "items";
+export interface SampleFieldOption {
+  path: string;
+  label: string;
+}
 
-export const canPickRow = (target: PickTarget, row: JsonTreeRow): boolean => {
-  if (target.kind === "items") return row.kind === "array";
-  if (target.kind === "input") return true;
-  return row.kind === "value";
+const WHOLE_RESPONSE: SampleFieldOption = { path: "", label: "The whole response is one item" };
+
+const fitsKind = (kind: SampleFieldKind, row: JsonTreeRow): boolean => {
+  if (row.kind === "more") return false;
+  if (kind === "items") return row.kind === "array";
+  if (kind === "item_value") return row.kind === "value";
+  return true;
 };
+
+export const sampleFieldOptions = (
+  sample: unknown,
+  itemsPath: string,
+  kind: SampleFieldKind,
+): SampleFieldOption[] => {
+  if (sample === undefined) return [];
+  const source = kind === "items" ? sample : firstItemOf(sample, itemsPath);
+  if (source === undefined) return [];
+  const seen = new Set<string>();
+  const options = jsonTreeRows(source)
+    .filter((row) => fitsKind(kind, row) && row.path !== "" && !seen.has(row.path) && seen.add(row.path))
+    .map((row) => ({ path: row.path, label: row.preview ? `${row.path} — ${row.preview}` : row.path }));
+  return kind === "items" ? [WHOLE_RESPONSE, ...options] : options;
+};
+
+// Typing a path by hand is the escape hatch: chosen explicitly, or forced when
+// a saved path is not in the sample (or there is no sample yet).
+export const isManualFieldValue = (value: string, options: SampleFieldOption[], manualChosen: boolean): boolean =>
+  manualChosen || (value !== "" && !options.some((option) => option.path === value));
 
 // What the router's `secret` means: a typed value replaces, an explicit removal
 // clears, and an untouched field keeps what is stored.
 export const secretChangeFor = (typed: string, clear: boolean): string | null | undefined => {
   if (clear) return null;
   return typed.trim() === "" ? undefined : typed;
-};
-
-export const pickTargetLabel = (target: PickTarget, inputLabel?: string): string => {
-  if (target.kind === "items") return "the list of items";
-  if (target.kind === "item_id") return "the field that identifies each item";
-  if (target.kind === "condition") return "the condition's field";
-  return inputLabel ?? target.key;
 };

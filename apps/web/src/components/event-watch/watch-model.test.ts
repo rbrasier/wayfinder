@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { EventWatch } from "@rbrasier/domain";
 import {
-  canPickRow,
   conditionOfKind,
   describeCondition,
   emptyWatchForm,
   firstItemOf,
   formFromWatch,
+  isManualFieldValue,
   jsonTreeRows,
   pausedReasonLabel,
+  sampleFieldOptions,
   secretChangeFor,
   watchInputFromForm,
 } from "./watch-model";
@@ -140,18 +141,45 @@ describe("conditionOfKind", () => {
   });
 });
 
-describe("canPickRow", () => {
-  const row = (kind: "object" | "array" | "value") => ({ path: "x", label: "x", depth: 0, kind, preview: "" });
+describe("sampleFieldOptions", () => {
+  const sample = { data: { hearings: [{ id: "H-1", committee: { name: "Finance" }, tags: ["a"] }, { id: "H-2" }] } };
 
-  it("takes only a list for the items path and only a value for the ID or condition field", () => {
-    expect(canPickRow({ kind: "items" }, row("array"))).toBe(true);
-    expect(canPickRow({ kind: "items" }, row("value"))).toBe(false);
-    expect(canPickRow({ kind: "item_id" }, row("value"))).toBe(true);
-    expect(canPickRow({ kind: "condition" }, row("object"))).toBe(false);
+  it("lists the response's lists for the items path, with the whole response first", () => {
+    expect(sampleFieldOptions(sample, "", "items").map((option) => option.path)).toEqual([
+      "",
+      "data.hearings",
+      "data.hearings[0].tags",
+    ]);
   });
 
-  it("lets an input take any part of the item", () => {
-    expect(canPickRow({ kind: "input", key: "hearing" }, row("object"))).toBe(true);
+  it("lists the first item's values for an ID or condition field, labelled with a sample value", () => {
+    expect(sampleFieldOptions(sample, "data.hearings", "item_value")).toEqual([
+      { path: "id", label: 'id — "H-1"' },
+      { path: "committee.name", label: 'committee.name — "Finance"' },
+      { path: "tags[0]", label: 'tags[0] — "a"' },
+    ]);
+  });
+
+  it("lists any part of the item for an input", () => {
+    expect(sampleFieldOptions(sample, "data.hearings", "item_any").map((option) => option.path)).toContain(
+      "committee",
+    );
+  });
+
+  it("lists nothing before a sample is fetched or when the items path leads nowhere", () => {
+    expect(sampleFieldOptions(undefined, "", "item_value")).toEqual([]);
+    expect(sampleFieldOptions(sample, "missing", "item_value")).toEqual([]);
+  });
+});
+
+describe("isManualFieldValue", () => {
+  const options = [{ path: "id", label: "id" }];
+
+  it("switches to typing when chosen, or when the saved path is not in the sample", () => {
+    expect(isManualFieldValue("id", options, false)).toBe(false);
+    expect(isManualFieldValue("", options, false)).toBe(false);
+    expect(isManualFieldValue("hearing.ref", options, false)).toBe(true);
+    expect(isManualFieldValue("id", options, true)).toBe(true);
   });
 });
 

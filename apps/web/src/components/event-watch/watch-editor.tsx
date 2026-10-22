@@ -11,19 +11,16 @@ import { Label } from "@/components/ui/label";
 import { PersonPicker } from "@/components/canvas/person-picker";
 import { trpc } from "@/trpc/client";
 import { ConditionBuilder } from "./condition-builder";
-import { JsonFieldPicker } from "./json-field-picker";
+import { JsonSamplePreview } from "./json-sample-preview";
+import { SampleFieldSelect } from "./sample-field-select";
 import { SELECT_CLASS, WatchConnectionFields } from "./watch-connection-fields";
 import {
-  canPickRow,
   emptyWatchForm,
-  firstItemOf,
   formFromWatch,
   jsonTreeRows,
-  pickTargetLabel,
-  picksFromItem,
+  sampleFieldOptions,
   secretChangeFor,
   watchInputFromForm,
-  type PickTarget,
   type WatchForm,
 } from "./watch-model";
 
@@ -40,7 +37,7 @@ type PreviewOutcome =
 const numberFrom = (value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
 
 // Admin → Event Watch editor (ADR-063 §2): connect, Test to fetch a sample,
-// click paths out of it, set the condition, preview it, and map the flow's
+// choose fields from it, set the condition, preview it, and map the flow's
 // inputs.
 export function WatchEditor({ existing }: WatchEditorProps) {
   const router = useRouter();
@@ -53,7 +50,6 @@ export function WatchEditor({ existing }: WatchEditorProps) {
   const [sample, setSample] = useState<unknown>(undefined);
   const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
   const [previewOutcome, setPreviewOutcome] = useState<PreviewOutcome | null>(null);
-  const [pickTarget, setPickTarget] = useState<PickTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -96,21 +92,6 @@ export function WatchEditor({ existing }: WatchEditorProps) {
     });
   };
 
-  const pick = (path: string) => {
-    if (!pickTarget) return;
-    if (pickTarget.kind === "items") change({ itemsPath: path });
-    if (pickTarget.kind === "item_id") change({ itemIdPath: path });
-    if (pickTarget.kind === "condition" && form.condition.kind !== "new_item") {
-      change({ condition: { ...form.condition, fieldPath: path } });
-    }
-    if (pickTarget.kind === "input") change({ inputMapping: { ...form.inputMapping, [pickTarget.key]: path } });
-    setPickTarget(null);
-  };
-
-  const togglePick = (target: PickTarget) =>
-    setPickTarget((current) => (current && JSON.stringify(current) === JSON.stringify(target) ? null : target));
-  const isPicking = (target: PickTarget) => JSON.stringify(pickTarget) === JSON.stringify(target);
-
   const save = () => {
     setError(null);
     const input = watchInputFromForm(form);
@@ -126,18 +107,10 @@ export function WatchEditor({ existing }: WatchEditorProps) {
   };
 
   const hasSample = sample !== undefined;
-  const pickFrom = pickTarget && picksFromItem(pickTarget) ? firstItemOf(sample, form.itemsPath) : sample;
   const saving = create.isPending || update.isPending;
-  const pickButton = (target: PickTarget) => (
-    <Button
-      type="button"
-      variant={isPicking(target) ? "default" : "outline"}
-      disabled={!hasSample}
-      onClick={() => togglePick(target)}
-    >
-      {isPicking(target) ? "Picking…" : "Pick"}
-    </Button>
-  );
+  const listOptions = sampleFieldOptions(sample, form.itemsPath, "items");
+  const valueOptions = sampleFieldOptions(sample, form.itemsPath, "item_value");
+  const inputOptions = sampleFieldOptions(sample, form.itemsPath, "item_any");
 
   return (
     <div className="h-full overflow-auto">
@@ -187,39 +160,32 @@ export function WatchEditor({ existing }: WatchEditorProps) {
               </CardHeader>
               <CardContent className="space-y-3">
                 {!hasSample && (
-                  <p className="text-sm text-muted-foreground">Test the connection to pick fields from a sample.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Test the connection to choose fields from a sample, or select them manually.
+                  </p>
                 )}
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="watch-items-path">List of items</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="watch-items-path"
-                        value={form.itemsPath}
-                        onChange={(event) => change({ itemsPath: event.target.value })}
-                        placeholder="Empty: the response is one item"
-                      />
-                      {pickButton({ kind: "items" })}
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="watch-item-id">Field that identifies each item</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id="watch-item-id"
-                        value={form.itemIdPath}
-                        onChange={(event) => change({ itemIdPath: event.target.value })}
-                        placeholder="id"
-                      />
-                      {pickButton({ kind: "item_id" })}
-                    </div>
-                  </div>
+                  <SampleFieldSelect
+                    id="watch-items-path"
+                    label="List of items"
+                    value={form.itemsPath}
+                    onChange={(itemsPath) => change({ itemsPath })}
+                    options={listOptions}
+                    emptyLabel="Choose the list"
+                  />
+                  <SampleFieldSelect
+                    id="watch-item-id"
+                    label="Field that identifies each item"
+                    value={form.itemIdPath}
+                    onChange={(itemIdPath) => change({ itemIdPath })}
+                    options={valueOptions}
+                    emptyLabel="Choose the field"
+                  />
                 </div>
                 <ConditionBuilder
                   condition={form.condition}
                   onChange={(condition) => change({ condition })}
-                  onPickField={() => togglePick({ kind: "condition" })}
-                  picking={isPicking({ kind: "condition" })}
+                  fieldOptions={valueOptions}
                 />
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
@@ -277,23 +243,15 @@ export function WatchEditor({ existing }: WatchEditorProps) {
                   </p>
                 )}
                 {triggerInputs.map((triggerInput) => (
-                  <div key={triggerInput.key} className="space-y-1.5">
-                    <Label htmlFor={`watch-input-${triggerInput.key}`}>
-                      {triggerInput.label || triggerInput.key}
-                      {triggerInput.required ? "" : " (optional)"}
-                    </Label>
-                    <div className="flex gap-2">
-                      <Input
-                        id={`watch-input-${triggerInput.key}`}
-                        value={form.inputMapping[triggerInput.key] ?? ""}
-                        onChange={(event) =>
-                          change({ inputMapping: { ...form.inputMapping, [triggerInput.key]: event.target.value } })
-                        }
-                        placeholder="Field of the item"
-                      />
-                      {pickButton({ kind: "input", key: triggerInput.key })}
-                    </div>
-                  </div>
+                  <SampleFieldSelect
+                    key={triggerInput.key}
+                    id={`watch-input-${triggerInput.key}`}
+                    label={`${triggerInput.label || triggerInput.key}${triggerInput.required ? "" : " (optional)"}`}
+                    value={form.inputMapping[triggerInput.key] ?? ""}
+                    onChange={(path) => change({ inputMapping: { ...form.inputMapping, [triggerInput.key]: path } })}
+                    options={inputOptions}
+                    emptyLabel="Choose the field of the item"
+                  />
                 ))}
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium">Runs belong to</p>
@@ -414,25 +372,8 @@ export function WatchEditor({ existing }: WatchEditorProps) {
               <p className="text-sm text-muted-foreground">Nothing yet. Use Test to fetch one.</p>
             ) : (
               <>
-                <p className="text-xs text-muted-foreground">
-                  {pickTarget
-                    ? `Click a field to use it for ${pickTargetLabel(
-                        pickTarget,
-                        pickTarget.kind === "input"
-                          ? triggerInputs.find((triggerInput) => triggerInput.key === pickTarget.key)?.label
-                          : undefined,
-                      )}.${picksFromItem(pickTarget) ? " Showing the first item." : ""}`
-                    : "Use a Pick button, then click a field here."}
-                </p>
-                {pickFrom === undefined ? (
-                  <p className="text-sm text-destructive">There is no list at the items path in this sample.</p>
-                ) : (
-                  <JsonFieldPicker
-                    rows={jsonTreeRows(pickFrom)}
-                    canPick={(row) => pickTarget !== null && canPickRow(pickTarget, row)}
-                    onPick={pick}
-                  />
-                )}
+                <p className="text-xs text-muted-foreground">What the API answered, for reference.</p>
+                <JsonSamplePreview rows={jsonTreeRows(sample)} />
               </>
             )}
           </aside>

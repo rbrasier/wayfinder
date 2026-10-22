@@ -1,10 +1,10 @@
 "use client";
 
 import type { WatchCondition, WatchMatchOperator } from "@rbrasier/domain";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { conditionOfKind } from "./watch-model";
+import { SampleFieldSelect } from "./sample-field-select";
+import { conditionOfKind, type SampleFieldOption } from "./watch-model";
 
 const SELECT_CLASS =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs";
@@ -26,11 +26,11 @@ const OPERATOR_LABELS: Record<WatchMatchOperator, string> = {
 interface ConditionBuilderProps {
   condition: WatchCondition;
   onChange: (condition: WatchCondition) => void;
-  onPickField: () => void;
-  picking: boolean;
+  // The sample's fields the condition can watch; empty before a Test.
+  fieldOptions: SampleFieldOption[];
 }
 
-export function ConditionBuilder({ condition, onChange, onPickField, picking }: ConditionBuilderProps) {
+export function ConditionBuilder({ condition, onChange, fieldOptions }: ConditionBuilderProps) {
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
@@ -50,20 +50,15 @@ export function ConditionBuilder({ condition, onChange, onPickField, picking }: 
       </div>
 
       {condition.kind !== "new_item" && (
-        <div className="space-y-1.5">
-          <Label htmlFor="watch-condition-field">Field</Label>
-          <div className="flex gap-2">
-            <Input
-              id="watch-condition-field"
-              value={condition.fieldPath}
-              onChange={(event) => onChange({ ...condition, fieldPath: event.target.value })}
-              placeholder="status"
-            />
-            <Button type="button" variant={picking ? "default" : "outline"} onClick={onPickField}>
-              {picking ? "Picking…" : "Pick"}
-            </Button>
-          </div>
-        </div>
+        <SampleFieldSelect
+          id="watch-condition-field"
+          label="Field"
+          value={condition.fieldPath}
+          onChange={(fieldPath) => onChange({ ...condition, fieldPath })}
+          options={fieldOptions}
+          emptyLabel="Choose the field to watch"
+          manualPlaceholder="status"
+        />
       )}
 
       {condition.kind === "transition" && (
