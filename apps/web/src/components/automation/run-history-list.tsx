@@ -52,6 +52,9 @@ export function RunHistoryList({
             {run.error && <p className="text-[12px] text-[#b42318]">{run.error}</p>}
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/chats/${run.sessionId}`}>Open chat</Link>
+            </Button>
             <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${TONE_CLASS[runStatusTone(run.status)]}`}>
               {runStatusLabel(run.status)}
             </span>

@@ -9,6 +9,7 @@ import { resolveGeneratingDocumentState } from "./generating-document-state";
 import { MarkdownText } from "./markdown-text";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
+import { AiTaskOutputCard } from "./ai-task-output-card";
 import { RecordCard } from "./record-card";
 import { MessageInfoModal } from "./message-info-modal";
 import {
@@ -446,7 +447,17 @@ export function MessageFeed({
                   }
                 />
               )}
-              {isAdvancingMsg && node && !isNeverDone && isStructuredNode && (
+              {/* An AI task's result is recorded whatever its confidence — a low
+                  one goes to review — so its card shows on every result. */}
+              {node?.type === "ai_task" && msg.role === "assistant" && (
+                <AiTaskOutputCard
+                  messageId={msg.id}
+                  stepName={node.name}
+                  confidence={msg.confidence}
+                  rationale={msg.aiPayload?.rationale ?? null}
+                />
+              )}
+              {isAdvancingMsg && node && node.type !== "ai_task" && !isNeverDone && isStructuredNode && (
                 <RecordCard
                   messageId={msg.id}
                   canEdit={showsEditAffordance({
