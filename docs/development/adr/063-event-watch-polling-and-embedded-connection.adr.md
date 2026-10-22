@@ -150,6 +150,12 @@ timeoutMs, maxBytes })`, returns `Result<{ status, json }>`. The adapter uses
   link-local (including `169.254.169.254`), RFC 1918, CGNAT and IPv6
   ULA/link-local, unless the host is listed in the `WATCH_ALLOWED_HOSTS`
   runtime setting. That setting is for on-prem APIs.
+
+  `WATCH_ALLOWED_HOSTS` and ADR-065's `EMAIL_ALLOWED_DOMAINS` are stored in
+  `admin_system_settings`. Neither is sensitive, so neither is encrypted.
+  Both are read through `RuntimeConfigStore` (ADR-041) and edited on a new
+  **Automation** card on Admin → Settings: two newline-separated lists, with
+  hostnames validated and wildcards rejected.
 - **Redirects.** It follows redirects manually, at most 3, re-checking each
   hop's address.
 - **Limits.** 15 s timeout, 5 MB response cap, and a response that must parse

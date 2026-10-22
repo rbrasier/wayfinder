@@ -82,10 +82,30 @@ new table. Columns: `enabled`, `token_hash`, `token_last_four`,
 The route only validates and calls `StartUnattendedRun` (ADR-065). The run
 proceeds asynchronously and the caller does not wait for steps.
 
-**Who may enable it.** The flow's owner, if they hold the existing
-`workflow:create_own` permission, or an admin. The run-as user defaults to
-whoever enabled it and can be changed only by an admin. Enable, disable,
-rotate and the HMAC toggle are audit-logged as `flow_trigger.*`.
+**Who may enable it.** A new registry permission, `flow:webhook_trigger`
+(label "Start flows via webhook"), is granted to **Power Users** by default.
+Admins hold it through the ADR-021 wildcard. A user may enable, disable,
+rotate or set HMAC on a flow's webhook only if they hold the permission
+**and** own the flow. Admins may do so on any flow. The `flowTrigger.*`
+mutations enforce this server-side, and the Triggers tab hides the webhook
+panel for anyone without it.
+
+`workflow:create_own` is deliberately **not** enough. It is granted to
+Everyone (`seed-roles.ts`), and an inbound endpoint that starts runs needs
+more trust than authoring a flow.
+
+The permission is granted to Power Users in two places:
+
+- **Fresh installs:** in `seed-roles.ts`.
+- **Upgraded installs:** in the migration's backfill (phase doc §7), because
+  `seed-roles.ts` only writes default grants for roles it creates.
+
+The run-as user defaults to whoever enabled the webhook and can be changed
+only by an admin. Enable, disable, rotate and the HMAC toggle are audit-logged
+as `flow_trigger.*`.
+
+Rejected: reusing `flow:advanced_config`. It would couple two unrelated
+capabilities, so an admin could not grant one without the other.
 
 Rejected: a token in the URL query string. It ends up in proxy and access
 logs. Rejected: HMAC only. Many low-code callers can't compute it.

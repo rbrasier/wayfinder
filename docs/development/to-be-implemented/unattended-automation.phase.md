@@ -79,12 +79,19 @@ flow's Triggers tab. Everything is flagged and permissioned, and it ships on
   watch, and the owner is alerted once per pause.
 - **Webhook.** Off by default for each flow. A bearer token, shown once and
   rotatable, plus optional HMAC. 60 calls a minute per flow. Invalid inputs get
-  a `400` and start no run.
+  a `400` and start no run. Enabling one requires the new
+  `flow:webhook_trigger` permission (Power Users by default; admins always)
+  **and** ownership of the flow. Admins can enable one on any flow.
 - **Run owner.** A named "run as" user per watch or webhook owns the session.
   The watch pauses if that user becomes inactive or loses access to the flow.
 - **Hand-off.** An AI task below its threshold goes to a reviewer, who can
-  accept, edit or reject. Conversational and approval steps hand off to a
-  person and wait.
+  accept, edit or reject. The reviewer is the run owner, an approval-style
+  approver, or a named user; there is no group reviewer (decided at
+  `/doc-review`). Conversational and approval steps hand off to a person and
+  wait.
+- **Disabled step types.** A run reaching an AI task or Email step whose flag
+  is off fails with `feature_disabled` and can be retried once the flag is
+  back on.
 - **Email.** Recipients are users, groups (expanded at send time) and fixed
   addresses. Fixed addresses are checked against an optional domain
   allow-list. Prior-step docx and xlsx files can be attached.
@@ -110,8 +117,8 @@ review and test granularity, not separate releases.
 - **Sub-phase C: Event Watch.** The outbound HTTP client, the poller, the admin
   UI, run history and the badge.
 
-One migration covers all three, generated in A, so 0.28.40 carries a single
-schema step.
+The schema migration and the seed migration (§7) cover all three sub-phases.
+Both are created in A, so 0.28.40 carries one migrate step.
 
 ## 6. Key entities / files
 
@@ -126,7 +133,10 @@ schema step.
 | `entities/flow.ts` | `Flow.triggerInputs?: TriggerInput[] \| null` |
 | `entities/event-watch.ts` | new: `EventWatch`, `WatchCondition`, `WatchItemState`, `WatchPausedReason`, `readJsonPath()`, `evaluateWatchItems()`, `validateEventWatch()` (all pure) |
 | `entities/session.ts` | `SessionOrigin`; `origin`, `triggerSourceId`, `triggerPayload`, `runError` on `Session`/`NewSession`; `UnattendedRunStatus` + `deriveRunStatus()` (pure) |
-| `entities/notification-log.ts` | `NotificationTrigger` adds `unattended_run_failed`, `unattended_awaiting_person`, `watch_paused`; `NotificationResourceType` adds `event_watch` |
+| `entities/notification-log.ts` | `NotificationTrigger` adds `unattended_run_failed`, `unattended_awaiting_person`, `watch_paused`; `NotificationResourceType` adds `event_watch` (text columns, no migration) |
+| `entities/permission.ts` | `PermissionKey` + `PERMISSIONS` add `flow:webhook_trigger` ("Start flows via webhook") |
+| `entities/approval.ts` | the stored approver-source union (line 6) adds `run_owner`, `named_user` (text column, no migration; ADR-065 §3) |
+| `entities/runtime-config.ts` | `AutomationConfig { watchAllowedHosts: string[]; emailAllowedDomains: string[] }` + validator |
 | `ports/email-sender.ts` | `SendEmailInput.attachments?` |
 | `ports/outbound-http-client.ts` | new: `IOutboundHttpClient` |
 | `ports/event-watch-repository.ts` | new: `list`, `findById`, `create`, `update`, `delete`, `claimDue(now, limit)`, `recordSuccess`, `recordFailure`, `pause`, `resume`, `getItemStates(watchId, itemIds)`, `saveItemStates`, `countNeedingAttention` |
@@ -161,7 +171,8 @@ schema step.
 | `http/fetch-outbound-http-client.ts` | new: SSRF guard, manual redirects, size/time caps, redaction (ADR-063 §6) |
 | `scheduling/event-watch-worker.ts` | new: mirrors `SchedulerWorker`; job `event_watch_worker` |
 | `email/nodemailer-email-sender.ts` | pass attachments |
-| `auth/seed-roles.ts` | add `ai_task_node`, `email_node` to `POWER_USER_SCOPED_FLAGS`; add an `ADMIN_SCOPED_FLAGS = ["event_watch"]` list for fresh installs |
+| `auth/seed-roles.ts` | add `ai_task_node`, `email_node` to `POWER_USER_SCOPED_FLAGS`; add an `ADMIN_SCOPED_FLAGS = ["event_watch"]` list for fresh installs; add `flow:webhook_trigger` to Power Users' `defaultPermissions` |
+| `config/runtime-config-store.ts` (existing store) | `getAutomationConfig()` / `invalidateAutomation()`, setting key `AUTOMATION_CONFIG_SETTING_KEY` (not sensitive, not encrypted) |
 | `factory.ts` / `bootstrap.ts` | wire repositories, client, worker |
 
 ### Apps
@@ -172,7 +183,8 @@ schema step.
 | `apps/api/src/routes/webhook-signature.ts` | `verifySignature` moved here from `webhooks.ts`, shared |
 | `apps/api/src/container.ts`, `index.ts` | wire use cases; start/stop `EventWatchWorker` with the scheduler |
 | `apps/web/src/server/routers/event-watch.ts` | new admin router (flag-checked) |
-| `apps/web/src/server/routers/flow-trigger.ts` | new router (flow owner or admin) |
+| `apps/web/src/server/routers/flow-trigger.ts` | new router: mutations require `flow:webhook_trigger` **and** flow ownership (or admin) |
+| Admin → Settings: Automation card | new card editing `AutomationConfig` (two newline lists; validated) |
 | `apps/web/src/app/(admin)/admin/event-watches/**` | new list, editor, `[id]/runs` |
 | `apps/web/src/components/sidebar.tsx` | **Event Watch** item under Admin, flag-gated, badge from `eventWatch.countNeedingAttention` |
 | `apps/web/src/components/json-field-picker/**` | new: tree picker for sample JSON (reuses auto-node field-row styling) |
@@ -182,9 +194,16 @@ schema step.
 
 ## 7. Database & migration
 
-One generated migration (`pnpm db:generate`, never `push`). Hand-edit only to
-append the seed and backfill statements below, in the same way as
-`0039_seed_extraction_flows_flag.sql`.
+There are two migrations, following the precedent of
+`0039_seed_extraction_flows_flag.sql`:
+
+1. **Schema:** generated with `pnpm db:generate` and never edited by hand.
+2. **Seeds:** a separate custom migration, created with
+   `pnpm db:generate --custom --name seed_unattended_automation`. The root
+   script forwards to `drizzle-kit generate`. It holds the seed and backfill
+   SQL below.
+
+Never `push`. Both ship in 0.28.40.
 
 **`admin_event_watches`**
 
@@ -244,10 +263,16 @@ INSERT INTO "admin_feature_flag_roles" ("flag_key", "role_id")
 SELECT f.key, r.id FROM (VALUES ('ai_task_node','power_users'),('email_node','power_users'),('event_watch','admins')) AS f(key, role_key)
 JOIN "admin_roles" r ON r.key = f.role_key
 ON CONFLICT DO NOTHING;
+
+-- Same reason: seed-roles.ts only writes default grants for roles it creates.
+INSERT INTO "admin_role_permissions" ("role_id", "permission_key")
+SELECT r.id, 'flow:webhook_trigger' FROM "admin_roles" r WHERE r.key = 'power_users'
+ON CONFLICT DO NOTHING;
 ```
 
-Column names (`admin_feature_flag_roles.flag_key`/`role_id`, unique on the
-pair) and role keys (`SYSTEM_ROLE_KEYS`: `admins`, `power_users`) were checked
+Column names (`admin_feature_flag_roles.flag_key`/`role_id` and
+`admin_role_permissions.role_id`/`permission_key`, each unique on the pair)
+and role keys (`SYSTEM_ROLE_KEYS`: `admins`, `power_users`) were checked
 against `release/alpha-2`.
 
 - **Fresh install.** Migrations run before `seedRoles`, so the backfill finds
@@ -264,7 +289,8 @@ against `release/alpha-2`.
 
 - extend `seeded-feature-flags.test.ts` for the three keys;
 - `migration-safety.test.ts` must pass;
-- `seed-roles.test.ts` covers the new lists.
+- `seed-roles.test.ts` covers the new lists and the new Power Users grant;
+- a migration-SQL test asserts the `flow:webhook_trigger` backfill exists.
 
 ## 8. Tests (write first)
 
@@ -312,6 +338,15 @@ against `release/alpha-2`.
   - audit without the body.
 - Webhook use cases: token hash match, rotation invalidates, HMAC required,
   validation errors.
+- Webhook permissions:
+  - without `flow:webhook_trigger` → `FORBIDDEN`;
+  - with it on a flow the user doesn't own → `FORBIDDEN`;
+  - admin on any flow → allowed.
+- `RunAiTaskNode` reviewer resolution: `run_owner`, `named_user`,
+  `approver_source`.
+- Driver with a flag off → `run_error.code = "feature_disabled"`; Retry after
+  re-enabling resumes.
+- `AutomationConfig` validation: hostnames only, no wildcards.
 - `RetryFailedStep`.
 - Alerts: idempotent per incident ID; a retry that fails again alerts again.
 
@@ -362,8 +397,10 @@ against `release/alpha-2`.
 - **Release-rule exception.** A new feature on `release/alpha-2`, at the
   requester's direction (2026-10-22). Record this in the implementation
   summary.
-- **Versioning-rule exception.** A schema change shipped as a PATCH
-  (`0.28.40`), because `0.29.x` would collide with `main`'s line (`0.40.x`).
+- **Versioning-rule exception, waived by the requester at `/doc-review`
+  (2026-10-22).** A schema change shipped as a PATCH (`0.28.40`), because
+  `0.29.x` would collide with `main`'s line (`0.40.x`). Doc-review check 5 is
+  accepted as waived, not passed.
   Release notes **must** say "contains a database migration; run migrations
   before starting".
 - **Forward-merge to `main`:**

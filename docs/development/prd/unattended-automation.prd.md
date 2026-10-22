@@ -24,8 +24,9 @@ is governed or audited.
   API tokens, and chooses which flow a watch starts and as whom. Watches every
   watch's health.
 - **Power User (flow author)**: builds flows that can run unattended using the
-  new **AI task** and **Email** steps. Can turn on a flow's **webhook** so other
-  systems start it.
+  new **AI task** and **Email** steps. Can turn on the **webhook** of a flow
+  they own so other systems start it. This needs the new
+  `flow:webhook_trigger` permission, which Power Users hold by default.
 - **Run owner** (the watch or webhook's "run as" user): owns the sessions that
   unattended runs create. Is alerted when a run fails or needs a person.
 - **Reviewer / approver**: picks up a low-confidence AI task result, or a
@@ -125,6 +126,11 @@ is governed or audited.
 - tRPC `flowTrigger.*` (get, setWebhookEnabled, rotateToken, setHmac,
   setInputs, runs): **new**.
 - tRPC `session.retryFailedStep`: **new**.
+- Admin → Settings: **new Automation card**. Holds `WATCH_ALLOWED_HOSTS`
+  (private hosts a watch may call) and `EMAIL_ALLOWED_DOMAINS` (domains Email
+  steps may send to).
+- Admin → Roles: the new `flow:webhook_trigger` permission appears in the
+  registry list. No UI change is needed.
 
 ## 8. Database changes
 
@@ -137,6 +143,7 @@ is governed or audited.
 | `app_sessions` | add `origin text NOT NULL DEFAULT 'manual'`, `trigger_source_id uuid`, `trigger_payload jsonb`, `run_error jsonb` | n/a |
 | `core_feature_flag` | seed `event_watch`, `ai_task_node`, `email_node` (enabled, 100%) | n/a |
 | `admin_feature_flag_roles` | seed scoping for **existing** installs: `event_watch` → Admins; `ai_task_node`, `email_node` → Power Users | n/a |
+| `admin_role_permissions` | grant `flow:webhook_trigger` to Power Users on **existing** installs | n/a |
 
 All changes are additive, and existing rows carry across.
 
@@ -184,10 +191,16 @@ All changes are additive, and existing rows carry across.
       rejected `401` even with a valid token.
 - [ ] A webhook token is shown exactly once. Rotating it invalidates the old
       one immediately.
+- [ ] A user without `flow:webhook_trigger` cannot see the webhook panel, and
+      their `flowTrigger.*` mutations return `FORBIDDEN`. A Power User can
+      enable a webhook only on a flow they own. An admin can enable one on any
+      flow. This holds on both fresh and upgraded installs.
 - [ ] A step can bind a field to a trigger input. The value is the validated
       input from the starting watch or webhook.
 - [ ] An AI task step at or above its threshold advances automatically. Below
-      it, the run waits and the reviewer can accept, edit or reject.
+      it, the run waits and the reviewer can accept, edit or reject. The
+      reviewer is the run owner, an approval-style approver, or a named user;
+      there is no group reviewer.
 - [ ] An Email step sends to resolved user and group addresses and fixed
       addresses. External addresses outside a configured domain allow-list
       fail the step. Selected prior-step documents are attached.
@@ -198,8 +211,13 @@ All changes are additive, and existing rows carry across.
 - [ ] The watch list shows last poll, last run and **View run history**. The
       flow Triggers tab shows the same for webhook runs.
 - [ ] Disabling `event_watch` hides the Admin menu item and stops polling.
-      Disabling `ai_task_node` or `email_node` removes the card from the
-      palette, and existing steps of that type fail with a clear error.
+- [ ] Disabling `ai_task_node` or `email_node`:
+      - removes the card from the palette;
+      - shows "Disabled by administrator" on existing steps of that type;
+      - fails a run reaching such a step with `run_error.code =
+        "feature_disabled"`, with one alert.
+
+      Re-enabling the flag and using **Retry** resumes the run.
 - [ ] On an **upgraded** install the three flags are scoped to the right roles.
       On a fresh install they are too.
 
@@ -211,6 +229,8 @@ All changes are additive, and existing rows carry across.
 - OpenAPI-driven field picking.
 - A cross-flow Run Monitor page, and Slack or Teams alerts.
 - Email recipients taken from flow data.
+- Group reviewers for AI task steps, where any group member claims and decides.
+  This needs approvals to support more than one approver.
 - Webhook replay protection beyond HMAC (timestamped signatures).
 
 ## 12. Risks / open questions
@@ -220,9 +240,10 @@ All changes are additive, and existing rows carry across.
   direction. Forward-merging to `main` will need migration renumbering:
   alpha-2's `0046+` collide with `main`'s. This is the same as the
   `0045_welcome_tour` → `0049_welcome_tour` precedent.
-- **Versioning-rule override (accepted by requester).** A schema change
-  normally warrants MINOR. `0.29.0` would clash with `main`'s line (already
-  `0.40.x`), so this ships as `0.28.40`. The version alone no longer signals
+- **Versioning-rule override (accepted and waived by requester at
+  `/doc-review`, 2026-10-22).** A schema change normally warrants MINOR.
+  `0.29.0` would clash with `main`'s line (already `0.40.x`), so this ships as
+  `0.28.40`. The version alone no longer signals
   that a migration is needed, and the release notes must say so.
 - **SSRF.** Admin-entered URLs are fetched server-side. Mitigated by the
   private-range block, a `WATCH_ALLOWED_HOSTS` escape hatch, no redirects to

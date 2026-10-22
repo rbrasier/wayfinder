@@ -88,9 +88,22 @@ interface AiTaskNodeConfig {
 type AiTaskReviewer =
   | { mode: "run_owner" }
   | { mode: "approver_source"; approverSource: ApproverSourceMode; roleHint?: string }
-  | { mode: "user"; userId: string }
-  | { mode: "group"; groupId: string };
+  | { mode: "user"; userId: string };
 ```
+
+**There is no group reviewer mode.** `app_session_approvals` holds a single
+`approver_user_id`, and group review (any member claims and decides) needs a
+schema change and approver-queue changes. Both are out of scope here; group
+review is noted as future work in the PRD.
+
+The reviewer is stored on the approval row as follows:
+
+- `run_owner` and `user` resolve to a concrete `approver_user_id` when the
+  approval is raised.
+- `approver_source` uses the existing ADR-018 resolver.
+- The row's `approver_source` text column gains the values `run_owner` and
+  `named_user`. It has no CHECK constraint, so this is a TypeScript-level
+  change with no migration, the same as ADR-045 §4.
 
 `RunAiTaskNode` resolves the bindings, which may include trigger inputs and
 prior-step fields. It calls the language model with structured output for
@@ -178,11 +191,25 @@ admin) clears `run_error` and re-enters the driver at `currentNodeId`.
 | Trigger | `resource_id` | Effect |
 | ------- | ------------- | ------ |
 | `unattended_run_failed` | a fresh `run_error.incidentId` uuid per failure | A retry that fails again is a new incident and alerts again |
-| `unattended_awaiting_person` | a v5 UUID derived from session ID + node ID | One per step reached |
+| `unattended_awaiting_person` | `"<sessionId>:<nodeId>"` (`resource_id` is `text`) | One per step reached |
 | `watch_paused` | `admin_event_watches.pause_incident_id`, regenerated on each pause | One per pause, not per failed poll |
 
 All three go to the run owner. The existing retry sweeper delivers them. No
 `app_run_incidents` table is added.
+
+`resource_type` gains `event_watch` for `watch_paused`. The session triggers
+use `session`. Both `trigger` and `resource_type` are text columns with no
+CHECK constraint, so the new values need no migration.
+
+### 6a. A step whose feature flag is off
+
+If a run reaches an `ai_task` or `email` node while `ai_task_node` or
+`email_node` is disabled for the run owner, the step does not run. The driver
+sets `run_error` to `{ code: "feature_disabled", message: "<Step type> steps
+are disabled by an administrator" }` and the normal failure alert follows.
+Re-enabling the flag and using **Retry** resumes the run. In the flow editor,
+an existing step of a disabled type shows a "Disabled by administrator"
+notice, and its card cannot be added from the palette.
 
 **Badge.** The Event Watch menu item shows the number of watches that are
 `paused`, plus the number of watch-originated sessions with `run_error` set.
