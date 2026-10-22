@@ -96,7 +96,7 @@ export const buildReleaseTurnStatement = (sessionId: string, turnId: string): SQ
     AND ${app_sessions.active_turn_id} = ${turnId}
 `;
 
-const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
+export const toSessionEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   id: row.id,
   flowId: row.flow_id,
   userId: row.user_id,
@@ -139,7 +139,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Session insert returned no row."));
-      return ok(toEntity(row));
+      return ok(toSessionEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to create session.", cause));
     }
@@ -148,7 +148,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
   async findById(id: string): Promise<Result<Session | null>> {
     try {
       const [row] = await this.db.select().from(app_sessions).where(eq(app_sessions.id, id));
-      return ok(row ? toEntity(row) : null);
+      return ok(row ? toSessionEntity(row) : null);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to find session.", cause));
     }
@@ -161,7 +161,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         .from(app_sessions)
         .where(eq(app_sessions.user_id, userId))
         .orderBy(desc(app_sessions.updated_at));
-      return ok(rows.map(toEntity));
+      return ok(rows.map(toSessionEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list sessions for user.", cause));
     }
@@ -173,7 +173,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         .select()
         .from(app_sessions)
         .orderBy(desc(app_sessions.updated_at));
-      return ok(rows.map(toEntity));
+      return ok(rows.map(toSessionEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list all sessions.", cause));
     }
@@ -204,7 +204,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
       // strictly after it under the same DESC sort. Not the (limit+1)th row:
       // the predicate is `<`, so encoding that would silently drop it.
       const nextCursor = hasMore ? encodeCursor(trimmed[trimmed.length - 1]!) : null;
-      return ok({ items: trimmed.map(toEntity), nextCursor });
+      return ok({ items: trimmed.map(toSessionEntity), nextCursor });
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list sessions for user.", cause));
     }
@@ -226,7 +226,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
       const hasMore = rows.length > limit;
       const trimmed = rows.slice(0, limit);
       const nextCursor = hasMore ? encodeCursor(trimmed[trimmed.length - 1]!) : null;
-      return ok({ items: trimmed.map(toEntity), nextCursor });
+      return ok({ items: trimmed.map(toSessionEntity), nextCursor });
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list all sessions.", cause));
     }
@@ -268,7 +268,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
           ? err(domainError("NOT_FOUND", `Session ${id} not found.`))
           : err(domainError("CONFLICT", `Session ${id} was modified concurrently.`));
       }
-      return ok(toEntity(row));
+      return ok(toSessionEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update session.", cause));
     }
@@ -285,7 +285,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         buildClaimTurnStatement(id, turnId, userId, leaseSeconds),
       )) as unknown as (typeof app_sessions.$inferSelect)[];
       const claimed = rows[0];
-      if (claimed) return ok({ claimed: true, session: toEntity(claimed) });
+      if (claimed) return ok({ claimed: true, session: toSessionEntity(claimed) });
 
       // Lost the claim — read who holds it so the caller can attribute the 409.
       const [current] = await this.db

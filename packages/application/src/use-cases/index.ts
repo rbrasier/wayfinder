@@ -20,6 +20,7 @@ export * from "./feedback/index";
 export * from "./knowledge/index";
 export * from "./skill/index";
 export * from "./mcp/index";
+export * from "./automation/index";
 export * from "./create-user";
 export * from "./update-user";
 export * from "./set-welcome-tour-completed";

@@ -44,6 +44,7 @@ const toEntity = (row: typeof app_flows.$inferSelect, contentRows: ContentRow[] 
     visibility: row.visibility,
     permissions: row.permissions,
     contextDocs: row.context_docs.map((d) => toContextDoc(d, contentByPath.get(d.storagePath))),
+    triggerInputs: row.trigger_inputs ?? [],
     deletedAt: row.deleted_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -194,6 +195,7 @@ export class DrizzleFlowRepository implements IFlowRepository {
           ...(patch.status !== undefined ? { status: patch.status } : {}),
           ...(patch.visibility !== undefined ? { visibility: patch.visibility } : {}),
           ...(patch.ownerUserId !== undefined ? { owner_user_id: patch.ownerUserId } : {}),
+          ...(patch.triggerInputs !== undefined ? { trigger_inputs: patch.triggerInputs } : {}),
           updated_at: new Date(),
         })
         .where(eq(app_flows.id, id))

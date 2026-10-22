@@ -5,6 +5,7 @@ import {
   flowEdgesFromSnapshot,
   flowNodesFromSnapshot,
   isExtractionSnapshot,
+  triggerInputsOfSnapshot,
 } from "./flow-version";
 import type { Flow } from "./flow";
 import type { FlowNode } from "./flow-node";
@@ -64,9 +65,28 @@ describe("buildFlowSnapshot", () => {
       icon: "📋",
       expertRole: "Procurement Officer",
       contextDocs: [],
+      triggerInputs: [],
     });
     expect(snapshot.flow).not.toHaveProperty("ownerUserId");
     expect(snapshot.flow).not.toHaveProperty("createdAt");
+  });
+
+  // A running session reads the inputs of the version it is pinned to, so a
+  // later edit to the flow's inputs cannot change what a live run expects.
+  it("freezes the flow's trigger inputs", () => {
+    const flow = {
+      ...makeFlow(),
+      triggerInputs: [{ key: "hearing_id", label: "Hearing ID", type: "text" as const, required: true }],
+    };
+
+    expect(buildFlowSnapshot(flow, [], []).flow.triggerInputs).toEqual(flow.triggerInputs);
+  });
+
+  it("reads a snapshot published before trigger inputs existed as declaring none", () => {
+    const legacy = buildFlowSnapshot(makeFlow(), [], []);
+    delete legacy.flow.triggerInputs;
+
+    expect(triggerInputsOfSnapshot(legacy)).toEqual([]);
   });
 
   it("preserves node ids and full config for restore", () => {
