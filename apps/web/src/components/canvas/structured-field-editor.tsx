@@ -18,12 +18,24 @@ interface StructuredFieldEditorProps {
   onChange: (lines: string[]) => void;
   // Opens the shared field-types explainer (the same dialog as document templates).
   onOpenHelp: () => void;
+  // Overrides for an editor that is not a conversation (the AI task's outputs).
+  label?: string;
+  description?: string;
 }
+
+const DEFAULT_DESCRIPTION =
+  "Add each value the AI should capture. Pick a type, and use the cog to set whether it is required, limits, and any choices.";
 
 const arraysEqual = (a: string[], b: string[]): boolean =>
   a.length === b.length && a.every((value, index) => value === b[index]);
 
-export function StructuredFieldEditor({ lines, onChange, onOpenHelp }: StructuredFieldEditorProps) {
+export function StructuredFieldEditor({
+  lines,
+  onChange,
+  onOpenHelp,
+  label = "Fields to capture",
+  description = DEFAULT_DESCRIPTION,
+}: StructuredFieldEditorProps) {
   // The field type is held in local state, not re-derived from `lines` on every
   // render. An options field with no choices yet serialises to a plain label
   // (its type annotation only appears once choices exist), so re-deriving from
@@ -69,7 +81,7 @@ export function StructuredFieldEditor({ lines, onChange, onOpenHelp }: Structure
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
-        <FieldGroupLabel id="structured-fields-label">Fields to capture</FieldGroupLabel>
+        <FieldGroupLabel id="structured-fields-label">{label}</FieldGroupLabel>
         <button
           type="button"
           aria-label="How field types work"
@@ -79,10 +91,7 @@ export function StructuredFieldEditor({ lines, onChange, onOpenHelp }: Structure
           <HelpCircle size={13} />
         </button>
       </div>
-      <p className="text-[12px] text-[#666055]">
-        Add each value the AI should capture. Pick a type, and use the cog to set whether it is
-        required, limits, and any choices.
-      </p>
+      <p className="text-[12px] text-[#666055]">{description}</p>
 
       <div className="space-y-2">
         {models.map((model, index) => (

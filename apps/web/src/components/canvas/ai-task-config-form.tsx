@@ -1,6 +1,6 @@
 "use client";
 
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { AiTaskReviewer, ApproverSourceMode, PriorStepField } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,8 @@ import { inputLabelFor, type AiTaskForm, type AiTaskInputRow } from "./automatio
 import { FieldValueSelector, TriggerInputsContext } from "./field-value-selector";
 import { InstructionToolBarWithPickers } from "./instruction-tool-bar";
 import { PersonPicker } from "./person-picker";
-import { TemplateFieldEditor } from "./template-field-editor";
+import { StructuredFieldEditor } from "./structured-field-editor";
+import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 
 const SELECT_CLASS =
   "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-hidden";
@@ -47,6 +48,7 @@ export function AiTaskConfigForm({
 }: AiTaskConfigFormProps) {
   const set = <K extends keyof AiTaskForm>(key: K, value: AiTaskForm[K]) => onChange({ ...form, [key]: value });
   const triggerInputs = useContext(TriggerInputsContext);
+  const [helpOpen, setHelpOpen] = useState(false);
   const updateInput = (index: number, next: AiTaskInputRow) =>
     set(
       "inputs",
@@ -132,13 +134,14 @@ export function AiTaskConfigForm({
         </Button>
       </div>
 
-      <TemplateFieldEditor
+      <StructuredFieldEditor
         label="Output fields (at least one)"
-        helpText="What the AI must return, e.g. Summary (narrative). The AI fills them as structured JSON, and later steps can use these values."
+        description="What the AI must return. Pick a type, and use the cog for required, limits and choices. The AI fills them as structured JSON, and later steps can use these values."
         lines={form.outputLines}
         onChange={(lines) => set("outputLines", lines)}
-        disallowSection
+        onOpenHelp={() => setHelpOpen(true)}
       />
+      <TemplateTagsHelpDialog open={helpOpen} variant="structured" onClose={() => setHelpOpen(false)} />
 
       <div className="space-y-1">
         <Label htmlFor="ai-task-threshold">Confidence needed to continue automatically (0–100)</Label>

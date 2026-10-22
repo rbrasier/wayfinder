@@ -210,8 +210,10 @@ Built on the same branch after the review of the first screenshots.
     scheduler's selector), named after the field and editable.
   - **Add skills** and **Add MCP** come from a shared `InstructionToolBar`,
     which the conversational step now uses too.
-  - At least one output field is required (already enforced; now said
-    on-screen).
+  - Output fields use the structured conversation's field editor: a label, a
+    type dropdown, and a settings cog for required, limits and choices. This
+    replaces typed `Label (type)` lines. At least one is required (already
+    enforced; now said on-screen).
   - At run time the step's skill instructions and MCP tool results join the
     prompt (`lib/automation/ai-task-context.ts`).
 - **Email editor:**
