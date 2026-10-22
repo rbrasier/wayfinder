@@ -25,6 +25,10 @@ const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL || 'admin@example.com';
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 
 test.describe('Unattended automation', () => {
+  // Each test crosses several routes that a dev-mode server may compile on
+  // first use, on top of a run that finishes after its 202.
+  test.describe.configure({ timeout: 120_000 });
+
   test('a webhook call starts an unattended run that appears in the flow run history', async ({
     page,
     request,
@@ -34,19 +38,29 @@ test.describe('Unattended automation', () => {
     await page.getByRole('button', { name: 'Triggers' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Triggers' });
-    // The box reflects the saved state, so it ticks once the server confirms.
     const webhookToggle = dialog.getByLabel('Let other systems start this flow');
-    await webhookToggle.click();
-    await expect(webhookToggle).toBeChecked();
-    const secret = dialog.getByRole('status').filter({ hasText: 'shown only this once' });
-    await expect(secret).toBeVisible();
+    // A retry finds the webhook already on from the first attempt, and its
+    // one-time token gone. Turning it on (when off) and then rotating gives a
+    // fresh token from either state. The dialog renders only once its data has
+    // loaded, so the box shows the saved state by the time it is visible.
+    await expect(webhookToggle).toBeVisible({ timeout: 30_000 });
+    if (!(await webhookToggle.isChecked())) {
+      await webhookToggle.click();
+      // The box reflects the saved state, so it ticks once the server confirms.
+      await expect(webhookToggle).toBeChecked({ timeout: 15_000 });
+    }
+    await dialog.getByRole('button', { name: 'Rotate token' }).click();
+    const secret = dialog.getByRole('status').filter({ hasText: 'New webhook token' });
+    await expect(secret).toBeVisible({ timeout: 15_000 });
     const token = (await secret.locator('code').textContent())?.trim() ?? '';
     expect(token).toMatch(/^wf_wh_/);
     await page.screenshot({ path: 'screenshots/automation-webhook-token.png', fullPage: true });
 
+    // The first call to the trigger route can pay a dev-mode compile.
     const rejected = await request.post(`/api/triggers/${automationFlowId}`, {
       headers: { Authorization: 'Bearer wf_wh_not-the-token' },
       data: { inputs: { hearing_id: 'H-1' } },
+      timeout: 30_000,
     });
     expect(rejected.status()).toBe(401);
 
@@ -57,18 +71,13 @@ test.describe('Unattended automation', () => {
     expect(accepted.status()).toBe(202);
 
     // The driver runs after the 202, so the run reaches the person's step a
-    // moment later. Reopening the dialog re-reads the history.
-    await expect
-      .poll(
-        async () => {
-          await page.reload();
-          await page.getByRole('button', { name: 'Triggers' }).click();
-          const history = page.getByRole('dialog', { name: 'Triggers' }).getByRole('listitem');
-          return (await history.allTextContents()).join(' | ');
-        },
-        { timeout: 30_000, intervals: [1_000, 2_000, 3_000] },
-      )
-      .toContain('Waiting on a person');
+    // moment later. Reopening the dialog refetches the history.
+    await expect(async () => {
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+      await page.getByRole('button', { name: 'Triggers' }).click();
+      await expect(dialog.getByText('Waiting on a person').first()).toBeVisible({ timeout: 5_000 });
+    }).toPass({ timeout: 60_000 });
     await page.screenshot({ path: 'screenshots/automation-webhook-run-history.png', fullPage: true });
   });
 
@@ -81,7 +90,10 @@ test.describe('Unattended automation', () => {
     await page.getByLabel('Authentication').selectOption('bearer');
     await page.getByLabel('Token', { exact: true }).fill('e2e-watch-token');
     await page.getByRole('button', { name: 'Test' }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'The API answered 200.' })).toBeVisible();
+    // The server's call to the watch source can pay a dev-mode compile.
+    await expect(page.getByRole('status').filter({ hasText: 'The API answered 200.' })).toBeVisible({
+      timeout: 30_000,
+    });
 
     // Pick the list, then the ID and the condition field from the first item.
     await page.getByRole('button', { name: 'Pick' }).first().click();
@@ -104,14 +116,15 @@ test.describe('Unattended automation', () => {
     await page.screenshot({ path: 'screenshots/automation-watch-editor.png', fullPage: true });
 
     await page.getByRole('button', { name: 'Create watch' }).click();
-    await expect(page).toHaveURL(/\/admin\/event-watches$/);
+    // The URL changes once the list page has compiled and loaded.
+    await expect(page).toHaveURL(/\/admin\/event-watches$/, { timeout: 30_000 });
     const row = page.getByRole('row').filter({ hasText: watchName });
     await expect(row).toContainText('Active · learning current items');
     await expect(row).toContainText('when status changes to finished');
     await page.screenshot({ path: 'screenshots/automation-watch-list.png', fullPage: true });
 
     await row.getByRole('link', { name: watchName }).click();
-    await expect(page.getByLabel('Name')).toHaveValue(watchName);
+    await expect(page.getByLabel('Name')).toHaveValue(watchName, { timeout: 30_000 });
     await page.reload();
 
     await expect(page.getByLabel('Name')).toHaveValue(watchName);
