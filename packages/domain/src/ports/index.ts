@@ -31,6 +31,8 @@ export * from "./flow-edge-repository";
 export * from "./session-repository";
 export * from "./flow-trigger-repository";
 export * from "./unattended-run-repository";
+export * from "./outbound-http-client";
+export * from "./event-watch-repository";
 export * from "./session-participant-repository";
 export * from "./session-message-repository";
 export * from "./session-event-bus";

@@ -27,4 +27,5 @@ export * from "./rate-limit/index";
 export * from "./skills/index";
 export * from "./mcp/index";
 export * from "./automation/index";
+export * from "./http/index";
 export * from "./factory";
