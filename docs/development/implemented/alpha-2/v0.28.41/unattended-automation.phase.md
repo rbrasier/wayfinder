@@ -483,3 +483,45 @@ migration are exercised by `validate.sh` §22 (schema vs migrations) and by CI.
 | C6 | `event-watch-worker` plus wiring |
 | C7 | Web: router, admin list with badge, sidebar item |
 | C8 | Web: watch editor (JSON picker, condition builder, preview, mapping) and run history page |
+
+## 12. Amendment — editor and run-visibility polish (approved 2026-10-22)
+
+Requested on review of the #345 screenshots. Same branch, same PR, still
+0.28.41 (PATCH), no migration.
+
+- **Watch editor**: List of items, ID field, condition field and each flow
+  input are dropdowns of the sample's paths, filtered to what fits, with
+  "Select manually…" first. A saved value not in the sample opens in manual
+  mode. Pick buttons are removed; the sample panel is a read-only preview.
+- **Run history**: each run has **Open chat**, landing on the session at its
+  current step.
+- **Chat on an AI task or Email step**:
+  - The step shows a working indicator and the composer is disabled.
+  - A finished AI task's message carries confidence and rationale like other
+    AI turns, plus an output card ("View output").
+- **AI task step**:
+  - Inputs are picked from earlier steps' fields and trigger inputs, as the
+    scheduler does; `inputFields` is derived from the picks.
+  - It gets the skill and MCP pickers of the conversational step:
+    `skillRefs` and `allowedMcpToolRefs`, whose instructions and tool results
+    go into the prompt.
+  - At least one output field is required. The model is already called with a
+    schema-enforced structured JSON response.
+- **Email step**:
+  - Recipients use one autosuggest for people and groups. A typed address that
+    isn't in the directory can be added; the allowed-domain rule still applies.
+  - Subject and message get an **Insert field** button for `{{ … }}` tags.
+  - The message is a Tiptap editor with a Rich text / Markdown toggle. After
+    templating, markdown is converted to HTML with
+    `renderMarkdownToHtml` (domain, built on the chat's parser, moved from
+    web) and sent with a plain-text alternative.
+- **Automation settings**: a blank watch-hosts list allows any host but always
+  blocks the link-local cloud metadata ranges (169.254.0.0/16, fe80::/10). A
+  filled list keeps today's rule. Blank email domains already allow any; the
+  copy now says so.
+- **Tests**:
+  - Unit, at each layer above.
+  - E2E: `unattended-automation.spec.ts` (group 4) builds the watch with the
+    dropdowns; `accessibility.spec.ts` (group 5) adds the email step editor.
+- **Dependencies**: `@tiptap/react`, `@tiptap/starter-kit` and
+  `tiptap-markdown` in `apps/web`.

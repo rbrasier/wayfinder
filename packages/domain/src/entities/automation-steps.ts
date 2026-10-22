@@ -68,14 +68,6 @@ export interface MessageTemplateValues {
 
 const PLACEHOLDER = /\{\{\s*(input|step)\.([^\s}]+)\s*\}\}/g;
 
-const escapeHtml = (value: string): string =>
-  value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-
 const lookupPlaceholder = (scope: string, path: string, values: MessageTemplateValues): string => {
   if (scope === "input") return values.inputs[path] ?? "";
   // A node id is a uuid, so the field key is everything after its last dot.
@@ -96,8 +88,4 @@ export const renderMessageTemplate = (template: string, values: MessageTemplateV
 // The HTML part of an Email step's message. The whole rendered text is escaped —
 // author template and AI output alike — so nothing in either can become markup;
 // blank lines become paragraphs and single newlines line breaks.
-export const textToHtml = (text: string): string =>
-  text
-    .split(/\n{2,}/)
-    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
-    .join("\n");
+

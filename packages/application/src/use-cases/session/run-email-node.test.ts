@@ -136,7 +136,7 @@ describe("RunEmailNode", () => {
       subject: "Hearing H-123 summary",
       text: "Summary:\nThe committee met.",
     });
-    expect(sender.sent[0]!.html).toContain("The committee met.");
+    expect(sender.sent[0]!.html).toBe("<p>Summary:<br>The committee met.</p>");
     expect(audit.entries[0]).toMatchObject({
       action: "email_step.sent",
       resourceType: "session",

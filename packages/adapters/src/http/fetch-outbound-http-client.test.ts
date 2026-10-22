@@ -67,10 +67,12 @@ describe("FetchOutboundHttpClient", () => {
     expect(result.data).toEqual({ status: 200, json: { items: [1] } });
   });
 
-  it("refuses a host that resolves to a private address, before sending anything", async () => {
+  it("refuses an unlisted private host when the admin has listed private hosts, before sending anything", async () => {
     const { client, requested } = build({}, { "internal.example.com": "10.0.0.5" });
 
-    const result = await client.requestJson(request("https://internal.example.com/h"));
+    const result = await client.requestJson(
+      request("https://internal.example.com/h", { allowedHosts: ["hearings.internal"] }),
+    );
 
     expect(result.error?.message).toBe("internal.example.com resolves to a private network address, which is not allowed.");
     expect(requested).toEqual([]);
@@ -86,6 +88,31 @@ describe("FetchOutboundHttpClient", () => {
 
     expect(result.error).toBeUndefined();
   });
+
+  it("calls any private host while the admin's list is blank", async () => {
+    const { client } = build(
+      { "https://internal.example.com/h": { status: 200, body: "{}" } },
+      { "internal.example.com": "10.0.0.5" },
+    );
+
+    const result = await client.requestJson(request("https://internal.example.com/h"));
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it.each(["169.254.169.254", "fe80::1"])(
+    "still refuses the cloud metadata range (%s) while the list is blank",
+    async (address) => {
+      const { client, requested } = build({}, { "metadata.internal": address });
+
+      const result = await client.requestJson(request("https://metadata.internal/latest"));
+
+      expect(result.error?.message).toBe(
+        "metadata.internal resolves to a cloud metadata address, which is not allowed.",
+      );
+      expect(requested).toEqual([]);
+    },
+  );
 
   it("re-checks every redirect and refuses one that lands on a private address", async () => {
     const { client } = build(

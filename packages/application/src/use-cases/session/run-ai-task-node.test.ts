@@ -147,6 +147,35 @@ describe("RunAiTaskNode", () => {
     expect(model.calls[0]!.purpose).toBe("aiTask");
   });
 
+  it("records the confidence, rationale and captured values on the message, like any AI turn", async () => {
+    const { useCase, messages } = build(
+      ok({ values: { summary: "The committee met." }, confidence: 92, rationale: "Clear transcript." }),
+    );
+
+    await useCase.execute({ session: runSession, flow, node: aiTaskNode(aiTaskConfig()), messages: [] });
+
+    expect(messages.rows[0]!.aiPayload).toEqual({
+      response: "Summarise hearing was completed by AI (confidence 92%).",
+      rationale: "Clear transcript.",
+      stepCompleteConfidence: 92,
+      contextGathered: [{ key: "Summary", value: "The committee met." }],
+    });
+  });
+
+  it("adds the step's skill instructions and tool results to the prompt", async () => {
+    const { useCase, model } = build(ok({ values: { summary: "x" }, confidence: 90, rationale: "" }));
+
+    await useCase.execute({
+      session: runSession,
+      flow,
+      node: aiTaskNode(aiTaskConfig()),
+      messages: [],
+      additionalContext: "<skill>Write in plain English.</skill>",
+    });
+
+    expect(model.calls[0]!.prompt).toContain("<skill>Write in plain English.</skill>");
+  });
+
   it("sends a low-confidence result to the run owner for review and confirms the request", async () => {
     const { useCase, approvals, requestedNotifier, stepOutputs } = build(
       ok({ values: { summary: "Partial." }, confidence: 55, rationale: "The transcript cut off." }),

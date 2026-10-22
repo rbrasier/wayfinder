@@ -3,7 +3,7 @@ import {
   err,
   ok,
   renderMessageTemplate,
-  textToHtml,
+  renderMarkdownToHtml,
   validateEmailNodeConfig,
   type AutomationConfig,
   type EmailAttachment,
@@ -113,7 +113,9 @@ export class RunEmailNode {
         to: recipient,
         subject,
         text,
-        html: textToHtml(text),
+        // The message is written in markdown, filled in, then rendered; the
+        // markdown itself is the plain-text alternative.
+        html: renderMarkdownToHtml(text),
         attachments: attachments.data,
       });
       if (sent.error) failed.push(recipient);

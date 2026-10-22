@@ -5,7 +5,6 @@ import {
   isEmailAddressAllowed,
   meetsConfidenceThreshold,
   renderMessageTemplate,
-  textToHtml,
   validateAiTaskNodeConfig,
   validateEmailNodeConfig,
 } from "./automation-steps";
@@ -140,12 +139,4 @@ describe("renderMessageTemplate", () => {
     expect(renderMessageTemplate("[{{ input.missing }}]", values)).toBe("[]");
   });
 
-});
-
-describe("textToHtml", () => {
-  it("escapes markup and turns blank lines into paragraphs and newlines into breaks", () => {
-    expect(textToHtml("Hi <b>team</b>\nLine two\n\nNext & last")).toBe(
-      "<p>Hi &lt;b&gt;team&lt;/b&gt;<br>Line two</p>\n<p>Next &amp; last</p>",
-    );
-  });
 });

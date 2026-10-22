@@ -58,6 +58,19 @@ const mappedIpv4 = (address: string): string | null => {
   return [high >> 8, high & 255, low >> 8, low & 255].join(".");
 };
 
+// Link-local, where every major cloud serves instance metadata and
+// credentials (169.254.169.254, fd00:ec2::254 aside). Blocked even when the
+// admin's list is blank and every other private address is allowed.
+export const isMetadataAddress = (address: string): boolean => {
+  const version = isIP(address);
+  if (version === 4) return ipv4ToNumber(address) >>> 16 === ipv4ToNumber("169.254.0.0") >>> 16;
+  if (version !== 6) return true;
+  const lower = address.toLowerCase();
+  const embedded = mappedIpv4(lower);
+  if (embedded) return isMetadataAddress(embedded);
+  return /^fe[89ab]/.test(lower) || lower === "fd00:ec2::254";
+};
+
 export const isBlockedAddress = (address: string): boolean => {
   const version = isIP(address);
   if (version === 4) return isBlockedIpv4(address);
@@ -165,7 +178,18 @@ export class FetchOutboundHttpClient implements IOutboundHttpClient {
     if (allowedHosts.some((host) => host.toLowerCase() === hostname)) return ok(true);
 
     const addresses = isIP(hostname) ? [hostname] : await this.resolveHost(hostname);
-    if (addresses.length === 0 || addresses.some(isBlockedAddress)) {
+    if (addresses.length === 0) {
+      return err(domainError("FORBIDDEN", `${hostname} could not be resolved.`));
+    }
+    // A blank list means any host may be called, internal ones included —
+    // except the cloud metadata range. A filled list allows only the listed
+    // private hosts (ADR-063 §6).
+    if (addresses.some(isMetadataAddress)) {
+      return err(
+        domainError("FORBIDDEN", `${hostname} resolves to a cloud metadata address, which is not allowed.`),
+      );
+    }
+    if (allowedHosts.length > 0 && addresses.some(isBlockedAddress)) {
       return err(
         domainError("FORBIDDEN", `${hostname} resolves to a private network address, which is not allowed.`),
       );

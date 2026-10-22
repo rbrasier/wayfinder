@@ -34,6 +34,9 @@ export interface RunAiTaskNodeInput {
   flow: Flow;
   node: FlowNode;
   messages: SessionMessage[];
+  // Skill instructions and MCP tool results for this step, prepared by the
+  // caller exactly as a conversational turn prepares them.
+  additionalContext?: string;
 }
 
 export type RunAiTaskNodeOutput =
@@ -120,12 +123,22 @@ export class RunAiTaskNode {
     const { confidence, rationale } = generated.data;
     const values = coerceValues(config, generated.data.values);
 
+    const content = `${input.node.name} was completed by AI (confidence ${confidence}%).`;
+    const fields = buildStepOutputFields(config.structuredFields, values);
     const message = await this.sessionMessages.create({
       sessionId: input.session.id,
       role: "assistant",
-      content: `${input.node.name} was completed by AI (confidence ${confidence}%).`,
+      content,
       stepNodeId: input.node.id,
       confidence,
+      aiPayload: {
+        response: content,
+        rationale,
+        stepCompleteConfidence: confidence,
+        contextGathered: fields
+          .filter((field) => field.type !== "group")
+          .map((field) => ({ key: field.label, value: field.value })),
+      },
     });
     if (message.error) return message;
 
@@ -134,7 +147,7 @@ export class RunAiTaskNode {
       flowId: input.flow.id,
       nodeId: input.node.id,
       messageId: message.data.id,
-      fields: buildStepOutputFields(config.structuredFields, values),
+      fields,
     });
     if (recorded.error) return recorded;
 
@@ -184,6 +197,7 @@ export class RunAiTaskNode {
       inputLines.length > 0 ? `\nInputs:\n${inputLines.join("\n")}` : "",
       buildPriorOutputsSection(priorStepOutputs),
       buildContextDocsSection(input.flow.contextDocs),
+      input.additionalContext ? `\n${input.additionalContext}` : "",
       transcript ? `\nSession transcript:\n${transcript}` : "",
     ]
       .filter(Boolean)

@@ -140,6 +140,10 @@ export interface AiTaskNodeConfig {
   // 0–100. Read through `aiTaskConfidenceThresholdOf`, never directly.
   confidenceThreshold: number;
   reviewer: AiTaskReviewer;
+  // As on a conversational step: library skills whose instructions join the
+  // prompt, and MCP tools whose results are gathered before the call.
+  skillRefs?: string[];
+  allowedMcpToolRefs?: McpToolRef[];
 }
 
 export type EmailRecipient =

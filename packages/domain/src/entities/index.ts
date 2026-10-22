@@ -32,6 +32,8 @@ export * from "./automation-steps";
 export * from "./automation-config";
 export * from "./flow-trigger";
 export * from "./event-watch";
+export * from "./markdown";
+export * from "./markdown-html";
 export * from "./node-output";
 export * from "./field-value-source";
 export * from "./n8n-workflow";
