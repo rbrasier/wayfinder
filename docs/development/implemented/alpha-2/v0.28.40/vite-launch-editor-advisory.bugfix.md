@@ -28,11 +28,18 @@ override (directly in the workspace packages, and through `vitest` → `@vitest/
 - **Lockfile:** regenerated with `pnpm install`. The only change is vite 6.4.3 → 6.4.5
   and the specifier.
 
-No allow-list entry: a patched release exists.
+- **E2E package:** CI's OSV scan then flagged `follow-redirects` 1.16.0 in
+  `apps/web/e2e/package-lock.json` (GHSA-8r9p-f939-6h3c, GHSA-q3jh-wrc6-jgq8,
+  published after the base went green). Add an `overrides` entry
+  `follow-redirects: ^1.16.1` beside the existing `axios`/`form-data`/`joi` ones and
+  refresh that lockfile with `npm install --package-lock-only`.
+
+No allow-list entry: a patched release exists for each.
 
 ## Implementation summary (v0.28.40)
 
-- **Files:** `package.json` (override and version), `pnpm-lock.yaml`, `VERSION`.
+- **Files:** `package.json` (override and version), `pnpm-lock.yaml`, `VERSION`,
+  `apps/web/e2e/package.json` and `apps/web/e2e/package-lock.json`.
 - **Verification:** `./scripts/audit-check.sh` now reports no blocking advisories (the
   existing `braces` allow-list entry still applies), and `./validate.sh` exits 0.
 - **Version:** PATCH, 0.28.39 → 0.28.40.
