@@ -10,8 +10,8 @@
  *     check, run start, the unattended driver — and the run shows up in the
  *     flow's run history, parked on the first person's step.
  *   - Navigation state across a page load (group 4): an Event Watch built from
- *     a fetched sample is saved, and after a reload the editor shows what was
- *     saved, with the token kept but never sent back.
+ *     a fetched sample's dropdowns is saved, and after a reload the editor shows
+ *     what was saved, with the token kept but never sent back.
  *
  * The automation flow and the allow-listed app host come from the seed
  * (lib/e2e-fixtures-automation.ts). The watch calls the test-only
@@ -95,22 +95,18 @@ test.describe('Unattended automation', () => {
       timeout: 30_000,
     });
 
-    // Pick the list, then the ID and the condition field from the first item.
-    await page.getByRole('button', { name: 'Pick' }).first().click();
-    await page.getByRole('button', { name: /^hearings/ }).click();
-    await expect(page.getByLabel('List of items')).toHaveValue('hearings');
-    await page.getByRole('button', { name: 'Pick' }).nth(1).click();
-    await page.getByRole('button', { name: /^id "H-1"/ }).click();
-    await expect(page.getByLabel('Field that identifies each item')).toHaveValue('id');
-
+    // Choose the list, then the ID and the condition field from the sample's
+    // first item — each a dropdown of the sample's paths.
+    await page.getByLabel('List of items', { exact: true }).selectOption('hearings');
+    await page.getByLabel('Field that identifies each item', { exact: true }).selectOption('id');
     await page.getByLabel('Start a run when').selectOption('transition');
-    await page.getByLabel('Field', { exact: true }).fill('status');
+    await page.getByLabel('Field', { exact: true }).selectOption('status');
     await page.getByLabel('To', { exact: true }).fill('finished');
     await page.getByRole('button', { name: 'Would fire now?' }).click();
     await expect(page.getByRole('status').filter({ hasText: '1 of 2 items would start a run: H-1' })).toBeVisible();
 
     await page.getByLabel('Flow', { exact: true }).selectOption({ label: 'E2E SEED Automation Flow' });
-    await page.getByLabel('Hearing').fill('id');
+    await page.getByLabel('Hearing', { exact: true }).selectOption('id');
     await page.getByLabel('Choose a person').fill(ADMIN_EMAIL);
     await page.getByRole('button', { name: new RegExp(ADMIN_EMAIL) }).first().click();
     await page.screenshot({ path: 'screenshots/automation-watch-editor.png', fullPage: true });
@@ -128,10 +124,12 @@ test.describe('Unattended automation', () => {
     await page.reload();
 
     await expect(page.getByLabel('Name')).toHaveValue(watchName);
-    await expect(page.getByLabel('List of items')).toHaveValue('hearings');
-    await expect(page.getByLabel('Field that identifies each item')).toHaveValue('id');
+    // Without a sample after the reload, saved paths open as typed values.
+    await expect(page.getByLabel('List of items (typed path)')).toHaveValue('hearings');
+    await expect(page.getByLabel('Field that identifies each item (typed path)')).toHaveValue('id');
+    await expect(page.getByLabel('Field (typed path)')).toHaveValue('status');
     await expect(page.getByLabel('To', { exact: true })).toHaveValue('finished');
-    await expect(page.getByLabel('Hearing')).toHaveValue('id');
+    await expect(page.getByLabel('Hearing (typed path)')).toHaveValue('id');
     // The saved token is kept on the server and never sent back to the page.
     const token = page.getByLabel('Token', { exact: true });
     await expect(token).toHaveValue('');

@@ -105,7 +105,7 @@ export function AutomationStepModal({
           <DialogTitle>{TITLES[type]}</DialogTitle>
           <DialogCloseButton />
         </DialogHeader>
-        <DialogBody className="space-y-4">
+        <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
           {disabledByAdmin ? (
             <p role="status" className="rounded-[9px] bg-[#fdf3e3] px-3 py-2 text-[13px] text-[#7a4b0c]">
               Disabled by administrator. This step will not run until it is turned back on.

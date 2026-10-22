@@ -157,6 +157,12 @@ timeoutMs, maxBytes })`, returns `Result<{ status, json }>`. The adapter uses
   ULA/link-local, unless the host is listed in the `WATCH_ALLOWED_HOSTS`
   runtime setting. That setting is for on-prem APIs.
 
+  > **Amended (v0.28.41 review):** an **empty** list now means any host may
+  > be called, internal ones included, except the link-local cloud metadata
+  > range (169.254.0.0/16, fe80::/10, fd00:ec2::254), which is always
+  > refused. A **filled** list keeps the rule above. Explicitly listing a
+  > metadata host still allows it.
+
   `WATCH_ALLOWED_HOSTS` and ADR-065's `EMAIL_ALLOWED_DOMAINS` are stored in
   `admin_system_settings`. Neither is sensitive, so neither is encrypted.
   Both are read through `RuntimeConfigStore` (ADR-041) and edited on a new

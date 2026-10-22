@@ -56,8 +56,8 @@ export function AutomationCard() {
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <p className="text-muted-foreground">
-          Limits for Event Watches and Email steps. Watches cannot call private network addresses unless the host
-          is listed here.
+          Limits for Event Watches and Email steps. Leave a list empty to allow anything; fill it in to allow only
+          what it names.
         </p>
         {!config ? (
           <p className="text-muted-foreground">Loading…</p>
@@ -65,11 +65,11 @@ export function AutomationCard() {
           <>
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">Private hosts watches may call</span>
-              <span className="text-right font-medium">{summary(config.watchAllowedHosts, "None")}</span>
+              <span className="text-right font-medium">{summary(config.watchAllowedHosts, "Any (cloud metadata blocked)")}</span>
             </div>
             <div className="flex justify-between gap-4">
               <span className="text-muted-foreground">Email steps may send to</span>
-              <span className="text-right font-medium">{summary(config.emailAllowedDomains, "Any domain")}</span>
+              <span className="text-right font-medium">{summary(config.emailAllowedDomains, "Any address")}</span>
             </div>
           </>
         )}
@@ -92,7 +92,9 @@ export function AutomationCard() {
                 placeholder={"hearings.internal\n10.0.4.12"}
               />
               <p className="text-xs text-muted-foreground">
-                One host name or IP address per line. Public internet addresses never need listing.
+                One host name or IP address per line. Leave empty to allow any host; a list allows only those
+                private hosts. Public addresses never need listing, and the cloud metadata address is always blocked
+                unless listed here.
               </p>
             </div>
             <div className="space-y-1">
@@ -105,7 +107,7 @@ export function AutomationCard() {
                 placeholder="agency.gov.au"
               />
               <p className="text-xs text-muted-foreground">
-                One domain per line. Leave empty to allow any domain. Wayfinder users and groups are always allowed.
+                One domain per line. Leave empty to allow any address. Wayfinder users and groups are always allowed.
               </p>
             </div>
           </DialogBody>

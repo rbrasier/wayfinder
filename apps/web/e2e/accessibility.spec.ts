@@ -22,6 +22,7 @@
 
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from './helpers/base';
+import { createFlow, FIRST_STEP_BUTTON } from './helpers/flow-builder';
 import type { Page } from '@playwright/test';
 
 // WCAG 2.0/2.1/2.2 A + AA. Including the wcag22aa tag enables axe's
@@ -98,6 +99,25 @@ test.describe('Accessibility: WCAG 2.2 AA runtime audit', () => {
     expect(
       results.violations,
       `axe found violations on the flow editor:\n\n${formatViolations(results.violations)}`,
+    ).toEqual([]);
+  });
+});
+
+test.describe('Accessibility: automation step editors', () => {
+  test('the Email step editor (recipients and rich text message) has no axe violations', async ({
+    page,
+  }) => {
+    await createFlow(page, `A11y email step ${Date.now()}`);
+    await page.getByRole('button', { name: FIRST_STEP_BUTTON }).click();
+    await page.getByRole('button', { name: /^Email/ }).click();
+
+    const editor = page.getByRole('dialog', { name: /Email step/ });
+    await expect(editor.getByRole('textbox', { name: 'Message' })).toBeVisible({ timeout: 15_000 });
+
+    const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).include('[role="dialog"]').analyze();
+    expect(
+      results.violations,
+      `axe found violations in the Email step editor:\n\n${formatViolations(results.violations)}`,
     ).toEqual([]);
   });
 });

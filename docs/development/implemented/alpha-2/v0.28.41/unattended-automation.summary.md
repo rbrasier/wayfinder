@@ -187,3 +187,83 @@ the trigger route, the editor and sidebar models).
 - **Prompt context helpers** were extracted to `lib/chat/prompt-context.ts` so
   the scheduler and the run driver share them.
 - **Version 0.28.41**, not 0.28.40, because the vite fix took 0.28.40.
+
+## Amendment — editor and run-visibility polish (phase doc §12)
+
+Built on the same branch after the review of the first screenshots.
+
+- **Watch editor:** every path is a dropdown of the sample's fields with
+  "Select manually…" near the top. The sample tree is a read-only preview.
+- **Run history** (watch page and the flow's Triggers dialog): **Open chat**
+  on every run.
+- **Chat:**
+  - While an AI task or Email step is current, a card sits above the
+    composer ("AI task running…", "Waiting for <reviewer> to review…" or
+    "Sending email…"). The composer is disabled and the session refetches
+    every 3 s until the run moves on.
+  - Each AI task result shows an **output card**: field count and
+    confidence, with **View output** for every field and the rationale. Its
+    message now carries the same `aiPayload` as other AI turns (rationale,
+    confidence, captured values).
+- **AI task editor:**
+  - Inputs are dropdowns of earlier fields and trigger inputs (the
+    scheduler's selector), named after the field and editable.
+  - **Add skills** and **Add MCP** come from a shared `InstructionToolBar`,
+    which the conversational step now uses too.
+  - At least one output field is required (already enforced; now said
+    on-screen).
+  - At run time the step's skill instructions and MCP tool results join the
+    prompt (`lib/automation/ai-task-context.ts`).
+- **Email editor:**
+  - One recipient box suggests people and groups and accepts any typed
+    address.
+  - Subject and message have **Insert field**, offering trigger inputs and
+    earlier fields.
+  - The message is a Tiptap editor with a Rich text / Markdown toggle. It is
+    rendered to HTML when sent by the domain's `renderMarkdownToHtml`, which
+    shares the chat's markdown parser (moved from web to domain).
+- **Automation settings:** a blank watch-hosts list allows any host except
+  the cloud metadata range (ADR-063 §6 amended). The copy explains blank =
+  any for both lists.
+
+### Bugs found while capturing the screenshots
+
+- **The AI task and Email step dialog** had no height limit, so on a short
+  screen its Save button sat below the window and could not be reached. Its
+  body now scrolls within 70% of the viewport, like the conversational
+  step's.
+- **The e2e scripted model** returned a schema default without running the
+  schema, and did not understand `.transform`. An unscripted AI task
+  therefore got an object for its confidence and failed with "Failed to
+  create session message". Defaults now unwrap `ZodEffects` and run through
+  the schema, as a provider's answer does, falling back to the raw default
+  only when a strict schema rejects it. Production calls were never
+  affected: the real provider always parses.
+
+### Amendment deviations
+
+- The official **`@tiptap/markdown`** extension was used instead of the
+  community `tiptap-markdown`, pinned at 3.31.4 (newer releases were under
+  two weeks old).
+- **Native dropdowns** stay closed in screenshots; the e2e spec drives them by
+  value.
+
+### Amendment tests
+
+- **Domain:** `markdown-html.test.ts`, `skill.test.ts`, and the moved
+  `markdown.test.ts`.
+- **Application:** `run-ai-task-node.test.ts` (rationale payload, extra
+  context) and `run-email-node.test.ts` (HTML).
+- **Adapters:** `fetch-outbound-http-client.test.ts` (blank list, metadata
+  range) and `scripted-language-model.test.ts`.
+- **Web:**
+  - `watch-model.test.ts` (sample options, manual mode)
+  - `automation-step-model.test.ts` (input rows, trigger-input tokens)
+  - `recipient-suggestions.test.ts`
+  - `automation-step-state.test.ts`
+  - `ai-task-context.test.ts`
+- **E2E:**
+  - `unattended-automation.spec.ts` builds the watch with the dropdowns
+    (group 4).
+  - `accessibility.spec.ts` audits the Email step editor (group 5).
+  - Both pass locally.
