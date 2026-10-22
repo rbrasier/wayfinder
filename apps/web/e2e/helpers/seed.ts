@@ -36,6 +36,7 @@ export const SEED_FIXTURE_KEYS = [
   'approvalFirstFlowId',
   'approvalWithdrawSessionId',
   'approvalWithdrawDraftStepName',
+  'automationFlowId',
 ] as const;
 
 export type SeedFixtures = Record<(typeof SEED_FIXTURE_KEYS)[number], string>;

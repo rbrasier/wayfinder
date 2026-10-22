@@ -38,6 +38,8 @@ const PAGES: { name: string; path: string }[] = [
   { name: 'admin settings', path: '/admin/settings' },
   { name: 'user settings', path: '/settings' },
   { name: 'approvals', path: '/approvals' },
+  { name: 'admin event watches', path: '/admin/event-watches' },
+  { name: 'new event watch', path: '/admin/event-watches/new' },
 ];
 
 async function runAxe(page: Page, excludeReactFlow = false) {

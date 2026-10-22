@@ -24,3 +24,11 @@ GET /api/branding/logo
 # 14.1s and 7.9s — paid by the first spec that drives the server-side AI stub.
 POST /api/chat/:id/stream
 GET /api/test/ai-script
+
+# New with unattended automation — compiled ahead so unattended-automation.spec.ts
+# does not wait on a first-request compile inside its expects.
+GET /admin/event-watches
+GET /admin/event-watches/new
+GET /admin/event-watches/:id
+GET /api/test/watch-source
+POST /api/triggers/:id

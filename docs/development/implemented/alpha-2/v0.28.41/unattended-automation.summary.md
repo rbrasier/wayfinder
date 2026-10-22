@@ -131,9 +131,25 @@ status), application (every use case above, with in-memory doubles), adapters
 nodemailer attachments, migration SQL), and web (routers, the scheduler tick,
 the trigger route, the editor and sidebar models).
 
-**No e2e spec.** Admin watch creation and the step editors fall outside the six
-groups in `docs/guides/e2e-test-policy.md`. Coverage sits at the domain,
-application and router layers, and in the pure web models behind the editor.
+**E2E** (`docs/guides/e2e-test-policy.md`):
+
+- `apps/web/e2e/unattended-automation.spec.ts` covers two groups.
+  - **Smoke (6):** a webhook call goes through the real stack. A wrong token
+    gets 401. The right token gets 202, and the run appears in the flow's
+    Triggers history as "Waiting on a person".
+  - **Navigation state across a page load (4):** a watch built in the editor
+    survives a reload. The editor uses Test, picks from the sample, previews
+    and saves; after the reload the token is kept but never sent back.
+- `accessibility.spec.ts` (group 5) audits `/admin/event-watches` and
+  `/admin/event-watches/new` too.
+- Supporting changes:
+  - The seed adds a published automation flow with one trigger input and
+    allow-lists the app's host for watches (`lib/e2e-fixtures-automation.ts`).
+  - A test-only `/api/test/watch-source` stands in for the external API. It
+    only exists when `TEST_AUTH_BYPASS=true`.
+  - Teardown deletes watches before flows.
+  - The new routes are added to `warm-routes.txt`.
+- All of these passed locally against the full stack.
 
 ## Known limitations
 

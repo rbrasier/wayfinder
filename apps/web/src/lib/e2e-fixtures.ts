@@ -2,6 +2,7 @@ import type { Result } from "@rbrasier/domain";
 import { schema } from "@rbrasier/adapters";
 import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
+import { seedAutomationFlow } from "./e2e-fixtures-automation";
 import { seedStructuredSession } from "./e2e-fixtures-structured";
 
 // Deterministic fixture data seeded before the E2E suite so that specs gated on
@@ -72,6 +73,7 @@ export interface SeedResult {
   // A flow whose first step is an approval, so the config editor has an
   // authoring-time warning to show (ADR-044 §2).
   approvalFirstFlowId: string;
+  automationFlowId: string;
   // `conversational → approval (pending)`, raised by the seed user so they are
   // the originator who may withdraw it. Its own session because withdrawing
   // moves the session off the approval node.
@@ -677,6 +679,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const approvalFirstFlowId = await seedApprovalFirstFlow(container, ownerUserId);
   const approvalWithdraw = await seedWithdrawableApprovalSession(container, ownerUserId);
   const signatureWarningFlowId = await seedSignatureWarningFlow(container, ownerUserId);
+  const automationFlowId = await seedAutomationFlow(container, ownerUserId);
 
   return {
     flowId: flow.id,
@@ -692,6 +695,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     approvalWithdrawSessionId: approvalWithdraw.sessionId,
     approvalWithdrawDraftStepName: approvalWithdraw.draftStepName,
     signatureWarningFlowId,
+    automationFlowId,
   };
 };
 
@@ -745,6 +749,10 @@ export const teardownE2EFixtures = async (container: Container): Promise<void> =
   }
 
   if (flowIds.length > 0) {
+    // A watch blocks deleting the flow it starts.
+    await db
+      .delete(schema.admin_event_watches)
+      .where(inArray(schema.admin_event_watches.flow_id, flowIds));
     await db
       .delete(schema.kb_document_chunks)
       .where(inArray(schema.kb_document_chunks.flow_id, flowIds));
