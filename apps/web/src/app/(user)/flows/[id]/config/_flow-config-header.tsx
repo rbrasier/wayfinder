@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { FlowTriggersButton } from "@/components/automation/flow-triggers-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -130,6 +131,7 @@ export function FlowConfigHeader({
         {flowStatus === "published" ? `Published · ${visibilityLabel(flowVisibility)}` : "Draft"}
       </Badge>
       <div className="ml-auto flex items-center gap-2">
+        <FlowTriggersButton flowId={flowId} />
         <Button size="sm" variant="outline" onClick={onAddStep}>
           + Add step
         </Button>
