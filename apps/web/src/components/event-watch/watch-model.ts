@@ -177,3 +177,43 @@ export const watchInputFromForm = (form: WatchForm): { data: WatchInput; error?:
   if ("error" in body) return { error: body.error };
   return { data: { ...form, requestBody: body.data } };
 };
+
+// Switching kind keeps the field already chosen, so an admin can compare kinds
+// without picking it again.
+export const conditionOfKind = (kind: WatchCondition["kind"], current: WatchCondition): WatchCondition => {
+  const fieldPath = current.kind === "new_item" ? "" : current.fieldPath;
+  if (kind === "new_item") return { kind };
+  if (kind === "changed") return { kind, fieldPath };
+  if (kind === "matches") return { kind, fieldPath, operator: "equals", value: "" };
+  return { kind, fieldPath, from: null, to: "" };
+};
+
+// Which field the tree is filling. The items list is picked from the whole
+// response; everything else is relative to one item.
+export type PickTarget =
+  | { kind: "items" }
+  | { kind: "item_id" }
+  | { kind: "condition" }
+  | { kind: "input"; key: string };
+
+export const picksFromItem = (target: PickTarget): boolean => target.kind !== "items";
+
+export const canPickRow = (target: PickTarget, row: JsonTreeRow): boolean => {
+  if (target.kind === "items") return row.kind === "array";
+  if (target.kind === "input") return true;
+  return row.kind === "value";
+};
+
+// What the router's `secret` means: a typed value replaces, an explicit removal
+// clears, and an untouched field keeps what is stored.
+export const secretChangeFor = (typed: string, clear: boolean): string | null | undefined => {
+  if (clear) return null;
+  return typed.trim() === "" ? undefined : typed;
+};
+
+export const pickTargetLabel = (target: PickTarget, inputLabel?: string): string => {
+  if (target.kind === "items") return "the list of items";
+  if (target.kind === "item_id") return "the field that identifies each item";
+  if (target.kind === "condition") return "the condition's field";
+  return inputLabel ?? target.key;
+};

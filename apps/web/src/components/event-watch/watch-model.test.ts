@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { EventWatch } from "@rbrasier/domain";
 import {
+  canPickRow,
+  conditionOfKind,
   describeCondition,
   emptyWatchForm,
   firstItemOf,
   formFromWatch,
   jsonTreeRows,
   pausedReasonLabel,
+  secretChangeFor,
   watchInputFromForm,
 } from "./watch-model";
 
@@ -110,5 +113,52 @@ describe("watch form", () => {
       failureThreshold: 5,
       condition: { kind: "transition", fieldPath: "", from: null, to: "" },
     });
+  });
+});
+
+describe("conditionOfKind", () => {
+  const transition = { kind: "transition", fieldPath: "status", from: "live", to: "finished" } as const;
+
+  it("keeps the chosen field when switching between kinds that use one", () => {
+    expect(conditionOfKind("matches", transition)).toEqual({
+      kind: "matches",
+      fieldPath: "status",
+      operator: "equals",
+      value: "",
+    });
+    expect(conditionOfKind("changed", transition)).toEqual({ kind: "changed", fieldPath: "status" });
+  });
+
+  it("drops the field for new_item and starts empty coming back from it", () => {
+    expect(conditionOfKind("new_item", transition)).toEqual({ kind: "new_item" });
+    expect(conditionOfKind("transition", { kind: "new_item" })).toEqual({
+      kind: "transition",
+      fieldPath: "",
+      from: null,
+      to: "",
+    });
+  });
+});
+
+describe("canPickRow", () => {
+  const row = (kind: "object" | "array" | "value") => ({ path: "x", label: "x", depth: 0, kind, preview: "" });
+
+  it("takes only a list for the items path and only a value for the ID or condition field", () => {
+    expect(canPickRow({ kind: "items" }, row("array"))).toBe(true);
+    expect(canPickRow({ kind: "items" }, row("value"))).toBe(false);
+    expect(canPickRow({ kind: "item_id" }, row("value"))).toBe(true);
+    expect(canPickRow({ kind: "condition" }, row("object"))).toBe(false);
+  });
+
+  it("lets an input take any part of the item", () => {
+    expect(canPickRow({ kind: "input", key: "hearing" }, row("object"))).toBe(true);
+  });
+});
+
+describe("secretChangeFor", () => {
+  it("replaces with a typed secret, clears on request, and otherwise keeps the stored one", () => {
+    expect(secretChangeFor("new-token", false)).toBe("new-token");
+    expect(secretChangeFor("ignored", true)).toBeNull();
+    expect(secretChangeFor("  ", false)).toBeUndefined();
   });
 });
