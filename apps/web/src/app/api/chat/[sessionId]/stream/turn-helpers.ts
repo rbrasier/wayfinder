@@ -756,6 +756,15 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
     return;
   }
 
+  // AI task and Email steps run through the unattended driver even in a manual
+  // session, which carries on to the next step that needs a person (ADR-065 §2).
+  // Imported lazily: the driver's module imports this one.
+  if (newNode.type === "ai_task" || newNode.type === "email") {
+    const { buildAdvanceUnattendedRun } = await import("@/lib/automation/unattended-runs");
+    await buildAdvanceUnattendedRun(container).execute({ sessionId: session.id, alreadyHoldsLease: true });
+    return;
+  }
+
   if (newNode.type !== "approval") {
     // Approval nodes park the session on the operator-facing approval gate,
     // which raises its own request — generating an AI opener here would leave a

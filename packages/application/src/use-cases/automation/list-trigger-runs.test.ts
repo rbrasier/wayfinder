@@ -24,7 +24,6 @@ const build = (sessions: Session[], pendingReviewSessionIds: string[] = []) =>
   new ListTriggerRuns({
     runs: {
       listByTriggerSource: async () => ok(sessions),
-      countFailedBySources: async () => ok(0),
     },
     graph: {
       flowVersions: { getById: async () => ok(null) },

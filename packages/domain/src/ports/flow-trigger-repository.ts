@@ -10,7 +10,7 @@ export interface FlowTriggerSettings {
 // as a hash and the HMAC secret only encrypted; neither appears on FlowTrigger.
 export interface IFlowTriggerRepository {
   findByFlow(flowId: string, kind: FlowTriggerKind): Promise<Result<FlowTrigger | null>>;
-  findByTokenHash(tokenHash: string): Promise<Result<FlowTrigger | null>>;
+  getTokenHash(triggerId: string): Promise<Result<string | null>>;
   // Creates the row on first use; later calls change only the given settings.
   upsert(
     flowId: string,

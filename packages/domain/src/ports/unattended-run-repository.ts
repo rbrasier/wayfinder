@@ -8,4 +8,7 @@ export interface IUnattendedRunRepository {
   // Sessions started by any of these sources that are stopped on a run error,
   // for the Event Watch menu badge.
   countFailedBySources(sourceIds: string[]): Promise<Result<number>>;
+  // Unattended runs sitting on a step the driver can run by itself, untouched
+  // since `staleBefore` — what the background sweeper resumes. Oldest first.
+  listResumableSessionIds(staleBefore: Date, limit: number): Promise<Result<string[]>>;
 }

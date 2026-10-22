@@ -10,7 +10,7 @@ import {
 import { resolveSessionGraph, type SessionGraphDependencies } from "../../services/resolve-session-graph";
 
 export interface ListTriggerRunsDependencies {
-  runs: IUnattendedRunRepository;
+  runs: Pick<IUnattendedRunRepository, "listByTriggerSource">;
   graph: SessionGraphDependencies;
   approvals: Pick<IApprovalRepository, "findPendingByNode">;
 }

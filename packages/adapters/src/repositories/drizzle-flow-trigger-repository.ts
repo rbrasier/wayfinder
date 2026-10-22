@@ -54,16 +54,16 @@ export class DrizzleFlowTriggerRepository implements IFlowTriggerRepository {
     }
   }
 
-  async findByTokenHash(tokenHash: string): Promise<Result<FlowTrigger | null>> {
+  async getTokenHash(triggerId: string): Promise<Result<string | null>> {
     try {
       const [row] = await this.db
-        .select()
+        .select({ tokenHash: app_flow_triggers.token_hash })
         .from(app_flow_triggers)
-        .where(eq(app_flow_triggers.token_hash, tokenHash))
+        .where(eq(app_flow_triggers.id, triggerId))
         .limit(1);
-      return ok(row ? toFlowTrigger(row) : null);
+      return ok(row?.tokenHash ?? null);
     } catch (cause) {
-      return err(domainError("INFRA_FAILURE", "Failed to look up the trigger token.", cause));
+      return err(domainError("INFRA_FAILURE", "Failed to read the trigger token.", cause));
     }
   }
 

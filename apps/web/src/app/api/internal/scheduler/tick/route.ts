@@ -1,7 +1,13 @@
-import { FireDueSchedules } from "@rbrasier/application";
+import { FireDueSchedules, ResumeStalledRuns } from "@rbrasier/application";
 import { SystemClock } from "@rbrasier/adapters";
 import { getContainer } from "@/lib/container";
 import { ScheduledSessionFireHandler } from "@/lib/scheduler/scheduled-session-fire-handler";
+import { kickUnattendedRun } from "@/lib/automation/unattended-runs";
+
+// An unattended run untouched this long on a step the driver runs alone has lost
+// its hook (a callback, a crash); the sweep drives it on (ADR-065 §2).
+const STALLED_RUN_AFTER_MS = 60_000;
+const STALLED_RUNS_PER_TICK = 20;
 
 // Internal endpoint driven by the API server's scheduler heartbeat. It claims
 // due schedules, fires them (advancing the session + generating the next
@@ -36,6 +42,21 @@ export async function POST(req: Request): Promise<Response> {
       metadata: { errorCode: result.error.code },
     });
     return Response.json({ error: result.error.message }, { status: 500 });
+  }
+
+  const resumed = await new ResumeStalledRuns({
+    runs: container.repos.unattendedRuns,
+    resume: (input) => kickUnattendedRun(container, input),
+    now: () => new Date(),
+  }).execute({ staleAfterMs: STALLED_RUN_AFTER_MS, limit: STALLED_RUNS_PER_TICK });
+  if (resumed.error) {
+    await container.services.errorLogger.log({
+      level: "error",
+      message: `Resuming stalled unattended runs failed: ${resumed.error.message}`,
+      stack: null,
+      page: "api/internal/scheduler/tick",
+      metadata: { errorCode: resumed.error.code },
+    });
   }
 
   return Response.json({ data: result.data });

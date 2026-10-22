@@ -203,7 +203,7 @@ import {
 } from "@rbrasier/adapters";
 import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
-import { buildAutomationUseCases } from "./container-automation";
+import { buildAutomation } from "./container-automation";
 import { buildExtractionModule } from "./container-extraction";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { entraEnvCredentials, m365EnvCredentials } from "./container-app-registrations";
@@ -617,6 +617,8 @@ const build = () => {
     notifyOnApprovalReassigned,
   });
 
+  const automation = buildAutomation({ db, secretCipher: settingsEncryption, languageModel: llm, sessions, sessionMessages, sessionStepOutputs, flows, flowNodes, flowEdges, flowVersions, approvals, confirmAndSend: approvalUseCases.confirmAndSend, reportingLineResolver, users, groups, objectStorage, emailSender, notificationLog, notificationConfig, auditLogger, loadAutomationConfig: () => runtimeConfig.getAutomationConfig() });
+
   return {
     env,
     db,
@@ -629,8 +631,8 @@ const build = () => {
     connectivityTester,
     resolveSession: resolveCachedSession,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services, ...automation.services },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos, ...automation.repos },
     useCases: {
       ...documentUseCases,
       evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
@@ -767,7 +769,7 @@ const build = () => {
       ),
       setColumnMapping: new SetColumnMapping(hrDatasets),
       ...skillsAndMcp.useCases,
-      ...buildAutomationUseCases({ languageModel: llm, sessionMessages, sessionStepOutputs, approvals, confirmAndSend: approvalUseCases.confirmAndSend, reportingLineResolver, users, groups, objectStorage, emailSender, auditLogger, loadAutomationConfig: () => runtimeConfig.getAutomationConfig() }),
+      ...automation.useCases,
       ...buildPresentationUseCases({ systemSettings, objectStorage, auditLogger, auditQuery, loadLoginNotice: () => runtimeConfig.getLoginNoticeConfig() }),
     },
   };
