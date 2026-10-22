@@ -203,6 +203,7 @@ import {
 } from "@rbrasier/adapters";
 import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
+import { buildAutomationUseCases } from "./container-automation";
 import { buildExtractionModule } from "./container-extraction";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { entraEnvCredentials, m365EnvCredentials } from "./container-app-registrations";
@@ -609,6 +610,7 @@ const build = () => {
     documentChunks,
     sha256Hex,
     updateDocumentFields: documentUseCases.updateDocumentFields,
+    updateStructuredStepOutput: documentUseCases.updateStructuredStepOutput,
     notifyOnApprovalRequested,
     notifyOnApprovalDecided,
     notifyOnApprovalWithdrawn,
@@ -765,6 +767,7 @@ const build = () => {
       ),
       setColumnMapping: new SetColumnMapping(hrDatasets),
       ...skillsAndMcp.useCases,
+      ...buildAutomationUseCases({ languageModel: llm, sessionMessages, sessionStepOutputs, approvals, confirmAndSend: approvalUseCases.confirmAndSend, reportingLineResolver, users, groups, objectStorage, emailSender, auditLogger, loadAutomationConfig: () => runtimeConfig.getAutomationConfig() }),
       ...buildPresentationUseCases({ systemSettings, objectStorage, auditLogger, auditQuery, loadLoginNotice: () => runtimeConfig.getLoginNoticeConfig() }),
     },
   };

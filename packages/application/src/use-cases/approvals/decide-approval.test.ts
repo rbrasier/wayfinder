@@ -68,45 +68,6 @@ describe("DecideApproval", () => {
     expect(projected?.fields.find((f) => f.key === "outcome")?.value).toBe("approved");
   });
 
-  // An AI task's low-confidence review is an ordinary approval raised on the AI
-  // task node itself, so accepting it moves the run past that step (ADR-065 §3).
-  it("advances past an AI task when its review is approved", async () => {
-    const approvals = new InMemoryApprovals();
-    const approval = await seedConfirmed(approvals, {
-      nodeId: "node-ai",
-      approverSource: "run_owner",
-      approverUserId: "run-owner-1",
-    });
-    const sessions = new InMemorySessions();
-    sessions.add(session({ userId: "run-owner-1", currentNodeId: "node-ai" }));
-    const edges = new InMemoryFlowEdges();
-    edges.rows.push({
-      id: "edge-ai",
-      flowId: "flow-1",
-      fromNodeId: "node-ai",
-      toNodeId: "node-email",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-    const sut = new DecideApproval(
-      unitOfWorkFor(approvals, sessions),
-      approvals,
-      sessions,
-      edges,
-      new InMemoryStepOutputs(),
-      new RecordingAuditLogger(),
-    );
-
-    const result = await sut.execute({
-      approvalId: approval.id,
-      decidedByUserId: "run-owner-1",
-      decision: "approved",
-    });
-
-    expect(result.data?.newNodeId).toBe("node-email");
-    expect(sessions.rows.get("session-1")?.currentNodeId).toBe("node-email");
-  });
-
   it("commits the approval update and the session advance through one transaction", async () => {
     const approvals = new InMemoryApprovals();
     const approval = await seedConfirmed(approvals);

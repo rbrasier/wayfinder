@@ -44,6 +44,7 @@ import { adminProcedure, publicProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { authConfigInputSchema, mergeAuthConfig } from "./settings-auth";
 import { directorySettingsProcedures } from "./settings-directory";
+import { automationSettingsProcedures } from "./settings-automation";
 import { presentationSettingsProcedures } from "./settings-presentation";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
@@ -339,6 +340,7 @@ export const settingsRouter = router({
 
   ...directorySettingsProcedures,
   ...presentationSettingsProcedures,
+  ...automationSettingsProcedures,
 
   getN8nConfig: adminProcedure.query(async ({ ctx }) => {
     const config: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();

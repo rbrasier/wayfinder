@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare, Plug, Stamp, Timer, Zap } from "lucide-react";
+import { Mail, MessageSquare, Plug, Sparkles, Stamp, Timer, Zap } from "lucide-react";
 import {
   Dialog,
   DialogBody,
@@ -53,6 +53,18 @@ const ADVANCED_OPTIONS: NodeTypeOption[] = [
     description: "Runs automatically by calling one tool on a registered MCP server.",
     Icon: Plug,
   },
+  {
+    type: "ai_task",
+    label: "AI task",
+    description: "Runs an AI instruction with no conversation; low-confidence results go to a reviewer.",
+    Icon: Sparkles,
+  },
+  {
+    type: "email",
+    label: "Email",
+    description: "Emails results to people, groups or inboxes, with documents attached if you like.",
+    Icon: Mail,
+  },
 ];
 
 interface NodeTypePickerModalProps {
@@ -61,6 +73,8 @@ interface NodeTypePickerModalProps {
   scheduledNodeEnabled?: boolean;
   approvalNodeEnabled?: boolean;
   mcpNodeEnabled?: boolean;
+  aiTaskNodeEnabled?: boolean;
+  emailNodeEnabled?: boolean;
   onSelect: (type: NodeConfigType) => void;
   onClose: () => void;
 }
@@ -129,6 +143,8 @@ export function NodeTypePickerModal({
   scheduledNodeEnabled = false,
   approvalNodeEnabled = true,
   mcpNodeEnabled = true,
+  aiTaskNodeEnabled = false,
+  emailNodeEnabled = false,
   onSelect,
   onClose,
 }: NodeTypePickerModalProps) {
@@ -141,6 +157,8 @@ export function NodeTypePickerModal({
   const advancedOptions = ADVANCED_OPTIONS.filter((option) => {
     if (option.type === "auto") return autoNodeEnabled;
     if (option.type === "mcp") return mcpNodeEnabled;
+    if (option.type === "ai_task") return aiTaskNodeEnabled;
+    if (option.type === "email") return emailNodeEnabled;
     return true;
   });
 

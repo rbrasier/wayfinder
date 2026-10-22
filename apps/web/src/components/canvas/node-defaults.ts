@@ -1,3 +1,4 @@
+import { DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD } from "@rbrasier/domain";
 import type { NodeConfigType } from "./node-config-modal";
 import { TEMPLATE_COMPLETE_SENTINEL } from "./output-type";
 
@@ -36,6 +37,20 @@ export const defaultConfigForType = (type: NodeConfigType): Record<string, unkno
       instructions: "",
       notifyOnComplete: true,
     };
+  }
+  if (type === "ai_task") {
+    return {
+      instruction: "",
+      inputFields: [],
+      inputFieldValues: {},
+      outputType: "structured",
+      structuredFields: [],
+      confidenceThreshold: DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD,
+      reviewer: { mode: "run_owner" },
+    };
+  }
+  if (type === "email") {
+    return { recipients: [], subjectTemplate: "", bodyTemplate: "", attachStepIds: [] };
   }
   if (type === "mcp") {
     return {

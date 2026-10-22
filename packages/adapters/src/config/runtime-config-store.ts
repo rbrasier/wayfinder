@@ -1,4 +1,8 @@
 import {
+  AUTOMATION_CONFIG_SETTING_KEY,
+  DEFAULT_AUTOMATION_CONFIG,
+  parseAutomationConfig,
+  type AutomationConfig,
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
   DIRECTORY_CONFIG_SETTING_KEY,
@@ -150,6 +154,7 @@ export class RuntimeConfigStore {
   private organisationResolutionPending: Promise<OrganisationResolution> | null = null;
   private readonly branding: CachedSetting<BrandingConfig>;
   private readonly loginNotice: CachedSetting<LoginNoticeConfig>;
+  private readonly automation: CachedSetting<AutomationConfig>;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -157,6 +162,12 @@ export class RuntimeConfigStore {
   ) {
     this.branding = new CachedSetting(settingsRepo, BRANDING_CONFIG_SETTING_KEY, parseBrandingConfig, createDefaultBrandingConfig);
     this.loginNotice = new CachedSetting(settingsRepo, LOGIN_NOTICE_CONFIG_SETTING_KEY, parseLoginNoticeConfig, createDefaultLoginNoticeConfig);
+    this.automation = new CachedSetting(
+      settingsRepo,
+      AUTOMATION_CONFIG_SETTING_KEY,
+      (raw) => parseAutomationConfig(raw),
+      () => DEFAULT_AUTOMATION_CONFIG,
+    );
   }
 
   // Read on every page render (ADR-060), so these go through CachedSetting.
@@ -174,6 +185,15 @@ export class RuntimeConfigStore {
 
   invalidateLoginNotice(): void {
     this.loginNotice.invalidate();
+  }
+
+  // Read when an Event Watch calls out or an Email step sends (ADR-063 §6).
+  getAutomationConfig(): Promise<AutomationConfig> {
+    return this.automation.get();
+  }
+
+  invalidateAutomation(): void {
+    this.automation.invalidate();
   }
 
   async getAiConfig(): Promise<AiConfig> {

@@ -62,6 +62,8 @@ import { BranchRuleModal } from "@/components/canvas/branch-rule-modal";
 import { FlowConfigHeader } from "./_flow-config-header";
 import { useBranchRules } from "./_use-branch-rules";
 import { usePriorStepViews } from "./_use-prior-step-views";
+import { AUTOMATION_NODE_TYPES, AutomationStepEditor } from "./_automation-step-editor";
+import type { AutomationStepType } from "@/components/canvas/automation-step-modal";
 import { configValuesForNode } from "./_node-config-values";
 
 // What the template endpoints return on success. Shared by the direct upload and
@@ -100,6 +102,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
     trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
   const mcpEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }).data ?? false;
   const skillsEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }).data ?? false;
+  const aiTaskNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "ai_task_node" }).data ?? false;
+  const emailNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "email_node" }).data ?? false;
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -433,6 +437,26 @@ function CanvasInner({ flowId }: { flowId: string }) {
     }
   }, [editingNodeId, flowId, rfNodes, updateNodeMutation, markEdited]);
 
+  // The AI task / Email editor persists the node itself; this mirrors what
+  // handleConfigSave does once the write has landed.
+  const handleAutomationStepSaved = useCallback(
+    (name: string, type: AutomationStepType, config: Record<string, unknown>) => {
+      if (!editingNodeId) return;
+      setRfNodes((nds) =>
+        nds.map((n) =>
+          n.id !== editingNodeId
+            ? n
+            : toRfNode({ id: n.id, name, colour: (n.data as { colour?: string | null }).colour ?? null, type, positionX: n.position.x, positionY: n.position.y, config }, null),
+        ),
+      );
+      setCreatedNodeId(null);
+      setConfigOpen(false);
+      setEditingNodeId(null);
+      markEdited();
+    },
+    [editingNodeId, markEdited],
+  );
+
   const handleAddStep = useCallback(() => {
     setTypePickerOpen(true);
   }, []);
@@ -574,6 +598,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
 
   const editingNode = editingNodeId ? rfNodes.find((n) => n.id === editingNodeId) : null;
   const initialConfigValues = configValuesForNode(editingNode);
+  const isAutomationStep = Boolean(editingNode && AUTOMATION_NODE_TYPES[editingNode.type ?? ""]);
 
   return (
     <div className="flex h-full flex-col">
@@ -641,6 +666,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
         mcpNodeEnabled={mcpEnabled}
+        aiTaskNodeEnabled={aiTaskNodeEnabled}
+        emailNodeEnabled={emailNodeEnabled}
         onSelect={handleSelectNodeType}
         onClose={() => {
           setTypePickerOpen(false);
@@ -648,8 +675,20 @@ function CanvasInner({ flowId }: { flowId: string }) {
         }}
       />
 
+      <AutomationStepEditor
+        open={configOpen && isAutomationStep}
+        flowId={flowId}
+        node={editingNode ?? null}
+        rfNodes={rfNodes}
+        stepNumbers={stepNumbers}
+        priorStepFields={priorStepFields}
+        onSaved={handleAutomationStepSaved}
+        onDelete={editingNodeId ? handleNodeDelete : undefined}
+        onClose={handleConfigClose}
+      />
+
       <NodeConfigModal
-        open={configOpen}
+        open={configOpen && !isAutomationStep}
         flowId={flowId}
         nodeId={editingNodeId}
         onTemplateApplied={applyTemplateResult}
