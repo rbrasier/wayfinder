@@ -1,14 +1,18 @@
 "use client";
 
+import { useContext } from "react";
+import { Plus, X } from "lucide-react";
 import type { AiTaskReviewer, ApproverSourceMode, PriorStepField } from "@rbrasier/domain";
+import { Button } from "@/components/ui/button";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { AiTaskForm } from "./automation-step-model";
-import { FieldValueList } from "./field-value-selector";
+import { inputLabelFor, type AiTaskForm, type AiTaskInputRow } from "./automation-step-model";
+import { FieldValueSelector, TriggerInputsContext } from "./field-value-selector";
+import { InstructionToolBarWithPickers } from "./instruction-tool-bar";
 import { PersonPicker } from "./person-picker";
-import { parseFieldLines, TemplateFieldEditor } from "./template-field-editor";
+import { TemplateFieldEditor } from "./template-field-editor";
 
 const SELECT_CLASS =
   "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-hidden";
@@ -42,13 +46,34 @@ export function AiTaskConfigForm({
   onReviewerPicked,
 }: AiTaskConfigFormProps) {
   const set = <K extends keyof AiTaskForm>(key: K, value: AiTaskForm[K]) => onChange({ ...form, [key]: value });
-  const inputFields = parseFieldLines(form.inputLines).fields;
+  const triggerInputs = useContext(TriggerInputsContext);
+  const updateInput = (index: number, next: AiTaskInputRow) =>
+    set(
+      "inputs",
+      form.inputs.map((row, position) => (position === index ? next : row)),
+    );
+  // A new input starts on the first earlier field, already named after it.
+  const newInputRow = (): AiTaskInputRow => {
+    const first = priorStepFields[0];
+    if (!first) return { label: "", source: { kind: "ai" } };
+    return {
+      label: first.field.label,
+      source: { kind: "step_field", nodeId: first.nodeId, fieldKey: first.field.key },
+    };
+  };
   const choice = reviewerChoiceOf(form.reviewer);
 
   return (
     <>
       <div className="space-y-1">
-        <Label htmlFor="ai-task-instruction">Instruction</Label>
+        <InstructionToolBarWithPickers
+          instructionId="ai-task-instruction"
+          label="Instruction"
+          skillRefs={form.skillRefs}
+          allowedMcpToolRefs={form.allowedMcpToolRefs}
+          onSkillRefsChange={(ids) => set("skillRefs", ids)}
+          onToolRefsChange={(refs) => set("allowedMcpToolRefs", refs)}
+        />
         <Textarea
           id="ai-task-instruction"
           rows={4}
@@ -61,27 +86,55 @@ export function AiTaskConfigForm({
         </p>
       </div>
 
-      <TemplateFieldEditor
-        label="Inputs (optional)"
-        helpText="Named values handed to the AI, e.g. Transcript. Use the same Label (type) syntax as document templates."
-        lines={form.inputLines}
-        onChange={(lines) => set("inputLines", lines)}
-      />
-      {inputFields.length > 0 && (
-        <div className="space-y-2">
-          <FieldGroupLabel id="ai-task-input-values">Where each input comes from</FieldGroupLabel>
-          <FieldValueList
-            fields={inputFields}
-            values={form.inputFieldValues}
-            onChange={(key, next) => set("inputFieldValues", { ...form.inputFieldValues, [key]: next })}
-            priorStepFields={priorStepFields}
-          />
-        </div>
-      )}
+      <div className="space-y-2">
+        <FieldGroupLabel id="ai-task-inputs">Inputs (optional)</FieldGroupLabel>
+        <p className="text-[12px] text-[#736d5f]">
+          Values from earlier steps handed to the AI by name, e.g. Transcript.
+        </p>
+        {form.inputs.map((row, index) => (
+          <div key={index} className="flex items-start gap-2 rounded-[9px] border border-[#e7e3db] p-2">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <FieldValueSelector
+                value={row.source}
+                onChange={(source) => {
+                  const previousDefault = inputLabelFor(row.source, priorStepFields, triggerInputs);
+                  const keepsName = row.label.trim() !== "" && row.label !== previousDefault;
+                  const label = keepsName ? row.label : inputLabelFor(source, priorStepFields, triggerInputs);
+                  updateInput(index, { source, label });
+                }}
+                priorStepFields={priorStepFields}
+              />
+              <Input
+                aria-label={`Name of input ${index + 1}`}
+                value={row.label}
+                onChange={(event) => updateInput(index, { ...row, label: event.target.value })}
+                placeholder="Name the AI sees, e.g. Transcript"
+              />
+            </div>
+            <button
+              type="button"
+              aria-label={`Remove input ${row.label || index + 1}`}
+              className="mt-2 text-[#736d5f] hover:text-[#1c1b19]"
+              onClick={() => set("inputs", form.inputs.filter((_, position) => position !== index))}
+            >
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => set("inputs", [...form.inputs, newInputRow()])}
+        >
+          <Plus className="mr-1 h-3.5 w-3.5" />
+          Add input
+        </Button>
+      </div>
 
       <TemplateFieldEditor
-        label="Output fields"
-        helpText="What the AI must return, e.g. Summary (narrative). Later steps can use these values."
+        label="Output fields (at least one)"
+        helpText="What the AI must return, e.g. Summary (narrative). The AI fills them as structured JSON, and later steps can use these values."
         lines={form.outputLines}
         onChange={(lines) => set("outputLines", lines)}
         disallowSection

@@ -12,6 +12,7 @@ import {
   resolveUserProfile,
 } from "@/lib/chat/prompt-context";
 import { buildGatheredContext, generateInitialMessage } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
+import { buildAiTaskContext } from "./ai-task-context";
 import { flagForStep, raiseUnattendedApproval } from "./unattended-approval";
 
 type Container = ReturnType<typeof getContainer>;
@@ -51,7 +52,11 @@ export const buildAdvanceUnattendedRun = (container: Container): AdvanceUnattend
     sessionMessages: container.repos.sessionMessages,
     sessionStepOutputs: container.repos.sessionStepOutputs,
     steps: {
-      runAiTask: (input) => container.useCases.runAiTaskNode.execute(input),
+      runAiTask: async (input) =>
+        container.useCases.runAiTaskNode.execute({
+          ...input,
+          additionalContext: await buildAiTaskContext(container, input),
+        }),
       runEmail: (input) => container.useCases.runEmailNode.execute(input),
       runAuto: (input) => container.useCases.runAutoNode.execute(input),
       runMcp: (input) => container.useCases.runMcpNode.execute(input),

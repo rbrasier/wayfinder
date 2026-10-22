@@ -11,7 +11,7 @@ import {
   type ISessionAgent,
   type PromptSessionUpload,
   type PromptUserProfile,
-  type ResolvedSkill,
+  renderSkillsBlock,
   type Result,
   type RetrievedChunk,
   type TemplateField,
@@ -49,7 +49,7 @@ export class FlowSessionGraph implements ISessionAgent {
     // Skills are author-attached reusable instructions (ADR-031), rendered in the
     // stable region of the prompt — above per-turn retrieved chunks — to preserve
     // prompt-cache hits. They steer behaviour; they do not replace <instructions>.
-    const skillsBlock = buildSkillsBlock(input.resolvedSkills ?? []);
+    const skillsBlock = renderSkillsBlock(input.resolvedSkills ?? []);
 
     // Attached documents are the user's own files for this request, injected in
     // full and independent of RAG, so a thin message ("here is the solution")
@@ -235,13 +235,6 @@ const buildReferenceDocumentsBlock = (chunks: RetrievedChunk[]): string => {
   return `\n\n<reference_documents>\n  The most relevant excerpts retrieved from documents attached to this workflow and any files the user has shared. Consult these when the user's question touches on policy or process. They are excerpts, not whole documents — if something needed is missing, ask the user rather than assuming.\n${entries.join("\n")}\n</reference_documents>`;
 };
 
-const buildSkillsBlock = (skills: ResolvedSkill[]): string => {
-  if (skills.length === 0) return "";
-  const rendered = skills
-    .map((skill) => `  <skill name="${skill.name}">\n    ${skill.body.trim()}\n  </skill>`)
-    .join("\n");
-  return `\n\n<skills>\n${rendered}\n</skills>`;
-};
 
 const buildColleagueDescription = (userProfile: PromptUserProfile | null): string => {
   const name = userProfile?.name?.trim();

@@ -5,8 +5,19 @@ import {
   aiTaskFormFromConfig,
   emailConfigFromForm,
   emailFormFromConfig,
+  inputLabelFor,
   placeholderOptions,
 } from "./automation-step-model";
+
+const priorFields: PriorStepField[] = [
+  {
+    nodeId: "node-1",
+    stepLabel: "1. Intake",
+    stepNumber: 1,
+    stepName: "Intake",
+    field: { key: "transcript", label: "Transcript", type: "narrative" },
+  },
+];
 
 describe("aiTaskFormFromConfig", () => {
   it("opens a new step with sensible defaults", () => {
@@ -14,62 +25,88 @@ describe("aiTaskFormFromConfig", () => {
 
     expect(form).toEqual({
       instruction: "",
-      inputLines: [],
-      inputFieldValues: {},
+      inputs: [],
       outputLines: [],
       confidenceThreshold: 80,
       reviewer: { mode: "run_owner" },
+      skillRefs: [],
+      allowedMcpToolRefs: [],
     });
   });
 
-  it("reads a saved config back into editable lines", () => {
+  it("reads saved inputs back as label-and-source rows, with skills and tools", () => {
     const form = aiTaskFormFromConfig({
       instruction: "Summarise.",
       inputFields: [{ key: "transcript", label: "Transcript", type: "text", optional: false, raw: "Transcript" }],
-      inputFieldValues: { transcript: { kind: "ai" } },
+      inputFieldValues: { transcript: { kind: "step_field", nodeId: "node-1", fieldKey: "transcript" } },
       structuredFields: [{ key: "summary", label: "Summary", type: "narrative", optional: false, raw: "Summary (narrative)" }],
       confidenceThreshold: 70,
       reviewer: { mode: "user", userId: "user-1" },
+      skillRefs: ["skill-1"],
+      allowedMcpToolRefs: [{ serverId: "server-1", toolName: "search" }],
     });
 
-    expect(form.inputLines).toEqual(["Transcript"]);
+    expect(form.inputs).toEqual([
+      { label: "Transcript", source: { kind: "step_field", nodeId: "node-1", fieldKey: "transcript" } },
+    ]);
     expect(form.outputLines).toEqual(["Summary (narrative)"]);
-    expect(form.confidenceThreshold).toBe(70);
-    expect(form.reviewer).toEqual({ mode: "user", userId: "user-1" });
+    expect(form.skillRefs).toEqual(["skill-1"]);
+    expect(form.allowedMcpToolRefs).toEqual([{ serverId: "server-1", toolName: "search" }]);
   });
 });
 
 describe("aiTaskConfigFromForm", () => {
-  it("builds a structured-output config from the form", () => {
-    const { config, problems } = aiTaskConfigFromForm({
-      instruction: "Summarise.",
-      inputLines: ["Transcript"],
-      inputFieldValues: { transcript: { kind: "literal", value: "x" }, removed: { kind: "ai" } },
-      outputLines: ["Summary (narrative)"],
-      confidenceThreshold: 80,
-      reviewer: { mode: "run_owner" },
-    });
+  const form = {
+    instruction: "Summarise.",
+    inputs: [
+      { label: "Transcript", source: { kind: "step_field" as const, nodeId: "node-1", fieldKey: "transcript" } },
+      { label: "Transcript", source: { kind: "trigger_input" as const, inputKey: "hearing_id" } },
+    ],
+    outputLines: ["Summary (narrative)"],
+    confidenceThreshold: 80,
+    reviewer: { mode: "run_owner" as const },
+    skillRefs: ["skill-1"],
+    allowedMcpToolRefs: [],
+  };
+
+  it("derives an input field per row, with a unique key, and keeps each row's source", () => {
+    const { config, problems } = aiTaskConfigFromForm(form);
 
     expect(problems).toEqual([]);
-    expect(config.outputType).toBe("structured");
-    expect(config.structuredFields.map((field) => field.key)).toEqual(["summary"]);
-    expect(config.inputFields?.map((field) => field.key)).toEqual(["transcript"]);
-    // A value source for a field that no longer exists is dropped, not kept.
-    expect(Object.keys(config.inputFieldValues ?? {})).toEqual(["transcript"]);
+    expect(config.inputFields?.map((field) => [field.key, field.label])).toEqual([
+      ["transcript", "Transcript"],
+      ["transcript_2", "Transcript"],
+    ]);
+    expect(config.inputFieldValues).toEqual({
+      transcript: { kind: "step_field", nodeId: "node-1", fieldKey: "transcript" },
+      transcript_2: { kind: "trigger_input", inputKey: "hearing_id" },
+    });
+    expect(config.skillRefs).toEqual(["skill-1"]);
   });
 
-  it("reports an unparseable field line and the domain's own problems", () => {
+  it("requires a label on every input and at least one output field", () => {
     const { problems } = aiTaskConfigFromForm({
-      instruction: "",
-      inputLines: [],
-      inputFieldValues: {},
-      outputLines: ["Summary (not-a-type)"],
-      confidenceThreshold: 80,
-      reviewer: { mode: "run_owner" },
+      ...form,
+      inputs: [{ label: " ", source: { kind: "ai" } }],
+      outputLines: [],
     });
 
-    expect(problems).toContain("Fix the highlighted output fields.");
-    expect(problems).toContain("Add an instruction for the AI task.");
+    expect(problems).toContain("Name every input.");
+    expect(problems).toContain("Add at least one output field.");
+  });
+});
+
+describe("inputLabelFor", () => {
+  it("names an input after the field or trigger input it reads", () => {
+    expect(inputLabelFor({ kind: "step_field", nodeId: "node-1", fieldKey: "transcript" }, priorFields, [])).toBe(
+      "Transcript",
+    );
+    expect(
+      inputLabelFor({ kind: "trigger_input", inputKey: "hearing_id" }, [], [
+        { key: "hearing_id", label: "Hearing", type: "text", required: true },
+      ]),
+    ).toBe("Hearing");
+    expect(inputLabelFor({ kind: "literal", value: "x" }, priorFields, [])).toBe("");
   });
 });
 
