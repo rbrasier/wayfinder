@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { documentDataSchema } from "./document";
 
 // Models do not reliably honour "a whole number 0-100" — they return 87.5 or a
 // value just outside the band — and rejecting the reply fails the whole turn or
@@ -58,3 +59,15 @@ export type TurnResponse = z.infer<typeof turnResponseSchema>;
 export type BranchChoice = z.infer<typeof branchChoiceSchema>;
 export type DocumentGenerationConfidenceData = z.infer<typeof documentGenerationConfidenceSchema>;
 export type PreGenerationEvaluationData = z.infer<typeof preGenerationEvaluationSchema>;
+
+// An AI task step's structured result (ADR-065 §3). The confidence decides
+// whether the run advances or the result goes to a reviewer.
+export const aiTaskResultSchema = z.object({
+  values: documentDataSchema.describe("One entry per requested output field, keyed by field key"),
+  confidence: z
+    .number()
+    .transform(toBoundedPercentConfidence)
+    .describe("Confidence 0-100 that the output fully and accurately meets the instruction"),
+  rationale: z.string().describe("Why the confidence is what it is; name anything missing or uncertain"),
+});
+export type AiTaskResult = z.infer<typeof aiTaskResultSchema>;

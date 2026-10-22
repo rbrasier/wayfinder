@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { branchChoiceSchema, preGenerationEvaluationSchema, turnResponseSchema } from "./confidence";
+import {
+  aiTaskResultSchema,
+  branchChoiceSchema,
+  preGenerationEvaluationSchema,
+  turnResponseSchema,
+} from "./confidence";
 
 describe("preGenerationEvaluationSchema", () => {
   it("accepts the two alignment confidences, rationales and a missingInformation list", () => {
@@ -135,5 +140,27 @@ describe("turnResponseSchema", () => {
     expect(turn(1).data?.stepCompleteConfidence).toBe(1);
     expect(turn(72).data?.stepCompleteConfidence).toBe(72);
     expect(turn(100).data?.stepCompleteConfidence).toBe(100);
+  });
+});
+
+describe("aiTaskResultSchema", () => {
+  it("accepts field values, a confidence and a rationale", () => {
+    const result = aiTaskResultSchema.safeParse({
+      values: { summary: "The committee met.", attendees: [{ name: "Smith" }] },
+      confidence: 91,
+      rationale: "The transcript was complete.",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.values.summary).toBe("The committee met.");
+  });
+
+  it("rounds and bounds the confidence to 0-100 rather than rejecting the reply", () => {
+    const parse = (confidence: number) =>
+      aiTaskResultSchema.parse({ values: {}, confidence, rationale: "" }).confidence;
+
+    expect(parse(87.6)).toBe(88);
+    expect(parse(140)).toBe(100);
+    expect(parse(-3)).toBe(0);
   });
 });

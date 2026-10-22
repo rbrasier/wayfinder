@@ -9,6 +9,7 @@ import {
   type IApprovalRepository,
   type IFlowNodeRepository,
   type ISessionMessageRepository,
+  type ISessionStepOutputRepository,
   type IUserRepository,
   type Result,
 } from "@rbrasier/domain";
@@ -16,6 +17,7 @@ import type {
   UpdateDocumentFields,
   UpdateDocumentFieldsOutput,
 } from "../document/update-document-fields";
+import type { UpdateStructuredStepOutput } from "../document/update-structured-output";
 import { SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
 
 export interface ApproverEditSubjectFieldsInput {
@@ -23,6 +25,19 @@ export interface ApproverEditSubjectFieldsInput {
   editedByUserId: string;
   values: Record<string, string>;
   groupItems?: Record<string, Array<Record<string, string>>>;
+}
+
+// A structured record (an AI task's output, or any structured step) has no
+// document to return, so a successful edit carries neither field.
+export type ApproverEditSubjectFieldsOutput =
+  | UpdateDocumentFieldsOutput
+  | { document?: undefined; fieldErrors?: undefined };
+
+// The record path for a subject with no document. Optional so the document path
+// keeps working unwired.
+export interface StructuredSubjectEditing {
+  sessionStepOutputs: Pick<ISessionStepOutputRepository, "findByMessageId">;
+  updateStructuredStepOutput: Pick<UpdateStructuredStepOutput, "execute">;
 }
 
 // Lets an approver fix a wrong date and approve, instead of sending the whole
@@ -39,11 +54,12 @@ export class ApproverEditSubjectFields {
     private readonly updateDocumentFields: UpdateDocumentFields,
     // Only ever read to resolve a changed key to its author-facing label.
     private readonly flowNodes: IFlowNodeRepository,
+    private readonly structured?: StructuredSubjectEditing,
   ) {}
 
   async execute(
     input: ApproverEditSubjectFieldsInput,
-  ): Promise<Result<UpdateDocumentFieldsOutput>> {
+  ): Promise<Result<ApproverEditSubjectFieldsOutput>> {
     const messageResult = await this.sessionMessages.findById(input.messageId);
     if (messageResult.error) return messageResult;
     const message = messageResult.data;
@@ -63,6 +79,10 @@ export class ApproverEditSubjectFields {
       );
     }
 
+    if (!message.document && this.structured) {
+      return this.editStructuredRecord(this.structured, message.sessionId, message.stepNodeId, input);
+    }
+
     // No lock override to pass: a pending approval is itself what keeps the
     // record editable (ADR-045 §6), and `isRecordLocked` reads that directly.
     const result = await this.updateDocumentFields.execute({
@@ -74,8 +94,41 @@ export class ApproverEditSubjectFields {
     if (result.error) return result;
     if (result.data.fieldErrors) return result;
 
-    await this.announce(message.sessionId, message.stepNodeId, input, result.data);
+    await this.announce(
+      message.sessionId,
+      message.stepNodeId,
+      input,
+      latestEditKeys(result.data, input.editedByUserId),
+    );
     return result;
+  }
+
+  // The changed keys are worked out against the record as it stood before the
+  // edit, because a structured record keeps no edit history of its own.
+  private async editStructuredRecord(
+    structured: StructuredSubjectEditing,
+    sessionId: string,
+    stepNodeId: string | null,
+    input: ApproverEditSubjectFieldsInput,
+  ): Promise<Result<ApproverEditSubjectFieldsOutput>> {
+    const before = await structured.sessionStepOutputs.findByMessageId(input.messageId);
+    if (before.error) return before;
+    const previous = new Map((before.data?.fields ?? []).map((field) => [field.key, field.value]));
+
+    const result = await structured.updateStructuredStepOutput.execute({
+      messageId: input.messageId,
+      editedByUserId: input.editedByUserId,
+      values: input.values,
+      groupItems: input.groupItems,
+    });
+    if (result.error) return result;
+    if (!result.data.ok) return ok({ fieldErrors: result.data.fieldErrors });
+
+    const changedKeys = Object.entries(input.values)
+      .filter(([key, value]) => previous.get(key) !== value)
+      .map(([key]) => key);
+    await this.announce(sessionId, stepNodeId, input, changedKeys);
+    return ok({});
   }
 
   // The approver's own pending approval, whose subject is exactly this step.
@@ -120,9 +173,8 @@ export class ApproverEditSubjectFields {
     sessionId: string,
     stepNodeId: string | null,
     input: ApproverEditSubjectFieldsInput,
-    output: UpdateDocumentFieldsOutput,
+    changedKeys: string[],
   ): Promise<void> {
-    const changedKeys = latestEditKeys(output, input.editedByUserId);
     if (changedKeys.length === 0) return;
 
     const content = buildApproverEditMessage({

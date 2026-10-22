@@ -236,3 +236,90 @@ describe("ApproverEditSubjectFields", () => {
     expect(sessionMessages.create).not.toHaveBeenCalled();
   });
 });
+
+// An AI task's output (and any structured step's) is a record with no document:
+// the approver's correction rewrites the step output instead (ADR-065 §3).
+describe("ApproverEditSubjectFields on a structured record", () => {
+  const aiTaskNode = {
+    id: "node-ai",
+    flowId: "flow-1",
+    type: "ai_task",
+    name: "Summarise hearing",
+    config: {
+      instruction: "Summarise.",
+      outputType: "structured",
+      structuredFields: [{ key: "summary", label: "Summary", type: "narrative", optional: false, raw: "" }],
+      confidenceThreshold: 80,
+      reviewer: { mode: "user", userId: "manager-1" },
+    },
+  };
+
+  const buildStructured = (structuredResult: unknown = ok({ ok: true })) => {
+    const approvals = {
+      listBySession: vi.fn(async () =>
+        ok([approval({ nodeId: "node-ai", recordSnapshot: { subjectNodeId: "node-ai" } })]),
+      ),
+    };
+    const users = {
+      findById: vi.fn(async () => ok({ id: "manager-1", email: "manager@corp.test", name: "Jane Doe" })),
+    };
+    const sessionMessages = {
+      findById: vi.fn(async () =>
+        ok({ id: "msg-ai", sessionId: "sess-1", stepNodeId: "node-ai", document: null }),
+      ),
+      create: vi.fn(async () => ok({ id: "msg-2" })),
+    };
+    const updateDocumentFields = { execute: vi.fn() };
+    const flowNodes = { findById: vi.fn(async () => ok(aiTaskNode)) };
+    const sessionStepOutputs = {
+      findByMessageId: vi.fn(async () =>
+        ok({ fields: [{ key: "summary", label: "Summary", type: "narrative", value: "Partial." }] }),
+      ),
+    };
+    const updateStructuredStepOutput = { execute: vi.fn(async () => structuredResult) };
+
+    const useCase = new ApproverEditSubjectFields(
+      approvals as never,
+      users as never,
+      sessionMessages as never,
+      updateDocumentFields as never,
+      flowNodes as never,
+      { sessionStepOutputs: sessionStepOutputs as never, updateStructuredStepOutput: updateStructuredStepOutput as never },
+    );
+    return { useCase, sessionMessages, updateDocumentFields, updateStructuredStepOutput };
+  };
+
+  const structuredEdit = { messageId: "msg-ai", editedByUserId: "manager-1", values: { summary: "Full summary." } };
+
+  it("rewrites the record through the structured path, not the document path", async () => {
+    const { useCase, updateDocumentFields, updateStructuredStepOutput } = buildStructured();
+
+    const result = await useCase.execute(structuredEdit);
+
+    expect(result.error).toBeUndefined();
+    expect(updateStructuredStepOutput.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ messageId: "msg-ai", editedByUserId: "manager-1" }),
+    );
+    expect(updateDocumentFields.execute).not.toHaveBeenCalled();
+  });
+
+  it("announces the fields whose values the approver changed", async () => {
+    const { useCase, sessionMessages } = buildStructured();
+
+    await useCase.execute(structuredEdit);
+
+    const posted = sessionMessages.create.mock.calls[0]![0] as { content: string };
+    expect(posted.content).toBe("Jane Doe edited this step before deciding the approval: Summary.");
+  });
+
+  it("returns the record's field errors without announcing anything", async () => {
+    const { useCase, sessionMessages } = buildStructured(
+      ok({ ok: false, fieldErrors: [{ key: "summary", message: "Required." }] }),
+    );
+
+    const result = await useCase.execute(structuredEdit);
+
+    expect(result.data).toMatchObject({ fieldErrors: [{ key: "summary" }] });
+    expect(sessionMessages.create).not.toHaveBeenCalled();
+  });
+});

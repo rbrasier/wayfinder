@@ -88,12 +88,16 @@ const lookupPlaceholder = (scope: string, path: string, values: MessageTemplateV
 
 // Fills an Email step's subject or body. An unknown placeholder renders blank
 // rather than leaking the raw `{{ … }}` into a sent message.
-export const renderMessageTemplate = (
-  template: string,
-  values: MessageTemplateValues,
-  options: { escapeHtml?: boolean } = {},
-): string =>
-  template.replace(PLACEHOLDER, (_match, scope: string, path: string) => {
-    const value = lookupPlaceholder(scope, path, values);
-    return options.escapeHtml ? escapeHtml(value) : value;
-  });
+export const renderMessageTemplate = (template: string, values: MessageTemplateValues): string =>
+  template.replace(PLACEHOLDER, (_match, scope: string, path: string) =>
+    lookupPlaceholder(scope, path, values),
+  );
+
+// The HTML part of an Email step's message. The whole rendered text is escaped —
+// author template and AI output alike — so nothing in either can become markup;
+// blank lines become paragraphs and single newlines line breaks.
+export const textToHtml = (text: string): string =>
+  text
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
