@@ -413,3 +413,73 @@ against `release/alpha-2`.
 - **In-process driver:** a crash mid-run leaves the session active with its
   lease expiring, so the owner must resume it by hand. The sweeper is future
   work.
+
+## 11. Build change summary (approved at `/build`, 2026-10-22)
+
+The build runs in three sub-phases, in order:
+
+- **A:** AI task and Email steps, plus the shared foundations (migrations,
+  flags, permissions, `SecretCipher`).
+- **B:** trigger inputs, the unattended driver, webhook start, and run history
+  and alerts on the flow Triggers tab.
+- **C:** Event Watch: the outbound HTTP client with its private-address guard,
+  the poller worker, and the admin list, editor and run history with an
+  incident badge.
+
+Each sub-component writes its tests first and ends with a green
+`./validate.sh`. The branch is `feature/unattended-automation/claude-rbrasier`,
+cut from the docs branch on `release/alpha-2`. The PR targets
+`release/alpha-2` (approved exception). Version `0.28.40` (PATCH, waived).
+
+**E2E:** none. No part of the feature falls into the six groups of
+`docs/guides/e2e-test-policy.md`. Coverage is at the domain, application and
+api-route layers.
+
+**Source issue:** rbrasier/wayfinder#334. Event Watch, item state and the Email
+step answer its schedule, state and notify asks. MCP subscriptions and
+streaming are not covered, so the PR says `Part of #334`.
+
+**Build-time risk:** this sandbox has no live database. Repository SQL and the
+migration are exercised by `validate.sh` §22 (schema vs migrations) and by CI.
+
+### Decomposition (build order)
+
+**Sub-phase A: foundations, AI task and Email**
+
+| # | Sub-component |
+|---|---|
+| A1 | Domain node types: `flow-node.ts`, `approval.ts`, `notification-log.ts`, `permission.ts`, with tests |
+| A2 | Domain session and settings: `session.ts` (origin, `runError`, `deriveRunStatus`), `runtime-config.ts` (`AutomationConfig`) |
+| A3 | Persistence: schema changes, the generated migration, the custom seed migration, `seed-roles.ts`, plus seed, role and safety tests |
+| A4 | `SecretCipher` extraction; email attachments (port and nodemailer) |
+| A5 | `run-ai-task-node.ts` |
+| A6 | `run-email-node.ts` |
+| A7 | Approval decision for `ai_task` subjects |
+| A8 | Web: AI task and Email step cards, flag gating, disabled state |
+| A9 | Web: Automation settings card and runtime config getter |
+
+**Sub-phase B: triggers, driver and webhook**
+
+| # | Sub-component |
+|---|---|
+| B1 | Domain: `flow-trigger.ts`, `trigger_input` source, flow and snapshot inputs |
+| B2 | Flow-trigger port and repository; session-repository additions |
+| B3 | `start-unattended-run`, `advance-unattended-run`, `retry-failed-step` |
+| B4 | Re-entry hooks in existing advance paths; `trigger_input` resolver |
+| B5 | `notify-unattended-incident`, `list-trigger-runs` |
+| B6 | `flow-trigger/*` use cases |
+| B7 | API: `webhook-signature.ts`, `routes/triggers.ts`, wiring |
+| B8 | Web: flow-trigger router, Triggers tab, "Trigger inputs" picker group |
+
+**Sub-phase C: Event Watch**
+
+| # | Sub-component |
+|---|---|
+| C1 | Domain: `event-watch.ts` pure functions |
+| C2 | Outbound HTTP client port and adapter |
+| C3 | Event-watch port and Drizzle repository |
+| C4 | `poll-due-watches` |
+| C5 | `event-watch/*` use cases |
+| C6 | `event-watch-worker` plus wiring |
+| C7 | Web: router, admin list with badge, sidebar item |
+| C8 | Web: watch editor (JSON picker, condition builder, preview, mapping) and run history page |
