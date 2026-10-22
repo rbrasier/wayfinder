@@ -112,6 +112,10 @@ const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   activeTurnClaimedAt: row.active_turn_claimed_at ?? null,
   version: row.version,
   manualEstimateMinutes: row.manual_estimate_minutes ?? null,
+  origin: row.origin,
+  triggerSourceId: row.trigger_source_id ?? null,
+  triggerPayload: row.trigger_payload ?? null,
+  runError: row.run_error ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -129,6 +133,9 @@ export class DrizzleSessionRepository implements ISessionRepository {
           title: input.title ?? null,
           current_node_id: input.currentNodeId ?? null,
           flow_version_id: input.flowVersionId ?? null,
+          origin: input.origin ?? "manual",
+          trigger_source_id: input.triggerSourceId ?? null,
+          trigger_payload: input.triggerPayload ?? null,
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Session insert returned no row."));
@@ -248,6 +255,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
           ...(patch.manualEstimateMinutes !== undefined
             ? { manual_estimate_minutes: patch.manualEstimateMinutes }
             : {}),
+          ...(patch.runError !== undefined ? { run_error: patch.runError } : {}),
           version: sql`${app_sessions.version} + 1`,
           updated_at: new Date(),
         })

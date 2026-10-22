@@ -168,6 +168,7 @@ describe("ListRoles", () => {
         "extraction:author",
         "extraction:run",
         "flow:advanced_config",
+        "flow:webhook_trigger",
         "group:manage_own",
         "knowledge:curate",
         "knowledge:submit_feedback",

@@ -2,10 +2,15 @@
 // is the source of truth for the decision; the resolver only ever *suggests* an
 // approver, and the operator must confirm (or override) before it is sent.
 
+// `run_owner` and `named_user` are raised by an AI task review (ADR-065 §3),
+// never by an approval node: the reviewer is fixed by the step's config rather
+// than suggested and confirmed.
 export type ApproverSource =
   | "first_level_supervisor"
   | "second_level_supervisor"
-  | "dynamic";
+  | "dynamic"
+  | "run_owner"
+  | "named_user";
 
 // What is *recorded*. `approved_with_edits` is derived by the system at decision
 // time, never selected: an approval earns it when the approver who signed it also

@@ -33,7 +33,7 @@ export interface RawNode {
   id: string;
   name: string;
   colour: string | null;
-  type?: "conversational" | "auto" | "scheduled" | "approval" | "mcp";
+  type?: "conversational" | "auto" | "scheduled" | "approval" | "mcp" | "ai_task" | "email";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;

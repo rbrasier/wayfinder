@@ -10,8 +10,13 @@ export type NotificationTrigger =
   | "approval_requested"
   | "approval_decided"
   | "approval_withdrawn"
-  | "approval_reassigned";
-export type NotificationResourceType = "session" | "flow" | "approval";
+  | "approval_reassigned"
+  // Unattended-run alerts to the run owner (ADR-065 §6). Each resource id names
+  // one incident, so the unique index sends each at most once.
+  | "unattended_run_failed"
+  | "unattended_awaiting_person"
+  | "watch_paused";
+export type NotificationResourceType = "session" | "flow" | "approval" | "event_watch";
 export type NotificationStatus = "pending" | "sent" | "failed";
 
 export interface NotificationLog {
