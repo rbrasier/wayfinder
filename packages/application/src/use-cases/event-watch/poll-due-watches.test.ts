@@ -12,7 +12,7 @@ import {
 } from "@rbrasier/domain";
 import type { UnattendedIncident } from "../notifications/notify-unattended-incident";
 import { PollDueWatches } from "./poll-due-watches";
-import type { StartUnattendedRunInput, StartUnattendedRunOutput } from "./start-unattended-run";
+import type { StartUnattendedRunInput, StartUnattendedRunOutput } from "../automation/start-unattended-run";
 
 const watch = (overrides: Partial<EventWatch> = {}): EventWatch => ({
   id: "watch-1",

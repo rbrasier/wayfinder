@@ -223,6 +223,34 @@ export const evaluateWatchItems = (input: WatchEvaluationInput): WatchEvaluation
   return evaluation;
 };
 
+// The editor's "would fire now" preview (ADR-063 §2): judges a sample as if
+// every item had just arrived in its current state, so an admin sees which
+// items the condition picks out without waiting for a real change.
+export const previewWatchItems = (input: {
+  condition: WatchCondition;
+  items: unknown[];
+  itemIdPath: string;
+}): { wouldFire: Array<{ itemId: string; item: unknown }>; skippedWithoutId: number } => {
+  const fieldPath = conditionFieldPath(input.condition);
+  const preview = { wouldFire: [] as Array<{ itemId: string; item: unknown }>, skippedWithoutId: 0 };
+  for (const item of input.items) {
+    const itemId = itemIdOf(item, input.itemIdPath);
+    if (itemId === null) {
+      preview.skippedWithoutId += 1;
+      continue;
+    }
+    const current = fieldPath === null ? undefined : readJsonPath(item, fieldPath);
+    if (isInFiringState(input.condition, current)) preview.wouldFire.push({ itemId, item });
+  }
+  return preview;
+};
+
+const isInFiringState = (condition: WatchCondition, current: unknown): boolean => {
+  if (condition.kind === "transition") return displayValue(current) === condition.to;
+  if (condition.kind === "matches") return matches(condition, current);
+  return true;
+};
+
 const isBlank = (value: string | null | undefined): boolean => !value || value.trim() === "";
 
 const conditionProblems = (condition: WatchCondition): string[] => {

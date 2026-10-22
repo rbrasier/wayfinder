@@ -7,12 +7,12 @@ import {
   type EventWatch,
   type IEventWatchRepository,
   type IOutboundHttpClient,
-  type OutboundJsonRequest,
   type Result,
   type WatchPausedReason,
 } from "@rbrasier/domain";
 import type { IUnattendedIncidentNotifier } from "../notifications/notify-unattended-incident";
-import type { StartUnattendedRun } from "./start-unattended-run";
+import type { StartUnattendedRun } from "../automation/start-unattended-run";
+import { buildWatchRequest } from "./watch-request";
 
 export interface PollDueWatchesDependencies {
   watches: Pick<
@@ -52,18 +52,9 @@ const outcome = (started: number, flags: { failed?: boolean; paused?: boolean } 
   paused: flags.paused ?? false,
 });
 
-const REQUEST_TIMEOUT_MS = 15_000;
-const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
-
 const PAUSE_REASONS: Record<"run_as_unavailable" | "flow_unavailable", string> = {
   run_as_unavailable: "The person the runs belong to no longer has an account.",
   flow_unavailable: "The flow it starts is no longer published.",
-};
-
-const withQueryParameter = (url: string, name: string, value: string): string => {
-  const parsed = new URL(url);
-  parsed.searchParams.set(name, value);
-  return parsed.toString();
 };
 
 // Polls every watch that is due (ADR-063 §5): fetch, judge, start runs, record.
@@ -89,9 +80,9 @@ export class PollDueWatches {
   }
 
   private async poll(watch: EventWatch, allowedHosts: readonly string[]): Promise<PollOutcome> {
-    const request = await this.buildRequest(watch, allowedHosts);
-    if (request.error) return this.recordFailure(watch, request.error.message);
-    const response = await this.dependencies.http.requestJson(request.data);
+    const secret = watch.authType === "none" ? ok(null) : await this.dependencies.watches.getSecret(watch.id);
+    if (secret.error) return this.recordFailure(watch, secret.error.message);
+    const response = await this.dependencies.http.requestJson(buildWatchRequest(watch, secret.data, allowedHosts));
     if (response.error) return this.recordFailure(watch, response.error.message);
     const items = watchItemsOf(response.data.json, watch.itemsPath);
     if (items.error) return this.recordFailure(watch, items.error.message);
@@ -224,30 +215,5 @@ export class PollDueWatches {
       watch: { id: watch.id, name: watch.name, runAsUserId: watch.runAsUserId, pauseIncidentId: incidentId },
       reason: explanation,
     });
-  }
-
-  private async buildRequest(
-    watch: EventWatch,
-    allowedHosts: readonly string[],
-  ): Promise<Result<OutboundJsonRequest>> {
-    const base: OutboundJsonRequest = {
-      url: watch.url,
-      method: watch.method,
-      headers: {},
-      body: watch.method === "POST" ? watch.requestBody : undefined,
-      timeoutMs: REQUEST_TIMEOUT_MS,
-      maxBytes: MAX_RESPONSE_BYTES,
-      allowedHosts,
-    };
-    if (watch.authType === "none") return ok(base);
-
-    const secret = await this.dependencies.watches.getSecret(watch.id);
-    if (secret.error) return secret;
-    const value = secret.data ?? "";
-    if (watch.authType === "bearer") return ok({ ...base, headers: { Authorization: `Bearer ${value}` } });
-
-    const placement = watch.apiKeyPlacement ?? { in: "header", name: "X-API-Key" };
-    if (placement.in === "query") return ok({ ...base, url: withQueryParameter(watch.url, placement.name, value) });
-    return ok({ ...base, headers: { [placement.name]: value } });
   }
 }

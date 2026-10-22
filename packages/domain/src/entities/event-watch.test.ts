@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   evaluateWatchItems,
+  previewWatchItems,
   readJsonPath,
   validateEventWatch,
   watchItemsOf,
@@ -168,6 +169,30 @@ describe("evaluateWatchItems", () => {
     const result = evaluate({ kind: "new_item" }, [{ id: "H-1", title: "Finance" }]);
 
     expect(result.toFire).toEqual([{ itemId: "H-1", item: { id: "H-1", title: "Finance" } }]);
+  });
+});
+
+describe("previewWatchItems", () => {
+  const items = [
+    { id: "H-1", status: "finished" },
+    { id: "H-2", status: "live" },
+    { status: "finished" },
+  ];
+  const previewIds = (condition: WatchCondition) =>
+    previewWatchItems({ condition, items, itemIdPath: "id" }).wouldFire.map((fired) => fired.itemId);
+
+  it("shows the items already in the state a transition or match fires into", () => {
+    expect(previewIds({ kind: "transition", fieldPath: "status", from: "live", to: "finished" })).toEqual(["H-1"]);
+    expect(previewIds({ kind: "matches", fieldPath: "status", operator: "equals", value: "live" })).toEqual(["H-2"]);
+  });
+
+  it("shows every identifiable item for new_item and changed, since any of them could fire", () => {
+    expect(previewIds({ kind: "new_item" })).toEqual(["H-1", "H-2"]);
+    expect(previewIds({ kind: "changed", fieldPath: "status" })).toEqual(["H-1", "H-2"]);
+  });
+
+  it("counts the items it cannot identify", () => {
+    expect(previewWatchItems({ condition: { kind: "new_item" }, items, itemIdPath: "id" }).skippedWithoutId).toBe(1);
   });
 });
 
