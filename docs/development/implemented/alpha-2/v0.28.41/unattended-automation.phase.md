@@ -1,12 +1,12 @@
 # Phase — Unattended Automation (Event Watch, Webhook Start, AI Task & Email Steps)
 
-- **Status**: Draft — awaiting `/doc-review`
-- **Target version**: **0.28.40** (PATCH, by **explicit requester exception**;
+- **Status**: Implemented (v0.28.41)
+- **Target version**: **0.28.41** (PATCH, by **explicit requester exception**;
   see §10). It would otherwise be MINOR: there are schema changes and new
   features.
 - **Base branch**: `release/alpha-2`, by **explicit requester exception** to
   `CLAUDE.md`'s "new features land on `main`". Implemented docs go to
-  `docs/development/implemented/alpha-2/v0.28.40/`.
+  `docs/development/implemented/alpha-2/v0.28.41/`.
 - **PRD**: `docs/development/prd/unattended-automation.prd.md`
 - **ADRs**:
   - `063-event-watch-polling-and-embedded-connection.adr.md`
@@ -56,7 +56,7 @@ someone to notice, start a flow and send the result by hand. See PRD §1.
 
 > Approved by the requester on 2026-10-22 (after one amend round: Connections
 > folded into the watch, Run Monitor folded into the watch list, version
-> 0.28.40).
+> 0.28.41).
 
 An admin builds an **Event Watch** under its own Admin menu item. The watch
 holds its own web address and encrypted token, polls every N minutes, and
@@ -66,7 +66,7 @@ step that runs an instruction unattended and sends low-confidence results to a
 reviewer, and an **Email** step that sends results to people, groups or shared
 inboxes. Run history and failure alerts are on the Event Watch list and the
 flow's Triggers tab. Everything is flagged and permissioned, and it ships on
-`release/alpha-2` as `0.28.40`.
+`release/alpha-2` as `0.28.41`.
 
 **Business rules**
 
@@ -106,7 +106,7 @@ flow Triggers tab, and the AI task and Email step cards. See §6.
 Build strictly bottom-up within each sub-phase (domain → application →
 adapters → apps), writing each test file before its implementation file
 (`CLAUDE.md`). Each sub-phase is independently shippable behind its flag and
-ends with a green `./validate.sh`. All three ship in 0.28.40. The split is for
+ends with a green `./validate.sh`. All three ship in 0.28.41. The split is for
 review and test granularity, not separate releases.
 
 - **Sub-phase A: AI task and Email steps** (no trigger yet; usable in manual
@@ -118,7 +118,7 @@ review and test granularity, not separate releases.
   UI, run history and the badge.
 
 The schema migration and the seed migration (§7) cover all three sub-phases.
-Both are created in A, so 0.28.40 carries one migrate step.
+Both are created in A, so 0.28.41 carries one migrate step.
 
 ## 6. Key entities / files
 
@@ -203,7 +203,7 @@ There are two migrations, following the precedent of
    script forwards to `drizzle-kit generate`. It holds the seed and backfill
    SQL below.
 
-Never `push`. Both ship in 0.28.40.
+Never `push`. Both ship in 0.28.41.
 
 **`admin_event_watches`**
 
@@ -389,7 +389,7 @@ against `release/alpha-2`.
   - confirm one run, one email and the run history row;
   - break the URL → pause after 5 polls, one alert;
   - resume.
-- **Version:** `VERSION` and root `package.json` move to `0.28.40` (applied by
+- **Version:** `VERSION` and root `package.json` move to `0.28.41` (applied by
   `/build`).
 
 ## 10. Exceptions, risks & forward-merge notes
@@ -398,7 +398,7 @@ against `release/alpha-2`.
   requester's direction (2026-10-22). Record this in the implementation
   summary.
 - **Versioning-rule exception, waived by the requester at `/doc-review`
-  (2026-10-22).** A schema change shipped as a PATCH (`0.28.40`), because
+  (2026-10-22).** A schema change shipped as a PATCH (`0.28.41`), because
   `0.29.x` would collide with `main`'s line (`0.40.x`). Doc-review check 5 is
   accepted as waived, not passed.
   Release notes **must** say "contains a database migration; run migrations
@@ -429,7 +429,7 @@ The build runs in three sub-phases, in order:
 Each sub-component writes its tests first and ends with a green
 `./validate.sh`. The branch is `feature/unattended-automation/claude-rbrasier`,
 cut from the docs branch on `release/alpha-2`. The PR targets
-`release/alpha-2` (approved exception). Version `0.28.40` (PATCH, waived).
+`release/alpha-2` (approved exception). Version `0.28.41` (PATCH, waived).
 
 **E2E:** none. No part of the feature falls into the six groups of
 `docs/guides/e2e-test-policy.md`. Coverage is at the domain, application and

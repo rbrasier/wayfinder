@@ -115,12 +115,18 @@ The rules that make it safe:
 - Comparison is on the JSON-stringified value, so `1` and `"1"` differ. That is
   intended, and the editor shows the sampled type.
 
-### 5. Scheduling: a second worker on the ADR-019 pattern
+### 5. Scheduling: on the existing scheduler tick
 
-`EventWatchWorker` (in `packages/adapters/src/scheduling/`) mirrors
-`SchedulerWorker`. It ticks every 60 s, registers `event_watch_worker` in
-`job_registry`, and never overlaps a tick. Each tick calls the application use
-case `PollDueWatches`:
+> **As built (v0.28.41).** The plan was a second `EventWatchWorker` in
+> `apps/api`. Every step a run needs (the AI and email steps, the run driver)
+> is wired in the web app's container, and the API's scheduler is already a
+> 60 s heartbeat that POSTs the web app's internal
+> `/api/internal/scheduler/tick`. Polling therefore runs on that tick, after
+> due schedules and the stalled-run sweep, up to 20 watches per tick. No new
+> worker, `job_registry` row or environment variable was added. The tick
+> skips polling while the `event_watch` flag is off.
+
+Each tick calls the application use case `PollDueWatches`:
 
 1. **Claim due watches.** `IEventWatchRepository.claimDue(now, limit)` uses
    `FOR UPDATE SKIP LOCKED` on `status = 'active' AND next_poll_at <= now` and
@@ -190,8 +196,8 @@ Create, edit, pause, resume, delete and test are audit-logged as
 
 ## Consequences
 
-- One more background worker and `job_registry` row, with the same operational
-  model as the scheduler.
+- No new background worker: polling shares the scheduler's heartbeat (§5), so
+  it has the same operational model and the same 60 s cadence.
 - A secret cannot be shared across watches; an admin pastes it into each. That
   is acceptable for the expected handful of watches.
 - `readJsonPath` and `evaluateWatchItems` are pure and fully unit-testable with
