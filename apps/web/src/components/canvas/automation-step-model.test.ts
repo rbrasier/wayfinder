@@ -155,4 +155,10 @@ describe("placeholderOptions", () => {
       { label: "1. Summarise → Summary", token: "{{ step.node-1.summary }}" },
     ]);
   });
+
+  it("offers the flow's trigger inputs first", () => {
+    expect(
+      placeholderOptions([], [{ key: "hearing_id", label: "Hearing", type: "text", required: true }]),
+    ).toEqual([{ label: "Trigger input → Hearing", token: "{{ input.hearing_id }}" }]);
+  });
 });

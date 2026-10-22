@@ -150,10 +150,19 @@ export interface PlaceholderOption {
   token: string;
 }
 
-// What the Email editor's "Insert field" menu offers: one token per field an
-// earlier step declares, in the syntax `renderMessageTemplate` reads.
-export const placeholderOptions = (priorStepFields: PriorStepField[]): PlaceholderOption[] =>
-  priorStepFields.map((prior) => ({
+// What the Email editor's "Insert field" menu offers: the flow's trigger
+// inputs, then one token per field an earlier step declares, in the syntax
+// `renderMessageTemplate` reads.
+export const placeholderOptions = (
+  priorStepFields: PriorStepField[],
+  triggerInputs: TriggerInput[] = [],
+): PlaceholderOption[] => [
+  ...triggerInputs.map((input) => ({
+    label: `Trigger input → ${input.label || input.key}`,
+    token: `{{ input.${input.key} }}`,
+  })),
+  ...priorStepFields.map((prior) => ({
     label: `${prior.stepLabel} → ${prior.field.label}`,
     token: `{{ step.${prior.nodeId}.${prior.field.key} }}`,
-  }));
+  })),
+];

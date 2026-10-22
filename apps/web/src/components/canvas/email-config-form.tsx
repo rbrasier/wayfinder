@@ -1,16 +1,16 @@
 "use client";
 
+import { useContext, useRef } from "react";
 import { X } from "lucide-react";
 import type { EmailRecipient, PriorStepField } from "@rbrasier/domain";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { placeholderOptions, type EmailForm } from "./automation-step-model";
-import { PersonPicker } from "./person-picker";
-
-const SELECT_CLASS =
-  "flex h-10 w-full rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-3 py-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-hidden";
+import { TriggerInputsContext } from "./field-value-selector";
+import { InsertFieldMenu } from "./insert-field-menu";
+import { MarkdownEditor } from "./markdown-editor";
+import { RecipientAutosuggest } from "./recipient-autosuggest";
 
 export interface DocumentStepOption {
   nodeId: string;
@@ -35,8 +35,9 @@ const recipientKey = (recipient: EmailRecipient): string =>
       ? `user:${recipient.userId}`
       : `group:${recipient.groupId}`;
 
-// The Email step editor (ADR-065 §4). Recipients are people, groups or fixed
-// inboxes; the subject and body take placeholders for earlier steps' values.
+// The Email step editor (ADR-065 §4). Recipients are people, groups or any
+// address; the subject and the markdown message take placeholders for trigger
+// inputs and earlier steps' values.
 export function EmailConfigForm({
   form,
   onChange,
@@ -47,6 +48,16 @@ export function EmailConfigForm({
   onRecipientNamed,
 }: EmailConfigFormProps) {
   const set = <K extends keyof EmailForm>(key: K, value: EmailForm[K]) => onChange({ ...form, [key]: value });
+  const triggerInputs = useContext(TriggerInputsContext);
+  const insertOptions = placeholderOptions(priorStepFields, triggerInputs);
+  const subjectRef = useRef<HTMLInputElement>(null);
+
+  const insertIntoSubject = (token: string) => {
+    const subject = subjectRef.current;
+    const start = subject?.selectionStart ?? form.subjectTemplate.length;
+    const end = subject?.selectionEnd ?? form.subjectTemplate.length;
+    set("subjectTemplate", `${form.subjectTemplate.slice(0, start)}${token}${form.subjectTemplate.slice(end)}`);
+  };
 
   const addRecipient = (recipient: EmailRecipient) => {
     const key = recipientKey(recipient);
@@ -99,44 +110,23 @@ export function EmailConfigForm({
             ))}
           </ul>
         )}
-        <PersonPicker
-          id="email-add-person"
-          label="Add a person or inbox"
-          placeholder="Search people, or type a full email address…"
-          onPick={(person) => {
-            if (person.userId) {
-              onRecipientNamed(person.userId, person.displayName ?? person.email);
-              addRecipient({ kind: "user", userId: person.userId });
-              return;
-            }
-            addRecipient({ kind: "address", email: person.email });
+        <RecipientAutosuggest
+          id="email-add-recipient"
+          groups={groups}
+          onAdd={(recipient, name) => {
+            if (recipient.kind === "user") onRecipientNamed(recipient.userId, name);
+            addRecipient(recipient);
           }}
         />
-        {groups.length > 0 && (
-          <div className="space-y-1">
-            <Label htmlFor="email-add-group">Add a group</Label>
-            <select
-              id="email-add-group"
-              className={SELECT_CLASS}
-              value=""
-              onChange={(event) => {
-                if (event.target.value) addRecipient({ kind: "group", groupId: event.target.value });
-              }}
-            >
-              <option value="">Choose a group…</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="email-subject">Subject</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="email-subject">Subject</Label>
+          <InsertFieldMenu fieldLabel="Subject" options={insertOptions} onInsert={insertIntoSubject} />
+        </div>
         <Input
+          ref={subjectRef}
           id="email-subject"
           value={form.subjectTemplate}
           onChange={(event) => set("subjectTemplate", event.target.value)}
@@ -144,36 +134,14 @@ export function EmailConfigForm({
         />
       </div>
 
-      <div className="space-y-1">
-        <Label htmlFor="email-body">Message</Label>
-        <Textarea
-          id="email-body"
-          rows={6}
-          value={form.bodyTemplate}
-          onChange={(event) => set("bodyTemplate", event.target.value)}
-          placeholder="Write the message. Insert values from earlier steps below."
-        />
-        {priorStepFields.length > 0 && (
-          <div className="space-y-1">
-            <Label htmlFor="email-insert-field">Insert a value from an earlier step</Label>
-            <select
-              id="email-insert-field"
-              className={SELECT_CLASS}
-              value=""
-              onChange={(event) => {
-                if (event.target.value) set("bodyTemplate", `${form.bodyTemplate}${event.target.value}`);
-              }}
-            >
-              <option value="">Choose a field…</option>
-              {placeholderOptions(priorStepFields).map((option) => (
-                <option key={option.token} value={option.token}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
+      <MarkdownEditor
+        id="email-body"
+        label="Message"
+        value={form.bodyTemplate}
+        onChange={(bodyTemplate) => set("bodyTemplate", bodyTemplate)}
+        insertOptions={insertOptions}
+        placeholder="Write the message. Use Insert field for values from earlier steps."
+      />
 
       {documentSteps.length > 0 && (
         <fieldset className="space-y-1">
