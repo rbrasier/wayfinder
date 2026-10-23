@@ -315,10 +315,12 @@ version stays 0.28.41.
   - The existing smoke test in `unattended-automation.spec.ts` (group 6) is
     extended.
   - The seeded automation flow now runs an AI task step ("Summarise the
-    hearing", threshold 50, below the scripted model's default of 75) before
-    the person's step.
+    hearing") before the person's step. Its threshold is 0, because the AI
+    task's confidence field declares no range: the unscripted model answers 1,
+    and any higher threshold would send the run to review, where the card is
+    hidden.
   - After the run parks, the test opens its chat from the run history, checks
-    the output card, and opens the ⓘ to read "Confidence: 75%".
+    the output card, and opens the ⓘ to read the confidence.
 
 ## Amendment 3 — local mocks for trying the features by hand
 

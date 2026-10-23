@@ -6,9 +6,10 @@ const SEED_AUTOMATION_FLOW_NAME = "E2E SEED Automation Flow";
 
 // A published flow that can be started unattended (ADR-064/065): it declares
 // one required trigger input, opens on an AI task step, then parks on a
-// conversational step as "Waiting on a person". The AI task's threshold sits
-// below the scripted model's default confidence (75), so with no script it
-// always passes and the run's chat shows its output card. Also allow-lists the
+// conversational step as "Waiting on a person". The AI task's threshold is 0:
+// its confidence field declares no range, so the unscripted model answers the
+// smallest value (1), and any higher threshold would park the run on review
+// with its output card hidden. Also allow-lists the
 // app's own host, so a watch in the e2e suite can call the test-only watch
 // source (`/api/test/watch-source`) past the SSRF guard.
 export const seedAutomationFlow = async (container: Container, ownerUserId: string): Promise<string> => {
@@ -33,7 +34,7 @@ export const seedAutomationFlow = async (container: Container, ownerUserId: stri
         instruction: "Summarise the finished hearing in two sentences.",
         outputType: "structured",
         structuredFields: [{ key: "summary", label: "Summary", type: "narrative" }],
-        confidenceThreshold: 50,
+        confidenceThreshold: 0,
         reviewer: { mode: "run_owner" },
       },
     }),
