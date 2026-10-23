@@ -1,3 +1,4 @@
+import { deriveStepKeys } from "./approval-record";
 import type { AiTaskNodeConfig, EmailNodeConfig } from "./flow-node";
 
 export const DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD = 80;
@@ -62,27 +63,39 @@ export const validateEmailNodeConfig = (
 
 export interface MessageTemplateValues {
   inputs: Record<string, string>;
-  // Keyed by node id, then field key.
+  // Keyed by step key (see `flowStepKeys`), then field key.
   steps: Record<string, Record<string, string>>;
 }
 
-const PLACEHOLDER = /\{\{\s*(input|step)\.([^\s}]+)\s*\}\}/g;
+// The scope trigger inputs are read from; no step is ever given this key.
+export const TRIGGER_INPUT_SCOPE = "input";
 
-const lookupPlaceholder = (scope: string, path: string, values: MessageTemplateValues): string => {
-  if (scope === "input") return values.inputs[path] ?? "";
-  // A node id is a uuid, so the field key is everything after its last dot.
-  const separator = path.lastIndexOf(".");
-  if (separator <= 0) return "";
-  const nodeId = path.slice(0, separator);
-  const fieldKey = path.slice(separator + 1);
-  return values.steps[nodeId]?.[fieldKey] ?? "";
+// Each step's key as an Email template names it — `{{ <step_key>.<field> }}` —
+// derived the way approval records name their steps (ADR-040 §5): the snake_cased
+// step name, suffixed `_2`, `_3`… when names repeat. Repeats are settled by node
+// id, the one order the canvas and a published version's snapshot (which keeps
+// neither creation times nor a stable node order) both see the same.
+export const flowStepKeys = (nodes: readonly { id: string; name: string }[]): Map<string, string> => {
+  const ordered = [...nodes].sort((first, second) => first.id.localeCompare(second.id));
+  const keys = deriveStepKeys(
+    ordered.map((node) => node.name),
+    [TRIGGER_INPUT_SCOPE],
+  );
+  return new Map(ordered.map((node, index) => [node.id, keys[index]!]));
+};
+
+const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_-]+)\s*\}\}/g;
+
+const lookupPlaceholder = (scope: string, key: string, values: MessageTemplateValues): string => {
+  if (scope === TRIGGER_INPUT_SCOPE) return values.inputs[key] ?? "";
+  return values.steps[scope]?.[key] ?? "";
 };
 
 // Fills an Email step's subject or body. An unknown placeholder renders blank
 // rather than leaking the raw `{{ … }}` into a sent message.
 export const renderMessageTemplate = (template: string, values: MessageTemplateValues): string =>
-  template.replace(PLACEHOLDER, (_match, scope: string, path: string) =>
-    lookupPlaceholder(scope, path, values),
+  template.replace(PLACEHOLDER, (_match, scope: string, key: string) =>
+    lookupPlaceholder(scope, key, values),
   );
 
 // The HTML part of an Email step's message. The whole rendered text is escaped —

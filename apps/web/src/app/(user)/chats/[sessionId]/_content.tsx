@@ -24,7 +24,6 @@ import { AppHeader } from "@/components/layout/app-header";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
-import { AutomationStepCard } from "@/components/chat/automation-step-card";
 import { automationStepState } from "@/components/chat/automation-step-state";
 import { ManualEstimateModal } from "@/components/chat/manual-estimate-modal";
 import { shouldPromptForEstimate } from "@/components/chat/manual-estimate-state";
@@ -555,6 +554,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         }
         pendingDocumentGeneration={isConfirmingStep && isDocumentTemplateStep}
         pendingStepAdvance={isConfirmingStep && !isDocumentTemplateStep}
+        pendingAutomation={
+          automationState && currentNode ? { message: automationState.message, stepName: currentNode.name } : null
+        }
       />
 
       {showBranchOverride && (
@@ -605,8 +607,6 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             viewerIsAdmin={isAdmin}
           />
         )}
-
-        {automationState && currentNode && <AutomationStepCard state={automationState} stepName={currentNode.name} />}
 
         {!isReadOnly && !isApprovalGate && (
           <ChatComposer

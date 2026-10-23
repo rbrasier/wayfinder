@@ -151,14 +151,18 @@ describe("placeholderOptions", () => {
       },
     ];
 
-    expect(placeholderOptions(prior)).toEqual([
-      { label: "1. Summarise → Summary", token: "{{ step.node-1.summary }}" },
+    expect(placeholderOptions(prior, [], new Map([["node-1", "summarise"]]))).toEqual([
+      { label: "1. Summarise → Summary", token: "{{ summarise.summary }}" },
     ]);
+  });
+
+  it("skips a field whose step has no key yet", () => {
+    expect(placeholderOptions(priorFields, [], new Map())).toEqual([]);
   });
 
   it("offers the flow's trigger inputs first", () => {
     expect(
-      placeholderOptions([], [{ key: "hearing_id", label: "Hearing", type: "text", required: true }]),
+      placeholderOptions([], [{ key: "hearing_id", label: "Hearing", type: "text", required: true }], new Map()),
     ).toEqual([{ label: "Trigger input → Hearing", token: "{{ input.hearing_id }}" }]);
   });
 });

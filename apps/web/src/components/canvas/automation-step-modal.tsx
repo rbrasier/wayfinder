@@ -37,6 +37,8 @@ export interface AutomationStepModalProps {
   // deletable, but cannot be edited and does not run (ADR-065 §6a).
   disabledByAdmin: boolean;
   priorStepFields: PriorStepField[];
+  // Every step's `{{ step_key.field }}` key, from `flowStepKeys`.
+  stepKeys: ReadonlyMap<string, string>;
   documentSteps: DocumentStepOption[];
   allowedEmailDomains: string[];
   isSaving: boolean;
@@ -59,6 +61,7 @@ export function AutomationStepModal({
   initialConfig,
   disabledByAdmin,
   priorStepFields,
+  stepKeys,
   documentSteps,
   allowedEmailDomains,
   isSaving,
@@ -129,6 +132,7 @@ export function AutomationStepModal({
                   form={emailForm}
                   onChange={setEmailForm}
                   priorStepFields={priorStepFields}
+                  stepKeys={stepKeys}
                   documentSteps={documentSteps}
                   groups={(groups.data ?? []).map((group) => ({ id: group.id, name: group.name }))}
                   recipientNames={names}

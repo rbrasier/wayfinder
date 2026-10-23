@@ -269,3 +269,53 @@ Built on the same branch after the review of the first screenshots.
     (group 4).
   - `accessibility.spec.ts` audits the Email step editor (group 5).
   - Both pass locally.
+
+## Amendment 2 — readable field tags and a quieter AI task in the chat
+
+Second round of review feedback on the screenshots. No schema change, and the
+version stays 0.28.41.
+
+**Readable field tags (screenshot 8).**
+- Email placeholders read `{{ <step_key>.<field_key> }}`, e.g.
+  `{{ summarise_the_hearing.summary }}`, instead of `{{ step.<uuid>.<key> }}`.
+- The step key is the snake_cased step name, built by `deriveStepKeys`, the
+  same helper approval records use (ADR-040 §5). A repeated name gets `_2`,
+  `_3`…, and `input` stays reserved for trigger inputs.
+- `flowStepKeys` (domain) settles repeats by node id. A published version's
+  snapshot keeps neither creation times nor a stable node order, so node id is
+  the only order the editor and the run both see the same way.
+- `RunEmailNode` now takes the run's `nodes` (threaded through `StepContext`)
+  so it can build the same keys. The old form never shipped, so nothing is
+  migrated.
+
+**The AI task in the chat (screenshot 12).**
+- **Result:** an AI task's result is drawn as its output card alone, with no
+  assistant bubble. The message is still stored, because it carries the record.
+- **Info toggle:** a small ⓘ in the card's bottom-right reveals the confidence
+  and rationale. **View output** now lists the fields only.
+- **While pending:** while the step runs or waits on its reviewer, its card is
+  hidden. In its place the feed ends on a spinner (the app's `Spinner`) and a
+  line of muted text, with no box. The hourglass and the boxed card above the
+  composer are gone; the composer is still disabled.
+- `aiTaskResultView` (in `automation-step-state.ts`) decides message, card or
+  hidden. `AutomationStepState` lost its unused `kind`.
+- `automation-step-card.tsx` was renamed to `automation-step-pending.tsx`.
+
+### Amendment 2 tests
+
+- **Domain:**
+  - `automation-steps.test.ts`: `flowStepKeys`, and placeholders by step key.
+  - `approval-record.test.ts`: reserved keys.
+- **Application:** `run-email-node.test.ts` resolves
+  `{{ summarise_hearing.summary }}` from the run's nodes.
+- **Web:**
+  - `automation-step-model.test.ts`: tokens by step key.
+  - `automation-step-state.test.ts`: `aiTaskResultView`.
+- **E2E:** no new spec or test.
+  - The existing smoke test in `unattended-automation.spec.ts` (group 6) is
+    extended.
+  - The seeded automation flow now runs an AI task step ("Summarise the
+    hearing", threshold 50, below the scripted model's default of 75) before
+    the person's step.
+  - After the run parks, the test opens its chat from the run history, checks
+    the output card, and opens the ⓘ to read "Confidence: 75%".

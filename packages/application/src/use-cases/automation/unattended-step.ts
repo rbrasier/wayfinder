@@ -36,6 +36,8 @@ export interface UnattendedStepRunners {
 export interface StepContext {
   session: Session;
   flow: Flow;
+  // Every step of the graph the run follows.
+  nodes: FlowNode[];
   node: FlowNode;
   messages: SessionMessage[];
   priorStepOutputs: SessionStepOutput[];
@@ -65,7 +67,7 @@ export const runUnattendedStep = async (
   runners: UnattendedStepRunners,
   context: StepContext,
 ): Promise<StepOutcome> => {
-  const { session, flow, node, messages } = context;
+  const { session, flow, nodes, node, messages } = context;
 
   switch (node.type) {
     case "ai_task": {
@@ -74,7 +76,7 @@ export const runUnattendedStep = async (
       return result.data.outcome === "accepted" ? { kind: "done" } : { kind: "waiting", needsPerson: false };
     }
     case "email": {
-      const result = await runners.runEmail({ session, flow, node });
+      const result = await runners.runEmail({ session, flow, nodes, node });
       return result.error ? failed(result.error) : { kind: "done" };
     }
     case "auto":

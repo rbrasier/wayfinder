@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Node } from "@xyflow/react";
-import type { PriorStepField } from "@rbrasier/domain";
+import { flowStepKeys, type PriorStepField } from "@rbrasier/domain";
 import { toast } from "sonner";
 import { AutomationStepModal, type AutomationStepType } from "@/components/canvas/automation-step-modal";
 import type { DocumentStepOption } from "@/components/canvas/email-config-form";
@@ -66,6 +66,14 @@ export function AutomationStepEditor({
       }));
   }, [priorStepFields, rfNodes, stepNumbers]);
 
+  const stepKeys = useMemo(
+    () =>
+      flowStepKeys(
+        rfNodes.map((candidate) => ({ id: candidate.id, name: (candidate.data as { name?: string }).name ?? "Step" })),
+      ),
+    [rfNodes],
+  );
+
   if (!node || !type) return null;
   const data = node.data as { name?: string; config?: Record<string, unknown> };
 
@@ -89,6 +97,7 @@ export function AutomationStepEditor({
       initialConfig={data.config ?? {}}
       disabledByAdmin={flagEnabled.data === false}
       priorStepFields={priorStepFields}
+      stepKeys={stepKeys}
       documentSteps={documentSteps}
       allowedEmailDomains={allowedDomains.data ?? []}
       isSaving={isSaving}

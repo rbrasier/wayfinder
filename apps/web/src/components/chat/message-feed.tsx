@@ -10,6 +10,8 @@ import { MarkdownText } from "./markdown-text";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
 import { AiTaskOutputCard } from "./ai-task-output-card";
+import { AutomationStepPending } from "./automation-step-pending";
+import { aiTaskResultView } from "./automation-step-state";
 import { RecordCard } from "./record-card";
 import { MessageInfoModal } from "./message-info-modal";
 import {
@@ -87,6 +89,9 @@ interface MessageFeedProps {
   // recomputes its branch): shows a generic "Advancing…" badge so the operator
   // sees the step is progressing rather than a frozen screen.
   pendingStepAdvance?: boolean;
+  // The current step is running by itself or waiting on its reviewer: the feed
+  // ends on a quiet indicator where that step's result will appear.
+  pendingAutomation?: { message: string; stepName: string } | null;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -209,6 +214,7 @@ export function MessageFeed({
   currentUserId,
   pendingDocumentGeneration,
   pendingStepAdvance,
+  pendingAutomation,
 }: MessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
@@ -315,6 +321,13 @@ export function MessageFeed({
             isSessionComplete: Boolean(isComplete),
           });
 
+          const aiTaskView = aiTaskResultView({
+            nodeType: node?.type ?? null,
+            role: msg.role,
+            stepNodeId: msg.stepNodeId,
+            currentNodeId: currentNodeId ?? null,
+            automationPending: Boolean(pendingAutomation),
+          });
           const showsConfidenceBar = msg.role === "assistant" && !isNeverDone;
           const showsInfoButton = msg.role === "assistant" && Boolean(msg.aiPayload);
 
@@ -348,7 +361,7 @@ export function MessageFeed({
                   body={displayContent}
                   at={msg.createdAt}
                 />
-              ) : msg.role === "user" ? (
+              ) : aiTaskView !== "message" ? null : msg.role === "user" ? (
                 <div className="flex justify-end" data-chat-message="user">
                   <div
                     title={senderName ?? undefined}
@@ -448,8 +461,9 @@ export function MessageFeed({
                 />
               )}
               {/* An AI task's result is recorded whatever its confidence — a low
-                  one goes to review — so its card shows on every result. */}
-              {node?.type === "ai_task" && msg.role === "assistant" && (
+                  one goes to review — so its card shows on every result once
+                  the step has moved on. */}
+              {node && aiTaskView === "card" && (
                 <AiTaskOutputCard
                   messageId={msg.id}
                   stepName={node.name}
@@ -545,6 +559,10 @@ export function MessageFeed({
       {pendingDocumentGeneration && <GeneratingDocumentBadge />}
 
       {pendingStepAdvance && <AdvancingBadge />}
+
+      {pendingAutomation && (
+        <AutomationStepPending message={pendingAutomation.message} stepName={pendingAutomation.stepName} />
+      )}
 
       {error && !isStreaming && (
         <div className="flex justify-start">

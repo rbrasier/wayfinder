@@ -9,6 +9,7 @@ import {
   type McpToolRef,
   type PriorStepField,
   type TemplateField,
+  TRIGGER_INPUT_SCOPE,
   type TriggerInput,
 } from "@rbrasier/domain";
 import { parseFieldLines } from "./template-field-editor";
@@ -151,18 +152,20 @@ export interface PlaceholderOption {
 }
 
 // What the Email editor's "Insert field" menu offers: the flow's trigger
-// inputs, then one token per field an earlier step declares, in the syntax
-// `renderMessageTemplate` reads.
+// inputs, then one token per field an earlier step declares, named by the step
+// keys `flowStepKeys` gives — the syntax `renderMessageTemplate` reads.
 export const placeholderOptions = (
   priorStepFields: PriorStepField[],
-  triggerInputs: TriggerInput[] = [],
+  triggerInputs: TriggerInput[],
+  stepKeys: ReadonlyMap<string, string>,
 ): PlaceholderOption[] => [
   ...triggerInputs.map((input) => ({
     label: `Trigger input → ${input.label || input.key}`,
-    token: `{{ input.${input.key} }}`,
+    token: `{{ ${TRIGGER_INPUT_SCOPE}.${input.key} }}`,
   })),
-  ...priorStepFields.map((prior) => ({
-    label: `${prior.stepLabel} → ${prior.field.label}`,
-    token: `{{ step.${prior.nodeId}.${prior.field.key} }}`,
-  })),
+  ...priorStepFields.flatMap((prior) => {
+    const stepKey = stepKeys.get(prior.nodeId);
+    if (!stepKey) return [];
+    return [{ label: `${prior.stepLabel} → ${prior.field.label}`, token: `{{ ${stepKey}.${prior.field.key} }}` }];
+  }),
 ];

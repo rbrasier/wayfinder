@@ -1,6 +1,7 @@
 import {
   domainError,
   err,
+  flowStepKeys,
   ok,
   renderMessageTemplate,
   renderMarkdownToHtml,
@@ -40,6 +41,8 @@ export interface RunEmailNodeDependencies {
 export interface RunEmailNodeInput {
   session: Session;
   flow: Flow;
+  // The run's steps, which name each step's key in a `{{ step_key.field }}` tag.
+  nodes: FlowNode[];
   node: FlowNode;
 }
 
@@ -64,15 +67,22 @@ const stringify = (value: unknown): string => {
 
 // The latest output per step wins, matching how a request field reads a prior
 // step (`lookupStepField`).
-const templateValues = (session: Session, outputs: SessionStepOutput[]): MessageTemplateValues => {
+const templateValues = (
+  session: Session,
+  nodes: FlowNode[],
+  outputs: SessionStepOutput[],
+): MessageTemplateValues => {
   const inputs: Record<string, string> = {};
   for (const [key, value] of Object.entries(session.triggerPayload?.inputs ?? {})) {
     inputs[key] = stringify(value);
   }
+  const stepKeys = flowStepKeys(nodes);
   const steps: Record<string, Record<string, string>> = {};
   const ordered = [...outputs].sort((first, second) => first.createdAt.getTime() - second.createdAt.getTime());
   for (const output of ordered) {
-    steps[output.nodeId] = Object.fromEntries(output.fields.map((field) => [field.key, field.value]));
+    const stepKey = stepKeys.get(output.nodeId);
+    if (!stepKey) continue;
+    steps[stepKey] = Object.fromEntries(output.fields.map((field) => [field.key, field.value]));
   }
   return { inputs, steps };
 };
@@ -103,7 +113,7 @@ export class RunEmailNode {
     if (attachments.error) return attachments;
 
     const outputs = await this.dependencies.sessionStepOutputs.listBySession(input.session.id);
-    const values = templateValues(input.session, outputs.error ? [] : outputs.data);
+    const values = templateValues(input.session, input.nodes, outputs.error ? [] : outputs.data);
     const subject = renderMessageTemplate(config.subjectTemplate, values).replace(/\s+/g, " ").trim();
     const text = renderMessageTemplate(config.bodyTemplate, values);
 

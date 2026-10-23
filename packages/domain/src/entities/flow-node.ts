@@ -154,7 +154,7 @@ export type EmailRecipient =
   | { kind: "address"; email: string };
 
 // Sends the flow's results by email (ADR-065 §4). Templates take
-// `{{ input.<key> }}` and `{{ step.<nodeId>.<fieldKey> }}` placeholders.
+// `{{ input.<key> }}` and `{{ <step_key>.<field_key> }}` placeholders (`flowStepKeys`).
 export interface EmailNodeConfig {
   recipients: EmailRecipient[];
   subjectTemplate: string;

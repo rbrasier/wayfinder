@@ -113,7 +113,7 @@ export class AdvanceUnattendedRun {
         return ok({ status: "waiting", nodeId: node.id });
       }
 
-      const outcome = await this.runStep(session, node);
+      const outcome = await this.runStep(session, graph.data.nodes, node);
       if (outcome.kind === "failed") return this.fail(session, node, outcome.code, outcome.message);
       if (outcome.kind === "waiting") {
         if (outcome.needsPerson) await this.alertAwaitingPerson(session, node);
@@ -145,7 +145,7 @@ export class AdvanceUnattendedRun {
     );
   }
 
-  private async runStep(session: Session, node: FlowNode): Promise<StepOutcome> {
+  private async runStep(session: Session, nodes: FlowNode[], node: FlowNode): Promise<StepOutcome> {
     const gatedLabel = FLAG_GATED_LABELS[node.type];
     if (gatedLabel && !(await this.dependencies.isStepEnabled(session.userId, node.type))) {
       return {
@@ -166,6 +166,7 @@ export class AdvanceUnattendedRun {
     return runUnattendedStep(this.dependencies.steps, {
       session,
       flow: flow.data,
+      nodes,
       node,
       messages: messages.error ? [] : messages.data,
       priorStepOutputs: outputs.error ? [] : outputs.data,

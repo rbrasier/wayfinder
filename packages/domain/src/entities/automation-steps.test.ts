@@ -5,6 +5,7 @@ import {
   isEmailAddressAllowed,
   meetsConfidenceThreshold,
   renderMessageTemplate,
+  flowStepKeys,
   validateAiTaskNodeConfig,
   validateEmailNodeConfig,
 } from "./automation-steps";
@@ -24,7 +25,7 @@ const aiTaskConfig = (overrides: Partial<AiTaskNodeConfig> = {}): AiTaskNodeConf
 const emailConfig = (overrides: Partial<EmailNodeConfig> = {}): EmailNodeConfig => ({
   recipients: [{ kind: "address", email: "estimates@agency.gov.au" }],
   subjectTemplate: "Hearing summary",
-  bodyTemplate: "{{ step.node-1.summary }}",
+  bodyTemplate: "{{ summarise.summary }}",
   attachStepIds: [],
   ...overrides,
 });
@@ -123,12 +124,12 @@ describe("validateEmailNodeConfig", () => {
 describe("renderMessageTemplate", () => {
   const values = {
     inputs: { hearingId: "H-123" },
-    steps: { "node-1": { summary: "The committee met." } },
+    steps: { review_the_hearing: { summary: "The committee met." } },
   };
 
   it("fills trigger input and step field placeholders", () => {
     const rendered = renderMessageTemplate(
-      "Hearing {{ input.hearingId }}: {{ step.node-1.summary }}",
+      "Hearing {{ input.hearingId }}: {{ review_the_hearing.summary }}",
       values,
     );
 
@@ -137,6 +138,39 @@ describe("renderMessageTemplate", () => {
 
   it("renders an unknown placeholder as blank", () => {
     expect(renderMessageTemplate("[{{ input.missing }}]", values)).toBe("[]");
+    expect(renderMessageTemplate("[{{ no_such_step.summary }}]", values)).toBe("[]");
   });
 
+  it("leaves text that is not a step-and-field placeholder alone", () => {
+    expect(renderMessageTemplate("{{ summary }} and {{ Two Words.x }}", values)).toBe(
+      "{{ summary }} and {{ Two Words.x }}",
+    );
+  });
+
+});
+
+describe("flowStepKeys", () => {
+  it("keys each step by its snake_cased name", () => {
+    const keys = flowStepKeys([
+      { id: "b", name: "Summarise" },
+      { id: "a", name: "Review the hearing" },
+    ]);
+
+    expect(keys.get("a")).toBe("review_the_hearing");
+    expect(keys.get("b")).toBe("summarise");
+  });
+
+  it("suffixes a repeated name by node id, whatever order the steps arrive in", () => {
+    const steps = [
+      { id: "b", name: "Draft" },
+      { id: "a", name: "Draft" },
+    ];
+
+    expect(flowStepKeys(steps)).toEqual(flowStepKeys([...steps].reverse()));
+    expect([flowStepKeys(steps).get("a"), flowStepKeys(steps).get("b")]).toEqual(["draft", "draft_2"]);
+  });
+
+  it("never gives a step the key reserved for trigger inputs", () => {
+    expect(flowStepKeys([{ id: "a", name: "Input" }]).get("a")).toBe("input_2");
+  });
 });

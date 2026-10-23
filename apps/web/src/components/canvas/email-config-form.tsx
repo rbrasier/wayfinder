@@ -21,6 +21,7 @@ interface EmailConfigFormProps {
   form: EmailForm;
   onChange: (next: EmailForm) => void;
   priorStepFields: PriorStepField[];
+  stepKeys: ReadonlyMap<string, string>;
   documentSteps: DocumentStepOption[];
   groups: { id: string; name: string }[];
   // Names for user recipients picked in this editor; a saved one shows generically.
@@ -42,6 +43,7 @@ export function EmailConfigForm({
   form,
   onChange,
   priorStepFields,
+  stepKeys,
   documentSteps,
   groups,
   recipientNames,
@@ -49,7 +51,7 @@ export function EmailConfigForm({
 }: EmailConfigFormProps) {
   const set = <K extends keyof EmailForm>(key: K, value: EmailForm[K]) => onChange({ ...form, [key]: value });
   const triggerInputs = useContext(TriggerInputsContext);
-  const insertOptions = placeholderOptions(priorStepFields, triggerInputs);
+  const insertOptions = placeholderOptions(priorStepFields, triggerInputs, stepKeys);
   const subjectRef = useRef<HTMLInputElement>(null);
 
   const insertIntoSubject = (token: string) => {

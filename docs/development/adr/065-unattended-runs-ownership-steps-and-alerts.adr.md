@@ -128,7 +128,7 @@ review inbox. Feature flag `ai_task_node`, scoped to **Power Users**.
 ```ts
 interface EmailNodeConfig {
   recipients: EmailRecipient[];   // at least one
-  subjectTemplate: string;        // {{ input.x }} / {{ step.<nodeId>.<field> }}
+  subjectTemplate: string;        // {{ input.x }} / {{ <step_key>.<field> }}
   bodyTemplate: string;           // markdown → HTML + text
   attachStepIds: string[];        // prior steps whose generated docx/xlsx to attach
 }
@@ -139,7 +139,11 @@ type EmailRecipient =
 ```
 
 The templates use the same placeholder resolver as document generation, with
-values HTML-escaped. `IEmailSender.SendEmailInput` gains optional
+values HTML-escaped. A step is named by its step key: its snake_cased name,
+derived the way approval records key their steps (ADR-040 §5), with `_2`, `_3`…
+for a repeated name and `input` reserved for trigger inputs. So
+`{{ review_the_hearing.summary }}` reads, and survives a version publish, where
+a node id would not. `IEmailSender.SendEmailInput` gains optional
 `attachments: { filename, contentType, content: Uint8Array }[]`, which nodemailer
 supports natively. Attachments are read from object storage and capped at 20 MB
 in total.

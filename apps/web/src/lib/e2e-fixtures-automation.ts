@@ -5,11 +5,12 @@ import { unwrap } from "./e2e-fixtures";
 const SEED_AUTOMATION_FLOW_NAME = "E2E SEED Automation Flow";
 
 // A published flow that can be started unattended (ADR-064/065): it declares
-// one required trigger input and opens on a conversational step, so a webhook
-// or watch run parks there as "Waiting on a person" without calling a model
-// for anything but the step's opening message. Also allow-lists the app's own
-// host, so a watch in the e2e suite can call the test-only watch source
-// (`/api/test/watch-source`) past the SSRF guard.
+// one required trigger input, opens on an AI task step, then parks on a
+// conversational step as "Waiting on a person". The AI task's threshold sits
+// below the scripted model's default confidence (75), so with no script it
+// always passes and the run's chat shows its output card. Also allow-lists the
+// app's own host, so a watch in the e2e suite can call the test-only watch
+// source (`/api/test/watch-source`) past the SSRF guard.
 export const seedAutomationFlow = async (container: Container, ownerUserId: string): Promise<string> => {
   const flow = unwrap(
     await container.useCases.createFlow.execute({
@@ -21,13 +22,31 @@ export const seedAutomationFlow = async (container: Container, ownerUserId: stri
     "create automation flow",
   );
 
-  unwrap(
+  const aiTaskNode = unwrap(
+    await container.useCases.createFlowNode.execute({
+      flowId: flow.id,
+      type: "ai_task",
+      name: "Summarise the hearing",
+      positionX: 120,
+      positionY: 120,
+      config: {
+        instruction: "Summarise the finished hearing in two sentences.",
+        outputType: "structured",
+        structuredFields: [{ key: "summary", label: "Summary", type: "narrative" }],
+        confidenceThreshold: 50,
+        reviewer: { mode: "run_owner" },
+      },
+    }),
+    "create automation AI task node",
+  );
+
+  const reviewNode = unwrap(
     await container.useCases.createFlowNode.execute({
       flowId: flow.id,
       type: "conversational",
       name: "Review the hearing",
       positionX: 120,
-      positionY: 120,
+      positionY: 320,
       config: {
         aiInstruction: "Help the officer review the finished hearing.",
         doneWhen: "The officer has reviewed the hearing.",
@@ -35,6 +54,15 @@ export const seedAutomationFlow = async (container: Container, ownerUserId: stri
       },
     }),
     "create automation node",
+  );
+
+  unwrap(
+    await container.useCases.createFlowEdge.execute({
+      flowId: flow.id,
+      fromNodeId: aiTaskNode.id,
+      toNodeId: reviewNode.id,
+    }),
+    "connect automation nodes",
   );
 
   unwrap(

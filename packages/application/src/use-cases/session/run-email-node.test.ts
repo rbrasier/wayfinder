@@ -75,13 +75,24 @@ const emailNode = (overrides: Partial<EmailNodeConfig> = {}): FlowNode => ({
   config: {
     recipients: [{ kind: "address", email: "estimates@agency.gov.au" }],
     subjectTemplate: "Hearing {{ input.hearingId }} summary",
-    bodyTemplate: "Summary:\n{{ step.node-ai.summary }}",
+    bodyTemplate: "Summary:\n{{ summarise_hearing.summary }}",
     attachStepIds: [],
     ...overrides,
   } as unknown as Record<string, unknown>,
   createdAt: new Date(),
   updatedAt: new Date(),
 });
+
+const aiNode: FlowNode = {
+  ...emailNode(),
+  id: "node-ai",
+  type: "ai_task",
+  name: "Summarise hearing",
+  config: {},
+};
+
+// The run's steps, which name each step's key in a `{{ step_key.field }}` tag.
+const nodes = [aiNode, emailNode()];
 
 const runSession = session({
   id: "session-1",
@@ -127,7 +138,7 @@ describe("RunEmailNode", () => {
       fields: [{ key: "summary", label: "Summary", type: "narrative", value: "The committee met." }],
     });
 
-    const result = await useCase.execute({ session: runSession, flow, node: emailNode() });
+    const result = await useCase.execute({ session: runSession, flow, nodes, node: emailNode() });
 
     expect(result.data).toEqual({ recipients: ["estimates@agency.gov.au"] });
     expect(sender.sent).toHaveLength(1);
@@ -153,6 +164,7 @@ describe("RunEmailNode", () => {
     const result = await useCase.execute({
       session: runSession,
       flow,
+      nodes,
       node: emailNode({ recipients: [{ kind: "group", groupId: "group-1" }, { kind: "user", userId: "user-a" }] }),
     });
 
@@ -168,6 +180,7 @@ describe("RunEmailNode", () => {
     const result = await useCase.execute({
       session: runSession,
       flow,
+      nodes,
       node: emailNode({ recipients: [{ kind: "address", email: "leak@gmail.com" }] }),
     });
 
@@ -185,7 +198,7 @@ describe("RunEmailNode", () => {
       fields: [{ key: "summary", label: "Summary", type: "narrative", value: "<script>x</script>" }],
     });
 
-    await useCase.execute({ session: runSession, flow, node: emailNode() });
+    await useCase.execute({ session: runSession, flow, nodes, node: emailNode() });
 
     expect(sender.sent[0]!.html).toContain("&lt;script&gt;");
     expect(sender.sent[0]!.html).not.toContain("<script>");
@@ -206,7 +219,7 @@ describe("RunEmailNode", () => {
       },
     });
 
-    await useCase.execute({ session: runSession, flow, node: emailNode({ attachStepIds: ["node-doc"] }) });
+    await useCase.execute({ session: runSession, flow, nodes, node: emailNode({ attachStepIds: ["node-doc"] }) });
 
     expect(sender.sent[0]!.attachments).toEqual([
       {
@@ -221,7 +234,7 @@ describe("RunEmailNode", () => {
     const sender = new RecordingEmailSender(false);
     const { useCase } = build({ sender });
 
-    const result = await useCase.execute({ session: runSession, flow, node: emailNode() });
+    const result = await useCase.execute({ session: runSession, flow, nodes, node: emailNode() });
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
     expect(sender.sent).toHaveLength(0);
@@ -234,6 +247,7 @@ describe("RunEmailNode", () => {
     const result = await useCase.execute({
       session: runSession,
       flow,
+      nodes,
       node: emailNode({
         recipients: [
           { kind: "user", userId: "user-a" },
@@ -253,6 +267,7 @@ describe("RunEmailNode", () => {
     const result = await useCase.execute({
       session: runSession,
       flow,
+      nodes,
       node: emailNode({ recipients: [{ kind: "user", userId: "deleted-user" }] }),
     });
 
