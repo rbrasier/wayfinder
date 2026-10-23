@@ -456,3 +456,16 @@ The e2e seed now stores `raw`.
   - The smoke test now also checks the run's start line.
   - Run locally, it passes with the rest of the unattended-automation spec and
     the Email editor audit.
+
+## Amendment 5 — escaped field tags in an Email message
+
+Found while capturing screenshots of the Email step's configuration. The
+message editor saves markdown, which escapes `_` as `\_`, so a step-field tag
+inserted in Rich text mode was stored as
+`{{ summarise\_the\_hearing.summary }}`. The placeholder pattern did not match
+it, and the email went out with the literal tag. `renderMessageTemplate` now
+accepts a backslash before any character of a tag's step or field name and
+reads the name with the escapes removed.
+
+- **Tests:** `automation-steps.test.ts` fills a tag whose underscores were
+  escaped.

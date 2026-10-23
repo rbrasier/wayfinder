@@ -166,6 +166,14 @@ describe("renderMessageTemplate", () => {
     );
   });
 
+  it("fills a placeholder whose underscores the markdown editor escaped", () => {
+    const rendered = renderMessageTemplate(
+      "Hearing {{ input.hearing\\_id }}: {{ review\\_the\\_hearing.summary }}",
+      { inputs: { hearing_id: "H-123" }, steps: values.steps },
+    );
+
+    expect(rendered).toBe("Hearing H-123: The committee met.");
+  });
 });
 
 describe("flowStepKeys", () => {

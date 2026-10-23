@@ -110,11 +110,17 @@ export const flowStepKeys = (nodes: readonly { id: string; name: string }[]): Ma
   return new Map(ordered.map((node, index) => [node.id, keys[index]!]));
 };
 
-const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\.([A-Za-z0-9_-]+)\s*\}\}/g;
+// The message editor saves markdown, which escapes `_` as `\_` — so a tag the
+// author inserted reads `{{ review\_the\_hearing.summary }}` once stored.
+const PLACEHOLDER = /\{\{\s*((?:\\?[A-Za-z0-9_])+)\.((?:\\?[A-Za-z0-9_-])+)\s*\}\}/g;
+
+const unescapeMarkdown = (name: string): string => name.replace(/\\/g, "");
 
 const lookupPlaceholder = (scope: string, key: string, values: MessageTemplateValues): string => {
-  if (scope === TRIGGER_INPUT_SCOPE) return values.inputs[key] ?? "";
-  return values.steps[scope]?.[key] ?? "";
+  const scopeName = unescapeMarkdown(scope);
+  const keyName = unescapeMarkdown(key);
+  if (scopeName === TRIGGER_INPUT_SCOPE) return values.inputs[keyName] ?? "";
+  return values.steps[scopeName]?.[keyName] ?? "";
 };
 
 // Fills an Email step's subject or body. An unknown placeholder renders blank
