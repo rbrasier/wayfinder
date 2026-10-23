@@ -319,3 +319,50 @@ version stays 0.28.41.
     the person's step.
   - After the run parks, the test opens its chat from the run history, checks
     the output card, and opens the ⓘ to read "Confidence: 75%".
+
+## Amendment 3 — local mocks for trying the features by hand
+
+Requested so every new feature can be exercised locally without a real ParlView
+or mail server. Both run on the shared mocks server (`./restart.sh --with-mocks`).
+`restart.sh` prints the setup steps for each.
+
+**ParlView hearing feed** (`mocks/parlview/`, mounted at `:4001/parlview`)
+
+- **Data:** hearings are derived from the clock in 5-minute slots
+  (`PARLVIEW_MOCK_PERIOD_SECONDS` to change). Each slot finishes one hearing
+  and starts the next, so an Event Watch on `status equals finished` fires once
+  per hearing.
+- **Endpoints:**
+  - `GET /parlview/api/hearings` lists the hearings under `data.hearings`,
+    filtered with `?status=`.
+  - `GET /parlview/api/hearings/:id` returns one hearing and its transcript.
+  - `POST /parlview/api/advance` skips to the next change.
+- **Webhook start:** `POST /parlview/api/webhook {url, token, hmacSecret?}`
+  makes the mock call a flow's webhook as each hearing finishes, signed the way
+  `verifyHmacSignature` expects. The first check is a baseline, like a watch,
+  so turning it on never replays old hearings.
+- **AI task:** the mock MCP server (`:4001/mcp`) gains `parlview_list_hearings`
+  and `parlview_get_transcript`, over the same clock. An AI task started for a
+  hearing can read its transcript.
+- **Shape:** ParlViewMCP was not reachable from this session, so the feed's
+  shape is a stand-in, kept in `hearings.mjs` (`toHearing`) so it is easy to
+  align with the real one.
+
+**SMTP mail catcher** (`mocks/smtp/`)
+
+- **Server:** speaks enough SMTP for nodemailer on `MOCKS_SMTP_PORT` (default
+  2525): AUTH PLAIN/LOGIN with any credentials, MAIL, RCPT and DATA. It refuses
+  STARTTLS.
+- **Output:** each message is printed to the mocks console (recipients,
+  subject, attachments and text body) and kept at `:4001/smtp/messages`, with
+  `/:id` for the raw source and `DELETE` to clear.
+- **Setup:** point Admin → Settings → Email at host `localhost`, port `2525`,
+  TLS off, any username and password.
+
+**Tests:** the `mocks/` vitest suite, 151 tests:
+- `hearings`, `api`, `webhook` and `tools` tests under `parlview/`
+- `message`, `inbox`, and `server` (a real socket conversation) under `smtp/`
+
+**Checked live:** a nodemailer send with HTML and an attachment was caught and
+printed. An advance delivered a signed webhook call. An MCP client listed the
+hearings and read the finished hearing's transcript.
