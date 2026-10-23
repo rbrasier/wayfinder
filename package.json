@@ -1,6 +1,6 @@
 {
   "name": "wayfinder",
-  "version": "0.28.40",
+  "version": "0.28.41",
   "private": true,
   "description": "Wayfinder — AI-guided workflow agent for document-heavy processes.",
   "packageManager": "pnpm@9.12.0",
@@ -27,7 +27,7 @@
   "pnpm": {
     "overrides": {
       "langsmith": ">=0.6.0",
-      "vitest": "^4.1.11",
+      "vitest": "^4.1.12",
       "vite": "^6.4.4",
       "@grpc/grpc-js": ">=1.14.5",
       "@opentelemetry/propagator-jaeger": ">=2.9.0",
