@@ -1,37 +1,54 @@
 import {
   DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD,
+  aiTaskInputModeOf,
   validateAiTaskNodeConfig,
   validateEmailNodeConfig,
   type AiTaskNodeConfig,
+  type AiTaskProblemField,
   type AiTaskReviewer,
   type EmailNodeConfig,
+  type EmailProblemField,
   type FieldValueSource,
   type McpToolRef,
   type PriorStepField,
+  type StepProblem,
   type TemplateField,
   TRIGGER_INPUT_SCOPE,
   type TriggerInput,
 } from "@rbrasier/domain";
-import { parseFieldLines } from "./template-field-editor";
+import { fieldLineError, parseFieldLines } from "./template-field-editor";
 
 // The AI task and Email step editors' form state, and its mapping to and from
 // the stored node config. Pure, so the editors stay thin and this is testable.
 
-// One value handed to the AI: a name for it and where it comes from, chosen
-// from earlier steps' fields the way a scheduled step picks its values.
-export interface AiTaskInputRow {
-  label: string;
-  source: FieldValueSource;
-}
+// One value handed to the AI when the step does not accept all inputs: an
+// earlier step's field or a trigger input, picked from a dropdown the way a
+// scheduled step picks its anchor. It is named after the field it reads.
+export type AiTaskInputSource = Extract<
+  FieldValueSource,
+  { kind: "step_field" } | { kind: "trigger_input" }
+>;
 
 export interface AiTaskForm {
   instruction: string;
-  inputs: AiTaskInputRow[];
+  acceptAllInputs: boolean;
+  inputs: AiTaskInputSource[];
   outputLines: string[];
   confidenceThreshold: number;
   reviewer: AiTaskReviewer;
   skillRefs: string[];
   allowedMcpToolRefs: McpToolRef[];
+}
+
+// A problem shown above the editor field it belongs to; `outputRow` points at
+// the output field row that is wrong.
+export interface AiTaskEditorProblem extends StepProblem<AiTaskProblemField> {
+  outputRow?: number;
+}
+
+export interface AiTaskEditorContext {
+  priorStepFields: PriorStepField[];
+  triggerInputs: TriggerInput[];
 }
 
 const readFields = (value: unknown): TemplateField[] =>
@@ -40,14 +57,17 @@ const readFields = (value: unknown): TemplateField[] =>
 const readStrings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
 
+const isInputSource = (source: FieldValueSource | undefined): source is AiTaskInputSource =>
+  source?.kind === "step_field" || source?.kind === "trigger_input";
+
 export const aiTaskFormFromConfig = (config: Record<string, unknown>): AiTaskForm => {
   const sources = (config.inputFieldValues as Record<string, FieldValueSource> | undefined) ?? {};
   return {
     instruction: typeof config.instruction === "string" ? config.instruction : "",
-    inputs: readFields(config.inputFields).map((field) => ({
-      label: field.label,
-      source: sources[field.key] ?? { kind: "ai" },
-    })),
+    acceptAllInputs: aiTaskInputModeOf(config as unknown as AiTaskNodeConfig) === "all",
+    inputs: readFields(config.inputFields)
+      .map((field) => sources[field.key])
+      .filter(isInputSource),
     outputLines: readFields(config.structuredFields).map((field) => field.raw),
     confidenceThreshold:
       typeof config.confidenceThreshold === "number"
@@ -55,26 +75,22 @@ export const aiTaskFormFromConfig = (config: Record<string, unknown>): AiTaskFor
         : DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD,
     reviewer: (config.reviewer as AiTaskReviewer | undefined) ?? { mode: "run_owner" },
     skillRefs: readStrings(config.skillRefs),
-    allowedMcpToolRefs: Array.isArray(config.allowedMcpToolRefs) ? (config.allowedMcpToolRefs as McpToolRef[]) : [],
+    allowedMcpToolRefs: Array.isArray(config.allowedMcpToolRefs)
+      ? (config.allowedMcpToolRefs as McpToolRef[])
+      : [],
   };
 };
 
-// What an input is called by default: the name of the field it reads.
-export const inputLabelFor = (
-  source: FieldValueSource,
-  priorStepFields: PriorStepField[],
-  triggerInputs: TriggerInput[],
-): string => {
-  if (source.kind === "step_field") {
-    const prior = priorStepFields.find(
-      (candidate) => candidate.nodeId === source.nodeId && candidate.field.key === source.fieldKey,
-    );
-    return prior?.field.label ?? "";
-  }
+const labelFor = (source: AiTaskInputSource, context: AiTaskEditorContext): string => {
   if (source.kind === "trigger_input") {
-    return triggerInputs.find((input) => input.key === source.inputKey)?.label ?? source.inputKey;
+    return (
+      context.triggerInputs.find((input) => input.key === source.inputKey)?.label || source.inputKey
+    );
   }
-  return "";
+  const prior = context.priorStepFields.find(
+    (candidate) => candidate.nodeId === source.nodeId && candidate.field.key === source.fieldKey,
+  );
+  return prior?.field.label ?? source.fieldKey;
 };
 
 const keyFor = (label: string): string =>
@@ -84,31 +100,43 @@ const keyFor = (label: string): string =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "") || "input";
 
-// Each input becomes a declared text field keyed from its name, so the stored
-// config keeps the shape the run reads (inputFields plus their sources).
-const inputFieldsFrom = (rows: AiTaskInputRow[]) => {
+// Each picked input becomes a declared text field keyed from its name, so the
+// stored config keeps the shape the run reads (inputFields plus their sources).
+const inputFieldsFrom = (sources: AiTaskInputSource[], context: AiTaskEditorContext) => {
   const used = new Map<string, number>();
   const fields: TemplateField[] = [];
   const values: Record<string, FieldValueSource> = {};
-  for (const row of rows) {
-    const base = keyFor(row.label);
+  for (const source of sources) {
+    const label = labelFor(source, context);
+    const base = keyFor(label);
     const count = (used.get(base) ?? 0) + 1;
     used.set(base, count);
     const key = count === 1 ? base : `${base}_${count}`;
-    const label = row.label.trim();
     fields.push({ key, label, type: "text", optional: false, raw: label });
-    values[key] = row.source;
+    values[key] = source;
   }
   return { fields, values };
 };
 
+const FIELD_ORDER: AiTaskProblemField[] = [
+  "instruction",
+  "inputs",
+  "outputs",
+  "threshold",
+  "reviewer",
+];
+
 export const aiTaskConfigFromForm = (
   form: AiTaskForm,
-): { config: AiTaskNodeConfig; problems: string[] } => {
-  const inputs = inputFieldsFrom(form.inputs);
+  context: AiTaskEditorContext,
+): { config: AiTaskNodeConfig; problems: AiTaskEditorProblem[] } => {
+  const inputs = form.acceptAllInputs
+    ? { fields: [], values: {} }
+    : inputFieldsFrom(form.inputs, context);
   const outputs = parseFieldLines(form.outputLines, { disallowSection: true });
   const config: AiTaskNodeConfig = {
     instruction: form.instruction,
+    inputMode: form.acceptAllInputs ? "all" : "selected",
     inputFields: inputs.fields,
     inputFieldValues: inputs.values,
     outputType: "structured",
@@ -118,17 +146,86 @@ export const aiTaskConfigFromForm = (
     skillRefs: form.skillRefs,
     allowedMcpToolRefs: form.allowedMcpToolRefs,
   };
-  const problems = [
-    ...(form.inputs.some((row) => row.label.trim() === "") ? ["Name every input."] : []),
-    ...(outputs.valid ? [] : ["Fix the highlighted output fields."]),
-    ...validateAiTaskNodeConfig(config),
+  const rowProblems = form.outputLines.flatMap((line, outputRow): AiTaskEditorProblem[] => {
+    const message = fieldLineError(line, true);
+    return message ? [{ field: "outputs", outputRow, message }] : [];
+  });
+  const problems: AiTaskEditorProblem[] = [
+    ...(!form.acceptAllInputs && form.inputs.length === 0
+      ? [{ field: "inputs" as const, message: "Pick at least one input, or accept all inputs." }]
+      : []),
+    ...rowProblems,
+    // A row that is wrong is reported on the row; "add at least one" would
+    // only repeat it.
+    ...validateAiTaskNodeConfig(config).filter(
+      (problem) => !(problem.field === "outputs" && rowProblems.length > 0),
+    ),
   ];
+  problems.sort(
+    (first, second) => FIELD_ORDER.indexOf(first.field) - FIELD_ORDER.indexOf(second.field),
+  );
   return { config, problems };
+};
+
+export interface InputOptionGroup {
+  label: string;
+  options: { value: string; label: string }[];
+}
+
+export const inputSourceValue = (source: AiTaskInputSource): string =>
+  source.kind === "trigger_input"
+    ? `input:${source.inputKey}`
+    : `step:${source.nodeId}:${source.fieldKey}`;
+
+export const inputSourceFrom = (value: string): AiTaskInputSource | null => {
+  const [scope, ...rest] = value.split(":");
+  if (scope === "input" && rest.length === 1 && rest[0])
+    return { kind: "trigger_input", inputKey: rest[0] };
+  if (scope === "step" && rest.length === 2 && rest[0] && rest[1]) {
+    return { kind: "step_field", nodeId: rest[0], fieldKey: rest[1] };
+  }
+  return null;
+};
+
+// The choices for one picked input, laid out like the scheduled step's anchor
+// dropdown: trigger inputs first, then each earlier step's fields under it.
+export const aiTaskInputOptions = (
+  priorStepFields: PriorStepField[],
+  triggerInputs: TriggerInput[],
+): InputOptionGroup[] => {
+  const groups: InputOptionGroup[] = [];
+  if (triggerInputs.length > 0) {
+    groups.push({
+      label: "Trigger inputs",
+      options: triggerInputs.map((input) => ({
+        value: inputSourceValue({ kind: "trigger_input", inputKey: input.key }),
+        label: `${input.label || input.key} (${input.type})`,
+      })),
+    });
+  }
+  for (const prior of priorStepFields) {
+    let group = groups.find((candidate) => candidate.label === prior.stepLabel);
+    if (!group) {
+      group = { label: prior.stepLabel, options: [] };
+      groups.push(group);
+    }
+    group.options.push({
+      value: inputSourceValue({
+        kind: "step_field",
+        nodeId: prior.nodeId,
+        fieldKey: prior.field.key,
+      }),
+      label: `${prior.stepLabel} — ${prior.field.label} (${prior.field.type})`,
+    });
+  }
+  return groups;
 };
 
 export type EmailForm = EmailNodeConfig;
 
-export const emailFormFromConfig = (config: Record<string, unknown> | EmailNodeConfig): EmailForm => {
+export const emailFormFromConfig = (
+  config: Record<string, unknown> | EmailNodeConfig,
+): EmailForm => {
   const source = config as Partial<EmailNodeConfig>;
   return {
     recipients: source.recipients ?? [],
@@ -141,7 +238,7 @@ export const emailFormFromConfig = (config: Record<string, unknown> | EmailNodeC
 export const emailConfigFromForm = (
   form: EmailForm,
   allowedDomains: readonly string[],
-): { config: EmailNodeConfig; problems: string[] } => ({
+): { config: EmailNodeConfig; problems: StepProblem<EmailProblemField>[] } => ({
   config: form,
   problems: validateEmailNodeConfig(form, allowedDomains),
 });
@@ -166,6 +263,11 @@ export const placeholderOptions = (
   ...priorStepFields.flatMap((prior) => {
     const stepKey = stepKeys.get(prior.nodeId);
     if (!stepKey) return [];
-    return [{ label: `${prior.stepLabel} → ${prior.field.label}`, token: `{{ ${stepKey}.${prior.field.key} }}` }];
+    return [
+      {
+        label: `${prior.stepLabel} → ${prior.field.label}`,
+        token: `{{ ${stepKey}.${prior.field.key} }}`,
+      },
+    ];
   }),
 ];

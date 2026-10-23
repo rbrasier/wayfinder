@@ -18,17 +18,39 @@ const reviewerIsComplete = (config: AiTaskNodeConfig): boolean => {
   return config.reviewer !== undefined;
 };
 
+// Which part of the step editor a problem belongs to, so the editor can show
+// it beside that field rather than in a list the author has to match up.
+export type AiTaskProblemField = "instruction" | "inputs" | "outputs" | "threshold" | "reviewer";
+
+export interface StepProblem<Field extends string> {
+  field: Field;
+  message: string;
+}
+
+// What an AI task is handed besides its instruction (ADR-065 §3): everything the
+// run knows — trigger inputs, the payload it started with and every earlier
+// step's output — or only the values the author picked.
+export type AiTaskInputMode = "all" | "selected";
+
+// A config saved before the mode existed picked its inputs if it listed any.
+export const aiTaskInputModeOf = (config: AiTaskNodeConfig): AiTaskInputMode =>
+  config.inputMode ?? ((config.inputFields ?? []).length > 0 ? "selected" : "all");
+
 // Problems an author must fix before an AI task can run, in the order the editor
 // shows them. Empty means runnable.
-export const validateAiTaskNodeConfig = (config: AiTaskNodeConfig): string[] => {
-  const problems: string[] = [];
-  if (isBlank(config.instruction)) problems.push("Add an instruction for the AI task.");
-  if ((config.structuredFields ?? []).length === 0) problems.push("Add at least one output field.");
+export const validateAiTaskNodeConfig = (config: AiTaskNodeConfig): StepProblem<AiTaskProblemField>[] => {
+  const problems: StepProblem<AiTaskProblemField>[] = [];
+  if (isBlank(config.instruction)) problems.push({ field: "instruction", message: "Add an instruction for the AI task." });
+  if ((config.structuredFields ?? []).length === 0) {
+    problems.push({ field: "outputs", message: "Add at least one output field." });
+  }
   const threshold = aiTaskConfidenceThresholdOf(config);
   if (threshold < 0 || threshold > 100) {
-    problems.push("The confidence threshold must be between 0 and 100.");
+    problems.push({ field: "threshold", message: "The confidence threshold must be between 0 and 100." });
   }
-  if (!reviewerIsComplete(config)) problems.push("Choose who reviews low-confidence results.");
+  if (!reviewerIsComplete(config)) {
+    problems.push({ field: "reviewer", message: "Choose who reviews low-confidence results." });
+  }
   return problems;
 };
 
@@ -44,18 +66,22 @@ export const isEmailAddressAllowed = (email: string, allowedDomains: readonly st
   return allowedDomains.some((allowed) => allowed.trim().toLowerCase() === domain);
 };
 
+export type EmailProblemField = "recipients" | "subject" | "body";
+
 export const validateEmailNodeConfig = (
   config: EmailNodeConfig,
   allowedDomains: readonly string[],
-): string[] => {
-  const problems: string[] = [];
-  if ((config.recipients ?? []).length === 0) problems.push("Add at least one recipient.");
-  if (isBlank(config.subjectTemplate)) problems.push("Add a subject.");
-  if (isBlank(config.bodyTemplate)) problems.push("Add a message body.");
+): StepProblem<EmailProblemField>[] => {
+  const problems: StepProblem<EmailProblemField>[] = [];
+  if ((config.recipients ?? []).length === 0) {
+    problems.push({ field: "recipients", message: "Add at least one recipient." });
+  }
+  if (isBlank(config.subjectTemplate)) problems.push({ field: "subject", message: "Add a subject." });
+  if (isBlank(config.bodyTemplate)) problems.push({ field: "body", message: "Add a message body." });
   for (const recipient of config.recipients ?? []) {
     if (recipient.kind !== "address") continue;
     if (!isEmailAddressAllowed(recipient.email, allowedDomains)) {
-      problems.push(`${recipient.email} is not on an allowed email domain.`);
+      problems.push({ field: "recipients", message: `${recipient.email} is not on an allowed email domain.` });
     }
   }
   return problems;

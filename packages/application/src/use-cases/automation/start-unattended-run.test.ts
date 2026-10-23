@@ -5,6 +5,7 @@ import {
   type Flow,
   type FlowVersion,
   type Session,
+  type SessionMessage,
   type User,
 } from "@rbrasier/domain";
 import type { StartSessionInput } from "../session/start-session";
@@ -55,6 +56,7 @@ const build = (options: { liveFlow?: Flow | null; pinnedFlow?: Flow; user?: User
   const liveFlow = options.liveFlow === undefined ? flow() : options.liveFlow;
   const started: StartSessionInput[] = [];
   const titled: Array<{ id: string; title: string }> = [];
+  const posted: Array<{ sessionId: string; role: string; content: string; aiPayload?: unknown }> = [];
   const useCase = new StartUnattendedRun({
     users: { findById: async () => ok(options.user === undefined ? runAs : options.user) },
     flows: { findById: async () => ok(liveFlow) },
@@ -64,7 +66,7 @@ const build = (options: { liveFlow?: Flow | null; pinnedFlow?: Flow; user?: User
     startSession: {
       execute: async (input: StartSessionInput) => {
         started.push(input);
-        return ok({ id: "session-9", ...input } as unknown as Session);
+        return ok({ id: "session-9", currentNodeId: "node-start", ...input } as unknown as Session);
       },
     },
     sessions: {
@@ -73,8 +75,14 @@ const build = (options: { liveFlow?: Flow | null; pinnedFlow?: Flow; user?: User
         return ok({ id } as Session);
       },
     },
+    sessionMessages: {
+      create: async (message) => {
+        posted.push(message);
+        return ok({ id: "message-1" } as SessionMessage);
+      },
+    },
   });
-  return { useCase, started, titled };
+  return { useCase, started, titled, posted };
 };
 
 const request = {
@@ -82,6 +90,7 @@ const request = {
   runAsUserId: "owner-1",
   origin: "webhook" as const,
   triggerSourceId: "trigger-1",
+  sourceName: null,
   inputs: { hearing_id: "H-123", unexpected: "x" },
   raw: { hearing_id: "H-123", unexpected: "x" },
 };
@@ -102,6 +111,23 @@ describe("StartUnattendedRun", () => {
       triggerPayload: { inputs: { hearing_id: "H-123" }, raw: request.raw, itemId: "H-123" },
     });
     expect(titled[0]).toEqual({ id: "session-9", title: "Estimates summary · H-123" });
+  });
+
+  it("opens the run's chat with a line saying what started it, carrying the inputs as insights", async () => {
+    const pinned = flow({ triggerInputs: [{ key: "hearing_id", label: "Hearing", type: "text", required: true }] });
+    const { useCase, posted } = build({ pinnedFlow: pinned });
+
+    await useCase.execute({ ...request, origin: "watch", sourceName: "ParlView hearings" });
+
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({
+      sessionId: "session-9",
+      role: "system",
+      // Anchored to the run's first step, as every insight-carrying message is.
+      stepNodeId: "node-start",
+      content: 'Started by Event Watch "ParlView hearings".',
+      aiPayload: { contextGathered: [{ key: "Hearing", value: "H-123" }] },
+    });
   });
 
   it("refuses inputs that fail the pinned version's declaration and starts nothing", async () => {

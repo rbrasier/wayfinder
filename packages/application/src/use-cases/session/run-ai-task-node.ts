@@ -1,5 +1,6 @@
 import {
   aiTaskConfidenceThresholdOf,
+  aiTaskInputModeOf,
   buildFieldConstraintsText,
   domainError,
   err,
@@ -20,6 +21,7 @@ import {
   type Session,
   type SessionMessage,
   type SessionStepOutput,
+  type SessionTriggerPayload,
 } from "@rbrasier/domain";
 import { aiTaskResultSchema, type AiTaskResult, type DocumentData } from "@rbrasier/shared";
 import { accumulateInsights } from "../../services/accumulate-insights";
@@ -49,6 +51,19 @@ const buildTranscript = (messages: SessionMessage[]): string =>
     .map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${message.content}`)
     .join("\n\n")
     .slice(0, 8000);
+
+const asPromptText = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value));
+
+// What an unattended run was started with: its declared inputs, then the whole
+// Event Watch item or webhook body, so a step that accepts all inputs needs no
+// mapping to see a field nobody declared.
+const buildRunInputsSection = (payload: SessionTriggerPayload | null | undefined): string => {
+  if (!payload) return "";
+  const lines = Object.entries(payload.inputs).map(([key, value]) => `- ${key}: ${asPromptText(value)}`);
+  const started = payload.raw === undefined || payload.raw === null ? "" : `\nStarted with:\n${asPromptText(payload.raw)}`;
+  if (lines.length === 0 && !started) return "";
+  return `\nRun inputs:\n${lines.join("\n")}${started}`;
+};
 
 const buildPriorOutputsSection = (outputs: SessionStepOutput[]): string => {
   const lines = outputs.flatMap((output) =>
@@ -99,7 +114,7 @@ export class RunAiTaskNode {
     const config = input.node.config as unknown as AiTaskNodeConfig;
     const problems = validateAiTaskNodeConfig(config);
     if (problems.length > 0) {
-      return err(domainError("VALIDATION_FAILED", problems.join(" ")));
+      return err(domainError("VALIDATION_FAILED", problems.map((problem) => problem.message).join(" ")));
     }
 
     // Re-entering the step while its review is open must not spend another
@@ -171,8 +186,10 @@ export class RunAiTaskNode {
     priorStepOutputs: SessionStepOutput[],
   ): Promise<Result<AiTaskResult>> {
     const transcript = buildTranscript(input.messages);
+    const acceptsAll = aiTaskInputModeOf(config) === "all";
+    const pickedFields = acceptsAll ? [] : (config.inputFields ?? []);
     const inputValues = await resolveFieldValues(this.languageModel, {
-      fields: config.inputFields ?? [],
+      fields: pickedFields,
       valueSources: config.inputFieldValues ?? {},
       priorStepOutputs,
       insights: accumulateInsights(input.messages),
@@ -186,7 +203,7 @@ export class RunAiTaskNode {
     });
     if (inputValues.error) return inputValues;
 
-    const inputLines = (config.inputFields ?? []).map(
+    const inputLines = pickedFields.map(
       (field) => `- ${field.label}: ${inputValues.data[field.key] ?? ""}`,
     );
     const keys = config.structuredFields.map((field) => field.key);
@@ -195,10 +212,11 @@ export class RunAiTaskNode {
       `Also return "confidence" (0-100) that your output fully and accurately meets the instruction, and a short "rationale" naming anything missing or uncertain.`,
       `\n<field_constraints>\n${buildFieldConstraintsText(config.structuredFields)}\n</field_constraints>`,
       inputLines.length > 0 ? `\nInputs:\n${inputLines.join("\n")}` : "",
-      buildPriorOutputsSection(priorStepOutputs),
+      acceptsAll ? buildRunInputsSection(input.session.triggerPayload) : "",
+      acceptsAll ? buildPriorOutputsSection(priorStepOutputs) : "",
       buildContextDocsSection(input.flow.contextDocs),
       input.additionalContext ? `\n${input.additionalContext}` : "",
-      transcript ? `\nSession transcript:\n${transcript}` : "",
+      acceptsAll && transcript ? `\nSession transcript:\n${transcript}` : "",
     ]
       .filter(Boolean)
       .join("\n");

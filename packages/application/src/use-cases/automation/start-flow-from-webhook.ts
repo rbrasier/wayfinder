@@ -60,6 +60,7 @@ export class StartFlowFromWebhook {
       runAsUserId: trigger.data.runAsUserId,
       origin: "webhook",
       triggerSourceId: trigger.data.id,
+      sourceName: null,
       inputs: inputsOf(input.body),
       raw: input.body,
     });

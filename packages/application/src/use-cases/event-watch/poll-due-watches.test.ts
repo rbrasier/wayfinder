@@ -193,6 +193,7 @@ describe("PollDueWatches", () => {
         runAsUserId: "owner-1",
         origin: "watch",
         triggerSourceId: "watch-1",
+        sourceName: "Estimates hearings",
         inputs: { hearing_id: "H-1", committee: "Finance" },
         raw: { id: "H-1", status: "finished", committee: { name: "Finance" } },
         itemId: "H-1",

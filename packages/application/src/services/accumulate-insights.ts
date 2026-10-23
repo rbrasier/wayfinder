@@ -5,12 +5,14 @@ export interface Insight {
   value: string;
 }
 
+// Assistant turns gather insights; a system message carries them only when it
+// opens an unattended run with its trigger inputs (`run-started-message.ts`).
 export function accumulateInsights(messages: SessionMessage[]): Insight[] {
   const order: string[] = [];
   const values = new Map<string, string>();
 
   for (const message of messages) {
-    if (message.role !== "assistant") continue;
+    if (message.role === "user") continue;
     const payload = message.aiPayload;
     if (!payload) continue;
 

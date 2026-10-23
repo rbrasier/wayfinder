@@ -6,9 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import { recipientSuggestions, type RecipientSuggestion } from "./recipient-suggestions";
+import { INVALID_OUTLINE } from "./step-problem";
 
 interface RecipientAutosuggestProps {
   id: string;
+  // The id of a save problem about recipients, which the box then points to.
+  describedBy?: string;
   groups: Array<{ id: string; name: string }>;
   onAdd: (recipient: EmailRecipient, name: string) => void;
 }
@@ -16,11 +19,19 @@ interface RecipientAutosuggestProps {
 // One box for every kind of recipient (ADR-065 §4): people from the directory
 // and groups appear as the author types, and any full address can be added —
 // Enter takes the highlighted suggestion.
-export function RecipientAutosuggest({ id, groups, onAdd }: RecipientAutosuggestProps) {
+export function RecipientAutosuggest({
+  id,
+  describedBy,
+  groups,
+  onAdd,
+}: RecipientAutosuggestProps) {
   const [query, setQuery] = useState("");
   const [highlighted, setHighlighted] = useState(0);
   const trimmed = query.trim();
-  const people = trpc.people.search.useQuery({ query: trimmed, limit: 8 }, { enabled: trimmed.length >= 2 });
+  const people = trpc.people.search.useQuery(
+    { query: trimmed, limit: 8 },
+    { enabled: trimmed.length >= 2 },
+  );
   const suggestions = recipientSuggestions(query, people.data ?? [], groups);
   const listId = `${id}-suggestions`;
 
@@ -39,6 +50,9 @@ export function RecipientAutosuggest({ id, groups, onAdd }: RecipientAutosuggest
         aria-expanded={suggestions.length > 0}
         aria-controls={listId}
         aria-autocomplete="list"
+        aria-invalid={describedBy ? true : undefined}
+        aria-describedby={describedBy}
+        className={INVALID_OUTLINE}
         aria-activedescendant={suggestions.length > 0 ? `${listId}-${highlighted}` : undefined}
         value={query}
         autoComplete="off"

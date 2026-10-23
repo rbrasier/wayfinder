@@ -135,6 +135,9 @@ export interface AiTaskNodeConfig {
   // so the same value-source picker serves both.
   inputFields?: TemplateField[];
   inputFieldValues?: Record<string, FieldValueSource>;
+  // "all" hands the model everything the run knows; "selected" only the
+  // inputs above. Read through `aiTaskInputModeOf`, never directly.
+  inputMode?: "all" | "selected";
   outputType: "structured";
   structuredFields: TemplateField[];
   // 0–100. Read through `aiTaskConfidenceThresholdOf`, never directly.

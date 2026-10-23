@@ -83,7 +83,8 @@ export const buildAttachmentAnnotation = (uploads: PromptSessionUpload[]): strin
 
 export const buildGatheredContext = (messages: SessionMessage[]): string => {
   const items = messages
-    .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
+    // A system message carries insights only when it opens an unattended run.
+    .filter((m) => (m.role === "assistant" || m.role === "system") && m.stepNodeId !== null && m.aiPayload)
     .flatMap((m) => m.aiPayload!.contextGathered);
   return renderGatheredContext(items);
 };

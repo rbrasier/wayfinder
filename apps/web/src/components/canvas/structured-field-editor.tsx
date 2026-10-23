@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { HelpCircle, Plus } from "lucide-react";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { FieldConfigModal, FieldRow } from "./field-row";
+import { StepProblemText } from "./step-problem";
 import {
   emptyModel,
   linesToModels,
@@ -21,6 +22,9 @@ interface StructuredFieldEditorProps {
   // Overrides for an editor that is not a conversation (the AI task's outputs).
   label?: string;
   description?: string;
+  // Save problems: `problems` for the field set as a whole, `rowErrors` by row.
+  problems?: readonly string[];
+  rowErrors?: ReadonlyMap<number, string>;
 }
 
 const DEFAULT_DESCRIPTION =
@@ -35,6 +39,8 @@ export function StructuredFieldEditor({
   onOpenHelp,
   label = "Fields to capture",
   description = DEFAULT_DESCRIPTION,
+  problems = [],
+  rowErrors,
 }: StructuredFieldEditorProps) {
   // The field type is held in local state, not re-derived from `lines` on every
   // render. An options field with no choices yet serialises to a plain label
@@ -92,6 +98,7 @@ export function StructuredFieldEditor({
         </button>
       </div>
       <p className="text-[12px] text-[#666055]">{description}</p>
+      <StepProblemText id="structured-fields-problem" messages={problems} />
 
       <div className="space-y-2">
         {models.map((model, index) => (
@@ -103,6 +110,7 @@ export function StructuredFieldEditor({
             onChangeType={(type) => changeType(index, type)}
             onRemove={() => removeRow(index)}
             onOpenConfig={() => setConfigIndex(index)}
+            error={rowErrors?.get(index) ?? null}
           />
         ))}
       </div>

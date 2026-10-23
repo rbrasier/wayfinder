@@ -96,7 +96,9 @@ export class RunEmailNode {
     const config = input.node.config as unknown as EmailNodeConfig;
     const automationConfig = await this.dependencies.loadAutomationConfig();
     const problems = validateEmailNodeConfig(config, automationConfig.emailAllowedDomains);
-    if (problems.length > 0) return err(domainError("VALIDATION_FAILED", problems.join(" ")));
+    if (problems.length > 0) {
+      return err(domainError("VALIDATION_FAILED", problems.map((problem) => problem.message).join(" ")));
+    }
 
     if (!(await this.dependencies.emailSender.isConfigured())) {
       return err(

@@ -110,6 +110,7 @@ export const buildAutomation = (deps: AutomationDependencies) => {
     flowVersions: deps.flowVersions,
     startSession: new StartSession(deps.sessions, deps.flows, deps.flowNodes, deps.flowEdges, deps.flowVersions),
     sessions: deps.sessions,
+    sessionMessages: deps.sessionMessages,
   });
 
   const listTriggerRuns = new ListTriggerRuns({ runs: unattendedRuns, graph, approvals: deps.approvals });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import type { PriorStepField } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,8 @@ import {
   type EmailForm,
 } from "./automation-step-model";
 import { EmailConfigForm, type DocumentStepOption } from "./email-config-form";
+import { TriggerInputsContext } from "./field-value-selector";
+import { revealFirstProblem } from "./step-problem";
 
 export type AutomationStepType = "ai_task" | "email";
 
@@ -70,13 +72,19 @@ export function AutomationStepModal({
   onClose,
 }: AutomationStepModalProps) {
   const [name, setName] = useState(initialName);
-  const [aiTaskForm, setAiTaskForm] = useState<AiTaskForm>(() => aiTaskFormFromConfig(initialConfig));
+  const [aiTaskForm, setAiTaskForm] = useState<AiTaskForm>(() =>
+    aiTaskFormFromConfig(initialConfig),
+  );
   const [emailForm, setEmailForm] = useState<EmailForm>(() => emailFormFromConfig(initialConfig));
   const [names, setNames] = useState<Record<string, string>>({});
   const [reviewerName, setReviewerName] = useState<string | null>(null);
   const [showProblems, setShowProblems] = useState(false);
   const wasOpenRef = useRef(false);
-  const groups = trpc.group.publishTargets.useQuery(undefined, { enabled: open && type === "email" });
+  const formRef = useRef<HTMLDivElement>(null);
+  const triggerInputs = useContext(TriggerInputsContext);
+  const groups = trpc.group.publishTargets.useQuery(undefined, {
+    enabled: open && type === "email",
+  });
 
   // Seed only on the open transition, as NodeConfigModal does, so a canvas
   // refresh while the editor is open cannot wipe the author's edits.
@@ -90,12 +98,16 @@ export function AutomationStepModal({
     wasOpenRef.current = open;
   }, [open, initialName, initialConfig]);
 
-  const built =
-    type === "ai_task" ? aiTaskConfigFromForm(aiTaskForm) : emailConfigFromForm(emailForm, allowedEmailDomains);
+  const aiTask = aiTaskConfigFromForm(aiTaskForm, { priorStepFields, triggerInputs });
+  const email = emailConfigFromForm(emailForm, allowedEmailDomains);
+  const built = type === "ai_task" ? aiTask : email;
 
+  // Problems stay hidden while the author works, then show beside their fields
+  // from the first Save that finds any, and the dialog moves to the first one.
   const handleSave = () => {
     if (built.problems.length > 0) {
       setShowProblems(true);
+      revealFirstProblem(formRef.current);
       return;
     }
     onSave(name, built.config as unknown as Record<string, unknown>);
@@ -110,42 +122,51 @@ export function AutomationStepModal({
         </DialogHeader>
         <DialogBody className="max-h-[70vh] space-y-4 overflow-y-auto">
           {disabledByAdmin ? (
-            <p role="status" className="rounded-[9px] bg-[#fdf3e3] px-3 py-2 text-[13px] text-[#7a4b0c]">
+            <p
+              role="status"
+              className="rounded-[9px] bg-[#fdf3e3] px-3 py-2 text-[13px] text-[#7a4b0c]"
+            >
               Disabled by administrator. This step will not run until it is turned back on.
             </p>
           ) : (
             <>
               <div className="space-y-1">
                 <Label htmlFor="automation-step-name">Step name</Label>
-                <Input id="automation-step-name" value={name} onChange={(event) => setName(event.target.value)} />
+                <Input
+                  id="automation-step-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
               </div>
-              {type === "ai_task" ? (
-                <AiTaskConfigForm
-                  form={aiTaskForm}
-                  onChange={setAiTaskForm}
-                  priorStepFields={priorStepFields}
-                  reviewerName={reviewerName}
-                  onReviewerPicked={setReviewerName}
-                />
-              ) : (
-                <EmailConfigForm
-                  form={emailForm}
-                  onChange={setEmailForm}
-                  priorStepFields={priorStepFields}
-                  stepKeys={stepKeys}
-                  documentSteps={documentSteps}
-                  groups={(groups.data ?? []).map((group) => ({ id: group.id, name: group.name }))}
-                  recipientNames={names}
-                  onRecipientNamed={(userId, label) => setNames((current) => ({ ...current, [userId]: label }))}
-                />
-              )}
-              {showProblems && built.problems.length > 0 && (
-                <ul role="alert" className="list-disc space-y-0.5 pl-5 text-[12.5px] text-[#b42318]">
-                  {built.problems.map((problem) => (
-                    <li key={problem}>{problem}</li>
-                  ))}
-                </ul>
-              )}
+              <div ref={formRef} className="space-y-4">
+                {type === "ai_task" ? (
+                  <AiTaskConfigForm
+                    form={aiTaskForm}
+                    onChange={setAiTaskForm}
+                    priorStepFields={priorStepFields}
+                    reviewerName={reviewerName}
+                    onReviewerPicked={setReviewerName}
+                    problems={showProblems ? aiTask.problems : []}
+                  />
+                ) : (
+                  <EmailConfigForm
+                    form={emailForm}
+                    onChange={setEmailForm}
+                    priorStepFields={priorStepFields}
+                    stepKeys={stepKeys}
+                    documentSteps={documentSteps}
+                    groups={(groups.data ?? []).map((group) => ({
+                      id: group.id,
+                      name: group.name,
+                    }))}
+                    recipientNames={names}
+                    onRecipientNamed={(userId, label) =>
+                      setNames((current) => ({ ...current, [userId]: label }))
+                    }
+                    problems={showProblems ? email.problems : []}
+                  />
+                )}
+              </div>
             </>
           )}
         </DialogBody>

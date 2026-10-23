@@ -1,9 +1,12 @@
 import {
+  buildRunStartedMessage,
   ok,
+  runStartedInsights,
   triggerInputsOfSnapshot,
   validateTriggerPayload,
   type IFlowRepository,
   type IFlowVersionRepository,
+  type ISessionMessageRepository,
   type ISessionRepository,
   type IUserRepository,
   type Result,
@@ -18,6 +21,7 @@ export interface StartUnattendedRunDependencies {
   flowVersions: Pick<IFlowVersionRepository, "latestPublished">;
   startSession: Pick<StartSession, "execute">;
   sessions: Pick<ISessionRepository, "update">;
+  sessionMessages: Pick<ISessionMessageRepository, "create">;
 }
 
 export interface StartUnattendedRunInput {
@@ -26,6 +30,8 @@ export interface StartUnattendedRunInput {
   origin: "watch" | "webhook";
   // The watch or flow-trigger id — what run history is queried by.
   triggerSourceId: string;
+  // The watch's name, for the line that opens the run's chat; null for a webhook.
+  sourceName: string | null;
   inputs: unknown;
   raw: unknown;
   itemId?: string | null;
@@ -87,6 +93,24 @@ export class StartUnattendedRun {
 
     const title = input.itemId ? `${flow.data.name} · ${input.itemId}` : flow.data.name;
     await this.dependencies.sessions.update(session.data.id, { title });
+
+    // The chat opens on what started the run, carrying its inputs as gathered
+    // insights. The run has already started, so a failed write does not undo it.
+    const content = buildRunStartedMessage({ origin: input.origin, sourceName: input.sourceName });
+    await this.dependencies.sessionMessages.create({
+      sessionId: session.data.id,
+      role: "system",
+      content,
+      // Anchored to the first step, as every insight-carrying message is, so
+      // the gathered-context reads that skip unanchored rows still see it.
+      stepNodeId: session.data.currentNodeId,
+      aiPayload: {
+        response: content,
+        rationale: "",
+        stepCompleteConfidence: 0,
+        contextGathered: runStartedInsights(declared.data, validated.data),
+      },
+    });
     return ok({ started: true, session: { ...session.data, title } });
   }
 

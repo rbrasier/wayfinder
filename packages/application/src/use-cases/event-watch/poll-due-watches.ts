@@ -143,6 +143,7 @@ export class PollDueWatches {
         runAsUserId: watch.runAsUserId,
         origin: "watch",
         triggerSourceId: watch.id,
+        sourceName: watch.name,
         inputs,
         raw: item,
         itemId,

@@ -120,6 +120,32 @@ test.describe('Accessibility: automation step editors', () => {
       `axe found violations in the Email step editor:\n\n${formatViolations(results.violations)}`,
     ).toEqual([]);
   });
+
+  test('the AI task step editor (input picker, Advanced and save problems) has no axe violations', async ({
+    page,
+  }) => {
+    await createFlow(page, `A11y AI task step ${Date.now()}`);
+    await page.getByRole('button', { name: FIRST_STEP_BUTTON }).click();
+    await page.getByRole('button', { name: /^AI task/ }).click();
+
+    const editor = page.getByRole('dialog', { name: /AI task step/ });
+    const acceptAll = editor.getByRole('switch', { name: 'Accept all inputs' });
+    await expect(acceptAll).toBeVisible({ timeout: 15_000 });
+    // The less-travelled states: picking inputs by hand, and a Save that finds
+    // problems — which shows them beside their fields and opens Advanced.
+    await acceptAll.click();
+    await editor.locator('summary', { hasText: 'Advanced' }).click();
+    await editor.getByLabel('Confidence needed to continue automatically (0–100)').fill('150');
+    await editor.getByRole('button', { name: 'Save' }).click();
+    await expect(editor.getByText('Add an instruction for the AI task.')).toBeVisible();
+    await expect(editor.getByText('The confidence threshold must be between 0 and 100.')).toBeVisible();
+
+    const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).include('[role="dialog"]').analyze();
+    expect(
+      results.violations,
+      `axe found violations in the AI task step editor:\n\n${formatViolations(results.violations)}`,
+    ).toEqual([]);
+  });
 });
 
 test.describe('Accessibility: focus visible (2.4.7)', () => {

@@ -2,7 +2,12 @@
 
 import { useContext, useRef } from "react";
 import { X } from "lucide-react";
-import type { EmailRecipient, PriorStepField } from "@rbrasier/domain";
+import type {
+  EmailProblemField,
+  EmailRecipient,
+  PriorStepField,
+  StepProblem,
+} from "@rbrasier/domain";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +16,7 @@ import { TriggerInputsContext } from "./field-value-selector";
 import { InsertFieldMenu } from "./insert-field-menu";
 import { MarkdownEditor } from "./markdown-editor";
 import { RecipientAutosuggest } from "./recipient-autosuggest";
+import { INVALID_OUTLINE, StepProblemText } from "./step-problem";
 
 export interface DocumentStepOption {
   nodeId: string;
@@ -27,6 +33,8 @@ interface EmailConfigFormProps {
   // Names for user recipients picked in this editor; a saved one shows generically.
   recipientNames: Record<string, string>;
   onRecipientNamed: (userId: string, name: string) => void;
+  // Save problems to show beside their fields; empty until the author tries to save.
+  problems: StepProblem<EmailProblemField>[];
 }
 
 const recipientKey = (recipient: EmailRecipient): string =>
@@ -48,8 +56,14 @@ export function EmailConfigForm({
   groups,
   recipientNames,
   onRecipientNamed,
+  problems,
 }: EmailConfigFormProps) {
-  const set = <K extends keyof EmailForm>(key: K, value: EmailForm[K]) => onChange({ ...form, [key]: value });
+  const messagesFor = (field: EmailProblemField) =>
+    problems.filter((problem) => problem.field === field).map((problem) => problem.message);
+  const problemIdFor = (field: EmailProblemField) =>
+    messagesFor(field).length > 0 ? `email-${field}-problem` : undefined;
+  const set = <K extends keyof EmailForm>(key: K, value: EmailForm[K]) =>
+    onChange({ ...form, [key]: value });
   const triggerInputs = useContext(TriggerInputsContext);
   const insertOptions = placeholderOptions(priorStepFields, triggerInputs, stepKeys);
   const subjectRef = useRef<HTMLInputElement>(null);
@@ -58,7 +72,10 @@ export function EmailConfigForm({
     const subject = subjectRef.current;
     const start = subject?.selectionStart ?? form.subjectTemplate.length;
     const end = subject?.selectionEnd ?? form.subjectTemplate.length;
-    set("subjectTemplate", `${form.subjectTemplate.slice(0, start)}${token}${form.subjectTemplate.slice(end)}`);
+    set(
+      "subjectTemplate",
+      `${form.subjectTemplate.slice(0, start)}${token}${form.subjectTemplate.slice(end)}`,
+    );
   };
 
   const addRecipient = (recipient: EmailRecipient) => {
@@ -85,6 +102,7 @@ export function EmailConfigForm({
     <>
       <div className="space-y-2">
         <FieldGroupLabel id="email-recipients">Recipients</FieldGroupLabel>
+        <StepProblemText id="email-recipients-problem" messages={messagesFor("recipients")} />
         {form.recipients.length === 0 ? (
           <p className="text-[12px] text-[#736d5f]">No recipients yet.</p>
         ) : (
@@ -102,7 +120,9 @@ export function EmailConfigForm({
                   onClick={() =>
                     set(
                       "recipients",
-                      form.recipients.filter((existing) => recipientKey(existing) !== recipientKey(recipient)),
+                      form.recipients.filter(
+                        (existing) => recipientKey(existing) !== recipientKey(recipient),
+                      ),
                     )
                   }
                 >
@@ -114,6 +134,7 @@ export function EmailConfigForm({
         )}
         <RecipientAutosuggest
           id="email-add-recipient"
+          describedBy={problemIdFor("recipients")}
           groups={groups}
           onAdd={(recipient, name) => {
             if (recipient.kind === "user") onRecipientNamed(recipient.userId, name);
@@ -125,11 +146,19 @@ export function EmailConfigForm({
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <Label htmlFor="email-subject">Subject</Label>
-          <InsertFieldMenu fieldLabel="Subject" options={insertOptions} onInsert={insertIntoSubject} />
+          <InsertFieldMenu
+            fieldLabel="Subject"
+            options={insertOptions}
+            onInsert={insertIntoSubject}
+          />
         </div>
+        <StepProblemText id="email-subject-problem" messages={messagesFor("subject")} />
         <Input
           ref={subjectRef}
           id="email-subject"
+          className={INVALID_OUTLINE}
+          aria-invalid={problemIdFor("subject") ? true : undefined}
+          aria-describedby={problemIdFor("subject")}
           value={form.subjectTemplate}
           onChange={(event) => set("subjectTemplate", event.target.value)}
           placeholder="e.g. Estimates hearing summary"
@@ -142,6 +171,7 @@ export function EmailConfigForm({
         value={form.bodyTemplate}
         onChange={(bodyTemplate) => set("bodyTemplate", bodyTemplate)}
         insertOptions={insertOptions}
+        problems={messagesFor("body")}
         placeholder="Write the message. Use Insert field for values from earlier steps."
       />
 

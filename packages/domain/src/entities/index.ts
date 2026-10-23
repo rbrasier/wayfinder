@@ -81,6 +81,7 @@ export * from "./approval-decision-message";
 export * from "./approval-withdrawal-message";
 export * from "./approval-reassignment-message";
 export * from "./approver-edit-message";
+export * from "./run-started-message";
 export * from "./approval-lock";
 export * from "./approval-record";
 export * from "./taken-path";

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
-import type { FlowNode, SessionMessage } from "@rbrasier/domain";
+import { parseRunStartedMessage, type FlowNode, type SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
 import { resolveGeneratingDocumentState } from "./generating-document-state";
@@ -13,6 +13,7 @@ import { AiTaskOutputCard } from "./ai-task-output-card";
 import { AutomationStepPending } from "./automation-step-pending";
 import { aiTaskResultView } from "./automation-step-state";
 import { RecordCard } from "./record-card";
+import { RunStartedLine } from "./run-started-line";
 import { MessageInfoModal } from "./message-info-modal";
 import {
   AdvancingBadge,
@@ -268,6 +269,7 @@ export function MessageFeed({
               ? senderNamesById?.[msg.senderUserId] ?? null
               : null);
 
+          const runStarted = msg.role === "system" ? parseRunStartedMessage(msg.content) : null;
           const scheduled = msg.role === "system" ? parseScheduledMessage(msg.content) : null;
           const displayContent = scheduled
             ? formatScheduledResume(scheduled.stepName, scheduled.nextFireAt)
@@ -334,7 +336,9 @@ export function MessageFeed({
           return (
             <div key={msg.id}>
               {isNewStep && node && <FeedDivider label={node.name} />}
-              {decision ? (
+              {runStarted ? (
+                <RunStartedLine source={runStarted} inputs={msg.aiPayload?.contextGathered ?? []} />
+              ) : decision ? (
                 // An approver is rarely the viewer, and their decision carries
                 // its own attribution — so it always renders as someone else's.
                 <OtherPersonMessage

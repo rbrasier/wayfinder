@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { PlaceholderOption } from "./automation-step-model";
 import { InsertFieldMenu } from "./insert-field-menu";
+import { INVALID_OUTLINE, StepProblemText } from "./step-problem";
 
 type EditorMode = "rich" | "markdown";
 
@@ -19,6 +20,8 @@ interface MarkdownEditorProps {
   onChange: (markdown: string) => void;
   insertOptions: PlaceholderOption[];
   placeholder?: string;
+  // Save problems about the message, shown under its label.
+  problems?: readonly string[];
 }
 
 const TOOLBAR_BUTTON =
@@ -26,8 +29,18 @@ const TOOLBAR_BUTTON =
 
 function RichToolbar({ editor }: { editor: Editor }) {
   const tools = [
-    { label: "Bold", icon: Bold, active: editor.isActive("bold"), run: () => editor.chain().focus().toggleBold().run() },
-    { label: "Italic", icon: Italic, active: editor.isActive("italic"), run: () => editor.chain().focus().toggleItalic().run() },
+    {
+      label: "Bold",
+      icon: Bold,
+      active: editor.isActive("bold"),
+      run: () => editor.chain().focus().toggleBold().run(),
+    },
+    {
+      label: "Italic",
+      icon: Italic,
+      active: editor.isActive("italic"),
+      run: () => editor.chain().focus().toggleItalic().run(),
+    },
     {
       label: "Heading",
       icon: Heading,
@@ -48,7 +61,11 @@ function RichToolbar({ editor }: { editor: Editor }) {
     },
   ];
   return (
-    <div role="toolbar" aria-label="Formatting" className="flex gap-0.5 border-b border-[#e7e3db] px-1.5 py-1">
+    <div
+      role="toolbar"
+      aria-label="Formatting"
+      className="flex gap-0.5 border-b border-[#e7e3db] px-1.5 py-1"
+    >
       {tools.map((tool) => (
         <button
           key={tool.label}
@@ -68,7 +85,16 @@ function RichToolbar({ editor }: { editor: Editor }) {
 // The Email step's message editor (ADR-065 §4): rich text by default, with a
 // switch to the markdown it is stored as. Both edit the same markdown string,
 // which the step renders to HTML when it sends.
-export function MarkdownEditor({ id, label, value, onChange, insertOptions, placeholder }: MarkdownEditorProps) {
+export function MarkdownEditor({
+  id,
+  label,
+  value,
+  onChange,
+  insertOptions,
+  placeholder,
+  problems = [],
+}: MarkdownEditorProps) {
+  const problemId = problems.length > 0 ? `${id}-problem` : undefined;
   const [mode, setMode] = useState<EditorMode>("rich");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editor = useEditor({
@@ -83,7 +109,8 @@ export function MarkdownEditor({ id, label, value, onChange, insertOptions, plac
         "aria-label": label,
         "aria-multiline": "true",
         role: "textbox",
-        class: "prose-sm min-h-[140px] px-3 py-2 text-[13px] leading-[1.55] text-[#1c1b19] outline-hidden",
+        class:
+          "prose-sm min-h-[140px] px-3 py-2 text-[13px] leading-[1.55] text-[#1c1b19] outline-hidden",
       },
     },
     onUpdate: ({ editor: current }) => onChange(current.getMarkdown()),
@@ -112,7 +139,11 @@ export function MarkdownEditor({ id, label, value, onChange, insertOptions, plac
         <Label htmlFor={mode === "markdown" ? `${id}-markdown` : id}>{label}</Label>
         <div className="flex items-center gap-1">
           <InsertFieldMenu fieldLabel={label} options={insertOptions} onInsert={insert} />
-          <div role="group" aria-label="Editor mode" className="flex rounded-md border border-[#e7e3db] p-0.5">
+          <div
+            role="group"
+            aria-label="Editor mode"
+            className="flex rounded-md border border-[#e7e3db] p-0.5"
+          >
             {(["rich", "markdown"] as const).map((option) => (
               <button
                 key={option}
@@ -127,8 +158,13 @@ export function MarkdownEditor({ id, label, value, onChange, insertOptions, plac
           </div>
         </div>
       </div>
+      <StepProblemText id={`${id}-problem`} messages={problems} />
       {mode === "rich" ? (
-        <div className="rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] focus-within:border-wf-primary focus-within:bg-white">
+        <div
+          className={`rounded-[9px] border bg-[#faf9f7] focus-within:border-wf-primary focus-within:bg-white ${
+            problemId ? "border-[#b42318]" : "border-[#e7e3db]"
+          }`}
+        >
           {editor && <RichToolbar editor={editor} />}
           <EditorContent editor={editor} />
         </div>
@@ -137,7 +173,9 @@ export function MarkdownEditor({ id, label, value, onChange, insertOptions, plac
           ref={textareaRef}
           id={`${id}-markdown`}
           rows={8}
-          className="font-mono"
+          className={`font-mono ${INVALID_OUTLINE}`}
+          aria-invalid={problemId ? true : undefined}
+          aria-describedby={problemId}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}

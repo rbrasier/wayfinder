@@ -147,6 +147,67 @@ describe("RunAiTaskNode", () => {
     expect(model.calls[0]!.purpose).toBe("aiTask");
   });
 
+  it("hands the model everything the run knows when it accepts all inputs", async () => {
+    const { useCase, model, stepOutputs } = build(ok({ values: { summary: "x" }, confidence: 90, rationale: "" }));
+    await stepOutputs.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-intake",
+      fields: [{ key: "notes", label: "Officer notes", type: "text", value: "Late start." }],
+    });
+    const watchRun = session({
+      id: "session-1",
+      userId: "run-owner-1",
+      currentNodeId: "node-ai",
+      triggerPayload: {
+        inputs: { hearing_id: "pv-12" },
+        raw: { id: "pv-12", committee: "Economics", status: "finished" },
+        itemId: "pv-12",
+      },
+    });
+
+    await useCase.execute({
+      session: watchRun,
+      flow,
+      node: aiTaskNode(aiTaskConfig({ inputMode: "all", inputFields: [], inputFieldValues: {} })),
+      messages: [],
+    });
+
+    const prompt = model.calls[0]!.prompt;
+    expect(prompt).toContain("hearing_id: pv-12");
+    expect(prompt).toContain('"committee":"Economics"');
+    expect(prompt).toContain("Officer notes");
+  });
+
+  it("hands the model only the picked inputs when it does not accept all", async () => {
+    const { useCase, model, stepOutputs } = build(ok({ values: { summary: "x" }, confidence: 90, rationale: "" }));
+    await stepOutputs.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-intake",
+      fields: [{ key: "notes", label: "Officer notes", type: "text", value: "Late start." }],
+    });
+    const watchRun = session({
+      id: "session-1",
+      userId: "run-owner-1",
+      currentNodeId: "node-ai",
+      triggerPayload: { inputs: { hearing_id: "pv-12" }, raw: { committee: "Economics" }, itemId: "pv-12" },
+    });
+
+    await useCase.execute({
+      session: watchRun,
+      flow,
+      node: aiTaskNode(aiTaskConfig({ inputMode: "selected" })),
+      messages: [],
+    });
+
+    const prompt = model.calls[0]!.prompt;
+    expect(prompt).toContain("Transcript: Senator: Thank you, Chair.");
+    expect(prompt).not.toContain("pv-12");
+    expect(prompt).not.toContain("Economics");
+    expect(prompt).not.toContain("Officer notes");
+  });
+
   it("records the confidence, rationale and captured values on the message, like any AI turn", async () => {
     const { useCase, messages } = build(
       ok({ values: { summary: "The committee met." }, confidence: 92, rationale: "Clear transcript." }),

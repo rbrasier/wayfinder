@@ -9,8 +9,8 @@
  *   - Smoke (group 6): a webhook call goes through the real stack — token
  *     check, run start, the unattended driver, an AI task step — and the run
  *     shows up in the flow's run history, parked on the first person's step.
- *     Its chat shows the AI task's result as an output card whose info toggle
- *     reveals the confidence.
+ *     Its chat opens on the line saying what started it, then shows the AI
+ *     task's result as an output card whose info toggle reveals the confidence.
  *   - Navigation state across a page load (group 4): an Event Watch built from
  *     a fetched sample's dropdowns is saved, and after a reload the editor shows
  *     what was saved, with the token kept but never sent back.
@@ -85,6 +85,9 @@ test.describe('Unattended automation', () => {
     // Open the run where it is parked; the AI task before it shows as a card.
     await dialog.getByRole('link', { name: 'Open chat' }).first().click();
     await expect(page).toHaveURL(/\/chats\//, { timeout: 30_000 });
+    // The chat opens on what started the run, with the inputs it was given.
+    await expect(page.getByTestId('run-started-line')).toContainText('Started by a webhook', { timeout: 30_000 });
+    await expect(page.getByTestId('run-started-line')).toContainText('Hearing: H-1');
     const outputCard = page.getByTestId('ai-task-output-card');
     await expect(outputCard).toBeVisible({ timeout: 30_000 });
     await expect(outputCard).toContainText('Summarise the hearing output');

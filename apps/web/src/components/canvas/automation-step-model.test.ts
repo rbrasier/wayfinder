@@ -5,7 +5,9 @@ import {
   aiTaskFormFromConfig,
   emailConfigFromForm,
   emailFormFromConfig,
-  inputLabelFor,
+  aiTaskInputOptions,
+  inputSourceFrom,
+  inputSourceValue,
   placeholderOptions,
 } from "./automation-step-model";
 
@@ -19,12 +21,16 @@ const priorFields: PriorStepField[] = [
   },
 ];
 
+const hearing = { key: "hearing_id", label: "Hearing", type: "text" as const, required: true };
+const context = { priorStepFields: priorFields, triggerInputs: [hearing] };
+
 describe("aiTaskFormFromConfig", () => {
-  it("opens a new step with sensible defaults", () => {
+  it("opens a new step accepting all inputs, with sensible defaults", () => {
     const form = aiTaskFormFromConfig({});
 
     expect(form).toEqual({
       instruction: "",
+      acceptAllInputs: true,
       inputs: [],
       outputLines: [],
       confidenceThreshold: 80,
@@ -34,7 +40,7 @@ describe("aiTaskFormFromConfig", () => {
     });
   });
 
-  it("reads saved inputs back as label-and-source rows, with skills and tools", () => {
+  it("reads a step that picked its inputs back as those picks, with skills and tools", () => {
     const form = aiTaskFormFromConfig({
       instruction: "Summarise.",
       inputFields: [{ key: "transcript", label: "Transcript", type: "text", optional: false, raw: "Transcript" }],
@@ -46,9 +52,8 @@ describe("aiTaskFormFromConfig", () => {
       allowedMcpToolRefs: [{ serverId: "server-1", toolName: "search" }],
     });
 
-    expect(form.inputs).toEqual([
-      { label: "Transcript", source: { kind: "step_field", nodeId: "node-1", fieldKey: "transcript" } },
-    ]);
+    expect(form.acceptAllInputs).toBe(false);
+    expect(form.inputs).toEqual([{ kind: "step_field", nodeId: "node-1", fieldKey: "transcript" }]);
     expect(form.outputLines).toEqual(["Summary (narrative)"]);
     expect(form.skillRefs).toEqual(["skill-1"]);
     expect(form.allowedMcpToolRefs).toEqual([{ serverId: "server-1", toolName: "search" }]);
@@ -58,9 +63,10 @@ describe("aiTaskFormFromConfig", () => {
 describe("aiTaskConfigFromForm", () => {
   const form = {
     instruction: "Summarise.",
+    acceptAllInputs: false,
     inputs: [
-      { label: "Transcript", source: { kind: "step_field" as const, nodeId: "node-1", fieldKey: "transcript" } },
-      { label: "Transcript", source: { kind: "trigger_input" as const, inputKey: "hearing_id" } },
+      { kind: "step_field" as const, nodeId: "node-1", fieldKey: "transcript" },
+      { kind: "trigger_input" as const, inputKey: "hearing_id" },
     ],
     outputLines: ["Summary (narrative)"],
     confidenceThreshold: 80,
@@ -69,44 +75,73 @@ describe("aiTaskConfigFromForm", () => {
     allowedMcpToolRefs: [],
   };
 
-  it("derives an input field per row, with a unique key, and keeps each row's source", () => {
-    const { config, problems } = aiTaskConfigFromForm(form);
+  it("names each picked input after its field and keeps where it comes from", () => {
+    const { config, problems } = aiTaskConfigFromForm(form, context);
 
     expect(problems).toEqual([]);
+    expect(config.inputMode).toBe("selected");
     expect(config.inputFields?.map((field) => [field.key, field.label])).toEqual([
       ["transcript", "Transcript"],
-      ["transcript_2", "Transcript"],
+      ["hearing", "Hearing"],
     ]);
     expect(config.inputFieldValues).toEqual({
       transcript: { kind: "step_field", nodeId: "node-1", fieldKey: "transcript" },
-      transcript_2: { kind: "trigger_input", inputKey: "hearing_id" },
+      hearing: { kind: "trigger_input", inputKey: "hearing_id" },
     });
     expect(config.skillRefs).toEqual(["skill-1"]);
   });
 
-  it("requires a label on every input and at least one output field", () => {
-    const { problems } = aiTaskConfigFromForm({
-      ...form,
-      inputs: [{ label: " ", source: { kind: "ai" } }],
-      outputLines: [],
-    });
+  it("stores no picked inputs while it accepts all", () => {
+    const { config } = aiTaskConfigFromForm({ ...form, acceptAllInputs: true }, context);
 
-    expect(problems).toContain("Name every input.");
-    expect(problems).toContain("Add at least one output field.");
+    expect(config.inputMode).toBe("all");
+    expect(config.inputFields).toEqual([]);
+    expect(config.inputFieldValues).toEqual({});
+  });
+
+  it("files each problem under its field, in the order the editor shows them", () => {
+    const { problems } = aiTaskConfigFromForm(
+      { ...form, instruction: "", inputs: [], outputLines: [], confidenceThreshold: 120 },
+      context,
+    );
+
+    expect(problems).toEqual([
+      { field: "instruction", message: "Add an instruction for the AI task." },
+      { field: "inputs", message: "Pick at least one input, or accept all inputs." },
+      { field: "outputs", message: "Add at least one output field." },
+      { field: "threshold", message: "The confidence threshold must be between 0 and 100." },
+    ]);
+  });
+
+  it("names the output row that is wrong and why", () => {
+    const { problems } = aiTaskConfigFromForm({ ...form, outputLines: ["Summary (narrative)", " (number)"] }, context);
+
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatchObject({ field: "outputs", outputRow: 1 });
+    expect(problems[0]!.message).not.toBe("");
   });
 });
 
-describe("inputLabelFor", () => {
-  it("names an input after the field or trigger input it reads", () => {
-    expect(inputLabelFor({ kind: "step_field", nodeId: "node-1", fieldKey: "transcript" }, priorFields, [])).toBe(
-      "Transcript",
-    );
-    expect(
-      inputLabelFor({ kind: "trigger_input", inputKey: "hearing_id" }, [], [
-        { key: "hearing_id", label: "Hearing", type: "text", required: true },
-      ]),
-    ).toBe("Hearing");
-    expect(inputLabelFor({ kind: "literal", value: "x" }, priorFields, [])).toBe("");
+describe("aiTaskInputOptions", () => {
+  it("offers trigger inputs, then each earlier step's fields grouped under the step", () => {
+    expect(aiTaskInputOptions(priorFields, [hearing])).toEqual([
+      { label: "Trigger inputs", options: [{ value: "input:hearing_id", label: "Hearing (text)" }] },
+      {
+        label: "1. Intake",
+        options: [{ value: "step:node-1:transcript", label: "1. Intake — Transcript (narrative)" }],
+      },
+    ]);
+  });
+
+  it("round-trips a choice through its option value", () => {
+    const source = { kind: "step_field" as const, nodeId: "node-1", fieldKey: "transcript" };
+
+    expect(inputSourceFrom(inputSourceValue(source))).toEqual(source);
+    expect(inputSourceFrom(inputSourceValue({ kind: "trigger_input", inputKey: "hearing_id" }))).toEqual({
+      kind: "trigger_input",
+      inputKey: "hearing_id",
+    });
+    expect(inputSourceFrom("nonsense")).toBeNull();
   });
 });
 
@@ -134,7 +169,7 @@ describe("email form", () => {
     });
 
     expect(emailConfigFromForm(form, ["agency.gov.au"]).problems).toEqual([
-      "x@gmail.com is not on an allowed email domain.",
+      { field: "recipients", message: "x@gmail.com is not on an allowed email domain." },
     ]);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD,
   aiTaskConfidenceThresholdOf,
+  aiTaskInputModeOf,
   isEmailAddressAllowed,
   meetsConfidenceThreshold,
   renderMessageTemplate,
@@ -48,6 +49,22 @@ describe("aiTaskConfidenceThresholdOf", () => {
   });
 });
 
+describe("aiTaskInputModeOf", () => {
+  it("reads the stored mode", () => {
+    expect(aiTaskInputModeOf(aiTaskConfig({ inputMode: "all" }))).toBe("all");
+    expect(aiTaskInputModeOf(aiTaskConfig({ inputMode: "selected" }))).toBe("selected");
+  });
+
+  it("treats a config saved before the mode existed by whether it picked inputs", () => {
+    const picked = aiTaskConfig({
+      inputFields: [{ key: "transcript", label: "Transcript", type: "text", optional: false, raw: "Transcript" }],
+    });
+
+    expect(aiTaskInputModeOf(picked)).toBe("selected");
+    expect(aiTaskInputModeOf(aiTaskConfig())).toBe("all");
+  });
+});
+
 describe("validateAiTaskNodeConfig", () => {
   it("accepts a complete config", () => {
     expect(validateAiTaskNodeConfig(aiTaskConfig())).toEqual([]);
@@ -57,21 +74,21 @@ describe("validateAiTaskNodeConfig", () => {
     const problems = validateAiTaskNodeConfig(aiTaskConfig({ instruction: "  ", structuredFields: [] }));
 
     expect(problems).toEqual([
-      "Add an instruction for the AI task.",
-      "Add at least one output field.",
+      { field: "instruction", message: "Add an instruction for the AI task." },
+      { field: "outputs", message: "Add at least one output field." },
     ]);
   });
 
   it("rejects a threshold outside 0 to 100", () => {
     expect(validateAiTaskNodeConfig(aiTaskConfig({ confidenceThreshold: 101 }))).toEqual([
-      "The confidence threshold must be between 0 and 100.",
+      { field: "threshold", message: "The confidence threshold must be between 0 and 100." },
     ]);
   });
 
   it("requires a named reviewer to have a user", () => {
     expect(
       validateAiTaskNodeConfig(aiTaskConfig({ reviewer: { mode: "user", userId: "" } })),
-    ).toEqual(["Choose who reviews low-confidence results."]);
+    ).toEqual([{ field: "reviewer", message: "Choose who reviews low-confidence results." }]);
   });
 });
 
@@ -105,9 +122,9 @@ describe("validateEmailNodeConfig", () => {
     );
 
     expect(problems).toEqual([
-      "Add at least one recipient.",
-      "Add a subject.",
-      "Add a message body.",
+      { field: "recipients", message: "Add at least one recipient." },
+      { field: "subject", message: "Add a subject." },
+      { field: "body", message: "Add a message body." },
     ]);
   });
 
@@ -117,7 +134,9 @@ describe("validateEmailNodeConfig", () => {
       ["agency.gov.au"],
     );
 
-    expect(problems).toEqual(["x@gmail.com is not on an allowed email domain."]);
+    expect(problems).toEqual([
+      { field: "recipients", message: "x@gmail.com is not on an allowed email domain." },
+    ]);
   });
 });
 
