@@ -6,6 +6,7 @@ import {
   isEmailAddressAllowed,
   meetsConfidenceThreshold,
   renderMessageTemplate,
+  emailConfigsAfterRename,
   flowStepKeys,
   validateAiTaskNodeConfig,
   validateEmailNodeConfig,
@@ -199,5 +200,74 @@ describe("flowStepKeys", () => {
 
   it("never gives a step the key reserved for trigger inputs", () => {
     expect(flowStepKeys([{ id: "a", name: "Input" }]).get("a")).toBe("input_2");
+  });
+});
+
+describe("emailConfigsAfterRename", () => {
+  const summarise = { id: "a", name: "Summarise the hearing", type: "ai_task", config: {} };
+  const email = (bodyTemplate: string, subjectTemplate = "Hearing summary") => ({
+    id: "e",
+    name: "Email the digest",
+    type: "email",
+    config: emailConfig({ subjectTemplate, bodyTemplate }) as unknown as Record<string, unknown>,
+  });
+
+  it("rewrites an Email step's tags to the renamed step's new key", () => {
+    const changed = emailConfigsAfterRename(
+      [summarise, email("{{ summarise_the_hearing.summary }}", "About {{ summarise_the_hearing.title }}")],
+      "a",
+      "Review the hearing",
+    );
+
+    expect(changed).toEqual([
+      {
+        nodeId: "e",
+        config: expect.objectContaining({
+          subjectTemplate: "About {{ review_the_hearing.title }}",
+          bodyTemplate: "{{ review_the_hearing.summary }}",
+        }),
+      },
+    ]);
+  });
+
+  it("keeps the markdown escaping a tag was saved with", () => {
+    const [changed] = emailConfigsAfterRename(
+      [summarise, email("{{ summarise\\_the\\_hearing.summary }}")],
+      "a",
+      "Review the hearing",
+    );
+
+    expect(changed!.config.bodyTemplate).toBe("{{ review\\_the\\_hearing.summary }}");
+  });
+
+  it("follows a step whose key moves because a namesake was renamed", () => {
+    const first = { id: "a", name: "Summarise", type: "ai_task", config: {} };
+    const second = { id: "b", name: "Summarise", type: "ai_task", config: {} };
+    const [changed] = emailConfigsAfterRename(
+      [first, second, email("{{ summarise.x }} and {{ summarise_2.y }}")],
+      "a",
+      "Draft",
+    );
+
+    expect(changed!.config.bodyTemplate).toBe("{{ draft.x }} and {{ summarise.y }}");
+  });
+
+  it("leaves trigger inputs, other steps and unchanged Email steps alone", () => {
+    const other = { id: "b", name: "Classify", type: "ai_task", config: {} };
+    const untouched = { ...email("{{ classify.kind }}"), id: "f" };
+    const changed = emailConfigsAfterRename(
+      [summarise, other, untouched, email("{{ input.hearing_id }} {{ summarise_the_hearing.summary }}")],
+      "a",
+      "Review the hearing",
+    );
+
+    expect(changed).toHaveLength(1);
+    expect(changed[0]!.config.bodyTemplate).toBe("{{ input.hearing_id }} {{ review_the_hearing.summary }}");
+  });
+
+  it("changes nothing when the name keeps the same key", () => {
+    expect(
+      emailConfigsAfterRename([summarise, email("{{ summarise_the_hearing.summary }}")], "a", "Summarise the Hearing"),
+    ).toEqual([]);
   });
 });

@@ -168,7 +168,9 @@ values HTML-escaped. A step is named by its step key: its snake_cased name,
 derived the way approval records key their steps (ADR-040 §5), with `_2`, `_3`…
 for a repeated name and `input` reserved for trigger inputs. So
 `{{ review_the_hearing.summary }}` reads, and survives a version publish, where
-a node id would not. `IEmailSender.SendEmailInput` gains optional
+a node id would not. Renaming a step rewrites the tags of the flow's Email steps to
+its new key (`emailConfigsAfterRename`, called by `UpdateFlowNode`), including a
+namesake whose `_2` suffix the rename moves. `IEmailSender.SendEmailInput` gains optional
 `attachments: { filename, contentType, content: Uint8Array }[]`, which nodemailer
 supports natively. Attachments are read from object storage and capped at 20 MB
 in total.

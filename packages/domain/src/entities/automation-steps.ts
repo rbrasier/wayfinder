@@ -130,6 +130,61 @@ export const renderMessageTemplate = (template: string, values: MessageTemplateV
     lookupPlaceholder(scope, key, values),
   );
 
+// The step key a name change moves, old → new. Renaming one of several steps
+// that share a name can move a namesake's `_2` suffix too, so every step's key is
+// compared, not just the renamed one's.
+const stepKeyRenames = (
+  nodes: readonly { id: string; name: string }[],
+  nodeId: string,
+  newName: string,
+): Map<string, string> => {
+  const before = flowStepKeys(nodes);
+  const after = flowStepKeys(nodes.map((node) => (node.id === nodeId ? { ...node, name: newName } : node)));
+  const renames = new Map<string, string>();
+  for (const [id, oldKey] of before) {
+    const newKey = after.get(id);
+    if (newKey && newKey !== oldKey) renames.set(oldKey, newKey);
+  }
+  return renames;
+};
+
+// One pass, so two keys that trade places are each rewritten once. A tag saved
+// with markdown escaping keeps it.
+const renameStepReferences = (template: string, renames: ReadonlyMap<string, string>): string =>
+  template.replace(PLACEHOLDER, (match, scope: string, key: string) => {
+    const newKey = renames.get(unescapeMarkdown(scope));
+    if (!newKey) return match;
+    const written = scope.includes("\\") ? newKey.replace(/_/g, "\\_") : newKey;
+    return `{{ ${written}.${key} }}`;
+  });
+
+export interface RewrittenEmailConfig {
+  nodeId: string;
+  config: Record<string, unknown>;
+}
+
+// Email steps name earlier steps by key (`{{ summarise_the_hearing.summary }}`),
+// and a key follows the step's name. When a step is renamed, these are the Email
+// steps whose subject or message must follow it; Email steps it does not touch
+// are left out.
+export const emailConfigsAfterRename = (
+  nodes: readonly { id: string; name: string; type: string; config: Record<string, unknown> }[],
+  nodeId: string,
+  newName: string,
+): RewrittenEmailConfig[] => {
+  const renames = stepKeyRenames(nodes, nodeId, newName);
+  if (renames.size === 0) return [];
+  return nodes.flatMap((node) => {
+    if (node.type !== "email") return [];
+    const subject = typeof node.config.subjectTemplate === "string" ? node.config.subjectTemplate : "";
+    const body = typeof node.config.bodyTemplate === "string" ? node.config.bodyTemplate : "";
+    const subjectTemplate = renameStepReferences(subject, renames);
+    const bodyTemplate = renameStepReferences(body, renames);
+    if (subjectTemplate === subject && bodyTemplate === body) return [];
+    return [{ nodeId: node.id, config: { ...node.config, subjectTemplate, bodyTemplate } }];
+  });
+};
+
 // The HTML part of an Email step's message. The whole rendered text is escaped —
 // author template and AI output alike — so nothing in either can become markup;
 // blank lines become paragraphs and single newlines line breaks.

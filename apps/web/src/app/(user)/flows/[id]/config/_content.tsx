@@ -51,6 +51,7 @@ import type {
   TemplateField,
 } from "@rbrasier/domain";
 import { computeStepNumbers } from "@/lib/flow-utils";
+import { followRenameOnCanvas } from "@/lib/canvas/follow-rename";
 import type { NextStepAnchor } from "@/lib/canvas/canvas-guidance";
 import {
   CANVAS_DEBOUNCE_MS as DEBOUNCE_MS,
@@ -421,7 +422,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     try {
       await updateNodeMutation.mutateAsync({ nodeId: editingNodeId, flowId, name: values.name, colour: values.colour, type: values.type, config });
       setRfNodes((nds) =>
-        nds.map((n) => {
+        followRenameOnCanvas(nds, editingNodeId, values.name).map((n) => {
           if (n.id !== editingNodeId) return n;
           return toRfNode({ id: n.id, name: values.name, colour: values.colour, type: values.type, positionX: n.position.x, positionY: n.position.y, config }, null);
         }),
@@ -443,7 +444,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
     (name: string, type: AutomationStepType, config: Record<string, unknown>) => {
       if (!editingNodeId) return;
       setRfNodes((nds) =>
-        nds.map((n) =>
+        followRenameOnCanvas(nds, editingNodeId, name).map((n) =>
           n.id !== editingNodeId
             ? n
             : toRfNode({ id: n.id, name, colour: (n.data as { colour?: string | null }).colour ?? null, type, positionX: n.position.x, positionY: n.position.y, config }, null),

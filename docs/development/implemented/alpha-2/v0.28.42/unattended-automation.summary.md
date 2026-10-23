@@ -469,3 +469,24 @@ reads the name with the escapes removed.
 
 - **Tests:** `automation-steps.test.ts` fills a tag whose underscores were
   escaped.
+
+## Amendment 6 — Email tags follow a renamed step
+
+Asked for during review. A step key follows the step's name, so renaming a step
+used to leave the Email steps that referenced it with tags that rendered blank.
+
+- **Domain:** `emailConfigsAfterRename` compares every step's key before and
+  after the rename, so a namesake whose `_2` suffix moves is followed too. It
+  returns the Email steps whose subject or message changes. Tags keep any
+  markdown escaping they were saved with, and swapped keys are rewritten in a
+  single pass.
+- **Application:** `UpdateFlowNode` saves the rewritten Email configs after a
+  name change.
+- **Web:** `followRenameOnCanvas` applies the same rewrite to the canvas's copy,
+  so an Email step reopened before the next load does not save the old tags
+  back.
+- **Not covered:** deleting a step can also move a namesake's key
+  (`summarise_2` becomes `summarise`); tags that used the old key render blank,
+  as before.
+- **Tests:** `automation-steps.test.ts` (five cases), `flow.test.ts` (the use
+  case saves the rewrite), `follow-rename.test.ts`.
