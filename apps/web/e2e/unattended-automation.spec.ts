@@ -22,6 +22,7 @@
 
 import { test, expect } from './helpers/base';
 import { requireSeedFixtures } from './helpers/seed';
+import { COLD_ROUTE_BUDGET, NAV_TIMEOUT } from './helpers/timeouts';
 
 const ADMIN_EMAIL = process.env.TEST_ADMIN_EMAIL || 'admin@example.com';
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
@@ -29,7 +30,7 @@ const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 test.describe('Unattended automation', () => {
   // Each test crosses several routes that a dev-mode server may compile on
   // first use, on top of a run that finishes after its 202.
-  test.describe.configure({ timeout: 120_000 });
+  test.describe.configure({ timeout: COLD_ROUTE_BUDGET });
 
   test('a webhook call starts an unattended run that appears in the flow run history', async ({
     page,
@@ -84,7 +85,7 @@ test.describe('Unattended automation', () => {
 
     // Open the run where it is parked; the AI task before it shows as a card.
     await dialog.getByRole('link', { name: 'Open chat' }).first().click();
-    await expect(page).toHaveURL(/\/chats\//, { timeout: 30_000 });
+    await expect(page).toHaveURL(/\/chats\//, { timeout: NAV_TIMEOUT });
     // The chat opens on what started the run, with the inputs it was given.
     await expect(page.getByTestId('run-started-line')).toContainText('Started by a webhook', { timeout: 30_000 });
     await expect(page.getByTestId('run-started-line')).toContainText('Hearing: H-1');

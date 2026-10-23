@@ -23,6 +23,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from './helpers/base';
 import { createFlow, FIRST_STEP_BUTTON } from './helpers/flow-builder';
+import { COLD_ROUTE_BUDGET } from './helpers/timeouts';
 import type { Page } from '@playwright/test';
 
 // WCAG 2.0/2.1/2.2 A + AA. Including the wcag22aa tag enables axe's
@@ -104,6 +105,10 @@ test.describe('Accessibility: WCAG 2.2 AA runtime audit', () => {
 });
 
 test.describe('Accessibility: automation step editors', () => {
+  // Each test creates a flow and opens a step editor: several navigations that a
+  // dev-mode server may compile on first use.
+  test.describe.configure({ timeout: COLD_ROUTE_BUDGET });
+
   test('the Email step editor (recipients and rich text message) has no axe violations', async ({
     page,
   }) => {
