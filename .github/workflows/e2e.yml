@@ -177,6 +177,10 @@ jobs:
       # unless NODE_OPTIONS already sets it, in which case it defers to that. So
       # any value below ~8 GB *lowers* the threshold; this raises it instead.
       # It is a ceiling, not a reservation — V8 still only grows as needed.
+      # At 10 GB a shard compiling the Event Watch admin pages on top of the
+      # other admin routes still crossed the threshold; 12 GB keeps the restart
+      # point near 9.8 GB, leaving the 16 GB runner room for Postgres, Chromium
+      # and the mocks.
       # The shared mocks server (one port, one path per mock). Only the mock
       # Entra identity provider is needed here; it must be up before the app so
       # the OAuth code flow has somewhere to go.
@@ -194,7 +198,7 @@ jobs:
 
       - name: Start app
         env:
-          NODE_OPTIONS: --max-old-space-size=10240
+          NODE_OPTIONS: --max-old-space-size=12288
         run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
 
       # Warming the heavy routes here, rather than giving specs longer waits: the
