@@ -15,6 +15,16 @@ const readAppVersion = (): string => {
 
 const config: NextConfig = {
   reactStrictMode: true,
+  // Dev server only. Next disposes a compiled route after 60s idle once more
+  // than five others are newer, so a route warmed before the e2e suite (and any
+  // route a developer returns to) is compiled again mid-run. The chat stream
+  // route is ~6,000 modules, and requests queue behind its recompile for longer
+  // than a spec's timeout. Keeping routes for the session costs heap, which the
+  // e2e job raises for this reason (--max-old-space-size in e2e.yml).
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000,
+    pagesBufferLength: 200,
+  },
   typedRoutes: true,
   env: {
     NEXT_PUBLIC_APP_VERSION: readAppVersion(),
