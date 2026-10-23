@@ -29,7 +29,20 @@
 #   REMOVE WHEN: braces (or micromatch moving off it) publishes a patched
 #   release — then pin it in the root package.json overrides instead — or
 #   both eslint-config-next and @changesets/cli stop depending on micromatch@4.
+#
+# GHSA-mrhx-c7xc-m3w5 — zod memory exhaustion validating oversized arrays.
+#   WHY: patched only in zod 4.6.6, and zod 3.25.76 (the last 3.x) has no fix.
+#   The zod 4 copy (better-auth) is pinned past it in the root package.json
+#   overrides; the zod 3 copy cannot move. Our own schemas are zod 3, and so
+#   are hard dependencies of ai@4, the @ai-sdk/* 1.x providers,
+#   @langchain/core@0.3 and @langchain/langgraph@0.2 — migrating our code
+#   alone leaves zod 3 in the lockfile, and AI SDK 4 turns zod 4 schemas into
+#   an empty JSON schema, which would strip every generateObject call of its
+#   output schema.
+#   REMOVE WHEN: the AI SDK 5+ / LangChain 1.x / zod 4 migration lands and no
+#   package resolves zod below 4.6.6.
 # shellcheck disable=SC2034 # read by the scripts that source this file
 ALLOWED_ADVISORIES=(
   "GHSA-vfj7-8cjw-p6xm"
+  "GHSA-mrhx-c7xc-m3w5"
 )
