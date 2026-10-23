@@ -1,6 +1,6 @@
-# Implementation Summary — Unattended Automation (v0.28.41)
+# Implementation Summary — Unattended Automation (v0.28.42)
 
-- **Version**: 0.28.41 (bump: **PATCH, by explicit requester exception**. It
+- **Version**: 0.28.42 (bump: **PATCH, by explicit requester exception**. It
   would otherwise be MINOR: there are schema changes and new features. 0.28.40
   went to the vite advisory fix, rbrasier/wayfinder#344.)
 - **Base branch**: `release/alpha-2`, by explicit requester exception to "new
@@ -186,7 +186,7 @@ the trigger route, the editor and sidebar models).
   structured approval, not only AI task reviews.
 - **Prompt context helpers** were extracted to `lib/chat/prompt-context.ts` so
   the scheduler and the run driver share them.
-- **Version 0.28.41**, not 0.28.40, because the vite fix took 0.28.40.
+- **Version 0.28.42**, not 0.28.40: the vite fix took 0.28.40 and the Dependabot sweep (#350) took 0.28.41.
 
 ## Amendment — editor and run-visibility polish (phase doc §12)
 
@@ -273,7 +273,7 @@ Built on the same branch after the review of the first screenshots.
 ## Amendment 2 — readable field tags and a quieter AI task in the chat
 
 Second round of review feedback on the screenshots. No schema change, and the
-version stays 0.28.41.
+version stays 0.28.42.
 
 **Readable field tags (screenshot 8).**
 - Email placeholders read `{{ <step_key>.<field_key> }}`, e.g.
@@ -371,7 +371,7 @@ hearings and read the finished hearing's transcript.
 
 ## Amendment 4 — AI task editor, Event Watch validation, MCP Tool hidden
 
-Third round of review feedback. No schema change, and the version stays 0.28.41.
+Third round of review feedback. No schema change, and the version stays 0.28.42.
 
 **Problems beside their fields.**
 - **Before:** save problems were listed at the foot of the dialog, and output

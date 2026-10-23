@@ -117,7 +117,7 @@ The rules that make it safe:
 
 ### 5. Scheduling: on the existing scheduler tick
 
-> **As built (v0.28.41).** The plan was a second `EventWatchWorker` in
+> **As built (v0.28.42).** The plan was a second `EventWatchWorker` in
 > `apps/api`. Every step a run needs (the AI and email steps, the run driver)
 > is wired in the web app's container, and the API's scheduler is already a
 > 60 s heartbeat that POSTs the web app's internal
@@ -157,7 +157,7 @@ timeoutMs, maxBytes })`, returns `Result<{ status, json }>`. The adapter uses
   ULA/link-local, unless the host is listed in the `WATCH_ALLOWED_HOSTS`
   runtime setting. That setting is for on-prem APIs.
 
-  > **Amended (v0.28.41 review):** an **empty** list now means any host may
+  > **Amended (v0.28.42 review):** an **empty** list now means any host may
   > be called, internal ones included, except the link-local cloud metadata
   > range (169.254.0.0/16, fe80::/10, fd00:ec2::254), which is always
   > refused. A **filled** list keeps the rule above. Explicitly listing a

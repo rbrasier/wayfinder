@@ -3,9 +3,9 @@
 - **Status**: Draft — awaiting `/doc-review`
 - **Date**: 2026-10-22
 - **Author**: rbrasier
-- **Target version**: 0.28.41 (bump: **PATCH, by explicit exception** — see §12)
+- **Target version**: 0.28.42 (bump: **PATCH, by explicit exception** — see §12)
 - **Base branch**: `release/alpha-2` (**by explicit exception** — see §12)
-- **Phase doc**: `docs/development/implemented/alpha-2/v0.28.41/unattended-automation.phase.md`
+- **Phase doc**: `docs/development/implemented/alpha-2/v0.28.42/unattended-automation.phase.md`
 - **ADRs**: ADR-063, ADR-064, ADR-065
 
 ## 1. Problem
@@ -243,7 +243,7 @@ All changes are additive, and existing rows carry across.
 - **Versioning-rule override (accepted and waived by requester at
   `/doc-review`, 2026-10-22).** A schema change normally warrants MINOR.
   `0.29.0` would clash with `main`'s line (already `0.40.x`), so this ships as
-  `0.28.41`. The version alone no longer signals
+  `0.28.42`. The version alone no longer signals
   that a migration is needed, and the release notes must say so.
 - **SSRF.** Admin-entered URLs are fetched server-side. Mitigated by the
   private-range block, a `WATCH_ALLOWED_HOSTS` escape hatch, no redirects to
