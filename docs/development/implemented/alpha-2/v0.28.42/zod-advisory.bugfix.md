@@ -35,3 +35,18 @@ No application logic changed. `osv-check.sh` exits 1 before and 0 after (zod 3 s
 allowlisted); `./validate.sh` passes with the full suite on zod 4.6.7.
 
 **E2E:** none — dependency resolution falls in no group of `e2e-test-policy.md`.
+
+## Added: body-parser GHSA-27r3-jxmh-p828
+
+`pnpm audit` (high): body-parser DoS via trailing bytes after a compressed request body,
+patched in 1.20.9 and 2.4.0. It failed `audit-check.sh` on `release/alpha-2` and on #345.
+
+- `body-parser@1` override `>=1.20.6 <2` → `>=1.20.9 <2` (express 4's `~1.20.3`; resolves 1.20.9).
+- New `body-parser@2` override `>=2.4.0 <3` (express 5's `^2.2.1`; resolves 2.4.0, which adds
+  `content-type@2.1.0` and `iconv-lite@0.7.3`).
+
+`audit-check.sh`: exit 1 → exit 0 (zod 3 allowlisted). Both are reached through Express
+(MCP SDK and `apps/api`), so this one is runtime, not tooling.
+
+Version stays 0.28.42: this change rides into #345 (unattended automation), which carries
+that version, rather than shipping as its own release.
