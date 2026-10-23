@@ -4,6 +4,7 @@ import type { WatchAuthType, WatchHttpMethod } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { FieldProblemText, INVALID_OUTLINE } from "@/components/ui/field-problem";
 import type { WatchForm } from "./watch-model";
 
 export const SELECT_CLASS =
@@ -24,6 +25,9 @@ interface WatchConnectionFieldsProps {
   hasStoredSecret: boolean;
   clearSecret: boolean;
   onClearSecretChange: (clear: boolean) => void;
+  // Save problems with the address, and with the body or credentials.
+  urlProblems: readonly string[];
+  connectionProblems: readonly string[];
 }
 
 // The connection a watch carries (ADR-063 §1). The stored secret is never sent
@@ -36,6 +40,8 @@ export function WatchConnectionFields({
   hasStoredSecret,
   clearSecret,
   onClearSecretChange,
+  urlProblems,
+  connectionProblems,
 }: WatchConnectionFieldsProps) {
   const changeAuth = (authType: WatchAuthType) =>
     onChange({
@@ -60,8 +66,12 @@ export function WatchConnectionFields({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="watch-url">API address</Label>
+          <FieldProblemText id="watch-url-problem" messages={urlProblems} />
           <Input
             id="watch-url"
+            className={INVALID_OUTLINE}
+            aria-invalid={urlProblems.length > 0 ? true : undefined}
+            aria-describedby={urlProblems.length > 0 ? "watch-url-problem" : undefined}
             value={form.url}
             onChange={(event) => onChange({ url: event.target.value })}
             placeholder="https://api.example.gov.au/hearings"
@@ -82,11 +92,13 @@ export function WatchConnectionFields({
         </div>
       )}
 
+      <FieldProblemText id="watch-connection-problem" messages={connectionProblems} />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="watch-auth">Authentication</Label>
           <select
             id="watch-auth"
+            aria-describedby={connectionProblems.length > 0 ? "watch-connection-problem" : undefined}
             className={SELECT_CLASS}
             value={form.authType}
             onChange={(event) => changeAuth(event.target.value as WatchAuthType)}

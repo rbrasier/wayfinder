@@ -1,5 +1,6 @@
 import { domainError } from "../errors/index";
 import { err, ok, type Result } from "../result";
+import type { TriggerInput } from "./flow-trigger";
 
 // An admin rule that polls an external JSON API and starts a flow run for each
 // item that meets a condition (ADR-063). The watch carries its own connection;
@@ -253,27 +254,56 @@ const isInFiringState = (condition: WatchCondition, current: unknown): boolean =
 
 const isBlank = (value: string | null | undefined): boolean => !value || value.trim() === "";
 
-const conditionProblems = (condition: WatchCondition): string[] => {
+// Which part of the watch editor a problem belongs to, in the order the editor
+// shows them, so each is shown beside its field.
+export type EventWatchProblemField =
+  | "name"
+  | "url"
+  | "connection"
+  | "itemId"
+  | "condition"
+  | "flow"
+  | "inputs"
+  | "runAs"
+  | "interval"
+  | "failureThreshold"
+  | "maxRuns";
+
+export interface EventWatchProblem {
+  field: EventWatchProblemField;
+  message: string;
+  // For an `inputs` problem, the flow input it is about.
+  inputKey?: string;
+}
+
+const MAX_WATCH_NAME_LENGTH = 120;
+const MAX_WATCH_URL_LENGTH = 2000;
+
+const conditionProblems = (condition: WatchCondition): EventWatchProblem[] => {
   if (condition.kind === "new_item") return [];
-  const problems = isBlank(condition.fieldPath) ? ["Choose the field the condition watches."] : [];
+  const problems: EventWatchProblem[] = isBlank(condition.fieldPath)
+    ? [{ field: "condition", message: "Choose the field the condition watches." }]
+    : [];
   if (condition.kind === "transition" && isBlank(condition.to)) {
-    problems.push("Enter the value the field changes to.");
+    problems.push({ field: "condition", message: "Enter the value the field changes to." });
   }
   if (condition.kind === "matches" && condition.operator === "regex") {
     try {
       new RegExp(condition.value);
     } catch {
-      problems.push("The pattern is not a valid regular expression.");
+      problems.push({ field: "condition", message: "The pattern is not a valid regular expression." });
     }
   }
   return problems;
 };
 
-const connectionProblems = (draft: EventWatchDraft): string[] => {
+const connectionProblems = (draft: EventWatchDraft): EventWatchProblem[] => {
   if (draft.authType === "none") return [];
-  const problems = draft.hasSecret ? [] : ["Enter the token or key for this connection."];
+  const problems: EventWatchProblem[] = draft.hasSecret
+    ? []
+    : [{ field: "connection", message: "Enter the token or key for this connection." }];
   if (draft.authType === "api_key" && isBlank(draft.apiKeyPlacement?.name)) {
-    problems.push("Name the header or query parameter that carries the key.");
+    problems.push({ field: "connection", message: "Name the header or query parameter that carries the key." });
   }
   return problems;
 };
@@ -290,19 +320,55 @@ const isHttpUrl = (value: string): boolean => {
 const between = (value: number, low: number, high: number): boolean =>
   Number.isInteger(value) && value >= low && value <= high;
 
+const nameProblems = (name: string): EventWatchProblem[] => {
+  if (isBlank(name)) return [{ field: "name", message: "Give the watch a name." }];
+  if (name.trim().length > MAX_WATCH_NAME_LENGTH) {
+    return [{ field: "name", message: "Keep the name to 120 characters or fewer." }];
+  }
+  return [];
+};
+
+const urlProblems = (url: string): EventWatchProblem[] => {
+  if (url.length > MAX_WATCH_URL_LENGTH) {
+    return [{ field: "url", message: "Keep the address to 2,000 characters or fewer." }];
+  }
+  return isHttpUrl(url) ? [] : [{ field: "url", message: "Enter an http:// or https:// address." }];
+};
+
 // Problems an admin must fix before a watch can be saved, in the order the
-// editor shows them.
-export const validateEventWatch = (draft: EventWatchDraft): string[] => [
-  ...(isBlank(draft.name) ? ["Give the watch a name."] : []),
-  ...(isHttpUrl(draft.url) ? [] : ["Enter an http:// or https:// address."]),
+// editor shows its fields. The editor runs this before saving, so a missing
+// choice is shown beside its field rather than refused by the server.
+export const validateEventWatch = (draft: EventWatchDraft): EventWatchProblem[] => [
+  ...nameProblems(draft.name),
+  ...urlProblems(draft.url),
+  ...connectionProblems(draft),
+  ...(!isBlank(draft.itemsPath) && isBlank(draft.itemIdPath)
+    ? [{ field: "itemId" as const, message: "Choose the field that identifies each item." }]
+    : []),
+  ...conditionProblems(draft.condition),
+  ...(isBlank(draft.flowId) ? [{ field: "flow" as const, message: "Choose the flow to start." }] : []),
+  ...(isBlank(draft.runAsUserId) ? [{ field: "runAs" as const, message: "Choose who the runs belong to." }] : []),
   ...(between(draft.intervalMinutes, MIN_WATCH_INTERVAL_MINUTES, MAX_WATCH_INTERVAL_MINUTES)
     ? []
-    : ["Check at least every 1 minute and at most every 1,440."]),
-  ...(!isBlank(draft.itemsPath) && isBlank(draft.itemIdPath) ? ["Choose the field that identifies each item."] : []),
-  ...conditionProblems(draft.condition),
-  ...(between(draft.failureThreshold, 1, 50) ? [] : ["Pause after between 1 and 50 failures in a row."]),
-  ...(between(draft.maxRunsPerPoll, 1, 100) ? [] : ["Allow between 1 and 100 runs per check."]),
-  ...connectionProblems(draft),
-  ...(isBlank(draft.flowId) ? ["Choose the flow to start."] : []),
-  ...(isBlank(draft.runAsUserId) ? ["Choose who the runs belong to."] : []),
+    : [{ field: "interval" as const, message: "Check at least every 1 minute and at most every 1,440." }]),
+  ...(between(draft.failureThreshold, 1, 50)
+    ? []
+    : [{ field: "failureThreshold" as const, message: "Pause after between 1 and 50 failures in a row." }]),
+  ...(between(draft.maxRunsPerPoll, 1, 100)
+    ? []
+    : [{ field: "maxRuns" as const, message: "Allow between 1 and 100 runs per check." }]),
 ];
+
+// The flow's required inputs that no item field supplies. Shared by the editor,
+// which shows each beside its input, and the save, which refuses the watch.
+export const unmappedRequiredInputs = (
+  declared: readonly TriggerInput[],
+  mapping: Readonly<Record<string, string>>,
+): EventWatchProblem[] =>
+  declared
+    .filter((input) => input.required && isBlank(mapping[input.key]))
+    .map((input) => ({
+      field: "inputs" as const,
+      inputKey: input.key,
+      message: `Choose the field that supplies ${input.label || input.key}.`,
+    }));

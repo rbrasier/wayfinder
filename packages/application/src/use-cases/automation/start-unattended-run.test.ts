@@ -126,7 +126,13 @@ describe("StartUnattendedRun", () => {
       // Anchored to the run's first step, as every insight-carrying message is.
       stepNodeId: "node-start",
       content: 'Started by Event Watch "ParlView hearings".',
-      aiPayload: { contextGathered: [{ key: "Hearing", value: "H-123" }] },
+      aiPayload: {
+        contextGathered: [
+          { key: "Event Watch · Hearing", value: "H-123" },
+          { key: "Event Watch · hearing_id", value: "H-123" },
+          { key: "Event Watch · unexpected", value: "x" },
+        ],
+      },
     });
   });
 

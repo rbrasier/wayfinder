@@ -20,7 +20,7 @@ import {
   type FieldRowType,
   type FieldRowTypeOption,
 } from "./field-row-model";
-import { INVALID_OUTLINE, StepProblemText } from "./step-problem";
+import { INVALID_OUTLINE, FieldProblemText } from "@/components/ui/field-problem";
 
 interface FieldRowProps {
   model: FieldModel;
@@ -55,7 +55,7 @@ export function FieldRow({
 
   return (
     <div className="space-y-1">
-      <StepProblemText id={errorId} messages={error ? [error] : []} />
+      <FieldProblemText id={errorId} messages={error ? [error] : []} />
       <div className="flex items-center gap-2">
         <Input
           value={model.label}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, MessageSquare, Plug, Sparkles, Stamp, Timer, Zap } from "lucide-react";
+import { Mail, MessageSquare, Sparkles, Stamp, Timer, Zap } from "lucide-react";
 import {
   Dialog,
   DialogBody,
@@ -47,12 +47,10 @@ const ADVANCED_OPTIONS: NodeTypeOption[] = [
     description: "Runs automatically via an n8n sub-workflow — no conversation.",
     Icon: Zap,
   },
-  {
-    type: "mcp",
-    label: "MCP Tool",
-    description: "Runs automatically by calling one tool on a registered MCP server.",
-    Icon: Plug,
-  },
+  // The MCP Tool step ("mcp") is no longer offered: the AI task supersedes it,
+  // calling MCP tools through its instruction's "Add MCP" and returning typed
+  // fields with a reviewer fallback. Existing MCP Tool steps still open, save
+  // and run; only adding new ones is hidden.
   {
     type: "ai_task",
     label: "AI task",
@@ -72,7 +70,6 @@ interface NodeTypePickerModalProps {
   autoNodeEnabled?: boolean;
   scheduledNodeEnabled?: boolean;
   approvalNodeEnabled?: boolean;
-  mcpNodeEnabled?: boolean;
   aiTaskNodeEnabled?: boolean;
   emailNodeEnabled?: boolean;
   onSelect: (type: NodeConfigType) => void;
@@ -142,7 +139,6 @@ export function NodeTypePickerModal({
   autoNodeEnabled = false,
   scheduledNodeEnabled = false,
   approvalNodeEnabled = true,
-  mcpNodeEnabled = true,
   aiTaskNodeEnabled = false,
   emailNodeEnabled = false,
   onSelect,
@@ -156,7 +152,6 @@ export function NodeTypePickerModal({
 
   const advancedOptions = ADVANCED_OPTIONS.filter((option) => {
     if (option.type === "auto") return autoNodeEnabled;
-    if (option.type === "mcp") return mcpNodeEnabled;
     if (option.type === "ai_task") return aiTaskNodeEnabled;
     if (option.type === "email") return emailNodeEnabled;
     return true;

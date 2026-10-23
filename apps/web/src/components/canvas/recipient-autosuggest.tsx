@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import { recipientSuggestions, type RecipientSuggestion } from "./recipient-suggestions";
-import { INVALID_OUTLINE } from "./step-problem";
+import { INVALID_OUTLINE } from "@/components/ui/field-problem";
 
 interface RecipientAutosuggestProps {
   id: string;

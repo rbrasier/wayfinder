@@ -26,7 +26,7 @@ import {
 } from "./automation-step-model";
 import { EmailConfigForm, type DocumentStepOption } from "./email-config-form";
 import { TriggerInputsContext } from "./field-value-selector";
-import { revealFirstProblem } from "./step-problem";
+import { revealFirstProblem } from "@/components/ui/field-problem";
 
 export type AutomationStepType = "ai_task" | "email";
 

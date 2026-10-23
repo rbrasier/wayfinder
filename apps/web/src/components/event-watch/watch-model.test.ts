@@ -12,6 +12,7 @@ import {
   sampleFieldOptions,
   secretChangeFor,
   watchInputFromForm,
+  watchProblems,
 } from "./watch-model";
 
 describe("jsonTreeRows", () => {
@@ -188,5 +189,48 @@ describe("secretChangeFor", () => {
     expect(secretChangeFor("new-token", false)).toBe("new-token");
     expect(secretChangeFor("ignored", true)).toBeNull();
     expect(secretChangeFor("  ", false)).toBeUndefined();
+  });
+});
+
+describe("watchProblems", () => {
+  const hearing = { key: "hearing_id", label: "Hearing", type: "text" as const, required: true };
+  const complete = {
+    ...emptyWatchForm(),
+    name: "Hearings",
+    url: "https://api.example.com/hearings",
+    itemsPath: "data.hearings",
+    itemIdPath: "id",
+    condition: { kind: "transition" as const, fieldPath: "status", from: null, to: "finished" },
+    flowId: "6f1c2b8e-0d6a-4f39-9a8e-1f2d3c4b5a69",
+    runAsUserId: "0b7f0e8a-5d0c-4c47-8d61-2a8e4f9c1b23",
+    inputMapping: { hearing_id: "id" },
+  };
+
+  it("finds nothing wrong with a complete watch", () => {
+    expect(watchProblems(complete, { hasSecret: false, triggerInputs: [hearing] })).toEqual([]);
+  });
+
+  it("names a missing flow and run owner instead of leaving them for the server to refuse", () => {
+    const problems = watchProblems({ ...complete, flowId: "", runAsUserId: "" }, { hasSecret: false, triggerInputs: [] });
+
+    expect(problems).toEqual([
+      { field: "flow", message: "Choose the flow to start." },
+      { field: "runAs", message: "Choose who the runs belong to." },
+    ]);
+  });
+
+  it("names each required flow input no item field supplies", () => {
+    expect(watchProblems({ ...complete, inputMapping: {} }, { hasSecret: false, triggerInputs: [hearing] })).toEqual([
+      { field: "inputs", inputKey: "hearing_id", message: "Choose the field that supplies Hearing." },
+    ]);
+  });
+
+  it("puts a request body that is not JSON with the connection", () => {
+    const problems = watchProblems(
+      { ...complete, method: "POST" as const, requestBody: "{ nope" },
+      { hasSecret: false, triggerInputs: [hearing] },
+    );
+
+    expect(problems).toEqual([{ field: "connection", message: "The request body is not valid JSON." }]);
   });
 });

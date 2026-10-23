@@ -28,32 +28,48 @@ describe("parseRunStartedMessage", () => {
 });
 
 describe("runStartedInsights", () => {
-  it("records each declared input under its label, in declared order", () => {
-    const insights = runStartedInsights(
-      [
-        { key: "hearing_id", label: "Hearing", type: "text", required: true },
-        { key: "sitting_day", label: "Sitting day", type: "number", required: false },
-        { key: "details", label: "Details", type: "json", required: false },
-      ],
-      { details: { room: "2S1" }, hearing_id: "pv-12", sitting_day: 4 },
-    );
+  const declared = [
+    { key: "hearing_id", label: "Hearing", type: "text" as const, required: true },
+    { key: "sitting_day", label: "Sitting day", type: "number" as const, required: false },
+    { key: "topic", label: "", type: "text" as const, required: false },
+  ];
+
+  it("records the declared inputs, then every field of the item, tagged with where they came from", () => {
+    const insights = runStartedInsights({
+      origin: "watch",
+      declared,
+      inputs: { hearing_id: "pv-12", sitting_day: 4 },
+      raw: { id: "pv-12", status: "finished", committee: { name: "Economics" }, speakers: ["Smith", "Jones"] },
+    });
 
     expect(insights).toEqual([
-      { key: "Hearing", value: "pv-12" },
-      { key: "Sitting day", value: "4" },
-      { key: "Details", value: '{"room":"2S1"}' },
+      { key: "Event Watch · Hearing", value: "pv-12" },
+      { key: "Event Watch · Sitting day", value: "4" },
+      { key: "Event Watch · id", value: "pv-12" },
+      { key: "Event Watch · status", value: "finished" },
+      { key: "Event Watch · committee.name", value: "Economics" },
+      { key: "Event Watch · speakers", value: "Smith, Jones" },
     ]);
   });
 
-  it("skips an input the run was not given, and falls back to the key for an unlabelled one", () => {
-    const insights = runStartedInsights(
-      [
-        { key: "hearing_id", label: "", type: "text", required: true },
-        { key: "topic", label: "Topic", type: "text", required: false },
-      ],
-      { hearing_id: "pv-12" },
-    );
+  it("tags a webhook's body as the webhook's", () => {
+    expect(runStartedInsights({ origin: "webhook", declared: [], inputs: {}, raw: { note: "Late start" } })).toEqual([
+      { key: "Webhook · note", value: "Late start" },
+    ]);
+  });
 
-    expect(insights).toEqual([{ key: "hearing_id", value: "pv-12" }]);
+  it("records nothing from a payload too large to have been stored", () => {
+    expect(
+      runStartedInsights({ origin: "watch", declared: [], inputs: {}, raw: { truncated: true, bytes: 900000 } }),
+    ).toEqual([]);
+  });
+
+  it("caps how many fields and how much of each value it records", () => {
+    const raw = Object.fromEntries(Array.from({ length: 80 }, (_, index) => [`field_${index}`, "x".repeat(900)]));
+
+    const insights = runStartedInsights({ origin: "watch", declared: [], inputs: {}, raw });
+
+    expect(insights).toHaveLength(50);
+    expect(insights[0]!.value.length).toBeLessThanOrEqual(500);
   });
 });

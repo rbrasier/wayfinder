@@ -60,6 +60,16 @@ describe("aiTaskFormFromConfig", () => {
   });
 });
 
+describe("aiTaskFormFromConfig with a field saved without its raw line", () => {
+  it("reads the field by its label rather than failing", () => {
+    const form = aiTaskFormFromConfig({
+      structuredFields: [{ key: "summary", label: "Summary", type: "narrative" }],
+    });
+
+    expect(form.outputLines).toEqual(["Summary"]);
+  });
+});
+
 describe("aiTaskConfigFromForm", () => {
   const form = {
     instruction: "Summarise.",

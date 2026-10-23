@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { FieldProblemText, INVALID_OUTLINE } from "@/components/ui/field-problem";
 import { SELECT_CLASS } from "./watch-connection-fields";
 import { isManualFieldValue, type SampleFieldOption } from "./watch-model";
 
@@ -17,6 +18,8 @@ interface SampleFieldSelectProps {
   // Shown on the empty choice, e.g. "Choose the field".
   emptyLabel: string;
   manualPlaceholder?: string;
+  // Save problems with this field, shown under its label.
+  problems?: readonly string[];
 }
 
 // A field chosen from the sample response, auto-node style, with typing the
@@ -29,7 +32,9 @@ export function SampleFieldSelect({
   options,
   emptyLabel,
   manualPlaceholder,
+  problems = [],
 }: SampleFieldSelectProps) {
+  const problemId = problems.length > 0 ? `${id}-problem` : undefined;
   const [manualChosen, setManualChosen] = useState(false);
   const manual = isManualFieldValue(value, options, manualChosen);
   const hasEmptyOption = !options.some((option) => option.path === "");
@@ -46,7 +51,15 @@ export function SampleFieldSelect({
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
-      <select id={id} className={SELECT_CLASS} value={manual ? MANUAL : value} onChange={(event) => choose(event.target.value)}>
+      <FieldProblemText id={`${id}-problem`} messages={problems} />
+      <select
+        id={id}
+        className={`${SELECT_CLASS} ${INVALID_OUTLINE}`}
+        aria-invalid={problemId ? true : undefined}
+        aria-describedby={problemId}
+        value={manual ? MANUAL : value}
+        onChange={(event) => choose(event.target.value)}
+      >
         {hasEmptyOption && <option value="">{options.length === 0 ? "Test the connection to list fields" : emptyLabel}</option>}
         <option value={MANUAL}>Select manually…</option>
         {options.map((option) => (

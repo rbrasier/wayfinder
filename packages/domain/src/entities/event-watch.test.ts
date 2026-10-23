@@ -3,6 +3,7 @@ import {
   evaluateWatchItems,
   previewWatchItems,
   readJsonPath,
+  unmappedRequiredInputs,
   validateEventWatch,
   watchItemsOf,
   type EventWatchDraft,
@@ -235,33 +236,65 @@ describe("validateEventWatch", () => {
     );
 
     expect(problems).toEqual([
-      "Give the watch a name.",
-      "Enter an http:// or https:// address.",
-      "Check at least every 1 minute and at most every 1,440.",
-      "Choose the field that identifies each item.",
-      "Choose the field the condition watches.",
-      "Enter the value the field changes to.",
-      "Pause after between 1 and 50 failures in a row.",
-      "Allow between 1 and 100 runs per check.",
-      "Enter the token or key for this connection.",
-      "Choose the flow to start.",
+      { field: "name", message: "Give the watch a name." },
+      { field: "url", message: "Enter an http:// or https:// address." },
+      { field: "connection", message: "Enter the token or key for this connection." },
+      { field: "itemId", message: "Choose the field that identifies each item." },
+      { field: "condition", message: "Choose the field the condition watches." },
+      { field: "condition", message: "Enter the value the field changes to." },
+      { field: "flow", message: "Choose the flow to start." },
+      { field: "interval", message: "Check at least every 1 minute and at most every 1,440." },
+      { field: "failureThreshold", message: "Pause after between 1 and 50 failures in a row." },
+      { field: "maxRuns", message: "Allow between 1 and 100 runs per check." },
+    ]);
+  });
+
+  it("requires who the runs belong to", () => {
+    expect(validateEventWatch(draft({ runAsUserId: "" }))).toEqual([
+      { field: "runAs", message: "Choose who the runs belong to." },
+    ]);
+  });
+
+  it("refuses a name or address longer than can be stored", () => {
+    expect(validateEventWatch(draft({ name: "x".repeat(121), url: `https://example.com/${"a".repeat(2000)}` }))).toEqual([
+      { field: "name", message: "Keep the name to 120 characters or fewer." },
+      { field: "url", message: "Keep the address to 2,000 characters or fewer." },
     ]);
   });
 
   it("requires an API key's header or parameter name", () => {
     expect(validateEventWatch(draft({ authType: "api_key", apiKeyPlacement: { in: "header", name: "" } }))).toEqual([
-      "Name the header or query parameter that carries the key.",
+      { field: "connection", message: "Name the header or query parameter that carries the key." },
     ]);
   });
 
   it("rejects an invalid pattern", () => {
     expect(
       validateEventWatch(draft({ condition: { kind: "matches", fieldPath: "status", operator: "regex", value: "(" } })),
-    ).toEqual(["The pattern is not a valid regular expression."]);
+    ).toEqual([{ field: "condition", message: "The pattern is not a valid regular expression." }]);
   });
 
   it("needs no identifying field when the response is a single object", () => {
     expect(validateEventWatch(draft({ itemsPath: "", itemIdPath: "" }))).toEqual([]);
+  });
+});
+
+describe("unmappedRequiredInputs", () => {
+  const declared = [
+    { key: "hearing_id", label: "Hearing", type: "text" as const, required: true },
+    { key: "topic", label: "", type: "text" as const, required: true },
+    { key: "room", label: "Room", type: "text" as const, required: false },
+  ];
+
+  it("names each required flow input no item field supplies, beside that input", () => {
+    expect(unmappedRequiredInputs(declared, { hearing_id: "  " })).toEqual([
+      { field: "inputs", inputKey: "hearing_id", message: "Choose the field that supplies Hearing." },
+      { field: "inputs", inputKey: "topic", message: "Choose the field that supplies topic." },
+    ]);
+  });
+
+  it("is satisfied once every required input has a field", () => {
+    expect(unmappedRequiredInputs(declared, { hearing_id: "id", topic: "topic" })).toEqual([]);
   });
 });
 

@@ -16,7 +16,7 @@ import { TriggerInputsContext } from "./field-value-selector";
 import { InsertFieldMenu } from "./insert-field-menu";
 import { MarkdownEditor } from "./markdown-editor";
 import { RecipientAutosuggest } from "./recipient-autosuggest";
-import { INVALID_OUTLINE, StepProblemText } from "./step-problem";
+import { INVALID_OUTLINE, FieldProblemText } from "@/components/ui/field-problem";
 
 export interface DocumentStepOption {
   nodeId: string;
@@ -102,7 +102,7 @@ export function EmailConfigForm({
     <>
       <div className="space-y-2">
         <FieldGroupLabel id="email-recipients">Recipients</FieldGroupLabel>
-        <StepProblemText id="email-recipients-problem" messages={messagesFor("recipients")} />
+        <FieldProblemText id="email-recipients-problem" messages={messagesFor("recipients")} />
         {form.recipients.length === 0 ? (
           <p className="text-[12px] text-[#736d5f]">No recipients yet.</p>
         ) : (
@@ -152,7 +152,7 @@ export function EmailConfigForm({
             onInsert={insertIntoSubject}
           />
         </div>
-        <StepProblemText id="email-subject-problem" messages={messagesFor("subject")} />
+        <FieldProblemText id="email-subject-problem" messages={messagesFor("subject")} />
         <Input
           ref={subjectRef}
           id="email-subject"

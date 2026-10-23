@@ -74,6 +74,16 @@ Manual sessions also gain the two new node types: the existing runner calls the
 same `RunAiTaskNode` and `RunEmailNode` when it reaches one. So the steps are
 not exclusive to unattended runs.
 
+**The run's opening line (amended).** `StartUnattendedRun` writes a system
+message, anchored to the first step, that says what started the run
+("Started by Event Watch "…"." or "Started by a webhook.", built and parsed by
+`run-started-message.ts`). It carries the declared trigger inputs as
+`contextGathered`, so they show in the chat and count as gathered insights for
+every later step, exactly like facts gathered in a chat. The insight reads
+(`accumulateInsights`, the turn's gathered-context aggregation) accept a system
+message for this reason; no other system message carries a payload. The raw
+payload stays on the session and is not turned into insights.
+
 ### 3. AI task step (`ai_task`)
 
 ```ts
@@ -122,6 +132,21 @@ like every other model call. Then:
 
 This reuses the approvals table, queue and notifications rather than adding a
 review inbox. Feature flag `ai_task_node`, scoped to **Power Users**.
+
+**What the task is given (amended).** `inputMode` (read through
+`aiTaskInputModeOf`) is `"all"` by default: the prompt carries the run's
+trigger inputs, the whole payload it started with (the Event Watch item or
+webhook body, as capped on the session), every earlier step's output and the
+chat transcript. `"selected"` carries only the inputs the author picked from
+earlier steps' fields and trigger inputs. A config saved before the mode
+existed is `"selected"` if it lists inputs, otherwise `"all"`.
+
+**Supersedes the MCP Tool step.** An AI task calls MCP tools through its
+instruction (the same "Add MCP" picker as a conversational step, ADR-032) and
+returns typed fields with a reviewer fallback, so it covers what the
+single-tool MCP Tool step (`mcp`) did. The step picker no longer offers MCP
+Tool. Existing MCP Tool steps still open, save and run; the node type and its
+executor stay until a later release migrates or retires them.
 
 ### 4. Email step (`email`)
 

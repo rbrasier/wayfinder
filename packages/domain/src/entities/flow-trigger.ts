@@ -36,8 +36,12 @@ const KEY_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 // Problems an author must fix before a flow's declared inputs can be saved.
+const MAX_TRIGGER_INPUTS = 50;
+const MAX_TRIGGER_LABEL_LENGTH = 120;
+
 export const validateTriggerInputs = (inputs: TriggerInput[]): string[] => {
   const problems: string[] = [];
+  if (inputs.length > MAX_TRIGGER_INPUTS) problems.push("A flow can declare at most 50 inputs.");
   const seen = new Set<string>();
   for (const input of inputs) {
     if (!KEY_PATTERN.test(input.key)) {
@@ -48,6 +52,9 @@ export const validateTriggerInputs = (inputs: TriggerInput[]): string[] => {
     if (seen.has(input.key)) problems.push(`${input.key} is used more than once.`);
     seen.add(input.key);
     if (input.label.trim().length === 0) problems.push(`Give ${input.key} a label.`);
+    if (input.label.length > MAX_TRIGGER_LABEL_LENGTH) {
+      problems.push(`Keep ${input.key}'s label to 120 characters or fewer.`);
+    }
   }
   return problems;
 };

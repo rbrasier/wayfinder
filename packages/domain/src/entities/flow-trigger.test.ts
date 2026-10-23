@@ -59,6 +59,21 @@ describe("validateTriggerInputs", () => {
     expect(validateTriggerInputs(inputs)).toEqual([]);
   });
 
+  it("refuses a label or a list longer than can be stored", () => {
+    const longLabel = validateTriggerInputs([{ key: "topic", label: "x".repeat(121), type: "text", required: false }]);
+    const tooMany = validateTriggerInputs(
+      Array.from({ length: 51 }, (_, index) => ({
+        key: `input_${index}`,
+        label: `Input ${index}`,
+        type: "text" as const,
+        required: false,
+      })),
+    );
+
+    expect(longLabel).toEqual(["Keep topic's label to 120 characters or fewer."]);
+    expect(tooMany).toEqual(["A flow can declare at most 50 inputs."]);
+  });
+
   it("rejects malformed and duplicate keys and blank labels", () => {
     const problems = validateTriggerInputs([
       { key: "Hearing ID", label: "Hearing", type: "text", required: true },

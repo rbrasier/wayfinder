@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { HelpCircle, Plus } from "lucide-react";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { FieldConfigModal, FieldRow } from "./field-row";
-import { StepProblemText } from "./step-problem";
+import { FieldProblemText } from "@/components/ui/field-problem";
 import {
   emptyModel,
   linesToModels,
@@ -98,7 +98,7 @@ export function StructuredFieldEditor({
         </button>
       </div>
       <p className="text-[12px] text-[#666055]">{description}</p>
-      <StepProblemText id="structured-fields-problem" messages={problems} />
+      <FieldProblemText id="structured-fields-problem" messages={problems} />
 
       <div className="space-y-2">
         {models.map((model, index) => (

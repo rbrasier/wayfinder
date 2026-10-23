@@ -665,7 +665,6 @@ function CanvasInner({ flowId }: { flowId: string }) {
         open={typePickerOpen}
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
-        mcpNodeEnabled={mcpEnabled}
         aiTaskNodeEnabled={aiTaskNodeEnabled}
         emailNodeEnabled={emailNodeEnabled}
         onSelect={handleSelectNodeType}

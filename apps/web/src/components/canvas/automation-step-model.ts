@@ -68,7 +68,9 @@ export const aiTaskFormFromConfig = (config: Record<string, unknown>): AiTaskFor
     inputs: readFields(config.inputFields)
       .map((field) => sources[field.key])
       .filter(isInputSource),
-    outputLines: readFields(config.structuredFields).map((field) => field.raw),
+    // A config written outside this editor may omit `raw`; the label is the
+    // closest line that still parses.
+    outputLines: readFields(config.structuredFields).map((field) => field.raw ?? field.label),
     confidenceThreshold:
       typeof config.confidenceThreshold === "number"
         ? config.confidenceThreshold

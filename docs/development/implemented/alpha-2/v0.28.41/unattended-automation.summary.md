@@ -368,3 +368,91 @@ or mail server. Both run on the shared mocks server (`./restart.sh --with-mocks`
 **Checked live:** a nodemailer send with HTML and an attachment was caught and
 printed. An advance delivered a signed webhook call. An MCP client listed the
 hearings and read the finished hearing's transcript.
+
+## Amendment 4 — AI task editor, Event Watch validation, MCP Tool hidden
+
+Third round of review feedback. No schema change, and the version stays 0.28.41.
+
+**Problems beside their fields.**
+- **Before:** save problems were listed at the foot of the dialog, and output
+  rows were never actually highlighted.
+- **Validators:** `validateAiTaskNodeConfig`, `validateEmailNodeConfig` and
+  `validateEventWatch` return `{ field, message }`. The AI task editor adds a
+  per-row problem for an output field that does not parse, with the reason.
+- **Display:** each problem shows directly above its field, with the control
+  outlined. On Save the form scrolls to the first one and focuses it, and
+  Advanced opens when the problem is inside it.
+- **Shared code:** `components/ui/field-problem.tsx`.
+
+**Event Watch saves no longer fail on the server for a missing choice.**
+- **The fault:** the editor sent an empty flow or run owner straight to the
+  router, whose `uuid` check rejected it with a raw error.
+- **The fix:** the editor now runs the same rules as the save first
+  (`watchProblems`: the domain validator plus required flow inputs left
+  unmapped) and blocks saving.
+- **Shared helper:** `unmappedRequiredInputs` is shared with the save use case.
+- **Other server limits now caught in the UI:**
+  - a watch name over 120 characters
+  - an address over 2,000 characters
+  - a trigger-input label over 120 characters
+  - more than 50 trigger inputs
+
+**AI task inputs.**
+- **Accept all inputs (default on):** the prompt gets the run's trigger inputs,
+  the whole payload it started with (the Event Watch item or webhook body) and
+  every earlier step's output.
+- **Off:** the author picks values from scheduler-style dropdowns, grouped by
+  step with their type, and the AI gets only those, with no earlier outputs or
+  transcript.
+- **Config:** stored as `inputMode`.
+
+**Advanced.** The confidence threshold and reviewer moved under an Advanced
+section, as on other step types.
+
+**Run start line and insights.**
+- **The line:** an unattended run's chat opens with "Started by Event Watch "…""
+  or "Started by a webhook", followed by the first few of its values.
+- **Insights:** the message carries those values as gathered insights, so later
+  steps get them like facts gathered in a chat. Before this, the item reached
+  no step unless a field was mapped, so a chat opened knowing nothing about the
+  hearing.
+- **What is recorded:**
+  - the declared trigger inputs under their labels
+  - every field of what started the run: the item the watch fired on (or the
+    whole response when there is no list), or the webhook body
+- **Tagged and capped:** each value is tagged with its source, e.g.
+  `Event Watch · committee`. The list is capped at 50 values of up to 500
+  characters each.
+- **Reads widened:** `accumulateInsights`, `buildGatheredContext` and the SQL
+  aggregation now accept a system message that has a payload.
+
+**MCP Tool hidden.** The step picker no longer offers MCP Tool; the AI task
+supersedes it (ADR-065 §3). Existing MCP Tool steps still open and run.
+
+**Fixed while capturing screenshots.** An AI task saved without its output
+fields' `raw` line crashed the editor on open. It now reads the label instead.
+The e2e seed now stores `raw`.
+
+### Amendment 4 tests
+
+- **Domain:**
+  - field-tagged problems and `aiTaskInputModeOf` (`automation-steps.test.ts`)
+  - `run-started-message.test.ts`
+  - watch problems, length limits and `unmappedRequiredInputs`
+    (`event-watch.test.ts`)
+  - trigger-input limits (`flow-trigger.test.ts`)
+- **Application:**
+  - "all" vs "selected" prompts (`run-ai-task-node.test.ts`)
+  - the start line (`start-unattended-run.test.ts`)
+  - system-message insights (`accumulate-insights.test.ts`)
+- **Adapters:** the gathered-context SQL reads system messages.
+- **Web:**
+  - the AI task form model, input options and per-row problems
+  - `watchProblems`
+  - `buildGatheredContext`
+- **E2E:**
+  - `accessibility.spec.ts` gains one test (group 5): the AI task editor with
+    inputs picked by hand, Advanced open and save problems showing.
+  - The smoke test now also checks the run's start line.
+  - Run locally, it passes with the rest of the unattended-automation spec and
+    the Email editor audit.

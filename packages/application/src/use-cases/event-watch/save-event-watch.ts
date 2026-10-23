@@ -2,6 +2,7 @@ import {
   domainError,
   err,
   ok,
+  unmappedRequiredInputs,
   validateEventWatch,
   type EventWatch,
   type IAuditLogger,
@@ -57,10 +58,8 @@ const checkReferences = async (
       return path ? [[triggerInput.key, path]] : [];
     }),
   );
-  const unmapped = declared.filter((triggerInput) => triggerInput.required && !(triggerInput.key in mapping));
-  if (unmapped.length > 0) {
-    return invalid(unmapped.map((triggerInput) => `Choose the field that supplies ${triggerInput.label || triggerInput.key}.`));
-  }
+  const unmapped = unmappedRequiredInputs(declared, mapping);
+  if (unmapped.length > 0) return invalid(unmapped.map((problem) => problem.message));
   return ok(mapping);
 };
 
@@ -72,7 +71,7 @@ const validate = async (
   hasSecret: boolean,
 ): Promise<Result<EventWatchInput>> => {
   const problems = validateEventWatch({ ...watch, hasSecret });
-  if (problems.length > 0) return invalid(problems);
+  if (problems.length > 0) return invalid(problems.map((problem) => problem.message));
   const mapping = await checkReferences(dependencies, watch);
   if (mapping.error) return mapping;
   return ok({ ...watch, name: watch.name.trim(), inputMapping: mapping.data });

@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { PlaceholderOption } from "./automation-step-model";
 import { InsertFieldMenu } from "./insert-field-menu";
-import { INVALID_OUTLINE, StepProblemText } from "./step-problem";
+import { INVALID_OUTLINE, FieldProblemText } from "@/components/ui/field-problem";
 
 type EditorMode = "rich" | "markdown";
 
@@ -158,7 +158,7 @@ export function MarkdownEditor({
           </div>
         </div>
       </div>
-      <StepProblemText id={`${id}-problem`} messages={problems} />
+      <FieldProblemText id={`${id}-problem`} messages={problems} />
       {mode === "rich" ? (
         <div
           className={`rounded-[9px] border bg-[#faf9f7] focus-within:border-wf-primary focus-within:bg-white ${

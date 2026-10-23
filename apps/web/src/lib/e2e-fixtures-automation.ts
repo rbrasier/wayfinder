@@ -33,7 +33,9 @@ export const seedAutomationFlow = async (container: Container, ownerUserId: stri
       config: {
         instruction: "Summarise the finished hearing in two sentences.",
         outputType: "structured",
-        structuredFields: [{ key: "summary", label: "Summary", type: "narrative" }],
+        structuredFields: [
+          { key: "summary", label: "Summary", type: "narrative", optional: false, raw: "Summary (narrative)" },
+        ],
         confidenceThreshold: 0,
         reviewer: { mode: "run_owner" },
       },

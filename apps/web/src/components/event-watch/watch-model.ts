@@ -1,6 +1,11 @@
 import {
   readJsonPath,
+  unmappedRequiredInputs,
+  validateEventWatch,
   type EventWatch,
+  type EventWatchProblem,
+  type EventWatchProblemField,
+  type TriggerInput,
   type WatchApiKeyPlacement,
   type WatchAuthType,
   type WatchCondition,
@@ -176,6 +181,42 @@ export const watchInputFromForm = (form: WatchForm): { data: WatchInput; error?:
   const body = form.method === "POST" ? parseBody(form.requestBody) : { data: null };
   if ("error" in body) return { error: body.error };
   return { data: { ...form, requestBody: body.data } };
+};
+
+// The editor's fields top to bottom, so problems read — and the first one is
+// scrolled to — in the order the admin meets them.
+const PROBLEM_FIELD_ORDER: EventWatchProblemField[] = [
+  "name",
+  "url",
+  "connection",
+  "itemId",
+  "condition",
+  "flow",
+  "inputs",
+  "runAs",
+  "interval",
+  "failureThreshold",
+  "maxRuns",
+];
+
+// What stops the watch saving, beside the field each is about — the same rules
+// the save applies, checked first so a missing choice never reaches the server
+// as a malformed request.
+export const watchProblems = (
+  form: WatchForm,
+  context: { hasSecret: boolean; triggerInputs: readonly TriggerInput[] },
+): EventWatchProblem[] => {
+  const input = watchInputFromForm(form);
+  const problems: EventWatchProblem[] = [
+    ...(input.error === undefined ? [] : [{ field: "connection" as const, message: input.error }]),
+    ...validateEventWatch({ ...form, hasSecret: context.hasSecret }),
+    // Inputs can only be checked once a flow is chosen; until then, choosing
+    // the flow is the fix.
+    ...(form.flowId.trim() === "" ? [] : unmappedRequiredInputs(context.triggerInputs, form.inputMapping)),
+  ];
+  return problems.sort(
+    (first, second) => PROBLEM_FIELD_ORDER.indexOf(first.field) - PROBLEM_FIELD_ORDER.indexOf(second.field),
+  );
 };
 
 // Switching kind keeps the field already chosen, so an admin can compare kinds

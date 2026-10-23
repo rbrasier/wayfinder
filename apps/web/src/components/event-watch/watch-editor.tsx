@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import type { EventWatch } from "@rbrasier/domain";
+import { useRef, useState } from "react";
+import type { EventWatch, EventWatchProblemField } from "@rbrasier/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldProblemText, INVALID_OUTLINE, revealFirstProblem } from "@/components/ui/field-problem";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PersonPicker } from "@/components/canvas/person-picker";
@@ -21,6 +22,7 @@ import {
   sampleFieldOptions,
   secretChangeFor,
   watchInputFromForm,
+  watchProblems,
   type WatchForm,
 } from "./watch-model";
 
@@ -52,6 +54,10 @@ export function WatchEditor({ existing }: WatchEditorProps) {
   const [previewOutcome, setPreviewOutcome] = useState<PreviewOutcome | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Problems stay hidden while the admin works, then show beside their fields
+  // from the first save that finds any.
+  const [showProblems, setShowProblems] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
 
   const change = (patch: Partial<WatchForm>) => setForm((current) => ({ ...current, ...patch }));
   const done = () => {
@@ -77,6 +83,16 @@ export function WatchEditor({ existing }: WatchEditorProps) {
   const flow = flowsQuery.data?.find((option) => option.id === form.flowId);
   const triggerInputs = flow?.triggerInputs ?? [];
   const secretChange = secretChangeFor(secret, clearSecret);
+  const hasSecret =
+    typeof secretChange === "string" || (secretChange === undefined && (existing?.watch.hasSecret ?? false));
+  const allProblems = watchProblems(form, { hasSecret, triggerInputs });
+  const problems = showProblems ? allProblems : [];
+  const messagesFor = (field: EventWatchProblemField, inputKey?: string) =>
+    problems
+      .filter((problem) => problem.field === field && (inputKey === undefined || problem.inputKey === inputKey))
+      .map((problem) => problem.message);
+  const problemIdFor = (field: EventWatchProblemField) =>
+    messagesFor(field).length > 0 ? `watch-${field}-problem` : undefined;
 
   const runTest = () => {
     const input = watchInputFromForm(form);
@@ -94,6 +110,11 @@ export function WatchEditor({ existing }: WatchEditorProps) {
 
   const save = () => {
     setError(null);
+    if (allProblems.length > 0) {
+      setShowProblems(true);
+      revealFirstProblem(formRef.current);
+      return;
+    }
     const input = watchInputFromForm(form);
     if (input.error !== undefined) {
       setError(input.error);
@@ -120,7 +141,7 @@ export function WatchEditor({ existing }: WatchEditorProps) {
         </Link>
         <h1 className="mt-3 text-xl font-semibold">{existing ? existing.watch.name : "New watch"}</h1>
         <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="space-y-6">
+          <div ref={formRef} className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Connection</CardTitle>
@@ -128,7 +149,15 @@ export function WatchEditor({ existing }: WatchEditorProps) {
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="watch-name">Name</Label>
-                  <Input id="watch-name" value={form.name} onChange={(event) => change({ name: event.target.value })} />
+                  <FieldProblemText id="watch-name-problem" messages={messagesFor("name")} />
+                  <Input
+                    id="watch-name"
+                    className={INVALID_OUTLINE}
+                    aria-invalid={problemIdFor("name") ? true : undefined}
+                    aria-describedby={problemIdFor("name")}
+                    value={form.name}
+                    onChange={(event) => change({ name: event.target.value })}
+                  />
                 </div>
                 <WatchConnectionFields
                   form={form}
@@ -138,6 +167,8 @@ export function WatchEditor({ existing }: WatchEditorProps) {
                   hasStoredSecret={existing?.watch.hasSecret ?? false}
                   clearSecret={clearSecret}
                   onClearSecretChange={setClearSecret}
+                  urlProblems={messagesFor("url")}
+                  connectionProblems={messagesFor("connection")}
                 />
                 <div className="flex items-center gap-3">
                   <Button type="button" variant="outline" onClick={runTest} disabled={test.isPending || !form.url}>
@@ -180,8 +211,10 @@ export function WatchEditor({ existing }: WatchEditorProps) {
                     onChange={(itemIdPath) => change({ itemIdPath })}
                     options={valueOptions}
                     emptyLabel="Choose the field"
+                    problems={messagesFor("itemId")}
                   />
                 </div>
+                <FieldProblemText id="watch-condition-problem" messages={messagesFor("condition")} />
                 <ConditionBuilder
                   condition={form.condition}
                   onChange={(condition) => change({ condition })}
@@ -223,9 +256,12 @@ export function WatchEditor({ existing }: WatchEditorProps) {
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="watch-flow">Flow</Label>
+                  <FieldProblemText id="watch-flow-problem" messages={messagesFor("flow")} />
                   <select
                     id="watch-flow"
-                    className={SELECT_CLASS}
+                    className={`${SELECT_CLASS} ${INVALID_OUTLINE}`}
+                    aria-invalid={problemIdFor("flow") ? true : undefined}
+                    aria-describedby={problemIdFor("flow")}
                     value={form.flowId}
                     onChange={(event) => change({ flowId: event.target.value, inputMapping: {} })}
                   >
@@ -251,10 +287,12 @@ export function WatchEditor({ existing }: WatchEditorProps) {
                     onChange={(path) => change({ inputMapping: { ...form.inputMapping, [triggerInput.key]: path } })}
                     options={inputOptions}
                     emptyLabel="Choose the field of the item"
+                    problems={messagesFor("inputs", triggerInput.key)}
                   />
                 ))}
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium">Runs belong to</p>
+                  <FieldProblemText id="watch-runAs-problem" messages={messagesFor("runAs")} />
                   <p className="text-sm text-muted-foreground">{runAsName ?? "Nobody chosen yet"}</p>
                   <PersonPicker
                     id="watch-run-as"
@@ -283,8 +321,12 @@ export function WatchEditor({ existing }: WatchEditorProps) {
                 <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="watch-interval">Check every (minutes)</Label>
+                    <FieldProblemText id="watch-interval-problem" messages={messagesFor("interval")} />
                     <Input
                       id="watch-interval"
+                      className={INVALID_OUTLINE}
+                      aria-invalid={problemIdFor("interval") ? true : undefined}
+                      aria-describedby={problemIdFor("interval")}
                       type="number"
                       min={1}
                       max={1440}
@@ -294,8 +336,12 @@ export function WatchEditor({ existing }: WatchEditorProps) {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="watch-threshold">Pause after failures in a row</Label>
+                    <FieldProblemText id="watch-failureThreshold-problem" messages={messagesFor("failureThreshold")} />
                     <Input
                       id="watch-threshold"
+                      className={INVALID_OUTLINE}
+                      aria-invalid={problemIdFor("failureThreshold") ? true : undefined}
+                      aria-describedby={problemIdFor("failureThreshold")}
                       type="number"
                       min={1}
                       max={50}
@@ -305,8 +351,12 @@ export function WatchEditor({ existing }: WatchEditorProps) {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="watch-cap">Most runs per check</Label>
+                    <FieldProblemText id="watch-maxRuns-problem" messages={messagesFor("maxRuns")} />
                     <Input
                       id="watch-cap"
+                      className={INVALID_OUTLINE}
+                      aria-invalid={problemIdFor("maxRuns") ? true : undefined}
+                      aria-describedby={problemIdFor("maxRuns")}
                       type="number"
                       min={1}
                       max={100}

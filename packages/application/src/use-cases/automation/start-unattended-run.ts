@@ -82,12 +82,13 @@ export class StartUnattendedRun {
       return ok({ started: false, reason: "invalid_inputs", message: validated.error.message });
     }
 
+    const raw = capRaw(input.raw);
     const session = await this.dependencies.startSession.execute({
       flowId: input.flowId,
       userId: input.runAsUserId,
       origin: input.origin,
       triggerSourceId: input.triggerSourceId,
-      triggerPayload: { inputs: validated.data, raw: capRaw(input.raw), itemId: input.itemId ?? null },
+      triggerPayload: { inputs: validated.data, raw, itemId: input.itemId ?? null },
     });
     if (session.error) return session;
 
@@ -108,7 +109,12 @@ export class StartUnattendedRun {
         response: content,
         rationale: "",
         stepCompleteConfidence: 0,
-        contextGathered: runStartedInsights(declared.data, validated.data),
+        contextGathered: runStartedInsights({
+          origin: input.origin,
+          declared: declared.data,
+          inputs: validated.data,
+          raw,
+        }),
       },
     });
     return ok({ started: true, session: { ...session.data, title } });

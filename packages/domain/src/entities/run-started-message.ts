@@ -26,12 +26,66 @@ export const parseRunStartedMessage = (content: string): RunStartedSource | null
   return match ? { origin: "watch", sourceName: match[1]! } : null;
 };
 
-const asText = (value: unknown): string => (typeof value === "string" ? value : JSON.stringify(value));
+// Prefixed to each insight the run opens with, e.g. "Event Watch · status".
+export const RUN_STARTED_SOURCE_TAG: Record<RunStartedSource["origin"], string> = {
+  watch: "Event Watch",
+  webhook: "Webhook",
+};
+// Enough for a hearing's metadata; a payload bigger than this is noise in every
+// later prompt, and the whole of it stays on the session for an AI task.
+const MAX_ITEM_FIELDS = 50;
+const MAX_VALUE_LENGTH = 500;
 
-export const runStartedInsights = (
-  declared: readonly TriggerInput[],
-  inputs: Record<string, unknown>,
-): { key: string; value: string }[] =>
-  declared
-    .filter((input) => inputs[input.key] !== undefined && inputs[input.key] !== null)
-    .map((input) => ({ key: input.label.trim() || input.key, value: asText(inputs[input.key]) }));
+const asText = (value: unknown): string =>
+  (typeof value === "string" ? value : JSON.stringify(value)).slice(0, MAX_VALUE_LENGTH);
+
+const isScalar = (value: unknown): boolean => value === null || typeof value !== "object";
+
+// The stored marker for a payload that was too large to keep (ADR-064 §2).
+const isTruncatedMarker = (raw: unknown): boolean =>
+  typeof raw === "object" && raw !== null && (raw as { truncated?: unknown }).truncated === true;
+
+// Every value in the item as a dotted path, e.g. `committee.name`. A list of
+// plain values reads as one comma-separated value.
+const itemFields = (value: unknown, path: string, fields: [string, string][]): void => {
+  if (fields.length >= MAX_ITEM_FIELDS || value === null || value === undefined) return;
+  if (Array.isArray(value) && value.every(isScalar)) {
+    fields.push([path || "item", asText(value.join(", "))]);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => itemFields(entry, `${path}[${index}]`, fields));
+    return;
+  }
+  if (typeof value === "object") {
+    for (const [key, entry] of Object.entries(value)) itemFields(entry, path ? `${path}.${key}` : key, fields);
+    return;
+  }
+  fields.push([path || "item", asText(value)]);
+};
+
+// What the run's opening line records as gathered insights: the flow's declared
+// inputs under their labels, then every field of what started it (the watch's
+// item or the webhook's body), each tagged with its source so a reader — and
+// the model — can tell them from facts gathered in the chat.
+export const runStartedInsights = (input: {
+  origin: RunStartedSource["origin"];
+  declared: readonly TriggerInput[];
+  inputs: Record<string, unknown>;
+  raw: unknown;
+}): { key: string; value: string }[] => {
+  const tag = RUN_STARTED_SOURCE_TAG[input.origin];
+  const declaredInsights = input.declared
+    .filter((declared) => input.inputs[declared.key] !== undefined && input.inputs[declared.key] !== null)
+    .map((declared) => ({
+      key: `${tag} · ${declared.label.trim() || declared.key}`,
+      value: asText(input.inputs[declared.key]),
+    }));
+  const fields: [string, string][] = [];
+  if (!isTruncatedMarker(input.raw)) itemFields(input.raw, "", fields);
+  const room = Math.max(MAX_ITEM_FIELDS - declaredInsights.length, 0);
+  return [
+    ...declaredInsights,
+    ...fields.slice(0, room).map(([path, value]) => ({ key: `${tag} · ${path}`, value })),
+  ];
+};

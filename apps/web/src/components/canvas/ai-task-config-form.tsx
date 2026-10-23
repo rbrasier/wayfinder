@@ -24,7 +24,7 @@ import {
 import { TriggerInputsContext } from "./field-value-selector";
 import { InstructionToolBarWithPickers } from "./instruction-tool-bar";
 import { PersonPicker } from "./person-picker";
-import { INVALID_OUTLINE, StepProblemText } from "./step-problem";
+import { INVALID_OUTLINE, FieldProblemText } from "@/components/ui/field-problem";
 import { StructuredFieldEditor } from "./structured-field-editor";
 import { TemplateTagsHelpDialog } from "./template-tags-help-dialog";
 
@@ -99,7 +99,7 @@ export function AiTaskConfigForm({
           onSkillRefsChange={(ids) => set("skillRefs", ids)}
           onToolRefsChange={(refs) => set("allowedMcpToolRefs", refs)}
         />
-        <StepProblemText id="ai-task-instruction-problem" messages={messagesFor("instruction")} />
+        <FieldProblemText id="ai-task-instruction-problem" messages={messagesFor("instruction")} />
         <Textarea
           id="ai-task-instruction"
           rows={4}
@@ -143,7 +143,7 @@ export function AiTaskConfigForm({
         {!form.acceptAllInputs && (
           <div className="space-y-2">
             <FieldGroupLabel id="ai-task-inputs">Inputs</FieldGroupLabel>
-            <StepProblemText id="ai-task-inputs-problem" messages={messagesFor("inputs")} />
+            <FieldProblemText id="ai-task-inputs-problem" messages={messagesFor("inputs")} />
             {form.inputs.map((source, index) => (
               <div key={index} className="flex items-center gap-2">
                 <select
@@ -227,7 +227,7 @@ export function AiTaskConfigForm({
           <Label htmlFor="ai-task-threshold">
             Confidence needed to continue automatically (0–100)
           </Label>
-          <StepProblemText id="ai-task-threshold-problem" messages={messagesFor("threshold")} />
+          <FieldProblemText id="ai-task-threshold-problem" messages={messagesFor("threshold")} />
           <Input
             id="ai-task-threshold"
             type="number"
@@ -243,7 +243,7 @@ export function AiTaskConfigForm({
 
         <div className="space-y-1">
           <Label htmlFor="ai-task-reviewer">Below that, send the result for review to</Label>
-          <StepProblemText id="ai-task-reviewer-problem" messages={messagesFor("reviewer")} />
+          <FieldProblemText id="ai-task-reviewer-problem" messages={messagesFor("reviewer")} />
           <select
             id="ai-task-reviewer"
             className={SELECT_CLASS}
