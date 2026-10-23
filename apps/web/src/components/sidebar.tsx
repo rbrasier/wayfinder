@@ -19,6 +19,7 @@ import {
   PieChart,
   Plug,
   Plus,
+  Radar,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -35,6 +36,7 @@ import { HelpMenu } from "@/components/help-menu";
 import { NewChatModal } from "@/components/chat/new-chat-modal";
 import { useSidebar } from "@/components/sidebar-context";
 import {
+  eventWatchAttention,
   formatRecentChatMeta,
   isNewChatShortcut,
   recentChatSessions,
@@ -106,6 +108,8 @@ interface AdminNavContext {
   readonly canCurate: boolean;
   readonly organisationsEnabled: boolean;
   readonly extractionEnabled: boolean;
+  // Null while the event_watch flag is off for this admin (ADR-063 §8).
+  readonly eventWatchAttention: number | null;
 }
 
 const buildAdminNav = ({
@@ -114,6 +118,7 @@ const buildAdminNav = ({
   canCurate,
   organisationsEnabled,
   extractionEnabled,
+  eventWatchAttention,
 }: AdminNavContext): NavGroup[] => {
   // Skills + MCP Servers are hidden when their feature flag is disabled — an
   // admin who turned the flag off should not see the surface it controls.
@@ -133,6 +138,9 @@ const buildAdminNav = ({
         { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Health" },
         { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
         { href: "/admin/flows", icon: GitBranch, label: "All Flows" },
+        ...(eventWatchAttention !== null
+          ? [{ href: "/admin/event-watches", icon: Radar, label: "Event Watch", badgeCount: eventWatchAttention }]
+          : []),
         // Shown only when the extraction_flows flag resolves (ADR-033 §7).
         ...(extractionEnabled
           ? [{ href: "/admin/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
@@ -404,12 +412,22 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     key: "extraction_flows",
   });
   const extractionEnabled = extractionFlagQuery.data ?? false;
+  const eventWatchFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery(
+    { key: "event_watch" },
+    { enabled: isAdmin },
+  );
+  const eventWatchEnabled = eventWatchFlagQuery.data ?? false;
+  const eventWatchAttentionQuery = trpc.eventWatch.countNeedingAttention.useQuery(undefined, {
+    enabled: isAdmin && eventWatchEnabled,
+    refetchInterval: 60_000,
+  });
   const adminNav = buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
     canCurate,
     organisationsEnabled: organisationsEnabledQuery.data ?? false,
     extractionEnabled,
+    eventWatchAttention: eventWatchAttention(eventWatchEnabled, eventWatchAttentionQuery.data),
   });
   const nav: NavGroup[] = isAdmin
     ? adminNav

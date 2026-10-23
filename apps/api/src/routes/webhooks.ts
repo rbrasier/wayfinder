@@ -1,21 +1,7 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { verifyHmacSignature } from "@rbrasier/adapters";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { Container } from "../container.js";
-
-const verifySignature = (
-  secret: string,
-  rawBody: Buffer,
-  signature: string,
-): boolean => {
-  const expected = createHmac("sha256", secret)
-    .update(rawBody)
-    .digest("hex");
-  const expectedBuf = Buffer.from(`sha256=${expected}`, "utf8");
-  const receivedBuf = Buffer.from(signature, "utf8");
-  if (expectedBuf.length !== receivedBuf.length) return false;
-  return timingSafeEqual(expectedBuf, receivedBuf);
-};
 
 const callbackSchema = z.object({
   correlationId: z.string().optional(),
@@ -46,7 +32,7 @@ export const buildWebhooksRouter = (container: Container): Router => {
 
       const rawBody: Buffer =
         (req as Request & { rawBody?: Buffer }).rawBody ?? Buffer.from(JSON.stringify(req.body));
-      if (!verifySignature(env.N8N_WEBHOOK_SECRET, rawBody, signature)) {
+      if (!verifyHmacSignature(env.N8N_WEBHOOK_SECRET, rawBody, signature)) {
         res.status(401).json({ error: "Invalid signature." });
         return;
       }

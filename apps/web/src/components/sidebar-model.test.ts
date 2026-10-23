@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SessionStatus } from "@rbrasier/domain";
 import {
   RECENT_CHATS_LIMIT,
+  eventWatchAttention,
   formatRecentChatMeta,
   isNewChatShortcut,
   recentChatSessions,
@@ -196,5 +197,16 @@ describe("recentChatSessions", () => {
 
   it("handles an empty list", () => {
     expect(recentChatSessions([])).toEqual([]);
+  });
+});
+
+describe("eventWatchAttention", () => {
+  it("hides the Event Watch item while the flag is off, whatever the count", () => {
+    expect(eventWatchAttention(false, 3)).toBeNull();
+  });
+
+  it("shows the item with its count, or zero before the count arrives", () => {
+    expect(eventWatchAttention(true, 3)).toBe(3);
+    expect(eventWatchAttention(true, undefined)).toBe(0);
   });
 });

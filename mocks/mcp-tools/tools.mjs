@@ -9,6 +9,8 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { PARLVIEW_PERIOD_MS, parlviewClock } from "../parlview/clock.mjs";
+import { hearingListText, transcriptText } from "../parlview/tools.mjs";
 
 const MISSPELLINGS = new Map([
   ["teh", "the"],
@@ -73,6 +75,32 @@ export function createMockMcpServer() {
         };
       }
       return { content: [{ type: "text", text: String(result) }] };
+    },
+  );
+
+  // ParlView lookups over the same hearings as the /parlview feed, so an AI task
+  // started by a watch or webhook can read the hearing it was started for.
+  mcp.registerTool(
+    "parlview_list_hearings",
+    {
+      description:
+        "Lists recent and upcoming Senate Estimates hearings from ParlView with their id, status (live, finished or scheduled), title and committee.",
+      inputSchema: { status: z.enum(["live", "finished", "scheduled"]).optional() },
+    },
+    ({ status }) => ({
+      content: [{ type: "text", text: hearingListText(parlviewClock.now(), PARLVIEW_PERIOD_MS, status ?? null) }],
+    }),
+  );
+
+  mcp.registerTool(
+    "parlview_get_transcript",
+    {
+      description: "Returns the transcript of one ParlView hearing by its id (e.g. pv-5975842).",
+      inputSchema: { hearing_id: z.string() },
+    },
+    ({ hearing_id: hearingId }) => {
+      const result = transcriptText(hearingId, parlviewClock.now(), PARLVIEW_PERIOD_MS);
+      return { isError: result.isError, content: [{ type: "text", text: result.text }] };
     },
   );
 

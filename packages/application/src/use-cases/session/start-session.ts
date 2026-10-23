@@ -13,7 +13,18 @@ import {
   type ISessionRepository,
   type Result,
   type Session,
+  type SessionOrigin,
+  type SessionTriggerPayload,
 } from "@rbrasier/domain";
+
+export interface StartSessionInput {
+  flowId: string;
+  userId: string;
+  // Set only for a session a watch or webhook starts (ADR-064 §4).
+  origin?: SessionOrigin;
+  triggerSourceId?: string | null;
+  triggerPayload?: SessionTriggerPayload | null;
+}
 
 export class StartSession {
   constructor(
@@ -24,7 +35,7 @@ export class StartSession {
     private readonly flowVersions: IFlowVersionRepository,
   ) {}
 
-  async execute(input: { flowId: string; userId: string }): Promise<Result<Session>> {
+  async execute(input: StartSessionInput): Promise<Result<Session>> {
     const flowResult = await this.flows.findById(input.flowId);
     if (flowResult.error) return flowResult;
     if (!flowResult.data) return err(domainError("NOT_FOUND", "Flow not found."));
@@ -68,6 +79,9 @@ export class StartSession {
       userId: input.userId,
       currentNodeId: firstNode.id,
       flowVersionId: pinnedVersion?.id ?? null,
+      origin: input.origin,
+      triggerSourceId: input.triggerSourceId ?? null,
+      triggerPayload: input.triggerPayload ?? null,
     });
   }
 }

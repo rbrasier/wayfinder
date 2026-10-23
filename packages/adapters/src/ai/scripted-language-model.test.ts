@@ -64,7 +64,24 @@ describe("defaultForSchema", () => {
   });
 });
 
+describe("defaultForSchema with transforms", () => {
+  it("defaults the schema underneath a transform, not the transform itself", () => {
+    const schema = z.object({ confidence: z.number().min(0).max(100).transform((value) => Math.round(value)) });
+
+    expect(defaultForSchema(schema)).toEqual({ confidence: 75 });
+  });
+});
+
 describe("ScriptedLanguageModel", () => {
+  it("runs an unscripted default through the schema, as a provider's answer would be", async () => {
+    const model = new ScriptedLanguageModel();
+    const schema = z.object({ confidence: z.number().transform((value) => value * 2) });
+
+    const result = await model.generateObject({ purpose: "aiTask", sessionId: "session-1", schema });
+
+    expect(result.data?.object).toEqual({ confidence: 2 });
+  });
+
   const baseCall = {
     purpose: "chat",
     sessionId: "session-1",

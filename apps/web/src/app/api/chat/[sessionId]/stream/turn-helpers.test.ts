@@ -131,6 +131,24 @@ describe("buildGatheredContext", () => {
     expect(result).toContain("Start Date: 1 June 2026");
   });
 
+  it("includes the trigger inputs an unattended run's start line carries", () => {
+    const messages: SessionMessage[] = [
+      makeAssistantMessage({
+        id: "start",
+        role: "system",
+        stepNodeId: "node-1",
+        aiPayload: {
+          response: 'Started by Event Watch "ParlView".',
+          rationale: "",
+          stepCompleteConfidence: 0,
+          contextGathered: [{ key: "Hearing", value: "pv-12" }],
+        },
+      }),
+    ];
+
+    expect(buildGatheredContext(messages)).toContain("Hearing: pv-12");
+  });
+
   it("returns empty string when no prior context exists", () => {
     expect(buildGatheredContext([])).toBe("");
   });

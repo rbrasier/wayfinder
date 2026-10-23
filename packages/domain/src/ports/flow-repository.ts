@@ -1,3 +1,4 @@
+import type { TriggerInput } from "../entities/flow-trigger";
 import type { Flow, FlowContextDoc, FlowPermissionRole, FlowStatus, FlowVisibility, NewFlow } from "../entities/flow";
 import type { Result } from "../result";
 
@@ -9,6 +10,7 @@ export interface FlowUpdate {
   status?: FlowStatus;
   visibility?: FlowVisibility;
   ownerUserId?: string;
+  triggerInputs?: TriggerInput[];
 }
 
 export interface IFlowRepository {

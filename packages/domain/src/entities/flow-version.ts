@@ -1,3 +1,4 @@
+import type { TriggerInput } from "./flow-trigger";
 import type { ExtractionSchema } from "./extraction-schema";
 import type { Flow, FlowType } from "./flow";
 import type { FlowEdge } from "./flow-edge";
@@ -15,6 +16,8 @@ export interface FlowSnapshotMeta {
   icon: string | null;
   expertRole: string | null;
   contextDocs: Flow["contextDocs"];
+  // Absent on snapshots published before trigger inputs existed; reads as none.
+  triggerInputs?: Flow["triggerInputs"];
 }
 
 // Node as captured in a snapshot. Node `id`s are preserved so a restore can
@@ -99,6 +102,7 @@ export const buildFlowSnapshot = (
     icon: flow.icon,
     expertRole: flow.expertRole,
     contextDocs: flow.contextDocs,
+    triggerInputs: flow.triggerInputs ?? [],
   },
   nodes: nodes.map((node) => ({
     id: node.id,
@@ -136,6 +140,9 @@ export const buildExtractionSnapshot = (
   edges: [],
   extraction,
 });
+
+export const triggerInputsOfSnapshot = (snapshot: FlowSnapshot): TriggerInput[] =>
+  snapshot.flow.triggerInputs ?? [];
 
 // Reconstructs live-shaped `FlowNode`s from a pinned snapshot so the runner and
 // canvas can render a session's pinned version through the same types as the

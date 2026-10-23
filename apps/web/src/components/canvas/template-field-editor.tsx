@@ -47,7 +47,8 @@ export function parseFieldLines(
   return { fields, valid };
 }
 
-const lineError = (line: string, disallowSection: boolean): string | null => {
+// Why one `Label (annotations)` line is not a valid field, or null if it is.
+export const fieldLineError = (line: string, disallowSection: boolean): string | null => {
   if (!line.trim()) return null;
   const parsed = parseTemplateField(line);
   if (parsed.error) return parsed.error.message;
@@ -92,7 +93,7 @@ export function TemplateFieldEditor({
       <p className="text-[12px] text-[#666055]">{helpText}</p>
       <div className="space-y-2">
         {rows.map((line, index) => {
-          const error = lineError(line, disallowSection);
+          const error = fieldLineError(line, disallowSection);
           return (
             <div key={index} className="space-y-1">
               <div className="flex items-center gap-2">

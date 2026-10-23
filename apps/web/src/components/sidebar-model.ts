@@ -91,3 +91,8 @@ export const isNewChatShortcut = (event: ShortcutEvent): boolean => {
   if (!event.metaKey && !event.ctrlKey) return false;
   return !isEditableTarget(event.target);
 };
+
+// The Event Watch menu item's badge, or null to hide the item: it exists only
+// while the event_watch flag is on for this admin (ADR-063 §8).
+export const eventWatchAttention = (flagEnabled: boolean, count: number | undefined): number | null =>
+  flagEnabled ? (count ?? 0) : null;

@@ -1,6 +1,17 @@
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { core_users } from "./core";
+import { app_flows } from "./wayfinder";
 
 export const app_error_log = pgTable(
   "app_error_log",
@@ -76,5 +87,35 @@ export const app_skills = pgTable(
   },
   (t) => ({
     by_status: index("app_skills_status_idx").on(t.status),
+  }),
+);
+
+// A flow's inbound start address (ADR-064 §3). One row per (flow, kind); `kind`
+// is only `webhook` today, kept as a column so a scheduled start can join it
+// without a new table. Only the token's hash is stored, and the HMAC secret is
+// encrypted at rest — neither is ever returned to a client.
+export const app_flow_triggers = pgTable(
+  "app_flow_triggers",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["webhook"] }).notNull(),
+    enabled: boolean("enabled").notNull().default(false),
+    token_hash: text("token_hash"),
+    token_last_four: text("token_last_four"),
+    hmac_secret_encrypted: text("hmac_secret_encrypted"),
+    run_as_user_id: uuid("run_as_user_id").references(() => core_users.id, {
+      onDelete: "set null",
+    }),
+    created_by: uuid("created_by").references(() => core_users.id, { onDelete: "set null" }),
+    last_triggered_at: timestamp("last_triggered_at", { withTimezone: true }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    flow_kind_unique: unique("app_flow_triggers_flow_id_kind_unique").on(t.flow_id, t.kind),
+    token_hash_unique: unique("app_flow_triggers_token_hash_unique").on(t.token_hash),
   }),
 );

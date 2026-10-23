@@ -11,7 +11,15 @@ import { ok } from "@rbrasier/domain";
 // Flags that are on for a fresh install with no persisted row. Automation flags
 // (auto_node, skills, mcp) are deliberately absent — they default off (ADR-041
 // §4) until an admin enables them, e.g. from the first-run setup wizard.
-const DEFAULT_ENABLED_FLAGS = new Set(["scheduled_node", "extraction_flows"]);
+// The unattended-automation flags ship on (their migration seeds them on); role
+// scoping, not the flag, is what keeps them to Admins and Power Users.
+const DEFAULT_ENABLED_FLAGS = new Set([
+  "scheduled_node",
+  "extraction_flows",
+  "event_watch",
+  "ai_task_node",
+  "email_node",
+]);
 
 // Flags surfaced in admin UI even before a row exists. skills and mcp are listed
 // (off) so their toggles appear on a fresh install without seeding a row
@@ -52,6 +60,33 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
     enabled: true,
     rolloutPct: 100,
     description: "Enables the Synthesise Information extraction-flows surface",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "default:event_watch",
+    key: "event_watch",
+    enabled: true,
+    rolloutPct: 100,
+    description: "Admin Event Watch: poll external APIs and start flows",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "default:ai_task_node",
+    key: "ai_task_node",
+    enabled: true,
+    rolloutPct: 100,
+    description: "AI task step: unattended AI instruction with reviewer fallback",
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  },
+  {
+    id: "default:email_node",
+    key: "email_node",
+    enabled: true,
+    rolloutPct: 100,
+    description: "Email step: send results to users, groups and inboxes",
     createdAt: new Date(0),
     updatedAt: new Date(0),
   },

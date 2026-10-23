@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import nodemailer from "nodemailer";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   domainError,
   EMAIL_CONFIG_SETTING_KEY,
@@ -42,6 +43,10 @@ const makeEnvConfig = (overrides: Partial<SmtpEnvConfig> = {}): SmtpEnvConfig =>
   ...overrides,
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("NodemailerEmailSender with environment transport config", () => {
   it("sends through the stream sink without touching admin settings", async () => {
     const sender = new NodemailerEmailSender(new FakeSystemSettingsRepository(), makeEnvConfig());
@@ -55,6 +60,43 @@ describe("NodemailerEmailSender with environment transport config", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data).toBe(true);
+  });
+
+  it("passes attachments through to the message it sends", async () => {
+    const sentMail: Array<Record<string, unknown>> = [];
+    const realCreateTransport = nodemailer.createTransport.bind(nodemailer);
+    vi.spyOn(nodemailer, "createTransport").mockImplementation(((options: never) => {
+      const transport = realCreateTransport(options);
+      const realSendMail = transport.sendMail.bind(transport);
+      transport.sendMail = ((mail: Record<string, unknown>) => {
+        sentMail.push(mail);
+        return realSendMail(mail as never);
+      }) as typeof transport.sendMail;
+      return transport;
+    }) as never);
+    const sender = new NodemailerEmailSender(new FakeSystemSettingsRepository(), makeEnvConfig());
+
+    const result = await sender.send({
+      to: "recipient@example.com",
+      subject: "Brief",
+      text: "Attached.",
+      attachments: [
+        {
+          filename: "brief.docx",
+          contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          content: new Uint8Array([1, 2, 3]),
+        },
+      ],
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(sentMail[0]?.attachments).toEqual([
+      {
+        filename: "brief.docx",
+        contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        content: Buffer.from([1, 2, 3]),
+      },
+    ]);
   });
 
   it("fails when SMTP_FROM is missing", async () => {

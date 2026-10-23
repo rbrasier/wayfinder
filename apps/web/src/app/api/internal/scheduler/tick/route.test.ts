@@ -6,7 +6,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // secret"); a route handler owns that check, so it is tested here rather than
 // through a browser.
 
-const { container, execute, setSecret, setFireResult } = vi.hoisted(() => {
+const { container, execute, resumeStalled, pollWatches, setSecret, setFireResult } = vi.hoisted(() => {
   let tickSecret: string | undefined = "correct-horse";
   let fireResult: { data: unknown } | { error: { code: string; message: string; cause?: unknown } } = {
     data: { fired: 0, recurred: 0, completed: 0 },
@@ -14,6 +14,8 @@ const { container, execute, setSecret, setFireResult } = vi.hoisted(() => {
   const executeFn = vi.fn(async () => fireResult);
   return {
     execute: executeFn,
+    resumeStalled: vi.fn(async () => ({ data: { resumed: 0 } })),
+    pollWatches: vi.fn(async () => ({ data: { polled: 0, started: 0, paused: 0, failed: 0 } })),
     container: {
       env: {
         get SCHEDULER_TICK_SECRET(): string | undefined {
@@ -21,8 +23,9 @@ const { container, execute, setSecret, setFireResult } = vi.hoisted(() => {
         },
         SCHEDULER_BATCH_SIZE: 50,
       },
-      repos: { schedules: {}, scheduleRuns: {} },
+      repos: { schedules: {}, scheduleRuns: {}, unattendedRuns: {} },
       services: { errorLogger: { log: vi.fn(async () => {}) } },
+      useCases: { isFeatureEnabled: { execute: vi.fn(async () => ({ data: true })) } },
     },
     setSecret: (value: string | undefined): void => {
       tickSecret = value;
@@ -38,7 +41,12 @@ vi.mock("@rbrasier/application", () => ({
   FireDueSchedules: class {
     execute = execute;
   },
+  ResumeStalledRuns: class {
+    execute = resumeStalled;
+  },
 }));
+vi.mock("@/lib/automation/unattended-runs", () => ({ kickUnattendedRun: vi.fn() }));
+vi.mock("@/lib/automation/event-watches", () => ({ buildPollDueWatches: () => ({ execute: pollWatches }) }));
 vi.mock("@rbrasier/adapters", () => ({ SystemClock: class {} }));
 vi.mock("@/lib/scheduler/scheduled-session-fire-handler", () => ({
   ScheduledSessionFireHandler: class {},
@@ -67,6 +75,32 @@ describe("/api/internal/scheduler/tick", () => {
 
     expect(response.status).toBe(503);
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("also resumes stalled unattended runs on an authorised tick", async () => {
+    resumeStalled.mockClear();
+
+    await POST(tickRequest("correct-horse"));
+
+    expect(resumeStalled).toHaveBeenCalledWith({ staleAfterMs: 60_000, limit: 20 });
+  });
+
+  it("polls due event watches while the event_watch flag is on", async () => {
+    pollWatches.mockClear();
+
+    await POST(tickRequest("correct-horse"));
+
+    expect(container.useCases.isFeatureEnabled.execute).toHaveBeenCalledWith("event_watch");
+    expect(pollWatches).toHaveBeenCalledWith({ limit: 20 });
+  });
+
+  it("leaves event watches alone while the event_watch flag is off", async () => {
+    pollWatches.mockClear();
+    container.useCases.isFeatureEnabled.execute.mockResolvedValueOnce({ data: false });
+
+    await POST(tickRequest("correct-horse"));
+
+    expect(pollWatches).not.toHaveBeenCalled();
   });
 
   it("rejects an unauthenticated tick with 401", async () => {

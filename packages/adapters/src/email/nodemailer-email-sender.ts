@@ -250,6 +250,15 @@ export class NodemailerEmailSender implements IEmailSender {
         subject: input.subject,
         text: input.text,
         html: input.html,
+        ...(input.attachments && input.attachments.length > 0
+          ? {
+              attachments: input.attachments.map((attachment) => ({
+                filename: attachment.filename,
+                contentType: attachment.contentType,
+                content: Buffer.from(attachment.content),
+              })),
+            }
+          : {}),
       });
       return ok(true as const);
     } catch (cause) {

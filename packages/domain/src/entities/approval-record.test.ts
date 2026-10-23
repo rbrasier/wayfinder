@@ -59,6 +59,10 @@ describe("deriveStepKeys", () => {
     ]);
   });
 
+  it("never hands out a reserved key", () => {
+    expect(deriveStepKeys(["Input", "Other"], ["input"])).toEqual(["input_2", "other"]);
+  });
+
   it("suffixes a repeated label so two steps never collide in the record", () => {
     expect(deriveStepKeys(["Review", "Review", "Review"])).toEqual([
       "review",
