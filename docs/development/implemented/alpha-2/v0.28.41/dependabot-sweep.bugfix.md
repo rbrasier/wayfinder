@@ -41,15 +41,18 @@ lockfile) and vitest/@vitest/mocker 4.1.12. The minio-chain alerts (stream-json,
 decode-uri-component) and the withdrawn sprintf-js advisory cannot be overridden without
 breaking MinIO and are dismissed in Dependabot instead. PATCH bump 0.28.39 → 0.28.40.
 
-## Implementation summary (v0.28.40)
+**Rebased scope:** while this was in review, #344 landed the vite (`^6.4.4`) and
+follow-redirects (`^1.16.1`) overrides on alpha-2 as 0.28.40. The merge takes those as-is;
+this change now carries the vitest/@vitest/mocker 4.1.12 patch and the record of which
+alerts are dismissed and why, as 0.28.41.
+
+## Implementation summary (v0.28.41)
 
 **Fix applied:**
 
 | Lockfile | Package | Override | Resolves | Advisories cleared |
 |---|---|---|---|---|
-| `pnpm-lock.yaml` | `vite` | `>=6.4.4 <7` (was `^6`) | 6.4.5 | GHSA-587h-7wmj-h5pm (high), launch-editor `%` escaping and CLI-flag injection, Vite custom-middleware and `server.fs.allow` advisories |
 | `pnpm-lock.yaml` | `vitest` (→ `@vitest/mocker`) | `^4.1.12` (was `^4.1.11`) | 4.1.12 | Vitest manual-mock code injection, Windows backslash redirect-allowlist bypass |
-| `apps/web/e2e/package-lock.json` | `follow-redirects` | `^1.16.1` (new) | 1.16.1 | GHSA-8r9p-f939-6h3c, GHSA-q3jh-wrc6-jgq8 (high) |
 
 Workspace `vitest` and `@vitest/coverage-v8` ranges raised to `^4.1.12` in `apps/api`,
 `apps/web`, `mocks` and every `packages/*` that declared them.
@@ -62,7 +65,8 @@ smoke-tested following a 302 on follow-redirects 1.16.1; the full vitest suite r
 
 **E2E:** none — dependency resolution falls in no group of `e2e-test-policy.md`.
 
-**Deviation from the approved summary:** none.
+**Deviation from the approved summary:** the vite and follow-redirects fixes shipped first in
+#344 (0.28.40); this change keeps only the vitest patch and the dismissal record, as 0.28.41.
 
 ## Remaining — dismiss in Dependabot, not fixable here
 

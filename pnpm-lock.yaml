@@ -7,7 +7,7 @@ settings:
 overrides:
   langsmith: '>=0.6.0'
   vitest: ^4.1.12
-  vite: '>=6.4.4 <7'
+  vite: ^6.4.4
   '@grpc/grpc-js': '>=1.14.5'
   '@opentelemetry/propagator-jaeger': '>=2.9.0'
   fast-uri: '>=3.1.8 <4'
@@ -131,7 +131,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vite:
-        specifier: '>=6.4.4 <7'
+        specifier: ^6.4.4
         version: 6.4.5(@types/node@25.9.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.12
@@ -264,7 +264,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vite:
-        specifier: '>=6.4.4 <7'
+        specifier: ^6.4.4
         version: 6.4.5(@types/node@20.19.39)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.12
@@ -407,7 +407,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vite:
-        specifier: '>=6.4.4 <7'
+        specifier: ^6.4.4
         version: 6.4.5(@types/node@25.9.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.12
@@ -435,7 +435,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vite:
-        specifier: '>=6.4.4 <7'
+        specifier: ^6.4.4
         version: 6.4.5(@types/node@25.9.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.12
@@ -453,7 +453,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vite:
-        specifier: '>=6.4.4 <7'
+        specifier: ^6.4.4
         version: 6.4.5(@types/node@25.9.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.12
@@ -469,7 +469,7 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
       vite:
-        specifier: '>=6.4.4 <7'
+        specifier: ^6.4.4
         version: 6.4.5(@types/node@25.9.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.9.0)
       vitest:
         specifier: ^4.1.12
@@ -2679,7 +2679,7 @@ packages:
     resolution: {integrity: sha512-fKShNpKZzupWZuY0z7egydvL0sqW4INEZBEExMBMAa6izlENEVHwoXgdaTCaBZ5fwlr4xf2o1wXC83n9RpO+NA==}
     peerDependencies:
       msw: ^2.4.9
-      vite: '>=6.4.4 <7'
+      vite: ^6.4.4
     peerDependenciesMeta:
       msw:
         optional: true
@@ -5478,7 +5478,7 @@ packages:
       '@vitest/ui': 4.1.12
       happy-dom: '*'
       jsdom: '*'
-      vite: '>=6.4.4 <7'
+      vite: ^6.4.4
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
