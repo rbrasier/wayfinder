@@ -1,10 +1,13 @@
-import { domainError, err, isValidMcpCredentialRef, MCP_CREDENTIAL_ENV_PREFIX, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@rbrasier/domain";
 import type {
+  ILegacyMcpCredentialSource,
   IMcpClient,
   IMcpServerDirectory,
   IMcpServerRepository,
   ListMcpServersInput,
+  McpCredentialChange,
   McpServer,
+  McpServerUpdate,
   McpServerWithTools,
   McpTool,
   McpToolRef,
@@ -12,10 +15,12 @@ import type {
   Result,
 } from "@rbrasier/domain";
 
-const credentialRefError = domainError(
-  "VALIDATION_FAILED",
-  `Credential reference must name an environment variable in the ${MCP_CREDENTIAL_ENV_PREFIX} namespace.`,
-);
+// A blank token field means "no change", not "an empty token".
+const tokenFrom = (credential: McpCredentialChange): McpCredentialChange => {
+  if (credential === undefined || credential === null) return credential;
+  const token = credential.trim();
+  return token.length > 0 ? token : undefined;
+};
 
 export class RegisterMcpServer {
   constructor(private readonly servers: IMcpServerRepository) {}
@@ -25,7 +30,7 @@ export class RegisterMcpServer {
     url: string;
     transport?: McpTransport;
     communicatesExternally?: boolean;
-    credentialRef?: string | null;
+    credential?: string | null;
     createdByUserId?: string | null;
   }): Promise<Result<McpServer>> {
     const label = input.label.trim();
@@ -36,49 +41,59 @@ export class RegisterMcpServer {
     if (!isHttpUrl(url)) {
       return err(domainError("VALIDATION_FAILED", "Server URL must be a valid http(s) URL."));
     }
-    const credentialRef = input.credentialRef?.trim() ? input.credentialRef.trim() : null;
-    if (credentialRef !== null && !isValidMcpCredentialRef(credentialRef)) {
-      return err(credentialRefError);
-    }
     return this.servers.create({
       label,
       url,
       transport: input.transport,
       communicatesExternally: input.communicatesExternally,
-      credentialRef,
+      credential: tokenFrom(input.credential) ?? undefined,
       createdByUserId: input.createdByUserId ?? null,
     });
   }
 }
 
 export class UpdateMcpServer {
-  constructor(private readonly servers: IMcpServerRepository) {}
+  constructor(
+    private readonly servers: IMcpServerRepository,
+    private readonly legacyCredentials: ILegacyMcpCredentialSource,
+  ) {}
 
   async execute(input: {
     id: string;
     label?: string;
     url?: string;
     communicatesExternally?: boolean;
-    credentialRef?: string | null;
+    credential?: string | null;
   }): Promise<Result<McpServer>> {
     if (input.url !== undefined && !isHttpUrl(input.url.trim())) {
       return err(domainError("VALIDATION_FAILED", "Server URL must be a valid http(s) URL."));
     }
-    const credentialRef =
-      input.credentialRef === undefined
-        ? undefined
-        : input.credentialRef?.trim()
-          ? input.credentialRef.trim()
-          : null;
-    if (credentialRef && !isValidMcpCredentialRef(credentialRef)) {
-      return err(credentialRefError);
-    }
+    const current = await this.servers.findById(input.id);
+    if (current.error) return current;
+    if (!current.data) return err(domainError("NOT_FOUND", "MCP server not found."));
+
     return this.servers.update(input.id, {
       label: input.label?.trim(),
       url: input.url?.trim(),
       communicatesExternally: input.communicatesExternally,
-      credentialRef,
+      ...this.credentialPatch(current.data, tokenFrom(input.credential)),
     });
+  }
+
+  // Any save of a server still on a legacy environment variable moves it to a
+  // stored token: the one typed, or else the variable's current value. With
+  // neither, the reference stays so the server keeps working as it did.
+  private credentialPatch(
+    server: McpServer,
+    credential: McpCredentialChange,
+  ): Pick<McpServerUpdate, "credential" | "credentialRef"> {
+    if (credential === null) return { credential: null, credentialRef: null };
+    if (credential !== undefined) {
+      return server.credentialRef ? { credential, credentialRef: null } : { credential };
+    }
+    if (!server.credentialRef || server.hasCredential) return {};
+    const legacyToken = this.legacyCredentials.read(server.credentialRef);
+    return legacyToken ? { credential: legacyToken, credentialRef: null } : {};
   }
 }
 
@@ -174,9 +189,7 @@ export class ResolveStepTools {
 
     for (const ref of refs) {
       const server = activeById.get(ref.serverId);
-      // Externally-communicating servers are not usable in flows at this stage —
-      // drop the ref so a reclassified server can never reach the tool-loop.
-      if (!server || server.communicatesExternally) continue;
+      if (!server) continue;
       keptRefs.push(ref);
       usedServers.set(server.id, server);
     }

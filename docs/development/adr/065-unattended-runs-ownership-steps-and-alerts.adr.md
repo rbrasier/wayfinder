@@ -148,6 +148,15 @@ single-tool MCP Tool step (`mcp`) did. The step picker no longer offers MCP
 Tool. Existing MCP Tool steps still open, save and run; the node type and its
 executor stay until a later release migrates or retires them.
 
+**External MCP servers in flows (amended).** A server marked as sending data
+outside Wayfinder (`communicatesExternally`) is now offered in **Add MCP** and its
+tools run, in AI task, conversational and MCP Tool steps alike. This lifts the
+internal-only rule of the MCP internal/external governance enhancement
+(`implemented/alpha-2/v2.5.0/enhance-mcp-internal-external-governance.md`): the
+classification is shown to flow authors as an **External** badge rather than
+used to hide the server. An AI task's reviewer threshold and the run's audit trail
+are the governance for what such a tool returns.
+
 ### 4. Email step (`email`)
 
 ```ts

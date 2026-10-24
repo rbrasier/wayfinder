@@ -80,13 +80,6 @@ export class RunMcpNode {
     if (serverResult.data.status !== "active") {
       return err(domainError("VALIDATION_FAILED", "The MCP server for this step is disabled."));
     }
-    // Backstop: externally-communicating servers are not permitted in flows at
-    // this stage, even if an older node config still references one.
-    if (serverResult.data.communicatesExternally) {
-      return err(
-        domainError("VALIDATION_FAILED", "This MCP server communicates outside Wayfinder and cannot run in a flow."),
-      );
-    }
 
     const priorOutputs = await this.sessionStepOutputs.listBySession(input.session.id);
     const fieldsResult = await resolveFieldValues(this.languageModel, {

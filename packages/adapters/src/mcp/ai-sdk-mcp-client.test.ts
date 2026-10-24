@@ -2,6 +2,7 @@ import type { McpServer } from "@rbrasier/domain";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildMcpTransport } from "./ai-sdk-mcp-client";
+import { EnvLegacyMcpCredentialSource } from "./env-legacy-mcp-credential-source";
 
 const serverWith = (overrides: Partial<McpServer>): McpServer => ({
   id: "s",
@@ -9,6 +10,7 @@ const serverWith = (overrides: Partial<McpServer>): McpServer => ({
   transport: "sse",
   url: "https://mcp.example.com/sse",
   credentialRef: null,
+  hasCredential: false,
   communicatesExternally: false,
   status: "active",
   createdByUserId: null,
@@ -56,5 +58,39 @@ describe("buildMcpTransport", () => {
       serverWith({ transport: "sse", credentialRef: "DATABASE_URL" }),
     );
     expect(transport).toEqual({ type: "sse", url: "https://mcp.example.com/sse", headers: {} });
+  });
+
+  it("sends a stored token, and prefers it over a legacy environment variable", () => {
+    process.env.MCP_CRED_TEST_TOKEN = "from-env";
+    const transport = buildMcpTransport(
+      serverWith({ transport: "sse", credentialRef: "MCP_CRED_TEST_TOKEN", hasCredential: true }),
+      "stored-token",
+    );
+    expect(transport).toEqual({
+      type: "sse",
+      url: "https://mcp.example.com/sse",
+      headers: { Authorization: "Bearer stored-token" },
+    });
+  });
+});
+
+describe("EnvLegacyMcpCredentialSource", () => {
+  const source = new EnvLegacyMcpCredentialSource({
+    MCP_CRED_GITHUB: "ghp_legacy",
+    DATABASE_URL: "postgres://secret",
+    MCP_CRED_EMPTY: "",
+  });
+
+  it("reads a variable inside the MCP_CRED_ namespace", () => {
+    expect(source.read("MCP_CRED_GITHUB")).toBe("ghp_legacy");
+  });
+
+  it("refuses any other process variable, so it cannot be copied into a stored token", () => {
+    expect(source.read("DATABASE_URL")).toBeNull();
+  });
+
+  it("treats an unset or empty variable as no token", () => {
+    expect(source.read("MCP_CRED_MISSING")).toBeNull();
+    expect(source.read("MCP_CRED_EMPTY")).toBeNull();
   });
 });

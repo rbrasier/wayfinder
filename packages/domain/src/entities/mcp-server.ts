@@ -5,15 +5,18 @@ export type McpServerStatus = "active" | "disabled";
 // streamable-HTTP endpoint. Local/stdio (process-spawning) is out of scope.
 export type McpTransport = "sse" | "streamable-http";
 
-// An admin-registered remote MCP server. `credentialRef` points at the secret
-// store — the secret itself never leaves the adapter layer and is never returned
-// to a client.
+// An admin-registered remote MCP server. Its bearer token is held encrypted by
+// the repository and never leaves the adapter layer: a server only says whether
+// it has one. `credentialRef` is the legacy alternative — the name of an
+// `MCP_CRED_` environment variable — kept working for servers registered before
+// tokens were stored, and moved into storage when the server is next saved.
 export interface McpServer {
   readonly id: string;
   readonly label: string;
   readonly transport: McpTransport;
   readonly url: string;
   readonly credentialRef: string | null;
+  readonly hasCredential: boolean;
   // Admin classification: does this server communicate outside Wayfinder? `false`
   // is a self-contained internal utility (spellcheck, calculation) governed by the
   // existing document human-review gate and offered to flow authors; `true` is an
@@ -26,10 +29,15 @@ export interface McpServer {
   readonly updatedAt: Date;
 }
 
+// A token to store, `null` to remove the stored one, or absent to keep it.
+export type McpCredentialChange = string | null | undefined;
+
 export interface NewMcpServer {
   readonly label: string;
   readonly transport?: McpTransport;
   readonly url: string;
+  readonly credential?: McpCredentialChange;
+  // Only a server registered before tokens were stored carries one.
   readonly credentialRef?: string | null;
   readonly communicatesExternally?: boolean;
   readonly createdByUserId?: string | null;
@@ -38,7 +46,9 @@ export interface NewMcpServer {
 export interface McpServerUpdate {
   readonly label?: string;
   readonly url?: string;
-  readonly credentialRef?: string | null;
+  readonly credential?: McpCredentialChange;
+  // A legacy reference can only be cleared, never set.
+  readonly credentialRef?: null;
   readonly communicatesExternally?: boolean;
 }
 

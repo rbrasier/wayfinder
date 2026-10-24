@@ -476,6 +476,7 @@ const build = () => {
   const hrDatasets = new DrizzleHrDatasetRepository(db);
   const skillsAndMcp = buildSkillsAndMcp({
     db,
+    secretCipher: settingsEncryption,
     usageRepo,
     quotaEnforcer,
     sessions,

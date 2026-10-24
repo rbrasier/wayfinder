@@ -98,6 +98,7 @@ const activeServer: McpServer = {
   transport: "sse",
   url: "https://mcp.example.com/sse",
   credentialRef: null,
+  hasCredential: false,
   communicatesExternally: false,
   status: "active",
   createdByUserId: null,
@@ -193,7 +194,7 @@ describe("RunMcpNode", () => {
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it("refuses to call an externally-communicating server", async () => {
+  it("calls a server that sends data outside Wayfinder, like any other", async () => {
     const result = await new RunMcpNode(
       makeSessions(makeSession()),
       makeLanguageModel(),
@@ -203,7 +204,7 @@ describe("RunMcpNode", () => {
       clock,
     ).execute({ session: makeSession(), flow: makeFlow(), node: makeNode(baseConfig), messages: makeMessages(), userId: "user-1" });
 
-    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error).toBeUndefined();
   });
 
   it("propagates a tool-call failure", async () => {

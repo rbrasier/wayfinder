@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import {
   domainError,
   err,
-  isValidMcpCredentialRef,
   ok,
   type IMcpClient,
+  type IMcpServerRepository,
   type McpServer,
   type McpTool,
   type McpToolCallOutput,
@@ -12,6 +12,7 @@ import {
 } from "@rbrasier/domain";
 import { experimental_createMCPClient, type MCPTransport } from "ai";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { EnvLegacyMcpCredentialSource } from "./env-legacy-mcp-credential-source";
 
 type SseTransportConfig = { type: "sse"; url: string; headers: Record<string, string> };
 
@@ -30,6 +31,8 @@ type ToolResult = { content?: ToolResultContent[] };
 // client is opened per call and always closed — the SDK recommends one client per
 // server and does not pool connections (verified in node_modules/ai).
 export class AiSdkMcpClient implements IMcpClient {
+  constructor(private readonly credentials: Pick<IMcpServerRepository, "readCredential">) {}
+
   async listTools(server: McpServer): Promise<Result<McpTool[]>> {
     return this.withClient(server, "Failed to list MCP tools.", async (client) => {
       const tools = await client.tools();
@@ -66,10 +69,12 @@ export class AiSdkMcpClient implements IMcpClient {
     failureMessage: string,
     run: (client: Awaited<ReturnType<typeof experimental_createMCPClient>>) => Promise<Result<T>>,
   ): Promise<Result<T>> {
+    const storedToken = server.hasCredential ? await this.credentials.readCredential(server.id) : ok(null);
+    if (storedToken.error) return storedToken;
     let client: Awaited<ReturnType<typeof experimental_createMCPClient>> | null = null;
     try {
       client = await withTimeout(
-        experimental_createMCPClient({ transport: buildMcpTransport(server) }),
+        experimental_createMCPClient({ transport: buildMcpTransport(server, storedToken.data) }),
         MCP_CALL_TIMEOUT_MS,
       );
       return await withTimeout(run(client), MCP_CALL_TIMEOUT_MS);
@@ -104,8 +109,11 @@ function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
 // Resolves a server descriptor to the transport the AI SDK MCP client accepts:
 // the built-in SSE shorthand for `sse` servers, or a StreamableHTTPClientTransport
 // instance for `streamable-http` servers (ADR-032 §1). Exported for unit testing.
-export function buildMcpTransport(server: McpServer): SseTransportConfig | MCPTransport {
-  const headers = resolveAuthHeaders(server);
+export function buildMcpTransport(
+  server: McpServer,
+  storedToken: string | null = null,
+): SseTransportConfig | MCPTransport {
+  const headers = resolveAuthHeaders(server, storedToken);
   if (server.transport === "streamable-http") {
     // The MCP SDK's Transport implements the AI SDK MCPTransport surface
     // (start/send/close/onmessage) — verified in node_modules/@modelcontextprotocol/sdk.
@@ -116,18 +124,15 @@ export function buildMcpTransport(server: McpServer): SseTransportConfig | MCPTr
   return { type: "sse", url: server.url, headers };
 }
 
-function resolveAuthHeaders(server: McpServer): Record<string, string> {
-  const headers: Record<string, string> = {};
-  // credentialRef names an environment variable holding a bearer token. It must
-  // sit in the MCP_CRED_ namespace: without that fence an admin could point a
-  // server they control at credentialRef "DATABASE_URL" and have the secret
-  // shipped to their endpoint as a bearer token. The value never leaves this
-  // layer (ADR-032).
-  if (server.credentialRef && isValidMcpCredentialRef(server.credentialRef)) {
-    const token = process.env[server.credentialRef];
-    if (token) headers.Authorization = `Bearer ${token}`;
-  }
-  return headers;
+const legacyCredentials = new EnvLegacyMcpCredentialSource();
+
+// The stored token wins; a server registered before tokens were stored falls
+// back to its `MCP_CRED_` environment variable. Neither ever leaves this layer
+// (ADR-032).
+function resolveAuthHeaders(server: McpServer, storedToken: string | null): Record<string, string> {
+  const token =
+    storedToken ?? (server.credentialRef ? legacyCredentials.read(server.credentialRef) : null);
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 function flattenResult(result: ToolResult): string {

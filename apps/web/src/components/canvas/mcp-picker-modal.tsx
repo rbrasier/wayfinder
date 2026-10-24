@@ -82,7 +82,17 @@ export function McpPickerModal({
             <div className="max-h-[46vh] space-y-3 overflow-y-auto rounded-[9px] border border-[#e7e3db] p-2.5">
               {filtered.map((entry) => (
                 <div key={entry.server.id} className="space-y-1.5">
-                  <p className="text-[12px] font-medium text-[#5c574c]">{entry.server.label}</p>
+                  <p className="flex items-center gap-1.5 text-[12px] font-medium text-[#5c574c]">
+                    {entry.server.label}
+                    {entry.server.communicatesExternally ? (
+                      <span
+                        title="Sends data outside Wayfinder"
+                        className="rounded-full border border-[#e7e3db] px-1.5 text-[10px] font-medium text-[#5c574c]"
+                      >
+                        External
+                      </span>
+                    ) : null}
+                  </p>
                   {entry.tools.length === 0 ? (
                     <p className="text-[12px] text-[#736d5f]">No tools discovered.</p>
                   ) : (

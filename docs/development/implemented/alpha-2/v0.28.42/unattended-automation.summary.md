@@ -563,3 +563,31 @@ no schema change, and the version stays 0.28.42.
 - `mcp`: a real socket and the SDK client. It covers the tool list, both token forms, links, tool errors and the 401.
 - `api`: the endpoints, the forms and redirects, closed forms on the page, an escaped notice, and the recording page.
 - `webhook`: updated for numeric ids.
+
+## Amendment 8 — MCP tokens stored in the database; external servers usable in flows
+
+Asked for during review. The full change is in `mcp-stored-credentials.phase.md`,
+alongside this summary.
+
+- **Stored tokens:**
+  - An MCP server's bearer token is entered on **Admin → MCP servers** and stored
+    encrypted in `admin_mcp_servers.credential_encrypted`, using the settings
+    cipher, as Event Watch secrets are.
+  - The browser only learns whether a token is stored.
+  - Registering no longer accepts an environment-variable name.
+- **Legacy servers:**
+  - Servers that name an `MCP_CRED_` variable keep working.
+  - Saving one in the new **Edit** dialog copies the variable's token into storage
+    and drops the reference. When the variable is empty, the reference is kept.
+- **External servers:**
+  - "Permitted to communicate outside Wayfinder" no longer hides a server from
+    **Add MCP** or drops its tools at run time.
+  - It reads **Sends data outside Wayfinder** and shows as an **External** badge
+    in the picker.
+  - ADR-065 §3 records this.
+- **Migration:** `0048_mcp_stored_credentials.sql` —
+  `-- data-impact: preserved — adds a nullable column; existing rows keep their
+  credential_ref and keep working through the environment fallback`.
+- **Deviation:** the phase doc planned a domain test for credential state
+  helpers. The rules ended up needing no domain helper, so they are tested in the
+  application layer and in the screen's model instead.

@@ -153,6 +153,45 @@ test.describe('Accessibility: automation step editors', () => {
   });
 });
 
+test.describe('Accessibility: MCP server editor', () => {
+  test.describe.configure({ timeout: COLD_ROUTE_BUDGET });
+
+  test('the edit dialog (masked token, remove token, save problems) has no axe violations', async ({
+    page,
+  }) => {
+    const label = `A11y MCP ${Date.now()}`;
+    const registered = await page.request.post('/api/trpc/mcpServer.register', {
+      data: { json: { label, url: 'http://localhost:4001/mcp', transport: 'streamable-http', credential: 'a11y-token' } },
+      timeout: 60_000,
+    });
+    expect(registered.ok(), await registered.text()).toBe(true);
+    const serverId = ((await registered.json()) as { result: { data: { json: { id: string } } } }).result.data
+      .json.id;
+
+    try {
+      await page.goto('/admin/mcp-servers');
+      const row = page.getByRole('row').filter({ hasText: label });
+      await expect(row.getByText('Stored securely')).toBeVisible({ timeout: 30_000 });
+      await row.getByRole('button', { name: 'Edit' }).click();
+
+      const dialog = page.getByRole('dialog', { name: `Edit ${label}` });
+      await expect(dialog.getByLabel('Bearer token')).toHaveAttribute('type', 'password');
+      await dialog.getByLabel('Remove token').check();
+      await dialog.getByLabel('URL').fill('not-a-url');
+      await dialog.getByRole('button', { name: 'Save' }).click();
+      await expect(dialog.getByText('Use an http:// or https:// address.')).toBeVisible();
+
+      const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).include('[role="dialog"]').analyze();
+      expect(
+        results.violations,
+        `axe found violations in the MCP server editor:\n\n${formatViolations(results.violations)}`,
+      ).toEqual([]);
+    } finally {
+      await page.request.post('/api/trpc/mcpServer.delete', { data: { json: { id: serverId } } });
+    }
+  });
+});
+
 test.describe('Accessibility: focus visible (2.4.7)', () => {
   test('keyboard focus produces a visible indicator', async ({ page }) => {
     await page.goto('/admin/flows');

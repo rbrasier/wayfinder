@@ -21,11 +21,13 @@ import {
   AiSdkMcpClient,
   DrizzleMcpServerRepository,
   DrizzleSkillRepository,
+  EnvLegacyMcpCredentialSource,
   McpServerDirectory,
   McpToolPrepass,
   SkillParser,
   createDatabase,
   type QuotaEnforcer,
+  type SecretCipher,
 } from "@rbrasier/adapters";
 import type {
   ILanguageModel,
@@ -36,6 +38,8 @@ import type {
 
 interface SkillsAndMcpDependencies {
   db: ReturnType<typeof createDatabase>;
+  // Encrypts MCP servers' stored bearer tokens, as for other admin secrets.
+  secretCipher: SecretCipher;
   usageRepo: IUsageRepository;
   quotaEnforcer: QuotaEnforcer;
   sessions: ISessionRepository;
@@ -49,6 +53,7 @@ interface SkillsAndMcpDependencies {
 // calls the model directly rather than through the decorated port.
 export const buildSkillsAndMcp = ({
   db,
+  secretCipher,
   usageRepo,
   quotaEnforcer,
   sessions,
@@ -57,8 +62,8 @@ export const buildSkillsAndMcp = ({
 }: SkillsAndMcpDependencies) => {
   const skills = new DrizzleSkillRepository(db);
   const skillParser = new SkillParser();
-  const mcpServers = new DrizzleMcpServerRepository(db);
-  const mcpClient = new AiSdkMcpClient();
+  const mcpServers = new DrizzleMcpServerRepository(db, secretCipher);
+  const mcpClient = new AiSdkMcpClient(mcpServers);
   const mcpServerDirectory = new McpServerDirectory(mcpServers, mcpClient);
   const mcpToolPrepass = new McpToolPrepass(usageRepo, quotaEnforcer);
 
@@ -74,7 +79,7 @@ export const buildSkillsAndMcp = ({
       restoreSkill: new RestoreSkill(skills),
       resolveStepSkills: new ResolveStepSkills(skills),
       registerMcpServer: new RegisterMcpServer(mcpServers),
-      updateMcpServer: new UpdateMcpServer(mcpServers),
+      updateMcpServer: new UpdateMcpServer(mcpServers, new EnvLegacyMcpCredentialSource()),
       listMcpServers: new ListMcpServers(mcpServers),
       disableMcpServer: new DisableMcpServer(mcpServers),
       enableMcpServer: new EnableMcpServer(mcpServers),
