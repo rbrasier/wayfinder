@@ -5,7 +5,7 @@
 - **Base branch**: `release/alpha-2` → implemented docs go to
   `docs/development/implemented/alpha-2/v0.28.44/`
 - **PRD**: `docs/development/prd/admin-permission-split.prd.md`
-- **ADRs**: ADR-063 (this phase), ADR-021 (amended), ADR-005
+- **ADRs**: ADR-066 (this phase), ADR-021 and ADR-022 (amended), ADR-063 (Event Watch), ADR-005
 - **Issue**: #349 (parent #346)
 
 ## Approved change summary
@@ -21,6 +21,10 @@ only database work is a one-row rename migration.
 Approved with notes: target `release/alpha-2` as an RBAC enhancement; keep the
 rename migration; PATCH bump, numbered after open PRs; add an extra admin
 permission for the other admin areas, held by Global Admins only by default.
+
+Doc-review amendments: everything under Advanced Flow Settings (Skills, MCP
+Servers, Event Watch, Knowledge) is technical; an area key passes a flag's
+role scoping on admin surfaces only (ADR-066 §5).
 
 ## 1. Problem
 
@@ -49,9 +53,9 @@ stays Global-only by default, which fails closed.
 
 | Area / key | Routers & procedures |
 | --- | --- |
-| `admin:technical` | `settings.ts` — AI, integrations, storage & uploads, notifications, automation-related procedures; `settings-presentation.ts` (branding, login notice, banner, disclaimer, about links); `settings-automation.ts`; `skill.ts` + `mcp-server.ts` (`requireAdmin` → key check); `feature-flag.ts`; `error.ts`; `schedule.ts`; `n8n.ts` |
-| `admin:users` | `user.ts` (`create`, `update`, `delete`, `resetPassword`, `revokeSessions`); `group.ts` (`create`, `delete`); `organisation.ts`; `role.assignUser`, `role.removeUser`, `role.list`, `role.listUsers` (read for the assign UI) |
-| `admin:oversight` | `analytics.ts`; `governance.ts`; `usage.ts`; `session.listAll`, `session.listAllPage`; `flow.list`, `flow.grantOwner`; `event-watch.ts` (`eventWatchProcedure`); `automation.retryRun` (admin path); `extraction.listAll`; `audit.ts`; `legal-hold.ts` |
+| `admin:technical` | `settings.ts` — AI, integrations, storage & uploads, notifications, automation-related procedures; `settings-presentation.ts` (branding, login notice, banner, disclaimer, about links); `settings-automation.ts`; `skill.ts` + `mcp-server.ts` (`requireAdmin` → key check); `event-watch.ts` (`eventWatchProcedure`); `automation.retryRun` (admin path); `feature-flag.ts` (`list`, `upsert`, `setRoles`); `error.ts`; `schedule.ts`; `n8n.ts` |
+| `admin:users` | `user.ts` (`create`, `update`, `delete`, `resetPassword`); `group.ts` (`create`, `delete`); `organisation.ts`; `role.assignUser`, `role.removeUser`, `role.list`, `role.listUsers` (read for the assign UI) |
+| `admin:oversight` | `analytics.ts`; `governance.ts`; `usage.ts`; `session.listAll`, `session.listAllPage`; `flow.list`, `flow.grantOwner`; `extraction.listAll`; `audit.ts`; `legal-hold.ts` |
 | `admin:users` **or** `admin:oversight` | `user.list` via `anyPermissionProcedure` |
 | Global Admin only | `role.create`, `rename`, `delete`, `updatePermissions`; auth/SSO config, session policy and directory procedures in `settings.ts` and `settings-directory.ts`; any `isAdmin` field on user create/update |
 
@@ -66,12 +70,14 @@ Global-only.
 | domain | `packages/domain/src/entities/permission.ts` (+ test) | add the three keys and `PERMISSIONS` entries |
 | domain | `packages/domain/src/entities/role.ts` (+ test) | `SYSTEM_ROLE_KEYS.technicalAdmins = "technical_admins"`, `userAdmins = "user_admins"`; `isAdminRoleKey(key)` true for `admins`, `technical_admins`, `user_admins` |
 | application | `packages/application/src/use-cases/role/assign-user-role.ts`, `remove-user-role.ts` (+ `role.test.ts`) | accept caller `{ isAdmin }`; refuse admin-role keys unless Global Admin (`DomainError` FORBIDDEN, Result pattern) |
-| application | `update-user.ts`, `delete-user.ts`, `reset-user-password.ts`, `create-user.ts`, session revocation (+ tests) | accept caller; refuse `isAdmin` changes and admin-held targets unless Global Admin |
-| adapters | `packages/adapters/src/auth/seed-roles.ts` (+ test) | Admins name → "Global Admin"; add Technical Admin (`admin:technical`) and User Admin (`admin:users`) seeds |
-| adapters | `packages/adapters/drizzle/0046_<name>.sql` + journal | generated migration; `UPDATE admin_roles SET name = 'Global Admin' WHERE key = 'admins';` with `-- data-impact: preserved — renames one row's display name` |
+| application | `create-user.ts`, `update-user.ts`, `delete-user.ts`, `reset-user-password.ts` (+ `user-mutations.test.ts`, `reset-user-password.test.ts`, `create-user.test.ts`) | accept caller `{ isAdmin }`; refuse `isAdmin` values and admin-held targets unless Global Admin |
+| adapters | `packages/adapters/src/auth/seed-roles.ts` (+ test) | Admins name → "Global Admin"; add Technical Admin (`admin:technical`, `knowledge:curate`) and User Admin (`admin:users`) seeds; `POWER_USER_SCOPED_FLAGS` / `ADMIN_SCOPED_FLAGS` unchanged |
+| adapters | `packages/adapters/drizzle/0049_<name>.sql` + journal | generated migration; `UPDATE admin_roles SET name = 'Global Admin' WHERE key = 'admins';` with `-- data-impact: preserved — renames one row's display name` |
 | web | `apps/web/src/server/trpc.ts` (+ `permission-procedure.test.ts`) | `anyPermissionProcedure(keys)`; `canOversee(ctx)`; `hasAnyAdminArea(permissions, isAdmin)` |
+| web | admin-surface flag check for `skills`, `mcp`, `event_watch` (new helper beside `feature-flag.ts`, + test) | Global Admin → `IsFeatureEnabledForUser` as today; `admin:technical` holder → `IsFeatureEnabled` (switched on, role scoping skipped). Used by the sidebar, the admin pages and the admin procedures of those three surfaces only; `featureFlag.isEnabledForMe` for authoring is unchanged (ADR-066 §5) |
 | web | routers in §4 (+ one test per router) | re-gate per the area map; pass caller into the guarded use cases |
-| web | oversight bypasses in `flow.ts`, `session.ts`, `event-watch.ts`, `automation.ts`, `extraction.ts`, `lib/extraction-artifact-access.ts`, `lib/template-route-helpers.ts` | `ctx.isAdmin` → `canOversee(ctx)` only where the bypass serves an oversight screen; authoring bypasses unchanged |
+| web | inline admin checks in `flow.ts`, `session.ts`, `extraction.ts`, `lib/extraction-artifact-access.ts`, `lib/template-route-helpers.ts` | `ctx.isAdmin` → `canOversee(ctx)` only where the check serves an oversight screen; authoring bypasses unchanged |
+| web | inline admin checks in `event-watch.ts`, `automation.ts` | `ctx.isAdmin` → `ctx.isAdmin \|\| ctx.permissions.has("admin:technical")` where the check serves the Event Watch admin screen |
 | web | `apps/web/src/app/(admin)/admin/layout.tsx` | gate on `hasAnyAdminArea`; redirect ungranted routes to the first held area; prefetch only allowed queries; pass permissions to the sidebar |
 | web | per-area `page.tsx` under `(admin)/admin/*` | server-side area check and redirect (layouts don't re-run per route, so each page checks its own key) |
 | web | `apps/web/src/components/sidebar.tsx`, `sidebar-model.ts` (+ test) | `buildAdminNav` takes effective permissions; "Admin" entry on the user rail for `admin:*` holders |
@@ -91,11 +97,15 @@ API in `node_modules/@trpc/server` before writing `anyPermissionProcedure`.
 - Application tests: each guarded use case refuses a non-Global caller on an
   admin role or admin target, and allows a Global Admin.
 - Adapter test: `seedRoles` on a database with existing roles creates the two
-  new roles, writes no `admin:oversight` grant, and leaves existing grants
+  new roles (Technical Admin with `admin:technical` + `knowledge:curate`),
+  writes no `admin:oversight` grant, and leaves existing grants
   unchanged. A migration-safety test passes with the `-- data-impact:` line.
 - Router tests: for each router in §4, refused without the key, allowed with
   it, and Global-only procedures refused for every `admin:*` key.
 - Component test: `buildAdminNav` output for each key combination.
+- Flag tests: an `admin:technical` holder outside a flag's roles sees the
+  admin surface when the flag is on and not when it is off; their
+  `isEnabledForMe` result is unchanged.
 - E2E: access control falls under `docs/guides/e2e-test-policy.md`. Extend the
   existing admin-access spec with one Technical Admin journey (sees
   Configuration, is redirected from `/admin/users`). Nothing more.
@@ -103,12 +113,14 @@ API in `node_modules/@trpc/server` before writing `anyPermissionProcedure`.
 ## 8. Database & migration
 
 No schema change (`permission_key` is `text`). One generated data migration
-(`0046`) renames the `admins` role row. Generate it with the repo's drizzle
+(`0049`, after alpha-2's latest `0048_mcp_stored_credentials`) renames the
+`admins` role row. Generate it with the repo's drizzle
 tooling as a custom migration; never `drizzle-kit push`.
 
-**Forward-merge to `main`:** `main` already has migrations `0046`–`0056`. When
-`/release` forward-merges, renumber this migration after `main`'s latest and
-regenerate the journal with the tooling, not by hand. The SQL is idempotent,
+**Forward-merge to `main`:** `main` numbers its migrations independently
+(up to `0056` at time of writing), so `0049` collides there. When `/release`
+forward-merges, renumber this migration after `main`'s latest and regenerate
+the journal with the tooling, not by hand. The SQL is idempotent,
 so re-running it is harmless. Record this step in the release PR.
 
 ## 9. Version
@@ -127,10 +139,12 @@ Departures recorded at the maintainer's request:
 
 - A re-gate placed on the wrong procedure is the real danger. Unlisted
   procedures stay Global-only, and every listed one has a refusal test.
-- An oversight bypass missed in §5 fails closed: the screen errors for an
-  oversight holder. The router tests cover the detail views.
+- An inline check missed in §5 fails closed: the screen errors for the key
+  holder. The router tests cover the detail views.
 - `admin:oversight` exposes every user's chats. That is why no role holds it
   by default.
+- The admin-surface flag check must never feed flow authoring, or Technical
+  Admins would silently gain Skills/MCP in their own flows. Tests pin this.
 
 ## 11. Acceptance criteria
 
