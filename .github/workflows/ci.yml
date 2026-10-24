@@ -258,12 +258,18 @@ jobs:
         # audit endpoint is down, this is the lockfile check that still runs.
         run: ./scripts/osv-check.sh
 
+      - name: Install Semgrep
+        # A pinned CLI rather than semgrep/semgrep-action@v1: that action's
+        # Semgrep 1.36 crashed on the current rule packs and still reported
+        # success, so the scan had silently stopped running.
+        env:
+          SEMGREP_VERSION: "1.182.1"
+        # pipx because the runner's system Python is externally managed (PEP 668).
+        run: pipx install "semgrep==${SEMGREP_VERSION}"
+
       - name: Static security scan (Semgrep)
-        uses: semgrep/semgrep-action@v1
-        with:
-          config: >-
-            p/typescript
-            p/owasp-top-ten
+        # Fails on any finding, and on a scan that did not complete.
+        run: ./scripts/semgrep-check.sh
 
   coverage:
     name: Test coverage
