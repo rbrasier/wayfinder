@@ -48,6 +48,11 @@ describe("aiTaskConfidenceThresholdOf", () => {
 
     expect(aiTaskConfidenceThresholdOf(config)).toBe(DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD);
   });
+
+  it("lets every result through by default, so a review is something an author opts into", () => {
+    expect(DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD).toBe(0);
+    expect(meetsConfidenceThreshold(0, DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD)).toBe(true);
+  });
 });
 
 describe("aiTaskInputModeOf", () => {

@@ -23,7 +23,7 @@ import {
   type SessionStepOutput,
   type SessionTriggerPayload,
 } from "@rbrasier/domain";
-import { aiTaskResultSchema, type AiTaskResult, type DocumentData } from "@rbrasier/shared";
+import { buildAiTaskResultSchema, type AiTaskResult, type DocumentData } from "@rbrasier/shared";
 import { accumulateInsights } from "../../services/accumulate-insights";
 import { resolveFieldValues } from "../../services/resolve-field-values";
 import { SUBJECT_DESCRIPTION_KEY, SUBJECT_NODE_ID_KEY } from "../approvals/approval-record-keys";
@@ -228,7 +228,12 @@ export class RunAiTaskNode {
       sessionId: input.session.id,
       system: config.instruction,
       prompt,
-      schema: aiTaskResultSchema,
+      schema: buildAiTaskResultSchema(
+        config.structuredFields.map((field) => ({
+          key: field.key,
+          itemKeys: field.type === "group" ? (field.itemFields ?? []).map((item) => item.key) : undefined,
+        })),
+      ),
     });
     if (result.error) return result;
     return ok(result.data.object);

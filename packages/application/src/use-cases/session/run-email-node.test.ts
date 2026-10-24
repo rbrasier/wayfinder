@@ -158,6 +158,32 @@ describe("RunEmailNode", () => {
     expect(stepOutputs.rows.at(-1)).toMatchObject({ nodeId: "node-email" });
   });
 
+  it("posts what it sent to the chat: a message linked to the recipients, subject and message", async () => {
+    const { useCase, stepOutputs, messages } = build();
+    await stepOutputs.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-ai",
+      fields: [{ key: "summary", label: "Summary", type: "narrative", value: "The committee met." }],
+    });
+
+    await useCase.execute({ session: runSession, flow, nodes, node: emailNode() });
+
+    const posted = messages.rows.at(-1)!;
+    expect(posted).toMatchObject({
+      role: "assistant",
+      stepNodeId: "node-email",
+      content: 'Sent "Hearing H-123 summary" to estimates@agency.gov.au.',
+    });
+    const record = stepOutputs.rows.at(-1)!;
+    expect(record.messageId).toBe(posted.id);
+    expect(record.fields).toEqual([
+      { key: "recipients", label: "Recipients", type: "text", value: "estimates@agency.gov.au" },
+      { key: "subject", label: "Subject", type: "text", value: "Hearing H-123 summary" },
+      { key: "message", label: "Message", type: "narrative", value: "Summary:\nThe committee met." },
+    ]);
+  });
+
   it("expands a group to its members' addresses and sends each one their own message", async () => {
     const { useCase, sender } = build({ groups: { "group-1": ["user-a", "user-b"] } });
 

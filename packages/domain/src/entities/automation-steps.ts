@@ -1,7 +1,12 @@
 import { deriveStepKeys } from "./approval-record";
 import type { AiTaskNodeConfig, EmailNodeConfig } from "./flow-node";
 
-export const DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD = 80;
+// An AI task proceeds with whatever it produced unless its author asks for a
+// review when the model is unsure; 0 lets every result through.
+export const DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD = 0;
+
+// Where the threshold starts when an author turns review on.
+export const SUGGESTED_AI_TASK_REVIEW_THRESHOLD = 80;
 
 export const aiTaskConfidenceThresholdOf = (config: AiTaskNodeConfig): number =>
   typeof config.confidenceThreshold === "number"

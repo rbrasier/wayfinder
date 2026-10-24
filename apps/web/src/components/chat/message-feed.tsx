@@ -10,8 +10,10 @@ import { MarkdownText } from "./markdown-text";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
 import { AiTaskOutputCard } from "./ai-task-output-card";
+import { EmailSentCard } from "./email-sent-card";
+import { AiTaskReviewPrompt } from "./ai-task-review-prompt";
 import { AutomationStepPending } from "./automation-step-pending";
-import { aiTaskResultView } from "./automation-step-state";
+import { automationResultView } from "./automation-step-state";
 import { RecordCard } from "./record-card";
 import { RunStartedLine } from "./run-started-line";
 import { MessageInfoModal } from "./message-info-modal";
@@ -92,7 +94,10 @@ interface MessageFeedProps {
   pendingStepAdvance?: boolean;
   // The current step is running by itself or waiting on its reviewer: the feed
   // ends on a quiet indicator where that step's result will appear.
-  pendingAutomation?: { message: string; stepName: string } | null;
+  // `reviewApprovalId` is set when an AI task's review falls to the viewer: the
+  // feed then hands it to them instead of showing a waiting line.
+  pendingAutomation?: { message: string; stepName: string; reviewApprovalId: string | null } | null;
+  onAutomationReviewed?: () => void;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -216,6 +221,7 @@ export function MessageFeed({
   pendingDocumentGeneration,
   pendingStepAdvance,
   pendingAutomation,
+  onAutomationReviewed,
 }: MessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
@@ -323,7 +329,7 @@ export function MessageFeed({
             isSessionComplete: Boolean(isComplete),
           });
 
-          const aiTaskView = aiTaskResultView({
+          const automationView = automationResultView({
             nodeType: node?.type ?? null,
             role: msg.role,
             stepNodeId: msg.stepNodeId,
@@ -365,7 +371,7 @@ export function MessageFeed({
                   body={displayContent}
                   at={msg.createdAt}
                 />
-              ) : aiTaskView !== "message" ? null : msg.role === "user" ? (
+              ) : automationView !== "message" ? null : msg.role === "user" ? (
                 <div className="flex justify-end" data-chat-message="user">
                   <div
                     title={senderName ?? undefined}
@@ -467,13 +473,16 @@ export function MessageFeed({
               {/* An AI task's result is recorded whatever its confidence — a low
                   one goes to review — so its card shows on every result once
                   the step has moved on. */}
-              {node && aiTaskView === "card" && (
+              {node && automationView === "card" && node.type === "ai_task" && (
                 <AiTaskOutputCard
                   messageId={msg.id}
                   stepName={node.name}
                   confidence={msg.confidence}
                   rationale={msg.aiPayload?.rationale ?? null}
                 />
+              )}
+              {node && automationView === "card" && node.type === "email" && (
+                <EmailSentCard messageId={msg.id} stepName={node.name} />
               )}
               {isAdvancingMsg && node && node.type !== "ai_task" && !isNeverDone && isStructuredNode && (
                 <RecordCard
@@ -564,9 +573,16 @@ export function MessageFeed({
 
       {pendingStepAdvance && <AdvancingBadge />}
 
-      {pendingAutomation && (
-        <AutomationStepPending message={pendingAutomation.message} stepName={pendingAutomation.stepName} />
-      )}
+      {pendingAutomation &&
+        (pendingAutomation.reviewApprovalId ? (
+          <AiTaskReviewPrompt
+            approvalId={pendingAutomation.reviewApprovalId}
+            stepName={pendingAutomation.stepName}
+            onDecided={() => onAutomationReviewed?.()}
+          />
+        ) : (
+          <AutomationStepPending message={pendingAutomation.message} stepName={pendingAutomation.stepName} />
+        ))}
 
       {error && !isStreaming && (
         <div className="flex justify-start">

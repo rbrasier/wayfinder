@@ -9,6 +9,8 @@ import {
   inputSourceFrom,
   inputSourceValue,
   placeholderOptions,
+  aiTaskReviewEnabled,
+  withAiTaskReview,
 } from "./automation-step-model";
 
 const priorFields: PriorStepField[] = [
@@ -33,7 +35,7 @@ describe("aiTaskFormFromConfig", () => {
       acceptAllInputs: true,
       inputs: [],
       outputLines: [],
-      confidenceThreshold: 80,
+      confidenceThreshold: 0,
       reviewer: { mode: "run_owner" },
       skillRefs: [],
       allowedMcpToolRefs: [],
@@ -209,5 +211,23 @@ describe("placeholderOptions", () => {
     expect(
       placeholderOptions([], [{ key: "hearing_id", label: "Hearing", type: "text", required: true }], new Map()),
     ).toEqual([{ label: "Trigger input → Hearing", token: "{{ input.hearing_id }}" }]);
+  });
+});
+
+describe("AI task review switch", () => {
+  const form = aiTaskFormFromConfig({});
+
+  it("starts off: a new AI task proceeds with whatever it produced", () => {
+    expect(form.confidenceThreshold).toBe(0);
+    expect(aiTaskReviewEnabled(form)).toBe(false);
+  });
+
+  it("turning review on starts the threshold at 80, and turning it off lets everything through", () => {
+    const on = withAiTaskReview(form, true);
+    expect(on.confidenceThreshold).toBe(80);
+    expect(aiTaskReviewEnabled(on)).toBe(true);
+
+    expect(withAiTaskReview({ ...on, confidenceThreshold: 65 }, true).confidenceThreshold).toBe(65);
+    expect(withAiTaskReview(on, false).confidenceThreshold).toBe(0);
   });
 });

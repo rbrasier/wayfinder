@@ -29,7 +29,7 @@ export interface RunEmailNodeDependencies {
   users: Pick<IUserRepository, "findById">;
   groups: Pick<IGroupRepository, "listMembers">;
   sessionStepOutputs: ISessionStepOutputRepository;
-  sessionMessages: Pick<ISessionMessageRepository, "listBySession">;
+  sessionMessages: Pick<ISessionMessageRepository, "listBySession" | "create">;
   objectStorage: Pick<IObjectStorage, "get">;
   emailSender: IEmailSender;
   auditLogger: IAuditLogger;
@@ -153,13 +153,26 @@ export class RunEmailNode {
       return err(domainError("INFRA_FAILURE", `The email could not be sent to ${failed.join(", ")}.`));
     }
 
+    // The chat shows what was sent as a card (as an AI task's result is), so the
+    // message only carries the record: who it went to, the subject and the
+    // message itself, which the card previews.
+    const message = await this.dependencies.sessionMessages.create({
+      sessionId: input.session.id,
+      role: "assistant",
+      content: `Sent "${subject}" to ${recipients.join(", ")}.`,
+      stepNodeId: input.node.id,
+    });
+    if (message.error) return message;
+
     await this.dependencies.sessionStepOutputs.create({
       sessionId: input.session.id,
       flowId: input.flow.id,
       nodeId: input.node.id,
+      messageId: message.data.id,
       fields: [
         { key: "recipients", label: "Recipients", type: "text", value: recipients.join(", ") },
         { key: "subject", label: "Subject", type: "text", value: subject },
+        { key: "message", label: "Message", type: "narrative", value: text },
       ],
     });
 

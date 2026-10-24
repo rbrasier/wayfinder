@@ -617,3 +617,50 @@ now** action.
   - `watch-model.test.ts` (the messages)
 - **E2E:** none. Run now falls in no group of `e2e-test-policy.md` and is covered at
   the application layer.
+
+## Amendment 10 — review in the chat, review off by default, the Email step in the chat
+
+Found and asked for while testing a run by hand.
+
+- **Review in the chat:**
+  - When an AI task's low-confidence result is the viewer's own to review, the
+    chat hands it to them in place of "Waiting for *you* to review".
+  - It shows the AI's reasoning and the fields, editable as on the Approvals page,
+    with **Accept and continue** and **Reject**.
+  - It is the same approval: `approval.get`, `PreviousStep` and `approval.decide`
+    (`ai-task-review-prompt.tsx`, `automationStepState`'s `reviewApprovalId`).
+- **Review off by default:**
+  - `DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD` is now 0, so an AI task carries on with
+    whatever it produced.
+  - **Advanced → Ask for a review when the AI is unsure** turns review on,
+    starting the threshold at 80 (`SUGGESTED_AI_TASK_REVIEW_THRESHOLD`). The
+    threshold and reviewer show only while it is on.
+  - A step saved before this keeps its stored threshold.
+- **AI task output schema:**
+  - The model call named no output fields (`values` was a free-form record). A
+    strict structured-output provider can answer that with an empty object, which
+    leaves every field, and every Email tag that uses one, blank.
+  - `buildAiTaskResultSchema` names each field and each group's item keys, as
+    `buildExtractionResultSchema` does for extraction. The free-form
+    `aiTaskResultSchema` is removed.
+- **The Email step in the chat:**
+  - `RunEmailNode` posts a message for what it sent. Its record now also keeps the
+    message as sent, besides the recipients and subject.
+  - The feed shows it as a card like an AI task's (`email-sent-card.tsx`).
+    **View email** previews who it went to, the subject and the rendered message.
+  - `document.emailSent` reads the record behind the session's access check.
+- **Approvals page:** the decision dialog is capped to the screen and only its
+  body scrolls, so a long subject never pushes **Confirm approval** out of reach.
+- **Not a bug:** the SMTP mock's console prints the plain-text alternative, which
+  is the markdown. The HTML part is sent alongside it and listed at
+  `:4001/smtp/messages`.
+- **Tests:**
+  - `automation-steps.test.ts`: the default lets everything through.
+  - `confidence.test.ts`: the per-field schema.
+  - `run-ai-task-node.test.ts`: the schema the model is held to.
+  - `run-email-node.test.ts`: the chat message and the kept message.
+  - `automation-step-state.test.ts`: review handed to the viewer, and the Email
+    card.
+  - `automation-step-model.test.ts`: the review switch.
+  - `email-sent.test.ts`.
+  - `accessibility.spec.ts` turns review on before auditing Advanced.

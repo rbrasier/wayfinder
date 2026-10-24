@@ -16,6 +16,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { AdvancedSection } from "./advanced-section";
 import {
   aiTaskInputOptions,
+  aiTaskReviewEnabled,
+  withAiTaskReview,
   inputSourceFrom,
   inputSourceValue,
   type AiTaskEditorProblem,
@@ -69,6 +71,7 @@ export function AiTaskConfigForm({
   const optionGroups = aiTaskInputOptions(priorStepFields, triggerInputs);
   const firstOption = optionGroups[0]?.options[0]?.value;
   const choice = reviewerChoiceOf(form.reviewer);
+  const reviewOn = aiTaskReviewEnabled(form);
 
   const messagesFor = (field: AiTaskProblemField) =>
     problems
@@ -223,89 +226,126 @@ export function AiTaskConfigForm({
       />
 
       <AdvancedSection openWhen={Boolean(invalid("threshold") || invalid("reviewer"))}>
-        <div className="space-y-1">
-          <Label htmlFor="ai-task-threshold">
-            Confidence needed to continue automatically (0–100)
-          </Label>
-          <FieldProblemText id="ai-task-threshold-problem" messages={messagesFor("threshold")} />
-          <Input
-            id="ai-task-threshold"
-            type="number"
-            min={0}
-            max={100}
-            className={INVALID_OUTLINE}
-            aria-invalid={invalid("threshold")}
-            aria-describedby={describedBy("threshold")}
-            value={form.confidenceThreshold}
-            onChange={(event) => set("confidenceThreshold", Number(event.target.value))}
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label htmlFor="ai-task-reviewer">Below that, send the result for review to</Label>
-          <FieldProblemText id="ai-task-reviewer-problem" messages={messagesFor("reviewer")} />
-          <select
-            id="ai-task-reviewer"
-            className={SELECT_CLASS}
-            aria-invalid={invalid("reviewer")}
-            aria-describedby={describedBy("reviewer")}
-            value={choice}
-            onChange={(event) =>
-              set("reviewer", reviewerFor(event.target.value as ReviewerChoice, form.reviewer))
-            }
-          >
-            <option value="run_owner">The run&apos;s owner</option>
-            <option value="first_level_supervisor">The run owner&apos;s supervisor</option>
-            <option value="second_level_supervisor">
-              The run owner&apos;s manager once removed
-            </option>
-            <option value="dynamic">A named role (from the people directory)</option>
-            <option value="user">A specific person</option>
-          </select>
-          <p className="text-[12px] text-[#736d5f]">
-            If a supervisor or role cannot be found, the run&apos;s owner reviews instead.
-          </p>
-        </div>
-
-        {form.reviewer.mode === "approver_source" && form.reviewer.approverSource === "dynamic" && (
-          <div className="space-y-1">
-            <Label htmlFor="ai-task-role">Role</Label>
-            <Input
-              id="ai-task-role"
-              value={form.reviewer.roleHint ?? ""}
-              onChange={(event) =>
-                set("reviewer", {
-                  mode: "approver_source",
-                  approverSource: "dynamic",
-                  roleHint: event.target.value,
-                })
-              }
-              placeholder="e.g. Director, Parliamentary Services"
-            />
-          </div>
-        )}
-
-        {form.reviewer.mode === "user" && (
-          <div className="space-y-1">
-            {form.reviewer.userId && (
-              <p className="text-[13px] text-[#1c1b19]">
-                Reviewer:{" "}
-                <span className="font-medium">{reviewerName ?? "the person chosen earlier"}</span>
-              </p>
-            )}
-            <PersonPicker
-              id="ai-task-reviewer-person"
-              label={form.reviewer.userId ? "Change reviewer" : "Reviewer"}
-              onPick={(person) => {
-                if (!person.userId) return;
-                set("reviewer", { mode: "user", userId: person.userId });
-                onReviewerPicked(person.displayName ?? person.email);
-              }}
-            />
-            <p className="text-[12px] text-[#736d5f]">
-              Only people with a Wayfinder account can review.
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <Label htmlFor="ai-task-review">Ask for a review when the AI is unsure</Label>
+            <p className="mt-0.5 text-[12px] text-[#736d5f]">
+              {reviewOn
+                ? "Below the confidence set here, the result waits for a person to check it."
+                : "Off: the flow carries on with whatever the AI produced."}
             </p>
           </div>
+          <button
+            id="ai-task-review"
+            type="button"
+            role="switch"
+            aria-checked={reviewOn}
+            onClick={() => onChange(withAiTaskReview(form, !reviewOn))}
+            className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+              reviewOn ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                reviewOn ? "translate-x-4" : "translate-x-0.5"
+              }`}
+            />
+          </button>
+        </div>
+
+        {reviewOn && (
+          <>
+            <div className="space-y-1">
+              <Label htmlFor="ai-task-threshold">
+                Confidence needed to continue automatically (0–100)
+              </Label>
+              <FieldProblemText
+                id="ai-task-threshold-problem"
+                messages={messagesFor("threshold")}
+              />
+              <Input
+                id="ai-task-threshold"
+                type="number"
+                min={0}
+                max={100}
+                className={INVALID_OUTLINE}
+                aria-invalid={invalid("threshold")}
+                aria-describedby={describedBy("threshold")}
+                value={form.confidenceThreshold}
+                onChange={(event) => set("confidenceThreshold", Number(event.target.value))}
+              />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="ai-task-reviewer">Below that, send the result for review to</Label>
+              <FieldProblemText id="ai-task-reviewer-problem" messages={messagesFor("reviewer")} />
+              <select
+                id="ai-task-reviewer"
+                className={SELECT_CLASS}
+                aria-invalid={invalid("reviewer")}
+                aria-describedby={describedBy("reviewer")}
+                value={choice}
+                onChange={(event) =>
+                  set("reviewer", reviewerFor(event.target.value as ReviewerChoice, form.reviewer))
+                }
+              >
+                <option value="run_owner">The run&apos;s owner</option>
+                <option value="first_level_supervisor">The run owner&apos;s supervisor</option>
+                <option value="second_level_supervisor">
+                  The run owner&apos;s manager once removed
+                </option>
+                <option value="dynamic">A named role (from the people directory)</option>
+                <option value="user">A specific person</option>
+              </select>
+              <p className="text-[12px] text-[#736d5f]">
+                If a supervisor or role cannot be found, the run&apos;s owner reviews instead.
+              </p>
+            </div>
+
+            {form.reviewer.mode === "approver_source" &&
+              form.reviewer.approverSource === "dynamic" && (
+                <div className="space-y-1">
+                  <Label htmlFor="ai-task-role">Role</Label>
+                  <Input
+                    id="ai-task-role"
+                    value={form.reviewer.roleHint ?? ""}
+                    onChange={(event) =>
+                      set("reviewer", {
+                        mode: "approver_source",
+                        approverSource: "dynamic",
+                        roleHint: event.target.value,
+                      })
+                    }
+                    placeholder="e.g. Director, Parliamentary Services"
+                  />
+                </div>
+              )}
+
+            {form.reviewer.mode === "user" && (
+              <div className="space-y-1">
+                {form.reviewer.userId && (
+                  <p className="text-[13px] text-[#1c1b19]">
+                    Reviewer:{" "}
+                    <span className="font-medium">
+                      {reviewerName ?? "the person chosen earlier"}
+                    </span>
+                  </p>
+                )}
+                <PersonPicker
+                  id="ai-task-reviewer-person"
+                  label={form.reviewer.userId ? "Change reviewer" : "Reviewer"}
+                  onPick={(person) => {
+                    if (!person.userId) return;
+                    set("reviewer", { mode: "user", userId: person.userId });
+                    onReviewerPicked(person.displayName ?? person.email);
+                  }}
+                />
+                <p className="text-[12px] text-[#736d5f]">
+                  Only people with a Wayfinder account can review.
+                </p>
+              </div>
+            )}
+          </>
         )}
       </AdvancedSection>
     </>

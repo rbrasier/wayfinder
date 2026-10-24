@@ -200,10 +200,17 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   );
   const pendingReviewer =
     pendingReviewQuery.data?.assignedApprover ?? pendingReviewQuery.data?.suggestedApprover ?? null;
+  const pendingApproval = pendingReviewQuery.data?.approval ?? null;
   const automationState = automationStepState({
     nodeType: currentNode?.type ?? null,
     sessionStatus: sessionData?.session.status ?? "",
-    pendingReviewerName: pendingReviewQuery.data ? (pendingReviewer?.name ?? pendingReviewer?.email ?? "the reviewer") : null,
+    pendingReview: pendingApproval
+      ? {
+          approvalId: pendingApproval.id,
+          reviewerName: pendingReviewer?.name ?? pendingReviewer?.email ?? "the reviewer",
+          isViewer: Boolean(myUserId) && pendingReviewer?.userId === myUserId,
+        }
+      : null,
   });
   const currentNodeConfig = currentNode?.config as Record<string, unknown> | undefined;
   const isDocumentTemplateStep =
@@ -554,8 +561,18 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         }
         pendingDocumentGeneration={isConfirmingStep && isDocumentTemplateStep}
         pendingStepAdvance={isConfirmingStep && !isDocumentTemplateStep}
+        onAutomationReviewed={() => {
+          void utils.session.get.invalidate({ sessionId });
+          void pendingReviewQuery.refetch();
+        }}
         pendingAutomation={
-          automationState && currentNode ? { message: automationState.message, stepName: currentNode.name } : null
+          automationState && currentNode
+            ? {
+                message: automationState.message,
+                stepName: currentNode.name,
+                reviewApprovalId: automationState.reviewApprovalId ?? null,
+              }
+            : null
         }
       />
 

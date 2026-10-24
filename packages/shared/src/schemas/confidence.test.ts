@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiTaskResultSchema,
   branchChoiceSchema,
+  buildAiTaskResultSchema,
   preGenerationEvaluationSchema,
   turnResponseSchema,
 } from "./confidence";
@@ -143,24 +143,29 @@ describe("turnResponseSchema", () => {
   });
 });
 
-describe("aiTaskResultSchema", () => {
-  it("accepts field values, a confidence and a rationale", () => {
-    const result = aiTaskResultSchema.safeParse({
-      values: { summary: "The committee met.", attendees: [{ name: "Smith" }] },
-      confidence: 91,
-      rationale: "The transcript was complete.",
-    });
+describe("buildAiTaskResultSchema", () => {
+  const schema = buildAiTaskResultSchema([
+    { key: "executive_summary" },
+    { key: "attendees", itemKeys: ["name", "role"] },
+  ]);
+  const valid = {
+    values: { executive_summary: "The committee met.", attendees: [{ name: "Sam", role: "Chair" }] },
+    confidence: 90,
+    rationale: "Clear transcript.",
+  };
 
-    expect(result.success).toBe(true);
-    expect(result.data?.values.summary).toBe("The committee met.");
+  it("names every output field, so a strict provider cannot answer with an empty object", () => {
+    expect(schema.safeParse(valid).success).toBe(true);
+    expect(schema.safeParse({ ...valid, values: {} }).success).toBe(false);
   });
 
-  it("rounds and bounds the confidence to 0-100 rather than rejecting the reply", () => {
-    const parse = (confidence: number) =>
-      aiTaskResultSchema.parse({ values: {}, confidence, rationale: "" }).confidence;
+  it("shapes a group's items by its sub-field keys", () => {
+    const missingRole = { ...valid, values: { ...valid.values, attendees: [{ name: "Sam" }] } };
+    expect(schema.safeParse(missingRole).success).toBe(false);
+  });
 
-    expect(parse(87.6)).toBe(88);
-    expect(parse(140)).toBe(100);
-    expect(parse(-3)).toBe(0);
+  it("bounds the confidence like the free-form schema does", () => {
+    expect(schema.parse({ ...valid, confidence: 140 }).confidence).toBe(100);
+    expect(schema.parse({ ...valid, confidence: 72.4 }).confidence).toBe(72);
   });
 });

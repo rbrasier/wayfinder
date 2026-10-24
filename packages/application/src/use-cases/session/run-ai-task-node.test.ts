@@ -147,6 +147,16 @@ describe("RunAiTaskNode", () => {
     expect(model.calls[0]!.purpose).toBe("aiTask");
   });
 
+  it("holds the model to a schema naming every output field, so it cannot answer with no values", async () => {
+    const { useCase, model } = build(ok({ values: { summary: "x" }, confidence: 90, rationale: "" }));
+
+    await useCase.execute({ session: runSession, flow, node: aiTaskNode(aiTaskConfig()), messages: [] });
+
+    const schema = model.calls[0]!.schema as { safeParse: (value: unknown) => { success: boolean } };
+    expect(schema.safeParse({ values: { summary: "The committee met." }, confidence: 90, rationale: "" }).success).toBe(true);
+    expect(schema.safeParse({ values: {}, confidence: 90, rationale: "" }).success).toBe(false);
+  });
+
   it("hands the model everything the run knows when it accepts all inputs", async () => {
     const { useCase, model, stepOutputs } = build(ok({ values: { summary: "x" }, confidence: 90, rationale: "" }));
     await stepOutputs.create({

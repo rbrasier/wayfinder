@@ -140,6 +140,7 @@ test.describe('Accessibility: automation step editors', () => {
     // problems — which shows them beside their fields and opens Advanced.
     await acceptAll.click();
     await editor.locator('summary', { hasText: 'Advanced' }).click();
+    await editor.getByRole('switch', { name: 'Ask for a review when the AI is unsure' }).click();
     await editor.getByLabel('Confidence needed to continue automatically (0–100)').fill('150');
     await editor.getByRole('button', { name: 'Save' }).click();
     await expect(editor.getByText('Add an instruction for the AI task.')).toBeVisible();

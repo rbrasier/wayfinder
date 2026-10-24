@@ -1,5 +1,6 @@
 import {
   DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD,
+  SUGGESTED_AI_TASK_REVIEW_THRESHOLD,
   aiTaskInputModeOf,
   validateAiTaskNodeConfig,
   validateEmailNodeConfig,
@@ -81,6 +82,15 @@ export const aiTaskFormFromConfig = (config: Record<string, unknown>): AiTaskFor
       ? (config.allowedMcpToolRefs as McpToolRef[])
       : [],
   };
+};
+
+// Review is opt-in: a threshold of 0 lets every result through, so any higher
+// threshold means the author asked for low-confidence results to be reviewed.
+export const aiTaskReviewEnabled = (form: AiTaskForm): boolean => form.confidenceThreshold > 0;
+
+export const withAiTaskReview = (form: AiTaskForm, enabled: boolean): AiTaskForm => {
+  if (!enabled) return { ...form, confidenceThreshold: 0 };
+  return aiTaskReviewEnabled(form) ? form : { ...form, confidenceThreshold: SUGGESTED_AI_TASK_REVIEW_THRESHOLD };
 };
 
 const labelFor = (source: AiTaskInputSource, context: AiTaskEditorContext): string => {
