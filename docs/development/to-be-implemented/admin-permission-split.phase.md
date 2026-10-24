@@ -26,6 +26,45 @@ Doc-review amendments: everything under Advanced Flow Settings (Skills, MCP
 Servers, Event Watch, Knowledge) is technical; an area key passes a flag's
 role scoping on admin surfaces only (ADR-066 §5).
 
+## Build — approved change summary (2026-10-24)
+
+Approved at `/build` Step 0, with two refinements found in the pre-flight read:
+
+- **Oversight is full read-and-edit, like admins (maintainer decision).** All
+  Chats and All Flows open the ordinary chat view and flow editor, which use
+  `isAdmin` as an ownership bypass. `canOversee(ctx)` replaces `isAdmin` at the
+  *ownership-bypass* sites only: chat access (tRPC, streaming, document and
+  upload routes, via `lib/session-access.ts`) and `canEditFlow` callers. Group-
+  admin powers (`resolveGroupAuthorization`), flag resolution and visibility
+  rules keep plain `isAdmin`.
+- **Configuration placement.** `settings.get` / `settings.set` are generic
+  key-value writes, so they stay Global-only except for an allowlisted key
+  (`global_prompt`, the Global Instructions card) that `admin:technical` may
+  read and write. In "General", Registration, Auth methods and the
+  Organisations deployment card stay Global-only; About links and Branding are
+  technical. The first-run setup wizard and "Re-run setup" stay Global-only.
+
+Business rules, UI, data, files, tests, version (PATCH `0.28.43 → 0.28.44`,
+base and PR target `release/alpha-2`) and risks are as in the sections below.
+
+Build order:
+
+1. Domain — permission keys, role keys (`permission.ts`, `role.ts` + tests).
+2. Application — role assign/remove guards (+ `role.test.ts`).
+3. Application — user create/update/delete/reset-password guards (+ tests).
+4. Adapters — seed roles + rename, migration `0049` (+ seed test).
+5. Web core — `anyPermissionProcedure`, `canOversee`, `lib/admin-areas.ts` (+ tests).
+6. Re-gate technical routers.
+7. Re-gate users routers.
+8. Re-gate oversight routers.
+9. Oversight ownership override — chat access and `canEditFlow` callers.
+10. Completeness test — `admin-area-gates.test.ts` across the whole `appRouter`.
+11. Admin-surface flag check.
+12. Admin layout + per-page area redirects.
+13. Sidebar + user-rail "Admin" entry.
+14. Settings card gating + "Global Admin" copy.
+15. E2E spec extension, docs move, implementation summary, `VERSION`.
+
 ## 1. Problem
 
 See PRD §1. `(admin)/admin/layout.tsx` and every admin procedure gate on

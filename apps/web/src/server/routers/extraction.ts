@@ -4,7 +4,7 @@ import { DocumentGeneratorRouter, DocxGenerator, XlsxGenerator } from "@rbrasier
 import type { Container } from "@/lib/container";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, canOversee, router, type TrpcContext } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { canEditFlow } from "./flow";
 
@@ -65,12 +65,13 @@ interface RunControlContext {
   container: Container;
   userId: string;
   isAdmin: boolean;
+  permissions: TrpcContext["permissions"];
 }
 
 const assertRunEditable = async (ctx: RunControlContext, runId: string): Promise<void> => {
   const run = await ctx.container.repos.extractionRuns.getRun(runId);
   if (run.error) throw toTrpcError(run.error);
-  if (!(await canEditFlow(ctx.container, run.data.flowId, ctx.userId, ctx.isAdmin))) {
+  if (!(await canEditFlow(ctx.container, run.data.flowId, ctx.userId, canOversee(ctx)))) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You cannot control this run." });
   }
 };
@@ -140,8 +141,8 @@ export const extractionRouter = router({
 
   // Every extraction flow across the org (the /admin/synthesise list).
   listAll: extractionEnabled.query(async ({ ctx }) => {
-    if (!ctx.isAdmin) {
-      throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
+    if (!canOversee(ctx)) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to do this." });
     }
     const result = await ctx.container.useCases.listExtractionFlows.execute();
     if (result.error) throw toTrpcError(result.error);
@@ -160,7 +161,7 @@ export const extractionRouter = router({
     }),
 
   getSchema: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
-    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
     }
     const result = await ctx.container.useCases.getExtractionSchema.execute(input.flowId);
@@ -175,7 +176,7 @@ export const extractionRouter = router({
   previewSystemPrompt: viewProcedure
     .input(z.object({ flowId: z.string().uuid(), schema: schemaInput }))
     .query(async ({ ctx, input }) => {
-      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
       }
       // Build best-effort from the fields that parse, so the author can preview
@@ -198,7 +199,7 @@ export const extractionRouter = router({
   saveSchema: authorProcedure
     .input(z.object({ flowId: z.string().uuid(), schema: schemaInput }))
     .mutation(async ({ ctx, input }) => {
-      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
       }
       const result = await ctx.container.useCases.saveExtractionSchema.execute({
@@ -212,7 +213,7 @@ export const extractionRouter = router({
   // Soft-deletes an extraction flow (a `flow` row with flowType "extraction").
   // Author-gated and re-checked through the shared flow-edit guard.
   delete: authorProcedure.input(flowIdInput).mutation(async ({ ctx, input }) => {
-    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot delete this flow." });
     }
     const result = await ctx.container.useCases.deleteFlow.execute(input.flowId);
@@ -233,7 +234,7 @@ export const extractionRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
       }
 
@@ -307,7 +308,7 @@ export const extractionRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
       }
 
@@ -345,7 +346,7 @@ export const extractionRouter = router({
   runSample: runProcedure
     .input(z.object({ flowId: z.string().uuid(), documents: z.array(sampleDocumentSchema) }))
     .mutation(async ({ ctx, input }) => {
-      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot run this flow." });
       }
 
@@ -378,7 +379,7 @@ export const extractionRouter = router({
 
   // The input documents staged against the flow's draft (progressive upload).
   listDraftDocuments: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
-    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
     }
     const result = await ctx.container.useCases.listDraftDocuments.execute(input.flowId);
@@ -396,7 +397,7 @@ export const extractionRouter = router({
   uploadDraftDocuments: runProcedure
     .input(z.object({ flowId: z.string().uuid(), files: z.array(batchFileSchema).min(1) }))
     .mutation(async ({ ctx, input }) => {
-      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
       }
       // Resolve the admin-configured archive limits at upload time so a zip is
@@ -438,7 +439,7 @@ export const extractionRouter = router({
       if (!document.data) {
         throw new TRPCError({ code: "NOT_FOUND", message: "Draft document not found." });
       }
-      if (!(await canEditFlow(ctx.container, document.data.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, document.data.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
       }
       const result = await ctx.container.useCases.removeDraftDocument.execute(input.documentId);
@@ -452,7 +453,7 @@ export const extractionRouter = router({
   startSample: runProcedure
     .input(z.object({ flowId: z.string().uuid(), sampleSize: z.number().int().min(1).optional() }))
     .mutation(async ({ ctx, input }) => {
-      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot run this flow." });
       }
 
@@ -498,7 +499,7 @@ export const extractionRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+      if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot run this flow." });
       }
 
@@ -537,7 +538,7 @@ export const extractionRouter = router({
   runStatus: runProcedure.input(runIdInput).query(async ({ ctx, input }) => {
     const run = await ctx.container.repos.extractionRuns.getRun(input.runId);
     if (run.error) throw toTrpcError(run.error);
-    if (!(await canEditFlow(ctx.container, run.data.flowId, ctx.userId, ctx.isAdmin))) {
+    if (!(await canEditFlow(ctx.container, run.data.flowId, ctx.userId, canOversee(ctx)))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this run." });
     }
     const counts = await ctx.container.repos.extractionRuns.countByStatus(input.runId);
@@ -589,7 +590,7 @@ export const extractionRouter = router({
     if (!flow.data) {
       throw new TRPCError({ code: "NOT_FOUND", message: "Flow not found." });
     }
-    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow's runs." });
     }
     const runs = await ctx.container.repos.extractionRuns.listRunsForFlow(input.flowId);

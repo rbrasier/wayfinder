@@ -1,20 +1,19 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, router } from "../trpc";
+import { canOpenAdminArea } from "@/lib/admin-areas";
+import { authenticatedProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
-
-const requireAdmin = (isAdmin: boolean): void => {
-  if (!isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
-};
 
 export const skillRouter = router({
   // Active skills are readable by any authenticated user so the flow editor can
-  // populate its picker; archived ones are admin-only.
+  // populate its picker; archived ones belong to the technical admin area.
   list: authenticatedProcedure
     .input(z.object({ includeArchived: z.boolean().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const includeArchived = input?.includeArchived ?? false;
-      if (includeArchived) requireAdmin(ctx.isAdmin);
+      if (includeArchived && !canOpenAdminArea(ctx, "technical")) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to do this." });
+      }
       const result = await ctx.container.useCases.listSkills.execute({ includeArchived });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
@@ -38,10 +37,9 @@ export const skillRouter = router({
       return result.data;
     }),
 
-  create: authenticatedProcedure
+  create: technicalAdminProcedure
     .input(z.object({ raw: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.createSkill.execute({
         raw: input.raw,
         createdByUserId: ctx.userId,
@@ -50,10 +48,9 @@ export const skillRouter = router({
       return result.data;
     }),
 
-  update: authenticatedProcedure
+  update: technicalAdminProcedure
     .input(z.object({ id: z.string().uuid(), raw: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.updateSkill.execute({
         id: input.id,
         raw: input.raw,
@@ -62,19 +59,17 @@ export const skillRouter = router({
       return result.data;
     }),
 
-  archive: authenticatedProcedure
+  archive: technicalAdminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.archiveSkill.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  restore: authenticatedProcedure
+  restore: technicalAdminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.restoreSkill.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;

@@ -31,6 +31,7 @@ import {
   CompositeHealthChecker,
   DbHealthChecker,
   DrizzleAuditLogger,
+  DrizzleUserRoleRepository,
   DrizzleConversationRepository,
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
@@ -78,6 +79,7 @@ export const buildContainer = (env: Env) => {
   const logger = new PinoLogger(env.NODE_ENV !== "production");
 
   const users = new DrizzleUserRepository(db);
+  const userRoles = new DrizzleUserRoleRepository(db);
   const conversations = new DrizzleConversationRepository(db);
   const errorLogs = new DrizzleErrorLogRepository(db);
   const errorLogger = new DrizzleErrorLogger(errorLogs);
@@ -274,8 +276,8 @@ export const buildContainer = (env: Env) => {
     useCases: {
       applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete, notifyOnStepComplete),
       createUser: new CreateUser(users),
-      updateUser: new UpdateUser(users),
-      deleteUser: new DeleteUser(users),
+      updateUser: new UpdateUser(users, userRoles),
+      deleteUser: new DeleteUser(users, userRoles),
       listUsers: new ListUsers(users),
       logError: new LogError(errorLogger),
       listErrors: new ListErrors(errorLogs),

@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { WebhookActor } from "@rbrasier/application";
 import { buildRetryFailedStep } from "@/lib/automation/unattended-runs";
-import { authenticatedProcedure, router, type TrpcContext } from "../trpc";
+import { authenticatedProcedure, canOversee, router, type TrpcContext } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { canEditFlow } from "./flow";
 
@@ -22,7 +22,7 @@ const actorOf = (ctx: TrpcContext & { userId: string }): WebhookActor => ({
 });
 
 const requireFlowEditor = async (ctx: TrpcContext & { userId: string }, flowId: string): Promise<void> => {
-  if (!(await canEditFlow(ctx.container, flowId, ctx.userId, ctx.isAdmin))) {
+  if (!(await canEditFlow(ctx.container, flowId, ctx.userId, canOversee(ctx)))) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
   }
 };
@@ -114,10 +114,12 @@ export const automationRouter = router({
   retryRun: authenticatedProcedure
     .input(z.object({ sessionId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      // Retried from All Chats (oversight) or Event Watch's run history
+      // (technical), so either area may retry a run it does not own (ADR-066 §4).
       const result = await buildRetryFailedStep(ctx.container).execute({
         sessionId: input.sessionId,
         userId: ctx.userId,
-        isAdmin: ctx.isAdmin,
+        isAdmin: canOversee(ctx) || ctx.permissions.has("admin:technical"),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

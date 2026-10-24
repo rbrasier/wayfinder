@@ -8,7 +8,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, router, userAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const GROUP_MANAGE_PERMISSION: PermissionKey = "group:manage_own";
@@ -92,7 +92,7 @@ export const groupRouter = router({
 
   // Creating groups and assigning their first delegated admin is a global-admin
   // action (PRD user story 1); delegated admins never mint new groups.
-  create: adminProcedure
+  create: userAdminProcedure
     .input(
       z.object({
         name: z.string().min(1),
@@ -130,7 +130,7 @@ export const groupRouter = router({
       return result.data;
     }),
 
-  delete: adminProcedure
+  delete: userAdminProcedure
     .input(z.object({ groupId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteGroup.execute(input.groupId);

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { groupIdsForMemberships, isFlowDiscoverableBy } from "@rbrasier/domain";
 import type { Session, SessionListSummary } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, canOversee, oversightProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { orderStepIds } from "@/lib/step-order";
 import { buildCompletedStepData } from "@/lib/step-data";
@@ -197,7 +197,7 @@ export const sessionRouter = router({
       return { items, nextCursor: result.data.nextCursor };
     }),
 
-  listAll: adminProcedure.query(async ({ ctx }) => {
+  listAll: oversightProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listAllSessions.execute();
     if (result.error) throw toTrpcError(result.error);
     return result.data;
@@ -205,7 +205,7 @@ export const sessionRouter = router({
 
   // Keyset-paginated counterpart of `listAll` for the admin table. Returns bare
   // sessions (the admin view joins users/flows client-side), one page at a time.
-  listAllPage: adminProcedure
+  listAllPage: oversightProcedure
     .input(sessionListPageInputSchema)
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.listAllSessionsPage.execute({
@@ -230,7 +230,7 @@ export const sessionRouter = router({
       // visitor as a collaborator; the server-computed role — not ?shared=true —
       // decides read-only. The approver read grant (ADR-018) is only computed for
       // non-owners so owners never pay the approvals lookup on a poll.
-      const isOwnerOrAdmin = ctx.isAdmin || session.userId === ctx.userId;
+      const isOwnerOrAdmin = canOversee(ctx) || session.userId === ctx.userId;
       const isApprover = isOwnerOrAdmin
         ? false
         : await viewerIsSessionApprover(ctx.container, ctx.userId, session.id);
@@ -238,7 +238,7 @@ export const sessionRouter = router({
         session,
         flow,
         userId: ctx.userId,
-        isAdmin: ctx.isAdmin,
+        isAdmin: canOversee(ctx),
         isApprover,
         allowAutoEnrol: true,
       });
@@ -271,7 +271,7 @@ export const sessionRouter = router({
       if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
       // Only the session owner or an admin may revoke a collaborator's send
       // access; the revoke downgrades them to viewer so their next send is 403.
-      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+      if (!canOversee(ctx) && sessionResult.data.session.userId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
       }
       const result = await ctx.container.useCases.revokeSessionParticipant.execute({
@@ -292,7 +292,7 @@ export const sessionRouter = router({
       if (!result.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
 
       const { session, messages, nodes, edges } = result.data;
-      if (!ctx.isAdmin && session.userId !== ctx.userId) {
+      if (!canOversee(ctx) && session.userId !== ctx.userId) {
         const isApprover = await viewerIsSessionApprover(ctx.container, ctx.userId, session.id);
         if (!isApprover) {
           throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
@@ -379,7 +379,7 @@ export const sessionRouter = router({
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);
       if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
-      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+      if (!canOversee(ctx) && sessionResult.data.session.userId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
       }
       const result = await ctx.container.repos.sessions.update(input.sessionId, { title: input.title });
@@ -394,7 +394,7 @@ export const sessionRouter = router({
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);
       if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
-      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+      if (!canOversee(ctx) && sessionResult.data.session.userId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
       }
       const result = await ctx.container.repos.sessions.update(input.sessionId, { status: "abandoned" });
@@ -409,7 +409,7 @@ export const sessionRouter = router({
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);
       if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
-      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+      if (!canOversee(ctx) && sessionResult.data.session.userId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
       }
       const result = await ctx.container.useCases.overrideBranch.execute({
@@ -440,7 +440,7 @@ export const sessionRouter = router({
       if (!sessionResult.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
       // Owner or admin only — this rejects read-only shared participants, the
       // same authorisation `confirmStep` applies.
-      if (!ctx.isAdmin && sessionResult.data.session.userId !== ctx.userId) {
+      if (!canOversee(ctx) && sessionResult.data.session.userId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
       }
 
@@ -486,7 +486,7 @@ export const sessionRouter = router({
       const { session, flow, nodes, edges, messages } = sessionResult.data;
       // Only the originator (or an admin) may confirm — this rejects read-only
       // shared participants, mirroring overrideBranch's authorisation.
-      if (!ctx.isAdmin && session.userId !== ctx.userId) {
+      if (!canOversee(ctx) && session.userId !== ctx.userId) {
         throw new TRPCError({ code: "FORBIDDEN", message: "Access denied." });
       }
 

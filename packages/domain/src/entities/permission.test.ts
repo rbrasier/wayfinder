@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_AREA_PERMISSIONS,
   PERMISSIONS,
   computeEffectivePermissions,
   type PermissionKey,
@@ -121,5 +122,40 @@ describe("PERMISSIONS registry", () => {
     const keys = PERMISSIONS.map((permission) => permission.key);
 
     expect(keys).toContain("flow:webhook_trigger");
+  });
+});
+
+describe("admin area permissions (ADR-066)", () => {
+  it("registers one permission per delegable admin area", () => {
+    const keys = PERMISSIONS.map((permission) => permission.key);
+
+    expect(keys).toContain("admin:technical");
+    expect(keys).toContain("admin:users");
+    expect(keys).toContain("admin:oversight");
+  });
+
+  it("lists the admin area keys in ADMIN_AREA_PERMISSIONS", () => {
+    expect([...ADMIN_AREA_PERMISSIONS].sort()).toEqual(
+      ["admin:oversight", "admin:technical", "admin:users"].sort(),
+    );
+  });
+
+  it("still gives a Global Admin every admin area key through the wildcard", () => {
+    const permissions = computeEffectivePermissions([], new Map(), true);
+
+    for (const key of ADMIN_AREA_PERMISSIONS) {
+      expect(permissions.has(key)).toBe(true);
+    }
+  });
+
+  it("gives a non-admin an admin area key only when a role grants it", () => {
+    const technicalAdmins: Role = { ...powerUsers, id: "role-technical", key: "technical_admins" };
+    const grantsByRole = new Map<string, PermissionKey[]>([["role-technical", ["admin:technical"]]]);
+
+    const permissions = computeEffectivePermissions([everyone, technicalAdmins], grantsByRole, false);
+
+    expect(permissions.has("admin:technical")).toBe(true);
+    expect(permissions.has("admin:users")).toBe(false);
+    expect(permissions.has("admin:oversight")).toBe(false);
   });
 });
