@@ -9,8 +9,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { EmptyState } from "@/components/empty-state";
 import { TableSkeletonRows } from "@/components/skeleton/card-skeleton";
 import { runStatusLabel } from "@/components/automation/run-status";
-import { describeCondition, pausedReasonLabel } from "@/components/event-watch/watch-model";
+import {
+  describeCondition,
+  pausedReasonLabel,
+  runNowMessage,
+  type RunNowMessage,
+} from "@/components/event-watch/watch-model";
 import { trpc } from "@/trpc/client";
+
+const MESSAGE_TONE: Record<RunNowMessage["tone"], string> = {
+  success: "text-[#1f6b4d]",
+  info: "text-muted-foreground",
+  error: "text-destructive",
+};
 
 const formatWhen = (value: Date | string | null): string => (value ? new Date(value).toLocaleString() : "—");
 
@@ -29,6 +40,16 @@ export function AdminEventWatchesContent() {
   };
   const pause = trpc.eventWatch.pause.useMutation({ onSuccess: refresh, onError: (cause) => setError(cause.message) });
   const resume = trpc.eventWatch.resume.useMutation({ onSuccess: refresh, onError: (cause) => setError(cause.message) });
+  // The outcome of the latest "Run now", shown under that watch's actions.
+  const [runNowResults, setRunNowResults] = useState<Record<string, RunNowMessage>>({});
+  const runNow = trpc.eventWatch.runNow.useMutation({
+    onSuccess: (result, { id }) => {
+      setRunNowResults((previous) => ({ ...previous, [id]: runNowMessage(result) }));
+      refresh();
+    },
+    onError: (cause, { id }) =>
+      setRunNowResults((previous) => ({ ...previous, [id]: { tone: "error", text: cause.message } })),
+  });
   const listings = listQuery.data ?? [];
 
   return (
@@ -118,7 +139,17 @@ export function AdminEventWatchesContent() {
                           View run history
                         </Link>
                       </TableCell>
-                      <TableCell className="text-right align-top">
+                      <TableCell className="text-right align-top [&>button+button]:ml-2">
+                        {watch.status === "active" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={runNow.isPending && runNow.variables?.id === watch.id}
+                            onClick={() => runNow.mutate({ id: watch.id })}
+                          >
+                            {runNow.isPending && runNow.variables?.id === watch.id ? "Running…" : "Run now"}
+                          </Button>
+                        )}
                         {watch.status === "paused" ? (
                           <Button
                             size="sm"
@@ -137,6 +168,14 @@ export function AdminEventWatchesContent() {
                           >
                             Pause
                           </Button>
+                        )}
+                        {runNowResults[watch.id] && (
+                          <p
+                            role="status"
+                            className={`mt-1.5 max-w-[240px] text-left text-xs ${MESSAGE_TONE[runNowResults[watch.id]!.tone]}`}
+                          >
+                            {runNowResults[watch.id]!.text}
+                          </p>
                         )}
                       </TableCell>
                     </TableRow>

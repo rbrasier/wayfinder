@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { buildClaimDueWatchesStatement, toEventWatch } from "./drizzle-event-watch-repository";
+import {
+  buildClaimDueWatchesStatement,
+  buildClaimWatchNowStatement,
+  toEventWatch,
+} from "./drizzle-event-watch-repository";
 
 describe("buildClaimDueWatchesStatement", () => {
   const now = new Date("2026-10-22T00:00:00.000Z");
@@ -20,6 +24,27 @@ describe("buildClaimDueWatchesStatement", () => {
 
     expect(params).toContain(now.toISOString());
     expect(params).toContain(10);
+  });
+});
+
+describe("buildClaimWatchNowStatement", () => {
+  const now = new Date("2026-10-22T00:00:00.000Z");
+  const render = () => new PgDialect().sqlToQuery(buildClaimWatchNowStatement("watch-1", now));
+
+  it("claims one active watch with skip-locked, moving its next poll on by its interval", () => {
+    const text = render().sql.toLowerCase();
+
+    expect(text).toContain("for update skip locked");
+    expect(text).toContain("status = 'active'");
+    expect(text).toContain("make_interval(mins => interval_minutes)");
+    expect(render().params).toContain("watch-1");
+  });
+
+  it("refuses a watch whose last claim is under 30 seconds old, as that check may still be running", () => {
+    const text = render().sql.toLowerCase();
+
+    expect(text).toContain("next_poll_at is null");
+    expect(text).toContain("interval '30 seconds'");
   });
 });
 

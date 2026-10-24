@@ -70,6 +70,28 @@ export const buildClaimDueWatchesStatement = (now: Date, limit: number): SQL => 
   RETURNING *
 `;
 
+// "Run now" takes one watch the same way. A watch's last claim was at
+// next_poll_at minus its interval; one claimed under 30 seconds ago may still be
+// mid-check (a request times out at 15), and checking it again could fire an
+// item twice, so it is left alone.
+export const buildClaimWatchNowStatement = (id: string, now: Date): SQL => sql`
+  UPDATE ${admin_event_watches}
+  SET next_poll_at = ${now.toISOString()}::timestamptz + make_interval(mins => interval_minutes),
+      updated_at = now()
+  WHERE id IN (
+    SELECT id FROM ${admin_event_watches}
+    WHERE id = ${id}
+      AND status = 'active'
+      AND (
+        next_poll_at IS NULL
+        OR next_poll_at - make_interval(mins => interval_minutes)
+          <= ${now.toISOString()}::timestamptz - interval '30 seconds'
+      )
+    FOR UPDATE SKIP LOCKED
+  )
+  RETURNING *
+`;
+
 // The poll path reads the raw row back from `RETURNING *`, whose column names
 // are the snake_case ones the schema declares.
 const toEventWatchFromRaw = (row: Record<string, unknown>): EventWatch =>
@@ -188,6 +210,18 @@ export class DrizzleEventWatchRepository implements IEventWatchRepository {
       return ok(rows.map(toEventWatchFromRaw));
     } catch (cause) {
       return failure("Failed to claim due event watches.", cause);
+    }
+  }
+
+  async claimNow(id: string, now: Date): Promise<Result<EventWatch | null>> {
+    try {
+      const rows = (await this.db.execute(buildClaimWatchNowStatement(id, now))) as unknown as Record<
+        string,
+        unknown
+      >[];
+      return ok(rows[0] ? toEventWatchFromRaw(rows[0]) : null);
+    } catch (cause) {
+      return failure("Failed to claim the event watch.", cause);
     }
   }
 

@@ -9,6 +9,7 @@ import {
   isManualFieldValue,
   jsonTreeRows,
   pausedReasonLabel,
+  runNowMessage,
   sampleFieldOptions,
   secretChangeFor,
   watchInputFromForm,
@@ -232,5 +233,39 @@ describe("watchProblems", () => {
     );
 
     expect(problems).toEqual([{ field: "connection", message: "The request body is not valid JSON." }]);
+  });
+});
+
+describe("runNowMessage", () => {
+  const checked = { outcome: "checked" as const, started: 0, failed: false, paused: false, lastError: null };
+
+  it("says how many runs a check started", () => {
+    expect(runNowMessage({ ...checked, started: 1 })).toEqual({ tone: "success", text: "Checked: started 1 run." });
+    expect(runNowMessage({ ...checked, started: 3 })).toEqual({ tone: "success", text: "Checked: started 3 runs." });
+  });
+
+  it("says when nothing met the condition", () => {
+    expect(runNowMessage(checked)).toEqual({
+      tone: "info",
+      text: "Checked: no item meets the condition right now, so nothing started.",
+    });
+  });
+
+  it("gives the reason a check failed or paused the watch", () => {
+    expect(runNowMessage({ ...checked, failed: true, lastError: "The API answered 503." })).toEqual({
+      tone: "error",
+      text: "The check failed: The API answered 503.",
+    });
+    expect(runNowMessage({ ...checked, paused: true, lastError: "Too many matched." })).toEqual({
+      tone: "error",
+      text: "The check paused the watch: Too many matched.",
+    });
+  });
+
+  it("asks to try again when a check is already under way", () => {
+    expect(runNowMessage({ outcome: "busy" })).toEqual({
+      tone: "info",
+      text: "A check of this watch started moments ago. Try again in a few seconds.",
+    });
   });
 });

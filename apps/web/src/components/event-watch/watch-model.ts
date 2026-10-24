@@ -274,3 +274,26 @@ export const secretChangeFor = (typed: string, clear: boolean): string | null | 
   if (clear) return null;
   return typed.trim() === "" ? undefined : typed;
 };
+
+export type RunNowResult =
+  | { outcome: "checked"; started: number; failed: boolean; paused: boolean; lastError: string | null }
+  | { outcome: "busy" };
+
+export interface RunNowMessage {
+  tone: "success" | "info" | "error";
+  text: string;
+}
+
+// What "Run now" tells the admin. A check that matches nothing is still a
+// successful check, so it says why nothing started rather than looking broken.
+export const runNowMessage = (result: RunNowResult): RunNowMessage => {
+  if (result.outcome === "busy") {
+    return { tone: "info", text: "A check of this watch started moments ago. Try again in a few seconds." };
+  }
+  if (result.paused) return { tone: "error", text: `The check paused the watch: ${result.lastError ?? "see its status"}` };
+  if (result.failed) return { tone: "error", text: `The check failed: ${result.lastError ?? "see its status"}` };
+  if (result.started === 0) {
+    return { tone: "info", text: "Checked: no item meets the condition right now, so nothing started." };
+  }
+  return { tone: "success", text: `Checked: started ${result.started} ${result.started === 1 ? "run" : "runs"}.` };
+};

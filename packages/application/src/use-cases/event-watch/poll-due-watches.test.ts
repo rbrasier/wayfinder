@@ -55,9 +55,18 @@ class InMemoryWatches {
   successes = 0;
   failures: string[] = [];
   fired: string[] = [];
+  // Set when a check of this watch started moments ago, so it cannot be claimed.
+  checkedMomentsAgo = false;
+  missing = false;
   constructor(public current: EventWatch) {}
   async claimDue() {
     return ok([this.current]);
+  }
+  async findById() {
+    return ok(this.missing ? null : this.current);
+  }
+  async claimNow() {
+    return ok(this.checkedMomentsAgo || this.current.status !== "active" ? null : this.current);
   }
   async getSecret() {
     return ok("api-token");
@@ -282,5 +291,61 @@ describe("PollDueWatches", () => {
     await useCase.execute({ limit: 10 });
 
     expect(watches.paused[0]!.reason).toBe("run_as_unavailable");
+  });
+});
+
+describe("PollDueWatches.runNow", () => {
+  it("checks the watch at once, starting a run for each item that meets its condition", async () => {
+    const { useCase, starts } = build({
+      response: hearings({ id: "H-1", status: "finished" }),
+      previous: [previous("H-1", "live")],
+    });
+
+    const result = await useCase.runNow("watch-1");
+
+    expect(result.data).toEqual({ outcome: "checked", started: 1, failed: false, paused: false, lastError: null });
+    expect(starts.map((start) => start.itemId)).toEqual(["H-1"]);
+  });
+
+  it("starts nothing when no item meets the condition, and says so", async () => {
+    const { useCase, starts } = build({ response: hearings({ id: "H-1", status: "live" }) });
+
+    const result = await useCase.runNow("watch-1");
+
+    expect(result.data).toMatchObject({ outcome: "checked", started: 0 });
+    expect(starts).toEqual([]);
+  });
+
+  it("reports a failed check with its reason", async () => {
+    const { useCase } = build({ response: err(domainError("INFRA_FAILURE", "The API answered 503.")) });
+
+    const result = await useCase.runNow("watch-1");
+
+    expect(result.data).toMatchObject({ outcome: "checked", failed: true, lastError: "The API answered 503." });
+  });
+
+  it("does not check a watch whose check started moments ago, so no item fires twice", async () => {
+    const { useCase, watches, requests } = build({});
+    watches.checkedMomentsAgo = true;
+
+    const result = await useCase.runNow("watch-1");
+
+    expect(result.data).toEqual({ outcome: "busy" });
+    expect(requests).toEqual([]);
+  });
+
+  it("refuses a paused watch, which must be resumed first", async () => {
+    const { useCase } = build({ watch: watch({ status: "paused", pausedReason: "manual" }) });
+
+    const result = await useCase.runNow("watch-1");
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("returns NOT_FOUND for an unknown watch", async () => {
+    const { useCase, watches } = build({});
+    watches.missing = true;
+
+    expect((await useCase.runNow("missing")).error?.code).toBe("NOT_FOUND");
   });
 });

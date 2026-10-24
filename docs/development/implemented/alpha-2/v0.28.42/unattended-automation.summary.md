@@ -591,3 +591,29 @@ alongside this summary.
 - **Deviation:** the phase doc planned a domain test for credential state
   helpers. The rules ended up needing no domain helper, so they are tested in the
   application layer and in the screen's model instead.
+
+## Amendment 9 — Run now on the Event Watch list
+
+Asked for during review. Each active watch on **Admin → Event Watch** has a **Run
+now** action.
+
+- **What it does:**
+  - Checks the watch at once by the same rules as a scheduled check, and resets
+    its schedule from now.
+  - Says what happened under the actions: runs started, nothing matched, the
+    check failed (with the reason), or the watch paused.
+- **Concurrency:** `claimNow` takes the watch atomically and refuses one claimed
+  under 30 seconds ago, so a check already under way is never duplicated. The
+  admin is asked to try again in a few seconds. ADR-063 §5 records this.
+- **Files:**
+  - `PollDueWatches.runNow`
+  - `IEventWatchRepository.claimNow` and `buildClaimWatchNowStatement`
+  - the `eventWatch.runNow` router mutation
+  - `runNowMessage` in `watch-model.ts`
+  - the list page
+- **Tests:**
+  - `poll-due-watches.test.ts` (six cases)
+  - `drizzle-event-watch-repository.test.ts` (the claim statement)
+  - `watch-model.test.ts` (the messages)
+- **E2E:** none. Run now falls in no group of `e2e-test-policy.md` and is covered at
+  the application layer.

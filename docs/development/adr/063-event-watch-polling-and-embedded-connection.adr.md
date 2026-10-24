@@ -146,6 +146,14 @@ Each tick calls the application use case `PollDueWatches`:
 values. A 1-minute watch on a 60 s tick polls roughly every minute. Exact
 cadence is not promised.
 
+**Run now (amended).** An admin can check an active watch at once from the
+watch list. `PollDueWatches.runNow` claims that one watch the way `claimDue` does
+(skip-locked, next poll moved on by its interval) and checks it by the same rules,
+so the condition, one run per item and the run cap all still apply. A watch claimed
+under 30 seconds ago is left alone, since its check may still be running (a request
+times out at 15 seconds) and a second check could fire an item twice. The admin
+is told to try again in a few seconds. A paused watch must be resumed first.
+
 ### 6. Outbound HTTP and SSRF
 
 A new domain port, `IOutboundHttpClient.request({ url, method, headers, body,

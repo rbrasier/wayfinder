@@ -46,6 +46,10 @@ export interface IEventWatchRepository {
   // Atomically takes the active watches due at `now` and moves each one's next
   // poll forward by its interval, so a second poller never takes the same one.
   claimDue(now: Date, limit: number): Promise<Result<EventWatch[]>>;
+  // Takes one active watch for an immediate check, moving its next poll forward
+  // as claimDue does. Null when it is paused or missing, or when a check of it
+  // was claimed moments ago and may still be running.
+  claimNow(id: string, now: Date): Promise<Result<EventWatch | null>>;
   recordSuccess(id: string, at: Date): Promise<Result<void>>;
   // Returns the watch with its failure count already incremented.
   recordFailure(id: string, at: Date, message: string): Promise<Result<EventWatch>>;

@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { buildPollDueWatches } from "@/lib/automation/event-watches";
 
 const RUN_HISTORY_LIMIT = 50;
 
@@ -150,6 +151,13 @@ export const eventWatchRouter = router({
     const resumed = await ctx.container.useCases.resumeEventWatch.execute({ id: input.id, actorId: ctx.userId });
     if (resumed.error) throw toTrpcError(resumed.error);
     return resumed.data;
+  }),
+
+  // Checks the watch now instead of at its next scheduled time, by the same rules.
+  runNow: eventWatchProcedure.input(byId).mutation(async ({ ctx, input }) => {
+    const result = await buildPollDueWatches(ctx.container).runNow(input.id);
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
   }),
 
   // A failed request is an answer, not an error: the editor shows it in place.

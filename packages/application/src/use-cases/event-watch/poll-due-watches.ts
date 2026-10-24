@@ -1,4 +1,6 @@
 import {
+  domainError,
+  err,
   evaluateWatchItems,
   ok,
   readJsonPath,
@@ -18,6 +20,8 @@ export interface PollDueWatchesDependencies {
   watches: Pick<
     IEventWatchRepository,
     | "claimDue"
+    | "claimNow"
+    | "findById"
     | "getSecret"
     | "getItemStates"
     | "saveItemStates"
@@ -44,13 +48,21 @@ export interface PollDueWatchesOutput {
 }
 
 // A poll can fail and pause the watch at once, so the two are counted apart.
-type PollOutcome = { started: number; failed: boolean; paused: boolean };
+type PollOutcome = { started: number; failed: boolean; paused: boolean; lastError: string | null };
 
-const outcome = (started: number, flags: { failed?: boolean; paused?: boolean } = {}): PollOutcome => ({
+const outcome = (
+  started: number,
+  flags: { failed?: boolean; paused?: boolean; lastError?: string } = {},
+): PollOutcome => ({
   started,
   failed: flags.failed ?? false,
   paused: flags.paused ?? false,
+  lastError: flags.lastError ?? null,
 });
+
+// What an admin's "Run now" did: checked the watch, or found a check of it
+// already under way.
+export type RunWatchNowOutput = ({ outcome: "checked" } & PollOutcome) | { outcome: "busy" };
 
 const PAUSE_REASONS: Record<"run_as_unavailable" | "flow_unavailable", string> = {
   run_as_unavailable: "The person the runs belong to no longer has an account.",
@@ -77,6 +89,24 @@ export class PollDueWatches {
       if (result.paused) summary.paused += 1;
     }
     return ok(summary);
+  }
+
+  // Checks one watch now rather than at its next scheduled time, by the same
+  // rules as a scheduled check: the condition, one run per item and the run cap
+  // all still apply.
+  async runNow(watchId: string): Promise<Result<RunWatchNowOutput>> {
+    const found = await this.dependencies.watches.findById(watchId);
+    if (found.error) return found;
+    if (!found.data) return err(domainError("NOT_FOUND", "Event watch not found."));
+    if (found.data.status !== "active") {
+      return err(domainError("VALIDATION_FAILED", "This watch is paused. Resume it to run it."));
+    }
+    const claimed = await this.dependencies.watches.claimNow(watchId, this.dependencies.now());
+    if (claimed.error) return claimed;
+    if (!claimed.data) return ok({ outcome: "busy" });
+    const { watchAllowedHosts } = await this.dependencies.loadAutomationConfig();
+    const result = await this.poll(claimed.data, watchAllowedHosts);
+    return ok({ outcome: "checked", ...result });
   }
 
   private async poll(watch: EventWatch, allowedHosts: readonly string[]): Promise<PollOutcome> {
@@ -113,12 +143,9 @@ export class PollDueWatches {
     // Advancing state past matches that were never run would lose them, so a
     // capped poll records nothing and leaves them for after the resume.
     if (evaluation.toFire.length > watch.maxRunsPerPoll) {
-      await this.pause(
-        watch,
-        "run_cap_exceeded",
-        `${evaluation.toFire.length} items matched in one check, more than the limit of ${watch.maxRunsPerPoll}. Check the condition, then resume the watch.`,
-      );
-      return outcome(0, { paused: true });
+      const explanation = `${evaluation.toFire.length} items matched in one check, more than the limit of ${watch.maxRunsPerPoll}. Check the condition, then resume the watch.`;
+      await this.pause(watch, "run_cap_exceeded", explanation);
+      return outcome(0, { paused: true, lastError: explanation });
     }
 
     return this.startRuns(watch, evaluation.toFire, evaluation.nextStates);
@@ -166,7 +193,7 @@ export class PollDueWatches {
       }
       await this.saveState(watch, nextStates, notStarted, started, now);
       await this.pause(watch, run.reason, PAUSE_REASONS[run.reason]);
-      return outcome(started.length, { paused: true });
+      return outcome(started.length, { paused: true, lastError: PAUSE_REASONS[run.reason] });
     }
 
     await this.saveState(watch, nextStates, notStarted, started, now);
@@ -197,14 +224,16 @@ export class PollDueWatches {
 
   private async recordFailure(watch: EventWatch, message: string): Promise<PollOutcome> {
     const recorded = await this.dependencies.watches.recordFailure(watch.id, this.dependencies.now(), message);
-    if (recorded.error) return outcome(0, { failed: true });
-    if (recorded.data.consecutiveFailures < recorded.data.failureThreshold) return outcome(0, { failed: true });
+    if (recorded.error) return outcome(0, { failed: true, lastError: message });
+    if (recorded.data.consecutiveFailures < recorded.data.failureThreshold) {
+      return outcome(0, { failed: true, lastError: message });
+    }
     await this.pause(
       recorded.data,
       "failure_threshold",
       `The API failed ${recorded.data.consecutiveFailures} times in a row. Last error: ${message}`,
     );
-    return outcome(0, { failed: true, paused: true });
+    return outcome(0, { failed: true, paused: true, lastError: message });
   }
 
   private async pause(watch: EventWatch, reason: WatchPausedReason, explanation: string): Promise<void> {
