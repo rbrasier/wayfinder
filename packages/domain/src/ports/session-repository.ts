@@ -1,4 +1,10 @@
-import type { Session, NewSession, PendingExecutions, SessionStatus } from "../entities/session";
+import type {
+  NewSession,
+  PendingExecutions,
+  Session,
+  SessionRunError,
+  SessionStatus,
+} from "../entities/session";
 import type { Result } from "../result";
 
 // Opaque cursor for keyset pagination. Callers hand it back unchanged; the
@@ -29,6 +35,7 @@ export interface SessionUpdate {
   graphCheckpoint?: Record<string, unknown> | null;
   pendingExecutions?: PendingExecutions;
   manualEstimateMinutes?: number | null;
+  runError?: SessionRunError | null;
   // When set, the update only applies if the row still carries this version;
   // otherwise it returns a CONFLICT domain error (optimistic concurrency). Omit
   // for the last-writer-wins behaviour the chat path relies on the turn lease for.

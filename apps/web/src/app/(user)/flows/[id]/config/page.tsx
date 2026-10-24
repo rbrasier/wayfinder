@@ -1,4 +1,5 @@
 import { createServerHelpers } from "@/trpc/server";
+import { TriggerInputsProvider } from "@/components/automation/trigger-inputs-provider";
 import { FlowOwnerCanvasContent } from "./_content";
 
 export default async function FlowOwnerCanvasPage({ params }: { params: Promise<{ id: string }> }) {
@@ -7,7 +8,9 @@ export default async function FlowOwnerCanvasPage({ params }: { params: Promise<
   void trpc.flow.getCanvas.prefetch({ flowId: id });
   return (
     <HydrateClient>
-      <FlowOwnerCanvasContent flowId={id} />
+      <TriggerInputsProvider flowId={id}>
+        <FlowOwnerCanvasContent flowId={id} />
+      </TriggerInputsProvider>
     </HydrateClient>
   );
 }

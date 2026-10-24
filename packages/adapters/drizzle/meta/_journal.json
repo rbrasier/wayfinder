@@ -323,6 +323,27 @@
       "when": 1788540895241,
       "tag": "0045_welcome_tour",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1792663388206,
+      "tag": "0046_unattended_automation",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1792663390398,
+      "tag": "0047_seed_unattended_automation",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1792835928941,
+      "tag": "0048_mcp_stored_credentials",
+      "breakpoints": true
     }
   ]
 }

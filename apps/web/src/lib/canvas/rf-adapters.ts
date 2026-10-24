@@ -12,6 +12,7 @@ import type { ScheduledNodeData } from "@/components/canvas/scheduled-node";
 import { ScheduledNode } from "@/components/canvas/scheduled-node";
 import type { McpNodeData } from "@/components/canvas/mcp-node";
 import { McpNode } from "@/components/canvas/mcp-node";
+import { AiTaskNode, EmailNode, type AutomationNodeData } from "@/components/canvas/automation-node";
 
 // Shared React Flow adapters and constants for the canonical flow-config canvas
 // page (`(user)/flows/[id]/config`). The former admin duplicate
@@ -23,6 +24,8 @@ export const NODE_TYPES = {
   scheduledNode: ScheduledNode,
   approvalNode: ApprovalNode,
   mcpNode: McpNode,
+  aiTaskNode: AiTaskNode,
+  emailNode: EmailNode,
 };
 
 // Delay between an in-flight change and its persist. Long enough to
@@ -33,7 +36,7 @@ export interface RawNode {
   id: string;
   name: string;
   colour: string | null;
-  type?: "conversational" | "auto" | "scheduled" | "approval" | "mcp";
+  type?: "conversational" | "auto" | "scheduled" | "approval" | "mcp" | "ai_task" | "email";
   positionX: number;
   positionY: number;
   config: Record<string, unknown>;
@@ -41,6 +44,16 @@ export interface RawNode {
 
 export const readFields = (value: unknown): TemplateField[] =>
   Array.isArray(value) ? (value as TemplateField[]) : [];
+
+const automationSubtitle = (type: "ai_task" | "email", config: Record<string, unknown>): string => {
+  if (type === "ai_task") {
+    const instruction = typeof config.instruction === "string" ? config.instruction.trim() : "";
+    return instruction || "No instruction yet";
+  }
+  const recipientCount = Array.isArray(config.recipients) ? config.recipients.length : 0;
+  if (recipientCount === 0) return "No recipients yet";
+  return recipientCount === 1 ? "Sends to 1 recipient" : `Sends to ${recipientCount} recipients`;
+};
 
 // Node → React Flow node adapter. Each node type has its own React Flow
 // node component and data shape; this walks the discriminator and returns
@@ -92,6 +105,18 @@ export const toRfNode = (node: RawNode, stepNumber: number | null): Node => {
       config: node.config,
     };
     return { id: node.id, type: "mcpNode", position: { x: node.positionX, y: node.positionY }, data };
+  }
+
+  if (node.type === "ai_task" || node.type === "email") {
+    const data: AutomationNodeData = {
+      name: node.name,
+      colour: node.colour,
+      subtitle: automationSubtitle(node.type, node.config),
+      stepNumber,
+      config: node.config,
+    };
+    const type = node.type === "ai_task" ? "aiTaskNode" : "emailNode";
+    return { id: node.id, type, position: { x: node.positionX, y: node.positionY }, data };
   }
 
   const data: ConversationalNodeData = {

@@ -30,8 +30,10 @@ export const changesRequestedTargetOf = (config: ApprovalNodeConfig): ChangesReq
 // label would collide in the flat record, so the second and later get a numeric
 // suffix — resolved when the flow is saved rather than at decision time, because
 // a report must not be the thing that discovers a name clash (ADR-040 §5).
-export const deriveStepKeys = (labels: string[]): string[] => {
-  const taken = new Set<string>();
+// `reserved` keys are never handed out, so a caller's own namespace (an Email
+// template's `input`) cannot be shadowed by a step that happens to share it.
+export const deriveStepKeys = (labels: string[], reserved: readonly string[] = []): string[] => {
+  const taken = new Set<string>(reserved);
   return labels.map((label) => {
     const base = deriveFieldKey(label);
     if (!taken.has(base)) {

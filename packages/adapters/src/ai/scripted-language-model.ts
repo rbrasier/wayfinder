@@ -107,6 +107,9 @@ export const defaultForSchema = (schema: unknown): unknown => {
       return (def.defaultValue as () => unknown)();
     case "ZodUnion":
       return defaultForSchema((def.options as readonly unknown[])[0]);
+    // A refine/transform/preprocess: default what it wraps; the parse applies it.
+    case "ZodEffects":
+      return defaultForSchema(def.schema);
     case "ZodRecord":
       return {};
     default:
@@ -264,16 +267,20 @@ export class ScriptedLanguageModel implements ILanguageModel {
   private resolveObject(call: ScriptCall, schema: unknown): Result<unknown> {
     const entry = this.next(call);
     if (entry?.failWith) return err(providerFailure(entry.failWith));
-    if (!entry?.object) return ok(defaultForSchema(schema));
-
     // Merge over the default so a script may set only the fields under test and
-    // still satisfy a schema that requires the rest.
-    const merged = { ...(defaultForSchema(schema) as Record<string, unknown>), ...entry.object };
+    // still satisfy a schema that requires the rest. Either way the result is
+    // parsed, as a provider's answer is, so the caller sees transformed values.
+    const merged = entry?.object
+      ? { ...(defaultForSchema(schema) as Record<string, unknown>), ...entry.object }
+      : defaultForSchema(schema);
     if (!isZodLike(schema)) return ok(merged);
 
     try {
       return ok(schema.parse(merged));
     } catch (cause) {
+      // An unscripted default that a strict schema rejects (a minimum length,
+      // say) is still the best stand-in there is; only a script is held to it.
+      if (!entry?.object) return ok(merged);
       return err(
         domainError(
           "VALIDATION_FAILED",

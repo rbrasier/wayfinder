@@ -11,6 +11,8 @@ const configTypeFor = (nodeType: string | undefined): NodeConfigValues["type"] =
   if (nodeType === "scheduledNode") return "scheduled";
   if (nodeType === "approvalNode") return "approval";
   if (nodeType === "mcpNode") return "mcp";
+  if (nodeType === "aiTaskNode") return "ai_task";
+  if (nodeType === "emailNode") return "email";
   return "conversational";
 };
 

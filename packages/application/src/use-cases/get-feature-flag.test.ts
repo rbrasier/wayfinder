@@ -169,6 +169,15 @@ describe("automation flags default off (ADR-041 §4)", () => {
 
     expect((await useCase.execute("extraction_flows")).data).toBe(true);
   });
+
+  it.each(["event_watch", "ai_task_node", "email_node"])(
+    "keeps %s enabled by default so unattended automation ships on",
+    async (key) => {
+      const useCase = new IsFeatureEnabled(new FakeFeatureFlagRepository());
+
+      expect((await useCase.execute(key)).data).toBe(true);
+    },
+  );
 });
 
 describe("ListFeatureFlags", () => {
@@ -189,6 +198,16 @@ describe("ListFeatureFlags", () => {
     const result = await useCase.execute();
 
     expect(result.data?.find((flag) => flag.key === "extraction_flows")?.enabled).toBe(true);
+  });
+
+  it("surfaces the unattended-automation flags as enabled defaults", async () => {
+    const useCase = new ListFeatureFlags(new FakeFeatureFlagRepository());
+
+    const result = await useCase.execute();
+
+    for (const key of ["event_watch", "ai_task_node", "email_node"]) {
+      expect(result.data?.find((flag) => flag.key === key)?.enabled).toBe(true);
+    }
   });
 
   it("prefers a persisted row over the default when one exists", async () => {

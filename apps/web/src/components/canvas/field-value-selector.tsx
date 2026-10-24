@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
+import { createContext, useContext, type ReactNode } from "react";
+import type { FieldValueSource, PriorStepField, TemplateField, TriggerInput } from "@rbrasier/domain";
 import { Input } from "@/components/ui/input";
 
 const SELECT_CLASS =
@@ -11,6 +11,7 @@ export const encodeSource = (source: FieldValueSource): string => {
   if (source.kind === "ai") return "ai";
   if (source.kind === "none") return "none";
   if (source.kind === "literal") return "literal";
+  if (source.kind === "trigger_input") return `input:${source.inputKey}`;
   return `step:${source.nodeId}:${source.fieldKey}`;
 };
 
@@ -20,9 +21,15 @@ export const decodeSource = (raw: string, previous: FieldValueSource): FieldValu
   if (raw === "literal") {
     return { kind: "literal", value: previous.kind === "literal" ? previous.value : "" };
   }
+  if (raw.startsWith("input:")) return { kind: "trigger_input", inputKey: raw.slice("input:".length) };
   const [, nodeId, fieldKey] = raw.split(":");
   return { kind: "step_field", nodeId: nodeId ?? "", fieldKey: fieldKey ?? "" };
 };
+
+// The flow's declared trigger inputs (ADR-064 §2), provided once by the flow
+// editor so every value picker can offer them without threading a prop
+// through each step's config modal.
+export const TriggerInputsContext = createContext<TriggerInput[]>([]);
 
 interface StepGroup {
   stepNumber: number;
@@ -66,6 +73,7 @@ export function FieldValueSelector({
   literalLabel = "Type anything",
 }: FieldValueSelectorProps) {
   const groups = groupPriorStepFields(priorStepFields);
+  const triggerInputs = useContext(TriggerInputsContext);
   return (
     <div className="space-y-1">
       <select
@@ -74,6 +82,15 @@ export function FieldValueSelector({
         onChange={(event) => onChange(decodeSource(event.target.value, value))}
       >
         <option value="ai">AI decides (or asks the user if uncertain)</option>
+        {triggerInputs.length > 0 && (
+          <optgroup label="Trigger inputs">
+            {triggerInputs.map((input) => (
+              <option key={input.key} value={`input:${input.key}`}>
+                {input.label} ({input.type})
+              </option>
+            ))}
+          </optgroup>
+        )}
         {groups.map((group) => (
           <optgroup key={group.stepNumber} label={`${group.stepNumber}. ${group.stepName}`}>
             {group.fields.map((prior) => (

@@ -4,6 +4,7 @@ import {
   ok,
   type IMcpServerRepository,
   type ListMcpServersInput,
+  type McpCredentialChange,
   type McpServer,
   type McpServerStatus,
   type McpServerUpdate,
@@ -13,6 +14,7 @@ import {
 import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { admin_mcp_servers } from "../db/schema/admin";
+import type { SecretCipher } from "./drizzle-flow-trigger-repository";
 
 const toEntity = (row: typeof admin_mcp_servers.$inferSelect): McpServer => ({
   id: row.id,
@@ -20,6 +22,7 @@ const toEntity = (row: typeof admin_mcp_servers.$inferSelect): McpServer => ({
   transport: row.transport,
   url: row.url,
   credentialRef: row.credential_ref,
+  hasCredential: row.credential_encrypted !== null,
   communicatesExternally: row.communicates_externally,
   status: row.status,
   createdByUserId: row.created_by_user_id,
@@ -28,7 +31,15 @@ const toEntity = (row: typeof admin_mcp_servers.$inferSelect): McpServer => ({
 });
 
 export class DrizzleMcpServerRepository implements IMcpServerRepository {
-  constructor(private readonly db: Database) {}
+  constructor(
+    private readonly db: Database,
+    private readonly cipher: SecretCipher,
+  ) {}
+
+  private encrypted(credential: McpCredentialChange): { credential_encrypted?: string | null } {
+    if (credential === undefined) return {};
+    return { credential_encrypted: credential === null ? null : this.cipher.encrypt(credential) };
+  }
 
   async create(input: NewMcpServer): Promise<Result<McpServer>> {
     try {
@@ -39,6 +50,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           transport: input.transport ?? "sse",
           url: input.url,
           credential_ref: input.credentialRef ?? null,
+          ...this.encrypted(input.credential),
           communicates_externally: input.communicatesExternally ?? false,
           created_by_user_id: input.createdByUserId ?? null,
         })
@@ -66,6 +78,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           url: patch.url ?? current.url,
           credential_ref:
             patch.credentialRef === undefined ? current.credential_ref : patch.credentialRef,
+          ...this.encrypted(patch.credential),
           communicates_externally:
             patch.communicatesExternally ?? current.communicates_externally,
           updated_at: new Date(),
@@ -89,6 +102,19 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
       return ok(row ? toEntity(row) : null);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to find MCP server.", cause));
+    }
+  }
+
+  async readCredential(id: string): Promise<Result<string | null>> {
+    try {
+      const [row] = await this.db
+        .select({ credential: admin_mcp_servers.credential_encrypted })
+        .from(admin_mcp_servers)
+        .where(eq(admin_mcp_servers.id, id))
+        .limit(1);
+      return ok(row?.credential ? this.cipher.decrypt(row.credential) : null);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to read the MCP server's token.", cause));
     }
   }
 

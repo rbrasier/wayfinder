@@ -83,7 +83,8 @@ export const buildAttachmentAnnotation = (uploads: PromptSessionUpload[]): strin
 
 export const buildGatheredContext = (messages: SessionMessage[]): string => {
   const items = messages
-    .filter((m) => m.role === "assistant" && m.stepNodeId !== null && m.aiPayload)
+    // A system message carries insights only when it opens an unattended run.
+    .filter((m) => (m.role === "assistant" || m.role === "system") && m.stepNodeId !== null && m.aiPayload)
     .flatMap((m) => m.aiPayload!.contextGathered);
   return renderGatheredContext(items);
 };
@@ -753,6 +754,15 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
 
   if (newNode.type === "mcp" && (await isMcpNodeEnabled(container, userId, isAdmin))) {
     await dispatchMcpNode({ container, session, flow, node: newNode, messages, userId });
+    return;
+  }
+
+  // AI task and Email steps run through the unattended driver even in a manual
+  // session, which carries on to the next step that needs a person (ADR-065 §2).
+  // Imported lazily: the driver's module imports this one.
+  if (newNode.type === "ai_task" || newNode.type === "email") {
+    const { buildAdvanceUnattendedRun } = await import("@/lib/automation/unattended-runs");
+    await buildAdvanceUnattendedRun(container).execute({ sessionId: session.id, alreadyHoldsLease: true });
     return;
   }
 

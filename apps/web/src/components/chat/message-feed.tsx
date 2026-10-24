@@ -2,14 +2,20 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
-import type { FlowNode, SessionMessage } from "@rbrasier/domain";
+import { parseRunStartedMessage, type FlowNode, type SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
 import { resolveGeneratingDocumentState } from "./generating-document-state";
 import { MarkdownText } from "./markdown-text";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
+import { AiTaskOutputCard } from "./ai-task-output-card";
+import { EmailSentCard } from "./email-sent-card";
+import { AiTaskReviewPrompt } from "./ai-task-review-prompt";
+import { AutomationStepPending } from "./automation-step-pending";
+import { automationResultView } from "./automation-step-state";
 import { RecordCard } from "./record-card";
+import { RunStartedLine } from "./run-started-line";
 import { MessageInfoModal } from "./message-info-modal";
 import {
   AdvancingBadge,
@@ -86,6 +92,12 @@ interface MessageFeedProps {
   // recomputes its branch): shows a generic "Advancing…" badge so the operator
   // sees the step is progressing rather than a frozen screen.
   pendingStepAdvance?: boolean;
+  // The current step is running by itself or waiting on its reviewer: the feed
+  // ends on a quiet indicator where that step's result will appear.
+  // `reviewApprovalId` is set when an AI task's review falls to the viewer: the
+  // feed then hands it to them instead of showing a waiting line.
+  pendingAutomation?: { message: string; stepName: string; reviewApprovalId: string | null } | null;
+  onAutomationReviewed?: () => void;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -208,6 +220,8 @@ export function MessageFeed({
   currentUserId,
   pendingDocumentGeneration,
   pendingStepAdvance,
+  pendingAutomation,
+  onAutomationReviewed,
 }: MessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
@@ -261,6 +275,7 @@ export function MessageFeed({
               ? senderNamesById?.[msg.senderUserId] ?? null
               : null);
 
+          const runStarted = msg.role === "system" ? parseRunStartedMessage(msg.content) : null;
           const scheduled = msg.role === "system" ? parseScheduledMessage(msg.content) : null;
           const displayContent = scheduled
             ? formatScheduledResume(scheduled.stepName, scheduled.nextFireAt)
@@ -314,13 +329,22 @@ export function MessageFeed({
             isSessionComplete: Boolean(isComplete),
           });
 
+          const automationView = automationResultView({
+            nodeType: node?.type ?? null,
+            role: msg.role,
+            stepNodeId: msg.stepNodeId,
+            currentNodeId: currentNodeId ?? null,
+            automationPending: Boolean(pendingAutomation),
+          });
           const showsConfidenceBar = msg.role === "assistant" && !isNeverDone;
           const showsInfoButton = msg.role === "assistant" && Boolean(msg.aiPayload);
 
           return (
             <div key={msg.id}>
               {isNewStep && node && <FeedDivider label={node.name} />}
-              {decision ? (
+              {runStarted ? (
+                <RunStartedLine source={runStarted} inputs={msg.aiPayload?.contextGathered ?? []} />
+              ) : decision ? (
                 // An approver is rarely the viewer, and their decision carries
                 // its own attribution — so it always renders as someone else's.
                 <OtherPersonMessage
@@ -347,7 +371,7 @@ export function MessageFeed({
                   body={displayContent}
                   at={msg.createdAt}
                 />
-              ) : msg.role === "user" ? (
+              ) : automationView !== "message" ? null : msg.role === "user" ? (
                 <div className="flex justify-end" data-chat-message="user">
                   <div
                     title={senderName ?? undefined}
@@ -446,7 +470,21 @@ export function MessageFeed({
                   }
                 />
               )}
-              {isAdvancingMsg && node && !isNeverDone && isStructuredNode && (
+              {/* An AI task's result is recorded whatever its confidence — a low
+                  one goes to review — so its card shows on every result once
+                  the step has moved on. */}
+              {node && automationView === "card" && node.type === "ai_task" && (
+                <AiTaskOutputCard
+                  messageId={msg.id}
+                  stepName={node.name}
+                  confidence={msg.confidence}
+                  rationale={msg.aiPayload?.rationale ?? null}
+                />
+              )}
+              {node && automationView === "card" && node.type === "email" && (
+                <EmailSentCard messageId={msg.id} stepName={node.name} />
+              )}
+              {isAdvancingMsg && node && node.type !== "ai_task" && !isNeverDone && isStructuredNode && (
                 <RecordCard
                   messageId={msg.id}
                   canEdit={showsEditAffordance({
@@ -534,6 +572,17 @@ export function MessageFeed({
       {pendingDocumentGeneration && <GeneratingDocumentBadge />}
 
       {pendingStepAdvance && <AdvancingBadge />}
+
+      {pendingAutomation &&
+        (pendingAutomation.reviewApprovalId ? (
+          <AiTaskReviewPrompt
+            approvalId={pendingAutomation.reviewApprovalId}
+            stepName={pendingAutomation.stepName}
+            onDecided={() => onAutomationReviewed?.()}
+          />
+        ) : (
+          <AutomationStepPending message={pendingAutomation.message} stepName={pendingAutomation.stepName} />
+        ))}
 
       {error && !isStreaming && (
         <div className="flex justify-start">

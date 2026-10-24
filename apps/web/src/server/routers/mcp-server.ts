@@ -7,6 +7,9 @@ const requireAdmin = (isAdmin: boolean): void => {
   if (!isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
 };
 
+// The bearer token itself — stored encrypted, never sent back (ADR-032).
+const credentialInput = z.string().max(4096, "The token is too long.").nullable().optional();
+
 export const mcpServerRouter = router({
   list: authenticatedProcedure
     .input(z.object({ includeDisabled: z.boolean().optional() }).optional())
@@ -34,7 +37,7 @@ export const mcpServerRouter = router({
         url: z.string().min(1),
         transport: z.enum(["sse", "streamable-http"]).optional(),
         communicatesExternally: z.boolean().optional(),
-        credentialRef: z.string().nullable().optional(),
+        credential: credentialInput,
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -44,7 +47,7 @@ export const mcpServerRouter = router({
         url: input.url,
         transport: input.transport,
         communicatesExternally: input.communicatesExternally,
-        credentialRef: input.credentialRef ?? null,
+        credential: input.credential,
         createdByUserId: ctx.userId,
       });
       if (result.error) throw toTrpcError(result.error);
@@ -58,7 +61,8 @@ export const mcpServerRouter = router({
         label: z.string().min(1).optional(),
         url: z.string().min(1).optional(),
         communicatesExternally: z.boolean().optional(),
-        credentialRef: z.string().nullable().optional(),
+        // Absent keeps the stored token, null removes it, a string replaces it.
+        credential: credentialInput,
       }),
     )
     .mutation(async ({ ctx, input }) => {

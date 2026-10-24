@@ -29,6 +29,13 @@ describe("encodeSource / decodeSource", () => {
     });
   });
 
+  it("round-trips a trigger_input source", () => {
+    const source: FieldValueSource = { kind: "trigger_input", inputKey: "hearing_id" };
+
+    expect(encodeSource(source)).toBe("input:hearing_id");
+    expect(decodeSource("input:hearing_id", { kind: "ai" })).toEqual(source);
+  });
+
   it("encodes No value as `none`", () => {
     expect(encodeSource({ kind: "none" })).toBe("none");
     expect(decodeSource("none", { kind: "ai" })).toEqual({ kind: "none" });

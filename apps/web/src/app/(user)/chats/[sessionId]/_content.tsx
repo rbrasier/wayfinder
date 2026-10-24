@@ -24,6 +24,7 @@ import { AppHeader } from "@/components/layout/app-header";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
+import { automationStepState } from "@/components/chat/automation-step-state";
 import { ManualEstimateModal } from "@/components/chat/manual-estimate-modal";
 import { shouldPromptForEstimate } from "@/components/chat/manual-estimate-state";
 
@@ -67,7 +68,19 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const router = useRouter();
 
   const utils = trpc.useUtils();
-  const sessionQuery = trpc.session.get.useQuery({ sessionId });
+  // While a step that runs by itself is current, nothing the operator does
+  // moves the chat on, so it re-reads the session until the run does.
+  const sessionQuery = trpc.session.get.useQuery(
+    { sessionId },
+    {
+      refetchInterval: (query) => {
+        const data = query.state.data;
+        const current = data?.nodes.find((node) => node.id === data.session.currentNodeId);
+        const runsAlone = current?.type === "ai_task" || current?.type === "email";
+        return runsAlone && data?.session.status === "active" ? 3_000 : false;
+      },
+    },
+  );
   const meQuery = trpc.user.me.useQuery();
   const sessionData = sessionQuery.data;
   // The server grants approvers read-only access to sessions they don't own so
@@ -181,6 +194,24 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
   const currentNode = rawNodes.find((node) => node.id === currentNodeId) ?? null;
   const isApprovalGate = currentNode?.type === "approval";
+  const pendingReviewQuery = trpc.approval.forNode.useQuery(
+    { sessionId, nodeId: currentNode?.id ?? "" },
+    { enabled: currentNode?.type === "ai_task", refetchInterval: 5_000 },
+  );
+  const pendingReviewer =
+    pendingReviewQuery.data?.assignedApprover ?? pendingReviewQuery.data?.suggestedApprover ?? null;
+  const pendingApproval = pendingReviewQuery.data?.approval ?? null;
+  const automationState = automationStepState({
+    nodeType: currentNode?.type ?? null,
+    sessionStatus: sessionData?.session.status ?? "",
+    pendingReview: pendingApproval
+      ? {
+          approvalId: pendingApproval.id,
+          reviewerName: pendingReviewer?.name ?? pendingReviewer?.email ?? "the reviewer",
+          isViewer: Boolean(myUserId) && pendingReviewer?.userId === myUserId,
+        }
+      : null,
+  });
   const currentNodeConfig = currentNode?.config as Record<string, unknown> | undefined;
   const isDocumentTemplateStep =
     currentNodeConfig?.["outputType"] === "generate_document" &&
@@ -530,6 +561,19 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         }
         pendingDocumentGeneration={isConfirmingStep && isDocumentTemplateStep}
         pendingStepAdvance={isConfirmingStep && !isDocumentTemplateStep}
+        onAutomationReviewed={() => {
+          void utils.session.get.invalidate({ sessionId });
+          void pendingReviewQuery.refetch();
+        }}
+        pendingAutomation={
+          automationState && currentNode
+            ? {
+                message: automationState.message,
+                stepName: currentNode.name,
+                reviewApprovalId: automationState.reviewApprovalId ?? null,
+              }
+            : null
+        }
       />
 
       {showBranchOverride && (
@@ -594,7 +638,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
               emitTypingMutation.mutate({ sessionId });
             }}
             onSubmit={handleSend}
-            disabled={isLoading || session.status !== "active" || isFlowDeleted}
+            disabled={isLoading || session.status !== "active" || isFlowDeleted || automationState !== null}
           />
         )}
       </div>

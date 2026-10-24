@@ -1,10 +1,17 @@
 import type { Result } from "../result";
 
+export interface EmailAttachment {
+  filename: string;
+  contentType: string;
+  content: Uint8Array;
+}
+
 export interface SendEmailInput {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface IEmailSender {

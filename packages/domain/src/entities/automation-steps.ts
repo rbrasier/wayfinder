@@ -1,0 +1,196 @@
+import { deriveStepKeys } from "./approval-record";
+import type { AiTaskNodeConfig, EmailNodeConfig } from "./flow-node";
+
+// An AI task proceeds with whatever it produced unless its author asks for a
+// review when the model is unsure; 0 lets every result through.
+export const DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD = 0;
+
+// Where the threshold starts when an author turns review on.
+export const SUGGESTED_AI_TASK_REVIEW_THRESHOLD = 80;
+
+export const aiTaskConfidenceThresholdOf = (config: AiTaskNodeConfig): number =>
+  typeof config.confidenceThreshold === "number"
+    ? config.confidenceThreshold
+    : DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD;
+
+export const meetsConfidenceThreshold = (confidence: number, threshold: number): boolean =>
+  confidence >= threshold;
+
+const isBlank = (value: string | undefined | null): boolean => !value || value.trim().length === 0;
+
+const reviewerIsComplete = (config: AiTaskNodeConfig): boolean => {
+  if (config.reviewer?.mode === "user") return !isBlank(config.reviewer.userId);
+  return config.reviewer !== undefined;
+};
+
+// Which part of the step editor a problem belongs to, so the editor can show
+// it beside that field rather than in a list the author has to match up.
+export type AiTaskProblemField = "instruction" | "inputs" | "outputs" | "threshold" | "reviewer";
+
+export interface StepProblem<Field extends string> {
+  field: Field;
+  message: string;
+}
+
+// What an AI task is handed besides its instruction (ADR-065 §3): everything the
+// run knows — trigger inputs, the payload it started with and every earlier
+// step's output — or only the values the author picked.
+export type AiTaskInputMode = "all" | "selected";
+
+// A config saved before the mode existed picked its inputs if it listed any.
+export const aiTaskInputModeOf = (config: AiTaskNodeConfig): AiTaskInputMode =>
+  config.inputMode ?? ((config.inputFields ?? []).length > 0 ? "selected" : "all");
+
+// Problems an author must fix before an AI task can run, in the order the editor
+// shows them. Empty means runnable.
+export const validateAiTaskNodeConfig = (config: AiTaskNodeConfig): StepProblem<AiTaskProblemField>[] => {
+  const problems: StepProblem<AiTaskProblemField>[] = [];
+  if (isBlank(config.instruction)) problems.push({ field: "instruction", message: "Add an instruction for the AI task." });
+  if ((config.structuredFields ?? []).length === 0) {
+    problems.push({ field: "outputs", message: "Add at least one output field." });
+  }
+  const threshold = aiTaskConfidenceThresholdOf(config);
+  if (threshold < 0 || threshold > 100) {
+    problems.push({ field: "threshold", message: "The confidence threshold must be between 0 and 100." });
+  }
+  if (!reviewerIsComplete(config)) {
+    problems.push({ field: "reviewer", message: "Choose who reviews low-confidence results." });
+  }
+  return problems;
+};
+
+const EMAIL_PATTERN = /^[^\s@]+@([^\s@]+\.[^\s@]+)$/;
+
+// An empty allow-list means any domain. A listed domain matches exactly, never as
+// a suffix, so `evilagency.gov.au` cannot pass for `agency.gov.au`.
+export const isEmailAddressAllowed = (email: string, allowedDomains: readonly string[]): boolean => {
+  const match = EMAIL_PATTERN.exec(email.trim());
+  if (!match) return false;
+  if (allowedDomains.length === 0) return true;
+  const domain = match[1]!.toLowerCase();
+  return allowedDomains.some((allowed) => allowed.trim().toLowerCase() === domain);
+};
+
+export type EmailProblemField = "recipients" | "subject" | "body";
+
+export const validateEmailNodeConfig = (
+  config: EmailNodeConfig,
+  allowedDomains: readonly string[],
+): StepProblem<EmailProblemField>[] => {
+  const problems: StepProblem<EmailProblemField>[] = [];
+  if ((config.recipients ?? []).length === 0) {
+    problems.push({ field: "recipients", message: "Add at least one recipient." });
+  }
+  if (isBlank(config.subjectTemplate)) problems.push({ field: "subject", message: "Add a subject." });
+  if (isBlank(config.bodyTemplate)) problems.push({ field: "body", message: "Add a message body." });
+  for (const recipient of config.recipients ?? []) {
+    if (recipient.kind !== "address") continue;
+    if (!isEmailAddressAllowed(recipient.email, allowedDomains)) {
+      problems.push({ field: "recipients", message: `${recipient.email} is not on an allowed email domain.` });
+    }
+  }
+  return problems;
+};
+
+export interface MessageTemplateValues {
+  inputs: Record<string, string>;
+  // Keyed by step key (see `flowStepKeys`), then field key.
+  steps: Record<string, Record<string, string>>;
+}
+
+// The scope trigger inputs are read from; no step is ever given this key.
+export const TRIGGER_INPUT_SCOPE = "input";
+
+// Each step's key as an Email template names it — `{{ <step_key>.<field> }}` —
+// derived the way approval records name their steps (ADR-040 §5): the snake_cased
+// step name, suffixed `_2`, `_3`… when names repeat. Repeats are settled by node
+// id, the one order the canvas and a published version's snapshot (which keeps
+// neither creation times nor a stable node order) both see the same.
+export const flowStepKeys = (nodes: readonly { id: string; name: string }[]): Map<string, string> => {
+  const ordered = [...nodes].sort((first, second) => first.id.localeCompare(second.id));
+  const keys = deriveStepKeys(
+    ordered.map((node) => node.name),
+    [TRIGGER_INPUT_SCOPE],
+  );
+  return new Map(ordered.map((node, index) => [node.id, keys[index]!]));
+};
+
+// The message editor saves markdown, which escapes `_` as `\_` — so a tag the
+// author inserted reads `{{ review\_the\_hearing.summary }}` once stored.
+const PLACEHOLDER = /\{\{\s*((?:\\?[A-Za-z0-9_])+)\.((?:\\?[A-Za-z0-9_-])+)\s*\}\}/g;
+
+const unescapeMarkdown = (name: string): string => name.replace(/\\/g, "");
+
+const lookupPlaceholder = (scope: string, key: string, values: MessageTemplateValues): string => {
+  const scopeName = unescapeMarkdown(scope);
+  const keyName = unescapeMarkdown(key);
+  if (scopeName === TRIGGER_INPUT_SCOPE) return values.inputs[keyName] ?? "";
+  return values.steps[scopeName]?.[keyName] ?? "";
+};
+
+// Fills an Email step's subject or body. An unknown placeholder renders blank
+// rather than leaking the raw `{{ … }}` into a sent message.
+export const renderMessageTemplate = (template: string, values: MessageTemplateValues): string =>
+  template.replace(PLACEHOLDER, (_match, scope: string, key: string) =>
+    lookupPlaceholder(scope, key, values),
+  );
+
+// The step key a name change moves, old → new. Renaming one of several steps
+// that share a name can move a namesake's `_2` suffix too, so every step's key is
+// compared, not just the renamed one's.
+const stepKeyRenames = (
+  nodes: readonly { id: string; name: string }[],
+  nodeId: string,
+  newName: string,
+): Map<string, string> => {
+  const before = flowStepKeys(nodes);
+  const after = flowStepKeys(nodes.map((node) => (node.id === nodeId ? { ...node, name: newName } : node)));
+  const renames = new Map<string, string>();
+  for (const [id, oldKey] of before) {
+    const newKey = after.get(id);
+    if (newKey && newKey !== oldKey) renames.set(oldKey, newKey);
+  }
+  return renames;
+};
+
+// One pass, so two keys that trade places are each rewritten once. A tag saved
+// with markdown escaping keeps it.
+const renameStepReferences = (template: string, renames: ReadonlyMap<string, string>): string =>
+  template.replace(PLACEHOLDER, (match, scope: string, key: string) => {
+    const newKey = renames.get(unescapeMarkdown(scope));
+    if (!newKey) return match;
+    const written = scope.includes("\\") ? newKey.replace(/_/g, "\\_") : newKey;
+    return `{{ ${written}.${key} }}`;
+  });
+
+export interface RewrittenEmailConfig {
+  nodeId: string;
+  config: Record<string, unknown>;
+}
+
+// Email steps name earlier steps by key (`{{ summarise_the_hearing.summary }}`),
+// and a key follows the step's name. When a step is renamed, these are the Email
+// steps whose subject or message must follow it; Email steps it does not touch
+// are left out.
+export const emailConfigsAfterRename = (
+  nodes: readonly { id: string; name: string; type: string; config: Record<string, unknown> }[],
+  nodeId: string,
+  newName: string,
+): RewrittenEmailConfig[] => {
+  const renames = stepKeyRenames(nodes, nodeId, newName);
+  if (renames.size === 0) return [];
+  return nodes.flatMap((node) => {
+    if (node.type !== "email") return [];
+    const subject = typeof node.config.subjectTemplate === "string" ? node.config.subjectTemplate : "";
+    const body = typeof node.config.bodyTemplate === "string" ? node.config.bodyTemplate : "";
+    const subjectTemplate = renameStepReferences(subject, renames);
+    const bodyTemplate = renameStepReferences(body, renames);
+    if (subjectTemplate === subject && bodyTemplate === body) return [];
+    return [{ nodeId: node.id, config: { ...node.config, subjectTemplate, bodyTemplate } }];
+  });
+};
+
+// The HTML part of an Email step's message. The whole rendered text is escaped —
+// author template and AI output alike — so nothing in either can become markup;
+// blank lines become paragraphs and single newlines line breaks.
+

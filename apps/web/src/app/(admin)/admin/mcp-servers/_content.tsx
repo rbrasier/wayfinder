@@ -15,6 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/trpc/client";
+import { EditMcpServerDialog, type EditableMcpServer } from "./edit-mcp-server-dialog";
+import { credentialSummary } from "./mcp-server-model";
 
 export function AdminMcpServersContent() {
   const utils = trpc.useUtils();
@@ -24,7 +26,8 @@ export function AdminMcpServersContent() {
   const [url, setUrl] = useState("");
   const [transport, setTransport] = useState<"sse" | "streamable-http">("sse");
   const [communicatesExternally, setCommunicatesExternally] = useState(false);
-  const [credentialRef, setCredentialRef] = useState("");
+  const [token, setToken] = useState("");
+  const [editing, setEditing] = useState<EditableMcpServer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -37,7 +40,7 @@ export function AdminMcpServersContent() {
       setUrl("");
       setTransport("sse");
       setCommunicatesExternally(false);
-      setCredentialRef("");
+      setToken("");
       setError(null);
       invalidate();
     },
@@ -69,7 +72,7 @@ export function AdminMcpServersContent() {
       url,
       transport,
       communicatesExternally,
-      credentialRef: credentialRef.trim() ? credentialRef.trim() : null,
+      credential: token.trim() ? token.trim() : null,
     });
   };
 
@@ -82,10 +85,9 @@ export function AdminMcpServersContent() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Register a remote (SSE) Model Context Protocol server. Flow authors
-              can then use its tools without seeing credentials. The credential
-              reference names an environment variable holding the bearer token —
-              the secret itself is never stored here.
+              Register a remote Model Context Protocol server. Flow authors can
+              then use its tools without seeing credentials. A bearer token is
+              stored encrypted and never shown again.
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
@@ -119,16 +121,15 @@ export function AdminMcpServersContent() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="mcp-cred">Credential ref (env var)</Label>
+                <Label htmlFor="mcp-cred">Bearer token (optional)</Label>
                 <Input
                   id="mcp-cred"
-                  value={credentialRef}
-                  onChange={(event) => setCredentialRef(event.target.value)}
-                  placeholder="MCP_CRED_GITHUB_TOKEN"
+                  type="password"
+                  autoComplete="off"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Must name an environment variable in the <code>MCP_CRED_</code> namespace.
-                </p>
+                <p className="text-xs text-muted-foreground">Stored encrypted.</p>
               </div>
             </div>
             <div className="space-y-1">
@@ -139,12 +140,13 @@ export function AdminMcpServersContent() {
                   checked={communicatesExternally}
                   onChange={(event) => setCommunicatesExternally(event.target.checked)}
                 />
-                Permitted to communicate outside Wayfinder
+                Sends data outside Wayfinder
               </label>
               <p className="pl-6 text-xs text-muted-foreground">
-                Leave off for self-contained utilities (spellcheck, calculation) — these are
-                usable in flows and governed by document review. Turn on for external
-                integrations; those are registered here but not yet selectable in flows.
+                Tick for integrations that pass data to another system (ParlView, a ticketing
+                tool); leave off for self-contained utilities such as spellcheck. Either way the
+                server can be used in AI task and conversational steps — this marks it External
+                so flow authors know where their data goes.
               </p>
             </div>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -187,8 +189,8 @@ export function AdminMcpServersContent() {
                           {server.communicatesExternally ? "External" : "Internal"}
                         </Badge>
                       </TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">
-                        {server.credentialRef ?? "—"}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {credentialSummary(server).text}
                       </TableCell>
                       <TableCell>
                         <Badge variant={server.status === "active" ? "default" : "outline"}>
@@ -208,6 +210,9 @@ export function AdminMcpServersContent() {
                           disabled={test.isPending}
                         >
                           Test
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setEditing(server)}>
+                          Edit
                         </Button>
                         {server.status === "active" ? (
                           <Button
@@ -269,6 +274,7 @@ export function AdminMcpServersContent() {
           </CardContent>
         </Card>
       </div>
+      <EditMcpServerDialog server={editing} onClose={() => setEditing(null)} onSaved={invalidate} />
     </div>
   );
 }

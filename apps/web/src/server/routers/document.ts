@@ -157,6 +157,22 @@ const hasSendAccess = async (
 };
 
 export const documentRouter = router({
+  // What an Email step sent, for its card in the chat (RunEmailNode): the
+  // recipients, subject and message it recorded against its message.
+  emailSent: authenticatedProcedure
+    .input(z.object({ messageId: z.string().uuid() }))
+    .query(async ({ ctx, input }) => {
+      const messageResult = await ctx.container.repos.sessionMessages.findById(input.messageId);
+      if (messageResult.error) throw toTrpcError(messageResult.error);
+      const message = messageResult.data;
+      if (!message) throw toTrpcError(domainError("NOT_FOUND", "Record not found."));
+      await authoriseSession(ctx.container, message.sessionId, ctx.userId, ctx.isAdmin, false);
+
+      const record = await ctx.container.repos.sessionStepOutputs.findByMessageId(input.messageId);
+      if (record.error) throw toTrpcError(record.error);
+      return { fields: (record.data?.fields ?? []).map((field) => ({ key: field.key, value: field.value })) };
+    }),
+
   getFields: authenticatedProcedure
     .input(z.object({ messageId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {

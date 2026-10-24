@@ -51,3 +51,13 @@ export interface ResolvedSkill {
   readonly name: string;
   readonly body: string;
 }
+
+// How applied skills reach a prompt (ADR-031): one tagged block, in order.
+// Shared by the conversational turn and the AI task step.
+export const renderSkillsBlock = (skills: ResolvedSkill[]): string => {
+  if (skills.length === 0) return "";
+  const rendered = skills
+    .map((skill) => `  <skill name="${skill.name}">\n    ${skill.body.trim()}\n  </skill>`)
+    .join("\n");
+  return `\n\n<skills>\n${rendered}\n</skills>`;
+};

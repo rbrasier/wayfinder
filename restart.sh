@@ -8,7 +8,14 @@
 #                           MCP tools mock is at :4001/mcp, the mock Entra
 #                           identity provider at :4001/entra, the mock Microsoft
 #                           Graph at :4001/graph, the mock HR roster at :4001/hr,
-#                           and the mock PKI reverse proxy at :4001/pki. To add a new mock,
+#                           the mock PKI reverse proxy at :4001/pki, a mock
+#                           ParlView at :4001/parlview (its search and captions
+#                           endpoints, as an Event Watch source whose hearings
+#                           start and finish every 5 minutes, and a mock of
+#                           parlviewMCP at :4001/parlview/mcp), and the inbox
+#                           of a mock SMTP server that listens on
+#                           MOCKS_SMTP_PORT (default 2525) and prints
+#                           every email it catches. To add a new mock,
 #                           follow the instructions at the top of
 #                           mocks/server.mjs and pick a new path (not a new port).
 #                           This flag also points Entra sign-in at the mock via
@@ -39,6 +46,7 @@ cd "$ROOT"
 WEB_PORT=${WEB_PORT:-3000}
 API_PORT=${API_PORT:-3001}
 MOCKS_PORT=${MOCKS_PORT:-4001}
+MOCKS_SMTP_PORT=${MOCKS_SMTP_PORT:-2525}
 
 WITH_MOCKS=0
 WITH_PKI=0
@@ -52,7 +60,7 @@ for arg in "$@"; do
       WITH_PKI=1
       ;;
     -h|--help)
-      sed -n '2,30p' "$0"
+      sed -n '2,35p' "$0"
       exit 0
       ;;
     *)
@@ -64,7 +72,7 @@ done
 
 PORTS_TO_KILL=("$WEB_PORT" "$API_PORT")
 if [ "$WITH_MOCKS" -eq 1 ]; then
-  PORTS_TO_KILL+=("$MOCKS_PORT")
+  PORTS_TO_KILL+=("$MOCKS_PORT" "$MOCKS_SMTP_PORT")
 fi
 
 echo "→ killing anything on ports ${PORTS_TO_KILL[*]}"
@@ -274,7 +282,7 @@ if [ "$WITH_MOCKS" -eq 1 ]; then
   echo "→ starting mocks on :$MOCKS_PORT"
   mkdir -p "$ROOT/.mocks-logs"
   log="$ROOT/.mocks-logs/server.log"
-  (cd "$ROOT/mocks" && MOCKS_PORT="$MOCKS_PORT" node server.mjs) >"$log" 2>&1 &
+  (cd "$ROOT/mocks" && MOCKS_PORT="$MOCKS_PORT" MOCKS_SMTP_PORT="$MOCKS_SMTP_PORT" node server.mjs) >"$log" 2>&1 &
   echo "  mocks server pid $! (logs: .mocks-logs/server.log)"
 
   # Point Entra sign-in at the mock identity provider, and *only* that. The
@@ -321,6 +329,32 @@ EOF
     Tenant ID      mock-tenant
     Client ID      mock-client
     Client secret  mock-secret
+EOF
+
+  # Neither of these is wired in automatically: an Event Watch and the app's
+  # mail settings are things an admin sets up, so the values are printed instead.
+  cat <<EOF
+
+  mock ParlView at http://localhost:$MOCKS_PORT/parlview — open it for what is live,
+  an "Advance to next change" button, the raw ParlView endpoints and these setups.
+  Every 5 minutes the live hearing finishes and the next one starts
+  (PARLVIEW_MOCK_PERIOD_SECONDS to change).
+  Admin → Event Watch → New watch:
+    URL            http://localhost:$MOCKS_PORT/parlview/vodapi/api/search?pageSize=40&page=0
+    List of items  searchResults.videos     Item ID  parlViewId
+    Condition      A field changes to a value: isLive, from true, to false
+  Or have it start a flow by webhook as each hearing finishes (form on the page, or):
+    curl -X POST http://localhost:$MOCKS_PORT/parlview/api/webhook -H 'Content-Type: application/json' \\
+      -d '{"url":"http://localhost:$WEB_PORT/api/triggers/<flowId>","token":"wf_wh_…"}'
+  An AI task can read the hearing through the mock ParlView MCP, the same six
+  tools as parlviewMCP. Admin → MCP servers: Streamable HTTP,
+    URL            http://localhost:$MOCKS_PORT/parlview/mcp/${PARLVIEW_MOCK_MCP_TOKEN:-mock-parlview-token}
+
+  mock SMTP server on localhost:$MOCKS_SMTP_PORT — catches mail, delivers none.
+  Each email is printed to .mocks-logs/server.log and listed at
+  http://localhost:$MOCKS_PORT/smtp/messages. To send to it, open
+  /admin/settings → Email (SMTP) and enter: host localhost, port $MOCKS_SMTP_PORT,
+  TLS off, username mock, password mock (any values work).
 EOF
 
   # Where the mock PKI proxy forwards the certificates it issues. Safe to export

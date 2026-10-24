@@ -1,3 +1,4 @@
+import type { TriggerInput } from "./flow-trigger";
 export type FlowStatus = "draft" | "published";
 export type FlowPermissionRole = "owner" | "viewer";
 
@@ -45,6 +46,9 @@ export interface Flow {
   visibility: FlowVisibility;
   permissions: FlowPermission[];
   contextDocs: FlowContextDoc[];
+  // Inputs a watch or webhook supplies when it starts the flow (ADR-064 §1).
+  // Optional so fixtures from before triggers satisfy the type; absent is none.
+  triggerInputs?: TriggerInput[];
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { documentDataSchema } from "./document";
 
 // Models do not reliably honour "a whole number 0-100" — they return 87.5 or a
 // value just outside the band — and rejecting the reply fails the whole turn or
@@ -58,3 +59,40 @@ export type TurnResponse = z.infer<typeof turnResponseSchema>;
 export type BranchChoice = z.infer<typeof branchChoiceSchema>;
 export type DocumentGenerationConfidenceData = z.infer<typeof documentGenerationConfidenceSchema>;
 export type PreGenerationEvaluationData = z.infer<typeof preGenerationEvaluationSchema>;
+
+// What an AI task's model call returns (ADR-065 §3); the schema it is held to
+// names each field, so it is built per step by buildAiTaskResultSchema.
+export interface AiTaskResult {
+  values: Record<string, string | Array<Record<string, string>>>;
+  confidence: number;
+  rationale: string;
+}
+
+export interface AiTaskOutputKey {
+  key: string;
+  // A repeating group's item sub-field keys; absent for a scalar field.
+  itemKeys?: string[];
+}
+
+// The schema an AI task's model call is held to, naming each output field. A
+// free-form `values` record lets a strict structured-output provider answer
+// with an empty object — every field blank — exactly the failure
+// buildExtractionResultSchema was introduced for.
+export const buildAiTaskResultSchema = (fields: AiTaskOutputKey[]) => {
+  const shape = Object.fromEntries(
+    fields.map((field) => [
+      field.key,
+      field.itemKeys
+        ? z.array(z.object(Object.fromEntries(field.itemKeys.map((itemKey) => [itemKey, z.string()]))))
+        : z.string(),
+    ]),
+  );
+  return z.object({
+    values: z.object(shape).describe("One entry per requested output field, keyed by field key"),
+    confidence: z
+      .number()
+      .transform(toBoundedPercentConfidence)
+      .describe("Confidence 0-100 that the output fully and accurately meets the instruction"),
+    rationale: z.string().describe("Why the confidence is what it is; name anything missing or uncertain"),
+  });
+};
