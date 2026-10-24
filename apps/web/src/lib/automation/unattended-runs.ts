@@ -33,6 +33,7 @@ const prepareConversationalStep = async (container: Container, session: Session,
     organisationName: await resolveOrganisationName(container),
     userProfile: await resolveUserProfile(container, session.userId),
     userId: session.userId,
+    isAdmin: await resolveIsAdmin(container, session.userId),
     gatheredContext: buildGatheredContext(loaded.data.messages),
     globalInstructions: await resolveGlobalInstructions(container),
   });

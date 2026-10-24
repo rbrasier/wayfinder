@@ -18,7 +18,7 @@ import {
   buildPromptSessionUploads,
   renderGatheredContext,
 } from "./turn-helpers";
-import { runMcpToolPrepass } from "./mcp-turn-helpers";
+import { conversationalStepBrief, runMcpToolPrepass } from "./mcp-turn-helpers";
 
 // The most recent turns the model is given as context, mirrored from the
 // client's own slice so the two agree (scaling wall #1).
@@ -184,13 +184,14 @@ export async function POST(
   const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
 
   // Conversational tool-loop (ADR-032): when a step allows MCP tools, let the model
-  // call them in a non-streaming pre-pass and fold the gathered results into the
-  // step context, leaving the structured streaming turn below untouched.
-  const gatheredContextWithTools = await runMcpToolPrepass({
+  // call them in a non-streaming pre-pass and hand the results to the prompt,
+  // leaving the structured streaming turn below untouched.
+  const toolPrepass = await runMcpToolPrepass({
     container,
     nodeConfig,
     dbMessages,
     lastUserMessage,
+    stepBrief: conversationalStepBrief(nodeConfig),
     gatheredContext,
     userId: authSession.userId,
     isAdmin: authSession.isAdmin,
@@ -207,7 +208,8 @@ export async function POST(
     nodeConfig,
     retrievedChunks,
     sessionUploads,
-    gatheredContext: gatheredContextWithTools,
+    gatheredContext,
+    toolResults: toolPrepass.toolResults,
     workflowName: flow.name,
     organisationName,
     globalInstructions,
@@ -279,6 +281,7 @@ export async function POST(
           userId: authSession.userId,
           isAdmin: authSession.isAdmin,
           lastUserMessage,
+          recordToolAudit: toolPrepass.recordAudit,
         });
       } finally {
         clearInterval(heartbeat);

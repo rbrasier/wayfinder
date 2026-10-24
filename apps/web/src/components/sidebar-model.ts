@@ -96,3 +96,8 @@ export const isNewChatShortcut = (event: ShortcutEvent): boolean => {
 // while the event_watch flag is on for this admin (ADR-063 §8).
 export const eventWatchAttention = (flagEnabled: boolean, count: number | undefined): number | null =>
   flagEnabled ? (count ?? 0) : null;
+
+// Event Watch lives in the Advanced Flow Settings group, which starts closed —
+// so a watch needing attention opens it, or its badge would sit out of sight.
+export const advancedFlowSettingsStartsCollapsed = (eventWatchAttentionCount: number | null): boolean =>
+  !eventWatchAttentionCount;
