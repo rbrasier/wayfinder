@@ -216,6 +216,25 @@ describe("executeTurn", () => {
     expect((scenario.container as never as { services: { llm: { streamObject: ReturnType<typeof vi.fn> } } }).services.llm.streamObject).not.toHaveBeenCalled();
   });
 
+  it("records the tool lookups after the user's message, so the note follows the message that asked", async () => {
+    const scenario = buildScenario({ confidence: 40, evaluation: null });
+    const order: string[] = [];
+    const persistUserMessage = scenario.input.container.useCases.runTurn.persistUserMessage as ReturnType<typeof vi.fn>;
+    persistUserMessage.mockImplementation(async () => {
+      order.push("user message");
+      return { data: { seq: 1 }, error: null };
+    });
+
+    await executeTurn({
+      ...scenario.input,
+      recordToolAudit: async () => {
+        order.push("tool note");
+      },
+    });
+
+    expect(order).toEqual(["user message", "tool note"]);
+  });
+
   it("streams the reply, emits a confidence annotation, and persists the assistant turn when the gate is skipped", async () => {
     // Below threshold → the readiness gate does not run at all.
     const scenario = buildScenario({ confidence: 40, evaluation: null });

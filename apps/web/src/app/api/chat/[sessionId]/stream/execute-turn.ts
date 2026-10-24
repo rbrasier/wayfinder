@@ -75,6 +75,9 @@ export interface ExecuteTurnInput {
   isAdmin: boolean;
   // The raw text the user typed (the persisted user message; used for the title).
   lastUserMessage: string;
+  // Writes the note for the MCP tools consulted before this turn. The lookups
+  // run before the user message is stored, so the note waits for it.
+  recordToolAudit?: () => Promise<void>;
 }
 
 // The chat turn's business orchestration, extracted verbatim from the stream
@@ -110,6 +113,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     userId,
     isAdmin,
     lastUserMessage,
+    recordToolAudit,
   } = input;
 
   const userMsgResult = await container.useCases.runTurn.persistUserMessage({
@@ -121,6 +125,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     const cause = userMsgResult.error.cause;
     throw cause instanceof Error ? cause : new Error(userMsgResult.error.message);
   }
+  await recordToolAudit?.();
 
   // Surface the human's message to collaborators immediately, before the AI
   // reply finishes streaming.
