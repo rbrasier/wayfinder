@@ -258,6 +258,12 @@ jobs:
         # audit endpoint is down, this is the lockfile check that still runs.
         run: ./scripts/osv-check.sh
 
+      - name: Security waivers still needed
+        # Fails when a waived advisory now has a fix within reach, or no longer
+        # applies — so a waiver ends with its reason. --strict: an unreachable
+        # OSV fails here rather than passing unchecked.
+        run: node scripts/waiver-check.mjs --strict
+
       - name: Static security scan (Semgrep)
         uses: semgrep/semgrep-action@v1
         with:

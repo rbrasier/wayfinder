@@ -8,6 +8,17 @@ describe("automationStepState", () => {
     });
   });
 
+  it("says which tools an AI task is consulting while it looks things up", () => {
+    expect(
+      automationStepState({
+        nodeType: "ai_task",
+        sessionStatus: "active",
+        pendingReview: null,
+        consultingSources: ["ParlView"],
+      }),
+    ).toEqual({ message: "AI task running — consulting ParlView…" });
+  });
+
   it("names the reviewer once an AI task's result is waiting on someone else's review", () => {
     expect(
       automationStepState({

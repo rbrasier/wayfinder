@@ -62,8 +62,15 @@ export class FlowSessionGraph implements ISessionAgent {
       ? `\n  <gathered_context>\n    ${gatheredContext.trim()}\n    You may ask nuanced follow-up questions to clarify or deepen anything captured here if it would help complete this step more accurately.\n  </gathered_context>`
       : "";
 
-    const contextSection = gatheredBlock
-      ? `\n<context>${gatheredBlock}\n</context>`
+    // Without its own framing a tool result read as one more captured fact, and
+    // a model asked to "use tools" replied that it would look it up — the lookup
+    // had already run, but the model had no tools of its own to know that.
+    const toolResultsBlock = input.toolResults?.trim()
+      ? `\n  <tool_results>\n    ${input.toolResults.trim()}\n    These have already been looked up for the user with this step's tools. Answer from them directly. Never say you lack access to this information, and never say you will look something up — that has been done. If they do not hold what is needed, say what was looked up and what is still missing.\n  </tool_results>`
+      : "";
+
+    const contextSection = gatheredBlock || toolResultsBlock
+      ? `\n<context>${gatheredBlock}${toolResultsBlock}\n</context>`
       : "";
 
     // Retrieved chunks vary per turn, so they are appended after the stable

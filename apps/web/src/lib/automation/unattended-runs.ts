@@ -13,6 +13,7 @@ import {
 } from "@/lib/chat/prompt-context";
 import { buildGatheredContext, generateInitialMessage } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
 import { buildAiTaskContext } from "./ai-task-context";
+import { publishStepActivity } from "./step-activity";
 import { flagForStep, raiseUnattendedApproval } from "./unattended-approval";
 
 type Container = ReturnType<typeof getContainer>;
@@ -33,8 +34,10 @@ const prepareConversationalStep = async (container: Container, session: Session,
     organisationName: await resolveOrganisationName(container),
     userProfile: await resolveUserProfile(container, session.userId),
     userId: session.userId,
+    isAdmin: await resolveIsAdmin(container, session.userId),
     gatheredContext: buildGatheredContext(loaded.data.messages),
     globalInstructions: await resolveGlobalInstructions(container),
+    onToolActivity: publishStepActivity(container, session.id, node.id),
   });
 };
 

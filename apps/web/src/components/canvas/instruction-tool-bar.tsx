@@ -6,6 +6,7 @@ import type { McpToolRef } from "@rbrasier/domain";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import { McpPickerModal } from "./mcp-picker-modal";
+import { toolCountAdvice } from "./tool-count-advice";
 import { SkillPickerModal } from "./skill-picker-modal";
 
 // Only the fields the chips read off a resolved library skill.
@@ -116,6 +117,11 @@ export function InstructionToolBar({
             </span>
           ))}
         </div>
+      )}
+      {mcpEnabled && toolCountAdvice(allowedMcpToolRefs.length) && (
+        <p role="status" className="text-[11.5px] text-[#8a5a1d]">
+          {toolCountAdvice(allowedMcpToolRefs.length)}
+        </p>
       )}
     </>
   );

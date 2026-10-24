@@ -38,12 +38,22 @@ export interface SessionTypingEvent {
   userName: string | null;
 }
 
+// What a step is doing while nobody's turn is streaming — an AI task or a step
+// opener consulting MCP tools. Ephemeral like typing: empty `sources` means the
+// lookup has finished.
+export interface SessionStepActivityEvent {
+  type: "step.activity";
+  nodeId: string | null;
+  sources: string[];
+}
+
 export type SessionEvent =
   | SessionTurnClaimedEvent
   | SessionTurnReleasedEvent
   | SessionMessageCreatedEvent
   | SessionUpdatedEvent
-  | SessionTypingEvent;
+  | SessionTypingEvent
+  | SessionStepActivityEvent;
 
 export type SessionEventType = SessionEvent["type"];
 
@@ -70,6 +80,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<SessionEventType> = new Set([
   "message.created",
   "session.updated",
   "typing",
+  "step.activity",
 ]);
 
 // Parse a NOTIFY payload back into an envelope, returning null on anything

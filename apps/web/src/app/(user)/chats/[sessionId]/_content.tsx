@@ -25,6 +25,7 @@ import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
 import { automationStepState } from "@/components/chat/automation-step-state";
+import { consultingLabel } from "@/components/chat/turn-activity";
 import { ManualEstimateModal } from "@/components/chat/manual-estimate-modal";
 import { shouldPromptForEstimate } from "@/components/chat/manual-estimate-state";
 
@@ -106,6 +107,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   // #2): each `typing` event stamps an expiry a few seconds out, and a light tick
   // recomputes the indicator so it fades when the events stop.
   const typingExpiryRef = useRef<Map<string, number>>(new Map());
+  // The MCP servers a step working with no turn streaming (an AI task, or an
+  // unattended run's step opener) is consulting, from its step.activity events.
+  const [stepActivity, setStepActivity] = useState<{ nodeId: string | null; sources: string[] } | null>(null);
   const [typingTick, setTypingTick] = useState(0);
 
   const [_regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
@@ -211,6 +215,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           isViewer: Boolean(myUserId) && pendingReviewer?.userId === myUserId,
         }
       : null,
+    consultingSources: stepActivity && stepActivity.nodeId === currentNodeId ? stepActivity.sources : null,
   });
   const currentNodeConfig = currentNode?.config as Record<string, unknown> | undefined;
   const isDocumentTemplateStep =
@@ -379,10 +384,24 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       // approver for a request that has already been sent.
       void utils.approval.forNode.invalidate();
     };
-    source.addEventListener("message.created", refetch);
+    source.addEventListener("message.created", () => {
+      // A lookup ends before anything it led to is stored, so a new message
+      // also clears a label whose closing event went missing.
+      setStepActivity(null);
+      refetch();
+    });
     source.addEventListener("session.updated", refetch);
     source.addEventListener("turn.claimed", refetch);
     source.addEventListener("turn.released", refetch);
+    source.addEventListener("step.activity", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as { nodeId?: string | null; sources?: string[] };
+        const sources = data.sources ?? [];
+        setStepActivity(sources.length > 0 ? { nodeId: data.nodeId ?? null, sources } : null);
+      } catch {
+        // Ignore malformed events; the label is only a courtesy.
+      }
+    });
     source.addEventListener("typing", (event) => {
       try {
         const data = JSON.parse((event as MessageEvent).data) as { userId?: string };
@@ -565,6 +584,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
           void utils.session.get.invalidate({ sessionId });
           void pendingReviewQuery.refetch();
         }}
+        backgroundActivity={stepActivity ? consultingLabel(stepActivity.sources) : null}
         pendingAutomation={
           automationState && currentNode
             ? {

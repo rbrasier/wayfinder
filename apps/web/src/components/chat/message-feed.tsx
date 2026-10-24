@@ -27,6 +27,12 @@ import {
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
 import {
+  awaitingFirstText,
+  consultingLabel,
+  resolveConsultingSources,
+  resolveTurnActivityLabel,
+} from "./turn-activity";
+import {
   decisionVerbPhrase,
   isApprovalGranted,
   parseApprovalDecisionMessage,
@@ -50,6 +56,21 @@ const toConfidenceAnnotation = (a: unknown): ConfidenceAnnotation | null => {
   if (obj["type"] !== "confidence" || typeof obj["score"] !== "number") return null;
   return obj as unknown as ConfidenceAnnotation;
 };
+
+// The AI's mark, its typing dots and what it is doing, in one quiet row.
+function ActivityRow({ initials, label }: { initials: string; label: string }) {
+  return (
+    <div className="flex gap-[14px]" data-testid="turn-activity">
+      <AgentMark initials={initials} />
+      <div className="flex items-center gap-2">
+        <TypingIndicator />
+        <span role="status" className="font-mono text-[11px] text-[#736d5f]">
+          {label}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 interface MessageFeedProps {
   dbMessages: SessionMessage[];
@@ -98,6 +119,9 @@ interface MessageFeedProps {
   // feed then hands it to them instead of showing a waiting line.
   pendingAutomation?: { message: string; stepName: string; reviewApprovalId: string | null } | null;
   onAutomationReviewed?: () => void;
+  // What a step working with no turn streaming is doing ("Consulting ParlView…"),
+  // reported over the session event bus; null when nothing is.
+  backgroundActivity?: string | null;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -222,6 +246,7 @@ export function MessageFeed({
   pendingStepAdvance,
   pendingAutomation,
   onAutomationReviewed,
+  backgroundActivity,
 }: MessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
@@ -518,7 +543,11 @@ export function MessageFeed({
             // reply, then a cross-check follow-up or pass note) split by
             // finish_step boundaries — each renders as its own bubble to match
             // the rows the server persists.
-            const segments = messageTextSegments(msg);
+            // A turn's status annotations can arrive before any of its text;
+            // until text does, the typing row below speaks for it.
+            const segments = messageTextSegments(msg).filter((segment) => segment.length > 0);
+            const consultingSources =
+              isStreaming && msg.role === "assistant" ? resolveConsultingSources(msg.annotations) : null;
 
             return (
               <div key={msg.id} className="flex flex-col gap-5">
@@ -551,6 +580,10 @@ export function MessageFeed({
               )}
               {isCrossChecking && <CrossCheckingBadge documents={crossCheckingState.documents} />}
               {isGeneratingDocument && <GeneratingDocumentBadge />}
+              {/* The next step's opener looking things up after this reply. */}
+              {consultingSources && segments.length > 0 && (
+                <ActivityRow initials={botInitials} label={consultingLabel(consultingSources)} />
+              )}
               </div>
             );
           })}
@@ -560,13 +593,17 @@ export function MessageFeed({
       {/* Outside the delta block: at the instant a turn starts the client list
           has not grown yet, and a typing indicator that blinks out on the first
           frame reads as a dropped message. */}
-      {isStreaming && streamingMessages.at(-1)?.role !== "assistant" && (
-        <div className="flex gap-[14px]">
-          <AgentMark initials={botInitials} />
-          <div className="flex items-center">
-            <TypingIndicator />
-          </div>
-        </div>
+      {isStreaming && awaitingFirstText(streamingMessages.at(-1)) && (
+        <ActivityRow
+          initials={botInitials}
+          label={resolveTurnActivityLabel(
+            streamingMessages.at(-1)?.role === "assistant" ? streamingMessages.at(-1)?.annotations : undefined,
+          )}
+        />
+      )}
+
+      {!isStreaming && !pendingAutomation && backgroundActivity && (
+        <ActivityRow initials={botInitials} label={backgroundActivity} />
       )}
 
       {pendingDocumentGeneration && <GeneratingDocumentBadge />}
