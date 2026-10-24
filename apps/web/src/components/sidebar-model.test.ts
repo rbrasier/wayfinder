@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SessionStatus } from "@rbrasier/domain";
 import {
   RECENT_CHATS_LIMIT,
+  advancedFlowSettingsStartsCollapsed,
   eventWatchAttention,
   formatRecentChatMeta,
   isNewChatShortcut,
@@ -208,5 +209,16 @@ describe("eventWatchAttention", () => {
   it("shows the item with its count, or zero before the count arrives", () => {
     expect(eventWatchAttention(true, 3)).toBe(3);
     expect(eventWatchAttention(true, undefined)).toBe(0);
+  });
+});
+
+describe("advancedFlowSettingsStartsCollapsed", () => {
+  it("keeps the group closed while no watch needs attention", () => {
+    expect(advancedFlowSettingsStartsCollapsed(null)).toBe(true);
+    expect(advancedFlowSettingsStartsCollapsed(0)).toBe(true);
+  });
+
+  it("opens the group when a watch needs attention, so Event Watch's badge is never hidden", () => {
+    expect(advancedFlowSettingsStartsCollapsed(2)).toBe(false);
   });
 });

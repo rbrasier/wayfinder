@@ -36,6 +36,7 @@ import { HelpMenu } from "@/components/help-menu";
 import { NewChatModal } from "@/components/chat/new-chat-modal";
 import { useSidebar } from "@/components/sidebar-context";
 import {
+  advancedFlowSettingsStartsCollapsed,
   eventWatchAttention,
   formatRecentChatMeta,
   isNewChatShortcut,
@@ -129,6 +130,14 @@ const buildAdminNav = ({
   // Knowledge lives only in Flow Settings; the page still enforces
   // knowledge:curate regardless (ADR-021).
   if (canCurate) flowSettingsItems.push({ href: "/knowledge", icon: BookOpen, label: "Knowledge" });
+  if (eventWatchAttention !== null) {
+    flowSettingsItems.push({
+      href: "/admin/event-watches",
+      icon: Radar,
+      label: "Event Watch",
+      badgeCount: eventWatchAttention,
+    });
+  }
 
   const groups: NavGroup[] = [
     {
@@ -138,9 +147,6 @@ const buildAdminNav = ({
         { href: "/admin/dashboards/flows", icon: BarChart2, label: "Flow Health" },
         { href: "/admin/sessions", icon: MessageSquare, label: "All Chats" },
         { href: "/admin/flows", icon: GitBranch, label: "All Flows" },
-        ...(eventWatchAttention !== null
-          ? [{ href: "/admin/event-watches", icon: Radar, label: "Event Watch", badgeCount: eventWatchAttention }]
-          : []),
         // Shown only when the extraction_flows flag resolves (ADR-033 §7).
         ...(extractionEnabled
           ? [{ href: "/admin/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
@@ -165,7 +171,7 @@ const buildAdminNav = ({
     {
       label: "Advanced Flow Settings",
       collapsible: true,
-      defaultCollapsed: true,
+      defaultCollapsed: advancedFlowSettingsStartsCollapsed(eventWatchAttention),
       items: flowSettingsItems,
     },
     {
@@ -181,8 +187,8 @@ const buildAdminNav = ({
       ],
     },
   ];
-  // Advanced Flow Settings can be empty when Skills/MCP/Knowledge are all
-  // unavailable — drop empty groups so no lonely collapsible header shows.
+  // Advanced Flow Settings can be empty when Skills/MCP/Knowledge/Event Watch
+  // are all unavailable — drop empty groups so no lonely collapsible header shows.
   return groups.filter((group) => group.items.length > 0);
 };
 

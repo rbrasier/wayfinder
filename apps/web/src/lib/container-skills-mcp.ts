@@ -65,7 +65,7 @@ export const buildSkillsAndMcp = ({
   const mcpServers = new DrizzleMcpServerRepository(db, secretCipher);
   const mcpClient = new AiSdkMcpClient(mcpServers);
   const mcpServerDirectory = new McpServerDirectory(mcpServers, mcpClient);
-  const mcpToolPrepass = new McpToolPrepass(usageRepo, quotaEnforcer);
+  const mcpToolPrepass = new McpToolPrepass(usageRepo, quotaEnforcer, mcpServers);
 
   return {
     repos: { skills, mcpServers },

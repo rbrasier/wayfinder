@@ -26,6 +26,10 @@ export interface BuildSystemPromptInput {
   // see the attachment instead of asking the user to paste it.
   sessionUploads?: PromptSessionUpload[];
   gatheredContext: string;
+  // What the step's MCP tools returned (ADR-032), one `- tool: result` line each.
+  // Kept apart from gatheredContext: these were looked up for the user, and the
+  // model must answer from them rather than offer to look anything up.
+  toolResults?: string;
   workflowName: string;
   organisationName: string | null;
   // Operator-set, organisation-wide guidance (tone, spelling, house style)

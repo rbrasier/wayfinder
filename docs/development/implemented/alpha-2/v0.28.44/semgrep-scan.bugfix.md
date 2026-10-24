@@ -40,7 +40,7 @@ above, then a green tick. (Not reproducible in the sandbox — its network polic
   scanner fails the job; locally it is a SKIP, the same contract as the OSV gate.
 - `ci.yml`: drop the action; install the pinned CLI (`semgrep==1.182.1`) from PyPI and
   run the script.
-- `validate.sh` §11c runs the same script with `CI` cleared.
+- `validate.sh` §11d runs the same script with `CI` cleared.
 - Findings the newly working scan reports are triaged in this PR: real ones fixed,
   false positives waived inline with `nosemgrep: <rule-id>` and a reason.
 
@@ -53,13 +53,13 @@ and that `ci.yml` runs the script rather than the action.
 
 **E2E:** none — CI tooling falls in no group of `e2e-test-policy.md`.
 
-## Implementation summary — v0.28.43
+## Implementation summary — v0.28.44
 
 - **Root cause:** `semgrep/semgrep-action@v1` runs Semgrep 1.36, which raises
   `invalid rule severity value: MEDIUM` loading the current packs; the action exits 0 anyway.
 - **Fix applied:** new `scripts/semgrep-check.sh` (exit 0 clean, 1 findings, anything else
   = scanner failed → fail in CI, SKIP locally); `ci.yml` installs `semgrep==1.182.1` with
-  pipx and runs the script; `validate.sh` §11c; `docs/guides/security-scanning.md` updated.
+  pipx and runs the script; `validate.sh` §11d; `docs/guides/security-scanning.md` updated.
   Exit codes and the `MEDIUM` severity verified against the real 1.182.1 CLI with a local rule.
 - **Regression test:** `packages/adapters/src/ci/semgrep-check.test.ts` — 9 cases, all
   failing before the fix, passing after.

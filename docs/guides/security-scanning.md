@@ -8,7 +8,7 @@ different question, so a finding one misses another can catch.
 |---|---|---|---|
 | `pnpm audit` | CI `security` job, `validate.sh` §11 — `scripts/audit-check.sh` | `pnpm-lock.yaml`, npm's advisory database | HIGH / CRITICAL (GitHub label) |
 | OSV-Scanner | CI `security` job, `validate.sh` §11b — `scripts/osv-check.sh` | Every lockfile git tracks, the OSV database | HIGH / CRITICAL (GitHub label; CVSS ≥ 7.0 when unlabelled) |
-| Semgrep | CI `security` job, `validate.sh` §11c — `scripts/semgrep-check.sh` | The source, with the `p/typescript` and `p/owasp-top-ten` rule packs | Any finding |
+| Semgrep | CI `security` job, `validate.sh` §11d — `scripts/semgrep-check.sh` | The source, with the `p/typescript` and `p/owasp-top-ten` rule packs | Any finding |
 | Trivy | CI `docker-image` job, `publish.yml` before the push | The built container image — Debian packages, the Node runtime, everything in `node_modules` | Fixable HIGH / CRITICAL |
 | Dependency review | `dependency-review.yml` on every PR | Only the dependencies the PR adds or changes | HIGH / CRITICAL |
 | Dependabot | GitHub, continuously | `pnpm-lock.yaml`, against GitHub's advisory database | Nothing — opens security-fix PRs against `main` |
@@ -32,7 +32,7 @@ packs and blocks on any finding. CI installs a pinned CLI and runs
 Semgrep 1.36 crashed loading the current packs (`invalid rule severity value:
 MEDIUM`) while the step still reported success, so the scan silently did not
 run. The script treats any exit other than "clean" or "findings" as the scanner
-failing, and in CI that fails the job. Locally, §11c skips when `semgrep` is not
+failing, and in CI that fails the job. Locally, §11d skips when `semgrep` is not
 installed or the registry is unreachable.
 
 ## Lockfiles outside the workspace

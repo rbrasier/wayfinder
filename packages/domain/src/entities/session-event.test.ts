@@ -24,6 +24,12 @@ describe("session-event NOTIFY codec", () => {
     expect(parsed?.event).toEqual(event);
   });
 
+  it("round-trips a step.activity event naming the tools being consulted", () => {
+    const event: SessionEvent = { type: "step.activity", nodeId: "node-1", sources: ["ParlView"] };
+
+    expect(parseSessionNotifyPayload(toSessionNotifyPayload("session-1", event))?.event).toEqual(event);
+  });
+
   it("returns null for non-JSON payloads instead of throwing", () => {
     expect(parseSessionNotifyPayload("not json{")).toBeNull();
   });

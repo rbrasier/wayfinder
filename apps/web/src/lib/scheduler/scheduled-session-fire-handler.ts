@@ -26,11 +26,13 @@ import {
 import {
   buildGatheredContext,
   dispatchAutoNode,
-  dispatchScheduledNode,
   generateInitialMessage,
   isAutoNodeEnabled,
-  isScheduledNodeEnabled,
 } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
+import {
+  dispatchScheduledNode,
+  isScheduledNodeEnabled,
+} from "@/app/api/chat/[sessionId]/stream/scheduled-node-dispatch";
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -122,6 +124,7 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
       organisationName: await resolveOrganisationName(this.container),
       userProfile: await resolveUserProfile(this.container, session.userId),
       userId: session.userId,
+      isAdmin: ownerIsAdmin,
       gatheredContext,
       globalInstructions: await resolveGlobalInstructions(this.container),
     });
