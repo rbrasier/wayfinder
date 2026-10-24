@@ -1,7 +1,9 @@
 import type { PermissionKey } from "@wayfinder/domain";
 import { describe, expect, it } from "vitest";
 import {
+  adminAreaForPath,
   canAccessSettingKey,
+  canOpenAdminPath,
   canOpenAdminArea,
   firstAdminHref,
   hasAnyAdminArea,
@@ -90,5 +92,43 @@ describe("canAccessSettingKey", () => {
 
   it("gives a User Admin no raw settings", () => {
     expect(canAccessSettingKey(userAdmin, "global_prompt")).toBe(false);
+  });
+});
+
+describe("adminAreaForPath", () => {
+  it("maps each admin screen to the area that owns it", () => {
+    expect(adminAreaForPath("/admin/settings")).toBe("technical");
+    expect(adminAreaForPath("/admin/flags")).toBe("technical");
+    expect(adminAreaForPath("/admin/errors")).toBe("technical");
+    expect(adminAreaForPath("/admin/schedules")).toBe("technical");
+    expect(adminAreaForPath("/admin/skills")).toBe("technical");
+    expect(adminAreaForPath("/admin/mcp-servers")).toBe("technical");
+    expect(adminAreaForPath("/admin/event-watches/new")).toBe("technical");
+    expect(adminAreaForPath("/admin/users")).toBe("users");
+    expect(adminAreaForPath("/admin/groups")).toBe("users");
+    expect(adminAreaForPath("/admin/organisations")).toBe("users");
+    expect(adminAreaForPath("/admin/dashboards/overview")).toBe("oversight");
+    expect(adminAreaForPath("/admin/sessions")).toBe("oversight");
+    expect(adminAreaForPath("/admin/flows/abc")).toBe("oversight");
+    expect(adminAreaForPath("/admin/synthesise")).toBe("oversight");
+    expect(adminAreaForPath("/admin/usage")).toBe("oversight");
+    expect(adminAreaForPath("/admin/audit")).toBe("oversight");
+    expect(adminAreaForPath("/admin/roles")).toBe("global");
+  });
+
+  it("treats an unknown admin screen as Global-only, so a new page fails closed", () => {
+    expect(adminAreaForPath("/admin/something-new")).toBe("global");
+  });
+
+  it("does not confuse a screen with another that shares its prefix", () => {
+    expect(adminAreaForPath("/admin/usersettings")).toBe("global");
+  });
+});
+
+describe("canOpenAdminPath", () => {
+  it("lets a Technical Admin open Configuration but not Users or Roles", () => {
+    expect(canOpenAdminPath(technicalAdmin, "/admin/settings")).toBe(true);
+    expect(canOpenAdminPath(technicalAdmin, "/admin/users")).toBe(false);
+    expect(canOpenAdminPath(technicalAdmin, "/admin/roles")).toBe(false);
   });
 });

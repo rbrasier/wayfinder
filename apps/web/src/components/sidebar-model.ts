@@ -1,4 +1,5 @@
 import type { SessionStatus } from "@wayfinder/domain";
+import { canOpenAdminPath, type AdminViewer } from "@/lib/admin-areas";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -101,3 +102,23 @@ export const eventWatchAttention = (flagEnabled: boolean, count: number | undefi
 // so a watch needing attention opens it, or its badge would sit out of sight.
 export const advancedFlowSettingsStartsCollapsed = (eventWatchAttentionCount: number | null): boolean =>
   !eventWatchAttentionCount;
+
+interface AdminNavGroupShape {
+  readonly items: readonly { readonly href?: string }[];
+}
+
+// The admin rail shows only the screens this viewer's areas open (ADR-066), and
+// drops a group left empty. Items outside /admin (Knowledge) carry their own
+// permission check where they are built, so they pass through untouched.
+export const filterAdminNavGroups = <T extends AdminNavGroupShape>(
+  groups: readonly T[],
+  viewer: AdminViewer,
+): T[] =>
+  groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter(
+        (item) => item.href === undefined || !item.href.startsWith("/admin") || canOpenAdminPath(viewer, item.href),
+      ),
+    }))
+    .filter((group) => group.items.length > 0);

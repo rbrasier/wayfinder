@@ -320,7 +320,7 @@ function FeatureAccessCard() {
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Grant access to each enabled feature by role. Leave every role unchecked to allow
-          everyone. Admins always have access. Enable or create features under{" "}
+          everyone. Global Admins always have access. Enable or create features under{" "}
           <span className="font-medium">Advanced → Flags</span>.
         </p>
         {flagsQuery.isPending ? (
