@@ -9,10 +9,12 @@
 #                           identity provider at :4001/entra, the mock Microsoft
 #                           Graph at :4001/graph, the mock HR roster at :4001/hr,
 #                           the mock PKI reverse proxy at :4001/pki, a mock
-#                           ParlView hearing feed at :4001/parlview (an Event
-#                           Watch source whose hearings start and finish every
-#                           5 minutes), and the inbox of a mock SMTP server that
-#                           listens on MOCKS_SMTP_PORT (default 2525) and prints
+#                           ParlView at :4001/parlview (its search and captions
+#                           endpoints, as an Event Watch source whose hearings
+#                           start and finish every 5 minutes, and a mock of
+#                           parlviewMCP at :4001/parlview/mcp), and the inbox
+#                           of a mock SMTP server that listens on
+#                           MOCKS_SMTP_PORT (default 2525) and prints
 #                           every email it catches. To add a new mock,
 #                           follow the instructions at the top of
 #                           mocks/server.mjs and pick a new path (not a new port).
@@ -333,18 +335,20 @@ EOF
   # mail settings are things an admin sets up, so the values are printed instead.
   cat <<EOF
 
-  mock ParlView hearing feed at http://localhost:$MOCKS_PORT/parlview
+  mock ParlView at http://localhost:$MOCKS_PORT/parlview — open it for what is live,
+  an "Advance to next change" button, the raw ParlView endpoints and these setups.
   Every 5 minutes the live hearing finishes and the next one starts
-  (PARLVIEW_MOCK_PERIOD_SECONDS to change; POST /parlview/api/advance to skip).
+  (PARLVIEW_MOCK_PERIOD_SECONDS to change).
   Admin → Event Watch → New watch:
-    URL            http://localhost:$MOCKS_PORT/parlview/api/hearings
-    List of items  data.hearings     Item ID  id
-    Condition      status equals finished
-  Or have it start a flow by webhook as each hearing finishes:
+    URL            http://localhost:$MOCKS_PORT/parlview/vodapi/api/search?pageSize=40&page=0
+    List of items  searchResults.videos     Item ID  parlViewId
+    Condition      A field changes to a value: isLive, from true, to false
+  Or have it start a flow by webhook as each hearing finishes (form on the page, or):
     curl -X POST http://localhost:$MOCKS_PORT/parlview/api/webhook -H 'Content-Type: application/json' \\
       -d '{"url":"http://localhost:$WEB_PORT/api/triggers/<flowId>","token":"wf_wh_…"}'
-  An AI task can read the hearing through the mock MCP server
-  (http://localhost:$MOCKS_PORT/mcp): parlview_list_hearings, parlview_get_transcript.
+  An AI task can read the hearing through the mock ParlView MCP, the same six
+  tools as parlviewMCP. Admin → MCP servers: Streamable HTTP,
+    URL            http://localhost:$MOCKS_PORT/parlview/mcp/${PARLVIEW_MOCK_MCP_TOKEN:-mock-parlview-token}
 
   mock SMTP server on localhost:$MOCKS_SMTP_PORT — catches mail, delivers none.
   Each email is printed to .mocks-logs/server.log and listed at

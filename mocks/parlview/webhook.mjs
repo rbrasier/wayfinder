@@ -8,7 +8,7 @@
 // baseline, like a watch's, so turning the mock on never replays old hearings.
 
 import { createHmac } from "node:crypto";
-import { hearingById } from "./hearings.mjs";
+import { recordingById, vodapiVideo } from "./recordings.mjs";
 
 export const targetFromEnv = () => {
   const url = process.env.PARLVIEW_MOCK_WEBHOOK_URL;
@@ -20,31 +20,34 @@ export const targetFromEnv = () => {
   };
 };
 
-const inputsFor = (hearing) => ({
-  hearing_id: hearing.id,
-  title: hearing.title,
-  committee: hearing.committee,
-  portfolio: hearing.portfolio,
-  status: hearing.status,
-  finished_at: hearing.finishedAt,
-  topic: hearing.topic,
-});
+// The finished recording's vodapi fields, under names a flow would declare.
+const inputsFor = (recording) => {
+  const video = vodapiVideo(recording);
+  return {
+    hearing_id: video.parlViewId,
+    title: video.parlViewTitle,
+    committee: video.eventTitle,
+    status: "finished",
+    recorded_from: video.recordingFrom,
+    recorded_to: video.recordingTo,
+  };
+};
 
 export const createWebhookNotifier = ({ target = null, periodMs, post = fetch, log = console.log }) => {
   let current = target;
   let lastSlot = null;
 
-  const deliver = async (hearing) => {
-    const body = JSON.stringify({ inputs: inputsFor(hearing) });
+  const deliver = async (recording) => {
+    const body = JSON.stringify({ inputs: inputsFor(recording) });
     const headers = { "Content-Type": "application/json", Authorization: `Bearer ${current.token}` };
     if (current.hmacSecret) {
       headers["X-Wayfinder-Signature"] = `sha256=${createHmac("sha256", current.hmacSecret).update(body).digest("hex")}`;
     }
     try {
       const response = await post(current.url, { method: "POST", headers, body });
-      log(`[mocks] parlview → webhook ${hearing.id} finished: HTTP ${response.status}`);
+      log(`[mocks] parlview → webhook ${recording.id} finished: HTTP ${response.status}`);
     } catch (cause) {
-      log(`[mocks] parlview → webhook ${hearing.id} failed: ${cause instanceof Error ? cause.message : cause}`);
+      log(`[mocks] parlview → webhook ${recording.id} failed: ${cause instanceof Error ? cause.message : cause}`);
     }
   };
 
@@ -53,9 +56,9 @@ export const createWebhookNotifier = ({ target = null, periodMs, post = fetch, l
     const previous = lastSlot;
     lastSlot = slot;
     if (previous === null || slot <= previous || !current) return;
-    // The hearing in each slot that has closed since the last check has finished.
+    // The recording in each slot that has closed since the last check has finished.
     for (let finishedSlot = previous; finishedSlot < slot; finishedSlot += 1) {
-      await deliver(hearingById(`pv-${finishedSlot}`, nowMs, { periodMs }));
+      await deliver(recordingById(String(finishedSlot), nowMs, { periodMs }));
     }
   };
 

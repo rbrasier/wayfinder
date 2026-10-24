@@ -490,3 +490,76 @@ used to leave the Email steps that referenced it with tags that rendered blank.
   as before.
 - **Tests:** `automation-steps.test.ts` (five cases), `flow.test.ts` (the use
   case saves the rewrite), `follow-rename.test.ts`.
+
+## Amendment 7 — the ParlView mock speaks ParlView, with a mock of parlviewMCP
+
+Asked for during review: be able to call ParlView MCP from Wayfinder locally as
+it would really be called, and make the mock's landing page easier to drive. It
+supersedes Amendment 3's stand-in feed and its two `parlview_*` tools. The
+shapes now come from [parlviewMCP](https://github.com/AI-CoLab/parlviewMCP), its
+SPEC §3 and the real responses in its `test/fixtures`. Mocks only: no app code,
+no schema change, and the version stays 0.28.42.
+
+**ParlView's own endpoints** (`mocks/parlview/recordings.mjs`, `api.mjs`)
+
+- **Same paths and shapes as ParlView:**
+  - `GET /parlview/vodapi/api/search` returns `{ searchResults: { totalItems, videos } }`.
+  - `GET /parlview/vodapi/api/search/:id` returns `{ videoDetails }`.
+  - `GET /parlview/vod/api/videos/eventvideos/:id` returns the recording's chunks.
+  - `POST /parlview/vod/api/videos/captions/:id` returns caption lines.
+- **Fields, as on ParlView:**
+  - Ids are numeric (`parlViewId`).
+  - Times are Canberra time. vodapi's carry the `+10:00`/`+11:00` offset; timecodes are PAL `HH:MM:SS:FF`.
+  - Caption lines are about 30 characters and name no speakers. A live recording has only the lines spoken so far.
+  - An unknown id gets ParlView's empty `Chunks: []` answer.
+- **What an Event Watch uses:** the hearing ending shows as vodapi's `isLive` going from `true` to `false`:
+  - items `searchResults.videos`
+  - ID `parlViewId`
+  - "A field changes to a value" on `isLive`, from `true` to `false`
+
+  Checked with `evaluateWatchItems`: the first poll records a baseline, and the next fires once, for the hearing that finished.
+- **Removed:** `/parlview/api/hearings`, its `/:id` route, and `hearings.mjs`. The webhook body is built from the same vodapi fields: `hearing_id`, `title`, `committee`, `status`, `recorded_from` and `recorded_to`.
+- **Checked against parlviewMCP's own code:** its `toRecording`, `toLines` and zod schemas parse the mock's vodapi, eventvideos and captions responses. Its `getTranscript` then returns status `ok` from them.
+
+**A mock of parlviewMCP** (`mocks/parlview/mcp.mjs`, `transcript.mjs`, at `:4001/parlview/mcp`)
+
+- **Called as the real server is called:**
+  - Streamable HTTP, stateless.
+  - The token goes in `Authorization: Bearer …` or as the last path segment (`/parlview/mcp/<token>`).
+  - With no token, or a wrong one, it returns 401.
+  - The token is `PARLVIEW_MOCK_MCP_TOKEN`, `mock-parlview-token` by default.
+- **The same tools:**
+  - The server name is `ParlView`, with the same six tools: `list_live_broadcasts`, `search_broadcasts`, `get_transcript`, `get_recent`, `search_captions` and `deep_link`.
+  - Titles, descriptions and input schemas are copied word for word.
+- **The same behaviour, ported from parlviewMCP's source:**
+  - range rules: the first 30 minutes of speech by default, 2-hour pages, `maxPassages`/`nextFrom`
+  - passage building
+  - live-caption term matching
+  - stream statuses and coverage: `ok`, `no_speech`, `no_captions_yet`, `not_live`
+  - the caveat and the error messages
+- **Left out:**
+  - The HLS fallback. A mock recording's captions API is never short.
+  - Caching.
+  - Multi-chunk recordings. A mock recording is one chunk.
+- **Deep links:** they open the mock's own recording page, `/parlview/video/:id?startTime=`, which highlights that moment, instead of aph.gov.au.
+- **The generic mock MCP server** (`:4001/mcp`) loses `parlview_list_hearings` and `parlview_get_transcript`.
+
+**Landing page** (`GET /parlview`, now HTML in the same minimal style)
+
+- What is live, with a countdown to the next change.
+- **Advance to next change.** It posts a form, and the page comes back with a line saying which hearing finished and which went live.
+- **Refresh**, and a link to the last finished hearing's captions.
+- The recordings vodapi lists, each linking to its captions page and its raw `details` and `eventvideos` JSON.
+- Links to each ParlView endpoint.
+- The Event Watch setup.
+- Webhook **Call it as hearings finish** and **Stop calling it** forms.
+- The MCP server registration: Streamable HTTP, the URL with the token, or the bearer-token alternative.
+- `POST /api/advance` and `POST /api/webhook` take the page's forms and redirect back to it (303). Their JSON behaviour is unchanged.
+- It has no sideways scroll at phone width and follows the system's dark mode.
+
+**Tests:** the `mocks/` vitest suite now has 181 tests. Under `parlview/`:
+- `recordings`: the vodapi, eventvideos and captions shapes, live versus finished, and the `isLive` flip.
+- `transcript`: each tool, paging, statuses, matching and errors.
+- `mcp`: a real socket and the SDK client. It covers the tool list, both token forms, links, tool errors and the 401.
+- `api`: the endpoints, the forms and redirects, closed forms on the page, an escaped notice, and the recording page.
+- `webhook`: updated for numeric ids.

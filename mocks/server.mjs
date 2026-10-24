@@ -29,6 +29,7 @@ import { mock as graphApi } from "./graph/api.mjs";
 import { mock as hrDownload } from "./hr/download.mjs";
 import { mock as pkiProxy } from "./pki/proxy.mjs";
 import { mock as parlviewFeed } from "./parlview/api.mjs";
+import { mock as parlviewMcp } from "./parlview/mcp.mjs";
 import { SMTP_PORT, createInbox, createInboxMock } from "./smtp/inbox.mjs";
 import { createSmtpServer } from "./smtp/server.mjs";
 
@@ -45,6 +46,7 @@ const MOCKS = [
   hrDownload,
   pkiProxy,
   parlviewFeed,
+  parlviewMcp,
   smtpInbox,
 ];
 

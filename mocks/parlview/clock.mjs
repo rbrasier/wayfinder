@@ -1,7 +1,7 @@
-// The one clock the ParlView feed, its webhook calls and the ParlView MCP tools
+// The one clock the ParlView feed, its webhook calls and the mock ParlView MCP
 // read, so skipping ahead with POST /parlview/api/advance moves all three.
 
-import { DEFAULT_PERIOD_MS } from "./hearings.mjs";
+import { DEFAULT_PERIOD_MS } from "./recordings.mjs";
 
 const periodFromEnv = () => {
   const seconds = Number(process.env.PARLVIEW_MOCK_PERIOD_SECONDS);

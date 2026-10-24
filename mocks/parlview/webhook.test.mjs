@@ -39,7 +39,7 @@ describe("createWebhookNotifier", () => {
     expect(posted).toHaveLength(1);
     expect(posted[0].url).toBe("http://wayfinder.test/api/triggers/flow-1");
     expect(posted[0].headers.Authorization).toBe("Bearer wf_wh_abc");
-    expect(JSON.parse(posted[0].body).inputs).toMatchObject({ hearing_id: `pv-${SLOT}`, status: "finished" });
+    expect(JSON.parse(posted[0].body).inputs).toMatchObject({ hearing_id: String(SLOT), status: "finished" });
   });
 
   it("calls once per hearing when several finished since the last check", async () => {
@@ -49,9 +49,9 @@ describe("createWebhookNotifier", () => {
     await notifier.check(at(SLOT + 3, 1_000));
 
     expect(posted.map((call) => JSON.parse(call.body).inputs.hearing_id)).toEqual([
-      `pv-${SLOT}`,
-      `pv-${SLOT + 1}`,
-      `pv-${SLOT + 2}`,
+      String(SLOT),
+      String(SLOT + 1),
+      String(SLOT + 2),
     ]);
   });
 
