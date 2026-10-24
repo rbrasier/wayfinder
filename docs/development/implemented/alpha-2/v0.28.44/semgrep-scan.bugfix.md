@@ -66,3 +66,18 @@ and that `ci.yml` runs the script rather than the action.
 - **E2E:** none — CI tooling, no group of `e2e-test-policy.md`.
 - **Not verified locally:** the scan's findings on this codebase — the sandbox network
   blocks `semgrep.dev`. The PR's CI run is the first real scan.
+
+## First real scan — 58 findings, triaged
+
+The first CI run of the working gate reported 58 blocking findings. Each is fixed or
+waived inline with its reason:
+
+| Finding | Where | Outcome |
+|---|---|---|
+| `gcm-no-tag-length` | `settings-encryption.ts` | **Fixed** — `authTagLength: 16` on cipher and decipher. A truncated envelope decrypted with a 4-byte tag before; regression test added |
+| `run-shell-injection` | `publish.yml` | **Fixed** — the tag goes through `env:`, not `${{ }}` spliced into bash |
+| `github-actions-mutable-action-tag` (×~48) | 7 workflows | **Fixed** — every action pinned to its commit SHA with a `# vX.Y.Z` comment, the convention the already-pinned actions use; Dependabot's github-actions entry keeps them current |
+| `missing-user`, `missing-user-entrypoint` | `Dockerfile` | **Fixed** — runtime stage runs as `node`, `/app` copied `--chown=node:node`; guarded by `container-user.test.ts` |
+| `dependabot-missing-cooldown` | `.github/dependabot.yml` | **Fixed** — `cooldown: default-days: 7` on each entry (security updates are not delayed) |
+| `pull-request-target-code-checkout` | `dependabot-version-bump.yml` | **Waived** — job is limited to Dependabot's same-repo branches and runs only git and sed on the checkout |
+| `pnpm-block-exotic-sub-dependencies`, `pnpm-minimum-release-age`, `pnpm-trust-policy` | `pnpm-workspace.yaml` | **Waived** — pnpm 10.16–10.26 settings; the repo pins pnpm 9.12, which does not read them. Remove when pnpm moves to 10.26+ |

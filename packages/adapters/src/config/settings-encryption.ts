@@ -46,7 +46,9 @@ export class SettingsEncryptionService {
 
   encrypt(plaintext: string): string {
     const iv = randomBytes(IV_LENGTH_BYTES);
-    const cipher = createCipheriv("aes-256-gcm", this.key, iv);
+    const cipher = createCipheriv("aes-256-gcm", this.key, iv, {
+      authTagLength: AUTH_TAG_LENGTH_BYTES,
+    });
     const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
     const authTag = cipher.getAuthTag();
     const packed = Buffer.concat([iv, authTag, ciphertext]);
@@ -59,7 +61,11 @@ export class SettingsEncryptionService {
     const iv = packed.subarray(0, IV_LENGTH_BYTES);
     const authTag = packed.subarray(IV_LENGTH_BYTES, IV_LENGTH_BYTES + AUTH_TAG_LENGTH_BYTES);
     const ciphertext = packed.subarray(IV_LENGTH_BYTES + AUTH_TAG_LENGTH_BYTES);
-    const decipher = createDecipheriv("aes-256-gcm", this.key, iv);
+    // A fixed tag length: unset, GCM verifies a tag of any length it is handed,
+    // so a truncated envelope would leave a tag short enough to forge.
+    const decipher = createDecipheriv("aes-256-gcm", this.key, iv, {
+      authTagLength: AUTH_TAG_LENGTH_BYTES,
+    });
     decipher.setAuthTag(authTag);
     return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString("utf8");
   }
