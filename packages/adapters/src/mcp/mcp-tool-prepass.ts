@@ -5,8 +5,10 @@ import {
   type McpServer,
   type McpToolCallRecord,
   type ProviderName,
+  type IMcpServerRepository,
   type IUsageRepository,
   type Result,
+  type TokenUsage,
 } from "@rbrasier/domain";
 import {
   experimental_createMCPClient,
@@ -109,6 +111,9 @@ export class McpToolPrepass {
   constructor(
     private readonly usageRepo: IUsageRepository,
     private readonly quotaEnforcer: QuotaEnforcer,
+    // Tokens saved in the admin UI; without them a server whose token is stored
+    // rather than in the environment is called unauthenticated.
+    private readonly credentials: Pick<IMcpServerRepository, "readCredential">,
   ) {}
 
   async run(input: McpToolPrepassInput): Promise<Result<McpToolPrepassResult>> {
@@ -118,16 +123,23 @@ export class McpToolPrepass {
     if (gate.error) return err(gate.error);
 
     const clients: Awaited<ReturnType<typeof experimental_createMCPClient>>[] = [];
+    // Collected as each round finishes, so a loop cut off by the deadline still
+    // hands over what its earlier rounds fetched.
+    const completedSteps: CompletedStep[] = [];
+    const origins = new Map<string, ToolOrigin>();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? DEFAULT_PREPASS_TIMEOUT_MS);
     try {
       let tools: ToolSet = {};
-      const origins = new Map<string, ToolOrigin>();
       const takenKeys = new Set<string>();
       for (const server of input.servers) {
         const allowed = input.allowedToolNamesByServer[server.id] ?? [];
         if (allowed.length === 0) continue;
-        const client = await experimental_createMCPClient({ transport: buildMcpTransport(server) });
+        const storedToken = server.hasCredential ? await this.credentials.readCredential(server.id) : ok(null);
+        if (storedToken.error) return storedToken;
+        const client = await experimental_createMCPClient({
+          transport: buildMcpTransport(server, storedToken.data),
+        });
         clients.push(client);
         const serverTools = (await client.tools()) as ToolSet;
         for (const [name, tool] of Object.entries(selectAllowedTools(serverTools, allowed))) {
@@ -149,30 +161,33 @@ export class McpToolPrepass {
         tools,
         maxSteps: input.maxSteps ?? 4,
         abortSignal: controller.signal,
+        onStepFinish: (step) => {
+          completedSteps.push(step);
+        },
       });
 
-      recordTokenUsage(
-        this.usageRepo,
-        {
-          purpose: input.purpose ?? "chat-mcp-prepass",
-          userId: input.userId,
-          flowId: input.flowId,
-          sessionId: input.sessionId,
-          model: input.modelName,
-          provider: input.provider,
-        },
-        {
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-          systemTokens: 0,
-          ...extractCacheTokens(result.providerMetadata as Record<string, unknown> | undefined),
-        },
-      );
+      this.recordUsage(input, {
+        promptTokens: result.usage.promptTokens,
+        completionTokens: result.usage.completionTokens,
+        systemTokens: 0,
+        ...extractCacheTokens(result.providerMetadata as Record<string, unknown> | undefined),
+      });
 
       const toolCalls = extractToolCalls(result.steps, origins);
       return ok({ summary: result.text.trim(), toolCallCount: toolCalls.length, toolCalls });
     } catch (cause) {
-      return err(domainError("AGENT_FAILED", "MCP tool pre-pass failed.", cause));
+      const partialCalls = controller.signal.aborted ? extractToolCalls(completedSteps, origins) : [];
+      if (partialCalls.length === 0) {
+        return err(domainError("AGENT_FAILED", "MCP tool pre-pass failed.", cause));
+      }
+      this.recordUsage(input, {
+        promptTokens: sumUsage(completedSteps, "promptTokens"),
+        completionTokens: sumUsage(completedSteps, "completionTokens"),
+        systemTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      });
+      return ok({ summary: "", toolCallCount: partialCalls.length, toolCalls: partialCalls });
     } finally {
       clearTimeout(timeout);
       for (const client of clients) {
@@ -184,7 +199,29 @@ export class McpToolPrepass {
       }
     }
   }
+
+  private recordUsage(input: McpToolPrepassInput, usage: TokenUsage): void {
+    recordTokenUsage(
+      this.usageRepo,
+      {
+        purpose: input.purpose ?? "chat-mcp-prepass",
+        userId: input.userId,
+        flowId: input.flowId,
+        sessionId: input.sessionId,
+        model: input.modelName,
+        provider: input.provider,
+      },
+      usage,
+    );
+  }
 }
+
+interface CompletedStep extends StepLike {
+  usage: { promptTokens: number; completionTokens: number };
+}
+
+const sumUsage = (steps: readonly CompletedStep[], key: "promptTokens" | "completionTokens"): number =>
+  steps.reduce((total, step) => total + (step.usage?.[key] ?? 0), 0);
 
 interface StepLike {
   toolCalls: { toolCallId: string; toolName: string; args: unknown }[];

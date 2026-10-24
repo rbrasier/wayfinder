@@ -222,6 +222,27 @@ else
   pass "no blocking high/critical vulnerabilities"
 fi
 
+# ── 11c. security waivers still have a reason to exist ────────────────────────
+# A waiver (audit-allowlist.sh, .trivyignore) must end the moment a fix is
+# reachable. The rules are unit-tested here; the live re-check against OSV skips
+# when OSV is unreachable — CI's security job and the weekly waiver-review run it
+# strictly.
+section "11c. security waivers are still needed"
+if ! node --test scripts/waiver-rules.test.mjs > /dev/null 2>&1; then
+  fail "waiver rules failing their tests — run 'node --test scripts/waiver-rules.test.mjs'"
+else
+  WAIVER_OUTPUT=$(node scripts/waiver-check.mjs 2>&1)
+  WAIVER_STATUS=$?
+  echo "$WAIVER_OUTPUT"
+  if [ "$WAIVER_STATUS" -ne 0 ]; then
+    fail "a security waiver must be removed or its fix taken — run 'node scripts/waiver-check.mjs'"
+  elif echo "$WAIVER_OUTPUT" | grep -q "^SKIP —"; then
+    skip "OSV unreachable — waivers not re-checked (their rules passed)"
+  else
+    pass "every waiver is still needed"
+  fi
+fi
+
 # ── 12. test files exist in domain and application ────────────────────────────
 section "12. domain and application packages have tests"
 DOMAIN_TESTS=$(find packages/domain/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')

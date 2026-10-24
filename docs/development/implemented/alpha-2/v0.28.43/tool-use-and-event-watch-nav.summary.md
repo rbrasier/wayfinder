@@ -24,6 +24,15 @@ Approved after review: a longer turn is fine as long as the person can see why. 
 - The chat's typing row now carries a label (`components/chat/turn-activity.ts`): "Thinking…" by default and "Consulting ParlView…" (server labels, "A and B", "A, B and C") during a lookup. A streamed message that so far carries only annotations renders no empty bubble. When the next step's opener looks things up after a reply, the row appears under that reply. The page turns `step.activity` into the same row, and an AI task's pending line into "AI task running — consulting ParlView…".
 - Tests: `turn-activity.test.ts` (new), `automation-step-state.test.ts`, `mcp-turn-helpers.test.ts`, `execute-turn.test.ts`, `turn-helpers.test.ts`, `ai-task-context.test.ts`, `session-event.test.ts`. E2E: `chat.spec.ts` gains "a turn says what it is doing while it waits" (e2e-test-policy group 2, streaming into the DOM), replaying a slow stream in the page.
 
+## Amendment 2 — tool limits, stored MCP tokens, and waivers that expire
+
+Approved after review (improvements 1 and 3 of three proposed; the per-step "look things up first" setting is deferred).
+
+- **Partial results on timeout.** `McpToolPrepass` collects each finished round through `onStepFinish`. When the 15-second deadline aborts the loop, it returns the calls already made (and records their token usage) instead of failing with nothing. With no finished round it still fails as before.
+- **Stored MCP tokens in the pre-pass (bug found in review).** The pre-pass built its MCP transport without the token saved in the admin UI (v0.28.42 moved tokens into the database), so such a server was called unauthenticated. `McpToolPrepass` now takes the credential store and passes the stored token, as `AiSdkMcpClient` does.
+- **Tool count warning.** `InstructionToolBar` (shared by the conversational and AI task editors) shows a non-blocking note past `RECOMMENDED_MAX_STEP_TOOLS` (8): more tools make the step slower and likelier to pick the wrong one.
+- **Waivers that expire.** CI's Trivy image gate began flagging zod 3.25.76 as CVE-2023-54404, the CVE alias of GHSA-mrhx-c7xc-m3w5 already waived for the lockfile gates. `.trivyignore` now waives it, and a new `scripts/waiver-check.mjs` (rules in `scripts/waiver-rules.mjs`, tested with `node --test`) re-checks every waiver against OSV and the lockfile. It fails when a fix lands within the major line already in use (naming the upgrade), or when nothing in the lockfile is vulnerable any more. It also fails when a `.trivyignore` entry waives anything the allowlist does not. It runs in `validate.sh` (section 11c, skipped offline), strictly in CI's security job, and weekly in `.github/workflows/waiver-review.yml` on `main` and the current release branch, which opens or refreshes an issue when a waiver needs action.
+
 ## Regression tests
 
 - `stream/mcp-turn-helpers.test.ts` (new) — prompt carries brief, known context and the look-it-up instruction; results returned apart; audit only on `recordAudit`; no tools → nothing.

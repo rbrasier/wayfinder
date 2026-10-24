@@ -1,6 +1,17 @@
-import type { ToolSet } from "ai";
-import { describe, expect, it } from "vitest";
-import { extractToolCalls, prefixToolName, selectAllowedTools } from "./mcp-tool-prepass";
+import { experimental_createMCPClient, generateText, type ToolSet } from "ai";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { McpServer } from "@rbrasier/domain";
+import { buildMcpTransport } from "./ai-sdk-mcp-client";
+import { recordTokenUsage } from "../observability/usage-tracking-adapter";
+import { extractToolCalls, McpToolPrepass, prefixToolName, selectAllowedTools } from "./mcp-tool-prepass";
+
+vi.mock("ai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ai")>()),
+  experimental_createMCPClient: vi.fn(),
+  generateText: vi.fn(),
+}));
+vi.mock("./ai-sdk-mcp-client", () => ({ buildMcpTransport: vi.fn(() => ({})) }));
+vi.mock("../observability/usage-tracking-adapter", () => ({ recordTokenUsage: vi.fn() }));
 
 // The tool objects are opaque to selection — only the keys matter — so a stub
 // shape cast to ToolSet exercises the deny-by-default rule without a live server.
@@ -78,5 +89,95 @@ describe("extractToolCalls", () => {
       },
     ];
     expect(extractToolCalls(steps, origins, now)[0]?.result).toBe("");
+  });
+});
+
+describe("McpToolPrepass.run", () => {
+  const server = {
+    id: "server-1",
+    label: "ParlView",
+    transport: "streamable-http",
+    url: "https://parlview.example/mcp",
+    credentialRef: null,
+    hasCredential: true,
+    communicatesExternally: true,
+  } as unknown as McpServer;
+
+  const transcriptStep = {
+    toolCalls: [{ toolCallId: "c1", toolName: "ParlView__get_transcript", args: { parlViewId: "5976131" } }],
+    toolResults: [{ toolCallId: "c1", result: "Senators asked about staffing levels." }],
+    usage: { promptTokens: 10, completionTokens: 5 },
+  };
+
+  const prepass = (readCredential = vi.fn(async () => ({ data: "stored-token" }))) =>
+    new McpToolPrepass(
+      {} as never,
+      { check: vi.fn(async () => ({ data: undefined })) } as never,
+      { readCredential } as never,
+    );
+
+  const input = {
+    model: {} as never,
+    provider: "anthropic" as const,
+    modelName: "chat-model",
+    system: "Look things up.",
+    messages: [{ role: "user" as const, content: "What did the hearing cover?" }],
+    servers: [server],
+    allowedToolNamesByServer: { "server-1": ["get_transcript"] },
+  };
+
+  beforeEach(() => {
+    vi.mocked(experimental_createMCPClient).mockResolvedValue({
+      tools: async () => ({ get_transcript: {} }),
+      close: async () => {},
+    } as never);
+  });
+
+  it("connects with the token stored for the server, not only the environment's", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      steps: [],
+      text: "",
+      usage: { promptTokens: 1, completionTokens: 1 },
+    } as never);
+    const readCredential = vi.fn(async () => ({ data: "stored-token" }));
+
+    await prepass(readCredential).run(input);
+
+    expect(readCredential).toHaveBeenCalledWith("server-1");
+    expect(buildMcpTransport).toHaveBeenCalledWith(server, "stored-token");
+  });
+
+  it("keeps what the tools returned before the time limit, rather than nothing", async () => {
+    vi.mocked(generateText).mockImplementation((async (options: {
+      onStepFinish?: (step: unknown) => void;
+      abortSignal?: AbortSignal;
+    }) => {
+      options.onStepFinish?.(transcriptStep);
+      await new Promise((_resolve, reject) =>
+        options.abortSignal?.addEventListener("abort", () => reject(new Error("aborted"))),
+      );
+    }) as never);
+
+    const result = await prepass().run({ ...input, timeoutMs: 20 });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.toolCalls.map((call) => call.result)).toEqual(["Senators asked about staffing levels."]);
+    expect(recordTokenUsage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ promptTokens: 10, completionTokens: 5 }),
+    );
+  });
+
+  it("still fails when the time limit passes before any tool returned", async () => {
+    vi.mocked(generateText).mockImplementation((async (options: { abortSignal?: AbortSignal }) => {
+      await new Promise((_resolve, reject) =>
+        options.abortSignal?.addEventListener("abort", () => reject(new Error("aborted"))),
+      );
+    }) as never);
+
+    const result = await prepass().run({ ...input, timeoutMs: 20 });
+
+    expect(result.error?.code).toBe("AGENT_FAILED");
   });
 });

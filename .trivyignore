@@ -5,6 +5,28 @@
 # that removes it again — the same rule as scripts/audit-allowlist.sh. An entry
 # here is a security gate held open; keep this list as short as it can be.
 #
+# An entry may only waive an advisory scripts/audit-allowlist.sh also waives (by
+# its GHSA or CVE id), so it retires with that waiver; scripts/waiver-check.mjs
+# enforces this.
+#
 # Unfixed CVEs need no entry: the gate runs with ignore-unfixed, because there is
 # nothing to upgrade to. Only a *fixable* finding that genuinely cannot take the
 # fix belongs here.
+
+# CVE-2023-54404 (GHSA-mrhx-c7xc-m3w5) — zod memory exhaustion validating
+# oversized arrays.
+#   WHY: patched only in zod 4.6.6, and zod 3.25.76 (the last 3.x) has no fix.
+#   Our schemas and the AI SDK 4 / @ai-sdk 1.x / LangChain 0.3 stack all depend
+#   on zod 3, and AI SDK 4 turns zod 4 schemas into an empty JSON schema. The
+#   same advisory is waived for pnpm audit in scripts/audit-allowlist.sh.
+#   REMOVE WHEN: the AI SDK 5+ / LangChain 1.x / zod 4 migration lands and no
+#   package resolves zod below 4.6.6.
+CVE-2023-54404
+
+# CVE-2023-54404 (GHSA-mrhx-c7xc-m3w5) — zod memory exhaustion validating
+# oversized arrays.
+#   WHY: the same advisory is waived for the lockfile gates in
+#   scripts/audit-allowlist.sh, which says why zod 3 cannot take the fix.
+#   REMOVE WHEN: scripts/waiver-check.mjs reports it — it fails CI and the weekly
+#   waiver review as soon as a fix is reachable or the advisory no longer applies.
+CVE-2023-54404

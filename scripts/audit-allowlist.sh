@@ -6,7 +6,10 @@
 # gates can never disagree on what is waived.
 #
 # GitHub advisory IDs that do NOT fail the build. Every entry must state what it
-# is, why it cannot be fixed, and the condition that removes it again. Keep this
+# is, why it cannot be fixed, and the condition that removes it again.
+# scripts/waiver-check.mjs holds every entry to that condition: CI and a weekly
+# review fail as soon as a fix is reachable within the major already in use, or
+# the advisory no longer applies, naming the upgrade to take. Keep this
 # list as short as it can possibly be — an entry here is a security gate held
 # open, and anything not listed still fails.
 #
@@ -30,7 +33,8 @@
 #   release — then pin it in the root package.json overrides instead — or
 #   both eslint-config-next and @changesets/cli stop depending on micromatch@4.
 #
-# GHSA-mrhx-c7xc-m3w5 — zod memory exhaustion validating oversized arrays.
+# GHSA-mrhx-c7xc-m3w5 (CVE-2023-54404) — zod memory exhaustion validating
+#   oversized arrays. Also waived in .trivyignore under its CVE id.
 #   WHY: patched only in zod 4.6.6, and zod 3.25.76 (the last 3.x) has no fix.
 #   The zod 4 copy (better-auth) is pinned past it in the root package.json
 #   overrides; the zod 3 copy cannot move. Our own schemas are zod 3, and so
