@@ -7,7 +7,14 @@ import {
   updateProfileInputSchema,
   updateUserInputSchema,
 } from "@wayfinder/shared";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import {
+  adminCallerOf,
+  adminProcedure,
+  anyPermissionProcedure,
+  authenticatedProcedure,
+  router,
+  userAdminProcedure,
+} from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export const userRouter = router({
@@ -43,7 +50,7 @@ export const userRouter = router({
   updateProfile: authenticatedProcedure
     .input(updateProfileInputSchema)
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.updateUser.execute(ctx.userId, input);
+      const result = await ctx.container.useCases.updateUser.execute(ctx.userId, input, adminCallerOf(ctx));
       if (result.error) throw toTrpcError(result.error);
       return {
         name: result.data.name,
@@ -53,39 +60,40 @@ export const userRouter = router({
       };
     }),
 
-  list: adminProcedure.input(listUsersInputSchema).query(async ({ ctx, input }) => {
+  list: anyPermissionProcedure(["admin:users", "admin:oversight"]).input(listUsersInputSchema).query(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.listUsers.execute(input);
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
-  create: adminProcedure.input(createUserInputSchema).mutation(async ({ ctx, input }) => {
-    const result = await ctx.container.useCases.createUser.execute(input);
+  create: userAdminProcedure.input(createUserInputSchema).mutation(async ({ ctx, input }) => {
+    const result = await ctx.container.useCases.createUser.execute(input, adminCallerOf(ctx));
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
-  update: adminProcedure.input(updateUserInputSchema).mutation(async ({ ctx, input }) => {
+  update: userAdminProcedure.input(updateUserInputSchema).mutation(async ({ ctx, input }) => {
     const { id, ...patch } = input;
-    const result = await ctx.container.useCases.updateUser.execute(id, patch);
+    const result = await ctx.container.useCases.updateUser.execute(id, patch, adminCallerOf(ctx));
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
-  resetPassword: adminProcedure
+  resetPassword: userAdminProcedure
     .input(resetUserPasswordInputSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.resetUserPassword.execute({
         actorId: ctx.userId,
         userId: input.id,
         password: input.password,
+        caller: adminCallerOf(ctx),
       });
       if (result.error) throw toTrpcError(result.error);
       return { sessionsRevoked: result.data.sessionsRevoked };
     }),
 
-  delete: adminProcedure.input(deleteUserInputSchema).mutation(async ({ ctx, input }) => {
-    const result = await ctx.container.useCases.deleteUser.execute(input.id);
+  delete: userAdminProcedure.input(deleteUserInputSchema).mutation(async ({ ctx, input }) => {
+    const result = await ctx.container.useCases.deleteUser.execute(input.id, adminCallerOf(ctx));
     if (result.error) throw toTrpcError(result.error);
     return { ok: true };
   }),

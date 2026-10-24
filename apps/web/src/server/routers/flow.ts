@@ -3,7 +3,14 @@ import type { TemplateField } from "@wayfinder/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
-import { adminProcedure, authenticatedProcedure, permissionProcedure, router, type TrpcContext } from "../trpc";
+import {
+  authenticatedProcedure,
+  canOversee,
+  oversightProcedure,
+  permissionProcedure,
+  router,
+  type TrpcContext,
+} from "../trpc";
 import { automationStepRejection } from "./automation-step-guard";
 import { toTrpcError } from "../trpc-errors";
 
@@ -48,9 +55,10 @@ export const canEditFlow = async (
   container: Container,
   flowId: string,
   userId: string,
-  isAdmin: boolean,
+  // True for a Global Admin or an admin:oversight holder (ADR-066 §4).
+  canOverride: boolean,
 ): Promise<boolean> => {
-  if (isAdmin) return true;
+  if (canOverride) return true;
   const result = await container.useCases.getFlowCanvas.execute(flowId);
   if (result.error || !result.data) return false;
   const { flow } = result.data;
@@ -100,7 +108,7 @@ const nodeRouter = router({
       }),
     )
     .query(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to view this flow." });
       }
 
@@ -159,7 +167,7 @@ const nodeRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       assertValidStructuredConfig(input.config);
@@ -191,7 +199,7 @@ const nodeRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       assertValidStructuredConfig(input.config);
@@ -217,7 +225,7 @@ const nodeRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.updateFlowNodePosition.execute(input.nodeId, input.x, input.y);
@@ -228,7 +236,7 @@ const nodeRouter = router({
   delete: authenticatedProcedure
     .input(z.object({ nodeId: z.string().guid(), flowId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.deleteFlowNode.execute(input.nodeId);
@@ -248,7 +256,7 @@ const edgeRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.createFlowEdge.execute(input);
@@ -268,7 +276,7 @@ const edgeRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.setFlowEdgeBranchRule.execute({
@@ -283,7 +291,7 @@ const edgeRouter = router({
   delete: authenticatedProcedure
     .input(z.object({ edgeId: z.string().guid(), flowId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const result = await ctx.container.useCases.deleteFlowEdge.execute(input.edgeId);
@@ -294,7 +302,7 @@ const edgeRouter = router({
 });
 
 export const flowRouter = router({
-  list: adminProcedure.query(async ({ ctx }) => {
+  list: oversightProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFlows.execute();
     if (result.error) throw toTrpcError(result.error);
     return result.data;
@@ -336,7 +344,7 @@ export const flowRouter = router({
 
       const { flow } = result.data;
       const canEdit =
-        ctx.isAdmin ||
+        canOversee(ctx) ||
         flow.ownerUserId === ctx.userId ||
         flow.permissions.some((p) => p.userId === ctx.userId && p.role === "owner");
 
@@ -367,7 +375,7 @@ export const flowRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       const { flowId, changeSummary, ...patch } = input;
@@ -411,7 +419,7 @@ export const flowRouter = router({
   delete: authenticatedProcedure
     .input(flowIdInput)
     .mutation(async ({ ctx, input }) => {
-      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+      if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to delete this flow." });
       }
       const result = await ctx.container.useCases.deleteFlow.execute(input.flowId);
@@ -419,7 +427,7 @@ export const flowRouter = router({
       return { ok: true };
     }),
 
-  grantOwner: adminProcedure
+  grantOwner: oversightProcedure
     .input(z.object({ flowId: z.string().guid(), userId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const before = await ctx.container.repos.flows.findById(input.flowId);
@@ -458,7 +466,7 @@ export const flowRouter = router({
     remove: authenticatedProcedure
       .input(z.object({ flowId: z.string().guid(), docId: z.string() }))
       .mutation(async ({ ctx, input }) => {
-        if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin)) {
+        if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
         }
         const flowResult = await ctx.container.repos.flows.findById(input.flowId);

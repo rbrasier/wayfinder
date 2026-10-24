@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { ADMIN_SURFACE_FLAGS, isAdminSurfaceEnabled } from "../admin-surface-flags";
 
 export const featureFlagRouter = router({
   isEnabledForMe: authenticatedProcedure
@@ -15,7 +16,13 @@ export const featureFlagRouter = router({
       return result.data;
     }),
 
-  list: adminProcedure.query(async ({ ctx }) => {
+  // For the admin sidebar and screens only (ADR-066 §5); authoring keeps
+  // isEnabledForMe, so a Technical Admin gains no authoring capability here.
+  isAdminSurfaceEnabled: technicalAdminProcedure
+    .input(z.object({ key: z.enum(ADMIN_SURFACE_FLAGS) }))
+    .query(({ ctx, input }) => isAdminSurfaceEnabled(ctx.container, input.key)),
+
+  list: technicalAdminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listFeatureFlags.execute();
     if (result.error) throw toTrpcError(result.error);
 
@@ -28,7 +35,7 @@ export const featureFlagRouter = router({
     return withRoles;
   }),
 
-  upsert: adminProcedure
+  upsert: technicalAdminProcedure
     .input(
       z.object({
         key: z.string().min(1),
@@ -43,7 +50,7 @@ export const featureFlagRouter = router({
       return result.data;
     }),
 
-  setRoles: adminProcedure
+  setRoles: technicalAdminProcedure
     .input(z.object({ key: z.string().min(1), roleIds: z.array(z.string().guid()) }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.setFeatureFlagRoles.execute(input.key, input.roleIds);

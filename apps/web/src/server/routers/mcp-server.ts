@@ -1,12 +1,7 @@
 import { z } from "zod";
 import { MAX_MCP_CALL_TIMEOUT_MS, MAX_MCP_TOOL_PAGES, MIN_MCP_CALL_TIMEOUT_MS } from "@wayfinder/domain";
-import { TRPCError } from "@trpc/server";
-import { authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
-
-const requireAdmin = (isAdmin: boolean): void => {
-  if (!isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
-};
 
 const classificationSchema = z.enum(["internal", "public-read", "external-write"]);
 const timeoutSchema = z.number().int().min(MIN_MCP_CALL_TIMEOUT_MS).max(MAX_MCP_CALL_TIMEOUT_MS);
@@ -58,10 +53,9 @@ const toolSettingsSchema = z.object({
 });
 
 export const mcpServerRouter = router({
-  list: authenticatedProcedure
+  list: technicalAdminProcedure
     .input(z.object({ includeDisabled: z.boolean().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.listMcpServers.execute({
         includeDisabled: input?.includeDisabled ?? true,
       });
@@ -78,7 +72,7 @@ export const mcpServerRouter = router({
     return result.data.map(({ server, tools }) => ({ server: { ...server, oauth: null }, tools }));
   }),
 
-  register: authenticatedProcedure
+  register: technicalAdminProcedure
     .input(
       z.object({
         label: z.string().min(1),
@@ -91,7 +85,6 @@ export const mcpServerRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.registerMcpServer.execute({
         ...input,
         createdByUserId: ctx.userId,
@@ -100,7 +93,7 @@ export const mcpServerRouter = router({
       return result.data;
     }),
 
-  update: authenticatedProcedure
+  update: technicalAdminProcedure
     .input(
       z.object({
         id: z.string().guid(),
@@ -113,25 +106,22 @@ export const mcpServerRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.updateMcpServer.execute(input);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  disable: authenticatedProcedure
+  disable: technicalAdminProcedure
     .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.disableMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  enable: authenticatedProcedure
+  enable: technicalAdminProcedure
     .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.enableMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
@@ -139,10 +129,9 @@ export const mcpServerRouter = router({
 
   // Permanent removal. Steps referencing a deleted server drop the stale tool
   // refs silently at resolve time (ResolveStepTools), so no cascade is needed.
-  delete: authenticatedProcedure
+  delete: technicalAdminProcedure
     .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.deleteMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
@@ -150,35 +139,32 @@ export const mcpServerRouter = router({
 
   // Connection test — lists the server's tools so the admin can confirm reach
   // and credentials before using it in a flow.
-  test: authenticatedProcedure
+  test: technicalAdminProcedure
     .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.testMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
   // The cached tools with their per-tool settings (ADR-062 §5).
-  listTools: authenticatedProcedure
+  listTools: technicalAdminProcedure
     .input(z.object({ serverId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.listMcpTools.execute(input.serverId);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  refreshTools: authenticatedProcedure
+  refreshTools: technicalAdminProcedure
     .input(z.object({ serverId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.refreshMcpTools.execute(input.serverId);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  updateToolSettings: authenticatedProcedure
+  updateToolSettings: technicalAdminProcedure
     .input(
       z.object({
         serverId: z.string().guid(),
@@ -187,7 +173,6 @@ export const mcpServerRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.updateMcpToolSettings.execute(input);
       if (result.error) throw toTrpcError(result.error);
       return result.data;

@@ -32,6 +32,7 @@ import {
   CompositeHealthChecker,
   DbHealthChecker,
   DrizzleAuditLogger,
+  DrizzleUserRoleRepository,
   DrizzleConversationRepository,
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
@@ -94,6 +95,7 @@ export const buildContainer = (env: Env) => {
   const logger = new PinoLogger(env.NODE_ENV !== "production");
 
   const users = new DrizzleUserRepository(db);
+  const userRoles = new DrizzleUserRoleRepository(db);
   const conversations = new DrizzleConversationRepository(db);
   const errorLogs = new DrizzleErrorLogRepository(db);
   const errorLogger = new DrizzleErrorLogger(errorLogs);

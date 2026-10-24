@@ -1,7 +1,7 @@
 import { buildAuditQuery, toAuditCsv, toAuditJson, verifyAuditChain } from "@wayfinder/domain";
 import { sha256Hex } from "@wayfinder/adapters";
 import { z } from "zod";
-import { adminProcedure, router } from "../trpc";
+import { oversightProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const filterInputSchema = z.object({
@@ -19,7 +19,7 @@ const searchInputSchema = filterInputSchema.extend({
 });
 
 export const auditRouter = router({
-  search: adminProcedure.input(searchInputSchema).query(async ({ ctx, input }) => {
+  search: oversightProcedure.input(searchInputSchema).query(async ({ ctx, input }) => {
     const query = buildAuditQuery(input);
     if (query.error) throw toTrpcError(query.error);
     const result = await ctx.container.repos.auditQuery.search(query.data);
@@ -27,13 +27,13 @@ export const auditRouter = router({
     return result.data;
   }),
 
-  getById: adminProcedure.input(z.object({ id: z.string().min(1) })).query(async ({ ctx, input }) => {
+  getById: oversightProcedure.input(z.object({ id: z.string().min(1) })).query(async ({ ctx, input }) => {
     const result = await ctx.container.repos.auditQuery.getById(input.id);
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
-  export: adminProcedure
+  export: oversightProcedure
     .input(filterInputSchema.extend({ format: z.enum(["csv", "json"]) }))
     .mutation(async ({ ctx, input }) => {
       const query = buildAuditQuery(input);
@@ -51,7 +51,7 @@ export const auditRouter = router({
 
   // On-demand tamper check: recompute the whole chain and report the first
   // break, if any. Not on the write path — this is the detection mechanism.
-  verifyChain: adminProcedure.query(async ({ ctx }) => {
+  verifyChain: oversightProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.repos.auditQuery.loadChain();
     if (result.error) throw toTrpcError(result.error);
     const firstBreak = verifyAuditChain(result.data, sha256Hex);

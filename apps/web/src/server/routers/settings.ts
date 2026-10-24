@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { canAccessSettingKey, type AdminViewer } from "@/lib/admin-areas";
 import {
   AI_CONFIG_SETTING_KEY,
   CONNECTIVITY_TARGETS,
@@ -46,7 +47,7 @@ import {
   isLocalEmbeddingsAvailable,
   resolveContextWindow,
 } from "@wayfinder/adapters";
-import { adminProcedure, publicProcedure, router } from "../trpc";
+import { adminProcedure, publicProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { authSettingsProcedures } from "./settings-auth";
 import { directorySettingsProcedures } from "./settings-directory";
@@ -235,10 +236,16 @@ const bedrockState = (value: BedrockCredentials | null) => ({
   secretAccessKey: apiKeyState(value?.secretAccessKey ?? null),
 });
 
+const requireSettingKeyAccess = (ctx: AdminViewer, key: string): void => {
+  if (canAccessSettingKey(ctx, key)) return;
+  throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to change this setting." });
+};
 
 export const settingsRouter = router({
-  // Data retention (ADR-041 §2: DB-first, env kept as fallback). Admin-only, and
-  // the use case checks that too rather than trusting the procedure.
+  // Data retention (ADR-041 §2: DB-first, env kept as fallback). Global Admin
+  // only — deleting records on a schedule is a governance decision, not a
+  // technical one (ADR-066 §2) — and the use case checks that too rather than
+  // trusting the procedure.
   retention: adminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.getRetentionSettings.execute(
       ctx.container.retentionEnvFallback,
@@ -264,23 +271,27 @@ export const settingsRouter = router({
       return result.data;
     }),
 
-  get: adminProcedure
+  // Raw rows reach every setting, auth config included, so a Technical Admin is
+  // held to the keys the technical cards use (ADR-066 §4).
+  get: technicalAdminProcedure
     .input(z.object({ key: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
+      requireSettingKeyAccess(ctx, input.key);
       const result = await ctx.container.repos.systemSettings.get(input.key);
       if (result.error) throw toTrpcError(result.error);
       return result.data ?? null;
     }),
 
-  set: adminProcedure
+  set: technicalAdminProcedure
     .input(z.object({ key: z.string().min(1), value: z.string() }))
     .mutation(async ({ ctx, input }) => {
+      requireSettingKeyAccess(ctx, input.key);
       const result = await ctx.container.repos.systemSettings.set(input.key, input.value);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  getAiConfig: adminProcedure.query(async ({ ctx }) => {
+  getAiConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     const config: AiConfig = await ctx.container.runtimeConfig.getAiConfig();
     return {
       provider: config.provider,
@@ -296,7 +307,7 @@ export const settingsRouter = router({
     };
   }),
 
-  setAiConfig: adminProcedure
+  setAiConfig: technicalAdminProcedure
     .input(aiConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const current: AiConfig = await ctx.container.runtimeConfig.getAiConfig();
@@ -320,12 +331,12 @@ export const settingsRouter = router({
   ...presentationSettingsProcedures,
   ...automationSettingsProcedures,
 
-  getN8nConfig: adminProcedure.query(async ({ ctx }) => {
+  getN8nConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     const config: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();
     return RuntimeConfigStore.redactN8n(config);
   }),
 
-  setN8nConfig: adminProcedure
+  setN8nConfig: technicalAdminProcedure
     .input(n8nConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const current: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();
@@ -342,12 +353,12 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getStorageConfig: adminProcedure.query(async ({ ctx }) => {
+  getStorageConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     const config: StorageConfig = await ctx.container.runtimeConfig.getStorageConfig();
     return RuntimeConfigStore.redactStorage(config);
   }),
 
-  setStorageConfig: adminProcedure
+  setStorageConfig: technicalAdminProcedure
     .input(storageConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.repos.systemSettings.set(
@@ -380,7 +391,7 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getEmbeddingsConfig: adminProcedure.query(async ({ ctx }) => {
+  getEmbeddingsConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     const config = await ctx.container.runtimeConfig.getEmbeddingsConfig();
     const provider = isEmbeddingsProvider(config.provider) ? config.provider : EMBEDDINGS_DEFAULT_PROVIDER;
     const staleDocumentCount = await countStaleEmbeddedDocuments(ctx.container);
@@ -396,11 +407,11 @@ export const settingsRouter = router({
   }),
 
   // Cheap enough for the admin sidebar: drives its "needs re-index" dot.
-  embeddingsAttention: adminProcedure.query(async ({ ctx }) => ({
+  embeddingsAttention: technicalAdminProcedure.query(async ({ ctx }) => ({
     staleDocumentCount: await countStaleEmbeddedDocuments(ctx.container),
   })),
 
-  setEmbeddingsConfig: adminProcedure
+  setEmbeddingsConfig: technicalAdminProcedure
     .input(z.object({ provider: z.enum(EMBEDDINGS_PROVIDERS), model: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       // A disabled control in the UI is a courtesy; this is the guard. A
@@ -430,17 +441,17 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  startReindex: adminProcedure.mutation(async ({ ctx }) => {
+  startReindex: technicalAdminProcedure.mutation(async ({ ctx }) => {
     return startReindex(ctx.container.useCases.reindexAllDocuments);
   }),
 
-  reindexStatus: adminProcedure.query(() => getReindexStatus()),
+  reindexStatus: technicalAdminProcedure.query(() => getReindexStatus()),
 
-  getSessionUploadConfig: adminProcedure.query(async ({ ctx }) => {
+  getSessionUploadConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     return ctx.container.runtimeConfig.getSessionUploadConfig();
   }),
 
-  setSessionUploadConfig: adminProcedure
+  setSessionUploadConfig: technicalAdminProcedure
     .input(sessionUploadConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.repos.systemSettings.set(
@@ -452,11 +463,11 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getExtractionConfig: adminProcedure.query(async ({ ctx }) => {
+  getExtractionConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     return ctx.container.runtimeConfig.getExtractionConfig();
   }),
 
-  setExtractionConfig: adminProcedure
+  setExtractionConfig: technicalAdminProcedure
     .input(extractionConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.repos.systemSettings.set(
@@ -468,7 +479,7 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getDocumentGenerationConfig: adminProcedure.query(async ({ ctx }) => {
+  getDocumentGenerationConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     const config = await ctx.container.runtimeConfig.getDocumentGenerationConfig();
     const aiConfig = await ctx.container.runtimeConfig.getAiConfig();
     const contextWindow = resolveContextWindow(aiConfig.provider, aiConfig.models.documentGeneration);
@@ -483,7 +494,7 @@ export const settingsRouter = router({
     };
   }),
 
-  setDocumentGenerationConfig: adminProcedure
+  setDocumentGenerationConfig: technicalAdminProcedure
     .input(documentGenerationConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.repos.systemSettings.set(
@@ -495,7 +506,7 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getEmailConfig: adminProcedure.query(async ({ ctx }) => {
+  getEmailConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     const config = await loadEmailConfig(ctx.container.repos.systemSettings);
     return {
       provider: config.provider,
@@ -512,7 +523,7 @@ export const settingsRouter = router({
     };
   }),
 
-  setEmailConfig: adminProcedure
+  setEmailConfig: technicalAdminProcedure
     .input(emailConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const current = await loadEmailConfig(ctx.container.repos.systemSettings);
@@ -543,11 +554,11 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getNotificationPrefs: adminProcedure.query(async ({ ctx }) => {
+  getNotificationPrefs: technicalAdminProcedure.query(async ({ ctx }) => {
     return loadNotificationPrefs(ctx.container.repos.systemSettings);
   }),
 
-  setNotificationPrefs: adminProcedure
+  setNotificationPrefs: technicalAdminProcedure
     .input(z.object({ sessionComplete: z.boolean(), flowShared: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.repos.systemSettings.set(
@@ -558,7 +569,7 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  sendTestEmail: adminProcedure
+  sendTestEmail: technicalAdminProcedure
     .input(z.object({ to: z.string().email() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.services.emailSender.send({
@@ -570,7 +581,7 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  testConnectivity: adminProcedure
+  testConnectivity: technicalAdminProcedure
     .input(
       z.object({
         target: z.enum([...CONNECTIVITY_TARGETS] as [ConnectivityTarget, ...ConnectivityTarget[]]),
@@ -582,7 +593,7 @@ export const settingsRouter = router({
       return result.data;
     }),
 
-  testAllConnectivity: adminProcedure.mutation(async ({ ctx }) => {
+  testAllConnectivity: technicalAdminProcedure.mutation(async ({ ctx }) => {
     const result = await ctx.container.connectivityTester.testAll();
     if (result.error) throw toTrpcError(result.error);
     return result.data;

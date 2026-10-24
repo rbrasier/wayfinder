@@ -2,6 +2,7 @@ import type { SessionEvent } from "@wayfinder/domain";
 import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer, type Container } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
+import { resolveCanOversee } from "@/lib/oversight";
 
 // A long-lived Node connection, never cached or statically rendered.
 export const runtime = "nodejs";
@@ -45,7 +46,8 @@ async function handleGET(
 
   // Watching is a read; viewers and approvers may subscribe. Authorise against
   // participant rows exactly as the page load does, so a non-visible flow is 403.
-  const isOwnerOrAdmin = principal.isAdmin || session.userId === principal.userId;
+  const canOverride = await resolveCanOversee(container, principal);
+  const isOwnerOrAdmin = canOverride || session.userId === principal.userId;
   const isApprover = isOwnerOrAdmin
     ? false
     : await isSessionApprover(container, principal.userId, session.id);
@@ -53,7 +55,7 @@ async function handleGET(
     session,
     flow,
     userId: principal.userId,
-    isAdmin: principal.isAdmin,
+    isAdmin: canOverride,
     isApprover,
     allowAutoEnrol: true,
   });
