@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { requireAdminPath } from "@/lib/admin-page-guard";
 
-export default function AdminIndexPage() {
+export default async function AdminIndexPage() {
+  await requireAdminPath("/admin");
   return (
     <div className="h-full overflow-auto">
     <div className="container py-8">
@@ -54,7 +56,7 @@ export default function AdminIndexPage() {
             <CardTitle>Users</CardTitle>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Create, edit, delete users. Toggle the admin flag.
+            Create, edit, delete users. Make someone a Global Admin.
           </CardContent>
         </Card>
       </Link>

@@ -43,3 +43,34 @@ export const canAccessSettingKey = (viewer: AdminViewer, key: string): boolean =
   if (viewer.isAdmin) return true;
   return canOpenAdminArea(viewer, "technical") && TECHNICAL_SETTING_KEYS.has(key);
 };
+
+// Which area owns each admin screen. Read by the sidebar and by every admin
+// page's server-side guard; a screen missing here is Global-only.
+const ADMIN_PATH_AREAS: readonly { readonly prefix: string; readonly area: AdminArea }[] = [
+  { prefix: "/admin/settings", area: "technical" },
+  { prefix: "/admin/flags", area: "technical" },
+  { prefix: "/admin/errors", area: "technical" },
+  { prefix: "/admin/schedules", area: "technical" },
+  { prefix: "/admin/skills", area: "technical" },
+  { prefix: "/admin/mcp-servers", area: "technical" },
+  { prefix: "/admin/event-watches", area: "technical" },
+  { prefix: "/admin/users", area: "users" },
+  { prefix: "/admin/groups", area: "users" },
+  { prefix: "/admin/organisations", area: "users" },
+  { prefix: "/admin/dashboards", area: "oversight" },
+  { prefix: "/admin/sessions", area: "oversight" },
+  { prefix: "/admin/flows", area: "oversight" },
+  { prefix: "/admin/synthesise", area: "oversight" },
+  { prefix: "/admin/usage", area: "oversight" },
+  { prefix: "/admin/audit", area: "oversight" },
+];
+
+export const adminAreaForPath = (pathname: string): AdminArea | "global" => {
+  const match = ADMIN_PATH_AREAS.find(
+    ({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+  return match?.area ?? "global";
+};
+
+export const canOpenAdminPath = (viewer: AdminViewer, pathname: string): boolean =>
+  canOpenAdminArea(viewer, adminAreaForPath(pathname));

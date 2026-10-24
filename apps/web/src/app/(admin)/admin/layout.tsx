@@ -7,6 +7,8 @@ import { SetupWizardMount } from "@/components/onboarding/setup-wizard-mount";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { createServerHelpers } from "@/trpc/server";
 import { getContainer } from "@/lib/container";
+import { canOpenAdminArea, hasAnyAdminArea } from "@/lib/admin-areas";
+import { createServerTrpcContext } from "@/server/server-context";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
@@ -23,9 +25,11 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     redirect("/login?expired=true");
   }
 
-  // The admin section is admin-only. Non-admins (including flow owners who
-  // followed a stale /admin link) are sent to their own workspace.
-  if (!session.isAdmin) {
+  // Open to Global Admins and to anyone holding an admin area key (ADR-066).
+  // Everyone else (including flow owners who followed a stale /admin link) is
+  // sent to their own workspace. Each page then checks its own area.
+  const viewer = await createServerTrpcContext();
+  if (!hasAnyAdminArea(viewer)) {
     redirect("/");
   }
 
@@ -34,9 +38,13 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   void trpc.user.me.prefetch();
   void trpc.settings.getBranding.prefetch();
   void trpc.settings.getLoginNoticeStatus.prefetch();
-  void trpc.flow.list.prefetch();
-  void trpc.user.list.prefetch({});
   void trpc.usage.myUsage.prefetch();
+  // Prefetch only what this viewer may read, or the hydrated cache carries a
+  // FORBIDDEN error into the page.
+  if (canOpenAdminArea(viewer, "oversight")) void trpc.flow.list.prefetch();
+  if (canOpenAdminArea(viewer, "users") || canOpenAdminArea(viewer, "oversight")) {
+    void trpc.user.list.prefetch({});
+  }
 
   return (
     <SidebarProvider>
@@ -46,7 +54,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
           <div className="flex flex-1 flex-col overflow-hidden bg-[#faf9f7]">
             {children}
           </div>
-          <SetupWizardMount />
+          {/* First-run setup configures auth and deployment, so it is Global-only. */}
+          {session.isAdmin && <SetupWizardMount />}
           {/* No organisation or welcome prompts here, so no SignInPromptsProvider:
               the notice gate stands alone (ADR-060 §5). */}
           <LoginNoticeGate />
