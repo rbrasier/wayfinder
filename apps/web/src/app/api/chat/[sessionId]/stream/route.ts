@@ -10,7 +10,7 @@ import { streamTurnRequestSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
-import { executeTurn } from "./execute-turn";
+import { executeTurn, type PreparedTurn } from "./execute-turn";
 import { toModelMessages } from "./model-messages";
 import { DataStreamTurnWriter } from "./turn-stream-writer";
 import {
@@ -18,7 +18,7 @@ import {
   buildPromptSessionUploads,
   renderGatheredContext,
 } from "./turn-helpers";
-import { conversationalStepBrief, runMcpToolPrepass } from "./mcp-turn-helpers";
+import { conversationalStepBrief, runMcpToolPrepass, type ToolActivityListener } from "./mcp-turn-helpers";
 
 // The most recent turns the model is given as context, mirrored from the
 // client's own slice so the two agree (scaling wall #1).
@@ -183,42 +183,46 @@ export async function POST(
   const skillsResult = await container.useCases.resolveStepSkills.execute(nodeConfig);
   const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
 
-  // Conversational tool-loop (ADR-032): when a step allows MCP tools, let the model
-  // call them in a non-streaming pre-pass and hand the results to the prompt,
-  // leaving the structured streaming turn below untouched.
-  const toolPrepass = await runMcpToolPrepass({
-    container,
-    nodeConfig,
-    dbMessages,
-    lastUserMessage,
-    stepBrief: conversationalStepBrief(nodeConfig),
-    gatheredContext,
-    userId: authSession.userId,
-    isAdmin: authSession.isAdmin,
-    flowId: flow.id,
-    sessionId,
-    nodeId: session.currentNodeId,
-  });
-
   // The lease is claimed; tell every open window whose turn it now is so they
   // disable Send and can attribute the hold ("Alex's turn is in progress").
   publishEvent({ type: "turn.claimed", userId: authSession.userId, userName: userProfile?.name ?? null });
 
-  const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
-    nodeConfig,
-    retrievedChunks,
-    sessionUploads,
-    gatheredContext,
-    toolResults: toolPrepass.toolResults,
-    workflowName: flow.name,
-    organisationName,
-    globalInstructions,
-    expertRole: flow.expertRole,
-    userProfile,
-    now: new Date(),
-    resolvedSkills,
-  });
-  if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
+  // Conversational tool-loop (ADR-032): when a step allows MCP tools, the model
+  // calls them in a non-streaming pre-pass whose results go into the prompt,
+  // leaving the structured streaming turn untouched. It runs inside the stream
+  // so the person waiting is told what is being consulted.
+  const prepareTurn = async (onToolActivity: ToolActivityListener): Promise<PreparedTurn> => {
+    const toolPrepass = await runMcpToolPrepass({
+      container,
+      nodeConfig,
+      dbMessages,
+      lastUserMessage,
+      stepBrief: conversationalStepBrief(nodeConfig),
+      gatheredContext,
+      userId: authSession.userId,
+      isAdmin: authSession.isAdmin,
+      flowId: flow.id,
+      sessionId,
+      nodeId: session.currentNodeId,
+      onActivity: onToolActivity,
+    });
+    const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
+      nodeConfig,
+      retrievedChunks,
+      sessionUploads,
+      gatheredContext,
+      toolResults: toolPrepass.toolResults,
+      workflowName: flow.name,
+      organisationName,
+      globalInstructions,
+      expertRole: flow.expertRole,
+      userProfile,
+      now: new Date(),
+      resolvedSkills,
+    });
+    if (systemPromptResult.error) throw new Error(`Failed to build prompt: ${systemPromptResult.error.message}`);
+    return { systemPrompt: systemPromptResult.data, recordToolAudit: toolPrepass.recordAudit };
+  };
 
   const outgoingEdges = edges.filter((e) => e.fromNodeId === session.currentNodeId);
   const branchNodes = buildBranchDescriptors(nodes, outgoingEdges);
@@ -267,7 +271,7 @@ export async function POST(
           dbMessages,
           currentNodeAssistantMessages,
           messagesWithNew,
-          systemPrompt: systemPromptResult.data,
+          prepareTurn,
           gatheredContext,
           branchNodes,
           isNeverDone,
@@ -281,7 +285,6 @@ export async function POST(
           userId: authSession.userId,
           isAdmin: authSession.isAdmin,
           lastUserMessage,
-          recordToolAudit: toolPrepass.recordAudit,
         });
       } finally {
         clearInterval(heartbeat);

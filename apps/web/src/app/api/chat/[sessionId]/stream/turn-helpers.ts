@@ -19,7 +19,12 @@ import { turnResponseSchema, type DocumentData } from "@rbrasier/shared";
 import type { getContainer } from "@/lib/container";
 import { OUTSTANDING_CONTEXT_KEY } from "./gate-holds";
 import type { ModelMessage } from "./model-messages";
-import { conversationalStepBrief, dispatchMcpNode, runMcpToolPrepass } from "./mcp-turn-helpers";
+import {
+  conversationalStepBrief,
+  dispatchMcpNode,
+  runMcpToolPrepass,
+  type ToolActivityListener,
+} from "./mcp-turn-helpers";
 import { dispatchScheduledNode, isScheduledNodeEnabled } from "./scheduled-node-dispatch";
 import { captureStructuredRecord } from "./structured-capture";
 import { streamTurn } from "./stream-turn";
@@ -412,6 +417,8 @@ export interface GenerateInitialMessageInput {
   isAdmin: boolean;
   gatheredContext: string;
   globalInstructions?: string | null;
+  // Told which tools the opener is consulting, so the wait can be explained.
+  onToolActivity?: ToolActivityListener;
 }
 
 // The opener has no user message to answer; this stands in for one, for the
@@ -432,6 +439,7 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
     isAdmin,
     gatheredContext,
     globalInstructions,
+    onToolActivity,
   } = input;
   try {
     const newNodeConfig = newNode.config as unknown as ConversationalNodeConfig;
@@ -450,6 +458,7 @@ export async function generateInitialMessage(input: GenerateInitialMessageInput)
       flowId: flow.id,
       sessionId,
       nodeId: newNodeId,
+      onActivity: onToolActivity,
     });
     await toolPrepass.recordAudit();
 
@@ -577,6 +586,8 @@ export interface ApplyAdvanceSideEffectsInput {
   // once it finishes. The streaming route uses it to write the transient
   // "Generating document…" badge annotation; the Proceed path omits it.
   onDocumentGenerationChange?: (active: boolean) => void;
+  // Live "Consulting …" feedback while the next step's opener looks things up.
+  onToolActivity?: ToolActivityListener;
 }
 
 // The post-advance side effects shared by the auto-advance turn and the operator
@@ -601,6 +612,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
     globalInstructions,
     precomputedDocument,
     onDocumentGenerationChange,
+    onToolActivity,
   } = input;
 
   const completedNodeConfig = completedNode.config as unknown as ConversationalNodeConfig;
@@ -713,6 +725,7 @@ export async function applyAdvanceSideEffects(input: ApplyAdvanceSideEffectsInpu
       isAdmin,
       gatheredContext: nextStepContext,
       globalInstructions,
+      onToolActivity,
     });
   }
 }

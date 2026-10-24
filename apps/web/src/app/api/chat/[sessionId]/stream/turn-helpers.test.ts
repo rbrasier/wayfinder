@@ -246,6 +246,7 @@ describe("generateInitialMessage", () => {
 
   it("looks things up with the step's tools before writing the opening message", async () => {
     const order: string[] = [];
+    const onToolActivity = vi.fn();
     runMcpToolPrepass.mockResolvedValueOnce({
       toolResults: "- get_transcript: Senators asked about staffing levels.",
       recordAudit: async () => {
@@ -292,10 +293,16 @@ describe("generateInitialMessage", () => {
       userId: "user-1",
       isAdmin: false,
       gatheredContext: "- parlViewId: 5976131",
+      onToolActivity,
     });
 
     expect(runMcpToolPrepass).toHaveBeenCalledWith(
-      expect.objectContaining({ gatheredContext: "- parlViewId: 5976131", nodeId: "node-2", sessionId: "sess-1" }),
+      expect.objectContaining({
+        gatheredContext: "- parlViewId: 5976131",
+        nodeId: "node-2",
+        sessionId: "sess-1",
+        onActivity: onToolActivity,
+      }),
     );
     expect(buildSystemPrompt.mock.calls[0]![0].toolResults).toBe(
       "- get_transcript: Senators asked about staffing levels.",

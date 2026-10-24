@@ -9,6 +9,7 @@ import type { getContainer } from "@/lib/container";
 import { resolveIsAdmin } from "@/lib/chat/prompt-context";
 import { runMcpToolPrepass } from "@/app/api/chat/[sessionId]/stream/mcp-turn-helpers";
 import { buildGatheredContext } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
+import { publishStepActivity } from "./step-activity";
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -66,6 +67,7 @@ export const buildAiTaskContext = async (container: Container, input: RunAiTaskN
     flowId: input.flow.id,
     sessionId: input.session.id,
     nodeId: input.node.id,
+    onActivity: publishStepActivity(container, input.session.id, input.node.id),
   });
   await toolPrepass.recordAudit();
   const toolResultsBlock = toolPrepass.toolResults

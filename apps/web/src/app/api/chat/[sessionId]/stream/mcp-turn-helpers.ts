@@ -92,7 +92,12 @@ export interface RunMcpToolPrepassInput {
   sessionId: string;
   // The node this turn runs on; the persisted tool-call audit is anchored to it.
   nodeId: string | null;
+  // Told the servers' names as the lookup starts and `null` when it ends, so
+  // the person waiting can see why the reply is taking longer.
+  onActivity?: ToolActivityListener;
 }
+
+export type ToolActivityListener = (sources: readonly string[] | null) => void;
 
 export interface McpToolPrepassResult {
   // Every result the step's tools have returned — earlier turns' and this
@@ -192,6 +197,7 @@ export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<
   // structured turn after the turn that fetched it.
   const priorToolCalls = collectPriorToolCalls(dbMessages);
 
+  input.onActivity?.(resolved.data.servers.map((server) => server.label));
   const prepass = await container.services.mcpToolPrepass.run({
     model,
     provider: aiConfig.provider,
@@ -208,6 +214,8 @@ export async function runMcpToolPrepass(input: RunMcpToolPrepassInput): Promise<
     flowId: input.flowId,
     sessionId: input.sessionId,
   });
+
+  input.onActivity?.(null);
 
   const newToolCalls = prepass.error ? [] : prepass.data.toolCalls;
   const summary = prepass.error ? "" : prepass.data.summary;

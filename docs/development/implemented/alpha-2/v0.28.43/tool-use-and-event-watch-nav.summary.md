@@ -14,6 +14,16 @@ The MCP tool pre-pass (`runMcpToolPrepass`) was told only that it "may" call too
 - Sidebar: Event Watch moved into Advanced Flow Settings; `advancedFlowSettingsStartsCollapsed` opens the group while a watch needs attention.
 - Email card (reported symptom 4): not reproduced on `release/alpha-2` — verified in a browser for an Email step mid-run and as the last step after a chat turn, live and after reload. No change.
 
+## Amendment 1 — progress while tools are consulted
+
+Approved after review: a longer turn is fine as long as the person can see why. The pre-pass now runs inside the reply stream and reports what it is doing.
+
+- `runMcpToolPrepass` takes `onActivity` and reports the servers' labels as the lookup starts and `null` when it ends.
+- The stream route hands `executeTurn` a `prepareTurn` closure (tool lookup, then the system prompt from its results). `executeTurn` calls it after the user message is stored and the spend cap is checked, and writes each report as a `consulting-tools` annotation (new `TurnStreamAnnotation` variant). The step opener after an in-chat advance reports through the same annotation.
+- An AI task, and a step opener an unattended run writes, have no stream: they publish a `step.activity` session event (new `SessionEvent`, ephemeral like `typing`) via `lib/automation/step-activity.ts`.
+- The chat's typing row now carries a label (`components/chat/turn-activity.ts`): "Thinking…" by default and "Consulting ParlView…" (server labels, "A and B", "A, B and C") during a lookup. A streamed message that so far carries only annotations renders no empty bubble. When the next step's opener looks things up after a reply, the row appears under that reply. The page turns `step.activity` into the same row, and an AI task's pending line into "AI task running — consulting ParlView…".
+- Tests: `turn-activity.test.ts` (new), `automation-step-state.test.ts`, `mcp-turn-helpers.test.ts`, `execute-turn.test.ts`, `turn-helpers.test.ts`, `ai-task-context.test.ts`, `session-event.test.ts`. E2E: `chat.spec.ts` gains "a turn says what it is doing while it waits" (e2e-test-policy group 2, streaming into the DOM), replaying a slow stream in the page.
+
 ## Regression tests
 
 - `stream/mcp-turn-helpers.test.ts` (new) — prompt carries brief, known context and the look-it-up instruction; results returned apart; audit only on `recordAudit`; no tools → nothing.
@@ -25,4 +35,4 @@ The MCP tool pre-pass (`runMcpToolPrepass`) was told only that it "may" call too
 
 ## E2E
 
-None: tool calling needs a live MCP server and model, outside the e2e policy's groups; the unit tests are the guard.
+Tool calling itself needs a live MCP server and model, so the fixes are guarded by unit tests. The progress label (Amendment 1) is streamed into the DOM and has an e2e test in `chat.spec.ts`.

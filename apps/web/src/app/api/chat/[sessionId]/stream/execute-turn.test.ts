@@ -183,7 +183,7 @@ const buildScenario = (options: {
     ] as ExecuteTurnInput["dbMessages"],
     currentNodeAssistantMessages: [],
     messagesWithNew: [{ role: "user", content: "hi" }],
-    systemPrompt: "system",
+    prepareTurn: async () => ({ systemPrompt: "system", recordToolAudit: async () => {} }),
     gatheredContext: "",
     branchNodes: [],
     isNeverDone: false,
@@ -216,7 +216,7 @@ describe("executeTurn", () => {
     expect((scenario.container as never as { services: { llm: { streamObject: ReturnType<typeof vi.fn> } } }).services.llm.streamObject).not.toHaveBeenCalled();
   });
 
-  it("records the tool lookups after the user's message, so the note follows the message that asked", async () => {
+  it("looks things up after storing the user's message, telling the page what it is consulting", async () => {
     const scenario = buildScenario({ confidence: 40, evaluation: null });
     const order: string[] = [];
     const persistUserMessage = scenario.input.container.useCases.runTurn.persistUserMessage as ReturnType<typeof vi.fn>;
@@ -227,12 +227,31 @@ describe("executeTurn", () => {
 
     await executeTurn({
       ...scenario.input,
-      recordToolAudit: async () => {
-        order.push("tool note");
+      prepareTurn: async (onToolActivity) => {
+        onToolActivity(["ParlView"]);
+        onToolActivity(null);
+        return {
+          systemPrompt: "system with tool results",
+          recordToolAudit: async () => {
+            order.push("tool note");
+          },
+        };
       },
     });
 
     expect(order).toEqual(["user message", "tool note"]);
+    expect(scenario.annotations.slice(0, 2)).toEqual([
+      { type: "consulting-tools", active: true, sources: ["ParlView"] },
+      { type: "consulting-tools", active: false, sources: [] },
+    ]);
+    const llm = (scenario.container as never as { services: { llm: { streamObject: ReturnType<typeof vi.fn> } } }).services.llm;
+    expect(llm.streamObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: "system", content: "system with tool results" }),
+        ]),
+      }),
+    );
   });
 
   it("streams the reply, emits a confidence annotation, and persists the assistant turn when the gate is skipped", async () => {

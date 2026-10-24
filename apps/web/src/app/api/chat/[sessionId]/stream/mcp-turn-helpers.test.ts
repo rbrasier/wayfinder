@@ -24,7 +24,10 @@ const container = (toolCalls: McpToolCallRecord[] = [transcriptCall]) => {
         isFeatureEnabledForUser: { execute: async () => ({ data: true }) },
         resolveStepTools: {
           execute: async () => ({
-            data: { refs: [{ serverId: "server-1", toolName: "get_transcript" }], servers: [{ id: "server-1" }] },
+            data: {
+              refs: [{ serverId: "server-1", toolName: "get_transcript" }],
+              servers: [{ id: "server-1", label: "ParlView" }],
+            },
           }),
         },
       },
@@ -100,12 +103,29 @@ describe("runMcpToolPrepass", () => {
 
   it("returns no results and records nothing when the step allows no tools", async () => {
     const harness = container();
+    const onActivity = vi.fn();
     const result = await runMcpToolPrepass(
-      input({ container: harness.container, nodeConfig: { allowedMcpToolRefs: [] } as never }),
+      input({ container: harness.container, nodeConfig: { allowedMcpToolRefs: [] } as never, onActivity }),
     );
 
     expect(result.toolResults).toBe("");
     await result.recordAudit();
     expect(harness.create).not.toHaveBeenCalled();
+    expect(onActivity).not.toHaveBeenCalled();
+  });
+
+  it("says which servers it is consulting while the lookup runs, then that it has finished", async () => {
+    const harness = container();
+    const activity: (readonly string[] | null)[] = [];
+    harness.run.mockImplementation(async () => {
+      activity.push(["running"]);
+      return { data: { toolCalls: [transcriptCall], summary: "" } };
+    });
+
+    await runMcpToolPrepass(
+      input({ container: harness.container, onActivity: (sources) => activity.push(sources) }),
+    );
+
+    expect(activity).toEqual([["ParlView"], ["running"], null]);
   });
 });
