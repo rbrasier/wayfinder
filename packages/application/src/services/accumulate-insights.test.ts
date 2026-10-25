@@ -125,4 +125,21 @@ describe("accumulateInsights", () => {
 
     expect(accumulateInsights(messages)).toEqual([{ key: "Budget", value: "$500k" }]);
   });
+
+  it("includes the inputs an unattended run's start line carries", () => {
+    const startLine: SessionMessage = {
+      ...makeAssistant("s1", [{ key: "Hearing", value: "pv-12" }], new Date("2026-01-01T09:59:00Z")),
+      role: "system",
+      stepNodeId: null,
+    };
+    const messages = [
+      startLine,
+      makeAssistant("a1", [{ key: "Budget", value: "$500k" }], new Date("2026-01-01T10:00:00Z")),
+    ];
+
+    expect(accumulateInsights(messages)).toEqual([
+      { key: "Hearing", value: "pv-12" },
+      { key: "Budget", value: "$500k" },
+    ]);
+  });
 });

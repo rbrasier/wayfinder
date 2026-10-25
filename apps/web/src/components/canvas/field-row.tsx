@@ -20,6 +20,7 @@ import {
   type FieldRowType,
   type FieldRowTypeOption,
 } from "./field-row-model";
+import { INVALID_OUTLINE, FieldProblemText } from "@/components/ui/field-problem";
 
 interface FieldRowProps {
   model: FieldModel;
@@ -30,6 +31,8 @@ interface FieldRowProps {
   onOpenConfig: () => void;
   typeOptions?: FieldRowTypeOption[];
   labelPlaceholder?: string;
+  // Why this row cannot be saved, shown above it; the row's name is outlined.
+  error?: string | null;
 }
 
 // One field's inline controls — name, type, config cog, remove. Shared verbatim
@@ -45,52 +48,59 @@ export function FieldRow({
   onOpenConfig,
   typeOptions = STRUCTURED_TYPE_OPTIONS,
   labelPlaceholder = "e.g. Preferred Vendor",
+  error = null,
 }: FieldRowProps) {
   const configured = hasNonDefaultConfig(model);
+  const errorId = `field-row-${index}-problem`;
 
   return (
-    <div className="flex items-center gap-2">
-      <Input
-        value={model.label}
-        onChange={(event) => onChange({ label: event.target.value })}
-        placeholder={labelPlaceholder}
-        className="flex-1"
-        aria-label={`Field ${index + 1} label`}
-      />
-      <select
-        aria-label={`Field ${index + 1} type`}
-        value={model.type}
-        onChange={(event) => onChangeType(event.target.value as FieldRowType)}
-        className="h-10 shrink-0 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-hidden"
-      >
-        {typeOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <button
-        type="button"
-        aria-label={`Configure field ${index + 1}`}
-        data-configured={configured ? "true" : "false"}
-        title={configured ? "Options set" : "Field settings"}
-        className={`shrink-0 rounded-md p-1.5 transition-colors ${
-          configured
-            ? "text-wf-primary hover:bg-wf-primary-light hover:text-wf-primary-hover"
-            : "text-[#666055] hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
-        }`}
-        onClick={onOpenConfig}
-      >
-        <Settings2 size={15} />
-      </button>
-      <button
-        type="button"
-        aria-label={`Remove field ${index + 1}`}
-        className="shrink-0 rounded-md p-1.5 text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#a8324c]"
-        onClick={onRemove}
-      >
-        <X size={14} />
-      </button>
+    <div className="space-y-1">
+      <FieldProblemText id={errorId} messages={error ? [error] : []} />
+      <div className="flex items-center gap-2">
+        <Input
+          value={model.label}
+          onChange={(event) => onChange({ label: event.target.value })}
+          placeholder={labelPlaceholder}
+          className={`flex-1 ${INVALID_OUTLINE}`}
+          aria-label={`Field ${index + 1} label`}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+        />
+        <select
+          aria-label={`Field ${index + 1} type`}
+          value={model.type}
+          onChange={(event) => onChangeType(event.target.value as FieldRowType)}
+          className="h-10 shrink-0 rounded-[9px] border border-[#e7e3db] bg-[#faf9f7] px-2 text-[13px] text-[#1c1b19] focus:border-wf-primary focus:bg-white focus:outline-hidden"
+        >
+          {typeOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          aria-label={`Configure field ${index + 1}`}
+          data-configured={configured ? "true" : "false"}
+          title={configured ? "Options set" : "Field settings"}
+          className={`shrink-0 rounded-md p-1.5 transition-colors ${
+            configured
+              ? "text-wf-primary hover:bg-wf-primary-light hover:text-wf-primary-hover"
+              : "text-[#666055] hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
+          }`}
+          onClick={onOpenConfig}
+        >
+          <Settings2 size={15} />
+        </button>
+        <button
+          type="button"
+          aria-label={`Remove field ${index + 1}`}
+          className="shrink-0 rounded-md p-1.5 text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#a8324c]"
+          onClick={onRemove}
+        >
+          <X size={14} />
+        </button>
+      </div>
     </div>
   );
 }

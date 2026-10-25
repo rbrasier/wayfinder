@@ -39,7 +39,9 @@ export const usePriorStepViews = (
       const fields =
         node.type === "autoNode"
           ? readFields(config.responseFields)
-          : node.type === "scheduledNode"
+          : node.type === "aiTaskNode"
+            ? readFields(config.structuredFields)
+            : node.type === "scheduledNode"
             ? []
             : config.outputType === "generate_document"
               ? readFields(config.documentTemplateFields)
@@ -72,6 +74,8 @@ export const usePriorStepViews = (
       scheduledNode: "scheduled",
       approvalNode: "approval",
       mcpNode: "mcp",
+      aiTaskNode: "ai_task",
+      emailNode: "email",
       conversationalNode: "conversational",
     };
     const result: PriorStep[] = [];

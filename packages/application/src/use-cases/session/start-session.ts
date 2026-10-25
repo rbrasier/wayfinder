@@ -15,6 +15,8 @@ import {
   type Result,
   type Session,
   type SessionMode,
+  type SessionOrigin,
+  type SessionTriggerPayload,
 } from "@wayfinder/domain";
 
 export interface StartSessionInput {
@@ -26,6 +28,10 @@ export interface StartSessionInput {
   // directly. A live session always starts at the root.
   startNodeId?: string;
   isAdmin?: boolean;
+  // Set only for a session a watch or webhook starts (ADR-064 §4).
+  origin?: SessionOrigin;
+  triggerSourceId?: string | null;
+  triggerPayload?: SessionTriggerPayload | null;
 }
 
 export class StartSession {
@@ -73,6 +79,9 @@ export class StartSession {
       mode,
       currentNodeId: firstNodeResult.data.id,
       flowVersionId: pinnedVersionId,
+      origin: input.origin,
+      triggerSourceId: input.triggerSourceId ?? null,
+      triggerPayload: input.triggerPayload ?? null,
     });
   }
 

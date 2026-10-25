@@ -6,8 +6,7 @@
 # to a page or route handler, so a renamed route fails there, not in CI.
 #
 # Not listed: /login and /register (the middleware redirects a signed-in request
-# away before they compile), and /api/sessions/:id/events (an SSE stream that
-# never ends a response, so it cannot be awaited here).
+# away before they compile).
 
 # 61.4s — outlasted createFlow's 30s waitForURL and the 45s retry (run 38303738883).
 GET /flows/:id/config
@@ -23,6 +22,21 @@ GET /admin/sessions
 GET /chats
 GET /chats/:id
 
+# The welcome tour's first stop after /chats; its first compile landed inside
+# the tour's URL wait (PR #356, shard 3).
+GET /flows
+
+# PR #356's runs, after the alpha-2 forward-merge grew the app: each was a
+# 20-28s first compile, and the requests queued behind it timed out whichever
+# spec held them (synthesise specs, the approvals a11y audit).
+GET /synthesise
+GET /synthesise/:id/runs/:id
+GET /approvals
+
+# 33.6s — the user settings page, which stalled every request queued behind it
+# (a 25.6s site-banner fetch) ahead of the Entra-linking and synthesise specs.
+GET /settings
+
 # 4.6s — outlasted the 5s "Logo uploaded" wait in branding.spec.ts (run 38621516985).
 GET /admin/settings
 GET /api/branding/logo
@@ -30,3 +44,17 @@ GET /api/branding/logo
 # 14.1s and 7.9s — paid by the first spec that drives the server-side AI stub.
 POST /api/chat/:id/stream
 GET /api/test/ai-script
+
+# The chat page's SSE route. For a real session it streams and never ends, but
+# the placeholder id is answered 404 straight after the compile. Unwarmed, its
+# compile landed inside the first spec to open a chat and stalled every request
+# queued behind it for ~56s (the transactional-turn spec in code-quality-hot-paths).
+GET /api/sessions/:id/events
+
+# New with unattended automation — compiled ahead so unattended-automation.spec.ts
+# does not wait on a first-request compile inside its expects.
+GET /admin/event-watches
+GET /admin/event-watches/new
+GET /admin/event-watches/:id
+GET /api/test/watch-source
+POST /api/triggers/:id

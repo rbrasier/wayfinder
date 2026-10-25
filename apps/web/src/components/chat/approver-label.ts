@@ -4,6 +4,8 @@ const STRUCTURAL_LABEL: Record<ApproverSource, string> = {
   first_level_supervisor: "First-level supervisor",
   second_level_supervisor: "Second-level supervisor",
   dynamic: "Nominated approver",
+  run_owner: "Run owner",
+  named_user: "Nominated reviewer",
 };
 
 // Who this approval is meant for, in words. Always resolves to something —

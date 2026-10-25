@@ -78,10 +78,16 @@ RUN apt-get update --error-on=any \
   && rm -rf /var/lib/apt/lists/* \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-COPY --from=build /app /app
+# The app writes into /app at runtime (the embeddings cache when the model is
+# not vendored), so the unprivileged user owns it.
+COPY --from=build --chown=node:node /app /app
 
 # web, api. Only web is normally published; the api takes almost no ingress.
 EXPOSE 3000 3001
+
+# Not root: a compromised web or api process would otherwise own the container.
+# `node` ships with the base image; nothing here binds a port below 1024.
+USER node
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["web"]

@@ -116,4 +116,10 @@ describe("PERMISSIONS registry", () => {
     expect(keys).toContain("extraction:author");
     expect(keys).toContain("extraction:run");
   });
+
+  it("registers the webhook-trigger permission (ADR-064 §3)", () => {
+    const keys = PERMISSIONS.map((permission) => permission.key);
+
+    expect(keys).toContain("flow:webhook_trigger");
+  });
 });

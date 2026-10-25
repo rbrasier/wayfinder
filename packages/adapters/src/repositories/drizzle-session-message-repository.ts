@@ -58,7 +58,9 @@ export const buildSessionListLastAssistantStatement = (sessionIds: readonly stri
 `;
 
 // Flattens the aiPayload.contextGathered arrays from every step-anchored
-// assistant message in one session into a single chronological array. Reads
+// assistant message in one session into a single chronological array — plus the
+// system line that opens an unattended run, the one system message that
+// carries insights (its trigger inputs). Reads
 // only the aiPayload column and uses the (session_id, seq) composite index, so
 // the query cost scales with rows-per-session, not row width — the bounded
 // turn read pairs with this so gatheredContext still reflects the full history
@@ -67,7 +69,7 @@ export const buildAggregateGatheredContextStatement = (sessionId: string): SQL =
   SELECT ${app_session_messages.ai_payload}->'contextGathered' AS items
   FROM ${app_session_messages}
   WHERE ${app_session_messages.session_id} = ${sessionId}
-    AND ${app_session_messages.role} = 'assistant'
+    AND ${app_session_messages.role} IN ('assistant', 'system')
     AND ${app_session_messages.step_node_id} IS NOT NULL
     AND ${app_session_messages.ai_payload} IS NOT NULL
     AND jsonb_typeof(${app_session_messages.ai_payload}->'contextGathered') = 'array'

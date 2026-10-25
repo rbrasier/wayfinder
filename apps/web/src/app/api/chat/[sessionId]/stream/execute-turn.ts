@@ -18,7 +18,7 @@ import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@wayf
 import type { Container } from "@/lib/container";
 import { shouldComputeBranchChoice } from "./branch-gate";
 import { countGateHoldsOnNode } from "./gate-holds";
-import { citedSourcesFor } from "./mcp-turn-helpers";
+import { citedSourcesFor, type ToolActivityListener } from "./mcp-turn-helpers";
 import type { ModelMessage } from "./model-messages";
 import { shouldEvaluateStepReadiness } from "./readiness-gate";
 import { streamTurn } from "./stream-turn";
@@ -62,7 +62,10 @@ export interface ExecuteTurnInput {
   // stored system rows are folded into user notes by `toModelMessages`, because
   // the SDK rejects a system message that appears mid-conversation.
   messagesWithNew: ModelMessage[];
-  systemPrompt: string;
+  // Runs the step's MCP tool lookups and builds the turn's system prompt from
+  // their results. Called inside the stream, after the user message is stored,
+  // so the page can be told what is being consulted while it waits.
+  prepareTurn: (onToolActivity: ToolActivityListener) => Promise<PreparedTurn>;
   gatheredContext: string;
   branchNodes: BranchDescriptor[];
   isNeverDone: boolean;
@@ -77,9 +80,15 @@ export interface ExecuteTurnInput {
   isAdmin: boolean;
   // The raw text the user typed (the persisted user message; used for the title).
   lastUserMessage: string;
+}
+
+export interface PreparedTurn {
+  systemPrompt: string;
   // The source records the tool pre-pass showed the model, by marker; the reply's
   // markers resolve against these into the turn's citations (ADR-062 §6).
   numberedCitations: NumberedCitation[];
+  // Writes the note for the MCP tools consulted for this turn.
+  recordToolAudit: () => Promise<void>;
 }
 
 // The chat turn's business orchestration, extracted verbatim from the stream
@@ -101,7 +110,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     dbMessages,
     currentNodeAssistantMessages,
     messagesWithNew,
-    systemPrompt,
+    prepareTurn,
     gatheredContext,
     branchNodes,
     isNeverDone,
@@ -149,6 +158,11 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     return;
   }
 
+  const reportToolActivity: ToolActivityListener = (sources) =>
+    writer.writeAnnotation({ type: "consulting-tools", active: sources !== null, sources: sources ?? [] });
+  const { systemPrompt, numberedCitations, recordToolAudit } = await prepareTurn(reportToolActivity);
+  await recordToolAudit();
+
   // Through the ILanguageModel port: the concurrency governor, usage
   // recording, quota enforcement, and Langfuse tracing all apply as
   // decorators (ADR-026). No hand-rolled recordTokenUsage here.
@@ -171,7 +185,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     rationale: turnResult.rationale,
     stepCompleteConfidence: turnResult.stepCompleteConfidence,
     contextGathered: turnResult.contextGathered,
-    citations: citedSourcesFor(turnResult.response, input.numberedCitations),
+    citations: citedSourcesFor(turnResult.response, numberedCitations),
   };
 
   writer.writeAnnotation({
@@ -384,6 +398,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
       // before the next step opens.
       onDocumentGenerationChange: (active) =>
         writer.writeAnnotation({ type: "generating-document", active }),
+      onToolActivity: reportToolActivity,
       // On a pass the gate already extracted the fields and graded them;
       // thread both onward so generation skips the second extraction.
       precomputedDocument: evaluation

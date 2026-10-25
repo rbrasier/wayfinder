@@ -58,6 +58,7 @@ import {
   embeddingsProviderOptions,
   embeddingsProviderUnavailableReason,
 } from "./settings-embeddings";
+import { automationSettingsProcedures } from "./settings-automation";
 import { presentationSettingsProcedures } from "./settings-presentation";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
 
@@ -317,6 +318,7 @@ export const settingsRouter = router({
 
   ...directorySettingsProcedures,
   ...presentationSettingsProcedures,
+  ...automationSettingsProcedures,
 
   getN8nConfig: adminProcedure.query(async ({ ctx }) => {
     const config: N8nConfig = await ctx.container.runtimeConfig.getN8nConfig();

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { branchChoiceSchema, preGenerationEvaluationSchema, turnResponseSchema } from "./confidence";
+import {
+  branchChoiceSchema,
+  buildAiTaskResultSchema,
+  preGenerationEvaluationSchema,
+  turnResponseSchema,
+} from "./confidence";
 
 describe("preGenerationEvaluationSchema", () => {
   it("accepts the two alignment confidences, rationales and a missingInformation list", () => {
@@ -135,5 +140,32 @@ describe("turnResponseSchema", () => {
     expect(turn(1).data?.stepCompleteConfidence).toBe(1);
     expect(turn(72).data?.stepCompleteConfidence).toBe(72);
     expect(turn(100).data?.stepCompleteConfidence).toBe(100);
+  });
+});
+
+describe("buildAiTaskResultSchema", () => {
+  const schema = buildAiTaskResultSchema([
+    { key: "executive_summary" },
+    { key: "attendees", itemKeys: ["name", "role"] },
+  ]);
+  const valid = {
+    values: { executive_summary: "The committee met.", attendees: [{ name: "Sam", role: "Chair" }] },
+    confidence: 90,
+    rationale: "Clear transcript.",
+  };
+
+  it("names every output field, so a strict provider cannot answer with an empty object", () => {
+    expect(schema.safeParse(valid).success).toBe(true);
+    expect(schema.safeParse({ ...valid, values: {} }).success).toBe(false);
+  });
+
+  it("shapes a group's items by its sub-field keys", () => {
+    const missingRole = { ...valid, values: { ...valid.values, attendees: [{ name: "Sam" }] } };
+    expect(schema.safeParse(missingRole).success).toBe(false);
+  });
+
+  it("bounds the confidence like the free-form schema does", () => {
+    expect(schema.parse({ ...valid, confidence: 140 }).confidence).toBe(100);
+    expect(schema.parse({ ...valid, confidence: 72.4 }).confidence).toBe(72);
   });
 });

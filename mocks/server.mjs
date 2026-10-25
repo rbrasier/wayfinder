@@ -16,6 +16,10 @@
 //   3. If it needs new npm deps, add them to mocks/package.json.
 //
 // Health check: GET /healthz → 200 "ok" (reserved, do not use as a mock path).
+//
+// The one exception to "one port": the mock SMTP server speaks SMTP, not HTTP,
+// so it listens on MOCKS_SMTP_PORT (default 2525). What it catches is printed
+// here and readable over HTTP at /smtp like any other mock.
 
 import { createServer } from "node:http";
 import { mock as mcpToolsStreamableHttp } from "./mcp-tools/streamable-http.mjs";
@@ -31,8 +35,15 @@ import { mock as pkiProxy } from "./pki/proxy.mjs";
 import { mock as lookupContractTypes } from "./lookup/contract-types.mjs";
 import { mock as lookupSkills } from "./lookup/skills.mjs";
 import { mock as lookupBusinessUnits } from "./lookup/business-units.mjs";
+import { mock as parlviewFeed } from "./parlview/api.mjs";
+import { mock as parlviewMcp } from "./parlview/mcp.mjs";
+import { SMTP_PORT, createInbox, createInboxMock } from "./smtp/inbox.mjs";
+import { createSmtpServer } from "./smtp/server.mjs";
 
 const PORT = Number(process.env.MOCKS_PORT ?? 4001);
+
+const inbox = createInbox();
+const smtpInbox = createInboxMock(inbox);
 
 const MOCKS = [
   mcpToolsStreamableHttp,
@@ -46,6 +57,9 @@ const MOCKS = [
   lookupContractTypes,
   lookupSkills,
   lookupBusinessUnits,
+  parlviewFeed,
+  parlviewMcp,
+  smtpInbox,
 ];
 
 const routes = new Map();
@@ -99,7 +113,19 @@ httpServer.listen(PORT, () => {
   }
 });
 
+// Webhook calls go out as hearings finish, whether or not anything is polling.
+const PARLVIEW_TICK_MS = 5_000;
+const parlviewTimer = setInterval(() => void parlviewFeed.tick(), PARLVIEW_TICK_MS);
+void parlviewFeed.tick();
+
+const smtpServer = createSmtpServer({ onMessage: inbox.add });
+smtpServer.listen(SMTP_PORT, () => {
+  console.log(`  smtp server (catches mail) → smtp://localhost:${SMTP_PORT}`);
+});
+
 const shutdown = () => {
+  clearInterval(parlviewTimer);
+  smtpServer.close();
   httpServer.close(() => process.exit(0));
 };
 process.on("SIGINT", shutdown);

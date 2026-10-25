@@ -9,7 +9,14 @@ export type TurnStreamAnnotation =
       readonly active: boolean;
       readonly documents?: readonly string[];
     }
-  | { readonly type: "generating-document"; readonly active: boolean };
+  | { readonly type: "generating-document"; readonly active: boolean }
+  // The MCP servers the turn is looking things up in, so the page can say so
+  // while it waits; `active: false` once the lookup is done.
+  | {
+      readonly type: "consulting-tools";
+      readonly active: boolean;
+      readonly sources: readonly string[];
+    };
 
 // Outbound port for writing a streaming chat turn back to the client. Semantic
 // operations only — no wire-format or SDK type leaks through it — so turn

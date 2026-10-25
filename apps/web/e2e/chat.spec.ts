@@ -120,6 +120,65 @@ test.describe('Chat: Session', () => {
     expect(errors, `Errors during chat:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
   });
 
+  // Streaming into the DOM (e2e-test-policy group 2): a turn that consults MCP
+  // tools takes longer, so the dots say what the AI is doing. The stream is
+  // replayed slowly in the page — the base fixture's mock answers in one go,
+  // too fast for a label that only lives while the turn is under way.
+  test('a turn says what it is doing while it waits: thinking, then the tools it consults', async ({ page }) => {
+    const { sessionId } = requireSeedFixtures();
+    await page.addInitScript(() => {
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (!/\/api\/chat\/[^/]+\/stream/.test(url)) return originalFetch(input, init);
+        const encoder = new TextEncoder();
+        const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+        const body = new ReadableStream({
+          async start(controller) {
+            controller.enqueue(encoder.encode('f:{"messageId":"msg-tools"}\n'));
+            await wait(1500);
+            controller.enqueue(
+              encoder.encode('8:[{"type":"consulting-tools","active":true,"sources":["ParlView"]}]\n'),
+            );
+            await wait(3000);
+            controller.enqueue(encoder.encode('8:[{"type":"consulting-tools","active":false,"sources":[]}]\n'));
+            await wait(3000);
+            controller.enqueue(encoder.encode('0:"The committee examined budget estimates."\n'));
+            controller.enqueue(
+              encoder.encode(
+                'e:{"finishReason":"stop","usage":{"promptTokens":1,"completionTokens":1},"isContinued":false}\n',
+              ),
+            );
+            controller.enqueue(
+              encoder.encode('d:{"finishReason":"stop","usage":{"promptTokens":1,"completionTokens":1}}\n'),
+            );
+            controller.close();
+          },
+        });
+        return new Response(body, {
+          status: 200,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8', 'x-vercel-ai-data-stream': 'v1' },
+        });
+      };
+    });
+
+    await page.goto(`/chats/${sessionId}`);
+    const input = page.locator('textarea[placeholder*="Wayfinder"]').first();
+    await expect(input).toBeVisible();
+    await input.fill('Look for a transcript');
+    await input.press('Enter');
+
+    const activity = page.getByTestId('turn-activity');
+    await expect(activity).toContainText('Thinking…');
+    await expect(activity).toContainText('Consulting ParlView…');
+    await page.screenshot({ path: 'screenshots/chat-consulting-tools.png', fullPage: true });
+    await expect(activity).toContainText('Thinking…');
+    // Gone once the reply streams in. The reply itself is not asserted: this
+    // mock never reaches the server, so the page drops it when it resyncs
+    // with the stored history at the end of the turn.
+    await expect(activity).toHaveCount(0, { timeout: 10_000 });
+  });
+
   test('multi-turn conversation works', async ({ page, consoleLogs }) => {
     const { sessionId } = requireSeedFixtures();
 

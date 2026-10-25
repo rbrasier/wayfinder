@@ -92,6 +92,7 @@ describe("seedRoles", () => {
         "workflow:publish_to_everyone",
         "extraction:author",
         "extraction:run",
+        "flow:webhook_trigger",
       ].sort(),
     );
 
@@ -108,6 +109,13 @@ describe("seedRoles", () => {
     expect(mcpRoles.data).toEqual([powerUsers.data!.id]);
     expect(skillsRoles.data).toEqual([powerUsers.data!.id]);
     expect(extractionRoles.data).toEqual([powerUsers.data!.id]);
+
+    const aiTaskRoles = await flagRoles.listRoleIdsForFlag("ai_task_node");
+    const emailRoles = await flagRoles.listRoleIdsForFlag("email_node");
+    const eventWatchRoles = await flagRoles.listRoleIdsForFlag("event_watch");
+    expect(aiTaskRoles.data).toEqual([powerUsers.data!.id]);
+    expect(emailRoles.data).toEqual([powerUsers.data!.id]);
+    expect(eventWatchRoles.data).toEqual([admins.data!.id]);
   });
 
   it("is a no-op on the second run — no duplicate roles", async () => {

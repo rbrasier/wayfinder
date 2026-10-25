@@ -13,8 +13,17 @@ const readAppVersion = (): string => {
   }
 };
 
+// E2E only. `next dev` disposes a compiled route after 60s idle, so a route
+// warmed by e2e/warm-routes.sh before the suite and first used minutes later
+// recompiles inside a spec's wait. Keeping every entry for the run makes the
+// warm-up hold; local dev keeps Next's defaults and their memory profile.
+const keepRoutesCompiled = process.env.E2E_KEEP_ROUTES_COMPILED === "true";
+
 const config: NextConfig = {
   reactStrictMode: true,
+  ...(keepRoutesCompiled && {
+    onDemandEntries: { maxInactiveAge: 24 * 60 * 60 * 1000, pagesBufferLength: 500 },
+  }),
   typedRoutes: true,
   env: {
     NEXT_PUBLIC_APP_VERSION: readAppVersion(),

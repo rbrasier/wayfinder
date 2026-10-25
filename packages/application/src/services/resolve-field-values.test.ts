@@ -80,6 +80,34 @@ describe("resolveFieldValues", () => {
     expect(model.generateObject).not.toHaveBeenCalled();
   });
 
+  it("reads a trigger_input from what the watch or webhook supplied, without calling the model", async () => {
+    const model = makeLanguageModel({});
+    const result = await resolveFieldValues(model, {
+      ...baseInput,
+      fields: [field("hearing"), field("day"), field("details")],
+      valueSources: {
+        hearing: { kind: "trigger_input", inputKey: "hearing_id" },
+        day: { kind: "trigger_input", inputKey: "sitting_day" },
+        details: { kind: "trigger_input", inputKey: "details" },
+      },
+      triggerInputs: { hearing_id: "H-123", sitting_day: 4, details: { room: "2S1" } },
+    });
+
+    expect(result.data).toEqual({ hearing: "H-123", day: "4", details: '{"room":"2S1"}' });
+    expect(model.generateObject).not.toHaveBeenCalled();
+  });
+
+  it("blanks a trigger_input in a session that was started by hand", async () => {
+    const model = makeLanguageModel({});
+    const result = await resolveFieldValues(model, {
+      ...baseInput,
+      fields: [field("hearing")],
+      valueSources: { hearing: { kind: "trigger_input", inputKey: "hearing_id" } },
+    });
+
+    expect(result.data).toEqual({ hearing: "" });
+  });
+
   it("pulls a step_field value from the matching prior step output", async () => {
     const model = makeLanguageModel({});
     const result = await resolveFieldValues(model, {

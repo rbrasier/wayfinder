@@ -26,6 +26,9 @@ export interface ResolveFieldValuesInput {
   // reaches the extraction prompt (ADR-050 §4). Optional — omitted, external
   // fields simply stay uninlined.
   valueSetProvider?: IValueSetProvider;
+  // What the watch or webhook that started the session supplied (ADR-064 §2).
+  // Absent for a session a person started.
+  triggerInputs?: Record<string, unknown>;
 }
 
 export const lookupStepField = (
@@ -41,6 +44,11 @@ export const lookupStepField = (
     );
   if (!latest) return "";
   return latest.fields.find((field) => field.key === fieldKey)?.value ?? "";
+};
+
+const triggerInputText = (value: unknown): string => {
+  if (value === undefined || value === null) return "";
+  return typeof value === "string" ? value : JSON.stringify(value);
 };
 
 // Resolves every request field to a string. `literal` and `step_field` sources
@@ -61,6 +69,10 @@ export const resolveFieldValues = async (
     }
     if (source.kind === "literal") {
       resolved[field.key] = source.value;
+      continue;
+    }
+    if (source.kind === "trigger_input") {
+      resolved[field.key] = triggerInputText(input.triggerInputs?.[source.inputKey]);
       continue;
     }
     if (source.kind === "step_field") {

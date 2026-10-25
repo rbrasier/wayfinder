@@ -50,6 +50,12 @@ describe("buildAggregateGatheredContextStatement", () => {
     expect(params).toContain("session-agg");
   });
 
+  it("also reads a system message, which carries insights only when it opens an unattended run", () => {
+    const { sql } = render(buildAggregateGatheredContextStatement("session-agg"));
+
+    expect(sql.toLowerCase()).toMatch(/role"? in \('assistant', 'system'\)/);
+  });
+
   it("filters out messages whose contextGathered is not a JSON array", () => {
     const { sql } = render(buildAggregateGatheredContextStatement("session-agg"));
     const text = sql.toLowerCase();

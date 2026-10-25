@@ -400,6 +400,20 @@
       "when": 1792208592373,
       "tag": "0056_mcp_drop_legacy_credentials",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1792915432301,
+      "tag": "0057_unattended_automation",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1792915442553,
+      "tag": "0058_seed_unattended_automation",
+      "breakpoints": true
     }
   ]
 }

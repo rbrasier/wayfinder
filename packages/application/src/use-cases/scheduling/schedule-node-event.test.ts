@@ -31,7 +31,7 @@ const NOW = new Date("2026-06-03T10:00:00.000Z");
 
 const fixedClock: IClock = { now: () => NOW };
 
-const makeSession = (): Session => ({
+const makeSession = (overrides: Partial<Session> = {}): Session => ({
   id: "sess-1",
   flowId: "flow-1",
   userId: "user-1",
@@ -42,6 +42,7 @@ const makeSession = (): Session => ({
   pendingExecutions: {},
   createdAt: NOW,
   updatedAt: NOW,
+  ...overrides,
 });
 
 const makeNode = (config: Record<string, unknown>): FlowNode => ({
@@ -238,6 +239,24 @@ describe("ScheduleNodeEvent", () => {
     });
 
     expect(result.data?.nextFireAt.toISOString()).toBe("2027-01-15T00:00:00.000Z");
+  });
+
+  it("draws an `at` specSource from the input that started an unattended run", async () => {
+    const repo = makeRepo();
+    const useCase = new ScheduleNodeEvent(repo, fixedClock);
+
+    const result = await useCase.execute({
+      session: makeSession({
+        triggerPayload: { inputs: { follow_up_at: "2027-02-01T09:00:00.000Z" }, raw: {} },
+      }),
+      node: makeNode({
+        kind: "at",
+        spec: "",
+        specSource: { kind: "trigger_input", inputKey: "follow_up_at" },
+      }),
+    });
+
+    expect(result.data?.nextFireAt.toISOString()).toBe("2027-02-01T09:00:00.000Z");
   });
 
   it("resolves an `at` ai specSource via the language model", async () => {

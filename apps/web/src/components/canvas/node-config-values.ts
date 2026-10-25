@@ -12,7 +12,14 @@ import { DATA_INDIGO } from "@/lib/data-colours";
 // Extracted from node-config-modal.tsx so that file stays under the source-size
 // ceiling; nothing here has behaviour.
 
-export type NodeConfigType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
+export type NodeConfigType =
+  | "conversational"
+  | "auto"
+  | "scheduled"
+  | "approval"
+  | "mcp"
+  | "ai_task"
+  | "email";
 
 export type ApproverSourceMode =
   | "first_level_supervisor"

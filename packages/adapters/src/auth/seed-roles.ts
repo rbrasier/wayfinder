@@ -51,6 +51,7 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
       "workflow:publish_to_everyone",
       "extraction:author",
       "extraction:run",
+      "flow:webhook_trigger",
     ],
   },
 ];
@@ -64,7 +65,13 @@ const POWER_USER_SCOPED_FLAGS = [
   "mcp",
   "skills",
   "extraction_flows",
+  "ai_task_node",
+  "email_node",
 ];
+
+// Event Watch reaches out to external systems and starts runs in someone's name,
+// so it is scoped to Admins rather than Power Users (ADR-063 §8).
+const ADMIN_SCOPED_FLAGS = ["event_watch"];
 
 /**
  * Idempotent seed of the three system roles, their default permission grants, and
@@ -77,6 +84,7 @@ export const seedRoles = async (
   featureFlagRoles: IFeatureFlagRoleRepository,
 ): Promise<void> => {
   let powerUsersCreated: Role | null = null;
+  let adminsCreated: Role | null = null;
 
   for (const seed of SYSTEM_ROLE_SEEDS) {
     const existing = await roles.findByKey(seed.definition.key);
@@ -91,11 +99,20 @@ export const seedRoles = async (
     if (seed.definition.key === SYSTEM_ROLE_KEYS.powerUsers) {
       powerUsersCreated = created.data;
     }
+    if (seed.definition.key === SYSTEM_ROLE_KEYS.admins) {
+      adminsCreated = created.data;
+    }
   }
 
-  if (!powerUsersCreated) return;
+  if (powerUsersCreated) {
+    for (const flagKey of POWER_USER_SCOPED_FLAGS) {
+      await featureFlagRoles.replaceRolesForFlag(flagKey, [powerUsersCreated.id]);
+    }
+  }
 
-  for (const flagKey of POWER_USER_SCOPED_FLAGS) {
-    await featureFlagRoles.replaceRolesForFlag(flagKey, [powerUsersCreated.id]);
+  if (adminsCreated) {
+    for (const flagKey of ADMIN_SCOPED_FLAGS) {
+      await featureFlagRoles.replaceRolesForFlag(flagKey, [adminsCreated.id]);
+    }
   }
 };

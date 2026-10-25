@@ -392,6 +392,32 @@ describe("UpdateFlowNode", () => {
     const result = await useCase.execute("missing", { name: "X" });
     expect(result.error?.code).toBe("NOT_FOUND");
   });
+
+  it("carries a renamed step's new key into the Email steps that use it", async () => {
+    nodes.nodes.set("node-1", makeNode({ type: "ai_task", name: "Summarise the hearing", config: {} }));
+    nodes.nodes.set(
+      "node-2",
+      makeNode({
+        id: "node-2",
+        type: "email",
+        name: "Email the digest",
+        config: {
+          recipients: [],
+          subjectTemplate: "Hearing {{ input.hearing_id }}",
+          bodyTemplate: "{{ summarise\\_the\\_hearing.summary }}",
+          attachStepIds: [],
+        },
+      }),
+    );
+
+    const result = await useCase.execute("node-1", { name: "Review the hearing" });
+
+    expect(result.data?.name).toBe("Review the hearing");
+    expect(nodes.nodes.get("node-2")!.config).toMatchObject({
+      subjectTemplate: "Hearing {{ input.hearing_id }}",
+      bodyTemplate: "{{ review\\_the\\_hearing.summary }}",
+    });
+  });
 });
 
 describe("UpdateFlowNodePosition", () => {

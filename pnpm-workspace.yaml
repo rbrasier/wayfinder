@@ -1,3 +1,7 @@
+# The repo pins pnpm 9.12 (package.json packageManager). blockExoticSubdeps,
+# minimumReleaseAge and trustPolicy arrived in pnpm 10.16-10.26 and pnpm 9 does
+# not read them; remove this waiver and set them when pnpm moves to 10.26+.
+# nosemgrep: package_managers.pnpm.pnpm-block-exotic-sub-dependencies.pnpm-block-exotic-sub-dependencies, package_managers.pnpm.pnpm-missing-minimum-release-age.pnpm-minimum-release-age, package_managers.pnpm.pnpm-trust-policy.pnpm-trust-policy
 packages:
   - "apps/*"
   - "packages/*"

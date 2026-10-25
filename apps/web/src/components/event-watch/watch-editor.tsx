@@ -1,0 +1,434 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
+import type { EventWatch, EventWatchProblemField } from "@wayfinder/domain";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FieldProblemText, INVALID_OUTLINE, revealFirstProblem } from "@/components/ui/field-problem";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PersonPicker } from "@/components/canvas/person-picker";
+import { trpc } from "@/trpc/client";
+import { ConditionBuilder } from "./condition-builder";
+import { JsonSamplePreview } from "./json-sample-preview";
+import { SampleFieldSelect } from "./sample-field-select";
+import { SELECT_CLASS, WatchConnectionFields } from "./watch-connection-fields";
+import {
+  emptyWatchForm,
+  formFromWatch,
+  jsonTreeRows,
+  sampleFieldOptions,
+  secretChangeFor,
+  watchInputFromForm,
+  watchProblems,
+  type WatchForm,
+} from "./watch-model";
+
+interface WatchEditorProps {
+  // Absent for a new watch.
+  existing?: { watch: EventWatch; runAs: { displayName: string | null; email: string } | null };
+}
+
+type TestOutcome = { ok: true; status: number; truncated: boolean } | { ok: false; message: string };
+type PreviewOutcome =
+  | { ok: true; itemCount: number; wouldFire: string[]; skippedWithoutId: number }
+  | { ok: false; message: string };
+
+const numberFrom = (value: string): number => (value.trim() === "" ? Number.NaN : Number(value));
+
+// Admin → Event Watch editor (ADR-063 §2): connect, Test to fetch a sample,
+// choose fields from it, set the condition, preview it, and map the flow's
+// inputs.
+export function WatchEditor({ existing }: WatchEditorProps) {
+  const router = useRouter();
+  const utils = trpc.useUtils();
+  const flowsQuery = trpc.eventWatch.flowOptions.useQuery(undefined);
+  const [form, setForm] = useState<WatchForm>(() => (existing ? formFromWatch(existing.watch) : emptyWatchForm()));
+  const [secret, setSecret] = useState("");
+  const [clearSecret, setClearSecret] = useState(false);
+  const [runAsName, setRunAsName] = useState(existing?.runAs?.displayName ?? existing?.runAs?.email ?? null);
+  const [sample, setSample] = useState<unknown>(undefined);
+  const [testOutcome, setTestOutcome] = useState<TestOutcome | null>(null);
+  const [previewOutcome, setPreviewOutcome] = useState<PreviewOutcome | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  // Problems stay hidden while the admin works, then show beside their fields
+  // from the first save that finds any.
+  const [showProblems, setShowProblems] = useState(false);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  const change = (patch: Partial<WatchForm>) => setForm((current) => ({ ...current, ...patch }));
+  const done = () => {
+    void utils.eventWatch.list.invalidate();
+    void utils.eventWatch.countNeedingAttention.invalidate();
+    router.push("/admin/event-watches");
+  };
+  const create = trpc.eventWatch.create.useMutation({ onSuccess: done, onError: (cause) => setError(cause.message) });
+  const update = trpc.eventWatch.update.useMutation({ onSuccess: done, onError: (cause) => setError(cause.message) });
+  const remove = trpc.eventWatch.delete.useMutation({ onSuccess: done, onError: (cause) => setError(cause.message) });
+  const test = trpc.eventWatch.test.useMutation({
+    onSuccess: (result) => {
+      setTestOutcome(result);
+      if (result.ok) setSample(result.sample);
+    },
+    onError: (cause) => setTestOutcome({ ok: false, message: cause.message }),
+  });
+  const preview = trpc.eventWatch.preview.useMutation({
+    onSuccess: setPreviewOutcome,
+    onError: (cause) => setPreviewOutcome({ ok: false, message: cause.message }),
+  });
+
+  const flow = flowsQuery.data?.find((option) => option.id === form.flowId);
+  const triggerInputs = flow?.triggerInputs ?? [];
+  const secretChange = secretChangeFor(secret, clearSecret);
+  const hasSecret =
+    typeof secretChange === "string" || (secretChange === undefined && (existing?.watch.hasSecret ?? false));
+  const allProblems = watchProblems(form, { hasSecret, triggerInputs });
+  const problems = showProblems ? allProblems : [];
+  const messagesFor = (field: EventWatchProblemField, inputKey?: string) =>
+    problems
+      .filter((problem) => problem.field === field && (inputKey === undefined || problem.inputKey === inputKey))
+      .map((problem) => problem.message);
+  const problemIdFor = (field: EventWatchProblemField) =>
+    messagesFor(field).length > 0 ? `watch-${field}-problem` : undefined;
+
+  const runTest = () => {
+    const input = watchInputFromForm(form);
+    if (input.error !== undefined) {
+      setTestOutcome({ ok: false, message: input.error });
+      return;
+    }
+    const { url, method, requestBody, authType, apiKeyPlacement } = input.data;
+    test.mutate({
+      watchId: existing?.watch.id,
+      connection: { url, method, requestBody, authType, apiKeyPlacement },
+      secret: secretChange,
+    });
+  };
+
+  const save = () => {
+    setError(null);
+    if (allProblems.length > 0) {
+      setShowProblems(true);
+      revealFirstProblem(formRef.current);
+      return;
+    }
+    const input = watchInputFromForm(form);
+    if (input.error !== undefined) {
+      setError(input.error);
+      return;
+    }
+    if (existing) {
+      update.mutate({ id: existing.watch.id, watch: input.data, secret: secretChange });
+      return;
+    }
+    create.mutate({ watch: input.data, secret: secretChange ?? null });
+  };
+
+  const hasSample = sample !== undefined;
+  const saving = create.isPending || update.isPending;
+  const listOptions = sampleFieldOptions(sample, form.itemsPath, "items");
+  const valueOptions = sampleFieldOptions(sample, form.itemsPath, "item_value");
+  const inputOptions = sampleFieldOptions(sample, form.itemsPath, "item_any");
+
+  return (
+    <div className="h-full overflow-auto">
+      <div className="container py-8">
+        <Link href="/admin/event-watches" className="text-sm text-wf-primary hover:underline">
+          ← All watches
+        </Link>
+        <h1 className="mt-3 text-xl font-semibold">{existing ? existing.watch.name : "New watch"}</h1>
+        <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div ref={formRef} className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Connection</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="watch-name">Name</Label>
+                  <FieldProblemText id="watch-name-problem" messages={messagesFor("name")} />
+                  <Input
+                    id="watch-name"
+                    className={INVALID_OUTLINE}
+                    aria-invalid={problemIdFor("name") ? true : undefined}
+                    aria-describedby={problemIdFor("name")}
+                    value={form.name}
+                    onChange={(event) => change({ name: event.target.value })}
+                  />
+                </div>
+                <WatchConnectionFields
+                  form={form}
+                  onChange={change}
+                  secret={secret}
+                  onSecretChange={setSecret}
+                  hasStoredSecret={existing?.watch.hasSecret ?? false}
+                  clearSecret={clearSecret}
+                  onClearSecretChange={setClearSecret}
+                  urlProblems={messagesFor("url")}
+                  connectionProblems={messagesFor("connection")}
+                />
+                <div className="flex items-center gap-3">
+                  <Button type="button" variant="outline" onClick={runTest} disabled={test.isPending || !form.url}>
+                    {test.isPending ? "Testing…" : "Test"}
+                  </Button>
+                  {testOutcome && (
+                    <p role="status" className={`text-sm ${testOutcome.ok ? "text-muted-foreground" : "text-destructive"}`}>
+                      {testOutcome.ok
+                        ? `The API answered ${testOutcome.status}.${testOutcome.truncated ? " The sample is cut short for display." : ""}`
+                        : testOutcome.message}
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Items and condition</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {!hasSample && (
+                  <p className="text-sm text-muted-foreground">
+                    Test the connection to choose fields from a sample, or select them manually.
+                  </p>
+                )}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SampleFieldSelect
+                    id="watch-items-path"
+                    label="List of items"
+                    value={form.itemsPath}
+                    onChange={(itemsPath) => change({ itemsPath })}
+                    options={listOptions}
+                    emptyLabel="Choose the list"
+                  />
+                  <SampleFieldSelect
+                    id="watch-item-id"
+                    label="Field that identifies each item"
+                    value={form.itemIdPath}
+                    onChange={(itemIdPath) => change({ itemIdPath })}
+                    options={valueOptions}
+                    emptyLabel="Choose the field"
+                    problems={messagesFor("itemId")}
+                  />
+                </div>
+                <FieldProblemText id="watch-condition-problem" messages={messagesFor("condition")} />
+                <ConditionBuilder
+                  condition={form.condition}
+                  onChange={(condition) => change({ condition })}
+                  fieldOptions={valueOptions}
+                />
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!hasSample || preview.isPending}
+                    onClick={() =>
+                      preview.mutate({
+                        sample,
+                        itemsPath: form.itemsPath,
+                        itemIdPath: form.itemIdPath,
+                        condition: form.condition,
+                      })
+                    }
+                  >
+                    Would fire now?
+                  </Button>
+                  {previewOutcome && (
+                    <p role="status" className={`text-sm ${previewOutcome.ok ? "text-muted-foreground" : "text-destructive"}`}>
+                      {previewOutcome.ok
+                        ? `${previewOutcome.wouldFire.length} of ${previewOutcome.itemCount} items would start a run${
+                            previewOutcome.wouldFire.length > 0 ? `: ${previewOutcome.wouldFire.slice(0, 10).join(", ")}` : ""
+                          }.${previewOutcome.skippedWithoutId > 0 ? ` ${previewOutcome.skippedWithoutId} have no ID and are skipped.` : ""}`
+                        : previewOutcome.message}
+                    </p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Flow to start</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="watch-flow">Flow</Label>
+                  <FieldProblemText id="watch-flow-problem" messages={messagesFor("flow")} />
+                  <select
+                    id="watch-flow"
+                    className={`${SELECT_CLASS} ${INVALID_OUTLINE}`}
+                    aria-invalid={problemIdFor("flow") ? true : undefined}
+                    aria-describedby={problemIdFor("flow")}
+                    value={form.flowId}
+                    onChange={(event) => change({ flowId: event.target.value, inputMapping: {} })}
+                  >
+                    <option value="">Choose a published flow</option>
+                    {(flowsQuery.data ?? []).map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {flow && triggerInputs.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    This flow declares no inputs. Add them under the flow&apos;s Triggers to pass item values in.
+                  </p>
+                )}
+                {triggerInputs.map((triggerInput) => (
+                  <SampleFieldSelect
+                    key={triggerInput.key}
+                    id={`watch-input-${triggerInput.key}`}
+                    label={`${triggerInput.label || triggerInput.key}${triggerInput.required ? "" : " (optional)"}`}
+                    value={form.inputMapping[triggerInput.key] ?? ""}
+                    onChange={(path) => change({ inputMapping: { ...form.inputMapping, [triggerInput.key]: path } })}
+                    options={inputOptions}
+                    emptyLabel="Choose the field of the item"
+                    problems={messagesFor("inputs", triggerInput.key)}
+                  />
+                ))}
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium">Runs belong to</p>
+                  <FieldProblemText id="watch-runAs-problem" messages={messagesFor("runAs")} />
+                  <p className="text-sm text-muted-foreground">{runAsName ?? "Nobody chosen yet"}</p>
+                  <PersonPicker
+                    id="watch-run-as"
+                    label={runAsName ? "Change person" : "Choose a person"}
+                    onPick={(person) => {
+                      if (!person.userId) {
+                        setError("Runs can only belong to someone with a Wayfinder account.");
+                        return;
+                      }
+                      change({ runAsUserId: person.userId });
+                      setRunAsName(person.displayName ?? person.email);
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    They own each run, see it in their chats and are told if it fails or needs them.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Schedule and safety</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="watch-interval">Check every (minutes)</Label>
+                    <FieldProblemText id="watch-interval-problem" messages={messagesFor("interval")} />
+                    <Input
+                      id="watch-interval"
+                      className={INVALID_OUTLINE}
+                      aria-invalid={problemIdFor("interval") ? true : undefined}
+                      aria-describedby={problemIdFor("interval")}
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={Number.isNaN(form.intervalMinutes) ? "" : form.intervalMinutes}
+                      onChange={(event) => change({ intervalMinutes: numberFrom(event.target.value) })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="watch-threshold">Pause after failures in a row</Label>
+                    <FieldProblemText id="watch-failureThreshold-problem" messages={messagesFor("failureThreshold")} />
+                    <Input
+                      id="watch-threshold"
+                      className={INVALID_OUTLINE}
+                      aria-invalid={problemIdFor("failureThreshold") ? true : undefined}
+                      aria-describedby={problemIdFor("failureThreshold")}
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={Number.isNaN(form.failureThreshold) ? "" : form.failureThreshold}
+                      onChange={(event) => change({ failureThreshold: numberFrom(event.target.value) })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="watch-cap">Most runs per check</Label>
+                    <FieldProblemText id="watch-maxRuns-problem" messages={messagesFor("maxRuns")} />
+                    <Input
+                      id="watch-cap"
+                      className={INVALID_OUTLINE}
+                      aria-invalid={problemIdFor("maxRuns") ? true : undefined}
+                      aria-describedby={problemIdFor("maxRuns")}
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={Number.isNaN(form.maxRunsPerPoll) ? "" : form.maxRunsPerPoll}
+                      onChange={(event) => change({ maxRunsPerPoll: numberFrom(event.target.value) })}
+                    />
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.fireOncePerItem}
+                    onChange={(event) => change({ fireOncePerItem: event.target.checked })}
+                  />
+                  Start at most one run per item, ever
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  The first check after saving records what is there and starts nothing. If more items match in one
+                  check than the limit allows, the watch pauses instead of starting any.
+                </p>
+              </CardContent>
+            </Card>
+
+            {error && (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="button" onClick={save} disabled={saving}>
+                {saving ? "Saving…" : existing ? "Save changes" : "Create watch"}
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/admin/event-watches">Cancel</Link>
+              </Button>
+              {existing &&
+                (confirmDelete ? (
+                  <>
+                    <span className="text-sm">Delete this watch? Its runs stay with their owners.</span>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate({ id: existing.watch.id })}
+                    >
+                      Delete
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={() => setConfirmDelete(false)}>
+                      Keep it
+                    </Button>
+                  </>
+                ) : (
+                  <Button type="button" variant="ghost" className="ml-auto" onClick={() => setConfirmDelete(true)}>
+                    Delete watch
+                  </Button>
+                ))}
+            </div>
+          </div>
+
+          <aside className="space-y-2 lg:sticky lg:top-4 lg:self-start">
+            <h2 className="text-sm font-semibold">Sample response</h2>
+            {!hasSample ? (
+              <p className="text-sm text-muted-foreground">Nothing yet. Use Test to fetch one.</p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">What the API answered, for reference.</p>
+                <JsonSamplePreview rows={jsonTreeRows(sample)} />
+              </>
+            )}
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
-import { parseInline, parseMarkdownBlocks, type InlineNode, type MarkdownBlock } from "./markdown";
+import { parseInline, parseMarkdownBlocks, type InlineNode, type MarkdownBlock } from "@wayfinder/domain";
 
 interface MarkdownTextProps {
   content: string;

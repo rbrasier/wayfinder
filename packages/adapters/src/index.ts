@@ -28,6 +28,8 @@ export * from "./hr/index";
 export * from "./rate-limit/index";
 export * from "./skills/index";
 export * from "./mcp/index";
+export * from "./automation/index";
+export * from "./http/index";
 export * from "./factory";
 export * from "./memory/index";
 export * from "./lookups/index";

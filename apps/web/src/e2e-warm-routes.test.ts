@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,5 +100,48 @@ describe("e2e route warm-up", () => {
     const firstTestRun = workflow.indexOf("npx playwright test --config=playwright.config.ts --project=chromium");
     expect(warmUp, "the e2e workflow never runs warm-routes.sh").toBeGreaterThan(-1);
     expect(warmUp).toBeLessThan(firstTestRun);
+  });
+});
+
+// Warming alone did not hold. `next dev` disposes any compiled route left idle
+// for 60s (onDemandEntries.maxInactiveAge), so a route warmed at boot and first
+// used minutes later recompiled inside a spec's wait — 16.3s for the chat
+// stream against an 8s poll, 13.6s for the AI-script stub against a 15s post.
+// Which spec paid moved with timing, so a different chat test failed each run.
+describe("e2e compiled-route retention", () => {
+  const KEEP_FLAG = "E2E_KEEP_ROUTES_COMPILED";
+
+  const loadNextConfig = async (flag: string | undefined) => {
+    vi.resetModules();
+    if (flag === undefined) delete process.env[KEEP_FLAG];
+    else process.env[KEEP_FLAG] = flag;
+    const module = await import("../next.config");
+    return module.default;
+  };
+
+  afterEach(() => {
+    delete process.env[KEEP_FLAG];
+  });
+
+  it("keeps every compiled route for the whole run when the e2e flag is set", async () => {
+    const config = await loadNextConfig("true");
+
+    expect(config.onDemandEntries?.maxInactiveAge).toBeGreaterThanOrEqual(60 * 60 * 1000);
+    expect(config.onDemandEntries?.pagesBufferLength).toBeGreaterThanOrEqual(100);
+  });
+
+  it("leaves local `next dev` on its defaults without the flag", async () => {
+    const config = await loadNextConfig(undefined);
+
+    expect(config.onDemandEntries).toBeUndefined();
+  });
+
+  it("sets the flag on every app the e2e workflow starts", () => {
+    const workflow = readFileSync(join(repositoryRoot, ".github", "workflows", "e2e.yml"), "utf8");
+    const appStarts = workflow.match(/pnpm --filter @wayfinder\/web dev/g) ?? [];
+    const flagged = workflow.match(new RegExp(`${KEEP_FLAG}: "true"`, "g")) ?? [];
+
+    expect(appStarts.length).toBeGreaterThan(0);
+    expect(flagged.length).toBe(appStarts.length);
   });
 });

@@ -8,6 +8,8 @@ import { extractionRouter } from "./routers/extraction";
 import { feedbackRouter } from "./routers/feedback";
 import { featureFlagRouter } from "./routers/feature-flag";
 import { flowRouter } from "./routers/flow";
+import { automationRouter } from "./routers/automation";
+import { eventWatchRouter } from "./routers/event-watch";
 import { flowVersionRouter } from "./routers/flow-version";
 import { flowTestRouter } from "./routers/flow-test";
 import { governanceRouter } from "./routers/governance";
@@ -40,6 +42,8 @@ export const appRouter = router({
   featureFlag: featureFlagRouter,
   usage: usageRouter,
   flow: flowRouter,
+  automation: automationRouter,
+  eventWatch: eventWatchRouter,
   flowVersion: flowVersionRouter,
   flowTest: flowTestRouter,
   extraction: extractionRouter,

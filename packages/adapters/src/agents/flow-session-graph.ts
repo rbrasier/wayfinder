@@ -11,8 +11,8 @@ import {
   type ISessionAgent,
   type PromptSessionUpload,
   type PromptUserProfile,
+  renderSkillsBlock,
   type ResolvedLesson,
-  type ResolvedSkill,
   type Result,
   type RetrievedChunk,
   type TemplateField,
@@ -50,7 +50,7 @@ export class FlowSessionGraph implements ISessionAgent {
     // Skills are author-attached reusable instructions (ADR-031), rendered in the
     // stable region of the prompt — above per-turn retrieved chunks — to preserve
     // prompt-cache hits. They steer behaviour; they do not replace <instructions>.
-    const skillsBlock = buildSkillsBlock(input.resolvedSkills ?? []);
+    const skillsBlock = renderSkillsBlock(input.resolvedSkills ?? []);
     // Accepted flow-memory lessons (ADR-057 §5), resolved live rather than from
     // the pinned snapshot (ADR-058). Sits beside <skills> in the cache-stable
     // region, above every per-turn block, so accepting one costs a single cache
@@ -68,8 +68,15 @@ export class FlowSessionGraph implements ISessionAgent {
       ? `\n  <gathered_context>\n    ${gatheredContext.trim()}\n    You may ask nuanced follow-up questions to clarify or deepen anything captured here if it would help complete this step more accurately.\n  </gathered_context>`
       : "";
 
-    const contextSection = gatheredBlock
-      ? `\n<context>${gatheredBlock}\n</context>`
+    // Without its own framing a tool result read as one more captured fact, and
+    // a model asked to "use tools" replied that it would look it up — the lookup
+    // had already run, but the model had no tools of its own to know that.
+    const toolResultsBlock = input.toolResults?.trim()
+      ? `\n  <tool_results>\n    ${input.toolResults.trim()}\n    These have already been looked up for the user with this step's tools. Answer from them directly. Never say you lack access to this information, and never say you will look something up — that has been done. If they do not hold what is needed, say what was looked up and what is still missing.\n  </tool_results>`
+      : "";
+
+    const contextSection = gatheredBlock || toolResultsBlock
+      ? `\n<context>${gatheredBlock}${toolResultsBlock}\n</context>`
       : "";
 
     // Retrieved chunks vary per turn, so they are appended after the stable
@@ -247,14 +254,6 @@ const buildLearnedGuidanceBlock = (lessons: ResolvedLesson[]): string => {
   if (lessons.length === 0) return "";
   const rendered = lessons.map((lesson) => `  - ${lesson.statement}`).join("\n");
   return `\n\n<learned_guidance>\n  Guidance accepted by this workflow's owner, learned from how earlier sessions on it actually went. Follow it alongside the instructions below; it never overrides them.\n${rendered}\n</learned_guidance>`;
-};
-
-const buildSkillsBlock = (skills: ResolvedSkill[]): string => {
-  if (skills.length === 0) return "";
-  const rendered = skills
-    .map((skill) => `  <skill name="${skill.name}">\n    ${skill.body.trim()}\n  </skill>`)
-    .join("\n");
-  return `\n\n<skills>\n${rendered}\n</skills>`;
 };
 
 const buildColleagueDescription = (userProfile: PromptUserProfile | null): string => {

@@ -4,6 +4,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
 import { seedForkFlow, seedConfirmationSession } from "./e2e-fixtures-flows";
 import { seedStorageObjects } from "./e2e-fixtures-storage";
+import { seedAutomationFlow } from "./e2e-fixtures-automation";
 import { seedStructuredSession } from "./e2e-fixtures-structured";
 import { seedExtractionRun } from "./e2e-fixtures-extraction";
 
@@ -72,6 +73,7 @@ export interface SeedResult {
   // A flow whose first step is an approval, so the config editor has an
   // authoring-time warning to show (ADR-044 §2).
   approvalFirstFlowId: string;
+  automationFlowId: string;
   // `conversational → approval (pending)`, raised by the seed user so they are
   // the originator who may withdraw it. Its own session because withdrawing
   // moves the session off the approval node.
@@ -486,6 +488,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const offSystemApproval = await seedOffSystemApprovalSession(container, ownerUserId);
   const signatureWarningFlowId = await seedSignatureWarningFlow(container, ownerUserId);
   const extraction = await seedExtractionRun(container, ownerUserId);
+  const automationFlowId = await seedAutomationFlow(container, ownerUserId);
 
   return {
     flowId: flow.id,
@@ -505,6 +508,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     signatureWarningFlowId,
     extractionFlowId: extraction.flowId,
     extractionRunId: extraction.runId,
+    automationFlowId,
   };
 };
 
@@ -567,6 +571,10 @@ export const teardownE2EFixtures = async (container: Container): Promise<void> =
     await db
       .delete(schema.app_extraction_runs)
       .where(inArray(schema.app_extraction_runs.flow_id, flowIds));
+    // A watch blocks deleting the flow it starts.
+    await db
+      .delete(schema.admin_event_watches)
+      .where(inArray(schema.admin_event_watches.flow_id, flowIds));
     await db
       .delete(schema.kb_document_chunks)
       .where(inArray(schema.kb_document_chunks.flow_id, flowIds));

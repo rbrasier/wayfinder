@@ -8,7 +8,6 @@ import {
   type FlowEdge,
   type FlowNode,
   type IScheduleFireHandler,
-  type PromptUserProfile,
   type Result,
   type SessionMessage,
   type SessionSchedule,
@@ -16,14 +15,24 @@ import {
 import { branchChoiceSchema } from "@wayfinder/shared";
 import type { getContainer } from "@/lib/container";
 import { toBranchChoiceMessages } from "@/lib/chat/branch-choice-messages";
+import { continueRunAtNode } from "@/lib/automation/unattended-runs";
+import {
+  resolveGlobalInstructions,
+  resolveIsAdmin,
+  resolveOrganisationName,
+  resolveUserProfile,
+  resolveUserRole,
+} from "@/lib/chat/prompt-context";
 import {
   buildGatheredContext,
   dispatchAutoNode,
-  dispatchScheduledNode,
   generateInitialMessage,
   isAutoNodeEnabled,
-  isScheduledNodeEnabled,
 } from "@/app/api/chat/[sessionId]/stream/turn-helpers";
+import {
+  dispatchScheduledNode,
+  isScheduledNodeEnabled,
+} from "@/app/api/chat/[sessionId]/stream/scheduled-node-dispatch";
 
 type Container = ReturnType<typeof getContainer>;
 
@@ -75,9 +84,11 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
     const newNode = nodes.find((node) => node.id === newNodeId);
     if (!newNode) return err(domainError("NOT_FOUND", "Next node not found after advance."));
 
+    if (await continueRunAtNode(this.container, schedule.sessionId, newNodeId)) return ok(undefined);
+
     const advancedSession = advance.data.session;
     const gatheredContext = buildGatheredContext(messages);
-    const ownerIsAdmin = await this.resolveIsAdmin(session.userId);
+    const ownerIsAdmin = await resolveIsAdmin(this.container, session.userId);
 
     if (
       newNode.type === "scheduled" &&
@@ -98,7 +109,7 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
         node: newNode,
         messages,
         userId: session.userId,
-        userRole: await this.resolveUserRole(session.userId),
+        userRole: await resolveUserRole(this.container, session.userId),
       });
       return ok(undefined);
     }
@@ -110,11 +121,12 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
       newNode,
       flow,
       modelName: aiConfig.models.branching,
-      organisationName: await this.resolveOrganisationName(),
-      userProfile: await this.resolveUserProfile(session.userId),
+      organisationName: await resolveOrganisationName(this.container),
+      userProfile: await resolveUserProfile(this.container, session.userId),
       userId: session.userId,
+      isAdmin: ownerIsAdmin,
       gatheredContext,
-      globalInstructions: await this.resolveGlobalInstructions(),
+      globalInstructions: await resolveGlobalInstructions(this.container),
     });
     return ok(undefined);
   }
@@ -168,32 +180,5 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
       return err(domainError("AGENT_FAILED", "Branch-choice model returned an invalid node."));
     }
     return ok(choice);
-  }
-
-  private async resolveOrganisationName(): Promise<string | null> {
-    const setting = await this.container.repos.systemSettings.get("organisation_name");
-    return setting.error ? null : (setting.data?.value ?? null);
-  }
-
-  private async resolveGlobalInstructions(): Promise<string | null> {
-    const setting = await this.container.repos.systemSettings.get("global_prompt");
-    return setting.error ? null : (setting.data?.value ?? null);
-  }
-
-  private async resolveUserProfile(userId: string): Promise<PromptUserProfile | null> {
-    const user = await this.container.repos.users.findById(userId);
-    if (user.error || !user.data) return null;
-    return { name: user.data.name, role: user.data.role, team: user.data.team };
-  }
-
-  private async resolveUserRole(userId: string): Promise<"admin" | "user"> {
-    const user = await this.container.repos.users.findById(userId);
-    if (user.error || !user.data) return "user";
-    return user.data.role === "admin" ? "admin" : "user";
-  }
-
-  private async resolveIsAdmin(userId: string): Promise<boolean> {
-    const user = await this.container.repos.users.findById(userId);
-    return !user.error && (user.data?.isAdmin ?? false);
   }
 }
