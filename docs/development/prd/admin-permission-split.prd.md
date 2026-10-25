@@ -1,6 +1,6 @@
 # PRD — Admin Permission Split (Delegated Admin Roles)
 
-- **Status**: Draft
+- **Status**: Accepted — implemented in v0.28.44
 - **Date**: 2026-10-24
 - **Author**: rbrasier (issue #349, parent #346)
 - **Target version**: 0.28.44  (bump: PATCH — chosen by the maintainer; see phase doc §Version)

@@ -153,3 +153,30 @@ describe("group router — global admin", () => {
     expect(groups.map((group) => group.id).sort()).toEqual([FIN, HR].sort());
   });
 });
+
+describe("group router — User Admin (ADR-066)", () => {
+  const userAdmin = () =>
+    createCaller(contextFor([], { permissions: new Set<PermissionKey>(["admin:users"]) }));
+
+  it("lists every group for a User Admin who belongs to none", async () => {
+    const groups = await userAdmin().group.list();
+
+    expect(groups.map((group) => group.id).sort()).toEqual([FIN, HR].sort());
+  });
+
+  it("lets a User Admin manage members of any group, including naming its delegated admin", async () => {
+    const caller = userAdmin();
+
+    await expect(caller.group.listMembers({ groupId: FIN })).resolves.toHaveLength(1);
+    await expect(
+      caller.group.addMember({ groupId: HR, userId: USER, roleInGroup: "delegated_admin" }),
+    ).resolves.toMatchObject({ roleInGroup: "delegated_admin" });
+  });
+
+  it("gives a Technical Admin no group management", async () => {
+    const caller = createCaller(contextFor([], { permissions: new Set<PermissionKey>(["admin:technical"]) }));
+
+    await expect(caller.group.list()).resolves.toEqual([]);
+    await expect(caller.group.listMembers({ groupId: HR })).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+});

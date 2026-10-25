@@ -278,7 +278,10 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   const railSteps = buildStepRail(nodes, edges, currentNodeId, completedNodeIds);
 
   const stallCount = countStalls(dbMessages, currentNodeId, edges);
-  const showBranchOverride = isAdmin && !isReadOnly && stallCount >= NULL_BRANCH_THRESHOLD;
+  // The server lets oversight holders override a branch as admins do (ADR-066 §4).
+  const canOverrideBranch =
+    isAdmin || (meQuery.data?.permissions ?? []).includes("admin:oversight");
+  const showBranchOverride = canOverrideBranch && !isReadOnly && stallCount >= NULL_BRANCH_THRESHOLD;
 
   const outgoingBranches = toBranchOptions(edges, nodes, currentNodeId);
 
