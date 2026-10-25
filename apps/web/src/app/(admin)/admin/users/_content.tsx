@@ -19,7 +19,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { usePermissions } from "@/lib/use-permissions";
 import { trpc } from "@/trpc/client";
 
 interface FormState {
@@ -31,11 +30,10 @@ interface FormState {
 
 const empty: FormState = { email: "", name: "", isAdmin: false };
 
-export function AdminUsersContent() {
+// Only a Global Admin may grant or touch Global Admin accounts (ADR-066 §3);
+// the server refuses it anyway, so this only avoids offering a dead control.
+export function AdminUsersContent({ viewerIsGlobalAdmin }: { readonly viewerIsGlobalAdmin: boolean }) {
   const utils = trpc.useUtils();
-  // Only a Global Admin may grant or touch Global Admin accounts (ADR-066 §3);
-  // the server refuses it anyway, so this only avoids offering a dead control.
-  const { isAdmin: viewerIsGlobalAdmin } = usePermissions();
   const usersQuery = trpc.user.list.useQuery({});
   const rolesQuery = trpc.role.list.useQuery();
   const powerUsersRole = (rolesQuery.data ?? []).find(

@@ -22,7 +22,7 @@ describe("requireAdminPath (ADR-066 §4)", () => {
   it("lets a Technical Admin stay on Configuration", async () => {
     signInAs(["admin:technical"]);
 
-    await expect(requireAdminPath("/admin/settings")).resolves.toBeUndefined();
+    await expect(requireAdminPath("/admin/settings")).resolves.toMatchObject({ isAdmin: false });
   });
 
   it("sends a Technical Admin who opens Users to their own first area", async () => {
@@ -46,6 +46,6 @@ describe("requireAdminPath (ADR-066 §4)", () => {
   it("lets a Global Admin open any screen", async () => {
     signInAs([], true);
 
-    await expect(requireAdminPath("/admin/roles")).resolves.toBeUndefined();
+    await expect(requireAdminPath("/admin/roles")).resolves.toMatchObject({ isAdmin: true });
   });
 });
