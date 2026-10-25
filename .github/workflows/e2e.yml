@@ -199,6 +199,9 @@ jobs:
       - name: Start app
         env:
           NODE_OPTIONS: --max-old-space-size=12288
+          # Keeps routes warm-routes.sh compiled instead of letting `next dev`
+          # dispose them after 60s idle (see next.config.ts).
+          E2E_KEEP_ROUTES_COMPILED: "true"
         run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
 
       # Warming the heavy routes here, rather than giving specs longer waits: the
@@ -339,6 +342,9 @@ jobs:
       - name: Start app in PKI mode
         env:
           NODE_OPTIONS: --max-old-space-size=10240
+          # Keeps routes warm-routes.sh compiled instead of letting `next dev`
+          # dispose them after 60s idle (see next.config.ts).
+          E2E_KEEP_ROUTES_COMPILED: "true"
         run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
 
       - name: Wait for app to be ready

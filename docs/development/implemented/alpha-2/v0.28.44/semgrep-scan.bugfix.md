@@ -81,3 +81,27 @@ waived inline with its reason:
 | `dependabot-missing-cooldown` | `.github/dependabot.yml` | **Fixed** — `cooldown: default-days: 7` on each entry (security updates are not delayed) |
 | `pull-request-target-code-checkout` | `dependabot-version-bump.yml` | **Waived** — job is limited to Dependabot's same-repo branches and runs only git and sed on the checkout |
 | `pnpm-block-exotic-sub-dependencies`, `pnpm-minimum-release-age`, `pnpm-trust-policy` | `pnpm-workspace.yaml` | **Waived** — pnpm 10.16–10.26 settings; the repo pins pnpm 9.12, which does not read them. Remove when pnpm moves to 10.26+ |
+
+## E2E shard 1: a different chat-turn spec failing each run
+
+Not caused by this change — it reproduced on the head before the triage fixes and on
+`release/alpha-2`'s own run — but it held this PR red, so it is fixed here.
+
+- **Symptom:** `chat.spec › multi-turn conversation works` (bubble poll, 8s) failed one
+  run; `code-quality-hot-paths › a committed turn keeps its … reply after reload`
+  (`POST /api/test/ai-script`, 15s) the next. Other chat-turn specs flaked around them.
+- **Root cause:** CI serves the app with `next dev`. `warm-routes.sh` compiles the heavy
+  routes before the suite, but `next dev` disposes any built route idle for more than
+  `onDemandEntries.maxInactiveAge` (60s — `disposeInactiveEntries` in
+  `next/dist/server/dev/on-demand-entry-handler.js`). A route warmed at boot and first
+  used minutes later recompiled mid-spec: the app log shows `/api/test/ai-script` built
+  in the warm-up (10.5s) and again mid-suite (13.6s), `/api/chat/[sessionId]/stream`
+  16.3s. Whichever spec arrived first after an idle spell paid it, so the failure moved.
+- **Fix:** `next.config.ts` sets `onDemandEntries` to keep every entry (24h, 500 pages)
+  when `E2E_KEEP_ROUTES_COMPILED=true`; both app starts in `e2e.yml` set it. Local
+  `next dev` keeps Next's defaults.
+- **Guard:** `apps/web/src/e2e-warm-routes.test.ts` — retention on with the flag, off
+  without it, and the flag set on every app start in `e2e.yml`.
+- **Watch:** retained entries hold more heap; the 12 GB / 10 GB `NODE_OPTIONS` ceilings
+  stay. A `next dev` memory restart would show as "Unexpected end of JSON input" in the
+  app log.
