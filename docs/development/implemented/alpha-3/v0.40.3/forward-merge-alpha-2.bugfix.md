@@ -36,6 +36,8 @@ needs its own reviewed port.
   across the workspace.
 - `deploy/lambda/package-lock.json` (main-only, outside the pnpm workspace): `body-parser`
   2.3.0 → 2.4.0 for the same advisory, found by OSV in CI; `npm run audit` there is clean.
+- `ci.yml` lambda job (main-only): its `checkout`/`pnpm/action-setup`/`setup-node` `@v4` tags
+  pinned to the same SHAs as the rest of the file, so the new Semgrep scan passes.
 - Already on `main`, so no-ops: the `vite` `^6.4.4`, `zod@4` and e2e `follow-redirects`
   overrides. `pnpm-lock.yaml` was regenerated, not merged.
 
