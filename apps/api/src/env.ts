@@ -26,6 +26,10 @@ const envSchema = z.object({
   // web app. See the scaling-current-stack phase doc.
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
   N8N_WEBHOOK_SECRET: z.string().optional(),
+  // Bearer key a service or operator presents to the management routes
+  // (/v1/users). Unset, those routes refuse every request (ADR-067). Generate
+  // with `openssl rand -hex 32`.
+  API_SERVICE_KEY: z.string().optional(),
   SETTINGS_ENCRYPTION_KEY: settingsEncryptionKeySchema,
   AI_DEFAULT_PROVIDER: z.enum(["anthropic", "openai", "mistral", "bedrock"]).default("anthropic"),
   ANTHROPIC_API_KEY: z.string().optional(),
