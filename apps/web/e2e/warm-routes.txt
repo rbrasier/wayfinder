@@ -33,6 +33,10 @@ GET /synthesise
 GET /synthesise/:id/runs/:id
 GET /approvals
 
+# 33.6s — the user settings page, which stalled every request queued behind it
+# (a 25.6s site-banner fetch) ahead of the Entra-linking and synthesise specs.
+GET /settings
+
 # 4.6s — outlasted the 5s "Logo uploaded" wait in branding.spec.ts (run 38621516985).
 GET /admin/settings
 GET /api/branding/logo
