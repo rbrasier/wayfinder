@@ -34,6 +34,8 @@ needs its own reviewed port.
   `>=2.4.0` override (GHSA-27r3-jxmh-p828).
 - **v0.28.40 vitest** (`57bdf2d`, `02479af`): `vitest` / `@vitest/coverage-v8` `^4.1.12`
   across the workspace.
+- `deploy/lambda/package-lock.json` (main-only, outside the pnpm workspace): `body-parser`
+  2.3.0 → 2.4.0 for the same advisory, found by OSV in CI; `npm run audit` there is clean.
 - Already on `main`, so no-ops: the `vite` `^6.4.4`, `zod@4` and e2e `follow-redirects`
   overrides. `pnpm-lock.yaml` was regenerated, not merged.
 
