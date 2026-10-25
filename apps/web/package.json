@@ -33,7 +33,7 @@
     "@trpc/react-query": "^11.0.0-rc.500",
     "@trpc/server": "^11.0.0-rc.500",
     "@xyflow/react": "^12.10.2",
-    "ai": "^4.0.0",
+    "ai": "^5.0.52",
     "better-auth": "~1.6.25",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -48,7 +48,7 @@
     "superjson": "^2.2.1",
     "tailwind-merge": "^3.7.0",
     "write-excel-file": "^4.1.1",
-    "zod": "^3.23.8"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
