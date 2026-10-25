@@ -22,6 +22,10 @@ GET /admin/sessions
 GET /chats
 GET /chats/:id
 
+# The welcome tour's first stop after /chats; its first compile landed inside
+# the tour's URL wait (PR #356, shard 3).
+GET /flows
+
 # 4.6s — outlasted the 5s "Logo uploaded" wait in branding.spec.ts (run 38621516985).
 GET /admin/settings
 GET /api/branding/logo
