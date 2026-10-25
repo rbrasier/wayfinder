@@ -1,6 +1,6 @@
 # Phase — Admin Permission Split (Delegated Admin Roles)
 
-- **Status**: Awaiting review
+- **Status**: Implemented (v0.28.44)
 - **Target version**: 0.28.44  (bump: PATCH — see §Version)
 - **Base branch**: `release/alpha-2` → implemented docs go to
   `docs/development/implemented/alpha-2/v0.28.44/`

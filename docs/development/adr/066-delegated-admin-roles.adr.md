@@ -1,6 +1,6 @@
 # ADR-066 — Delegated Admin Roles
 
-- **Status**: Proposed (scoped by `admin-permission-split.prd.md`)
+- **Status**: Accepted (scoped by `admin-permission-split.prd.md`)
 - **Date**: 2026-10-24
 - **Assumes**: ADR-021 (RBAC registry; `is_admin` is Admins membership and a
   wildcard), ADR-022 (role-scoped feature flags), ADR-063 (Event Watch, its
@@ -109,6 +109,28 @@ everyone except a Global Admin re-enabling it in `/admin/flags`.
 Flow-authoring checks (`IsFeatureEnabledForUser` via `featureFlag.isEnabledForMe`)
 are unchanged. A Technical Admin does not gain Skills or MCP in their own flows
 unless they are also in the flag's roles.
+
+### 6. Decisions taken at build (v0.28.44)
+
+- **Oversight is full read-and-edit.** `canOversee` replaces `isAdmin` wherever
+  `isAdmin` meant "may bypass ownership": `canEditFlow` callers, the chat
+  owner checks, `resolveSessionAccess` (tRPC, the chat stream and the upload,
+  document and event routes via `resolveCanOversee`), schedules in a chat, and
+  `extraction.listAll`. Group-admin powers, flag resolution, discoverability
+  and the extraction author/run keys keep `isAdmin`.
+- **Groups are users-area.** The group router reads "manages every group" as
+  Global Admin or `admin:users`, so a User Admin manages any group's members
+  and names its delegated admins. `publishTargets` keeps `isAdmin`.
+- **Raw settings rows.** `settings.get` / `settings.set` reach any row, auth
+  config included, so a Technical Admin may use only allowlisted keys
+  (`global_prompt`). Registration, auth methods, the organisations deployment
+  card, "Directory & security", the setup wizard and "Re-run setup" are
+  Global-only.
+- **Shared reads.** `user.list` is open to users or oversight; `role.list` to
+  users, technical or oversight (the Flags page and spend caps read it).
+- **Completeness.** `admin-area-gates.test.ts` probes every procedure in
+  `appRouter` and fails on any that an ordinary user is refused but that is
+  not classified, so a new admin procedure cannot ship unclassified.
 
 ## Consequences
 

@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, router, technicalAdminProcedure } from "../trpc";
+import { authenticatedProcedure, canOversee, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const assertOwnsSession = async (
@@ -10,7 +10,7 @@ const assertOwnsSession = async (
   const session = await ctx.container.repos.sessions.findById(sessionId);
   if (session.error) throw toTrpcError(session.error);
   if (!session.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
-  if (session.data.userId !== ctx.userId && !ctx.isAdmin) {
+  if (session.data.userId !== ctx.userId && !canOversee(ctx)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this session." });
   }
 };

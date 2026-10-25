@@ -3,13 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { flowVersionRouter } from "./flow-version";
+import { scheduleRouter } from "./schedule";
 import { sessionRouter } from "./session";
 
 // ADR-066 §4 (maintainer decision at build): an admin:oversight holder opens and
 // edits other people's chats and flows exactly as a Global Admin does from All
 // Chats and All Flows. Technical and User Admins do not.
 
-const createCaller = createCallerFactory(router({ flowVersion: flowVersionRouter, session: sessionRouter }));
+const createCaller = createCallerFactory(
+  router({ flowVersion: flowVersionRouter, schedule: scheduleRouter, session: sessionRouter }),
+);
 
 const FLOW_ID = "11111111-1111-4111-8111-111111111111";
 const SESSION_ID = "22222222-2222-4222-8222-222222222222";
@@ -24,7 +27,11 @@ const makeContainer = () => {
     },
     repos: {
       users: { findManyByIds: async () => ok([]) },
-      sessions: { update: updateSession },
+      sessions: {
+        update: updateSession,
+        findById: async () => ok({ id: SESSION_ID, userId: "someone-else" }),
+      },
+      schedules: { listForSession: async () => ok([]) },
     },
     useCases: {
       getFlowCanvas: {
@@ -85,5 +92,18 @@ describe("oversight over other people's chats", () => {
       callerWith(container, ["admin:technical"]).session.rename({ sessionId: SESSION_ID, title: "Renamed" }),
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(updateSession).not.toHaveBeenCalled();
+  });
+});
+
+describe("oversight over the schedules in other people's chats", () => {
+  it("lets an oversight holder see a chat's schedules and refuses a Technical Admin", async () => {
+    const { container } = makeContainer();
+
+    await expect(
+      callerWith(container, ["admin:oversight"]).schedule.listForSession({ sessionId: SESSION_ID }),
+    ).resolves.toEqual([]);
+    await expect(
+      callerWith(container, ["admin:technical"]).schedule.listForSession({ sessionId: SESSION_ID }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 });
