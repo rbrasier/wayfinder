@@ -243,6 +243,21 @@ else
   fi
 fi
 
+# ── 11d. Semgrep static security scan ────────────────────────────────────────
+# CI is cleared for the same reason as 11b: the blocking run is the security job,
+# which installs Semgrep; here a missing scanner or registry is a skip.
+section "11d. Semgrep (static security scan)"
+SEMGREP_OUTPUT=$(CI= ./scripts/semgrep-check.sh 2>&1)
+SEMGREP_STATUS=$?
+echo "$SEMGREP_OUTPUT"
+if [ "$SEMGREP_STATUS" -ne 0 ]; then
+  fail "Semgrep findings — run './scripts/semgrep-check.sh' for details"
+elif echo "$SEMGREP_OUTPUT" | grep -q "^SKIP —"; then
+  skip "Semgrep not installed or rule registry unreachable — static scan not run"
+else
+  pass "no Semgrep findings"
+fi
+
 # ── 12. test files exist in domain and application ────────────────────────────
 section "12. domain and application packages have tests"
 DOMAIN_TESTS=$(find packages/domain/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')

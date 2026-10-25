@@ -61,6 +61,15 @@ describe("SettingsEncryptionService", () => {
     expect(() => service.decrypt(tampered)).toThrow();
   });
 
+  // Without a fixed tag length GCM verifies whatever tag length it is given, so
+  // an envelope cut short leaves a 4-byte tag an attacker can brute-force.
+  it("rejects an envelope whose auth tag was truncated", () => {
+    const encrypted = service.encrypt("");
+    const packed = Buffer.from(encrypted.slice("enc:v1:".length), "base64");
+    const truncated = "enc:v1:" + packed.subarray(0, 12 + 4).toString("base64");
+    expect(() => service.decrypt(truncated)).toThrow();
+  });
+
   it("cannot decrypt a value encrypted under a different key", () => {
     const other = new SettingsEncryptionService(
       createSettingsEncryptionKey(randomBytes(32).toString("hex")),
