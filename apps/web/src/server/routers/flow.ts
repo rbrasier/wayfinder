@@ -3,7 +3,8 @@ import type { TemplateField } from "@wayfinder/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
-import { adminProcedure, authenticatedProcedure, permissionProcedure, router } from "../trpc";
+import { adminProcedure, authenticatedProcedure, permissionProcedure, router, type TrpcContext } from "../trpc";
+import { automationStepRejection } from "./automation-step-guard";
 import { toTrpcError } from "../trpc-errors";
 
 const flowIdInput = z.object({ flowId: z.string().uuid() });
@@ -20,6 +21,27 @@ const assertValidStructuredConfig = (config: Record<string, unknown> | undefined
     : [];
   const validation = validateStructuredFieldSet(fields);
   if (validation.error) throw toTrpcError(validation.error);
+};
+
+
+const assertAutomationStepAllowed = async (
+  ctx: TrpcContext,
+  type: string | undefined,
+  config: Record<string, unknown> | undefined,
+): Promise<void> => {
+  if (!ctx.userId) throw new TRPCError({ code: "UNAUTHORIZED" });
+  const rejection = await automationStepRejection(
+    {
+      isFeatureEnabledForUser: (userId, key, isAdmin) =>
+        ctx.container.useCases.isFeatureEnabledForUser.execute(userId, key, isAdmin),
+      getAutomationConfig: () => ctx.container.runtimeConfig.getAutomationConfig(),
+    },
+    ctx.userId,
+    ctx.isAdmin,
+    type,
+    config,
+  );
+  if (rejection) throw new TRPCError(rejection);
 };
 
 export const canEditFlow = async (
@@ -130,7 +152,7 @@ const nodeRouter = router({
         // renders an "Untitled step" fallback while the name is empty.
         name: z.string(),
         colour: z.string().nullable().optional(),
-        type: z.enum(["conversational", "auto", "scheduled", "approval", "mcp"]).optional(),
+        type: z.enum(["conversational", "auto", "scheduled", "approval", "mcp", "ai_task", "email"]).optional(),
         positionX: z.number(),
         positionY: z.number(),
         config: z.record(z.unknown()).default({}),
@@ -141,6 +163,7 @@ const nodeRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       assertValidStructuredConfig(input.config);
+      await assertAutomationStepAllowed(ctx, input.type, input.config);
       const result = await ctx.container.useCases.createFlowNode.execute({
         flowId: input.flowId,
         type: input.type ?? "conversational",
@@ -163,7 +186,7 @@ const nodeRouter = router({
         // Blank names are allowed (v1.36.0) — canvas shows an "Untitled step" fallback.
         name: z.string().optional(),
         colour: z.string().nullable().optional(),
-        type: z.enum(["conversational", "auto", "scheduled", "approval", "mcp"]).optional(),
+        type: z.enum(["conversational", "auto", "scheduled", "approval", "mcp", "ai_task", "email"]).optional(),
         config: z.record(z.unknown()).optional(),
       }),
     )
@@ -172,6 +195,7 @@ const nodeRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
       }
       assertValidStructuredConfig(input.config);
+      await assertAutomationStepAllowed(ctx, input.type, input.config);
       const result = await ctx.container.useCases.updateFlowNode.execute(input.nodeId, {
         name: input.name,
         colour: input.colour,

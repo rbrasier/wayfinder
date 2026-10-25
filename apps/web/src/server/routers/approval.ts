@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ApprovalNodeConfig, ApproverSource } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
+import { continueRunAtNode } from "@/lib/automation/unattended-runs";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
@@ -206,6 +207,7 @@ export const approvalRouter = router({
       });
       if (result.error) throw toTrpcError(result.error);
       publishSessionUpdated(ctx, result.data.approval.sessionId);
+      await continueRunAtNode(ctx.container, result.data.approval.sessionId, result.data.newNodeId);
 
       const nextApproval = await resolveNextApproval(ctx.container, result.data.newNodeId);
       // Who to tell, when email cannot tell them. Best-effort by construction:

@@ -13,6 +13,7 @@ import {
   SuggestApprover,
   WithdrawApproval,
   type UpdateDocumentFields,
+  type UpdateStructuredStepOutput,
 } from "@wayfinder/application";
 import type {
   IApprovalRepository,
@@ -55,6 +56,9 @@ export interface ApprovalUseCaseDeps {
   sha256Hex: Sha256Hex;
   clock: IClock;
   updateDocumentFields: UpdateDocumentFields;
+  // An approver correcting a structured record (an AI task's output) has no
+  // document to edit, so the record path is wired alongside (ADR-065 §3).
+  updateStructuredStepOutput: UpdateStructuredStepOutput;
   notifyOnApprovalRequested: ConstructorParameters<typeof ConfirmAndSend>[2];
   notifyOnApprovalDecided: ConstructorParameters<typeof DecideApproval>[6];
   notifyOnApprovalWithdrawn: ConstructorParameters<typeof WithdrawApproval>[8];
@@ -122,6 +126,10 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.sessionMessages,
       deps.updateDocumentFields,
       deps.flowNodes,
+      {
+        sessionStepOutputs: deps.sessionStepOutputs,
+        updateStructuredStepOutput: deps.updateStructuredStepOutput,
+      },
     ),
     suggestApprover: new SuggestApprover(
       deps.approvals,

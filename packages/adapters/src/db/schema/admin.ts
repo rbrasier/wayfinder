@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -15,8 +16,12 @@ import type {
   McpToolCitationMapping,
   McpToolPagination,
   McpToolStatusMapping,
+  WatchApiKeyPlacement,
+  WatchCondition,
+  WatchInputMapping,
 } from "@wayfinder/domain";
 import { core_organisations, core_users } from "./core";
+import { app_flows } from "./wayfinder";
 
 export const admin_roles = pgTable("admin_roles", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -223,5 +228,90 @@ export const admin_mcp_tools = pgTable(
   (t) => ({
     server_tool_unique: unique("admin_mcp_tools_server_id_name_unique").on(t.server_id, t.name),
     by_server: index("admin_mcp_tools_server_id_idx").on(t.server_id),
+  }),
+);
+
+// An Event Watch with its embedded connection (ADR-063 §1). The secret is held
+// only as ciphertext and decrypted only on the poller's adapter-internal path.
+export const admin_event_watches = pgTable(
+  "admin_event_watches",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    url: text("url").notNull(),
+    method: text("method", { enum: ["GET", "POST"] }).notNull().default("GET"),
+    request_body: jsonb("request_body").$type<unknown>(),
+    auth_type: text("auth_type", { enum: ["none", "bearer", "api_key"] })
+      .notNull()
+      .default("none"),
+    api_key_placement: jsonb("api_key_placement").$type<WatchApiKeyPlacement>(),
+    secret_encrypted: text("secret_encrypted"),
+    interval_minutes: integer("interval_minutes").notNull(),
+    items_path: text("items_path").notNull().default(""),
+    item_id_path: text("item_id_path").notNull().default(""),
+    condition: jsonb("condition").$type<WatchCondition>().notNull(),
+    fire_once_per_item: boolean("fire_once_per_item").notNull().default(true),
+    max_runs_per_poll: integer("max_runs_per_poll").notNull().default(20),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "restrict" }),
+    input_mapping: jsonb("input_mapping").$type<WatchInputMapping>().notNull().default({}),
+    run_as_user_id: uuid("run_as_user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "restrict" }),
+    status: text("status", { enum: ["active", "paused"] }).notNull().default("active"),
+    // Set on create and on any edit to what is polled or how it is judged; the
+    // next successful poll records state and starts nothing (ADR-063 §4).
+    baseline_pending: boolean("baseline_pending").notNull().default(true),
+    consecutive_failures: integer("consecutive_failures").notNull().default(0),
+    failure_threshold: integer("failure_threshold").notNull().default(5),
+    last_error: text("last_error"),
+    paused_reason: text("paused_reason", {
+      enum: ["failure_threshold", "run_cap_exceeded", "run_as_unavailable", "flow_unavailable", "manual"],
+    }),
+    paused_at: timestamp("paused_at", { withTimezone: true }),
+    // Regenerated on each pause so the watch_paused alert sends once per pause.
+    pause_incident_id: uuid("pause_incident_id"),
+    last_polled_at: timestamp("last_polled_at", { withTimezone: true }),
+    last_success_at: timestamp("last_success_at", { withTimezone: true }),
+    next_poll_at: timestamp("next_poll_at", { withTimezone: true }),
+    created_by: uuid("created_by").references(() => core_users.id, { onDelete: "set null" }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    by_status_next_poll: index("admin_event_watches_status_next_poll_at_idx").on(
+      t.status,
+      t.next_poll_at,
+    ),
+  }),
+);
+
+// Last-seen values per (watch, item), so a poll can tell what changed since the
+// previous one. Rows outlive an item's absence from a response on purpose.
+export const admin_event_watch_item_states = pgTable(
+  "admin_event_watch_item_states",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    // The foreign key is declared below with an explicit name: the generated one
+    // runs one character past Postgres's 63-character identifier limit.
+    watch_id: uuid("watch_id").notNull(),
+    item_id: text("item_id").notNull(),
+    last_values: jsonb("last_values").$type<Record<string, unknown>>().notNull().default({}),
+    fired_at: timestamp("fired_at", { withTimezone: true }),
+    last_seen_at: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    watch_item_unique: unique("admin_event_watch_item_states_watch_id_item_id_unique").on(
+      t.watch_id,
+      t.item_id,
+    ),
+    watch_fk: foreignKey({
+      columns: [t.watch_id],
+      foreignColumns: [admin_event_watches.id],
+      name: "admin_event_watch_item_states_watch_id_fk",
+    }).onDelete("cascade"),
   }),
 );

@@ -13,7 +13,7 @@ import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
-import { executeTurn } from "./execute-turn";
+import { executeTurn, type PreparedTurn } from "./execute-turn";
 import { toModelMessages } from "./model-messages";
 import { DataStreamTurnWriter } from "./turn-stream-writer";
 import {
@@ -21,7 +21,7 @@ import {
   buildPromptSessionUploads,
   renderGatheredContext,
 } from "./turn-helpers";
-import { runMcpToolPrepass } from "./mcp-turn-helpers";
+import { conversationalStepBrief, runMcpToolPrepass, type ToolActivityListener } from "./mcp-turn-helpers";
 
 // The most recent turns the model is given as context, mirrored from the
 // client's own slice so the two agree (scaling wall #1).
@@ -182,23 +182,6 @@ async function handlePOST(
   const skillsResult = await container.useCases.resolveStepSkills.execute(nodeConfig);
   const resolvedSkills = skillsResult.error ? [] : skillsResult.data;
 
-  // Conversational tool-loop (ADR-032): when a step allows MCP tools, let the model
-  // call them in a non-streaming pre-pass and fold the gathered results into the
-  // step context, leaving the structured streaming turn below untouched.
-  const toolPrepass = await runMcpToolPrepass({
-    container,
-    nodeConfig,
-    dbMessages,
-    lastUserMessage,
-    gatheredContext,
-    userId: principal.userId,
-    isAdmin: principal.isAdmin,
-    flowId: flow.id,
-    sessionId,
-    nodeId: session.currentNodeId,
-    publishEvent,
-  });
-
   // The lease is claimed; tell every open window whose turn it now is so they
   // disable Send and can attribute the hold ("Alex's turn is in progress").
   publishEvent({ type: "turn.claimed", userId: principal.userId, userName: userProfile?.name ?? null });
@@ -211,27 +194,54 @@ async function handlePOST(
     nodeFieldSet(nodeConfig),
   );
 
-  const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
-    nodeConfig,
-    templateFields,
-    retrievedChunks,
-    sessionUploads,
-    gatheredContext: toolPrepass.gatheredContext,
-    workflowName: flow.name,
-    organisationName,
-    globalInstructions,
-    expertRole: flow.expertRole,
-    userProfile,
-    // Filtered to this step and capped before it reaches the prompt: only
-    // accepted guidance/efficiency lessons are injectable, most recently
-    // accepted first (ADR-057 §5).
-    acceptedLessons: selectInjectableLessons(
-      acceptedLessons.filter((lesson) => lesson.nodeId === session.currentNodeId),
-    ),
-    now: new Date(),
-    resolvedSkills,
-  });
-  if (systemPromptResult.error) return new Response("Failed to build prompt", { status: 500 });
+  // Conversational tool-loop (ADR-032): when a step allows MCP tools, the model
+  // calls them in a non-streaming pre-pass whose results go into the prompt,
+  // leaving the structured streaming turn untouched. It runs inside the stream
+  // so the person waiting is told what is being consulted.
+  const prepareTurn = async (onToolActivity: ToolActivityListener): Promise<PreparedTurn> => {
+    const toolPrepass = await runMcpToolPrepass({
+      container,
+      nodeConfig,
+      dbMessages,
+      lastUserMessage,
+      stepBrief: conversationalStepBrief(nodeConfig),
+      gatheredContext,
+      userId: principal.userId,
+      isAdmin: principal.isAdmin,
+      flowId: flow.id,
+      sessionId,
+      nodeId: session.currentNodeId,
+      publishEvent,
+      onActivity: onToolActivity,
+    });
+    const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
+      nodeConfig,
+      templateFields,
+      retrievedChunks,
+      sessionUploads,
+      gatheredContext,
+      toolResults: toolPrepass.toolResults,
+      workflowName: flow.name,
+      organisationName,
+      globalInstructions,
+      expertRole: flow.expertRole,
+      userProfile,
+      // Filtered to this step and capped before it reaches the prompt: only
+      // accepted guidance/efficiency lessons are injectable, most recently
+      // accepted first (ADR-057 §5).
+      acceptedLessons: selectInjectableLessons(
+        acceptedLessons.filter((lesson) => lesson.nodeId === session.currentNodeId),
+      ),
+      now: new Date(),
+      resolvedSkills,
+    });
+    if (systemPromptResult.error) throw new Error(`Failed to build prompt: ${systemPromptResult.error.message}`);
+    return {
+      systemPrompt: systemPromptResult.data,
+      numberedCitations: toolPrepass.numberedCitations,
+      recordToolAudit: toolPrepass.recordAudit,
+    };
+  };
 
   const outgoingEdges = edges.filter((e) => e.fromNodeId === session.currentNodeId);
   const branchNodes = buildBranchDescriptors(nodes, outgoingEdges);
@@ -280,7 +290,7 @@ async function handlePOST(
           dbMessages,
           currentNodeAssistantMessages,
           messagesWithNew,
-          systemPrompt: systemPromptResult.data,
+          prepareTurn,
           gatheredContext,
           branchNodes,
           isNeverDone,
@@ -294,7 +304,6 @@ async function handlePOST(
           userId: principal.userId,
           isAdmin: principal.isAdmin,
           lastUserMessage,
-          numberedCitations: toolPrepass.numberedCitations,
         });
       } finally {
         clearInterval(heartbeat);

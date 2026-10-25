@@ -20,7 +20,17 @@ import {
   vector,
 } from "drizzle-orm/pg-core";
 import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@wayfinder/domain";
-import type { AiTurnPayload, PendingExecutions, SeedContextItem, SeedStepOutput, SessionDocument, StepOutputField } from "@wayfinder/domain";
+import type {
+  AiTurnPayload,
+  PendingExecutions,
+  SeedContextItem,
+  SeedStepOutput,
+  SessionDocument,
+  SessionRunError,
+  SessionTriggerPayload,
+  StepOutputField,
+  TriggerInput,
+} from "@wayfinder/domain";
 import { core_users } from "./core";
 
 type StoredContextDoc = {
@@ -54,6 +64,9 @@ export const app_flows = pgTable(
       .default({ kind: "private" }),
     permissions: jsonb("permissions").$type<FlowPermission[]>().notNull().default([]),
     context_docs: jsonb("context_docs").$type<StoredContextDoc[]>().notNull().default([]),
+    // Inputs the flow expects from a watch or webhook (ADR-064 §1). Null reads
+    // as none; copied into each published snapshot.
+    trigger_inputs: jsonb("trigger_inputs").$type<TriggerInput[]>(),
     deleted_at: timestamp("deleted_at", { withTimezone: true }),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -67,7 +80,9 @@ export const app_flow_nodes = pgTable(
     flow_id: uuid("flow_id")
       .notNull()
       .references(() => app_flows.id, { onDelete: "cascade" }),
-    type: text("type", { enum: ["conversational", "auto", "scheduled", "approval", "mcp"] })
+    type: text("type", {
+      enum: ["conversational", "auto", "scheduled", "approval", "mcp", "ai_task", "email"],
+    })
       .notNull()
       .default("conversational"),
     name: text("name").notNull(),
@@ -188,6 +203,16 @@ export const app_sessions = pgTable(
     // taken without Wayfinder. Captured once the session finishes; null when
     // never asked or skipped. A flow's baseline is the median of these.
     manual_estimate_minutes: integer("manual_estimate_minutes"),
+    // How the session started (ADR-064 §4). Existing rows were all started by a
+    // person, so the default carries them across as `manual`.
+    origin: text("origin", { enum: ["manual", "watch", "webhook"] })
+      .notNull()
+      .default("manual"),
+    // The watch or webhook trigger that started it; run history reads by this.
+    trigger_source_id: uuid("trigger_source_id"),
+    trigger_payload: jsonb("trigger_payload").$type<SessionTriggerPayload>(),
+    // Why an unattended run stopped (ADR-065 §5). Cleared on retry.
+    run_error: jsonb("run_error").$type<SessionRunError>(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -196,6 +221,10 @@ export const app_sessions = pgTable(
     // than getting one of its own: it is 'live' for almost every row, so a
     // standalone index on it would never be chosen (ADR-048 §4).
     by_user: index("app_sessions_user_id_created_at_idx").on(t.user_id, t.mode, t.created_at),
+    by_trigger_source: index("app_sessions_trigger_source_id_created_at_idx").on(
+      t.trigger_source_id,
+      t.created_at,
+    ),
     by_flow: index("app_sessions_flow_id_idx").on(t.flow_id, t.mode),
     by_flow_version: index("app_sessions_flow_version_id_idx").on(t.flow_version_id),
   }),
@@ -420,7 +449,13 @@ export const app_session_approvals = pgTable(
       .notNull()
       .references(() => core_users.id, { onDelete: "restrict" }),
     approver_source: text("approver_source", {
-      enum: ["first_level_supervisor", "second_level_supervisor", "dynamic"],
+      enum: [
+        "first_level_supervisor",
+        "second_level_supervisor",
+        "dynamic",
+        "run_owner",
+        "named_user",
+      ],
     }).notNull(),
     // The foreign key is declared below with an explicit name, for the same
     // 63-character reason as app_session_schedule_runs.schedule_id.
@@ -511,9 +546,14 @@ export const app_notification_log = pgTable(
         "approval_decided",
         "approval_withdrawn",
         "approval_reassigned",
+        "unattended_run_failed",
+        "unattended_awaiting_person",
+        "watch_paused",
       ],
     }).notNull(),
-    resource_type: text("resource_type", { enum: ["session", "flow", "approval"] }).notNull(),
+    resource_type: text("resource_type", {
+      enum: ["session", "flow", "approval", "event_watch"],
+    }).notNull(),
     resource_id: text("resource_id").notNull(),
     subject: text("subject").notNull(),
     status: text("status", { enum: ["pending", "sent", "failed"] })

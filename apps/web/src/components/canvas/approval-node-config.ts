@@ -16,7 +16,7 @@ export type ApprovalSubjectKind = "step" | "custom";
 export interface PriorStep {
   nodeId: string;
   stepLabel: string;
-  type: "conversational" | "auto" | "scheduled" | "approval" | "mcp";
+  type: "conversational" | "auto" | "scheduled" | "approval" | "mcp" | "ai_task" | "email";
 }
 
 // The empty string is the "use the default" sentinel for both dropdowns: an

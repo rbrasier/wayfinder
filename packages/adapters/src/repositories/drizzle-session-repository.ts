@@ -126,7 +126,7 @@ export const buildListAllPageWhere = (mode: SessionMode, cursor: SQL | undefined
   return and(...clauses)!;
 };
 
-const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
+export const toSessionEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   id: row.id,
   flowId: row.flow_id,
   userId: row.user_id,
@@ -143,6 +143,10 @@ const toEntity = (row: typeof app_sessions.$inferSelect): Session => ({
   activeTurnClaimedAt: row.active_turn_claimed_at ?? null,
   version: row.version,
   manualEstimateMinutes: row.manual_estimate_minutes ?? null,
+  origin: row.origin,
+  triggerSourceId: row.trigger_source_id ?? null,
+  triggerPayload: row.trigger_payload ?? null,
+  runError: row.run_error ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -161,10 +165,13 @@ export class DrizzleSessionRepository implements ISessionRepository {
           title: input.title ?? null,
           current_node_id: input.currentNodeId ?? null,
           flow_version_id: input.flowVersionId ?? null,
+          origin: input.origin ?? "manual",
+          trigger_source_id: input.triggerSourceId ?? null,
+          trigger_payload: input.triggerPayload ?? null,
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Session insert returned no row."));
-      return ok(toEntity(row));
+      return ok(toSessionEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to create session.", cause));
     }
@@ -173,7 +180,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
   async findById(id: string): Promise<Result<Session | null>> {
     try {
       const [row] = await this.db.select().from(app_sessions).where(eq(app_sessions.id, id));
-      return ok(row ? toEntity(row) : null);
+      return ok(row ? toSessionEntity(row) : null);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to find session.", cause));
     }
@@ -186,7 +193,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         .from(app_sessions)
         .where(buildListByUserWhere(userId, mode))
         .orderBy(desc(app_sessions.updated_at));
-      return ok(rows.map(toEntity));
+      return ok(rows.map(toSessionEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list sessions for user.", cause));
     }
@@ -199,7 +206,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         .from(app_sessions)
         .where(buildListAllWhere(mode))
         .orderBy(desc(app_sessions.updated_at));
-      return ok(rows.map(toEntity));
+      return ok(rows.map(toSessionEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list all sessions.", cause));
     }
@@ -227,7 +234,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
       // strictly after it under the same DESC sort. Not the (limit+1)th row:
       // the predicate is `<`, so encoding that would silently drop it.
       const nextCursor = hasMore ? encodeCursor(trimmed[trimmed.length - 1]!) : null;
-      return ok({ items: trimmed.map(toEntity), nextCursor });
+      return ok({ items: trimmed.map(toSessionEntity), nextCursor });
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list sessions for user.", cause));
     }
@@ -248,7 +255,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
       const hasMore = rows.length > limit;
       const trimmed = rows.slice(0, limit);
       const nextCursor = hasMore ? encodeCursor(trimmed[trimmed.length - 1]!) : null;
-      return ok({ items: trimmed.map(toEntity), nextCursor });
+      return ok({ items: trimmed.map(toSessionEntity), nextCursor });
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list all sessions.", cause));
     }
@@ -286,7 +293,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         .where(and(...clauses))
         .orderBy(app_sessions.updated_at)
         .limit(limit);
-      return ok(rows.map(toEntity));
+      return ok(rows.map(toSessionEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list terminal sessions.", cause));
     }
@@ -311,7 +318,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         .where(and(...clauses))
         .orderBy(app_sessions.created_at)
         .limit(limit);
-      return ok(rows.map(toEntity));
+      return ok(rows.map(toSessionEntity));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list expired test sessions.", cause));
     }
@@ -340,6 +347,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
           ...(patch.manualEstimateMinutes !== undefined
             ? { manual_estimate_minutes: patch.manualEstimateMinutes }
             : {}),
+          ...(patch.runError !== undefined ? { run_error: patch.runError } : {}),
           version: sql`${app_sessions.version} + 1`,
           updated_at: new Date(),
         })
@@ -352,7 +360,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
           ? err(domainError("NOT_FOUND", `Session ${id} not found.`))
           : err(domainError("CONFLICT", `Session ${id} was modified concurrently.`));
       }
-      return ok(toEntity(row));
+      return ok(toSessionEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update session.", cause));
     }
@@ -369,7 +377,7 @@ export class DrizzleSessionRepository implements ISessionRepository {
         buildClaimTurnStatement(id, turnId, userId, leaseSeconds),
       )) as unknown as (typeof app_sessions.$inferSelect)[];
       const claimed = rows[0];
-      if (claimed) return ok({ claimed: true, session: toEntity(claimed) });
+      if (claimed) return ok({ claimed: true, session: toSessionEntity(claimed) });
 
       // Lost the claim — read who holds it so the caller can attribute the 409.
       const [current] = await this.db

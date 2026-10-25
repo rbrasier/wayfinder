@@ -34,6 +34,28 @@ export interface PendingExecution {
 
 export type PendingExecutions = Record<string, PendingExecution>;
 
+// How a session started (ADR-064 §4). Only `manual` sessions have an operator
+// driving them; the other two are advanced by the unattended driver.
+export type SessionOrigin = "manual" | "watch" | "webhook";
+
+// What started an unattended session, kept for audit and so steps can read the
+// validated inputs. `raw` is capped before it is stored.
+export interface SessionTriggerPayload {
+  inputs: Record<string, unknown>;
+  raw: unknown;
+  itemId?: string | null;
+}
+
+// Why an unattended run stopped (ADR-065 §5). `incidentId` is fresh per failure
+// so a retry that fails again alerts again. Never carries a secret.
+export interface SessionRunError {
+  incidentId: string;
+  nodeId: string;
+  code: string;
+  message: string;
+  at: string;
+}
+
 export interface Session {
   id: string;
   flowId: string;
@@ -73,6 +95,14 @@ export interface Session {
   // state. Null when never asked or skipped; a flow's baseline is the median of
   // these, so a null is excluded rather than counted as zero.
   manualEstimateMinutes?: number | null;
+  // Optional so rows and fixtures from before unattended runs satisfy the type;
+  // absent reads as `manual`.
+  origin?: SessionOrigin;
+  // The watch or webhook trigger that started the session — what run history is
+  // queried by. Null for manual sessions.
+  triggerSourceId?: string | null;
+  triggerPayload?: SessionTriggerPayload | null;
+  runError?: SessionRunError | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -84,4 +114,7 @@ export interface NewSession {
   title?: string | null;
   currentNodeId?: string | null;
   flowVersionId?: string | null;
+  origin?: SessionOrigin;
+  triggerSourceId?: string | null;
+  triggerPayload?: SessionTriggerPayload | null;
 }

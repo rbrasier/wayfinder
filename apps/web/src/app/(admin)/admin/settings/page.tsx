@@ -6,6 +6,7 @@ import { SetupWizard } from "@/components/onboarding/setup-wizard";
 import { AiProviderCard } from "@/components/settings/ai-provider-card";
 import { AboutLinksCard } from "@/components/settings/about-links-card";
 import { AuthMethodsCard } from "@/components/settings/auth-methods-card";
+import { AutomationCard } from "@/components/settings/automation-card";
 import { BrandingCard } from "@/components/settings/branding-card";
 import { ChatDisclaimerCard } from "@/components/settings/chat-disclaimer-card";
 import { CollapsibleSection } from "@/components/settings/collapsible-section";
@@ -94,6 +95,7 @@ export default function AppSettingsPage() {
               <N8nIntegrationCard connectivity={connectivity} />
               <RagEmbeddingsCard connectivity={connectivity} />
               <EmailCard connectivity={connectivity} />
+              <AutomationCard />
             </CollapsibleSection>
 
             <CollapsibleSection title="Storage & uploads" description="Where files live and upload limits.">

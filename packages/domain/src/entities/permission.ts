@@ -9,7 +9,8 @@ export type PermissionKey =
   | "knowledge:curate"
   | "group:manage_own"
   | "extraction:author"
-  | "extraction:run";
+  | "extraction:run"
+  | "flow:webhook_trigger";
 
 export interface PermissionDefinition {
   readonly key: PermissionKey;
@@ -67,6 +68,12 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
     label: "Run extraction flows",
     description:
       "Upload documents to an extraction flow, run and preview extraction, and review results.",
+  },
+  {
+    key: "flow:webhook_trigger",
+    label: "Start flows via webhook",
+    description:
+      "Turn on a secure web address that lets other systems start a flow the user owns (ADR-064 §3).",
   },
 ];
 

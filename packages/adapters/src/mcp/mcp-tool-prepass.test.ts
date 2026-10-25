@@ -1,8 +1,10 @@
+import { generateText, type ToolSet } from "ai";
 import { describe, expect, it, vi } from "vitest";
 import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   CachedMcpTool,
   IMcpClient,
+  IMcpToolRepository,
   IntervalScheduler,
   McpServer,
   McpTool,
@@ -12,11 +14,19 @@ import type {
 import {
   buildCallRecord,
   buildPrepassTools,
+  McpToolPrepass,
   PREPASS_RESULT_MAX_CHARS,
   prefixToolName,
   prepassBudgetMs,
   selectAllowedTools,
 } from "./mcp-tool-prepass";
+import { recordTokenUsage } from "../observability/usage-tracking-adapter";
+
+vi.mock("ai", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("ai")>()),
+  generateText: vi.fn(),
+}));
+vi.mock("../observability/usage-tracking-adapter", () => ({ recordTokenUsage: vi.fn() }));
 
 const tool = (name: string, overrides: Partial<McpTool> = {}): McpTool => ({
   name,
@@ -206,5 +216,73 @@ describe("buildPrepassTools", () => {
 
     expect(answer).toBe("The tool call failed: timed out");
     expect(built.records).toHaveLength(1);
+  });
+});
+
+describe("McpToolPrepass.run", () => {
+  const transcriptServer = server({ callTimeoutMs: 20 });
+
+  const makePrepass = () => {
+    const client = {
+      listTools: vi.fn(),
+      callTool: vi.fn(async () => ok(output({ output: "Senators asked about staffing levels." }))),
+    } as unknown as IMcpClient;
+    const toolCache = {
+      listByServer: vi.fn(async () => ok([cached("get_transcript")])),
+      replaceForServer: vi.fn(),
+    } as unknown as IMcpToolRepository;
+    return new McpToolPrepass(
+      {} as never,
+      { check: vi.fn(async () => ({ data: undefined })) } as never,
+      client,
+      toolCache,
+    );
+  };
+
+  const input = {
+    model: {} as never,
+    provider: "anthropic" as const,
+    modelName: "chat-model",
+    system: "Look things up.",
+    messages: [{ role: "user" as const, content: "What did the hearing cover?" }],
+    servers: [transcriptServer],
+    allowedToolNamesByServer: { "mcp-1": ["get_transcript"] },
+    maxSteps: 1,
+  };
+
+  const waitForAbort = (signal?: AbortSignal) =>
+    new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new Error("aborted"))));
+
+  it("keeps what the tools returned before the time limit, rather than nothing", async () => {
+    vi.mocked(generateText).mockImplementation((async (options: {
+      tools: ToolSet;
+      onStepFinish?: (step: unknown) => void;
+      abortSignal?: AbortSignal;
+    }) => {
+      const [onlyTool] = Object.values(options.tools);
+      await onlyTool.execute?.({ parlViewId: "5976131" }, { toolCallId: "c1", messages: [] });
+      options.onStepFinish?.({ usage: { promptTokens: 10, completionTokens: 5 } });
+      await waitForAbort(options.abortSignal);
+    }) as never);
+
+    const result = await makePrepass().run(input);
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.toolCalls.map((call) => call.result)).toEqual(["Senators asked about staffing levels."]);
+    expect(recordTokenUsage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ promptTokens: 10, completionTokens: 5 }),
+    );
+  });
+
+  it("still fails when the time limit passes before any tool returned", async () => {
+    vi.mocked(generateText).mockImplementation((async (options: { abortSignal?: AbortSignal }) => {
+      await waitForAbort(options.abortSignal);
+    }) as never);
+
+    const result = await makePrepass().run(input);
+
+    expect(result.error?.code).toBe("AGENT_FAILED");
   });
 });

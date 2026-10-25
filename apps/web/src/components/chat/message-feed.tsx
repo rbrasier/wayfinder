@@ -2,14 +2,20 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { Message as UIMessage } from "@ai-sdk/react";
-import type { FlowNode, SessionMessage } from "@wayfinder/domain";
+import { parseRunStartedMessage, type FlowNode, type SessionMessage } from "@wayfinder/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
 import { resolveGeneratingDocumentState } from "./generating-document-state";
 import { MarkdownText } from "./markdown-text";
 import { messageTextSegments } from "./message-segments";
 import { DocumentCard } from "./document-card";
+import { AiTaskOutputCard } from "./ai-task-output-card";
+import { EmailSentCard } from "./email-sent-card";
+import { AiTaskReviewPrompt } from "./ai-task-review-prompt";
+import { AutomationStepPending } from "./automation-step-pending";
+import { automationResultView } from "./automation-step-state";
 import { RecordCard } from "./record-card";
+import { RunStartedLine } from "./run-started-line";
 import { MessageInfoModal } from "./message-info-modal";
 import {
   AdvancingBadge,
@@ -21,6 +27,12 @@ import {
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
 import { CitedSources } from "./cited-sources";
+import {
+  awaitingFirstText,
+  consultingLabel,
+  resolveConsultingSources,
+  resolveTurnActivityLabel,
+} from "./turn-activity";
 import {
   decisionVerbPhrase,
   isApprovalGranted,
@@ -45,6 +57,21 @@ const toConfidenceAnnotation = (a: unknown): ConfidenceAnnotation | null => {
   if (obj["type"] !== "confidence" || typeof obj["score"] !== "number") return null;
   return obj as unknown as ConfidenceAnnotation;
 };
+
+// The AI's mark, its typing dots and what it is doing, in one quiet row.
+function ActivityRow({ initials, label }: { initials: string; label: string }) {
+  return (
+    <div className="flex gap-[14px]" data-testid="turn-activity">
+      <AgentMark initials={initials} />
+      <div className="flex items-center gap-2">
+        <TypingIndicator />
+        <span role="status" className="font-mono text-[11px] text-[#736d5f]">
+          {label}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 interface MessageFeedProps {
   dbMessages: SessionMessage[];
@@ -93,14 +120,15 @@ interface MessageFeedProps {
   // A queued MCP step is waiting on its source after the turn ended: the dots
   // and this label stay up until the worker posts the outcome.
   waitingOnToolLabel?: string | null;
-}
-
-function ToolProgressText({ label }: { label: string }) {
-  return (
-    <span className="ml-2 text-[12px] text-[#736d5f]" data-tool-progress aria-live="polite">
-      {label}
-    </span>
-  );
+  // The current step is running by itself or waiting on its reviewer: the feed
+  // ends on a quiet indicator where that step's result will appear.
+  // `reviewApprovalId` is set when an AI task's review falls to the viewer: the
+  // feed then hands it to them instead of showing a waiting line.
+  pendingAutomation?: { message: string; stepName: string; reviewApprovalId: string | null } | null;
+  onAutomationReviewed?: () => void;
+  // What a step working with no turn streaming is doing ("Consulting ParlView…"),
+  // reported over the session event bus; null when nothing is.
+  backgroundActivity?: string | null;
 }
 
 const getRoleInitials = (role: string | null | undefined, fallback: string): string => {
@@ -225,6 +253,9 @@ export function MessageFeed({
   pendingStepAdvance,
   toolProgressLabel,
   waitingOnToolLabel,
+  pendingAutomation,
+  onAutomationReviewed,
+  backgroundActivity,
 }: MessageFeedProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isPinnedToBottomRef = useRef(true);
@@ -278,6 +309,7 @@ export function MessageFeed({
               ? senderNamesById?.[msg.senderUserId] ?? null
               : null);
 
+          const runStarted = msg.role === "system" ? parseRunStartedMessage(msg.content) : null;
           const scheduled = msg.role === "system" ? parseScheduledMessage(msg.content) : null;
           const displayContent = scheduled
             ? formatScheduledResume(scheduled.stepName, scheduled.nextFireAt)
@@ -331,13 +363,22 @@ export function MessageFeed({
             isSessionComplete: Boolean(isComplete),
           });
 
+          const automationView = automationResultView({
+            nodeType: node?.type ?? null,
+            role: msg.role,
+            stepNodeId: msg.stepNodeId,
+            currentNodeId: currentNodeId ?? null,
+            automationPending: Boolean(pendingAutomation),
+          });
           const showsConfidenceBar = msg.role === "assistant" && !isNeverDone;
           const showsInfoButton = msg.role === "assistant" && Boolean(msg.aiPayload);
 
           return (
             <div key={msg.id}>
               {isNewStep && node && <FeedDivider label={node.name} />}
-              {decision ? (
+              {runStarted ? (
+                <RunStartedLine source={runStarted} inputs={msg.aiPayload?.contextGathered ?? []} />
+              ) : decision ? (
                 // An approver is rarely the viewer, and their decision carries
                 // its own attribution — so it always renders as someone else's.
                 <OtherPersonMessage
@@ -364,7 +405,7 @@ export function MessageFeed({
                   body={displayContent}
                   at={msg.createdAt}
                 />
-              ) : msg.role === "user" ? (
+              ) : automationView !== "message" ? null : msg.role === "user" ? (
                 <div className="flex justify-end" data-chat-message="user">
                   <div
                     title={senderName ?? undefined}
@@ -464,7 +505,21 @@ export function MessageFeed({
                   }
                 />
               )}
-              {isAdvancingMsg && node && !isNeverDone && isStructuredNode && (
+              {/* An AI task's result is recorded whatever its confidence — a low
+                  one goes to review — so its card shows on every result once
+                  the step has moved on. */}
+              {node && automationView === "card" && node.type === "ai_task" && (
+                <AiTaskOutputCard
+                  messageId={msg.id}
+                  stepName={node.name}
+                  confidence={msg.confidence}
+                  rationale={msg.aiPayload?.rationale ?? null}
+                />
+              )}
+              {node && automationView === "card" && node.type === "email" && (
+                <EmailSentCard messageId={msg.id} stepName={node.name} />
+              )}
+              {isAdvancingMsg && node && node.type !== "ai_task" && !isNeverDone && isStructuredNode && (
                 <RecordCard
                   messageId={msg.id}
                   canEdit={showsEditAffordance({
@@ -498,7 +553,11 @@ export function MessageFeed({
             // reply, then a cross-check follow-up or pass note) split by
             // finish_step boundaries — each renders as its own bubble to match
             // the rows the server persists.
-            const segments = messageTextSegments(msg);
+            // A turn's status annotations can arrive before any of its text;
+            // until text does, the typing row below speaks for it.
+            const segments = messageTextSegments(msg).filter((segment) => segment.length > 0);
+            const consultingSources =
+              isStreaming && msg.role === "assistant" ? resolveConsultingSources(msg.annotations) : null;
 
             return (
               <div key={msg.id} className="flex flex-col gap-5">
@@ -531,6 +590,10 @@ export function MessageFeed({
               )}
               {isCrossChecking && <CrossCheckingBadge documents={crossCheckingState.documents} />}
               {isGeneratingDocument && <GeneratingDocumentBadge />}
+              {/* The next step's opener looking things up after this reply. */}
+              {consultingSources && segments.length > 0 && (
+                <ActivityRow initials={botInitials} label={consultingLabel(consultingSources)} />
+              )}
               </div>
             );
           })}
@@ -540,29 +603,38 @@ export function MessageFeed({
       {/* Outside the delta block: at the instant a turn starts the client list
           has not grown yet, and a typing indicator that blinks out on the first
           frame reads as a dropped message. */}
-      {isStreaming && streamingMessages.at(-1)?.role !== "assistant" && (
-        <div className="flex gap-[14px]">
-          <AgentMark initials={botInitials} />
-          <div className="flex items-center">
-            <TypingIndicator />
-            {toolProgressLabel ? <ToolProgressText label={toolProgressLabel} /> : null}
-          </div>
-        </div>
+      {isStreaming && awaitingFirstText(streamingMessages.at(-1)) && (
+        <ActivityRow
+          initials={botInitials}
+          label={
+            toolProgressLabel ??
+            resolveTurnActivityLabel(
+              streamingMessages.at(-1)?.role === "assistant" ? streamingMessages.at(-1)?.annotations : undefined,
+            )
+          }
+        />
       )}
 
-      {!isStreaming && waitingOnToolLabel && (
-        <div className="flex gap-[14px]">
-          <AgentMark initials={botInitials} />
-          <div className="flex items-center">
-            <TypingIndicator />
-            <ToolProgressText label={waitingOnToolLabel} />
-          </div>
-        </div>
+      {!isStreaming && waitingOnToolLabel && <ActivityRow initials={botInitials} label={waitingOnToolLabel} />}
+
+      {!isStreaming && !waitingOnToolLabel && !pendingAutomation && backgroundActivity && (
+        <ActivityRow initials={botInitials} label={backgroundActivity} />
       )}
 
       {pendingDocumentGeneration && <GeneratingDocumentBadge />}
 
       {pendingStepAdvance && <AdvancingBadge />}
+
+      {pendingAutomation &&
+        (pendingAutomation.reviewApprovalId ? (
+          <AiTaskReviewPrompt
+            approvalId={pendingAutomation.reviewApprovalId}
+            stepName={pendingAutomation.stepName}
+            onDecided={() => onAutomationReviewed?.()}
+          />
+        ) : (
+          <AutomationStepPending message={pendingAutomation.message} stepName={pendingAutomation.stepName} />
+        ))}
 
       {error && !isStreaming && (
         <div className="flex justify-start">

@@ -26,6 +26,8 @@ import {
   type ApprovalContext,
 } from "./approval-parts";
 
+const SCROLLING_BODY = "min-h-0 flex-1 overflow-y-auto";
+
 type Decision = "approved" | "rejected" | "changes_requested";
 type DecideOutput = inferRouterOutputs<AppRouter>["approval"]["decide"];
 type NextApproval = DecideOutput["nextApproval"];
@@ -150,7 +152,7 @@ export function DecisionModal({
   const commentRequired = decision === "changes_requested";
 
   const notifyBody = (
-    <DialogBody>
+    <DialogBody className={SCROLLING_BODY}>
       {notifyTargets.length === 0 ? (
         <p className="text-[13px] text-[#5c574c]">
           The decision was recorded and is shown in the session. There is no one else to notify —
@@ -160,10 +162,8 @@ export function DecisionModal({
         <>
           <p className="text-[13px] text-[#5c574c]">
             The decision was recorded and is shown in the session. Let{" "}
-            <span className="font-medium">
-              {notifyTargets.map(targetLabel).join(", ")}
-            </span>{" "}
-            know so the request can be picked up.
+            <span className="font-medium">{notifyTargets.map(targetLabel).join(", ")}</span> know so
+            the request can be picked up.
           </p>
           <ul className="space-y-2" data-notify-targets>
             {notifyTargets.map((target) => (
@@ -199,7 +199,10 @@ export function DecisionModal({
 
   return (
     <Dialog open onOpenChange={(open) => (open ? undefined : void close())}>
+      {/* Capped to the screen with only the body scrolling, so a long subject
+          or document never pushes the decision buttons out of reach. */}
       <DialogContent
+        className="flex max-h-[90vh] flex-col"
         onOpenAutoFocus={(event) => {
           // Focus the comment field instead of the dialog's first focusable
           // element. Replaces autoFocus (jsx-a11y/no-autofocus) without ceding
@@ -226,7 +229,7 @@ export function DecisionModal({
         </DialogHeader>
 
         {nextApproval ? (
-          <DialogBody>
+          <DialogBody className={SCROLLING_BODY}>
             <ApproverPicker
               sessionId={approval.sessionId}
               flowId={approval.approval.flowId}
@@ -242,7 +245,7 @@ export function DecisionModal({
         ) : manualNotify ? (
           notifyBody
         ) : (
-          <DialogBody>
+          <DialogBody className={SCROLLING_BODY}>
             {/* The same three things the chat gate shows before a request is
                 sent: which signature this is, what is being signed, and the
                 artefact itself. Deciding from a bare comment box meant scrolling
@@ -274,12 +277,21 @@ export function DecisionModal({
 
         <DialogFooter>
           {nextApproval || manualNotify ? (
-            <Button size="sm" variant={nextApproval ? "outline" : undefined} onClick={() => void close()}>
+            <Button
+              size="sm"
+              variant={nextApproval ? "outline" : undefined}
+              onClick={() => void close()}
+            >
               Done
             </Button>
           ) : decision === "rejected" ? (
             <>
-              <Button size="sm" variant="outline" onClick={() => submit(false)} disabled={decide.isPending}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => submit(false)}
+                disabled={decide.isPending}
+              >
                 Close request
               </Button>
               <Button size="sm" onClick={() => submit(true)} disabled={decide.isPending}>

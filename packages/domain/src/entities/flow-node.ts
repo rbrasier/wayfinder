@@ -7,7 +7,14 @@ import type { ScheduleAnchor, ScheduleKind } from "./session-schedule";
 import type { ParsedSkill } from "./skill";
 import type { TemplateField } from "./template-field";
 
-export type FlowNodeType = "conversational" | "auto" | "scheduled" | "approval" | "mcp";
+export type FlowNodeType =
+  | "conversational"
+  | "auto"
+  | "scheduled"
+  | "approval"
+  | "mcp"
+  | "ai_task"
+  | "email";
 
 export type ApproverSourceMode =
   | "first_level_supervisor"
@@ -124,6 +131,55 @@ export interface McpNodeConfig {
   responseFields?: TemplateField[];
   // See `ConversationalNodeConfig.unresolvedDependencies`.
   unresolvedDependencies?: FlowExportDependency[];
+}
+
+// Who reviews an AI task result that falls below its confidence threshold
+// (ADR-065 §3). There is deliberately no group mode: an approval row holds one
+// approver, and group review needs approvals to hold several.
+export type AiTaskReviewer =
+  | { mode: "run_owner" }
+  | { mode: "approver_source"; approverSource: ApproverSourceMode; roleHint?: string }
+  | { mode: "user"; userId: string };
+
+// An AI instruction run with no operator (ADR-065 §3). The output lives in the
+// same `outputType`/`structuredFields` slot a structured conversational step
+// uses, so `nodeFieldSet`, the record card and approver edits read an AI task's
+// result without knowing it came from one.
+export interface AiTaskNodeConfig {
+  instruction: string;
+  // The values handed to the model, resolved like an auto node's request fields
+  // so the same value-source picker serves both.
+  inputFields?: TemplateField[];
+  inputFieldValues?: Record<string, FieldValueSource>;
+  // "all" hands the model everything the run knows; "selected" only the
+  // inputs above. Read through `aiTaskInputModeOf`, never directly.
+  inputMode?: "all" | "selected";
+  outputType: "structured";
+  structuredFields: TemplateField[];
+  // 0–100. Read through `aiTaskConfidenceThresholdOf`, never directly.
+  confidenceThreshold: number;
+  reviewer: AiTaskReviewer;
+  // As on a conversational step: library skills whose instructions join the
+  // prompt, and MCP tools whose results are gathered before the call.
+  skillRefs?: string[];
+  allowedMcpToolRefs?: McpToolRef[];
+}
+
+export type EmailRecipient =
+  | { kind: "user"; userId: string }
+  // Expanded to the group's members when the step sends, not when it is saved.
+  | { kind: "group"; groupId: string }
+  // A fixed external or shared inbox, checked against the allowed domains.
+  | { kind: "address"; email: string };
+
+// Sends the flow's results by email (ADR-065 §4). Templates take
+// `{{ input.<key> }}` and `{{ <step_key>.<field_key> }}` placeholders (`flowStepKeys`).
+export interface EmailNodeConfig {
+  recipients: EmailRecipient[];
+  subjectTemplate: string;
+  bodyTemplate: string;
+  // Prior steps whose generated docx/xlsx is attached.
+  attachStepIds: string[];
 }
 
 export interface ScheduledNodeConfig {

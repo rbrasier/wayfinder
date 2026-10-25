@@ -9,6 +9,9 @@ export type FieldValueSource =
   | { kind: "ai" }
   | { kind: "step_field"; nodeId: string; fieldKey: string }
   | { kind: "literal"; value: string }
+  // A value the watch or webhook that started the session supplied (ADR-064 §2).
+  // Resolves blank in a manually started session, which has no trigger inputs.
+  | { kind: "trigger_input"; inputKey: string }
   | { kind: "none" };
 
 // A field a prior node is known to declare, surfaced so an author can bind a

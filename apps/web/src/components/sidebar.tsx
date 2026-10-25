@@ -20,6 +20,7 @@ import {
   PieChart,
   Plug,
   Plus,
+  Radar,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -36,6 +37,8 @@ import { HelpMenu } from "@/components/help-menu";
 import { NewChatModal } from "@/components/chat/new-chat-modal";
 import { useSidebar } from "@/components/sidebar-context";
 import {
+  advancedFlowSettingsStartsCollapsed,
+  eventWatchAttention,
   formatRecentChatMeta,
   isNewChatShortcut,
   recentChatSessions,
@@ -113,6 +116,8 @@ interface AdminNavContext {
   readonly organisationsEnabled: boolean;
   readonly extractionEnabled: boolean;
   readonly configurationAttention: string | null;
+  // Null while the event_watch flag is off for this admin (ADR-063 §8).
+  readonly eventWatchAttention: number | null;
 }
 
 const buildAdminNav = ({
@@ -122,6 +127,7 @@ const buildAdminNav = ({
   organisationsEnabled,
   extractionEnabled,
   configurationAttention,
+  eventWatchAttention,
 }: AdminNavContext): NavGroup[] => {
   // Skills + MCP Servers are hidden when their feature flag is disabled — an
   // admin who turned the flag off should not see the surface it controls.
@@ -132,6 +138,14 @@ const buildAdminNav = ({
   // Knowledge lives only in Flow Settings; the page still enforces
   // knowledge:curate regardless (ADR-021).
   if (canCurate) flowSettingsItems.push({ href: "/knowledge", icon: BookOpen, label: "Knowledge" });
+  if (eventWatchAttention !== null) {
+    flowSettingsItems.push({
+      href: "/admin/event-watches",
+      icon: Radar,
+      label: "Event Watch",
+      badgeCount: eventWatchAttention,
+    });
+  }
 
   const groups: NavGroup[] = [
     {
@@ -170,7 +184,7 @@ const buildAdminNav = ({
     {
       label: "Advanced Flow Settings",
       collapsible: true,
-      defaultCollapsed: true,
+      defaultCollapsed: advancedFlowSettingsStartsCollapsed(eventWatchAttention),
       items: flowSettingsItems,
     },
     {
@@ -186,8 +200,8 @@ const buildAdminNav = ({
       ],
     },
   ];
-  // Advanced Flow Settings can be empty when Skills/MCP/Knowledge are all
-  // unavailable — drop empty groups so no lonely collapsible header shows.
+  // Advanced Flow Settings can be empty when Skills/MCP/Knowledge/Event Watch
+  // are all unavailable — drop empty groups so no lonely collapsible header shows.
   return groups.filter((group) => group.items.length > 0);
 };
 
@@ -437,6 +451,15 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     enabled: isAdmin,
     staleTime: 60_000,
   });
+  const eventWatchFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery(
+    { key: "event_watch" },
+    { enabled: isAdmin },
+  );
+  const eventWatchEnabled = eventWatchFlagQuery.data ?? false;
+  const eventWatchAttentionQuery = trpc.eventWatch.countNeedingAttention.useQuery(undefined, {
+    enabled: isAdmin && eventWatchEnabled,
+    refetchInterval: 60_000,
+  });
   const adminNav = buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
@@ -444,6 +467,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     organisationsEnabled: organisationsEnabledQuery.data ?? false,
     extractionEnabled,
     configurationAttention: staleDocumentsMessage(embeddingsAttentionQuery.data?.staleDocumentCount ?? 0),
+    eventWatchAttention: eventWatchAttention(eventWatchEnabled, eventWatchAttentionQuery.data),
   });
   const nav: NavGroup[] = isAdmin
     ? adminNav

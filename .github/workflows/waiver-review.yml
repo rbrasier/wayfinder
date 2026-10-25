@@ -1,0 +1,84 @@
+name: Security waiver review
+
+# A waiver in scripts/audit-allowlist.sh or .trivyignore holds a security gate
+# open because a fix cannot be taken today. CI re-checks the waivers on every
+# change, but a fix published upstream lands while nothing here changes — so
+# this re-checks them weekly on main and the current release branch, and opens
+# (or refreshes) an issue naming the upgrade to take or the waiver to drop.
+on:
+  schedule:
+    - cron: "17 21 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  branches:
+    name: Branches to review
+    runs-on: ubuntu-latest
+    outputs:
+      refs: ${{ steps.refs.outputs.refs }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The release line is read from CLAUDE.md, the same pointer validate.sh's
+      # dependabot check follows, so cutting a new line needs no edit here.
+      - name: Read the current release branch
+        id: refs
+        run: |
+          release=$(grep -oE 'Current release branch: `release/[^`]+`' CLAUDE.md | grep -oE 'release/[^`]+' || true)
+          if [ -n "$release" ]; then
+            echo "refs=[\"main\",\"$release\"]" >> "$GITHUB_OUTPUT"
+          else
+            echo "refs=[\"main\"]" >> "$GITHUB_OUTPUT"
+          fi
+
+  review:
+    name: Waivers on ${{ matrix.ref }}
+    needs: branches
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: ${{ fromJson(needs.branches.outputs.refs) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ matrix.ref }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+
+      - name: Re-check the waivers
+        id: check
+        run: |
+          set +e
+          output=$(node scripts/waiver-check.mjs --strict 2>&1)
+          status=$?
+          echo "$output"
+          {
+            echo "report<<WAIVER_REPORT_END"
+            echo "$output"
+            echo "WAIVER_REPORT_END"
+          } >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Open or refresh the waiver issue
+        if: failure() && steps.check.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ matrix.ref }}
+          REPORT: ${{ steps.check.outputs.report }}
+        run: |
+          title="Security waiver needs action on ${REF}"
+          body=$(printf '%s\n\n```\n%s\n```\n\nFound by the weekly [security waiver review](%s/%s/actions/runs/%s). Take the named upgrade or remove the waiver from `scripts/audit-allowlist.sh` (and `.trivyignore`), then this issue can be closed.\n' \
+            "A waiver on \`${REF}\` has outlived its reason:" "$REPORT" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"${title}\" in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "$body"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi

@@ -1,10 +1,11 @@
 "use client";
 
 import { type ChangeEvent, type RefObject } from "react";
-import { Download, HelpCircle, ListChecks, Plug, Sparkles, X } from "lucide-react";
+import { Download, HelpCircle, ListChecks } from "lucide-react";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { InstructionToolBar } from "./instruction-tool-bar";
 import type { NodeConfigValues } from "./node-config-modal";
 import type { OutputType } from "./output-type";
 import { StructuredFieldEditor } from "./structured-field-editor";
@@ -22,11 +23,6 @@ const OUTPUT_TYPE_OPTIONS: { value: OutputType; label: string }[] = [
   { value: "structured", label: "Structured conversation" },
   { value: "unstructured", label: "Unstructured conversation" },
 ];
-
-// Only the fields this view reads off a resolved library skill.
-interface SkillSummary {
-  name: string;
-}
 
 // The conversational-step section of NodeConfigModal. Extracted verbatim from
 // the original monolithic modal (Group D item 10 split): the parent still owns
@@ -52,7 +48,7 @@ export interface NodeConfigModalConversationalProps {
   // Power-user surfaces (ADR-022). When the flag is off the section is hidden.
   skillsEnabled: boolean;
   mcpEnabled: boolean;
-  skillsById: Map<string, SkillSummary>;
+  skillsById: Map<string, { name: string }>;
   onOpenSkillPicker: () => void;
   removeSkill: (id: string) => void;
   onOpenMcpPicker: () => void;
@@ -85,80 +81,19 @@ export function NodeConfigModalConversational({
   return (
     <>
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="ai-instruction">Instructions for the AI</Label>
-          <div className="flex items-center gap-1">
-            {skillsEnabled && (
-              <button
-                type="button"
-                onClick={onOpenSkillPicker}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
-                aria-label="Add skills"
-              >
-                <Sparkles size={13} />
-                {values.skillRefs.length > 0 ? `Skills · ${values.skillRefs.length}` : "Add skills"}
-              </button>
-            )}
-            {mcpEnabled && (
-              <button
-                type="button"
-                onClick={onOpenMcpPicker}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-[#666055] transition-colors hover:bg-[#f5f3ee] hover:text-[#1c1b19]"
-                aria-label="Add MCP tools"
-              >
-                <Plug size={13} />
-                {values.allowedMcpToolRefs.length > 0
-                  ? `MCP · ${values.allowedMcpToolRefs.length}`
-                  : "Add MCP"}
-              </button>
-            )}
-          </div>
-        </div>
-        {skillsEnabled && values.skillRefs.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {values.skillRefs.map((id) => {
-              const skill = skillsById.get(id);
-              return (
-                <span
-                  key={id}
-                  className="inline-flex items-center gap-1 rounded-full border border-wf-primary-dim bg-wf-primary-light px-2 py-0.5 text-[11px] text-wf-primary"
-                >
-                  <Sparkles size={10} />
-                  {skill?.name ?? "Skill"}
-                  <button
-                    type="button"
-                    aria-label={`Remove ${skill?.name ?? "skill"}`}
-                    className="text-wf-primary hover:text-[#25439c]"
-                    onClick={() => removeSkill(id)}
-                  >
-                    <X size={11} />
-                  </button>
-                </span>
-              );
-            })}
-          </div>
-        )}
-        {mcpEnabled && values.allowedMcpToolRefs.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {values.allowedMcpToolRefs.map((ref) => (
-              <span
-                key={`${ref.serverId}:${ref.toolName}`}
-                className="inline-flex items-center gap-1 rounded-full border border-[#cbd8c5] bg-[#eef4ea] px-2 py-0.5 text-[11px] text-[#3f7a2e]"
-              >
-                <Plug size={10} />
-                {ref.toolName}
-                <button
-                  type="button"
-                  aria-label={`Remove ${ref.toolName}`}
-                  className="text-[#3f7a2e] hover:text-[#2c5920]"
-                  onClick={() => toggleAllowedTool(ref.serverId, ref.toolName)}
-                >
-                  <X size={11} />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
+        <InstructionToolBar
+          instructionId="ai-instruction"
+          label="Instructions for the AI"
+          skillsEnabled={skillsEnabled}
+          mcpEnabled={mcpEnabled}
+          skillRefs={values.skillRefs}
+          allowedMcpToolRefs={values.allowedMcpToolRefs}
+          skillsById={skillsById}
+          onOpenSkillPicker={onOpenSkillPicker}
+          removeSkill={removeSkill}
+          onOpenMcpPicker={onOpenMcpPicker}
+          toggleAllowedTool={toggleAllowedTool}
+        />
         <Textarea
           id="ai-instruction"
           required

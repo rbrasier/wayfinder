@@ -150,6 +150,10 @@ export class ScheduleNodeEvent {
     }
     if (source.kind === "literal") return ok(source.value);
     if (source.kind === "none") return ok("");
+    if (source.kind === "trigger_input") {
+      const value = input.session.triggerPayload?.inputs[source.inputKey];
+      return ok(typeof value === "string" ? value : "");
+    }
     return ok(lookupStepField(input.priorStepOutputs ?? [], source.nodeId, source.fieldKey));
   }
 

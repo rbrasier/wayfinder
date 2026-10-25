@@ -33,4 +33,27 @@ describe("core_feature_flag seed migrations", () => {
   it("seeds the extraction_flows flag so the Synthesise UI surfaces on fresh installs", () => {
     expect(seedsFlag("extraction_flows")).toBe(true);
   });
+
+  it.each(["event_watch", "ai_task_node", "email_node"])(
+    "seeds the %s flag on so unattended automation surfaces on fresh installs",
+    (key) => {
+      expect(seedsFlag(key)).toBe(true);
+    },
+  );
+
+  // seed-roles.ts only scopes flags and grants defaults for roles it creates, so
+  // an install whose system roles already exist needs the migration to do it.
+  it("backfills role scoping for the unattended-automation flags on upgraded installs", () => {
+    const backfill =
+      /INSERT\s+INTO\s+"admin_feature_flag_roles"[\s\S]*?'event_watch',\s*'admins'[\s\S]*?'ai_task_node',\s*'power_users'[\s\S]*?'email_node',\s*'power_users'/i;
+
+    expect(backfill.test(migrationSql)).toBe(true);
+  });
+
+  it("backfills the webhook-trigger permission to Power Users on upgraded installs", () => {
+    const backfill =
+      /INSERT\s+INTO\s+"admin_role_permissions"[\s\S]*?'flow:webhook_trigger'[\s\S]*?'power_users'/i;
+
+    expect(backfill.test(migrationSql)).toBe(true);
+  });
 });

@@ -242,6 +242,26 @@ describe("FlowSessionGraph.buildSystemPrompt", () => {
     expect(result.data).toContain("laptops");
   });
 
+  it("omits <tool_results> when no tool was consulted", () => {
+    expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<tool_results>");
+  });
+
+  it("frames tool results as lookups already made for this turn, apart from gathered context", () => {
+    const result = agent.buildSystemPrompt({
+      ...baseInput,
+      gatheredContext: "- parlViewId: 5976131",
+      toolResults: "- get_transcript: Senators asked about staffing levels.",
+    });
+    const prompt = result.data!;
+    const gathered = prompt.slice(prompt.indexOf("<gathered_context>"), prompt.indexOf("</gathered_context>"));
+
+    expect(prompt).toContain("<tool_results>");
+    expect(prompt).toContain("- get_transcript: Senators asked about staffing levels.");
+    expect(gathered).not.toContain("get_transcript");
+    expect(prompt).toMatch(/already been looked up/i);
+    expect(prompt).toMatch(/never say you will look something up/i);
+  });
+
   it("omits <reference_documents> when retrievedChunks is absent or empty", () => {
     expect(agent.buildSystemPrompt(baseInput).data).not.toContain("<reference_documents>");
     expect(

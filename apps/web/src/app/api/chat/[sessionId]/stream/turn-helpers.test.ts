@@ -21,6 +21,15 @@ import {
   writeCrossCheckPassNote,
 } from "./turn-helpers";
 import type { Session, TurnStreamWriter } from "@wayfinder/domain";
+import type * as McpTurnHelpers from "./mcp-turn-helpers";
+
+const { runMcpToolPrepass } = vi.hoisted(() => ({
+  runMcpToolPrepass: vi.fn(async () => ({ toolResults: "", numberedCitations: [], recordAudit: async () => {} })),
+}));
+vi.mock("./mcp-turn-helpers", async (importOriginal) => ({
+  ...(await importOriginal<typeof McpTurnHelpers>()),
+  runMcpToolPrepass,
+}));
 
 // The approval reads every extracting generation makes, to pick up an
 // approver's outstanding change requests. Stubbed empty so these tests stay
@@ -131,6 +140,24 @@ describe("buildGatheredContext", () => {
     expect(result).toContain("Start Date: 1 June 2026");
   });
 
+  it("includes the trigger inputs an unattended run's start line carries", () => {
+    const messages: SessionMessage[] = [
+      makeAssistantMessage({
+        id: "start",
+        role: "system",
+        stepNodeId: "node-1",
+        aiPayload: {
+          response: 'Started by Event Watch "ParlView".',
+          rationale: "",
+          stepCompleteConfidence: 0,
+          contextGathered: [{ key: "Hearing", value: "pv-12" }],
+        },
+      }),
+    ];
+
+    expect(buildGatheredContext(messages)).toContain("Hearing: pv-12");
+  });
+
   it("returns empty string when no prior context exists", () => {
     expect(buildGatheredContext([])).toBe("");
   });
@@ -199,6 +226,7 @@ describe("generateInitialMessage", () => {
       organisationName: "Acme",
       userProfile: { name: "Ada Lovelace", role: "Analyst", team: "Risk" },
       userId: "user-1",
+      isAdmin: false,
       gatheredContext: "- Full Name: John Dutton\n- Department: Sales",
       globalInstructions: "Use Australian English spelling.",
     });
@@ -214,6 +242,73 @@ describe("generateInitialMessage", () => {
     expect(portCall.purpose).toBe("chat-turn");
     expect(portCall.model).toBe("claude-haiku-4-5-20251001");
     expect(portCall.userId).toBe("user-1");
+  });
+
+  it("looks things up with the step's tools before writing the opening message", async () => {
+    const order: string[] = [];
+    const onToolActivity = vi.fn();
+    runMcpToolPrepass.mockResolvedValueOnce({
+      toolResults: "- get_transcript: Senators asked about staffing levels.",
+      numberedCitations: [],
+      recordAudit: async () => {
+        order.push("tool note");
+      },
+    });
+    const buildSystemPrompt = vi.fn().mockReturnValue({ data: "system-prompt", error: null });
+    const create = vi.fn(async () => {
+      order.push("opening message");
+      return { data: {}, error: null };
+    });
+    const container = {
+      services: {
+        llm: {
+          generateObject: vi.fn().mockResolvedValue({
+            data: { object: { response: "Here is the hearing.", rationale: "r", stepCompleteConfidence: 0, contextGathered: [] } },
+          }),
+        },
+        sessionAgent: { buildSystemPrompt },
+        errorLogger: { log: vi.fn() },
+      },
+      repos: {
+        sessionMessages: { create },
+        sessionUploads: { listBySession: vi.fn().mockResolvedValue({ data: [], error: null }) },
+      },
+      runtimeConfig: {
+        getSessionUploadConfig: vi.fn().mockResolvedValue({ maxFileSizeBytes: 1, totalBudgetChars: 1000 }),
+      },
+      useCases: {
+        retrieveDocumentChunks: { execute: vi.fn().mockResolvedValue({ data: [], error: null }) },
+        resolveStepSkills: { execute: vi.fn().mockResolvedValue({ data: [], error: null }) },
+      },
+    } as unknown as Parameters<typeof generateInitialMessage>[0]["container"];
+
+    await generateInitialMessage({
+      container,
+      sessionId: "sess-1",
+      newNodeId: "node-2",
+      newNode: makeNode(),
+      flow: makeFlow(),
+      modelName: "chat-model",
+      organisationName: null,
+      userProfile: null,
+      userId: "user-1",
+      isAdmin: false,
+      gatheredContext: "- parlViewId: 5976131",
+      onToolActivity,
+    });
+
+    expect(runMcpToolPrepass).toHaveBeenCalledWith(
+      expect.objectContaining({
+        gatheredContext: "- parlViewId: 5976131",
+        nodeId: "node-2",
+        sessionId: "sess-1",
+        onActivity: onToolActivity,
+      }),
+    );
+    expect(buildSystemPrompt.mock.calls[0]![0].toolResults).toBe(
+      "- get_transcript: Senators asked about staffing levels.",
+    );
+    expect(order).toEqual(["tool note", "opening message"]);
   });
 });
 
@@ -1444,6 +1539,7 @@ describe("generateInitialMessage — external-sourced fields", () => {
       organisationName: "Acme",
       userProfile: null,
       userId: "user-1",
+      isAdmin: false,
       gatheredContext: "",
       globalInstructions: null,
     });

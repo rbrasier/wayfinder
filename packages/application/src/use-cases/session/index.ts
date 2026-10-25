@@ -15,6 +15,8 @@ export * from "./run-turn";
 export * from "./turn-lease";
 export * from "./evaluate-step-readiness";
 export * from "./run-auto-node";
+export * from "./run-ai-task-node";
+export * from "./run-email-node";
 export * from "./apply-auto-node-result";
 export * from "./run-mcp-node";
 export * from "./override-branch";

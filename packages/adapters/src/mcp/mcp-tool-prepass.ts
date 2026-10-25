@@ -18,6 +18,7 @@ import {
   type ProviderName,
   type Result,
   type SessionToolProgressEvent,
+  type TokenUsage,
 } from "@wayfinder/domain";
 import { generateText, jsonSchema, tool, type LanguageModelV1, type ToolSet } from "ai";
 import { recordTokenUsage } from "../observability/usage-tracking-adapter";
@@ -242,6 +243,9 @@ export class McpToolPrepass {
       return ok({ summary: "", toolCallCount: 0, toolCalls: [] });
     }
 
+    // Summed as each round finishes, so a loop cut off by the deadline still
+    // bills the rounds that ran and hands over the results they fetched.
+    const completedRoundUsage = { promptTokens: 0, completionTokens: 0 };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), prepassBudgetMs(usedServers, maxSteps));
     try {
@@ -252,32 +256,45 @@ export class McpToolPrepass {
         tools: built.tools,
         maxSteps,
         abortSignal: controller.signal,
+        onStepFinish: (step) => {
+          completedRoundUsage.promptTokens += step.usage?.promptTokens ?? 0;
+          completedRoundUsage.completionTokens += step.usage?.completionTokens ?? 0;
+        },
       });
 
-      recordTokenUsage(
-        this.usageRepo,
-        {
-          purpose: input.purpose ?? "chat-mcp-prepass",
-          userId: input.userId,
-          flowId: input.flowId,
-          sessionId: input.sessionId,
-          model: input.modelName,
-          provider: input.provider,
-        },
-        {
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-          systemTokens: 0,
-          ...extractCacheTokens(result.providerMetadata as Record<string, unknown> | undefined),
-        },
-      );
+      this.recordUsage(input, {
+        promptTokens: result.usage.promptTokens,
+        completionTokens: result.usage.completionTokens,
+        systemTokens: 0,
+        ...extractCacheTokens(result.providerMetadata as Record<string, unknown> | undefined),
+      });
 
       return ok({ summary: result.text.trim(), toolCallCount: built.records.length, toolCalls: built.records });
     } catch (cause) {
-      return err(domainError("AGENT_FAILED", "MCP tool pre-pass failed.", cause));
+      const partialCalls = controller.signal.aborted ? [...built.records] : [];
+      if (partialCalls.length === 0) {
+        return err(domainError("AGENT_FAILED", "MCP tool pre-pass failed.", cause));
+      }
+      this.recordUsage(input, { ...completedRoundUsage, systemTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 });
+      return ok({ summary: "", toolCallCount: partialCalls.length, toolCalls: partialCalls });
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private recordUsage(input: McpToolPrepassInput, usage: TokenUsage): void {
+    recordTokenUsage(
+      this.usageRepo,
+      {
+        purpose: input.purpose ?? "chat-mcp-prepass",
+        userId: input.userId,
+        flowId: input.flowId,
+        sessionId: input.sessionId,
+        model: input.modelName,
+        provider: input.provider,
+      },
+      usage,
+    );
   }
 
   // The cache answers first; an empty cache falls back to a live listing, which

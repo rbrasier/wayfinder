@@ -158,6 +158,9 @@ class FakeSessionRepository implements ISessionRepository {
       title: input.title ?? null,
       currentNodeId: input.currentNodeId ?? null,
       flowVersionId: input.flowVersionId ?? null,
+      origin: input.origin ?? "manual",
+      triggerSourceId: input.triggerSourceId ?? null,
+      triggerPayload: input.triggerPayload ?? null,
       awaitingConfirmationNodeId: null,
       graphCheckpoint: null,
       createdAt: new Date(),
@@ -468,6 +471,22 @@ describe("StartSession", () => {
     expect(result.data?.userId).toBe("user-1");
     expect(result.data?.status).toBe("active");
     expect(result.data?.currentNodeId).toBe("node-1");
+  });
+
+  it("records how an unattended session was started and what it was given", async () => {
+    const result = await useCase.execute({
+      flowId: "flow-1",
+      userId: "user-1",
+      origin: "webhook",
+      triggerSourceId: "trigger-1",
+      triggerPayload: { inputs: { hearing_id: "H-1" }, raw: { hearing_id: "H-1" } },
+    });
+
+    expect(result.data).toMatchObject({
+      origin: "webhook",
+      triggerSourceId: "trigger-1",
+      triggerPayload: { inputs: { hearing_id: "H-1" } },
+    });
   });
 
   it("pins the session to the latest published version and reads its snapshot", async () => {
