@@ -110,7 +110,7 @@ Flow-authoring checks (`IsFeatureEnabledForUser` via `featureFlag.isEnabledForMe
 are unchanged. A Technical Admin does not gain Skills or MCP in their own flows
 unless they are also in the flag's roles.
 
-### 6. Decisions taken at build (v0.28.44)
+### 6. Decisions taken at build (v0.28.45)
 
 - **Oversight is full read-and-edit.** `canOversee` replaces `isAdmin` wherever
   `isAdmin` meant "may bypass ownership": `canEditFlow` callers, the chat

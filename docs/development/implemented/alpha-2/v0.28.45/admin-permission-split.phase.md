@@ -1,9 +1,9 @@
 # Phase — Admin Permission Split (Delegated Admin Roles)
 
-- **Status**: Implemented (v0.28.44)
-- **Target version**: 0.28.44  (bump: PATCH — see §Version)
+- **Status**: Implemented (v0.28.45)
+- **Target version**: 0.28.45  (bump: PATCH — see §Version)
 - **Base branch**: `release/alpha-2` → implemented docs go to
-  `docs/development/implemented/alpha-2/v0.28.44/`
+  `docs/development/implemented/alpha-2/v0.28.45/`
 - **PRD**: `docs/development/prd/admin-permission-split.prd.md`
 - **ADRs**: ADR-066 (this phase), ADR-021 and ADR-022 (amended), ADR-063 (Event Watch), ADR-005
 - **Issue**: #349 (parent #346)
@@ -44,7 +44,7 @@ Approved at `/build` Step 0, with two refinements found in the pre-flight read:
   Organisations deployment card stay Global-only; About links and Branding are
   technical. The first-run setup wizard and "Re-run setup" stay Global-only.
 
-Business rules, UI, data, files, tests, version (PATCH `0.28.43 → 0.28.44`,
+Business rules, UI, data, files, tests, version (PATCH `0.28.44 → 0.28.45`,
 base and PR target `release/alpha-2`) and risks are as in the sections below.
 
 Build order:
@@ -164,9 +164,9 @@ so re-running it is harmless. Record this step in the release PR.
 
 ## 9. Version
 
-PATCH `0.28.41 → 0.28.44`. Open PR #353 (`bugfix/tool-use-and-email-card`)
-already moves `release/alpha-2` to `0.28.43`. If another PR merges first,
-take the next free patch number at build time.
+PATCH, landing as `0.28.45`. PR #353 took `0.28.43` and PR #354 took
+`0.28.44` while this was in review, so the build took the next free number,
+as planned here.
 
 Departures recorded at the maintainer's request:
 - CLAUDE.md routes new features to `main` and classes them as MINOR. This

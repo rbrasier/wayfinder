@@ -1,4 +1,4 @@
-# Summary — Admin permission split: Global, Technical and User Admin (v0.28.44)
+# Summary — Admin permission split: Global, Technical and User Admin (v0.28.45)
 
 Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
 `docs/development/prd/admin-permission-split.prd.md`. ADR-066.

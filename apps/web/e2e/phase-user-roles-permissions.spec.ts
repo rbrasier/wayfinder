@@ -3,7 +3,7 @@
  *
  * Covers:
  *   v1.32.0 — User Roles & Permissions (ADR-021, ADR-022).
- *   v0.28.44 — Delegated admin roles (ADR-066): a Technical Admin is let into
+ *   v0.28.45 — Delegated admin roles (ADR-066): a Technical Admin is let into
  *     the admin section but redirected away from areas they do not hold
  *     (policy group 1 — redirects).
  *
