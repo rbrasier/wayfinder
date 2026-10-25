@@ -54,6 +54,9 @@ Their own docs stay where they were written, under `implemented/alpha-2/v0.28.40
 - **Chat feed.** One activity row: `main`'s per-tool progress label when a tool is running,
   otherwise alpha-2's "Thinking…" / "Consulting …"; the queued-MCP-step wait and the
   background step activity each keep their own row.
+- **Step picker.** alpha-2 stopped offering MCP Tool, letting the AI task supersede it. On
+  `main` it stays offered beside AI task and Email: `main`'s MCP Tool is the queued,
+  verbatim-governed call ADR-062 built, which the AI task does not replace.
 - **Sessions.** `main`'s test-run `mode` and alpha-2's `origin` / trigger fields both reach
   `StartSession` and the repository; the `app_sessions` indexes keep `mode` and add the
   trigger-source index.
@@ -61,6 +64,10 @@ Their own docs stay where they were written, under `implemented/alpha-2/v0.28.40
   e2e seed (extraction + automation fixtures), the mocks server, the session-event union, the
   settings router and `validate.sh` (waiver check §11c, Semgrep now §11d). `http/index.ts`
   exports only the outbound client, because `lookups/` already exports an `isBlockedAddress`.
+- **Size ceilings.** The two lines' growth together pushed two files over `validate.sh`'s
+  limits: the flow config page's flag queries moved to `_use-step-feature-flags.ts`, and the
+  opening message's external-field tests to `initial-message-external-fields.test.ts`.
+  `.trivyignore` carried the zod waiver twice; one entry is kept.
 
 ## Upgrading an alpha-2 database
 

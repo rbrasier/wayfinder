@@ -64,6 +64,7 @@ import { BranchRuleModal } from "@/components/canvas/branch-rule-modal";
 import { FlowConfigHeader } from "./_flow-config-header";
 import { useBranchRules } from "./_use-branch-rules";
 import { usePriorStepViews } from "./_use-prior-step-views";
+import { useStepFeatureFlags } from "./_use-step-feature-flags";
 import { AUTOMATION_NODE_TYPES, AutomationStepEditor } from "./_automation-step-editor";
 import type { AutomationStepType } from "@/components/canvas/automation-step-modal";
 import { configValuesForNode } from "./_node-config-values";
@@ -99,13 +100,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const canPublishToEveryone =
     isAdmin ||
     ((meQuery.data?.permissions ?? []) as PermissionKey[]).includes("workflow:publish_to_everyone");
-  const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
-  const scheduledNodeEnabled =
-    trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
-  const mcpEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }).data ?? false;
-  const skillsEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }).data ?? false;
-  const aiTaskNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "ai_task_node" }).data ?? false;
-  const emailNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "email_node" }).data ?? false;
+  const { autoNodeEnabled, scheduledNodeEnabled, mcpEnabled, skillsEnabled, aiTaskNodeEnabled, emailNodeEnabled } =
+    useStepFeatureFlags();
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
@@ -672,6 +668,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         open={typePickerOpen}
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
+        mcpNodeEnabled={mcpEnabled}
         aiTaskNodeEnabled={aiTaskNodeEnabled}
         emailNodeEnabled={emailNodeEnabled}
         onSelect={handleSelectNodeType}
