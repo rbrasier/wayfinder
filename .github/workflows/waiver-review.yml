@@ -21,7 +21,7 @@ jobs:
     outputs:
       refs: ${{ steps.refs.outputs.refs }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The release line is read from CLAUDE.md, the same pointer validate.sh's
       # dependabot check follows, so cutting a new line needs no edit here.
@@ -44,11 +44,11 @@ jobs:
       matrix:
         ref: ${{ fromJson(needs.branches.outputs.refs) }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ matrix.ref }}
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 20
 
