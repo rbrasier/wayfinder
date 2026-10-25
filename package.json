@@ -1,6 +1,6 @@
 {
   "name": "wayfinder",
-  "version": "0.40.2",
+  "version": "0.40.3",
   "private": true,
   "description": "Wayfinder \u2014 AI-guided workflow agent for document-heavy processes.",
   "packageManager": "pnpm@9.12.0",
@@ -25,7 +25,7 @@
   "pnpm": {
     "overrides": {
       "langsmith": ">=0.6.0",
-      "vitest": "^4.1.11",
+      "vitest": "^4.1.12",
       "vite": "^6.4.4",
       "@grpc/grpc-js": ">=1.14.5",
       "@opentelemetry/propagator-jaeger": ">=2.9.0",
@@ -52,7 +52,8 @@
       "source-map-js": ">=1.2.2",
       "proxy-addr": ">=2.0.8",
       "qs": ">=6.16.0 <7",
-      "body-parser@1": ">=1.20.6 <2",
+      "body-parser@1": ">=1.20.9 <2",
+      "body-parser@2": ">=2.4.0 <3",
       "hono": ">=4.13.7 <5",
       "@hono/node-server": ">=1.19.15 <2",
       "@opentelemetry/core": ">=2.8.0 <3",
