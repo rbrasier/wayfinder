@@ -30,14 +30,12 @@ import { ExtractionConfigCard } from "@/components/settings/extraction-config-ca
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
 import { SiteBannerCard } from "@/components/settings/site-banner-card";
 import { StorageCard } from "@/components/settings/storage-card";
-import { usePermissions } from "@/lib/use-permissions";
 
-export function AppSettingsContent() {
+// Access, deployment shape and directory settings can grant access, so they
+// stay with Global Admins; a Technical Admin sees the rest (ADR-066 §3).
+export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: boolean }) {
   const connectivity = useConnectivity();
   const [rerunSetup, setRerunSetup] = useState(false);
-  // Access, deployment shape and directory settings can grant access, so they
-  // stay with Global Admins; a Technical Admin sees the rest (ADR-066 §3).
-  const { isAdmin: isGlobalAdmin } = usePermissions();
 
   return (
     <div className="h-full overflow-auto">
