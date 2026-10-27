@@ -57,7 +57,11 @@ jobs:
           fi
           echo "bump=true" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v7
+      # Checks out the PR head under pull_request_target, but runs none of its
+      # code: the job is limited to Dependabot's own same-repo branches and only
+      # git and sed touch the checkout.
+      # nosemgrep: yaml.github-actions.security.pull-request-target-code-checkout.pull-request-target-code-checkout
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.scope.outputs.bump == 'true'
         with:
           ref: ${{ github.event.pull_request.head.ref }}

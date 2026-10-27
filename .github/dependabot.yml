@@ -18,12 +18,18 @@
 # CLAUDE.md — validate.sh section 25 enforces it, and /release moves both when a
 # new line is cut. Dependabot reads this file from `main` only, so a change here
 # takes effect once it is forward-merged.
+#
+# Every entry waits 7 days before proposing a newly published version, so a
+# compromised or broken release has time to be pulled before it reaches a PR.
+# Security updates are not delayed by it.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 0
     groups:
       security:
@@ -35,6 +41,8 @@ updates:
     target-branch: release/alpha-2
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -45,6 +53,8 @@ updates:
     target-branch: release/alpha-2
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     ignore:
       - dependency-name: node
         update-types: ["version-update:semver-major"]
