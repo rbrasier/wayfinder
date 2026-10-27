@@ -1,4 +1,4 @@
-# Summary — `/v1/users` requires a service key (v0.28.44)
+# Summary — `/v1/users` requires a service key (v0.28.45)
 
 ## Root cause
 
