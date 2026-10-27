@@ -81,7 +81,7 @@ Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
 
 - A User Admin can assign only Power Users from the Users screen. The server allows any non-admin role, but other roles are assigned from the Roles screen, which is Global-only.
 - The Configuration and Users UI gating has no component-render test (the repo has no jsdom or Testing Library). The decisions are tested in `admin-areas`, the page guard and the server gates.
-- `apps/api`'s `/v1/users` routes are unauthenticated (pre-existing). They pass a system caller so their behaviour is unchanged. Raised as a separate task.
+- `apps/api`'s unauthenticated `/v1/users` and `/v1/errors` routes (pre-existing scaffold duplicates of the tRPC user and error routers) are removed — see `api-users-unauthenticated.bugfix.md`. No system caller remains: every caller of the guarded user use cases is an authenticated tRPC procedure.
 - `validate.sh`'s drizzle schema check was skipped locally (no Postgres in the build environment).
 
 ## Deviations from the approved summary

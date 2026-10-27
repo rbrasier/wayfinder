@@ -2,19 +2,14 @@ import { buildRetentionPolicies } from "@rbrasier/domain";
 import {
   ApplyAutoNodeResult,
   ApplyRetentionPolicies,
-  CreateUser,
-  DeleteUser,
   FailJob,
   GetFeatureFlag,
   GetSystemHealth,
   GetUsageSummary,
   IsFeatureEnabled,
-  ListErrors,
   ListFeatureFlags,
   ListJobs,
-  ListUsers,
   LogAuditEvent,
-  LogError,
   AdvanceBatchRuns,
   NotifyOnSessionComplete,
   NotifyOnStepComplete,
@@ -22,8 +17,6 @@ import {
   ProcessExtractionTask,
   RegisterJob,
   TrackUsage,
-  UpdateErrorStatus,
-  UpdateUser,
   UpsertFeatureFlag,
 } from "@rbrasier/application";
 import {
@@ -31,7 +24,6 @@ import {
   CompositeHealthChecker,
   DbHealthChecker,
   DrizzleAuditLogger,
-  DrizzleUserRoleRepository,
   DrizzleConversationRepository,
   DrizzleErrorLogRepository,
   DrizzleErrorLogger,
@@ -79,7 +71,6 @@ export const buildContainer = (env: Env) => {
   const logger = new PinoLogger(env.NODE_ENV !== "production");
 
   const users = new DrizzleUserRepository(db);
-  const userRoles = new DrizzleUserRoleRepository(db);
   const conversations = new DrizzleConversationRepository(db);
   const errorLogs = new DrizzleErrorLogRepository(db);
   const errorLogger = new DrizzleErrorLogger(errorLogs);
@@ -275,13 +266,6 @@ export const buildContainer = (env: Env) => {
     services: { llm, errorLogger, auditLogger },
     useCases: {
       applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete, notifyOnStepComplete),
-      createUser: new CreateUser(users),
-      updateUser: new UpdateUser(users, userRoles),
-      deleteUser: new DeleteUser(users, userRoles),
-      listUsers: new ListUsers(users),
-      logError: new LogError(errorLogger),
-      listErrors: new ListErrors(errorLogs),
-      updateErrorStatus: new UpdateErrorStatus(errorLogs),
       logAuditEvent: new LogAuditEvent(auditLogger),
       getFeatureFlag: new GetFeatureFlag(featureFlags),
       isFeatureEnabled: new IsFeatureEnabled(featureFlags),
