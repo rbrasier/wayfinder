@@ -2,6 +2,7 @@ import type { ExtractionRun } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { canEditFlow } from "@/server/routers/flow";
+import { resolveCanOversee } from "@/lib/oversight";
 
 export type RunAccess =
   | { ok: true; run: ExtractionRun; userId: string; isAdmin: boolean }
@@ -34,7 +35,7 @@ export const authoriseRunAccess = async (
   const run = await container.repos.extractionRuns.getRun(runId);
   if (run.error) return { ok: false, status: 404, error: "Run not found" };
 
-  if (!(await canEditFlow(container, run.data.flowId, session.userId, session.isAdmin))) {
+  if (!(await canEditFlow(container, run.data.flowId, session.userId, await resolveCanOversee(container, session)))) {
     return { ok: false, status: 403, error: "Forbidden" };
   }
 

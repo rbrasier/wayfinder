@@ -19,6 +19,7 @@ import {
   renderGatheredContext,
 } from "./turn-helpers";
 import { conversationalStepBrief, runMcpToolPrepass, type ToolActivityListener } from "./mcp-turn-helpers";
+import { resolveCanOversee } from "@/lib/oversight";
 
 // The most recent turns the model is given as context, mirrored from the
 // client's own slice so the two agree (scaling wall #1).
@@ -96,7 +97,8 @@ export async function POST(
     session,
     flow,
     userId: authSession.userId,
-    isAdmin: authSession.isAdmin,
+    // Ownership override only (ADR-066 §4); flags below keep authSession.isAdmin.
+    isAdmin: await resolveCanOversee(container, authSession),
     isApprover: false,
     allowAutoEnrol: true,
   });

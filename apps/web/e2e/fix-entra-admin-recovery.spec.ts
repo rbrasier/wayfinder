@@ -112,10 +112,10 @@ const promoteToAdmin = async (page: Page, email: string): Promise<void> => {
   await expect(row).toBeVisible({ timeout: 15000 });
   await row.getByRole('button', { name: /^edit$/i }).click();
 
-  await page.getByRole('checkbox', { name: /^admin$/i }).check();
+  await page.getByRole('checkbox', { name: /^global admin$/i }).check();
   await page.getByRole('button', { name: /^save$/i }).click();
 
-  await expect(row.getByText(/^admin$/)).toBeVisible({ timeout: 15000 });
+  await expect(row.getByText(/^Global Admin$/)).toBeVisible({ timeout: 15000 });
 };
 
 const signInWithEntra = async (browser: Browser, email: string): Promise<void> => {

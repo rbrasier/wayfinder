@@ -1,3 +1,4 @@
+import type { AdminCaller } from "@rbrasier/application";
 import type { PermissionKey } from "@rbrasier/domain";
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
@@ -97,6 +98,23 @@ export const adminProcedure = publicProcedure.use(({ ctx, next }) => {
   return next();
 });
 
+// For reads shared by several admin areas, such as the user list behind both
+// user management and the oversight screens' filters (ADR-066 §4).
+export const anyPermissionProcedure = (keys: readonly PermissionKey[]) =>
+  authenticatedProcedure.use(({ ctx, next }) => {
+    if (!ctx.isAdmin && !keys.some((key) => ctx.permissions.has(key))) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to do this." });
+    }
+    return next();
+  });
+
+// Whether the caller may open and edit other people's chats and flows, as an
+// admin does from All Chats and All Flows (ADR-066 §4). Use it only where
+// `isAdmin` stands for "may bypass ownership" — group-admin powers, flag
+// resolution and visibility rules stay on `isAdmin`.
+export const canOversee = (ctx: Pick<TrpcContext, "isAdmin" | "permissions">): boolean =>
+  ctx.isAdmin || ctx.permissions.has("admin:oversight");
+
 // Guards a procedure behind an effective permission. Admins always pass (ADR-021).
 export const permissionProcedure = (key: PermissionKey) =>
   authenticatedProcedure.use(({ ctx, next }) => {
@@ -105,3 +123,15 @@ export const permissionProcedure = (key: PermissionKey) =>
     }
     return next();
   });
+
+// The delegable admin areas (ADR-066 §1). Anything not on one of these stays on
+// adminProcedure, so a procedure nobody re-classified fails closed.
+export const technicalAdminProcedure = permissionProcedure("admin:technical");
+export const userAdminProcedure = permissionProcedure("admin:users");
+export const oversightProcedure = permissionProcedure("admin:oversight");
+
+// The caller the user and role use cases guard against (ADR-066 §3).
+export const adminCallerOf = (ctx: Pick<TrpcContext, "isAdmin" | "userId">): AdminCaller => ({
+  isAdmin: ctx.isAdmin,
+  userId: ctx.userId,
+});

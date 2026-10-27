@@ -4,6 +4,7 @@ import type { ConversationalNodeConfig } from "@rbrasier/domain";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
+import { resolveCanOversee } from "@/lib/oversight";
 
 export async function GET(
   req: NextRequest,
@@ -32,7 +33,8 @@ export async function GET(
   // Collaborative sessions: any participant of the document's session may
   // download it. Authorise against participant membership (scaling wall #11) —
   // knowing the message UUID is not itself authorisation.
-  const access = await authorizeSessionAccess(container, message.sessionId, authSession.userId, authSession.isAdmin, {
+  const canOverride = await resolveCanOversee(container, authSession);
+  const access = await authorizeSessionAccess(container, message.sessionId, authSession.userId, canOverride, {
     requireSend: false,
     allowApprover: true,
   });

@@ -5,7 +5,7 @@ import {
 } from "@rbrasier/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { adminProcedure, authenticatedProcedure, router, userAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const resolutionSchema: z.ZodType<OrganisationResolution> = z.discriminatedUnion("strategy", [
@@ -31,7 +31,7 @@ const resolutionSchema: z.ZodType<OrganisationResolution> = z.discriminatedUnion
 
 export const organisationRouter = router({
   // Every organisation, for the admin CRUD screen.
-  list: adminProcedure.query(async ({ ctx }) => {
+  list: userAdminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listOrganisations.execute();
     if (result.error) throw toTrpcError(result.error);
     return result.data;
@@ -74,7 +74,7 @@ export const organisationRouter = router({
     return organisationResult.data;
   }),
 
-  create: adminProcedure
+  create: userAdminProcedure
     .input(z.object({ name: z.string().min(1), emailDomain: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.createOrganisation.execute({
@@ -115,7 +115,7 @@ export const organisationRouter = router({
       return created.data;
     }),
 
-  update: adminProcedure
+  update: userAdminProcedure
     .input(
       z.object({
         organisationId: z.string().uuid(),
@@ -132,7 +132,7 @@ export const organisationRouter = router({
       return result.data;
     }),
 
-  delete: adminProcedure
+  delete: userAdminProcedure
     .input(z.object({ organisationId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteOrganisation.execute(input.organisationId);
@@ -140,7 +140,7 @@ export const organisationRouter = router({
       return { ok: true };
     }),
 
-  assignUser: adminProcedure
+  assignUser: userAdminProcedure
     .input(
       z.object({
         userId: z.string().uuid(),
@@ -156,13 +156,13 @@ export const organisationRouter = router({
       return { ok: true };
     }),
 
-  getResolution: adminProcedure.query(async ({ ctx }) => {
+  getResolution: userAdminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.getOrganisationResolution.execute();
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
-  setResolution: adminProcedure
+  setResolution: userAdminProcedure
     .input(resolutionSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.setOrganisationResolution.execute(input);

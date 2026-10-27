@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
+import { resolveCanOversee } from "@/lib/oversight";
 
 export async function DELETE(
   req: NextRequest,
@@ -16,7 +17,8 @@ export async function DELETE(
   const authSession = await container.resolveSession(token);
   if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const access = await authorizeSessionAccess(container, sessionId, authSession.userId, authSession.isAdmin, {
+  const canOverride = await resolveCanOversee(container, authSession);
+  const access = await authorizeSessionAccess(container, sessionId, authSession.userId, canOverride, {
     requireSend: true,
     allowApprover: false,
   });

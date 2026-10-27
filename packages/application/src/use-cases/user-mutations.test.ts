@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   type IUserRepository,
+  type IUserRoleRepository,
   type NewUser,
   type Result,
   type User,
@@ -90,13 +91,21 @@ class InMemoryUsers implements IUserRepository {
   }
 }
 
+const noRoles: IUserRoleRepository = {
+  listRolesForUser: async () => ok([]),
+  listUsersForRole: async () => ok([]),
+  assign: async () => ok(undefined),
+  remove: async () => ok(undefined),
+};
+const globalAdminCaller = { isAdmin: true, userId: "global-admin" };
+
 describe("UpdateUser", () => {
   it("updates an existing user", async () => {
     const repo = new InMemoryUsers();
     const existing = repo.seed({ email: "ada@example.com", name: "Ada" });
-    const sut = new UpdateUser(repo);
+    const sut = new UpdateUser(repo, noRoles);
 
-    const result = await sut.execute(existing.id, { name: "Ada Lovelace" });
+    const result = await sut.execute(existing.id, { name: "Ada Lovelace" }, globalAdminCaller);
 
     expect(result.error).toBeUndefined();
     expect(result.data?.name).toBe("Ada Lovelace");
@@ -104,9 +113,9 @@ describe("UpdateUser", () => {
   });
 
   it("returns NOT_FOUND when user does not exist", async () => {
-    const sut = new UpdateUser(new InMemoryUsers());
+    const sut = new UpdateUser(new InMemoryUsers(), noRoles);
 
-    const result = await sut.execute("non-existent-id", { name: "Ghost" });
+    const result = await sut.execute("non-existent-id", { name: "Ghost" }, globalAdminCaller);
 
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("NOT_FOUND");
@@ -117,18 +126,18 @@ describe("DeleteUser", () => {
   it("deletes an existing user", async () => {
     const repo = new InMemoryUsers();
     const existing = repo.seed({ email: "ada@example.com" });
-    const sut = new DeleteUser(repo);
+    const sut = new DeleteUser(repo, noRoles);
 
-    const result = await sut.execute(existing.id);
+    const result = await sut.execute(existing.id, globalAdminCaller);
 
     expect(result.error).toBeUndefined();
     expect(result.data).toBe(true);
   });
 
   it("returns NOT_FOUND when user does not exist", async () => {
-    const sut = new DeleteUser(new InMemoryUsers());
+    const sut = new DeleteUser(new InMemoryUsers(), noRoles);
 
-    const result = await sut.execute("non-existent-id");
+    const result = await sut.execute("non-existent-id", globalAdminCaller);
 
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("NOT_FOUND");
