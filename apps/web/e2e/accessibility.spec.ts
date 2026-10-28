@@ -157,7 +157,7 @@ test.describe('Accessibility: automation step editors', () => {
 test.describe('Accessibility: MCP server editor', () => {
   test.describe.configure({ timeout: COLD_ROUTE_BUDGET });
 
-  test('the edit dialog (masked token, remove token, save problems) has no axe violations', async ({
+  test('the edit dialog (masked token, OAuth sign-in fields, save problems) has no axe violations', async ({
     page,
   }) => {
     const label = `A11y MCP ${Date.now()}`;
@@ -176,11 +176,14 @@ test.describe('Accessibility: MCP server editor', () => {
       await row.getByRole('button', { name: 'Edit' }).click();
 
       const dialog = page.getByRole('dialog', { name: `Edit ${label}` });
-      await expect(dialog.getByLabel('Bearer token')).toHaveAttribute('type', 'password');
-      await dialog.getByLabel('Remove token').check();
-      await dialog.getByLabel('URL').fill('not-a-url');
+      await expect(dialog.getByLabel('Bearer token', { exact: true })).toHaveAttribute('type', 'password');
+      await dialog.getByLabel('URL', { exact: true }).fill('not-a-url');
+      await dialog.getByLabel('Authentication').selectOption('oauth');
+      await expect(dialog.getByLabel('Client secret')).toHaveAttribute('type', 'password');
       await dialog.getByRole('button', { name: 'Save' }).click();
-      await expect(dialog.getByText('Use an http:// or https:// address.')).toBeVisible();
+      // Both the server URL and the empty token URL are flagged beside their fields.
+      await expect(dialog.getByText('Use an http:// or https:// address.')).toHaveCount(2);
+      await expect(dialog.getByText('Enter the client secret.')).toBeVisible();
 
       const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).include('[role="dialog"]').analyze();
       expect(
