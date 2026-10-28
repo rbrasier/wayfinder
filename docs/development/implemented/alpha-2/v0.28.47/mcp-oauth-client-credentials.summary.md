@@ -25,11 +25,13 @@ the change adds nullable columns, but MINOR numbers from `0.29.0` are taken on
 - **Errors.** A failed token request fails the call with "Couldn't get an access
   token from `<host>`: `<error — description>`" (or the HTTP status), which Test
   connection shows. The client secret never appears in an error.
-- **Admin UI.** The register form and edit dialog gain an Authentication choice
-  (None / Bearer token / OAuth client credentials) with token URL, client ID,
-  client secret, client-credential sending method, scope and audience. Secrets
-  are write-only; left blank on edit they are kept. The server list reads
-  "OAuth client credentials (`<client ID>`)".
+- **Admin UI.** The inline register card is replaced by a **New MCP server**
+  button that opens the same dialog **Edit** uses (transport is chosen only when
+  registering). The dialog gains an Authentication choice (None / Bearer token /
+  OAuth client credentials) with token URL, client ID, client secret,
+  client-credential sending method, scope and audience. Secrets are write-only;
+  left blank on edit they are kept. The server list reads "OAuth client
+  credentials (`<client ID>`)".
 - **Flow authors** no longer receive a server's OAuth settings from `listWithTools`.
 
 ## Files created
@@ -48,7 +50,7 @@ the change adds nullable columns, but MINOR numbers from `0.29.0` are taken on
   `mcp/mcp-server-directory.test.ts` (fixture), `mcp/index.ts`,
   `repositories/drizzle-mcp-server-repository.ts`, `db/schema/admin.ts`
 - apps/web: `server/routers/mcp-server.ts`, `lib/container-skills-mcp.ts`,
-  `app/(admin)/admin/mcp-servers/_content.tsx`, `edit-mcp-server-dialog.tsx`,
+  `app/(admin)/admin/mcp-servers/_content.tsx`, `mcp-server-dialog.tsx` (was `edit-mcp-server-dialog.tsx`),
   `mcp-server-model.ts` (+ test)
 
 ## Migrations run
