@@ -44,6 +44,11 @@ AI.
   never silently dropped.
 - With two or more examples, wording that is identical in every copy is not
   tagged.
+- Tag insertion keeps the original document's formatting. Each tag is a
+  plain text replacement inside the existing Word runs, and the document is
+  never rebuilt.
+- The author can compare the original and the tagged version side by side
+  before saving.
 - Filled examples never reach object storage. Only the tagged result is
   saved, through the existing template save route.
 
@@ -63,8 +68,9 @@ AI.
 | `IDocumentGenerator.annotate()` | same | existing | Places tags in `.docx` runs and reports `unmatched` |
 | `TemplateDraftField` | `packages/domain/src/entities/template-draft.ts` | new | `{ label, type, options, multiple, sourceValue, occurrence }`, where `sourceValue` is quoted exactly from the base document |
 | `resolveCaptionAnchor` | same | new | Pure function, restored from the removed `resolveAnchor` (`ed73b66`). Moves a tag that landed on a field's caption onto the value the caption introduces, or marks the tag to go after the caption when there is no value. |
-| `DraftEvidence` | same | new | `"varies" \| "single-example" \| "checking-pass"`, plus `{ differsIn, of }` for `varies`. Shown on each row in place of an AI confidence score. |
-| `variesAcrossExamples` | same | new | Pure function: does a value differ across the example texts? |
+| `DraftEvidence` | same | new | `"varies" \| "single-example" \| "checking-pass" \| "restored"`, plus `{ differsIn, of }` for `varies`. Shown on each row in place of an AI confidence score. |
+| `countExamplesLacking` | same | new | Pure function: how many of the other examples do *not* contain the value. More than 0 means the value varies, and the count feeds **Differs in N of M examples**. |
+| `valueAfterCaption` | same | new | Pure function: in another example, finds the value the same caption introduces. Used only to collect multi-select choices. |
 | `DraftTemplateFromExamples` | `packages/application/src/use-cases/document/draft-template-from-examples.ts` | new | Extract → filter → place → verify |
 | `templateDraftExtractionSchema`, `templateDraftVerificationSchema` | `packages/shared/src/schemas/document.ts` | new | Zod schemas for the two AI calls |
 | `AnnotationRow` | `apps/web/src/lib/template-annotation.ts` | existing | Drafted fields become rows whose occurrences point at the literal value. Gains optional `draft: { replacedValue, context, insertAfter, evidence, confirmed }`. `buildAnnotationEdits` writes an insert-after as `caption + " " + tag`, as before `cdcab7d`, so the generators need no change. |
@@ -79,8 +85,9 @@ AI.
    replaced, so I can check it against the document.
 3. As a flow author, I see a list of fields that could not be placed, so I
    know what is missing before I save.
-4. As a flow author, I preview the tagged document before saving, so I can
-   see where each tag landed.
+4. As a flow author, I compare my original document and the tagged version
+   side by side before saving, so I can see what each tag replaced and
+   where it landed.
 5. As a flow author, each drafted field shows the text around it and
    whether it differs between my examples, so I can tell which "Smith" was
    tagged and how much evidence supports it.
@@ -111,7 +118,7 @@ as it does today.
   pass.
 - Restores the caption-to-value anchoring from `ed73b66` and the
   modal's copy and layout from `eb5e93e`/`d900b6b`. It does not restore the
-  AI's self-reported confidence (see ADR-066 §4).
+  AI's self-reported confidence (see ADR-066 §2).
 - Assumes the annotation design from v0.21.3: tag syntax is built
   server-side, and examples are held in the browser and never stored.
 
@@ -131,7 +138,11 @@ as it does today.
       by a use-case test.
 - [ ] With 2+ examples, a value that appears verbatim in every example is
       not tagged. This is covered by a domain unit test for
-      `variesAcrossExamples` and a use-case test.
+      `countExamplesLacking` and a use-case test.
+- [ ] Values dropped as identical in every example are listed under "Same
+      in every example" on the review step, and one click restores each as
+      a row (evidence **Restored**, no confirmation needed). A restored row
+      is placed at save time by the existing save route.
 - [ ] With 1 example, no comparison filter runs, and the review step says
       so ("Add more examples to improve accuracy").
 - [ ] A drafted `sourceValue` that is the field's own caption ("Employee
@@ -151,7 +162,9 @@ as it does today.
       before saving."). No other evidence label needs confirmation.
 - [ ] A short comma- or slash-separated list in a filled value ("Mobile
       phone, Laptop") drafts as a multi-select. With 2+ examples, the
-      choices are the union of the values seen across the examples.
+      choices are the union of the values that the same caption introduces
+      in each example (`valueAfterCaption`). Examples where the caption is
+      not found add nothing.
 - [ ] The review step opens with a found-fields summary (two columns, type
       in brackets, using "data fields" wording) before the editable grid.
 - [ ] The **Use an existing example** button and its confirmation use the
@@ -168,8 +181,19 @@ as it does today.
       same exact-match check and placement as the extracted fields.
 - [ ] Edits that `annotate()` reports as `unmatched` appear in a "Not
       placed" list on the review step.
-- [ ] The preview step shows the tagged document text with the tags
-      highlighted.
+- [ ] The preview step shows the original and the tagged document side by
+      side, aligned paragraph by paragraph. Replaced values are highlighted
+      on the left and their tags on the right; hovering either one
+      highlights its pair. Below 768 px wide, the panes stack with an
+      Original / Tagged toggle.
+- [ ] Tag insertion is a plain text replacement through the existing
+      `annotate()`: the matched characters in the existing `<w:r>` runs are
+      swapped for the tag text, and the tag takes the formatting of the
+      first run it replaces. The document is never rebuilt from extracted
+      text, and the AI never sees or returns document XML. Covered by a docx
+      adapter test on a fixture with bold, italic, a table, an image, a
+      header and a footer: every part with no edits is byte-identical after
+      annotation, and each edited run's `<w:rPr>` is unchanged.
 - [ ] Save sends the base example and the reviewed rows to the existing
       `POST …/template`. No other route writes to object storage. Covered by
       a route test asserting the draft route never calls the storage port.
@@ -202,5 +226,8 @@ as it does today.
   in the document, so `resolveCaptionAnchor` is required, not optional.
 - **Values Word splits across runs.** This relies on `annotate()`'s existing
   handling of spans split across runs.
+- **Values that cross a paragraph break.** `annotate()` matches within one
+  paragraph only, so such a value cannot be placed. It appears under "Not
+  placed" rather than being forced in.
 - **Token cost.** Ten long examples can be expensive. Only the base text is
   sent to the AI. The other examples are compared in code.

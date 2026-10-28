@@ -61,7 +61,12 @@ its confirm gate are *replaced* by evidence labels (**Differs in N of M
 examples**, **Only one example**, **Added by the checking pass**). Only
 checking-pass rows need confirmation before saving.
 
-**Data & types**: `TemplateDraftField`, `resolveCaptionAnchor`, `DraftEvidence`, `variesAcrossExamples`,
+**Amendment, doc-review 2026-10-28.** (1) Tag insertion must preserve the
+original document's formatting: a plain text replacement inside existing
+runs, via `annotate()`, and never a rebuild. (2) The preview step becomes a
+side-by-side comparison of the original and the tagged document.
+
+**Data & types**: `TemplateDraftField`, `resolveCaptionAnchor`, `DraftEvidence`, `countExamplesLacking`,
 `DraftTemplateFromExamples`, and the purposes `template-draft-extract` and
 `template-draft-verify`.
 
@@ -87,7 +92,10 @@ Removed in `cdcab7d` and **not** restored: `SuggestTemplateFields`, the
 `/suggest` route, `classifyTemplateSource`, `rowsFromSuggestions`, the
 confidence fields on rows, and the low-confidence gate.
 
-**Restored from history.** Port these; don't re-derive them:
+**Restored from history.** Port these; don't re-derive them. The original
+design and its review rounds are written up in
+`docs/development/implemented/alpha-2/v0.21.3/guided-annotation-upload.md`
+and `guided-annotation-upload.summary.md`.
 
 | What | Source | Goes to |
 | ---- | ------ | ------- |
@@ -102,15 +110,15 @@ confidence fields on rows, and the low-confidence gate.
 
 | Layer | File | Change |
 | ----- | ---- | ------ |
-| domain | `packages/domain/src/entities/template-draft.ts` (+ `.test.ts` first) | `TemplateDraftField` type; `DraftEvidence`; `variesAcrossExamples(value, otherTexts)` (normalises whitespace only); `locateExactOccurrence(text, value, occurrence): boolean` for the exact-match check; `resolveCaptionAnchor(...)`, which returns `{ sourceText, occurrence, insertAfter }`; `contextAround(text, position, maxChars = 200)` |
+| domain | `packages/domain/src/entities/template-draft.ts` (+ `.test.ts` first) | `TemplateDraftField` type; `DraftEvidence`; `countExamplesLacking(value, otherTexts): number` (normalises whitespace only); `valueAfterCaption(caption, text)` (shares `valueIntroducedBy` with `resolveCaptionAnchor`); `locateExactOccurrence(paragraphs, value, occurrence): boolean` for the exact-match check. It counts within paragraphs in body → headers → footers order, matching `annotate()`'s counter, so a value spanning paragraphs never matches; `resolveCaptionAnchor(...)`, which returns `{ sourceText, occurrence, insertAfter }`; `contextAround(text, position, maxChars = 200)` |
 | shared | `packages/shared/src/schemas/document.ts` | `templateDraftExtractionSchema` and `templateDraftVerificationSchema`: `{ fields: { label, type, options, multiple, sourceValue, occurrence }[] }`, where `type` is limited to the existing template field types |
-| application | `packages/application/src/use-cases/document/draft-template-from-examples.ts` (+ `.test.ts` first) | `DraftTemplateFromExamples(languageModel, documentGenerator)`. Input `{ baseBytes, baseText, otherTexts }`. Output `{ fields, sameInEveryExample, unplaced, previewText }`. Runs extract → exact-match check → caption correction → comparison filter → `annotate()` → verify → (the same checks and `annotate()`) once more → `extractFullText` for the preview. Each field carries `evidence`, `context` and `insertAfter`. With 2+ examples, a multi-select's options are the union of the values seen. Never throws; returns `Result`. |
+| application | `packages/application/src/use-cases/document/draft-template-from-examples.ts` (+ `.test.ts` first) | `DraftTemplateFromExamples(languageModel, documentGenerator)`. Input `{ baseBytes, baseText, otherTexts }`. Output `{ fields, sameInEveryExample, unplaced, comparison }`, where `comparison = { original: Paragraph[], tagged: Paragraph[], links: { originalSpan, taggedSpan, fieldKey }[] }`. Runs extract → exact-match check → caption correction → comparison filter → `annotate()` → verify → (the same checks and `annotate()`) once more → `extractFullText` of both documents to build `comparison`. Each field carries `evidence`, `context` and `insertAfter`. With 2+ examples, a multi-select's options are the union of the values seen. Never throws; returns `Result`. |
 | apps/web | `apps/web/src/app/api/flows/[id]/nodes/[nodeId]/template/draft/route.ts` | Auth via `authoriseTemplateNode`. Reads 1–10 `.docx` files (10 MB each, 25 MB total) from multipart, extracts text, runs the use case, and maps fields to `AnnotationRow`s. **No storage call.** |
 | apps/web | `apps/web/src/lib/container.ts` | Wire `DraftTemplateFromExamples` |
 | apps/web | `apps/web/src/lib/template-annotation.ts` | Optional `draft` metadata on `AnnotationRow`; `buildAnnotationEdits` handles `insertAfter` |
 | apps/web | `apps/web/src/components/canvas/template-source-choice-modal.tsx` | Step 1: two side-by-side buttons. **Use an existing example** uses the restored "pattern" wording and asks for confirmation before the file picker opens. |
 | apps/web | `apps/web/src/components/canvas/template-draft-model.ts` (+ `.test.ts` first) | Step state for the example path: `choose-examples → drafting → review → preview → saving` (plus the existing `reupload`); the choice of base document; restoring a "same in every example" field as a row; `saveBlockedReason` extended to block on an unconfirmed **Added by the checking pass** row |
-| apps/web | `apps/web/src/components/canvas/template-draft-modal.tsx` | The example path's UI. Reuses `template-field-editor.tsx` for the review grid. Each row shows "Replaces '…'" or "Goes after '…'", its surrounding text and an evidence badge. The review step opens with the found-fields summary. The footer has Cancel bottom-left and actions bottom-right, plus "Need to add more fields? Download…" leading to the existing re-upload panel. The preview highlights `{{ … }}` in `previewText`. |
+| apps/web | `apps/web/src/components/canvas/template-draft-modal.tsx` | The example path's UI. Reuses `template-field-editor.tsx` for the review grid. Each row shows "Replaces '…'" or "Goes after '…'", its surrounding text and an evidence badge. The review step opens with the found-fields summary. The footer has Cancel bottom-left and actions bottom-right, plus "Need to add more fields? Download…" leading to the existing re-upload panel. The preview step is a two-pane comparison (`template-draft-compare.tsx`), with the original on the left and the tagged version on the right, aligned by paragraph. Replaced values and tags are highlighted, and hovering one highlights its pair. Below 768 px the panes stack with an Original / Tagged toggle. It shows text, not a rendered Word page. |
 | apps/web | `template-upload-controller.tsx`, `node-config-modal-conversational.tsx` | **Upload template** opens the choice modal; **I have a template with tags** triggers the existing file input and flow |
 
 Save: the draft modal posts the base `File` and the reviewed rows to the
@@ -123,9 +131,10 @@ None. No migration.
 ## 6. Implementation order (tests first)
 
 1. `template-draft.test.ts` → `template-draft.ts`. Cases: a value present in
-   every example → false; missing from one → true; whitespace-only
-   differences → false; formatting differences ("$1,200" vs "$1,200.00") →
-   true; the exact-match check at occurrence 0, 1 and out of range.
+   every example → 0; missing from 2 of 3 → 2; whitespace-only
+   differences → 0; formatting differences ("$1,200" vs "$1,200.00") →
+   counted as lacking; `valueAfterCaption` on the same-line and next-cell
+   layouts, and null when the caption is missing; the exact-match check at occurrence 0, 1 and out of range.
    `resolveCaptionAnchor`, porting the `ed73b66` cases: a caption with its
    value on the same line ("Supplier Name: Acme") moves to "Acme"; a
    caption with its value in the next cell moves to the next line; a blank
@@ -140,23 +149,31 @@ None. No migration.
    comparison filter is skipped; verify additions are filtered and placed;
    verify cannot remove fields already placed; a caption-anchored field is
    placed on its value; evidence is set correctly for 1 example, 2+
-   examples and checking-pass fields; multi-select options are the union
-   across examples; `annotate().unmatched` →
+   examples and checking-pass fields; multi-select options are the union of
+   `valueAfterCaption` across examples; a restored row carries evidence
+   `Restored`; `annotate().unmatched` →
    `unplaced`; AI error → `Result` error; the purposes are exactly
    `template-draft-extract` and `template-draft-verify`.
-4. Draft route plus a route test asserting that the storage port is never
+4. Adapter: `docx-generator.test.ts`, if not already covered. Using a fixture
+   with bold, italic, a table, an image, a header and a footer:
+   - parts with no edits are byte-identical after annotation;
+   - each edited run's `<w:rPr>` is unchanged;
+   - a value split across runs is replaced in place;
+   - a value spanning two paragraphs comes back as `unmatched`.
+5. Draft route plus a route test asserting that the storage port is never
    called, plus rejection by file type, count and size.
-5. `template-annotation.test.ts`: an `insertAfter` edit keeps the caption.
+6. `template-annotation.test.ts`: an `insertAfter` edit keeps the caption.
    `template-draft-model.test.ts` → model (step transitions, base choice,
    restore, save blocked until checking-pass rows are confirmed).
-6. Choice modal, draft modal, and the controller and conversational config
+7. Comparison model test (paragraph alignment, span links) → compare pane.
+   Choice modal, draft modal, and the controller and conversational config
    wiring. Component tests for the two-button choice and the unchanged
    tagged-template path.
-7. E2E: one spec, `apps/web/e2e/template-drafting-from-examples.spec.ts`,
+8. E2E: one spec, `apps/web/e2e/template-drafting-from-examples.spec.ts`,
    only if `docs/guides/e2e-test-policy.md` puts the path from upload to
    save in one of its six groups. Otherwise cover it with component tests.
    Stub the language model; don't use a live AI.
-8. `./validate.sh`.
+9. `./validate.sh`.
 
 ## 7. ADR required
 
@@ -174,8 +191,12 @@ comparison is a domain function; the draft route persists nothing.
 - **Coincidental sameness.** Restoring a field must be one click from the
   "Same in every example" list.
 - **Values Word splits across runs.** Covered by existing `annotate()`
-  behaviour; add one docx adapter fixture with a value split across runs if
-  none exists.
+  behaviour, plus the adapter fixture in step 4.
+- **Occurrence drift.** `extractFullText` and `annotate()` must count
+  occurrences the same way. Counting per paragraph in reading order keeps
+  them aligned, and the step-4 fixture checks it.
+- **Comparison is text-only.** It shows extracted text, not a rendered
+  Word page. A rendered preview is future work.
 - **Prompt injection from example content.** Examples are untrusted text.
   The AI output is limited to the schema, and every value must match the
   base text exactly, so the worst case is a wrong or extra tag, which the
