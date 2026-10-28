@@ -16,6 +16,8 @@ export interface IMcpServerRepository {
   findById(id: string): Promise<Result<McpServer | null>>;
   // The decrypted bearer token, for the MCP client only — never for a client app.
   readCredential(id: string): Promise<Result<string | null>>;
+  // The decrypted OAuth client secret, for the MCP client only.
+  readOAuthClientSecret(id: string): Promise<Result<string | null>>;
   list(input?: ListMcpServersInput): Promise<Result<McpServer[]>>;
   setStatus(id: string, status: McpServerStatus): Promise<Result<McpServer>>;
   delete(id: string): Promise<Result<void>>;

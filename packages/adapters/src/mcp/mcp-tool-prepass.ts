@@ -5,7 +5,6 @@ import {
   type McpServer,
   type McpToolCallRecord,
   type ProviderName,
-  type IMcpServerRepository,
   type IUsageRepository,
   type Result,
   type TokenUsage,
@@ -17,6 +16,7 @@ import {
   type ToolSet,
 } from "ai";
 import { buildMcpTransport } from "./ai-sdk-mcp-client";
+import type { McpBearerTokenResolver } from "./mcp-bearer-token-resolver";
 import { recordTokenUsage } from "../observability/usage-tracking-adapter";
 import type { QuotaEnforcer } from "../observability/quota-enforcing-adapter";
 
@@ -111,9 +111,9 @@ export class McpToolPrepass {
   constructor(
     private readonly usageRepo: IUsageRepository,
     private readonly quotaEnforcer: QuotaEnforcer,
-    // Tokens saved in the admin UI; without them a server whose token is stored
-    // rather than in the environment is called unauthenticated.
-    private readonly credentials: Pick<IMcpServerRepository, "readCredential">,
+    // Stored tokens and OAuth access tokens; without it a server whose token is
+    // not in the environment is called unauthenticated.
+    private readonly bearerTokens: Pick<McpBearerTokenResolver, "resolve">,
   ) {}
 
   async run(input: McpToolPrepassInput): Promise<Result<McpToolPrepassResult>> {
@@ -135,10 +135,10 @@ export class McpToolPrepass {
       for (const server of input.servers) {
         const allowed = input.allowedToolNamesByServer[server.id] ?? [];
         if (allowed.length === 0) continue;
-        const storedToken = server.hasCredential ? await this.credentials.readCredential(server.id) : ok(null);
-        if (storedToken.error) return storedToken;
+        const bearerToken = await this.bearerTokens.resolve(server);
+        if (bearerToken.error) return bearerToken;
         const client = await experimental_createMCPClient({
-          transport: buildMcpTransport(server, storedToken.data),
+          transport: buildMcpTransport(server, bearerToken.data),
         });
         clients.push(client);
         const serverTools = (await client.tools()) as ToolSet;

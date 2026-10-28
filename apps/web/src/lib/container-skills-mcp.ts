@@ -22,6 +22,7 @@ import {
   DrizzleMcpServerRepository,
   DrizzleSkillRepository,
   EnvLegacyMcpCredentialSource,
+  McpBearerTokenResolver,
   McpServerDirectory,
   McpToolPrepass,
   SkillParser,
@@ -63,9 +64,11 @@ export const buildSkillsAndMcp = ({
   const skills = new DrizzleSkillRepository(db);
   const skillParser = new SkillParser();
   const mcpServers = new DrizzleMcpServerRepository(db, secretCipher);
-  const mcpClient = new AiSdkMcpClient(mcpServers);
+  // Shared so every MCP connection reuses the same cached OAuth access tokens.
+  const mcpBearerTokens = new McpBearerTokenResolver(mcpServers);
+  const mcpClient = new AiSdkMcpClient(mcpBearerTokens);
   const mcpServerDirectory = new McpServerDirectory(mcpServers, mcpClient);
-  const mcpToolPrepass = new McpToolPrepass(usageRepo, quotaEnforcer, mcpServers);
+  const mcpToolPrepass = new McpToolPrepass(usageRepo, quotaEnforcer, mcpBearerTokens);
 
   return {
     repos: { skills, mcpServers },

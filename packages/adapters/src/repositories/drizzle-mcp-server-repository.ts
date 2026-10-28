@@ -5,6 +5,8 @@ import {
   type IMcpServerRepository,
   type ListMcpServersInput,
   type McpCredentialChange,
+  type McpOAuthChange,
+  type McpOAuthSettings,
   type McpServer,
   type McpServerStatus,
   type McpServerUpdate,
@@ -16,19 +18,70 @@ import type { Database } from "../db/client";
 import { admin_mcp_servers } from "../db/schema/admin";
 import type { SecretCipher } from "./drizzle-flow-trigger-repository";
 
-const toEntity = (row: typeof admin_mcp_servers.$inferSelect): McpServer => ({
+type McpServerRow = typeof admin_mcp_servers.$inferSelect;
+
+const oauthOf = (row: McpServerRow): McpOAuthSettings | null => {
+  if (!row.oauth_token_url || !row.oauth_client_id) return null;
+  return {
+    tokenUrl: row.oauth_token_url,
+    clientId: row.oauth_client_id,
+    scope: row.oauth_scope,
+    audience: row.oauth_audience,
+    clientAuthMethod: row.oauth_client_auth_method ?? "client_secret_basic",
+  };
+};
+
+export const toMcpServer = (row: McpServerRow): McpServer => ({
   id: row.id,
   label: row.label,
   transport: row.transport,
   url: row.url,
   credentialRef: row.credential_ref,
   hasCredential: row.credential_encrypted !== null,
+  oauth: oauthOf(row),
   communicatesExternally: row.communicates_externally,
   status: row.status,
   createdByUserId: row.created_by_user_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+type OAuthColumns = Partial<
+  Pick<
+    McpServerRow,
+    | "oauth_token_url"
+    | "oauth_client_id"
+    | "oauth_client_secret_encrypted"
+    | "oauth_scope"
+    | "oauth_audience"
+    | "oauth_client_auth_method"
+  >
+>;
+
+// The secret column is written only when a new secret is given, so editing the
+// other settings keeps the stored one.
+export const oauthColumns = (change: McpOAuthChange, cipher: SecretCipher): OAuthColumns => {
+  if (change === undefined) return {};
+  if (change === null) {
+    return {
+      oauth_token_url: null,
+      oauth_client_id: null,
+      oauth_client_secret_encrypted: null,
+      oauth_scope: null,
+      oauth_audience: null,
+      oauth_client_auth_method: null,
+    };
+  }
+  const { settings, clientSecret } = change;
+  return {
+    oauth_token_url: settings.tokenUrl,
+    oauth_client_id: settings.clientId,
+    oauth_scope: settings.scope,
+    oauth_audience: settings.audience,
+    oauth_client_auth_method: settings.clientAuthMethod,
+    ...(clientSecret ? { oauth_client_secret_encrypted: cipher.encrypt(clientSecret) } : {}),
+  };
+};
 
 export class DrizzleMcpServerRepository implements IMcpServerRepository {
   constructor(
@@ -51,12 +104,13 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           url: input.url,
           credential_ref: input.credentialRef ?? null,
           ...this.encrypted(input.credential),
+          ...oauthColumns(input.oauth, this.cipher),
           communicates_externally: input.communicatesExternally ?? false,
           created_by_user_id: input.createdByUserId ?? null,
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Insert returned no row."));
-      return ok(toEntity(row));
+      return ok(toMcpServer(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to create MCP server.", cause));
     }
@@ -79,6 +133,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           credential_ref:
             patch.credentialRef === undefined ? current.credential_ref : patch.credentialRef,
           ...this.encrypted(patch.credential),
+          ...oauthColumns(patch.oauth, this.cipher),
           communicates_externally:
             patch.communicatesExternally ?? current.communicates_externally,
           updated_at: new Date(),
@@ -86,7 +141,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .where(eq(admin_mcp_servers.id, id))
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Update returned no row."));
-      return ok(toEntity(row));
+      return ok(toMcpServer(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update MCP server.", cause));
     }
@@ -99,7 +154,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .from(admin_mcp_servers)
         .where(eq(admin_mcp_servers.id, id))
         .limit(1);
-      return ok(row ? toEntity(row) : null);
+      return ok(row ? toMcpServer(row) : null);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to find MCP server.", cause));
     }
@@ -118,6 +173,19 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
     }
   }
 
+  async readOAuthClientSecret(id: string): Promise<Result<string | null>> {
+    try {
+      const [row] = await this.db
+        .select({ secret: admin_mcp_servers.oauth_client_secret_encrypted })
+        .from(admin_mcp_servers)
+        .where(eq(admin_mcp_servers.id, id))
+        .limit(1);
+      return ok(row?.secret ? this.cipher.decrypt(row.secret) : null);
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to read the MCP server's OAuth client secret.", cause));
+    }
+  }
+
   async list(input?: ListMcpServersInput): Promise<Result<McpServer[]>> {
     try {
       const rows = input?.includeDisabled
@@ -127,7 +195,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
             .from(admin_mcp_servers)
             .where(eq(admin_mcp_servers.status, "active"))
             .orderBy(desc(admin_mcp_servers.updated_at));
-      return ok(rows.map(toEntity));
+      return ok(rows.map(toMcpServer));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list MCP servers.", cause));
     }
@@ -141,7 +209,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .where(eq(admin_mcp_servers.id, id))
         .returning();
       if (!row) return err(domainError("NOT_FOUND", "MCP server not found."));
-      return ok(toEntity(row));
+      return ok(toMcpServer(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update MCP server status.", cause));
     }

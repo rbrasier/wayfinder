@@ -4,8 +4,6 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -15,37 +13,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/trpc/client";
-import { EditMcpServerDialog, type EditableMcpServer } from "./edit-mcp-server-dialog";
+import { McpServerDialog, type McpServerDialogTarget } from "./mcp-server-dialog";
 import { credentialSummary } from "./mcp-server-model";
 
 export function AdminMcpServersContent() {
   const utils = trpc.useUtils();
   const serversQuery = trpc.mcpServer.list.useQuery({ includeDisabled: true });
 
-  const [label, setLabel] = useState("");
-  const [url, setUrl] = useState("");
-  const [transport, setTransport] = useState<"sse" | "streamable-http">("sse");
-  const [communicatesExternally, setCommunicatesExternally] = useState(false);
-  const [token, setToken] = useState("");
-  const [editing, setEditing] = useState<EditableMcpServer | null>(null);
+  const [dialog, setDialog] = useState<McpServerDialogTarget | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const invalidate = () => void utils.mcpServer.list.invalidate();
 
-  const register = trpc.mcpServer.register.useMutation({
-    onSuccess: () => {
-      setLabel("");
-      setUrl("");
-      setTransport("sse");
-      setCommunicatesExternally(false);
-      setToken("");
-      setError(null);
-      invalidate();
-    },
-    onError: (cause) => setError(cause.message),
-  });
   const disable = trpc.mcpServer.disable.useMutation({ onSuccess: invalidate });
   const enable = trpc.mcpServer.enable.useMutation({ onSuccess: invalidate });
   const remove = trpc.mcpServer.delete.useMutation({
@@ -65,96 +46,17 @@ export function AdminMcpServersContent() {
       setTestResult((prev) => ({ ...prev, [variables.id]: `Failed — ${cause.message}` })),
   });
 
-  const submit = () => {
-    if (!label.trim() || !url.trim()) return;
-    register.mutate({
-      label,
-      url,
-      transport,
-      communicatesExternally,
-      credential: token.trim() ? token.trim() : null,
-    });
-  };
-
   return (
     <div className="h-full overflow-auto">
       <div className="container py-8 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Register an MCP server</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Register a remote Model Context Protocol server. Flow authors can
-              then use its tools without seeing credentials. A bearer token is
-              stored encrypted and never shown again.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="mcp-label">Label</Label>
-                <Input
-                  id="mcp-label"
-                  value={label}
-                  onChange={(event) => setLabel(event.target.value)}
-                  placeholder="GitHub"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mcp-transport">Transport</Label>
-                <select
-                  id="mcp-transport"
-                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs"
-                  value={transport}
-                  onChange={(event) => setTransport(event.target.value as "sse" | "streamable-http")}
-                >
-                  <option value="sse">SSE</option>
-                  <option value="streamable-http">Streamable HTTP</option>
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mcp-url">URL</Label>
-                <Input
-                  id="mcp-url"
-                  value={url}
-                  onChange={(event) => setUrl(event.target.value)}
-                  placeholder="https://mcp.example.com/sse"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mcp-cred">Bearer token (optional)</Label>
-                <Input
-                  id="mcp-cred"
-                  type="password"
-                  autoComplete="off"
-                  value={token}
-                  onChange={(event) => setToken(event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Stored encrypted.</p>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <label htmlFor="mcp-external" className="flex items-center gap-2 text-sm font-medium">
-                <input
-                  id="mcp-external"
-                  type="checkbox"
-                  checked={communicatesExternally}
-                  onChange={(event) => setCommunicatesExternally(event.target.checked)}
-                />
-                Sends data outside Wayfinder
-              </label>
-              <p className="pl-6 text-xs text-muted-foreground">
-                Tick for integrations that pass data to another system (ParlView, a ticketing
-                tool); leave off for self-contained utilities such as spellcheck. Either way the
-                server can be used in AI task and conversational steps — this marks it External
-                so flow authors know where their data goes.
-              </p>
-            </div>
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-            <Button onClick={submit} disabled={register.isPending || !label.trim() || !url.trim()}>
-              {register.isPending ? "Registering…" : "Register server"}
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="flex items-start justify-between gap-4">
+          <p className="text-sm text-muted-foreground">
+            Remote Model Context Protocol servers whose tools flow authors can use without seeing
+            credentials.
+          </p>
+          <Button onClick={() => setDialog({ mode: "create" })}>New MCP server</Button>
+        </div>
+        {error ? <p className="text-sm text-destructive">{error}</p> : null}
 
         <Card>
           <CardHeader>
@@ -211,7 +113,7 @@ export function AdminMcpServersContent() {
                         >
                           Test
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => setEditing(server)}>
+                        <Button variant="outline" size="sm" onClick={() => setDialog({ mode: "edit", server })}>
                           Edit
                         </Button>
                         {server.status === "active" ? (
@@ -274,7 +176,7 @@ export function AdminMcpServersContent() {
           </CardContent>
         </Card>
       </div>
-      <EditMcpServerDialog server={editing} onClose={() => setEditing(null)} onSaved={invalidate} />
+      <McpServerDialog target={dialog} onClose={() => setDialog(null)} onSaved={invalidate} />
     </div>
   );
 }

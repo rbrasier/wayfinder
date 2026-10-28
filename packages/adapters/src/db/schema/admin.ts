@@ -182,6 +182,17 @@ export const admin_mcp_servers = pgTable("admin_mcp_servers", {
   url: text("url").notNull(),
   credential_ref: text("credential_ref"),
   credential_encrypted: text("credential_encrypted"),
+  // OAuth 2.0 client credentials (issue #361): set together, or all null for a
+  // server that signs in with a fixed token or not at all. The secret is
+  // encrypted with the same cipher as the bearer token.
+  oauth_token_url: text("oauth_token_url"),
+  oauth_client_id: text("oauth_client_id"),
+  oauth_client_secret_encrypted: text("oauth_client_secret_encrypted"),
+  oauth_scope: text("oauth_scope"),
+  oauth_audience: text("oauth_audience"),
+  oauth_client_auth_method: text("oauth_client_auth_method", {
+    enum: ["client_secret_basic", "client_secret_post"],
+  }),
   // Admin classification: does this server communicate outside Wayfinder? Existing
   // rows default to the safe internal classification (ADR-032).
   communicates_externally: boolean("communicates_externally").notNull().default(false),

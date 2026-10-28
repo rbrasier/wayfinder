@@ -9,6 +9,7 @@ const server = (id: string, communicatesExternally: boolean): McpServer => ({
   url: `https://${id}.example/sse`,
   credentialRef: null,
   hasCredential: false,
+  oauth: null,
   communicatesExternally,
   status: "active",
   createdByUserId: null,
