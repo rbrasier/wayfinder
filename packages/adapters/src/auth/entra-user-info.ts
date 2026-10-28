@@ -2,7 +2,6 @@ import { normaliseEmail } from "@rbrasier/domain";
 
 export interface EntraUserInfo {
   readonly user: {
-    readonly id: string;
     readonly name: string;
     readonly email: string;
     readonly emailVerified: boolean;
@@ -85,12 +84,12 @@ export const userInfoFromIdToken = (token: { idToken?: string }): EntraUserInfo 
   const email = asString(claims.email) ?? asString(claims.preferred_username);
   if (!email) return null;
 
-  const subject = asString(claims.sub);
-  if (!subject) return null;
+  // Better Auth 1.7 keys the Microsoft account on `oid` (its `accountSubject`),
+  // and fails the sign-in with a generic error when it is missing.
+  if (!asString(claims.oid)) return null;
 
   return {
     user: {
-      id: subject,
       name: asString(claims.name) ?? email,
       email: normaliseEmail(email),
       emailVerified: emailVerifiedFrom(claims),

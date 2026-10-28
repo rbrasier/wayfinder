@@ -273,9 +273,9 @@ describe("the Entra mock's tokens through the real claim reader", () => {
     expect(info?.user.emailVerified).toBe(false);
   });
 
-  it("keeps the opaque subject as the account id", async () => {
+  it("carries the opaque oid Better Auth keys the account on", async () => {
     const info = await signIn({ email: "ada@example.com" });
-    expect(info?.user.id).toBeTruthy();
-    expect(info?.user.id).not.toContain("ada@example.com");
+    expect(info?.data.oid).toBeTruthy();
+    expect(info?.data.oid).not.toContain("ada@example.com");
   });
 });
