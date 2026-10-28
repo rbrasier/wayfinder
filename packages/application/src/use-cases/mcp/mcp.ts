@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok, validateMcpOAuthSettings } from "@rbrasier/domain";
 import type {
   ILegacyMcpCredentialSource,
   IMcpClient,
@@ -6,6 +6,8 @@ import type {
   IMcpServerRepository,
   ListMcpServersInput,
   McpCredentialChange,
+  McpOAuthInput,
+  McpOAuthWrite,
   McpServer,
   McpServerUpdate,
   McpServerWithTools,
@@ -22,6 +24,10 @@ const tokenFrom = (credential: McpCredentialChange): McpCredentialChange => {
   return token.length > 0 ? token : undefined;
 };
 
+// Both would compete for the one Authorization header.
+const bothSignInMethods = () =>
+  err(domainError("VALIDATION_FAILED", "Use either a bearer token or OAuth client credentials, not both."));
+
 export class RegisterMcpServer {
   constructor(private readonly servers: IMcpServerRepository) {}
 
@@ -31,22 +37,33 @@ export class RegisterMcpServer {
     transport?: McpTransport;
     communicatesExternally?: boolean;
     credential?: string | null;
+    oauth?: McpOAuthInput | null;
     createdByUserId?: string | null;
   }): Promise<Result<McpServer>> {
     const label = input.label.trim();
     const url = input.url.trim();
+    const credential = tokenFrom(input.credential) ?? undefined;
     if (label.length === 0) {
       return err(domainError("VALIDATION_FAILED", "Server label is required."));
     }
     if (!isHttpUrl(url)) {
       return err(domainError("VALIDATION_FAILED", "Server URL must be a valid http(s) URL."));
     }
+    if (input.oauth && credential) return bothSignInMethods();
+
+    let oauth: McpOAuthWrite | undefined;
+    if (input.oauth) {
+      const validated = validateMcpOAuthSettings(input.oauth, false);
+      if (validated.error) return validated;
+      oauth = validated.data;
+    }
     return this.servers.create({
       label,
       url,
       transport: input.transport,
       communicatesExternally: input.communicatesExternally,
-      credential: tokenFrom(input.credential) ?? undefined,
+      credential,
+      oauth,
       createdByUserId: input.createdByUserId ?? null,
     });
   }
@@ -64,20 +81,43 @@ export class UpdateMcpServer {
     url?: string;
     communicatesExternally?: boolean;
     credential?: string | null;
+    oauth?: McpOAuthInput | null;
   }): Promise<Result<McpServer>> {
+    const credential = tokenFrom(input.credential);
     if (input.url !== undefined && !isHttpUrl(input.url.trim())) {
       return err(domainError("VALIDATION_FAILED", "Server URL must be a valid http(s) URL."));
     }
+    if (input.oauth && typeof credential === "string") return bothSignInMethods();
     const current = await this.servers.findById(input.id);
     if (current.error) return current;
     if (!current.data) return err(domainError("NOT_FOUND", "MCP server not found."));
 
+    const signIn = this.signInPatch(current.data, credential, input.oauth);
+    if (signIn.error) return signIn;
     return this.servers.update(input.id, {
       label: input.label?.trim(),
       url: input.url?.trim(),
       communicatesExternally: input.communicatesExternally,
-      ...this.credentialPatch(current.data, tokenFrom(input.credential)),
+      ...signIn.data,
     });
+  }
+
+  // A server signs in exactly one way. Switching to OAuth drops the stored token
+  // and any legacy reference; setting a token, or removing OAuth, drops OAuth.
+  // The client secret may be left blank only when the server already uses OAuth.
+  private signInPatch(
+    server: McpServer,
+    credential: McpCredentialChange,
+    oauth: McpOAuthInput | null | undefined,
+  ): Result<Pick<McpServerUpdate, "credential" | "credentialRef" | "oauth">> {
+    if (oauth) {
+      const validated = validateMcpOAuthSettings(oauth, server.oauth !== null);
+      if (validated.error) return validated;
+      return ok({ oauth: validated.data, credential: null, credentialRef: null });
+    }
+    const tokenPatch = this.credentialPatch(server, credential);
+    const dropsOAuth = oauth === null || (typeof credential === "string" && server.oauth !== null);
+    return ok(dropsOAuth ? { ...tokenPatch, oauth: null } : tokenPatch);
   }
 
   // Any save of a server still on a legacy environment variable moves it to a

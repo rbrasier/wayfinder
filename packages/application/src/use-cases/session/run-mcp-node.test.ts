@@ -99,6 +99,7 @@ const activeServer: McpServer = {
   url: "https://mcp.example.com/sse",
   credentialRef: null,
   hasCredential: false,
+  oauth: null,
   communicatesExternally: false,
   status: "active",
   createdByUserId: null,

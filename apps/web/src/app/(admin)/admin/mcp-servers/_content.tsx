@@ -16,7 +16,19 @@ import {
 } from "@/components/ui/table";
 import { trpc } from "@/trpc/client";
 import { EditMcpServerDialog, type EditableMcpServer } from "./edit-mcp-server-dialog";
-import { credentialSummary } from "./mcp-server-model";
+import {
+  credentialSummary,
+  oauthFieldsOf,
+  signInChange,
+  signInProblems,
+  type ServerFormField,
+  type ServerFormProblem,
+  type SignInFieldValues,
+  type SignInMethod,
+} from "./mcp-server-model";
+import { SignInFields } from "./sign-in-fields";
+
+const EMPTY_SIGN_IN: SignInFieldValues = { token: "", oauth: oauthFieldsOf(null) };
 
 export function AdminMcpServersContent() {
   const utils = trpc.useUtils();
@@ -26,7 +38,9 @@ export function AdminMcpServersContent() {
   const [url, setUrl] = useState("");
   const [transport, setTransport] = useState<"sse" | "streamable-http">("sse");
   const [communicatesExternally, setCommunicatesExternally] = useState(false);
-  const [token, setToken] = useState("");
+  const [signInMethod, setSignInMethod] = useState<SignInMethod>("none");
+  const [signInValues, setSignInValues] = useState<SignInFieldValues>(EMPTY_SIGN_IN);
+  const [signInIssues, setSignInIssues] = useState<ServerFormProblem[]>([]);
   const [editing, setEditing] = useState<EditableMcpServer | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, string>>({});
@@ -40,7 +54,9 @@ export function AdminMcpServersContent() {
       setUrl("");
       setTransport("sse");
       setCommunicatesExternally(false);
-      setToken("");
+      setSignInMethod("none");
+      setSignInValues(EMPTY_SIGN_IN);
+      setSignInIssues([]);
       setError(null);
       invalidate();
     },
@@ -67,14 +83,21 @@ export function AdminMcpServersContent() {
 
   const submit = () => {
     if (!label.trim() || !url.trim()) return;
+    const found = signInProblems(signInMethod, signInValues, "none");
+    setSignInIssues(found);
+    if (found.length > 0) return;
+    const { credential, oauth } = signInChange(signInMethod, signInValues, "none");
     register.mutate({
       label,
       url,
       transport,
       communicatesExternally,
-      credential: token.trim() ? token.trim() : null,
+      credential: credential ?? null,
+      oauth: oauth ?? null,
     });
   };
+  const signInMessagesFor = (field: ServerFormField) =>
+    signInIssues.filter((problem) => problem.field === field).map((problem) => problem.message);
 
   return (
     <div className="h-full overflow-auto">
@@ -86,10 +109,10 @@ export function AdminMcpServersContent() {
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Register a remote Model Context Protocol server. Flow authors can
-              then use its tools without seeing credentials. A bearer token is
-              stored encrypted and never shown again.
+              then use its tools without seeing credentials. Tokens and client
+              secrets are stored encrypted and never shown again.
             </p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="mcp-label">Label</Label>
                 <Input
@@ -120,18 +143,17 @@ export function AdminMcpServersContent() {
                   placeholder="https://mcp.example.com/sse"
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="mcp-cred">Bearer token (optional)</Label>
-                <Input
-                  id="mcp-cred"
-                  type="password"
-                  autoComplete="off"
-                  value={token}
-                  onChange={(event) => setToken(event.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">Stored encrypted.</p>
-              </div>
             </div>
+            <SignInFields
+              idPrefix="mcp-register"
+              method={signInMethod}
+              onMethodChange={setSignInMethod}
+              values={signInValues}
+              onValuesChange={setSignInValues}
+              current="none"
+              legacyCredentialRef={null}
+              messagesFor={signInMessagesFor}
+            />
             <div className="space-y-1">
               <label htmlFor="mcp-external" className="flex items-center gap-2 text-sm font-medium">
                 <input

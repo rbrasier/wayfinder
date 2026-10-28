@@ -100,6 +100,7 @@ describe("McpToolPrepass.run", () => {
     url: "https://parlview.example/mcp",
     credentialRef: null,
     hasCredential: true,
+    oauth: null,
     communicatesExternally: true,
   } as unknown as McpServer;
 
@@ -109,11 +110,11 @@ describe("McpToolPrepass.run", () => {
     usage: { promptTokens: 10, completionTokens: 5 },
   };
 
-  const prepass = (readCredential = vi.fn(async () => ({ data: "stored-token" }))) =>
+  const prepass = (resolve = vi.fn(async () => ({ data: "stored-token" }))) =>
     new McpToolPrepass(
       {} as never,
       { check: vi.fn(async () => ({ data: undefined })) } as never,
-      { readCredential } as never,
+      { resolve } as never,
     );
 
   const input = {
@@ -133,18 +134,18 @@ describe("McpToolPrepass.run", () => {
     } as never);
   });
 
-  it("connects with the token stored for the server, not only the environment's", async () => {
+  it("connects with the token resolved for the server, not only the environment's", async () => {
     vi.mocked(generateText).mockResolvedValue({
       steps: [],
       text: "",
       usage: { promptTokens: 1, completionTokens: 1 },
     } as never);
-    const readCredential = vi.fn(async () => ({ data: "stored-token" }));
+    const resolve = vi.fn(async () => ({ data: "resolved-token" }));
 
-    await prepass(readCredential).run(input);
+    await prepass(resolve).run(input);
 
-    expect(readCredential).toHaveBeenCalledWith("server-1");
-    expect(buildMcpTransport).toHaveBeenCalledWith(server, "stored-token");
+    expect(resolve).toHaveBeenCalledWith(server);
+    expect(buildMcpTransport).toHaveBeenCalledWith(server, "resolved-token");
   });
 
   it("keeps what the tools returned before the time limit, rather than nothing", async () => {

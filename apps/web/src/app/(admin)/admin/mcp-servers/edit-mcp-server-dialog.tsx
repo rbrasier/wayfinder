@@ -17,12 +17,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import {
-  credentialChange,
-  credentialSummary,
+  oauthFieldsOf,
   serverFormProblems,
+  signInChange,
+  signInMethodOf,
+  signInProblems,
+  type OAuthSettingsView,
   type ServerFormField,
   type ServerFormProblem,
+  type SignInFieldValues,
+  type SignInMethod,
 } from "./mcp-server-model";
+import { SignInFields } from "./sign-in-fields";
 
 export interface EditableMcpServer {
   id: string;
@@ -31,6 +37,7 @@ export interface EditableMcpServer {
   communicatesExternally: boolean;
   hasCredential: boolean;
   credentialRef: string | null;
+  oauth: OAuthSettingsView | null;
 }
 
 interface EditMcpServerDialogProps {
@@ -39,15 +46,15 @@ interface EditMcpServerDialogProps {
   onSaved: () => void;
 }
 
-// Edits a registered server. The token field never shows the stored token: left
-// blank it keeps it. Saving a server still on a legacy environment variable
-// moves that token into secure storage (UpdateMcpServer).
+// Edits a registered server. Secret fields never show what is stored: left blank
+// they keep it. Saving a server still on a legacy environment variable moves that
+// token into secure storage (UpdateMcpServer).
 export function EditMcpServerDialog({ server, onClose, onSaved }: EditMcpServerDialogProps) {
   const [label, setLabel] = useState("");
   const [url, setUrl] = useState("");
   const [communicatesExternally, setCommunicatesExternally] = useState(false);
-  const [token, setToken] = useState("");
-  const [removeToken, setRemoveToken] = useState(false);
+  const [signInMethod, setSignInMethod] = useState<SignInMethod>("none");
+  const [signInValues, setSignInValues] = useState<SignInFieldValues>({ token: "", oauth: oauthFieldsOf(null) });
   const [problems, setProblems] = useState<ServerFormProblem[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -57,8 +64,8 @@ export function EditMcpServerDialog({ server, onClose, onSaved }: EditMcpServerD
     setLabel(server.label);
     setUrl(server.url);
     setCommunicatesExternally(server.communicatesExternally);
-    setToken("");
-    setRemoveToken(false);
+    setSignInMethod(signInMethodOf(server));
+    setSignInValues({ token: "", oauth: oauthFieldsOf(server.oauth) });
     setProblems([]);
     setSaveError(null);
   }, [server]);
@@ -72,14 +79,17 @@ export function EditMcpServerDialog({ server, onClose, onSaved }: EditMcpServerD
   });
 
   if (!server) return null;
-  const summary = credentialSummary(server);
+  const currentSignIn = signInMethodOf(server);
   const messagesFor = (field: ServerFormField) =>
     problems.filter((problem) => problem.field === field).map((problem) => problem.message);
   const invalid = (field: ServerFormField) => (messagesFor(field).length > 0 ? true : undefined);
   const describedBy = (field: ServerFormField) => (invalid(field) ? `mcp-edit-${field}-problem` : undefined);
 
   const save = () => {
-    const found = serverFormProblems({ label, url });
+    const found = [
+      ...serverFormProblems({ label, url }),
+      ...signInProblems(signInMethod, signInValues, currentSignIn),
+    ];
     setProblems(found);
     if (found.length > 0) {
       revealFirstProblem(dialogRef.current);
@@ -90,7 +100,7 @@ export function EditMcpServerDialog({ server, onClose, onSaved }: EditMcpServerD
       label: label.trim(),
       url: url.trim(),
       communicatesExternally,
-      credential: credentialChange({ token, remove: removeToken }),
+      ...signInChange(signInMethod, signInValues, currentSignIn),
     });
   };
 
@@ -103,8 +113,8 @@ export function EditMcpServerDialog({ server, onClose, onSaved }: EditMcpServerD
         </DialogHeader>
         <DialogBody>
           <DialogDescription id="mcp-edit-description">
-            The token is stored encrypted and never shown again. Leave it blank to keep the
-            current one.
+            Tokens and secrets are stored encrypted and never shown again. Leave them blank to
+            keep the current ones.
           </DialogDescription>
           {saveError ? (
             <p role="alert" className="text-[13px] font-medium text-[#b42318]">
@@ -138,35 +148,16 @@ export function EditMcpServerDialog({ server, onClose, onSaved }: EditMcpServerD
             />
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="mcp-edit-token">Bearer token</Label>
-            {summary.kind === "legacy" ? (
-              <p className="text-[12px] text-[#736d5f]">
-                Uses the environment variable <code>{server.credentialRef}</code>. Saving moves its
-                token into secure storage, or type a new one here.
-              </p>
-            ) : null}
-            <Input
-              id="mcp-edit-token"
-              type="password"
-              autoComplete="off"
-              value={token}
-              disabled={removeToken}
-              onChange={(event) => setToken(event.target.value)}
-              placeholder={summary.kind === "stored" ? "A token is stored. Leave blank to keep it" : "Optional"}
-            />
-            {summary.kind !== "none" ? (
-              <label htmlFor="mcp-edit-remove-token" className="flex items-center gap-2 text-[13px]">
-                <input
-                  id="mcp-edit-remove-token"
-                  type="checkbox"
-                  checked={removeToken}
-                  onChange={(event) => setRemoveToken(event.target.checked)}
-                />
-                Remove token
-              </label>
-            ) : null}
-          </div>
+          <SignInFields
+            idPrefix="mcp-edit"
+            method={signInMethod}
+            onMethodChange={setSignInMethod}
+            values={signInValues}
+            onValuesChange={setSignInValues}
+            current={currentSignIn}
+            legacyCredentialRef={server.credentialRef}
+            messagesFor={messagesFor}
+          />
 
           <label htmlFor="mcp-edit-external" className="flex items-center gap-2 text-[13px] font-medium">
             <input

@@ -5,6 +5,20 @@ import { toTrpcError } from "../trpc-errors";
 // The bearer token itself — stored encrypted, never sent back (ADR-032).
 const credentialInput = z.string().max(4096, "The token is too long.").nullable().optional();
 
+// OAuth 2.0 client credentials (issue #361). The client secret is write-only like
+// the token; absent keeps the stored one. Null stops the server using OAuth.
+const oauthInput = z
+  .object({
+    tokenUrl: z.string().max(2048),
+    clientId: z.string().max(512),
+    clientSecret: z.string().max(4096, "The client secret is too long.").optional(),
+    scope: z.string().max(1024).nullable().optional(),
+    audience: z.string().max(2048).nullable().optional(),
+    clientAuthMethod: z.enum(["client_secret_basic", "client_secret_post"]).optional(),
+  })
+  .nullable()
+  .optional();
+
 export const mcpServerRouter = router({
   list: technicalAdminProcedure
     .input(z.object({ includeDisabled: z.boolean().optional() }).optional())
@@ -21,7 +35,8 @@ export const mcpServerRouter = router({
   listWithTools: authenticatedProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listMcpServersWithTools.execute();
     if (result.error) throw toTrpcError(result.error);
-    return result.data;
+    // Flow authors see which servers exist, not how they sign in.
+    return result.data.map(({ server, tools }) => ({ server: { ...server, oauth: null }, tools }));
   }),
 
   register: technicalAdminProcedure
@@ -32,6 +47,7 @@ export const mcpServerRouter = router({
         transport: z.enum(["sse", "streamable-http"]).optional(),
         communicatesExternally: z.boolean().optional(),
         credential: credentialInput,
+        oauth: oauthInput,
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -41,6 +57,7 @@ export const mcpServerRouter = router({
         transport: input.transport,
         communicatesExternally: input.communicatesExternally,
         credential: input.credential,
+        oauth: input.oauth,
         createdByUserId: ctx.userId,
       });
       if (result.error) throw toTrpcError(result.error);
@@ -56,6 +73,7 @@ export const mcpServerRouter = router({
         communicatesExternally: z.boolean().optional(),
         // Absent keeps the stored token, null removes it, a string replaces it.
         credential: credentialInput,
+        oauth: oauthInput,
       }),
     )
     .mutation(async ({ ctx, input }) => {

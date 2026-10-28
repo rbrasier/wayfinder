@@ -1,7 +1,7 @@
-import type { McpServer } from "@rbrasier/domain";
+import { domainError, err, type McpServer } from "@rbrasier/domain";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { afterEach, describe, expect, it } from "vitest";
-import { buildMcpTransport } from "./ai-sdk-mcp-client";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AiSdkMcpClient, buildMcpTransport } from "./ai-sdk-mcp-client";
 import { EnvLegacyMcpCredentialSource } from "./env-legacy-mcp-credential-source";
 
 const serverWith = (overrides: Partial<McpServer>): McpServer => ({
@@ -11,6 +11,7 @@ const serverWith = (overrides: Partial<McpServer>): McpServer => ({
   url: "https://mcp.example.com/sse",
   credentialRef: null,
   hasCredential: false,
+  oauth: null,
   communicatesExternally: false,
   status: "active",
   createdByUserId: null,
@@ -71,6 +72,20 @@ describe("buildMcpTransport", () => {
       url: "https://mcp.example.com/sse",
       headers: { Authorization: "Bearer stored-token" },
     });
+  });
+});
+
+describe("AiSdkMcpClient", () => {
+  it("reports a failed token request, such as on Test connection, without trying to connect", async () => {
+    const resolve = vi.fn(async () =>
+      err(domainError("INFRA_FAILURE", "Couldn't get an access token from login.example.com: invalid_client")),
+    );
+    const client = new AiSdkMcpClient({ resolve });
+
+    const result = await client.listTools(serverWith({ url: "http://127.0.0.1:1/never-called" }));
+
+    expect(result.error?.message).toBe("Couldn't get an access token from login.example.com: invalid_client");
+    expect(resolve).toHaveBeenCalledTimes(1);
   });
 });
 
