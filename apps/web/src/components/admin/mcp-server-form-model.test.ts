@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  EMPTY_OAUTH_FIELDS,
   CLASSIFICATION_OPTIONS,
   classificationBadge,
   credentialSummary,
   formatHeaderNames,
+  oauthFieldsOf,
   parseCustomHeaders,
   parseStatusMeanings,
   secondsToTimeoutMs,
+  signInChange,
+  signInMethodOf,
+  signInProblems,
   timeoutMsToSeconds,
   toolSettingsFromForm,
   toolSettingsToForm,
@@ -56,11 +61,100 @@ describe("parseCustomHeaders", () => {
 
 describe("credential summary", () => {
   it("names what is saved without any value", () => {
-    expect(credentialSummary({ hasCredential: true, customHeaderNames: ["X-Api-Key"] })).toBe(
+    expect(credentialSummary({ hasCredential: true, customHeaderNames: ["X-Api-Key"], oauth: null })).toBe(
       "Token saved · headers: X-Api-Key",
     );
-    expect(credentialSummary({ hasCredential: false, customHeaderNames: [] })).toBe("—");
+    expect(credentialSummary({ hasCredential: false, customHeaderNames: [], oauth: null })).toBe("—");
     expect(formatHeaderNames(["A", "B"])).toBe("A, B");
+  });
+
+  it("names OAuth client credentials by their client ID", () => {
+    expect(credentialSummary({ hasCredential: false, customHeaderNames: ["X-Tenant"], oauth: oauthSettings })).toBe(
+      "OAuth client credentials (wayfinder-service) · headers: X-Tenant",
+    );
+  });
+});
+
+const oauthSettings = {
+  tokenUrl: "https://login.example.com/token",
+  clientId: "wayfinder-service",
+  scope: "mcp.read",
+  audience: null,
+  clientAuthMethod: "client_secret_basic" as const,
+};
+
+const oauthFields = {
+  ...EMPTY_OAUTH_FIELDS,
+  tokenUrl: " https://login.example.com/token ",
+  clientId: " wayfinder-service ",
+  clientSecret: " s3cret ",
+};
+
+describe("sign-in method", () => {
+  it("reads OAuth, a saved token, or nothing", () => {
+    expect(signInMethodOf({ hasCredential: false, oauth: oauthSettings })).toBe("oauth");
+    expect(signInMethodOf({ hasCredential: true, oauth: null })).toBe("bearer");
+    expect(signInMethodOf({ hasCredential: false, oauth: null })).toBe("none");
+  });
+
+  it("fills the OAuth form from saved settings, leaving the secret blank, or starts empty on HTTP Basic", () => {
+    expect(oauthFieldsOf(oauthSettings)).toEqual({
+      tokenUrl: "https://login.example.com/token",
+      clientId: "wayfinder-service",
+      clientSecret: "",
+      scope: "mcp.read",
+      audience: "",
+      clientAuthMethod: "client_secret_basic",
+    });
+    expect(oauthFieldsOf(null)).toEqual(EMPTY_OAUTH_FIELDS);
+  });
+});
+
+describe("signInChange", () => {
+  it("sends trimmed OAuth settings, leaving out a blank secret so the saved one is kept", () => {
+    expect(signInChange("oauth", { token: "", oauth: { ...oauthFields, clientSecret: " " } }, "oauth")).toEqual({
+      oauth: {
+        tokenUrl: "https://login.example.com/token",
+        clientId: "wayfinder-service",
+        scope: null,
+        audience: null,
+        clientAuthMethod: "client_secret_basic",
+      },
+    });
+    expect(signInChange("oauth", { token: "", oauth: oauthFields }, "none").oauth?.clientSecret).toBe("s3cret");
+  });
+
+  it("sends a typed bearer token, keeps a saved one when blank, and drops OAuth when switching away", () => {
+    expect(signInChange("bearer", { token: " t ", oauth: EMPTY_OAUTH_FIELDS }, "bearer")).toEqual({ bearerToken: "t" });
+    expect(signInChange("bearer", { token: "", oauth: EMPTY_OAUTH_FIELDS }, "bearer")).toEqual({});
+    expect(signInChange("bearer", { token: "t", oauth: EMPTY_OAUTH_FIELDS }, "oauth")).toEqual({
+      bearerToken: "t",
+      oauth: null,
+    });
+  });
+
+  it("removes every way of signing in for None", () => {
+    expect(signInChange("none", { token: "x", oauth: oauthFields }, "oauth")).toEqual({ bearerToken: null, oauth: null });
+  });
+});
+
+describe("signInProblems", () => {
+  it("asks for a bearer token unless one is saved", () => {
+    expect(signInProblems("bearer", { token: " ", oauth: EMPTY_OAUTH_FIELDS }, "none")).toEqual(["Enter the token."]);
+    expect(signInProblems("bearer", { token: "", oauth: EMPTY_OAUTH_FIELDS }, "bearer")).toEqual([]);
+  });
+
+  it("asks for a token URL, client ID and client secret for OAuth, but lets a saved secret stand", () => {
+    expect(signInProblems("oauth", { token: "", oauth: EMPTY_OAUTH_FIELDS }, "none")).toEqual([
+      "Use an http:// or https:// address for the token URL.",
+      "Enter the client ID.",
+      "Enter the client secret.",
+    ]);
+    expect(signInProblems("oauth", { token: "", oauth: { ...oauthFields, clientSecret: "" } }, "oauth")).toEqual([]);
+  });
+
+  it("has nothing to check for None", () => {
+    expect(signInProblems("none", { token: "", oauth: EMPTY_OAUTH_FIELDS }, "none")).toEqual([]);
   });
 });
 

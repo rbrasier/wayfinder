@@ -14,6 +14,19 @@ const timeoutSchema = z.number().int().min(MIN_MCP_CALL_TIMEOUT_MS).max(MAX_MCP_
 const secretInputs = {
   bearerToken: z.string().nullable().optional(),
   customHeaders: z.record(z.string(), z.string()).nullable().optional(),
+  // OAuth 2.0 client credentials (issue #361). An absent client secret keeps the
+  // saved one; null stops the server using OAuth.
+  oauth: z
+    .object({
+      tokenUrl: z.string().max(2048),
+      clientId: z.string().max(512),
+      clientSecret: z.string().max(4096).optional(),
+      scope: z.string().max(1024).nullable().optional(),
+      audience: z.string().max(2048).nullable().optional(),
+      clientAuthMethod: z.enum(["client_secret_basic", "client_secret_post"]).optional(),
+    })
+    .nullable()
+    .optional(),
 };
 
 const pathSchema = z.string().min(1);
@@ -61,7 +74,8 @@ export const mcpServerRouter = router({
   listWithTools: authenticatedProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listMcpServersWithTools.execute();
     if (result.error) throw toTrpcError(result.error);
-    return result.data;
+    // Flow authors see which servers exist, not how they sign in.
+    return result.data.map(({ server, tools }) => ({ server: { ...server, oauth: null }, tools }));
   }),
 
   register: authenticatedProcedure

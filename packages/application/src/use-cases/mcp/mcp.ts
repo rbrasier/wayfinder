@@ -7,6 +7,7 @@ import {
   MIN_MCP_CALL_TIMEOUT_MS,
   ok,
   validateMcpCustomHeaders,
+  validateMcpOAuthSettings,
   validateMcpToolSettings,
 } from "@wayfinder/domain";
 import type {
@@ -18,6 +19,8 @@ import type {
   IMcpToolRepository,
   ListMcpServersInput,
   McpDataClassification,
+  McpOAuthInput,
+  McpOAuthSettings,
   McpServer,
   McpServerSecretsPatch,
   McpServerWithTools,
@@ -34,10 +37,29 @@ const timeoutError = domainError(
 );
 
 // Secrets travel on the request as write-only inputs: `undefined` leaves them
-// unchanged, `null` (or a blank token) clears them.
+// unchanged, `null` (or a blank token) clears them. OAuth settings travel with
+// their client secret; a blank secret keeps the stored one.
 interface McpServerSecretsInput {
   bearerToken?: string | null;
   customHeaders?: Record<string, string> | null;
+  oauth?: McpOAuthInput | null;
+}
+
+interface CurrentSignIn {
+  hasCredential: boolean;
+  hasOAuth: boolean;
+}
+
+interface SignInPatch {
+  secrets: McpServerSecretsPatch;
+  // Undefined leaves the server's OAuth settings as they are; null removes them.
+  oauth: McpOAuthSettings | null | undefined;
+}
+
+interface SignInChoice {
+  bearerToken: string | null | undefined;
+  oauth: McpOAuthSettings | null | undefined;
+  oauthClientSecret: string | null | undefined;
 }
 
 const normaliseToken = (token: string | null | undefined): string | null | undefined => {
@@ -46,22 +68,46 @@ const normaliseToken = (token: string | null | undefined): string | null | undef
   return trimmed.length > 0 ? trimmed : null;
 };
 
-// Validates the secrets as they will stand after the write — an Authorization
-// header is refused only while a bearer token will also be set.
-const buildSecretsPatch = (
+// A server signs in exactly one way (issue #361). Switching to OAuth clears the
+// bearer token; setting a token, or removing OAuth, clears OAuth and its secret.
+const resolveSignIn = (
   input: McpServerSecretsInput,
-  currentlyHasCredential: boolean,
-): Result<McpServerSecretsPatch> => {
+  current: CurrentSignIn,
+): Result<SignInChoice> => {
   const bearerToken = normaliseToken(input.bearerToken);
-  const willHaveToken = bearerToken === undefined ? currentlyHasCredential : bearerToken !== null;
-  if (!input.customHeaders) return ok({ bearerToken, headers: input.customHeaders });
-  const headers = validateMcpCustomHeaders(input.customHeaders, willHaveToken);
+  if (input.oauth && typeof bearerToken === "string") {
+    return err(domainError("VALIDATION_FAILED", "Use either a bearer token or OAuth client credentials, not both."));
+  }
+  if (input.oauth) {
+    const validated = validateMcpOAuthSettings(input.oauth, current.hasOAuth);
+    if (validated.error) return err(validated.error);
+    return ok({ bearerToken: null, oauth: validated.data.settings, oauthClientSecret: validated.data.clientSecret });
+  }
+  const dropsOAuth = input.oauth === null || (typeof bearerToken === "string" && current.hasOAuth);
+  return ok(
+    dropsOAuth
+      ? { bearerToken, oauth: null, oauthClientSecret: null }
+      : { bearerToken, oauth: undefined, oauthClientSecret: undefined },
+  );
+};
+
+// Validates the secrets as they will stand after the write — an Authorization
+// header is refused only while a bearer token or OAuth will also be set.
+const buildSignInPatch = (input: McpServerSecretsInput, current: CurrentSignIn): Result<SignInPatch> => {
+  const signIn = resolveSignIn(input, current);
+  if (signIn.error) return err(signIn.error);
+  const { bearerToken, oauth, oauthClientSecret } = signIn.data;
+  const willHaveToken = bearerToken === undefined ? current.hasCredential : bearerToken !== null;
+  const willUseOAuth = oauth === undefined ? current.hasOAuth : oauth !== null;
+  const secrets = { bearerToken, oauthClientSecret, headers: input.customHeaders };
+  if (!input.customHeaders) return ok({ secrets, oauth });
+  const headers = validateMcpCustomHeaders(input.customHeaders, willHaveToken || willUseOAuth);
   if (headers.error) return err(headers.error);
-  return ok({ bearerToken, headers: headers.data });
+  return ok({ secrets: { ...secrets, headers: headers.data }, oauth });
 };
 
 const hasSecretChanges = (patch: McpServerSecretsPatch): boolean =>
-  patch.bearerToken !== undefined || patch.headers !== undefined;
+  patch.bearerToken !== undefined || patch.headers !== undefined || patch.oauthClientSecret !== undefined;
 
 const reload = async (servers: IMcpServerRepository, id: string): Promise<Result<McpServer>> => {
   const found = await servers.findById(id);
@@ -98,8 +144,8 @@ export class RegisterMcpServer {
     if (input.callTimeoutMs !== undefined && !isValidMcpCallTimeout(input.callTimeoutMs)) {
       return err(timeoutError);
     }
-    const secretsPatch = buildSecretsPatch(input, false);
-    if (secretsPatch.error) return err(secretsPatch.error);
+    const signIn = buildSignInPatch(input, { hasCredential: false, hasOAuth: false });
+    if (signIn.error) return err(signIn.error);
 
     const created = await this.servers.create({
       label,
@@ -108,11 +154,12 @@ export class RegisterMcpServer {
       dataClassification: input.dataClassification,
       verbatimOnly: input.verbatimOnly,
       callTimeoutMs: input.callTimeoutMs,
+      oauth: signIn.data.oauth ?? undefined,
       createdByUserId: input.createdByUserId ?? null,
     });
-    if (created.error || !hasSecretChanges(secretsPatch.data)) return created;
+    if (created.error || !hasSecretChanges(signIn.data.secrets)) return created;
 
-    const stored = await this.secrets.set(created.data.id, secretsPatch.data);
+    const stored = await this.secrets.set(created.data.id, signIn.data.secrets);
     if (stored.error) return err(stored.error);
     return reload(this.servers, created.data.id);
   }
@@ -143,8 +190,11 @@ export class UpdateMcpServer {
     const current = await reload(this.servers, input.id);
     if (current.error) return current;
 
-    const secretsPatch = buildSecretsPatch(input, current.data.hasCredential);
-    if (secretsPatch.error) return err(secretsPatch.error);
+    const signIn = buildSignInPatch(input, {
+      hasCredential: current.data.hasCredential,
+      hasOAuth: current.data.oauth !== null,
+    });
+    if (signIn.error) return err(signIn.error);
 
     const updated = await this.servers.update(input.id, {
       label: input.label?.trim(),
@@ -152,10 +202,11 @@ export class UpdateMcpServer {
       dataClassification: input.dataClassification,
       verbatimOnly: input.verbatimOnly,
       callTimeoutMs: input.callTimeoutMs,
+      oauth: signIn.data.oauth,
     });
-    if (updated.error || !hasSecretChanges(secretsPatch.data)) return updated;
+    if (updated.error || !hasSecretChanges(signIn.data.secrets)) return updated;
 
-    const stored = await this.secrets.set(input.id, secretsPatch.data);
+    const stored = await this.secrets.set(input.id, signIn.data.secrets);
     if (stored.error) return err(stored.error);
     return reload(this.servers, input.id);
   }

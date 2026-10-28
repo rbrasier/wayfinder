@@ -196,6 +196,17 @@ export const admin_mcp_servers = pgTable("admin_mcp_servers", {
   credential_ciphertext: text("credential_ciphertext"),
   // JSON object of header name → value, encrypted as a whole.
   custom_headers_ciphertext: text("custom_headers_ciphertext"),
+  // OAuth 2.0 client credentials (issue #361): set together, or all null for a
+  // server that does not sign in with OAuth. The client secret is write-only
+  // like the token and read only by the secret store.
+  oauth_token_url: text("oauth_token_url"),
+  oauth_client_id: text("oauth_client_id"),
+  oauth_scope: text("oauth_scope"),
+  oauth_audience: text("oauth_audience"),
+  oauth_client_auth_method: text("oauth_client_auth_method", {
+    enum: ["client_secret_basic", "client_secret_post"],
+  }),
+  oauth_client_secret_ciphertext: text("oauth_client_secret_ciphertext"),
   status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
   created_by_user_id: uuid("created_by_user_id").references(() => core_users.id, {
     onDelete: "set null",

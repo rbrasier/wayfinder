@@ -13,6 +13,7 @@ const server = (id: string, dataClassification: McpServer["dataClassification"])
   callTimeoutMs: 30_000,
   hasCredential: false,
   customHeaderNames: [],
+  oauth: null,
   status: "active",
   createdByUserId: null,
   createdAt: new Date(),

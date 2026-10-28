@@ -42,6 +42,43 @@ export const isValidMcpCallTimeout = (timeoutMs: number): boolean =>
   timeoutMs >= MIN_MCP_CALL_TIMEOUT_MS &&
   timeoutMs <= MAX_MCP_CALL_TIMEOUT_MS;
 
+// How the client ID and secret reach the token endpoint (RFC 6749 §2.3.1): an
+// HTTP Basic header, which every server must support, or the form body, which
+// some providers default to.
+export type McpOAuthClientAuthMethod = "client_secret_basic" | "client_secret_post";
+
+export const MCP_OAUTH_CLIENT_AUTH_METHODS: readonly McpOAuthClientAuthMethod[] = [
+  "client_secret_basic",
+  "client_secret_post",
+];
+
+// OAuth 2.0 client-credentials settings: Wayfinder signs in as a service account
+// and fetches its own short-lived access tokens. Everything but the client secret.
+export interface McpOAuthSettings {
+  readonly tokenUrl: string;
+  readonly clientId: string;
+  readonly scope: string | null;
+  // Provider-specific: Auth0 reads it as `audience`, RFC 8707 servers as `resource`.
+  readonly audience: string | null;
+  readonly clientAuthMethod: McpOAuthClientAuthMethod;
+}
+
+// What an admin submits. A blank or absent secret keeps the stored one.
+export interface McpOAuthInput {
+  readonly tokenUrl: string;
+  readonly clientId: string;
+  readonly clientSecret?: string;
+  readonly scope?: string | null;
+  readonly audience?: string | null;
+  readonly clientAuthMethod?: McpOAuthClientAuthMethod;
+}
+
+// Settings to store, with a new client secret only when one was given.
+export interface McpOAuthWrite {
+  readonly settings: McpOAuthSettings;
+  readonly clientSecret?: string;
+}
+
 // An admin-registered remote MCP server. Its credential and custom headers are
 // write-only (ADR-062 §8): the entity says only whether they exist, and the
 // values are decrypted inside the adapter that opens the connection.
@@ -59,6 +96,9 @@ export interface McpServer {
   readonly callTimeoutMs: number;
   readonly hasCredential: boolean;
   readonly customHeaderNames: string[];
+  // Set when the server signs in with OAuth 2.0 client credentials (issue #361).
+  // The client secret, like the bearer token, lives only in the secret store.
+  readonly oauth: McpOAuthSettings | null;
   readonly status: McpServerStatus;
   readonly createdByUserId: string | null;
   readonly createdAt: Date;
@@ -72,6 +112,7 @@ export interface NewMcpServer {
   readonly dataClassification?: McpDataClassification;
   readonly verbatimOnly?: boolean;
   readonly callTimeoutMs?: number;
+  readonly oauth?: McpOAuthSettings;
   readonly createdByUserId?: string | null;
 }
 
@@ -81,6 +122,8 @@ export interface McpServerUpdate {
   readonly dataClassification?: McpDataClassification;
   readonly verbatimOnly?: boolean;
   readonly callTimeoutMs?: number;
+  // `null` stops the server using OAuth.
+  readonly oauth?: McpOAuthSettings | null;
 }
 
 // The secrets a connection sends. Never returned by a repository read or a
@@ -88,12 +131,14 @@ export interface McpServerUpdate {
 export interface McpServerSecrets {
   readonly bearerToken: string | null;
   readonly headers: Record<string, string>;
+  readonly oauthClientSecret: string | null;
 }
 
 // `undefined` leaves a secret unchanged; `null` clears it.
 export interface McpServerSecretsPatch {
   readonly bearerToken?: string | null;
   readonly headers?: Record<string, string> | null;
+  readonly oauthClientSecret?: string | null;
 }
 
 // Headers the transport sets itself. Letting an admin override them would break
@@ -113,11 +158,12 @@ const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
 const LINE_BREAK = /[\r\n]/;
 
 // Validates and trims custom header names. `Authorization` is allowed as a custom
-// header only when no bearer token is set — otherwise two values would compete
-// for the same header and which one is sent would depend on merge order.
+// header only when the server signs in with neither a bearer token nor OAuth —
+// otherwise two values would compete for the same header and which one is sent
+// would depend on merge order.
 export const validateMcpCustomHeaders = (
   headers: Record<string, string>,
-  hasBearerToken: boolean,
+  authorizationTaken: boolean,
 ): Result<Record<string, string>> => {
   const validated: Record<string, string> = {};
   for (const [rawName, value] of Object.entries(headers)) {
@@ -129,9 +175,12 @@ export const validateMcpCustomHeaders = (
     if (RESERVED_MCP_HEADER_NAMES.includes(lowerName)) {
       return err(domainError("VALIDATION_FAILED", `${name} is set by the connection and cannot be overridden.`));
     }
-    if (lowerName === "authorization" && hasBearerToken) {
+    if (lowerName === "authorization" && authorizationTaken) {
       return err(
-        domainError("VALIDATION_FAILED", "Remove the bearer token before setting an Authorization header."),
+        domainError(
+          "VALIDATION_FAILED",
+          "Remove the bearer token or OAuth sign-in before setting an Authorization header.",
+        ),
       );
     }
     if (LINE_BREAK.test(value)) {
@@ -192,3 +241,49 @@ export interface McpToolCallRecord {
   readonly sourceStatus?: McpSourceStatus | null;
   readonly citations?: ToolRecordCitation[];
 }
+
+const isHttpUrl = (value: string): boolean => {
+  try {
+    const protocol = new URL(value).protocol;
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+const blankToNull = (value: string | null | undefined): string | null => {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+// `hasStoredSecret` is whether the server already signs in with OAuth — only
+// then may the secret field be left blank to keep the one already stored.
+export const validateMcpOAuthSettings = (
+  input: McpOAuthInput,
+  hasStoredSecret: boolean,
+): Result<McpOAuthWrite> => {
+  const tokenUrl = input.tokenUrl.trim();
+  const clientId = input.clientId.trim();
+  const clientSecret = blankToNull(input.clientSecret);
+  const clientAuthMethod = input.clientAuthMethod ?? "client_secret_basic";
+  if (!isHttpUrl(tokenUrl)) {
+    return err(domainError("VALIDATION_FAILED", "Token URL must be a valid http(s) URL."));
+  }
+  if (clientId.length === 0) {
+    return err(domainError("VALIDATION_FAILED", "Client ID is required."));
+  }
+  if (!clientSecret && !hasStoredSecret) {
+    return err(domainError("VALIDATION_FAILED", "Client secret is required."));
+  }
+  if (!MCP_OAUTH_CLIENT_AUTH_METHODS.includes(clientAuthMethod)) {
+    return err(domainError("VALIDATION_FAILED", "Unknown client authentication method."));
+  }
+  const settings: McpOAuthSettings = {
+    tokenUrl,
+    clientId,
+    scope: blankToNull(input.scope),
+    audience: blankToNull(input.audience),
+    clientAuthMethod,
+  };
+  return ok(clientSecret ? { settings, clientSecret } : { settings });
+};

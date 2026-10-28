@@ -414,6 +414,13 @@
       "when": 1792915442553,
       "tag": "0058_seed_unattended_automation",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793187869298,
+      "tag": "0059_mcp_oauth_client_credentials",
+      "breakpoints": true
     }
   ]
 }
