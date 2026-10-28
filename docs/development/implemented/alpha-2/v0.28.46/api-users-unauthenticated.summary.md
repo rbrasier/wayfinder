@@ -1,4 +1,4 @@
-# Summary — remove the API's unauthenticated user and error routes (v0.28.45)
+# Summary — remove the API's unauthenticated user and error routes (v0.28.46)
 
 ## Root cause
 
@@ -21,7 +21,7 @@ The first revision (PR #360, against `release/alpha-2`) authenticated the routes
 with a new `API_SERVICE_KEY` and ADR-067. On review there was no caller to
 authenticate, so the routes are removed instead, the key and ADR are dropped, and
 the fix moved onto the admin permission split branch (#355) — it ships in that
-PR's v0.28.45 rather than taking its own version.
+PR's v0.28.46 rather than taking its own version.
 
 ## Regression tests
 

@@ -1,7 +1,7 @@
 # Bug fix — the API served user and error management without authentication
 
 - **Severity**: Major
-- **Base**: `feature/admin-permission-split/claude-rbrasier` (#355), shipping with it in v0.28.45
+- **Base**: `feature/admin-permission-split/claude-rbrasier` (#355), shipping with it in v0.28.46
 - **Source issue**: none
 
 ## Symptom
