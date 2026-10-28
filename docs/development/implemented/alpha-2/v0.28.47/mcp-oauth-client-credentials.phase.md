@@ -1,6 +1,6 @@
 # Phase — MCP OAuth 2.0 Client Credentials
 
-- **Status**: Draft (run `/doc-review` before building)
+- **Status**: Implemented (v0.28.47)
 - **Target version**: 0.28.47 — **PATCH**, on `release/alpha-2`. A documented
   exception: the change adds nullable columns, which would normally be MINOR,
   but MINOR `0.29.0` and later are already taken on `main`, and the maintainer
