@@ -69,12 +69,15 @@ obtain more access:
 `admin:users` holders get two guards, enforced in `packages/application`.
 Each guarded use case takes the caller as `{ isAdmin: boolean }`:
 
-- `assignUserRole` / `removeUserRole` refuse any role where
-  `isAdminRoleKey(role.key)` (Global, Technical or User Admin) unless
-  `caller.isAdmin`.
+- `assignUserRole` / `removeUserRole` refuse any role that grants admin
+  access unless `caller.isAdmin`. `grantsAdminAccess(key, permissions)` decides
+  it: a built-in admin role (Global, Technical or User Admin) or any role whose
+  permissions include an `ADMIN_AREA_PERMISSIONS` key — a Global Admin can build
+  a custom role carrying one (fixed in v0.28.47; the key check alone let a User
+  Admin assign such a role to themselves).
 - `createUser` and `updateUser` refuse an `isAdmin` value, and `updateUser`,
   `deleteUser` and `resetUserPassword` refuse a target that is `is_admin` or
-  holds an admin role, unless `caller.isAdmin`. Without this, resetting a
+  holds a role that grants admin access (same test), unless `caller.isAdmin`. Without this, resetting a
   Global Admin's password is an account takeover.
 
 ### 4. Gate mechanics

@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   type IAuditLogger,
   type IPasswordResetter,
+  type IRoleRepository,
   type IUserRepository,
   type IUserRoleRepository,
   type NewAuditLog,
+  type NewRole,
   type NewUser,
+  type PermissionKey,
   type PasswordResetOutcome,
   type Result,
   type Role,
@@ -35,6 +38,41 @@ const role = (key: string): Role => ({
   isImmutable: false,
   isDefault: false,
 });
+
+// Only listPermissions matters to the guard: it decides whether a role the
+// target holds grants admin access, built-in or not.
+class InMemoryRoles implements IRoleRepository {
+  readonly permissionsByRoleId = new Map<string, PermissionKey[]>();
+
+  grantPermissions(roleKey: string, permissions: PermissionKey[]): void {
+    this.permissionsByRoleId.set(role(roleKey).id, permissions);
+  }
+
+  async list(): Promise<Result<Role[]>> {
+    return ok([]);
+  }
+  async findByKey(): Promise<Result<Role | null>> {
+    return ok(null);
+  }
+  async findById(): Promise<Result<Role | null>> {
+    return ok(null);
+  }
+  async create(input: NewRole): Promise<Result<Role>> {
+    return ok(role(input.key));
+  }
+  async update(id: string): Promise<Result<Role>> {
+    return ok(role(id));
+  }
+  async delete(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+  async listPermissions(roleId: string): Promise<Result<PermissionKey[]>> {
+    return ok(this.permissionsByRoleId.get(roleId) ?? []);
+  }
+  async replacePermissions(): Promise<Result<void>> {
+    return ok(undefined);
+  }
+}
 
 class InMemoryUsers implements IUserRepository {
   readonly byId = new Map<string, User>();
@@ -122,13 +160,19 @@ class SilentAuditLogger implements IAuditLogger {
 const setup = () => {
   const users = new InMemoryUsers();
   const userRoles = new InMemoryUserRoles();
+  const roles = new InMemoryRoles();
   users.seed("ordinary");
   users.seed("global-admin", true);
   users.seed("technical-admin");
   userRoles.grant("technical-admin", "technical_admins");
   users.seed("power-user");
   userRoles.grant("power-user", "power_users");
-  return { users, userRoles };
+  // A Global-Admin-made custom role carrying an admin area key is as much an
+  // admin role as the built-in ones.
+  users.seed("oversight-holder");
+  userRoles.grant("oversight-holder", "oversight");
+  roles.grantPermissions("oversight", ["admin:oversight"]);
+  return { users, userRoles, roles };
 };
 
 describe("CreateUser — delegated caller", () => {
@@ -166,8 +210,8 @@ describe("CreateUser — delegated caller", () => {
 
 describe("UpdateUser — delegated caller", () => {
   it("lets a User Admin edit an ordinary user and a Power User", async () => {
-    const { users, userRoles } = setup();
-    const updateUser = new UpdateUser(users, userRoles);
+    const { users, userRoles, roles } = setup();
+    const updateUser = new UpdateUser(users, userRoles, roles);
 
     const ordinary = await updateUser.execute("ordinary", { name: "Renamed" }, userAdminCaller);
     const powerUser = await updateUser.execute("power-user", { name: "Renamed" }, userAdminCaller);
@@ -177,9 +221,9 @@ describe("UpdateUser — delegated caller", () => {
   });
 
   it("accepts an unchanged isAdmin: false from the edit form", async () => {
-    const { users, userRoles } = setup();
+    const { users, userRoles, roles } = setup();
 
-    const result = await new UpdateUser(users, userRoles).execute(
+    const result = await new UpdateUser(users, userRoles, roles).execute(
       "ordinary",
       { name: "Renamed", isAdmin: false },
       userAdminCaller,
@@ -189,9 +233,9 @@ describe("UpdateUser — delegated caller", () => {
   });
 
   it("refuses a User Admin promoting someone to Global Admin", async () => {
-    const { users, userRoles } = setup();
+    const { users, userRoles, roles } = setup();
 
-    const result = await new UpdateUser(users, userRoles).execute(
+    const result = await new UpdateUser(users, userRoles, roles).execute(
       "ordinary",
       { isAdmin: true },
       userAdminCaller,
@@ -202,8 +246,8 @@ describe("UpdateUser — delegated caller", () => {
   });
 
   it("refuses a User Admin editing a Global Admin or an admin-role holder", async () => {
-    const { users, userRoles } = setup();
-    const updateUser = new UpdateUser(users, userRoles);
+    const { users, userRoles, roles } = setup();
+    const updateUser = new UpdateUser(users, userRoles, roles);
 
     const globalAdmin = await updateUser.execute("global-admin", { email: "x@example.com" }, userAdminCaller);
     const technicalAdmin = await updateUser.execute("technical-admin", { name: "x" }, userAdminCaller);
@@ -212,10 +256,22 @@ describe("UpdateUser — delegated caller", () => {
     expect(technicalAdmin.error?.code).toBe("FORBIDDEN");
   });
 
-  it("lets a Technical Admin edit their own profile", async () => {
-    const { users, userRoles } = setup();
+  it("refuses a User Admin editing the holder of a custom role that grants admin access", async () => {
+    const { users, userRoles, roles } = setup();
 
-    const result = await new UpdateUser(users, userRoles).execute(
+    const result = await new UpdateUser(users, userRoles, roles).execute(
+      "oversight-holder",
+      { email: "x@example.com" },
+      userAdminCaller,
+    );
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+  });
+
+  it("lets a Technical Admin edit their own profile", async () => {
+    const { users, userRoles, roles } = setup();
+
+    const result = await new UpdateUser(users, userRoles, roles).execute(
       "technical-admin",
       { name: "Renamed" },
       { isAdmin: false, userId: "technical-admin" },
@@ -225,9 +281,9 @@ describe("UpdateUser — delegated caller", () => {
   });
 
   it("still refuses someone making themselves a Global Admin", async () => {
-    const { users, userRoles } = setup();
+    const { users, userRoles, roles } = setup();
 
-    const result = await new UpdateUser(users, userRoles).execute(
+    const result = await new UpdateUser(users, userRoles, roles).execute(
       "technical-admin",
       { isAdmin: true },
       { isAdmin: false, userId: "technical-admin" },
@@ -237,9 +293,9 @@ describe("UpdateUser — delegated caller", () => {
   });
 
   it("lets a Global Admin edit another Global Admin", async () => {
-    const { users, userRoles } = setup();
+    const { users, userRoles, roles } = setup();
 
-    const result = await new UpdateUser(users, userRoles).execute(
+    const result = await new UpdateUser(users, userRoles, roles).execute(
       "global-admin",
       { name: "Renamed" },
       globalAdminCaller,
@@ -251,16 +307,16 @@ describe("UpdateUser — delegated caller", () => {
 
 describe("DeleteUser — delegated caller", () => {
   it("lets a User Admin delete an ordinary user", async () => {
-    const { users, userRoles } = setup();
+    const { users, userRoles, roles } = setup();
 
-    const result = await new DeleteUser(users, userRoles).execute("ordinary", userAdminCaller);
+    const result = await new DeleteUser(users, userRoles, roles).execute("ordinary", userAdminCaller);
 
     expect(result.data).toBe(true);
   });
 
   it("refuses a User Admin deleting a Global Admin or an admin-role holder", async () => {
-    const { users, userRoles } = setup();
-    const deleteUser = new DeleteUser(users, userRoles);
+    const { users, userRoles, roles } = setup();
+    const deleteUser = new DeleteUser(users, userRoles, roles);
 
     const globalAdmin = await deleteUser.execute("global-admin", userAdminCaller);
     const technicalAdmin = await deleteUser.execute("technical-admin", userAdminCaller);
@@ -268,6 +324,17 @@ describe("DeleteUser — delegated caller", () => {
     expect(globalAdmin.error?.code).toBe("FORBIDDEN");
     expect(technicalAdmin.error?.code).toBe("FORBIDDEN");
     expect(users.byId.has("global-admin")).toBe(true);
+  });
+});
+
+describe("DeleteUser — custom admin role holder", () => {
+  it("refuses a User Admin deleting the holder of a custom role that grants admin access", async () => {
+    const { users, userRoles, roles } = setup();
+
+    const result = await new DeleteUser(users, userRoles, roles).execute("oversight-holder", userAdminCaller);
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+    expect(users.byId.has("oversight-holder")).toBe(true);
   });
 });
 
@@ -280,10 +347,10 @@ describe("ResetUserPassword — delegated caller", () => {
   });
 
   it("lets a User Admin reset an ordinary user's password", async () => {
-    const { users, userRoles } = setup();
+    const { users, userRoles, roles } = setup();
     const resetter = new CountingResetter();
 
-    const result = await new ResetUserPassword(users, userRoles, resetter, new SilentAuditLogger()).execute(
+    const result = await new ResetUserPassword(users, userRoles, roles, resetter, new SilentAuditLogger()).execute(
       command("ordinary", userAdminCaller),
     );
 
@@ -292,10 +359,10 @@ describe("ResetUserPassword — delegated caller", () => {
   });
 
   it("refuses a User Admin resetting a Global Admin's password, so the account cannot be taken over", async () => {
-    const { users, userRoles } = setup();
+    const { users, userRoles, roles } = setup();
     const resetter = new CountingResetter();
 
-    const result = await new ResetUserPassword(users, userRoles, resetter, new SilentAuditLogger()).execute(
+    const result = await new ResetUserPassword(users, userRoles, roles, resetter, new SilentAuditLogger()).execute(
       command("global-admin", userAdminCaller),
     );
 
@@ -304,10 +371,10 @@ describe("ResetUserPassword — delegated caller", () => {
   });
 
   it("refuses a User Admin resetting an admin-role holder's password", async () => {
-    const { users, userRoles } = setup();
+    const { users, userRoles, roles } = setup();
     const resetter = new CountingResetter();
 
-    const result = await new ResetUserPassword(users, userRoles, resetter, new SilentAuditLogger()).execute(
+    const result = await new ResetUserPassword(users, userRoles, roles, resetter, new SilentAuditLogger()).execute(
       command("technical-admin", userAdminCaller),
     );
 
@@ -315,11 +382,23 @@ describe("ResetUserPassword — delegated caller", () => {
     expect(resetter.calls).toBe(0);
   });
 
-  it("lets a Global Admin reset another Global Admin's password", async () => {
-    const { users, userRoles } = setup();
+  it("refuses a User Admin resetting the password of a custom admin role holder", async () => {
+    const { users, userRoles, roles } = setup();
     const resetter = new CountingResetter();
 
-    const result = await new ResetUserPassword(users, userRoles, resetter, new SilentAuditLogger()).execute(
+    const result = await new ResetUserPassword(users, userRoles, roles, resetter, new SilentAuditLogger()).execute(
+      command("oversight-holder", userAdminCaller),
+    );
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+    expect(resetter.calls).toBe(0);
+  });
+
+  it("lets a Global Admin reset another Global Admin's password", async () => {
+    const { users, userRoles, roles } = setup();
+    const resetter = new CountingResetter();
+
+    const result = await new ResetUserPassword(users, userRoles, roles, resetter, new SilentAuditLogger()).execute(
       command("global-admin", globalAdminCaller),
     );
 

@@ -97,13 +97,16 @@ const noRoles: IUserRoleRepository = {
   assign: async () => ok(undefined),
   remove: async () => ok(undefined),
 };
+// The guard reads role permissions only for a delegated caller; these tests act
+// as a Global Admin, so no role is ever looked up.
+const noRolePermissions = { listPermissions: async () => ok([]) } as never;
 const globalAdminCaller = { isAdmin: true, userId: "global-admin" };
 
 describe("UpdateUser", () => {
   it("updates an existing user", async () => {
     const repo = new InMemoryUsers();
     const existing = repo.seed({ email: "ada@example.com", name: "Ada" });
-    const sut = new UpdateUser(repo, noRoles);
+    const sut = new UpdateUser(repo, noRoles, noRolePermissions);
 
     const result = await sut.execute(existing.id, { name: "Ada Lovelace" }, globalAdminCaller);
 
@@ -113,7 +116,7 @@ describe("UpdateUser", () => {
   });
 
   it("returns NOT_FOUND when user does not exist", async () => {
-    const sut = new UpdateUser(new InMemoryUsers(), noRoles);
+    const sut = new UpdateUser(new InMemoryUsers(), noRoles, noRolePermissions);
 
     const result = await sut.execute("non-existent-id", { name: "Ghost" }, globalAdminCaller);
 
@@ -126,7 +129,7 @@ describe("DeleteUser", () => {
   it("deletes an existing user", async () => {
     const repo = new InMemoryUsers();
     const existing = repo.seed({ email: "ada@example.com" });
-    const sut = new DeleteUser(repo, noRoles);
+    const sut = new DeleteUser(repo, noRoles, noRolePermissions);
 
     const result = await sut.execute(existing.id, globalAdminCaller);
 
@@ -135,7 +138,7 @@ describe("DeleteUser", () => {
   });
 
   it("returns NOT_FOUND when user does not exist", async () => {
-    const sut = new DeleteUser(new InMemoryUsers(), noRoles);
+    const sut = new DeleteUser(new InMemoryUsers(), noRoles, noRolePermissions);
 
     const result = await sut.execute("non-existent-id", globalAdminCaller);
 
