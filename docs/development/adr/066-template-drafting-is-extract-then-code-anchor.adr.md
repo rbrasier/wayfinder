@@ -26,12 +26,25 @@ between copies is almost certainly a field.
 
 1. **Extract (AI).** `generateObject` on the base example's text, purpose
    `template-draft-extract`. It returns
-   `TemplateDraftField[] = { label, type, sourceValue, occurrence }`. The
-   AI never writes `{{ … }}`. The server builds the annotation line from
+   `TemplateDraftField[] = { label, type, options, multiple, sourceValue, occurrence }`.
+   The prompt carries the rule from `ed73b66`: `sourceValue` is the answer,
+   never the question, and Word extracts one table cell per line. A short
+   comma- or slash-separated list in a value is a fixed set (`multiple`).
+   The AI never writes `{{ … }}`. The server builds the annotation line from
    `label` and `type`, as v0.21.3 did.
 2. **Place (code).** Each field must pass two checks, in order:
    - **Exact-match check.** `sourceValue` must appear in the base text at
      `occurrence`. Fields that fail are dropped.
+   - **Caption correction.** `resolveCaptionAnchor` (restored from the
+     removed `resolveAnchor`). When `deriveFieldKey(sourceValue)` equals the
+     field's own key, the AI pointed at the caption. The anchor moves to the
+     value the caption introduces (the rest of the line after `:`, `|` or a
+     dash, otherwise the next non-blank line, which is the next table cell)
+     and is re-indexed by that value's own occurrence. If that value is
+     blank, longer than 120 characters, ends in `:`, already has a tag, or
+     is another field's caption, the tag is placed *after* the caption
+     instead (`insertAfter`). The exact-match check alone cannot catch this
+     error, because the caption really is in the document.
    - **Comparison filter** (only with 2+ examples).
      `variesAcrossExamples(sourceValue, otherExampleTexts)` must be true:
      the value is missing from at least one other example. Fields that fail
@@ -47,7 +60,23 @@ between copies is almost certainly a field.
    instance-specific. These go through stage 2 again, once. The verify pass
    cannot rename, remove or move a field that has already been placed.
 
-### 2. The comparison is a pure domain function
+### 2. Evidence, not self-reported confidence
+
+The removed design showed the AI's own 0–100 confidence and made the author
+confirm low scores before saving. That score was a guess with nothing
+behind it. Each row now shows evidence that code can check:
+
+| Label | When | Confirm before save? |
+| ----- | ---- | -------------------- |
+| Differs in N of M examples | 2+ examples, value missing from at least one | No |
+| Only one example | 1 example; no comparison was possible | No |
+| Added by the checking pass | Came from stage 3 | **Yes**, because it had the least scrutiny |
+
+Each row also shows up to 200 characters of surrounding text, which code
+takes from the base document at the resolved anchor, and "Replaces '…'" or
+"Goes after '…'".
+
+### 3. The comparison is a pure domain function
 
 `variesAcrossExamples(value: string, otherTexts: string[]): boolean` lives
 in `packages/domain`. It normalises whitespace only, so formatting
@@ -56,7 +85,7 @@ the spec. The AI only sees the base example. The other examples are used
 only by this comparison, which keeps token cost proportional to one
 document.
 
-### 3. The draft route persists nothing
+### 4. The draft route persists nothing
 
 `POST …/template/draft` returns `AnnotationRow`s whose occurrences point at
 the literal values, along with the unplaced fields and the preview text
@@ -76,14 +105,19 @@ apply unchanged. Examples live in the browser between steps, as before.
 - **Letting the AI return a rewritten document.** Rejected. That is the
   failure mode the issue thread describes ("trouble reconstructing the
   document").
+- **Restoring the AI confidence bar and its confirm gate.** Rejected. The
+  score is self-reported and was part of the design that failed. Evidence
+  labels (§2) replace it. The `ConfidenceBar` component stays where chat
+  uses it.
 - **Sending every example to the AI.** Rejected. It costs N× the tokens,
   and the comparison is more reliable done in code.
 
 ## Consequences
 
 - Placement errors can now only come from wrong *values*, not wrong
-  *positions*, and the exact-match check catches wrong values before
-  anything is written.
+  *positions*. The exact-match check catches values that are not in the
+  document, and caption correction catches the one wrong value that is
+  (the field's own caption).
 - A value that is the same in every example by coincidence is not tagged.
   The review UI has to make restoring it a single click.
 - Section and repeating-group tags are still written by hand.

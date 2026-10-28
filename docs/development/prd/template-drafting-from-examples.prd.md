@@ -61,11 +61,13 @@ AI.
 | ------ | -------- | -------------- | ----- |
 | `TemplateAnnotationEdit` | `packages/domain/src/ports/document-generator.ts` | existing | `{ find, occurrence, replacement }`, reused unchanged |
 | `IDocumentGenerator.annotate()` | same | existing | Places tags in `.docx` runs and reports `unmatched` |
-| `TemplateDraftField` | `packages/domain/src/entities/template-draft.ts` | new | `{ label, type, sourceValue, occurrence }`, where `sourceValue` is quoted exactly from the base document |
+| `TemplateDraftField` | `packages/domain/src/entities/template-draft.ts` | new | `{ label, type, options, multiple, sourceValue, occurrence }`, where `sourceValue` is quoted exactly from the base document |
+| `resolveCaptionAnchor` | same | new | Pure function, restored from the removed `resolveAnchor` (`ed73b66`). Moves a tag that landed on a field's caption onto the value the caption introduces, or marks the tag to go after the caption when there is no value. |
+| `DraftEvidence` | same | new | `"varies" \| "single-example" \| "checking-pass"`, plus `{ differsIn, of }` for `varies`. Shown on each row in place of an AI confidence score. |
 | `variesAcrossExamples` | same | new | Pure function: does a value differ across the example texts? |
 | `DraftTemplateFromExamples` | `packages/application/src/use-cases/document/draft-template-from-examples.ts` | new | Extract → filter → place → verify |
 | `templateDraftExtractionSchema`, `templateDraftVerificationSchema` | `packages/shared/src/schemas/document.ts` | new | Zod schemas for the two AI calls |
-| `AnnotationRow` | `apps/web/src/lib/template-annotation.ts` | existing | Drafted fields become rows whose occurrences point at the literal value |
+| `AnnotationRow` | `apps/web/src/lib/template-annotation.ts` | existing | Drafted fields become rows whose occurrences point at the literal value. Gains optional `draft: { replacedValue, context, insertAfter, evidence, confirmed }`. `buildAnnotationEdits` writes an insert-after as `caption + " " + tag`, as before `cdcab7d`, so the generators need no change. |
 
 ## 6. User stories
 
@@ -79,7 +81,10 @@ AI.
    know what is missing before I save.
 4. As a flow author, I preview the tagged document before saving, so I can
    see where each tag landed.
-5. As a template-literate author, I choose **I have a template with tags**
+5. As a flow author, each drafted field shows the text around it and
+   whether it differs between my examples, so I can tell which "Smith" was
+   tagged and how much evidence supports it.
+6. As a template-literate author, I choose **I have a template with tags**
    and the flow is exactly what it is today.
 
 ## 7. Pages / surfaces affected
@@ -104,6 +109,9 @@ as it does today.
 - ADR-066 (new): template drafting extracts with the AI and places tags with
   code, with a cross-example comparison filter and a verify-only second
   pass.
+- Restores the caption-to-value anchoring from `ed73b66` and the
+  modal's copy and layout from `eb5e93e`/`d900b6b`. It does not restore the
+  AI's self-reported confidence (see ADR-066 §4).
 - Assumes the annotation design from v0.21.3: tag syntax is built
   server-side, and examples are held in the browser and never stored.
 
@@ -126,6 +134,36 @@ as it does today.
       `variesAcrossExamples` and a use-case test.
 - [ ] With 1 example, no comparison filter runs, and the review step says
       so ("Add more examples to improve accuracy").
+- [ ] A drafted `sourceValue` that is the field's own caption ("Employee
+      Name") is moved onto the value the caption introduces (the rest of the
+      line, or the next table cell) and re-indexed by that value's own
+      occurrence. When there is no usable value (blank, prose over 120
+      characters, another caption, or text that already has a tag), the tag
+      goes after the caption and the caption is kept. Covered by domain unit
+      tests carried over from `ed73b66`.
+- [ ] Each review row shows: "Replaces '…'" or "Goes after '…'"; up to 200
+      characters of surrounding text, taken by code from the base document;
+      and an evidence label: **Differs in N of M examples**, **Only one
+      example**, or **Added by the checking pass**. No AI confidence score
+      is shown.
+- [ ] Save stays blocked until the author confirms every **Added by the
+      checking pass** row ("Confirm the fields the checking pass added
+      before saving."). No other evidence label needs confirmation.
+- [ ] A short comma- or slash-separated list in a filled value ("Mobile
+      phone, Laptop") drafts as a multi-select. With 2+ examples, the
+      choices are the union of the values seen across the examples.
+- [ ] The review step opens with a found-fields summary (two columns, type
+      in brackets, using "data fields" wording) before the editable grid.
+- [ ] The **Use an existing example** button and its confirmation use the
+      wording from the earlier design: "Wayfinder uses them as a pattern,
+      working out which text changes each time and turning those parts into
+      fields", and "The details in these documents (names, amounts, dates)
+      will be replaced with fields. Your original files are not changed,
+      and they are not saved."
+- [ ] The modal footer follows the existing annotation modal: Cancel
+      bottom-left, actions bottom-right. The review step offers "Need to add
+      more fields? Download…", which reuses the existing download and
+      `reupload` step.
 - [ ] The verify pass can only add fields. Its additions go through the
       same exact-match check and placement as the extracted fields.
 - [ ] Edits that `annotate()` reports as `unmatched` appear in a "Not
@@ -159,6 +197,9 @@ as it does today.
   value that is the same in every copy by coincidence (one supplier for all
   three contracts) will not be tagged. The review step lets the author add
   it back from the base text.
+- **Captions taken for values.** This was the main failure of the old pass
+  (`ed73b66`). The exact-match check cannot catch it, because the caption is
+  in the document, so `resolveCaptionAnchor` is required, not optional.
 - **Values Word splits across runs.** This relies on `annotate()`'s existing
   handling of spans split across runs.
 - **Token cost.** Ten long examples can be expensive. Only the base text is

@@ -51,7 +51,17 @@ shows the value it replaced, plus "Not placed" and "Same in every example"
 lists) → preview → save. Empty and error states: no fields found, a file
 that isn't `.docx`, AI failure (Retry, or Tag it myself).
 
-**Data & types**: `TemplateDraftField`, `variesAcrossExamples`,
+**Amendment, approved 2026-10-28.** This restores parts of the earlier
+AI-annotation work deleted in `cdcab7d`: the caption-to-value correction and
+insert-after-caption for blank values (`ed73b66`); surrounding text per row;
+"Replaces" vs "Goes after"; multi-select detection; the "completed
+document" wording and confirmation; the found-fields summary; the footer
+layout; and Download / re-upload. The AI's self-reported confidence bar and
+its confirm gate are *replaced* by evidence labels (**Differs in N of M
+examples**, **Only one example**, **Added by the checking pass**). Only
+checking-pass rows need confirmation before saving.
+
+**Data & types**: `TemplateDraftField`, `resolveCaptionAnchor`, `DraftEvidence`, `variesAcrossExamples`,
 `DraftTemplateFromExamples`, and the purposes `template-draft-extract` and
 `template-draft-verify`.
 
@@ -74,20 +84,33 @@ template library, storing examples, section and group tags.
 | `SummariseTemplate` | `packages/application/src/use-cases/document/summarise-template.ts` | Pattern for an AI use case with a Zod schema and a purpose |
 
 Removed in `cdcab7d` and **not** restored: `SuggestTemplateFields`, the
-`/suggest` route, `classifyTemplateSource`, `rowsFromSuggestions`.
+`/suggest` route, `classifyTemplateSource`, `rowsFromSuggestions`, the
+confidence fields on rows, and the low-confidence gate.
+
+**Restored from history.** Port these; don't re-derive them:
+
+| What | Source | Goes to |
+| ---- | ------ | ------- |
+| `resolveAnchor`, `valueIntroducedBy`, `isUsableValue`, `CAPTION_SEPARATOR`, `MAX_INFERRED_VALUE_CHARS` | `git show cdcab7d^:packages/application/src/use-cases/document/suggest-template-fields.ts` (around lines 130–260) and its tests | `packages/domain/src/entities/template-draft.ts` as `resolveCaptionAnchor` (pure; no `mode`, because an example is always filled) |
+| "Value, not caption" and multi-select prompt rules; the `multiple` and `options` schema fields | the same file's `buildPrompt` and `suggestedTemplateFieldsSchema` | the extraction prompt and schema |
+| `insertAfter` → `caption + " " + tag` in `buildAnnotationEdits` | `git show cdcab7d^:apps/web/src/lib/template-annotation.ts` | `apps/web/src/lib/template-annotation.ts` |
+| Row meta line ("Replaces" / "Goes after", context truncated with a `title` tooltip) | `git show cdcab7d^:apps/web/src/components/canvas/template-annotation-modal.tsx` (around lines 620–690) | the draft modal's row. Swap `ConfidenceBar` for an evidence badge. |
+| `branchFor("filled")` wording and `confirmationBody` | `git show cdcab7d^:apps/web/src/components/canvas/template-annotation-model.ts` | the choice modal's **Use an existing example** button and its confirmation, made plural |
+| Found-fields two-column summary | `d900b6b` | the top of the review step. `rowTypeLabel` still exists. |
 
 ## 4. What is built
 
 | Layer | File | Change |
 | ----- | ---- | ------ |
-| domain | `packages/domain/src/entities/template-draft.ts` (+ `.test.ts` first) | `TemplateDraftField` type; `variesAcrossExamples(value, otherTexts)` (normalises whitespace only); `locateExactOccurrence(text, value, occurrence): boolean` for the exact-match check |
-| shared | `packages/shared/src/schemas/document.ts` | `templateDraftExtractionSchema` and `templateDraftVerificationSchema`: `{ fields: { label, type, sourceValue, occurrence }[] }`, where `type` is limited to the existing template field types |
-| application | `packages/application/src/use-cases/document/draft-template-from-examples.ts` (+ `.test.ts` first) | `DraftTemplateFromExamples(languageModel, documentGenerator)`. Input `{ baseBytes, baseText, otherTexts }`. Output `{ fields, sameInEveryExample, unplaced, previewText }`. Runs extract → exact-match check → comparison filter → `annotate()` → verify → (exact-match check, comparison filter, `annotate()`) once more → `extractFullText` for the preview. Never throws; returns `Result`. |
+| domain | `packages/domain/src/entities/template-draft.ts` (+ `.test.ts` first) | `TemplateDraftField` type; `DraftEvidence`; `variesAcrossExamples(value, otherTexts)` (normalises whitespace only); `locateExactOccurrence(text, value, occurrence): boolean` for the exact-match check; `resolveCaptionAnchor(...)`, which returns `{ sourceText, occurrence, insertAfter }`; `contextAround(text, position, maxChars = 200)` |
+| shared | `packages/shared/src/schemas/document.ts` | `templateDraftExtractionSchema` and `templateDraftVerificationSchema`: `{ fields: { label, type, options, multiple, sourceValue, occurrence }[] }`, where `type` is limited to the existing template field types |
+| application | `packages/application/src/use-cases/document/draft-template-from-examples.ts` (+ `.test.ts` first) | `DraftTemplateFromExamples(languageModel, documentGenerator)`. Input `{ baseBytes, baseText, otherTexts }`. Output `{ fields, sameInEveryExample, unplaced, previewText }`. Runs extract → exact-match check → caption correction → comparison filter → `annotate()` → verify → (the same checks and `annotate()`) once more → `extractFullText` for the preview. Each field carries `evidence`, `context` and `insertAfter`. With 2+ examples, a multi-select's options are the union of the values seen. Never throws; returns `Result`. |
 | apps/web | `apps/web/src/app/api/flows/[id]/nodes/[nodeId]/template/draft/route.ts` | Auth via `authoriseTemplateNode`. Reads 1–10 `.docx` files (10 MB each, 25 MB total) from multipart, extracts text, runs the use case, and maps fields to `AnnotationRow`s. **No storage call.** |
 | apps/web | `apps/web/src/lib/container.ts` | Wire `DraftTemplateFromExamples` |
-| apps/web | `apps/web/src/components/canvas/template-source-choice-modal.tsx` | Step 1: two side-by-side buttons |
-| apps/web | `apps/web/src/components/canvas/template-draft-model.ts` (+ `.test.ts` first) | Step state for the example path: `choose-examples → drafting → review → preview → saving`; the choice of base document; restoring a "same in every example" field as a row |
-| apps/web | `apps/web/src/components/canvas/template-draft-modal.tsx` | The example path's UI. Reuses `template-field-editor.tsx` for the review grid; each row shows its replaced value. The preview highlights `{{ … }}` in `previewText`. |
+| apps/web | `apps/web/src/lib/template-annotation.ts` | Optional `draft` metadata on `AnnotationRow`; `buildAnnotationEdits` handles `insertAfter` |
+| apps/web | `apps/web/src/components/canvas/template-source-choice-modal.tsx` | Step 1: two side-by-side buttons. **Use an existing example** uses the restored "pattern" wording and asks for confirmation before the file picker opens. |
+| apps/web | `apps/web/src/components/canvas/template-draft-model.ts` (+ `.test.ts` first) | Step state for the example path: `choose-examples → drafting → review → preview → saving` (plus the existing `reupload`); the choice of base document; restoring a "same in every example" field as a row; `saveBlockedReason` extended to block on an unconfirmed **Added by the checking pass** row |
+| apps/web | `apps/web/src/components/canvas/template-draft-modal.tsx` | The example path's UI. Reuses `template-field-editor.tsx` for the review grid. Each row shows "Replaces '…'" or "Goes after '…'", its surrounding text and an evidence badge. The review step opens with the found-fields summary. The footer has Cancel bottom-left and actions bottom-right, plus "Need to add more fields? Download…" leading to the existing re-upload panel. The preview highlights `{{ … }}` in `previewText`. |
 | apps/web | `template-upload-controller.tsx`, `node-config-modal-conversational.tsx` | **Upload template** opens the choice modal; **I have a template with tags** triggers the existing file input and flow |
 
 Save: the draft modal posts the base `File` and the reviewed rows to the
@@ -103,19 +126,29 @@ None. No migration.
    every example → false; missing from one → true; whitespace-only
    differences → false; formatting differences ("$1,200" vs "$1,200.00") →
    true; the exact-match check at occurrence 0, 1 and out of range.
+   `resolveCaptionAnchor`, porting the `ed73b66` cases: a caption with its
+   value on the same line ("Supplier Name: Acme") moves to "Acme"; a
+   caption with its value in the next cell moves to the next line; a blank
+   value → `insertAfter`; the next line being another caption or text
+   already carrying a tag → `insertAfter`; a value over 120 characters →
+   `insertAfter`; the occurrence is re-indexed by the value's own count.
 2. Shared Zod schemas.
 3. `draft-template-from-examples.test.ts` → use case, with a fake
    `ILanguageModel` and a fake `IDocumentGenerator`. Cases: a field whose
    value is not in the base text is dropped; a field with the same value in
    every example goes to `sameInEveryExample`; with one example, the
    comparison filter is skipped; verify additions are filtered and placed;
-   verify cannot remove fields already placed; `annotate().unmatched` →
+   verify cannot remove fields already placed; a caption-anchored field is
+   placed on its value; evidence is set correctly for 1 example, 2+
+   examples and checking-pass fields; multi-select options are the union
+   across examples; `annotate().unmatched` →
    `unplaced`; AI error → `Result` error; the purposes are exactly
    `template-draft-extract` and `template-draft-verify`.
 4. Draft route plus a route test asserting that the storage port is never
    called, plus rejection by file type, count and size.
-5. `template-draft-model.test.ts` → model (step transitions, base choice,
-   restore).
+5. `template-annotation.test.ts`: an `insertAfter` edit keeps the caption.
+   `template-draft-model.test.ts` → model (step transitions, base choice,
+   restore, save blocked until checking-pass rows are confirmed).
 6. Choice modal, draft modal, and the controller and conversational config
    wiring. Component tests for the two-button choice and the unchanged
    tagged-template path.
@@ -135,6 +168,9 @@ comparison is a domain function; the draft route persists nothing.
 - **Single example.** Tell the author that more examples improve accuracy.
   Measure the share of fields that fail the exact-match check during build
   testing on real documents before calling it done.
+- **Captions taken for values.** This was the old pass's main failure, and
+  the exact-match check can't catch it. `resolveCaptionAnchor` is required,
+  not optional.
 - **Coincidental sameness.** Restoring a field must be one click from the
   "Same in every example" list.
 - **Values Word splits across runs.** Covered by existing `annotate()`
