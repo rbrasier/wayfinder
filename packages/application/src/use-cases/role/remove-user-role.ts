@@ -1,11 +1,11 @@
 import {
   domainError,
   err,
-  isAdminRoleKey,
   type IRoleRepository,
   type IUserRoleRepository,
   type Result,
 } from "@wayfinder/domain";
+import { roleGrantsAdminAccess } from "../admin-account-guard";
 import type { AdminCaller } from "../admin-caller";
 
 export class RemoveUserRole {
@@ -24,8 +24,12 @@ export class RemoveUserRole {
     if (role.data.isImmutable) {
       return err(domainError("FORBIDDEN", "The Global Admin role is managed via admin status."));
     }
-    if (isAdminRoleKey(role.data.key) && !caller.isAdmin) {
-      return err(domainError("FORBIDDEN", "Only a Global Admin can change who holds an admin role."));
+    if (!caller.isAdmin) {
+      const granted = await roleGrantsAdminAccess(role.data, this.roles);
+      if (granted.error) return granted;
+      if (granted.data) {
+        return err(domainError("FORBIDDEN", "Only a Global Admin can change who holds an admin role."));
+      }
     }
     return this.userRoles.remove(userId, roleId);
   }

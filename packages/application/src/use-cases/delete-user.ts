@@ -1,4 +1,5 @@
 import {
+  type IRoleRepository,
   type IUserRepository,
   type IUserRoleRepository,
   type Result,
@@ -12,6 +13,7 @@ export class DeleteUser {
   constructor(
     private readonly users: IUserRepository,
     private readonly userRoles: IUserRoleRepository,
+    private readonly roles: IRoleRepository,
   ) {}
 
   async execute(id: string, caller: AdminCaller): Promise<Result<true>> {
@@ -20,7 +22,7 @@ export class DeleteUser {
     if (!found.data) {
       return err(domainError("NOT_FOUND", `User ${id} not found.`));
     }
-    const guard = await refuseAdminAccountForDelegate(found.data, this.userRoles, caller);
+    const guard = await refuseAdminAccountForDelegate(found.data, this.userRoles, this.roles, caller);
     if (guard.error) return guard;
     return this.users.delete(id);
   }
