@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { accessError, authorizeSessionAccess } from "./session-access";
 import type { Container } from "./container";
 
@@ -86,6 +86,17 @@ describe("authorizeSessionAccess", () => {
       allowApprover: false,
     });
     expect(result).toEqual({ authorized: false, status: 500 });
+  });
+});
+
+describe("authorizeSessionAccess — ownership override (ADR-066 §4)", () => {
+  it("hands the override to resolveSessionAccess so an oversight holder is treated as an admin", async () => {
+    const container = buildContainer({});
+    const execute = vi.spyOn(container.useCases.resolveSessionAccess, "execute");
+
+    await authorizeSessionAccess(container, "s1", "overseer", true, { requireSend: false, allowApprover: true });
+
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({ userId: "overseer", isAdmin: true }));
   });
 });
 

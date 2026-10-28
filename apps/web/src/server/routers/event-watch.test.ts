@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok, type PermissionKey } from "@rbrasier/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { eventWatchRouter } from "./event-watch";
@@ -10,7 +10,7 @@ const makeContainer = (flagOn = true) =>
   ({
     services: { errorLogger: { log: async () => undefined } },
     useCases: {
-      isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue(ok(flagOn)) },
+      isFeatureEnabled: { execute: vi.fn().mockResolvedValue(ok(flagOn)) },
       countWatchesNeedingAttention: { execute: vi.fn().mockResolvedValue(ok(2)) },
       testEventWatch: {
         execute: vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "The API answered HTTP 401."))),
@@ -18,21 +18,36 @@ const makeContainer = (flagOn = true) =>
     },
   }) as unknown as Container;
 
-const caller = (container: Container, isAdmin: boolean) =>
+const caller = (container: Container, isAdmin: boolean, permissions: PermissionKey[] = []) =>
   createCaller({
     container,
     userId: "admin-1",
     authSessionId: null,
     isAdmin,
-    permissions: new Set(),
+    permissions: new Set(permissions),
     headers: new Headers(),
   } satisfies TrpcContext);
 
 describe("eventWatch router", () => {
-  it("is for admins only", async () => {
+  it("is closed to anyone without technical admin access", async () => {
     await expect(caller(makeContainer(), false).eventWatch.countNeedingAttention()).rejects.toMatchObject({
       code: "FORBIDDEN",
     });
+    await expect(
+      caller(makeContainer(), false, ["admin:users", "admin:oversight"]).eventWatch.countNeedingAttention(),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  });
+
+  it("answers a Technical Admin whenever the flag is switched on, whoever it is scoped to (ADR-066 §5)", async () => {
+    await expect(
+      caller(makeContainer(), false, ["admin:technical"]).eventWatch.countNeedingAttention(),
+    ).resolves.toBe(2);
+  });
+
+  it("is closed to a Technical Admin while the event_watch flag is off", async () => {
+    await expect(
+      caller(makeContainer(false), false, ["admin:technical"]).eventWatch.countNeedingAttention(),
+    ).rejects.toMatchObject({ code: "FORBIDDEN", message: "Event Watch is switched off." });
   });
 
   it("is closed while the event_watch flag is off", async () => {

@@ -1,20 +1,14 @@
 import { z } from "zod";
-import { TRPCError } from "@trpc/server";
-import { authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
-
-const requireAdmin = (isAdmin: boolean): void => {
-  if (!isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
-};
 
 // The bearer token itself — stored encrypted, never sent back (ADR-032).
 const credentialInput = z.string().max(4096, "The token is too long.").nullable().optional();
 
 export const mcpServerRouter = router({
-  list: authenticatedProcedure
+  list: technicalAdminProcedure
     .input(z.object({ includeDisabled: z.boolean().optional() }).optional())
     .query(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.listMcpServers.execute({
         includeDisabled: input?.includeDisabled ?? true,
       });
@@ -30,7 +24,7 @@ export const mcpServerRouter = router({
     return result.data;
   }),
 
-  register: authenticatedProcedure
+  register: technicalAdminProcedure
     .input(
       z.object({
         label: z.string().min(1),
@@ -41,7 +35,6 @@ export const mcpServerRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.registerMcpServer.execute({
         label: input.label,
         url: input.url,
@@ -54,7 +47,7 @@ export const mcpServerRouter = router({
       return result.data;
     }),
 
-  update: authenticatedProcedure
+  update: technicalAdminProcedure
     .input(
       z.object({
         id: z.string().uuid(),
@@ -66,25 +59,22 @@ export const mcpServerRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.updateMcpServer.execute(input);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  disable: authenticatedProcedure
+  disable: technicalAdminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.disableMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  enable: authenticatedProcedure
+  enable: technicalAdminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.enableMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
@@ -92,10 +82,9 @@ export const mcpServerRouter = router({
 
   // Permanent removal. Steps referencing a deleted server drop the stale tool
   // refs silently at resolve time (ResolveStepTools), so no cascade is needed.
-  delete: authenticatedProcedure
+  delete: technicalAdminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.deleteMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
@@ -103,10 +92,9 @@ export const mcpServerRouter = router({
 
   // Connection test — lists the server's tools so the admin can confirm reach
   // and credentials before using it in a flow.
-  test: authenticatedProcedure
+  test: technicalAdminProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.testMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return result.data;

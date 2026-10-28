@@ -10,7 +10,10 @@ export type PermissionKey =
   | "group:manage_own"
   | "extraction:author"
   | "extraction:run"
-  | "flow:webhook_trigger";
+  | "flow:webhook_trigger"
+  | "admin:technical"
+  | "admin:users"
+  | "admin:oversight";
 
 export interface PermissionDefinition {
   readonly key: PermissionKey;
@@ -75,6 +78,32 @@ export const PERMISSIONS: readonly PermissionDefinition[] = [
     description:
       "Turn on a secure web address that lets other systems start a flow the user owns (ADR-064 §3).",
   },
+  {
+    key: "admin:technical",
+    label: "Technical administration",
+    description:
+      "Use the technical admin screens: Configuration (AI, integrations, storage, notifications, branding), Flags, Errors, Schedules, Skills, MCP Servers and Event Watch.",
+  },
+  {
+    key: "admin:users",
+    label: "User administration",
+    description:
+      "Manage users, groups and organisations, and assign non-admin roles. Cannot grant admin roles or change admin accounts.",
+  },
+  {
+    key: "admin:oversight",
+    label: "Admin oversight",
+    description:
+      "See the dashboards, usage and audit log, and open and edit every user's chats and flows from All Chats and All Flows.",
+  },
+];
+
+// The keys that open part of the admin section (ADR-066). Holding any one of
+// them lets a non-admin into /admin; each still gates only its own area.
+export const ADMIN_AREA_PERMISSIONS: readonly PermissionKey[] = [
+  "admin:technical",
+  "admin:users",
+  "admin:oversight",
 ];
 
 const ALL_PERMISSION_KEYS: readonly PermissionKey[] = PERMISSIONS.map(

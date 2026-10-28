@@ -6,11 +6,16 @@ import {
   domainError,
   err,
 } from "@rbrasier/domain";
+import { refuseAdminGrantForDelegate } from "./admin-account-guard";
+import type { AdminCaller } from "./admin-caller";
 
 export class CreateUser {
   constructor(private readonly users: IUserRepository) {}
 
-  async execute(input: NewUser): Promise<Result<User>> {
+  async execute(input: NewUser, caller: AdminCaller): Promise<Result<User>> {
+    const grant = refuseAdminGrantForDelegate(input.isAdmin, caller);
+    if (grant.error) return grant;
+
     const existing = await this.users.findByEmail(input.email);
     if (existing.error) return existing;
     if (existing.data) {

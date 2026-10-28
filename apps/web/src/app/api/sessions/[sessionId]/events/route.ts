@@ -1,6 +1,7 @@
 import type { SessionEvent } from "@rbrasier/domain";
 import { getContainer, type Container } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { resolveCanOversee } from "@/lib/oversight";
 
 // A long-lived Node connection, never cached or statically rendered.
 export const runtime = "nodejs";
@@ -48,7 +49,8 @@ export async function GET(
 
   // Watching is a read; viewers and approvers may subscribe. Authorise against
   // participant rows exactly as the page load does, so a non-visible flow is 403.
-  const isOwnerOrAdmin = authSession.isAdmin || session.userId === authSession.userId;
+  const canOverride = await resolveCanOversee(container, authSession);
+  const isOwnerOrAdmin = canOverride || session.userId === authSession.userId;
   const isApprover = isOwnerOrAdmin
     ? false
     : await isSessionApprover(container, authSession.userId, session.id);
@@ -56,7 +58,7 @@ export async function GET(
     session,
     flow,
     userId: authSession.userId,
-    isAdmin: authSession.isAdmin,
+    isAdmin: canOverride,
     isApprover,
     allowAutoEnrol: true,
   });

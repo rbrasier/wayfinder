@@ -2,9 +2,7 @@ import cors from "cors";
 import express, { type Express } from "express";
 import type { Container } from "./container.js";
 import { errorHandler } from "./middleware/error-handler.js";
-import { buildErrorsRouter } from "./routes/errors.js";
 import { buildHealthRouter } from "./routes/health.js";
-import { buildUsersRouter } from "./routes/users.js";
 import { buildWebhooksRouter } from "./routes/webhooks.js";
 
 export const buildApp = (container: Container): Express => {
@@ -21,8 +19,6 @@ export const buildApp = (container: Container): Express => {
   );
 
   app.use("/health", buildHealthRouter(container));
-  app.use("/v1/users", buildUsersRouter(container));
-  app.use("/v1/errors", buildErrorsRouter(container));
   app.use("/v1/webhooks", buildWebhooksRouter(container));
 
   app.use(errorHandler(container));

@@ -4,6 +4,7 @@ import { SESSION_UPLOADS_ALLOWED_MIME_TYPES } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
+import { resolveCanOversee } from "@/lib/oversight";
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(SESSION_UPLOADS_ALLOWED_MIME_TYPES);
 
@@ -20,7 +21,8 @@ export async function GET(
   const authSession = await container.resolveSession(token);
   if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const access = await authorizeSessionAccess(container, sessionId, authSession.userId, authSession.isAdmin, {
+  const canOverride = await resolveCanOversee(container, authSession);
+  const access = await authorizeSessionAccess(container, sessionId, authSession.userId, canOverride, {
     requireSend: false,
     allowApprover: true,
   });

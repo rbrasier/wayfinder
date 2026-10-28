@@ -28,7 +28,9 @@ export const authorizeSessionAccess = async (
   container: Container,
   sessionId: string,
   userId: string,
-  isAdmin: boolean,
+  // True for a Global Admin or an admin:oversight holder (ADR-066 §4); the
+  // REST routes compute it with `resolveCanOversee`.
+  canOverride: boolean,
   options: AuthorizeOptions,
 ): Promise<SessionAccessOutcome> => {
   const sessionResult = await container.useCases.getSession.execute(sessionId);
@@ -36,7 +38,7 @@ export const authorizeSessionAccess = async (
   if (!sessionResult.data) return { authorized: false, status: 404 };
 
   const { session, flow } = sessionResult.data;
-  const isOwnerOrAdmin = isAdmin || session.userId === userId;
+  const isOwnerOrAdmin = canOverride || session.userId === userId;
   const isApprover =
     options.allowApprover && !isOwnerOrAdmin
       ? await viewerIsSessionApprover(container, userId, session.id)
@@ -46,7 +48,7 @@ export const authorizeSessionAccess = async (
     session,
     flow,
     userId,
-    isAdmin,
+    isAdmin: canOverride,
     isApprover,
     allowAutoEnrol: true,
   });
