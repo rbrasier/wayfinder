@@ -1,6 +1,6 @@
 {
   "name": "wayfinder",
-  "version": "0.28.44",
+  "version": "0.28.45",
   "private": true,
   "description": "Wayfinder — AI-guided workflow agent for document-heavy processes.",
   "packageManager": "pnpm@9.12.0",
@@ -35,7 +35,7 @@
       "sharp": ">=0.35.5",
       "esbuild": ">=0.28.1",
       "postcss": ">=8.5.18",
-      "better-auth": ">=1.6.22 <1.7.0",
+      "better-auth": ">=1.7.7 <1.8.0",
       "protobufjs": ">=8.6.6 <9",
       "adm-zip": ">=0.6.1",
       "nanoid@3": ">=3.3.18 <4",
