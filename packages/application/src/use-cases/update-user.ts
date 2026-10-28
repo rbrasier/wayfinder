@@ -1,4 +1,5 @@
 import {
+  type IRoleRepository,
   type IUserRepository,
   type IUserRoleRepository,
   type Result,
@@ -14,6 +15,7 @@ export class UpdateUser {
   constructor(
     private readonly users: IUserRepository,
     private readonly userRoles: IUserRoleRepository,
+    private readonly roles: IRoleRepository,
   ) {}
 
   async execute(id: string, patch: UserUpdate, caller: AdminCaller): Promise<Result<User>> {
@@ -25,7 +27,7 @@ export class UpdateUser {
     if (!found.data) {
       return err(domainError("NOT_FOUND", `User ${id} not found.`));
     }
-    const guard = await refuseAdminAccountForDelegate(found.data, this.userRoles, caller);
+    const guard = await refuseAdminAccountForDelegate(found.data, this.userRoles, this.roles, caller);
     if (guard.error) return guard;
     return this.users.update(id, patch);
   }

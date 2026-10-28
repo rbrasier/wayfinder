@@ -1,10 +1,13 @@
 import {
   domainError,
   err,
+  grantsAdminAccess,
   isAdminRoleKey,
   ok,
+  type IRoleRepository,
   type IUserRoleRepository,
   type Result,
+  type Role,
   type User,
 } from "@rbrasier/domain";
 import type { AdminCaller } from "./admin-caller";
@@ -15,6 +18,7 @@ import type { AdminCaller } from "./admin-caller";
 export const refuseAdminAccountForDelegate = async (
   target: User,
   userRoles: IUserRoleRepository,
+  roles: IRoleRepository,
   caller: AdminCaller,
 ): Promise<Result<void>> => {
   if (caller.isAdmin) return ok(undefined);
@@ -23,10 +27,21 @@ export const refuseAdminAccountForDelegate = async (
   if (caller.userId === target.id) return ok(undefined);
   if (target.isAdmin) return err(adminAccountRefusal());
 
-  const roles = await userRoles.listRolesForUser(target.id);
-  if (roles.error) return roles;
-  if (roles.data.some((role) => isAdminRoleKey(role.key))) return err(adminAccountRefusal());
+  const heldRoles = await userRoles.listRolesForUser(target.id);
+  if (heldRoles.error) return heldRoles;
+  for (const role of heldRoles.data) {
+    const granted = await roleGrantsAdminAccess(role, roles);
+    if (granted.error) return granted;
+    if (granted.data) return err(adminAccountRefusal());
+  }
   return ok(undefined);
+};
+
+export const roleGrantsAdminAccess = async (role: Role, roles: IRoleRepository): Promise<Result<boolean>> => {
+  if (isAdminRoleKey(role.key)) return ok(true);
+  const permissions = await roles.listPermissions(role.id);
+  if (permissions.error) return permissions;
+  return ok(grantsAdminAccess(role.key, permissions.data));
 };
 
 export const refuseAdminGrantForDelegate = (

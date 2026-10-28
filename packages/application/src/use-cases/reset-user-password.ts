@@ -2,6 +2,7 @@ import {
   MINIMUM_PASSWORD_LENGTH,
   type IAuditLogger,
   type IPasswordResetter,
+  type IRoleRepository,
   type IUserRepository,
   type IUserRoleRepository,
   type PasswordResetOutcome,
@@ -37,6 +38,7 @@ export class ResetUserPassword {
   constructor(
     private readonly users: IUserRepository,
     private readonly userRoles: IUserRoleRepository,
+    private readonly roles: IRoleRepository,
     private readonly passwordResetter: IPasswordResetter,
     private readonly auditLogger: IAuditLogger,
   ) {}
@@ -57,7 +59,7 @@ export class ResetUserPassword {
       return err(domainError("NOT_FOUND", `User ${command.userId} not found.`));
     }
 
-    const guard = await refuseAdminAccountForDelegate(found.data, this.userRoles, command.caller);
+    const guard = await refuseAdminAccountForDelegate(found.data, this.userRoles, this.roles, command.caller);
     if (guard.error) return err(guard.error);
 
     const reset = await this.passwordResetter.resetPassword({

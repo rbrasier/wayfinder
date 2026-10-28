@@ -296,6 +296,65 @@ describe("AssignUserRole / RemoveUserRole — delegated callers (ADR-066 §3)", 
   });
 });
 
+describe("AssignUserRole / RemoveUserRole — custom roles holding an admin area key (ADR-066 §3)", () => {
+  const oversight: Role = {
+    id: "oversight",
+    key: "oversight",
+    name: "Oversight",
+    description: null,
+    isSystem: false,
+    isImmutable: false,
+    isDefault: false,
+  };
+  const reviewers: Role = { ...oversight, id: "reviewers", key: "reviewers", name: "Reviewers" };
+
+  const reposWithCustomRoles = () => {
+    const repos = seededRepos();
+    repos.roles.seed(oversight, ["admin:oversight"]);
+    repos.roles.seed(reviewers, ["knowledge:curate"]);
+    return repos;
+  };
+
+  it("refuses a User Admin assigning a custom role that grants admin access, including to themselves", async () => {
+    const { roles, userRoles } = reposWithCustomRoles();
+
+    const toSelf = await new AssignUserRole(roles, userRoles).execute("user-admin", "oversight", delegatedCaller);
+    const toOther = await new AssignUserRole(roles, userRoles).execute("user-1", "oversight", delegatedCaller);
+
+    expect(toSelf.error?.code).toBe("FORBIDDEN");
+    expect(toOther.error?.code).toBe("FORBIDDEN");
+    expect((await userRoles.listUsersForRole("oversight")).data).toEqual([]);
+  });
+
+  it("refuses a User Admin removing someone from a custom role that grants admin access", async () => {
+    const { roles, userRoles } = reposWithCustomRoles();
+    await new AssignUserRole(roles, userRoles).execute("user-1", "oversight", globalAdminCaller);
+
+    const result = await new RemoveUserRole(roles, userRoles).execute("user-1", "oversight", delegatedCaller);
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+    expect((await userRoles.listUsersForRole("oversight")).data).toEqual(["user-1"]);
+  });
+
+  it("lets a User Admin assign a custom role with no admin area key", async () => {
+    const { roles, userRoles } = reposWithCustomRoles();
+
+    const result = await new AssignUserRole(roles, userRoles).execute("user-1", "reviewers", delegatedCaller);
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("lets a Global Admin assign and remove a custom role that grants admin access", async () => {
+    const { roles, userRoles } = reposWithCustomRoles();
+
+    const assign = await new AssignUserRole(roles, userRoles).execute("user-1", "oversight", globalAdminCaller);
+    const remove = await new RemoveUserRole(roles, userRoles).execute("user-1", "oversight", globalAdminCaller);
+
+    expect(assign.error).toBeUndefined();
+    expect(remove.error).toBeUndefined();
+  });
+});
+
 describe("GetEffectivePermissions", () => {
   it("returns the full registry for admins regardless of assignments", async () => {
     const { roles, userRoles } = seededRepos();
