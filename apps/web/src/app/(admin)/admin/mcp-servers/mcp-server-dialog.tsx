@@ -127,7 +127,7 @@ export function McpServerDialog({ target, onClose, onSaved }: McpServerDialogPro
           <DialogTitle>{server ? `Edit ${server.label}` : "New MCP server"}</DialogTitle>
           <DialogCloseButton />
         </DialogHeader>
-        <DialogBody>
+        <DialogBody className="max-h-[70vh] overflow-y-auto">
           <DialogDescription id="mcp-dialog-description">
             {server
               ? "Tokens and secrets are stored encrypted and never shown again. Leave them blank to keep the current ones."
