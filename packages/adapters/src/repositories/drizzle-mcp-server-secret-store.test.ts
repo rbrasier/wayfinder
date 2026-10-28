@@ -26,15 +26,44 @@ describe("decodeMcpServerSecrets", () => {
 
     expect(
       decodeMcpServerSecrets(
-        { credential_ciphertext: columns.credential_ciphertext ?? null, custom_headers_ciphertext: columns.custom_headers_ciphertext ?? null },
+        {
+          credential_ciphertext: columns.credential_ciphertext ?? null,
+          custom_headers_ciphertext: columns.custom_headers_ciphertext ?? null,
+          oauth_client_secret_ciphertext: null,
+        },
         encryption,
       ),
-    ).toEqual({ bearerToken: "token-1", headers: { "X-Key": "v" } });
+    ).toEqual({ bearerToken: "token-1", headers: { "X-Key": "v" }, oauthClientSecret: null });
   });
 
   it("reads absent columns as no secrets", () => {
     expect(
-      decodeMcpServerSecrets({ credential_ciphertext: null, custom_headers_ciphertext: null }, encryption),
-    ).toEqual({ bearerToken: null, headers: {} });
+      decodeMcpServerSecrets(
+        { credential_ciphertext: null, custom_headers_ciphertext: null, oauth_client_secret_ciphertext: null },
+        encryption,
+      ),
+    ).toEqual({ bearerToken: null, headers: {}, oauthClientSecret: null });
+  });
+});
+
+describe("OAuth client secret", () => {
+  it("encrypts it on its own column, clears it on null, and decodes it back", () => {
+    const columns = encodeMcpServerSecretsPatch({ oauthClientSecret: "client-secret" }, encryption);
+
+    expect(Object.keys(columns)).toEqual(["oauth_client_secret_ciphertext"]);
+    expect(columns.oauth_client_secret_ciphertext?.startsWith("enc:v1:")).toBe(true);
+    expect(encodeMcpServerSecretsPatch({ oauthClientSecret: null }, encryption)).toEqual({
+      oauth_client_secret_ciphertext: null,
+    });
+    expect(
+      decodeMcpServerSecrets(
+        {
+          credential_ciphertext: null,
+          custom_headers_ciphertext: null,
+          oauth_client_secret_ciphertext: columns.oauth_client_secret_ciphertext ?? null,
+        },
+        encryption,
+      ).oauthClientSecret,
+    ).toBe("client-secret");
   });
 });

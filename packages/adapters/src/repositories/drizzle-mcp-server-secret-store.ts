@@ -15,6 +15,7 @@ import { admin_mcp_servers } from "../db/schema/admin";
 interface SecretColumns {
   credential_ciphertext: string | null;
   custom_headers_ciphertext: string | null;
+  oauth_client_secret_ciphertext: string | null;
 }
 
 // Only the columns the patch names are written; an empty header map clears the
@@ -26,6 +27,10 @@ export const encodeMcpServerSecretsPatch = (
   const columns: Partial<SecretColumns> = {};
   if (patch.bearerToken !== undefined) {
     columns.credential_ciphertext = patch.bearerToken === null ? null : encryption.encrypt(patch.bearerToken);
+  }
+  if (patch.oauthClientSecret !== undefined) {
+    columns.oauth_client_secret_ciphertext =
+      patch.oauthClientSecret === null ? null : encryption.encrypt(patch.oauthClientSecret);
   }
   if (patch.headers !== undefined) {
     const hasHeaders = patch.headers !== null && Object.keys(patch.headers).length > 0;
@@ -42,6 +47,9 @@ export const decodeMcpServerSecrets = (
   headers: columns.custom_headers_ciphertext
     ? (JSON.parse(encryption.decrypt(columns.custom_headers_ciphertext)) as Record<string, string>)
     : {},
+  oauthClientSecret: columns.oauth_client_secret_ciphertext
+    ? encryption.decrypt(columns.oauth_client_secret_ciphertext)
+    : null,
 });
 
 // Encrypted, write-only MCP credentials (ADR-062 §8). `get` is for the MCP client
@@ -58,6 +66,7 @@ export class DrizzleMcpServerSecretStore implements IMcpServerSecretStore {
         .select({
           credential_ciphertext: admin_mcp_servers.credential_ciphertext,
           custom_headers_ciphertext: admin_mcp_servers.custom_headers_ciphertext,
+          oauth_client_secret_ciphertext: admin_mcp_servers.oauth_client_secret_ciphertext,
         })
         .from(admin_mcp_servers)
         .where(eq(admin_mcp_servers.id, serverId))

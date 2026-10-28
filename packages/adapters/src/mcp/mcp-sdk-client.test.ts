@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { ok } from "@wayfinder/domain";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type { IMcpServerSecretStore, McpServer, McpServerSecrets, McpToolSettings } from "@wayfinder/domain";
 import { McpSdkClient } from "./mcp-sdk-client";
 import { startMcpFixture, type FixtureMode, type McpFixture } from "./mcp-fixture-server.test-support";
@@ -14,6 +14,7 @@ const serverFor = (fixture: McpFixture, mode: FixtureMode, overrides: Partial<Mc
   callTimeoutMs: 5_000,
   hasCredential: false,
   customHeaderNames: [],
+  oauth: null,
   status: "active",
   createdByUserId: null,
   createdAt: new Date(),
@@ -26,7 +27,7 @@ const secretsOf = (secrets: McpServerSecrets): IMcpServerSecretStore => ({
   set: async () => ok(undefined),
 });
 
-const noSecrets = secretsOf({ bearerToken: null, headers: {} });
+const noSecrets = secretsOf({ bearerToken: null, headers: {}, oauthClientSecret: null });
 
 const settings = (overrides: Partial<McpToolSettings> = {}): McpToolSettings => ({
   pagination: null,
@@ -178,7 +179,7 @@ describe("McpSdkClient", () => {
 
   it.each<FixtureMode>(["stateless", "sse"])("sends the bearer token and custom headers to a %s server", async (mode) => {
     fixture = await startMcpFixture(mode);
-    const secrets = secretsOf({ bearerToken: "token-1", headers: { "X-Api-Key": "key-1" } });
+    const secrets = secretsOf({ bearerToken: "token-1", headers: { "X-Api-Key": "key-1" }, oauthClientSecret: null });
 
     await new McpSdkClient(secrets).listTools(serverFor(fixture, mode));
 
@@ -187,5 +188,55 @@ describe("McpSdkClient", () => {
       expect(headers.authorization).toBe("Bearer token-1");
       expect(headers["x-api-key"]).toBe("key-1");
     }
+  });
+});
+
+describe("McpSdkClient with OAuth client credentials", () => {
+  const oauth = {
+    tokenUrl: "https://login.example.com/token",
+    clientId: "wayfinder-service",
+    scope: null,
+    audience: null,
+    clientAuthMethod: "client_secret_basic" as const,
+  };
+  const oauthSecrets = secretsOf({ bearerToken: null, headers: { "X-Api-Key": "key-1" }, oauthClientSecret: "client-secret" });
+
+  it("sends a fetched access token alongside the custom headers", async () => {
+    fixture = await startMcpFixture("stateless");
+    const tokenSource = { accessToken: vi.fn(async () => ok("fetched-token")) };
+
+    await new McpSdkClient(oauthSecrets, tokenSource).listTools(serverFor(fixture, "stateless", { oauth }));
+
+    expect(tokenSource.accessToken).toHaveBeenCalledWith("mcp-1", oauth, "client-secret");
+    expect(fixture.seenHeaders.length).toBeGreaterThan(0);
+    for (const headers of fixture.seenHeaders) {
+      expect(headers.authorization).toBe("Bearer fetched-token");
+      expect(headers["x-api-key"]).toBe("key-1");
+    }
+  });
+
+  it("reports a failed token request, such as on Test connection, without connecting", async () => {
+    fixture = await startMcpFixture("stateless");
+    const tokenSource = {
+      accessToken: vi.fn(async () =>
+        err(domainError("INFRA_FAILURE", "Couldn't get an access token from login.example.com: invalid_client")),
+      ),
+    };
+
+    const result = await new McpSdkClient(oauthSecrets, tokenSource).listTools(serverFor(fixture, "stateless", { oauth }));
+
+    expect(result.error?.message).toBe("Couldn't get an access token from login.example.com: invalid_client");
+    expect(fixture.seenHeaders).toHaveLength(0);
+  });
+
+  it("refuses to call an OAuth server whose client secret is missing rather than calling it unauthenticated", async () => {
+    fixture = await startMcpFixture("stateless");
+    const tokenSource = { accessToken: vi.fn(async () => ok("fetched-token")) };
+
+    const result = await new McpSdkClient(noSecrets, tokenSource).listTools(serverFor(fixture, "stateless", { oauth }));
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(tokenSource.accessToken).not.toHaveBeenCalled();
+    expect(fixture.seenHeaders).toHaveLength(0);
   });
 });

@@ -25,10 +25,18 @@ import {
   CLASSIFICATION_OPTIONS,
   classificationBadge,
   credentialSummary,
+  oauthFieldsOf,
   parseCustomHeaders,
   secondsToTimeoutMs,
+  signInChange,
+  signInMethodOf,
+  signInProblems,
   timeoutMsToSeconds,
+  type OAuthSettingsView,
+  type SignInFieldValues,
+  type SignInMethod,
 } from "@/components/admin/mcp-server-form-model";
+import { McpSignInFields } from "@/components/admin/mcp-sign-in-fields";
 import { McpToolsPanel } from "@/components/admin/mcp-tools-panel";
 import { trpc } from "@/trpc/client";
 
@@ -37,50 +45,55 @@ type Classification = (typeof CLASSIFICATION_OPTIONS)[number]["value"];
 const SELECT_CLASS =
   "flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs";
 
+const EMPTY_SIGN_IN: SignInFieldValues = { token: "", oauth: oauthFieldsOf(null) };
+
 // Write-only credential entry for an existing server: a value typed here replaces
 // the saved one, and the saved values are never shown back.
 function CredentialsEditor({
   serverId,
   hasCredential,
+  hasAnySecret,
+  oauth,
   onDone,
 }: {
   serverId: string;
   hasCredential: boolean;
+  hasAnySecret: boolean;
+  oauth: OAuthSettingsView | null;
   onDone: () => void;
 }) {
-  const [token, setToken] = useState("");
+  const current = signInMethodOf({ hasCredential, oauth });
+  const [method, setMethod] = useState<SignInMethod>(current);
+  const [signIn, setSignIn] = useState<SignInFieldValues>({ token: "", oauth: oauthFieldsOf(oauth) });
   const [headers, setHeaders] = useState("");
   const [error, setError] = useState<string | null>(null);
   const update = trpc.mcpServer.update.useMutation({ onSuccess: onDone, onError: (cause) => setError(cause.message) });
 
   const save = () => {
     const parsed = parseCustomHeaders(headers);
-    if (parsed.error) {
-      setError(parsed.error);
+    const problem = parsed.error ?? signInProblems(method, signIn, current)[0];
+    if (problem) {
+      setError(problem);
       return;
     }
     update.mutate({
       id: serverId,
-      ...(token.trim() ? { bearerToken: token } : {}),
+      ...signInChange(method, signIn, current),
       ...(headers.trim() ? { customHeaders: parsed.headers } : {}),
     });
   };
 
   return (
     <div className="space-y-2 py-2">
+      <McpSignInFields
+        idPrefix={`signin-${serverId}`}
+        method={method}
+        onMethodChange={setMethod}
+        values={signIn}
+        onValuesChange={setSignIn}
+        current={current}
+      />
       <div className="grid gap-2 sm:grid-cols-2">
-        <div className="space-y-1">
-          <Label htmlFor={`token-${serverId}`} className="text-xs">
-            New bearer token
-          </Label>
-          <Input
-            id={`token-${serverId}`}
-            type="password"
-            autoComplete="off"
-            value={token}
-            onChange={(event) => setToken(event.target.value)}
-          />
-        </div>
         <div className="space-y-1">
           <Label htmlFor={`headers-${serverId}`} className="text-xs">
             Replace custom headers (one &quot;Name: value&quot; per line)
@@ -101,8 +114,8 @@ function CredentialsEditor({
         <Button
           size="sm"
           variant="outline"
-          onClick={() => update.mutate({ id: serverId, bearerToken: null, customHeaders: null })}
-          disabled={update.isPending || !hasCredential}
+          onClick={() => update.mutate({ id: serverId, bearerToken: null, customHeaders: null, oauth: null })}
+          disabled={update.isPending || !hasAnySecret}
         >
           Clear saved credentials
         </Button>
@@ -124,7 +137,8 @@ export function AdminMcpServersContent() {
   const [dataClassification, setDataClassification] = useState<Classification>("internal");
   const [verbatimOnly, setVerbatimOnly] = useState(false);
   const [timeoutSeconds, setTimeoutSeconds] = useState("30");
-  const [bearerToken, setBearerToken] = useState("");
+  const [signInMethod, setSignInMethod] = useState<SignInMethod>("none");
+  const [signIn, setSignIn] = useState<SignInFieldValues>(EMPTY_SIGN_IN);
   const [customHeaders, setCustomHeaders] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [openPanel, setOpenPanel] = useState<{ id: string; panel: "tools" | "credentials" } | null>(null);
@@ -152,7 +166,8 @@ export function AdminMcpServersContent() {
       setDataClassification("internal");
       setVerbatimOnly(false);
       setTimeoutSeconds("30");
-      setBearerToken("");
+      setSignInMethod("none");
+      setSignIn(EMPTY_SIGN_IN);
       setCustomHeaders("");
       setError(null);
       invalidate();
@@ -199,10 +214,12 @@ export function AdminMcpServersContent() {
   const submit = () => {
     if (!label.trim() || !url.trim()) return;
     const headers = parseCustomHeaders(customHeaders);
-    if (headers.error) {
-      setError(headers.error);
+    const problem = headers.error ?? signInProblems(signInMethod, signIn, "none")[0];
+    if (problem) {
+      setError(problem);
       return;
     }
+    const { bearerToken, oauth } = signInChange(signInMethod, signIn, "none");
     register.mutate({
       label,
       url,
@@ -210,7 +227,8 @@ export function AdminMcpServersContent() {
       dataClassification,
       verbatimOnly,
       callTimeoutMs: secondsToTimeoutMs(timeoutSeconds),
-      bearerToken: bearerToken.trim() ? bearerToken : null,
+      bearerToken: bearerToken ?? null,
+      oauth: oauth ?? null,
       customHeaders: Object.keys(headers.headers).length > 0 ? headers.headers : null,
     });
   };
@@ -228,8 +246,8 @@ export function AdminMcpServersContent() {
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Register a remote Model Context Protocol server. Flow authors can then
-              use its tools without seeing credentials. The bearer token and custom
-              headers are stored encrypted and are never shown again after saving.
+              use its tools without seeing credentials. Tokens, client secrets and
+              custom headers are stored encrypted and are never shown again after saving.
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1.5">
@@ -273,17 +291,15 @@ export function AdminMcpServersContent() {
                 <p className="text-xs text-muted-foreground">Per request, 1–120. Public-data sources often need 30+.</p>
               </div>
             </div>
+            <McpSignInFields
+              idPrefix="mcp-signin"
+              method={signInMethod}
+              onMethodChange={setSignInMethod}
+              values={signIn}
+              onValuesChange={setSignIn}
+              current="none"
+            />
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="mcp-token">Bearer token (optional)</Label>
-                <Input
-                  id="mcp-token"
-                  type="password"
-                  autoComplete="off"
-                  value={bearerToken}
-                  onChange={(event) => setBearerToken(event.target.value)}
-                />
-              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="mcp-headers">Custom headers (optional, one &quot;Name: value&quot; per line)</Label>
                 <Textarea
@@ -538,7 +554,11 @@ export function AdminMcpServersContent() {
                           ) : (
                             <CredentialsEditor
                               serverId={server.id}
-                              hasCredential={server.hasCredential || server.customHeaderNames.length > 0}
+                              hasCredential={server.hasCredential}
+                              hasAnySecret={
+                                server.hasCredential || server.customHeaderNames.length > 0 || server.oauth !== null
+                              }
+                              oauth={server.oauth}
                               onDone={() => {
                                 setOpenPanel(null);
                                 invalidate();

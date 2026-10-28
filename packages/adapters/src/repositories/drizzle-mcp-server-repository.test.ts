@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SettingsEncryptionService } from "../config/settings-encryption";
-import { toMcpServerEntity, type McpServerRow } from "./drizzle-mcp-server-repository";
+import { oauthColumns, toMcpServerEntity, type McpServerRow } from "./drizzle-mcp-server-repository";
 
 const encryption = new SettingsEncryptionService(Buffer.alloc(32, 7));
 
@@ -17,6 +17,12 @@ const row = (overrides: Partial<McpServerRow> = {}): McpServerRow => ({
   call_timeout_ms: 30_000,
   credential_ciphertext: null,
   custom_headers_ciphertext: null,
+  oauth_token_url: null,
+  oauth_client_id: null,
+  oauth_scope: null,
+  oauth_audience: null,
+  oauth_client_auth_method: null,
+  oauth_client_secret_ciphertext: null,
   status: "active",
   created_by_user_id: null,
   created_at: new Date("2026-01-01"),
@@ -55,5 +61,53 @@ describe("toMcpServerEntity", () => {
   it("reads undecryptable headers as none rather than failing the listing", () => {
     const entity = toMcpServerEntity(row({ custom_headers_ciphertext: "enc:v1:garbage" }), encryption);
     expect(entity.customHeaderNames).toEqual([]);
+  });
+});
+
+const oauthSettings = {
+  tokenUrl: "https://login.example.com/token",
+  clientId: "wayfinder-service",
+  scope: "mcp.read",
+  audience: null,
+  clientAuthMethod: "client_secret_post" as const,
+};
+
+describe("OAuth settings", () => {
+  it("reads a server with no OAuth columns as not using OAuth", () => {
+    expect(toMcpServerEntity(row(), encryption).oauth).toBeNull();
+  });
+
+  it("carries the OAuth settings onto the entity but never the client secret", () => {
+    const entity = toMcpServerEntity(
+      row({
+        oauth_token_url: "https://login.example.com/token",
+        oauth_client_id: "wayfinder-service",
+        oauth_scope: "mcp.read",
+        oauth_client_auth_method: "client_secret_post",
+        oauth_client_secret_ciphertext: encryption.encrypt("client-secret"),
+      }),
+      encryption,
+    );
+
+    expect(entity.oauth).toEqual(oauthSettings);
+    expect(JSON.stringify(entity)).not.toContain("client-secret");
+  });
+
+  it("writes the settings columns, clears them on null and leaves them alone when absent", () => {
+    expect(oauthColumns(undefined)).toEqual({});
+    expect(oauthColumns(oauthSettings)).toEqual({
+      oauth_token_url: "https://login.example.com/token",
+      oauth_client_id: "wayfinder-service",
+      oauth_scope: "mcp.read",
+      oauth_audience: null,
+      oauth_client_auth_method: "client_secret_post",
+    });
+    expect(oauthColumns(null)).toEqual({
+      oauth_token_url: null,
+      oauth_client_id: null,
+      oauth_scope: null,
+      oauth_audience: null,
+      oauth_client_auth_method: null,
+    });
   });
 });

@@ -13,6 +13,7 @@ import {
   type McpCallOptions,
   type McpResourceLink,
   type McpServer,
+  type McpServerSecrets,
   type McpSourceStatus,
   type McpTool,
   type McpToolCallOutput,
@@ -23,6 +24,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { OAuthClientCredentialsTokenSource } from "./oauth-client-credentials-token-source";
 
 const CLIENT_INFO = { name: "wayfinder", version: "1.0.0" };
 
@@ -101,9 +103,14 @@ const describeFailure = (cause: unknown): string =>
 
 // Talks to remote MCP servers through the MCP SDK `Client` (ADR-062 §2), which
 // negotiates up to protocol 2025-11-25 and works with servers that keep no
-// session. A fresh client is opened per call and always closed.
+// session. A fresh client is opened per call and always closed. One instance per
+// process, so its OAuth token cache is shared by every call.
 export class McpSdkClient implements IMcpClient {
-  constructor(private readonly secrets: IMcpServerSecretStore) {}
+  constructor(
+    private readonly secrets: IMcpServerSecretStore,
+    private readonly tokenSource: Pick<OAuthClientCredentialsTokenSource, "accessToken"> =
+      new OAuthClientCredentialsTokenSource(),
+  ) {}
 
   async listTools(server: McpServer): Promise<Result<McpTool[]>> {
     return this.withClient(server, "Failed to list MCP tools.", async (client) => {
@@ -181,6 +188,21 @@ export class McpSdkClient implements IMcpClient {
     });
   }
 
+  // What the connection sends: for an OAuth server, a current access token in
+  // place of a stored one (issue #361).
+  private async connectionSecrets(
+    server: McpServer,
+    secrets: McpServerSecrets,
+  ): Promise<Result<{ bearerToken: string | null; headers: Record<string, string> }>> {
+    if (!server.oauth) return ok(secrets);
+    if (!secrets.oauthClientSecret) {
+      return err(domainError("VALIDATION_FAILED", "This server's OAuth client secret is missing — save it again."));
+    }
+    const accessToken = await this.tokenSource.accessToken(server.id, server.oauth, secrets.oauthClientSecret);
+    if (accessToken.error) return err(accessToken.error);
+    return ok({ bearerToken: accessToken.data, headers: secrets.headers });
+  }
+
   private async withClient<T>(
     server: McpServer,
     failureMessage: string,
@@ -188,11 +210,13 @@ export class McpSdkClient implements IMcpClient {
   ): Promise<Result<T>> {
     const secrets = await this.secrets.get(server.id);
     if (secrets.error) return err(secrets.error);
+    const connection = await this.connectionSecrets(server, secrets.data);
+    if (connection.error) return err(connection.error);
 
     const client = new Client(CLIENT_INFO);
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await client.connect(buildMcpTransport(server, secrets.data), { timeout: server.callTimeoutMs });
+      await client.connect(buildMcpTransport(server, connection.data), { timeout: server.callTimeoutMs });
       // Each request carries the server's own timeout; this bounds the whole call,
       // every page included, so a worker can tell a slow call from a dead one.
       const deadline = new Promise<never>((_, reject) => {
