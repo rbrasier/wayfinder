@@ -101,7 +101,7 @@ export function SignInFields({
             aria-invalid={invalid("token")}
             aria-describedby={describedBy("token")}
             value={values.token}
-            placeholder={current === "bearer" ? "Leave blank to keep the current token" : undefined}
+            placeholder={current === "bearer" ? "Leave blank to keep it" : undefined}
             onChange={(event) => onValuesChange({ ...values, token: event.target.value })}
           />
         </div>
@@ -126,7 +126,7 @@ export function SignInFields({
               aria-invalid={invalid("clientSecret")}
               aria-describedby={describedBy("clientSecret")}
               value={values.oauth.clientSecret}
-              placeholder={current === "oauth" ? "Leave blank to keep the current secret" : undefined}
+              placeholder={current === "oauth" ? "Leave blank to keep it" : undefined}
               onChange={(event) => setOAuth({ clientSecret: event.target.value })}
             />
           </div>
