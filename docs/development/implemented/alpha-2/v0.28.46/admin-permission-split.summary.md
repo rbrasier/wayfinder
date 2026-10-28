@@ -75,6 +75,7 @@ Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
   - They are redirected from `/admin/users` and `/admin/roles`.
   - The existing matrix assertions now expect the five roles and "Global Admin".
   - Written, not run; CI runs it.
+- **E2E, unrelated fix:** `chat.spec.ts` "multi-turn conversation works" failed on `release/alpha-2` too after PR #362. Its replies came from the browser-side stream mock. The page drops those when it resyncs with the stored history, so counting bubbles only passed when the poll beat the resync. It now scripts the server's AI stub (`scriptAiFor`), so each reply is stored, and it waits for each reply's text.
 
 ## Known limitations
 
