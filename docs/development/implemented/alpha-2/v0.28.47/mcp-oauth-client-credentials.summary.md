@@ -60,9 +60,11 @@ the change adds nullable columns, but MINOR numbers from `0.29.0` are taken on
 
 Domain validator, application sign-in rules, repository column mapping, token
 source (auth methods, parameters, caching, refresh, invalidation, sharing, error
-reporting), resolver, MCP client, pre-pass and the admin form model. **No e2e** —
-the behaviour is in none of the six `e2e-test-policy.md` groups; it is covered at
-the domain, application and adapter layers and by the form-model test.
+reporting), resolver, MCP client, pre-pass and the admin form model.
+**E2E**: the existing axe check on the MCP edit dialog (`e2e/accessibility.spec.ts`,
+accessibility group) now drives the Authentication choice and the OAuth fields'
+save problems instead of the removed "Remove token" checkbox. The sign-in
+behaviour itself is covered at the domain, application and adapter layers.
 
 ## Known limitations
 
