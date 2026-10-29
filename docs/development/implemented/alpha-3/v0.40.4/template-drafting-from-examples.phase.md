@@ -1,6 +1,6 @@
 # Phase — Template Drafting from Examples
 
-- **Status**: Draft (run `/doc-review` before `/build`)
+- **Status**: Implemented in 0.40.4 — see `template-drafting-from-examples.summary.md`
 - **Target version**: **PATCH**, 0.40.3 → 0.40.4 on `main`. CLAUDE.md's rule
   would make a new feature MINOR. The maintainer chose PATCH on 2026-10-28
   because this extends the existing template upload flow and changes no

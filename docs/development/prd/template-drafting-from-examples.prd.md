@@ -1,6 +1,6 @@
 # PRD — Template Drafting from Examples
 
-- **Status**: Draft
+- **Status**: Accepted — implemented in 0.40.4
 - **Date**: 2026-10-28
 - **Author**: rbrasier
 - **Target version**: 0.40.4 (bump: PATCH, the maintainer's choice; see the phase doc §1)
@@ -68,7 +68,7 @@ AI.
 | `IDocumentGenerator.annotate()` | same | existing | Places tags in `.docx` runs and reports `unmatched` |
 | `TemplateDraftField` | `packages/domain/src/entities/template-draft.ts` | new | `{ label, type, options, multiple, sourceValue, occurrence }`, where `sourceValue` is quoted exactly from the base document |
 | `resolveCaptionAnchor` | same | new | Pure function, restored from the removed `resolveAnchor` (`ed73b66`). Moves a tag that landed on a field's caption onto the value the caption introduces, or marks the tag to go after the caption when there is no value. |
-| `DraftEvidence` | same | new | `"varies" \| "single-example" \| "checking-pass" \| "restored"`, plus `{ differsIn, of }` for `varies`. Shown on each row in place of an AI confidence score. |
+| `DraftEvidence` | same | new | `"varies" \| "single-example" \| "blank-in-example" \| "checking-pass" \| "restored"`, plus `{ differsIn, of }` for `varies`. Shown on each row in place of an AI confidence score. |
 | `countExamplesLacking` | same | new | Pure function: how many of the other examples do *not* contain the value. More than 0 means the value varies, and the count feeds **Differs in N of M examples**. |
 | `valueAfterCaption` | same | new | Pure function: in another example, finds the value the same caption introduces. Used only to collect multi-select choices. |
 | `DraftTemplateFromExamples` | `packages/application/src/use-cases/document/draft-template-from-examples.ts` | new | Extract → filter → place → verify |

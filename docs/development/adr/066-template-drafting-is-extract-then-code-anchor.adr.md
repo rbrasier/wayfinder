@@ -1,6 +1,6 @@
 # ADR-066 — Template Drafting: the AI Extracts, Code Places Tags, the AI Verifies
 
-- **Status**: Proposed (scoped by `template-drafting-from-examples.prd.md`)
+- **Status**: Accepted — implemented in 0.40.4 (scoped by `template-drafting-from-examples.prd.md`)
 - **Date**: 2026-10-28
 - **Assumes**:
   - The v0.21.3 annotation design (`eb5e93e`): `IDocumentGenerator.annotate()`,
@@ -82,6 +82,7 @@ behind it. Each row now shows evidence that code can check:
 | ----- | ---- | -------------------- |
 | Differs in N of M examples | 2+ examples, value missing from at least one | No |
 | Only one example | 1 example; no comparison was possible | No |
+| Blank in your example | The tag goes after the caption because the example left the value blank, so there was no value to compare | No |
 | Added by the checking pass | Came from stage 3 | **Yes**, because it had the least scrutiny |
 | Restored | The author restored it from "Same in every example" | No; the author chose it |
 
