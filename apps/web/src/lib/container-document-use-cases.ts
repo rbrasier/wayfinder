@@ -1,5 +1,6 @@
 import {
   CaptureStructuredStepOutput,
+  DraftTemplateFromExamples,
   GenerateDocument,
   SummariseTemplate,
   UpdateDocumentFields,
@@ -64,4 +65,5 @@ export const buildDocumentUseCases = (deps: DocumentUseCaseDeps) => ({
     deps.auditLogger,
   ),
   summariseTemplate: new SummariseTemplate(deps.languageModel),
+  draftTemplateFromExamples: new DraftTemplateFromExamples(deps.languageModel, deps.documentGenerator),
 });

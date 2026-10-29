@@ -556,6 +556,7 @@ export function NodeConfigModal({
                       fileInputRef={fileInputRef}
                       handleFileChange={handleFileChange}
                       isUploading={isUploading}
+                      onStartTemplateUpload={templateUpload.start}
                       onEditTemplateFields={templateUpload.editFields}
                       templateDownloadUrl={
                         nodeId && values.documentTemplatePath

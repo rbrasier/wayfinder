@@ -4,8 +4,13 @@
  * Covers the guided annotation upload flow (v0.21.3): uploading a document into
  * a "Generate document" step opens a guided modal that lists the {{ placeholders }}
  * the author wrote in the document, lets them accept those or edit the names and
- * types, and only then persists the template. Nothing is inferred — no AI pass
- * ever writes placeholders into a document.
+ * types, and only then persists the template.
+ *
+ * Since #347 the upload button first asks whether the author has a tagged
+ * template or a filled example. The tagged path is the flow above, unchanged;
+ * the example path drafts placeholders from one or more filled .docx copies
+ * (ADR-067). The draft route is stubbed here — what it drafts is covered by the
+ * use-case and route unit tests; this covers the files crossing the browser.
  *
  * What is tested:
  *   1. A document carrying placeholders lists them with their types and saves on
@@ -19,6 +24,12 @@
  *      flow and picks up the new fields.
  *   5. The config icon renders in an accent colour when a non-default option is
  *      set, in the structured conversation editor as well (the retrofit).
+ *   6. "I have a template with tags" opens the file picker into the flow above.
+ *   7. "Use an existing example" uploads several examples, reviews the draft
+ *      (evidence, a checking-pass field to confirm), compares the original and
+ *      tagged text side by side, and saves.
+ *   8. A file that is not a Word document is named and refused before drafting,
+ *      and a failed draft offers Retry and "Tag it myself".
  */
 
 import { test, expect } from './helpers/base';
@@ -299,5 +310,155 @@ test.describe('enhance: guided annotation upload', () => {
 
     await expect(cog).toHaveAttribute('data-configured', 'true');
     await page.screenshot({ path: 'screenshots/enhance-template-annotation-cog-accent.png', fullPage: true });
+  });
+});
+
+const examplesFile = (name: string) => ({
+  name,
+  mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  buffer: fakeDocx(),
+});
+
+async function openUploadChoice(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /Click to upload a \.docx or \.xlsx template/ }).click();
+  await expect(page.getByRole('button', { name: /I have a template with tags/ })).toBeVisible({ timeout: 5_000 });
+}
+
+async function chooseExamples(page: Page, files: ReturnType<typeof examplesFile>[]): Promise<void> {
+  await page.getByRole('button', { name: /Use an existing example/ }).click();
+  await expect(page.getByText(/Your\s+original files are not changed, and they are not saved/)).toBeVisible();
+  await page.getByRole('button', { name: 'Choose examples' }).click();
+  await page.locator('input[type="file"][accept=".docx"]').setInputFiles(files);
+}
+
+const DRAFT = {
+  filename: 'contract-2024.docx',
+  exampleCount: 2,
+  rows: [
+    {
+      key: 'supplier_name',
+      line: 'Supplier Name',
+      occurrences: [{ sourceText: 'Acme Pty Ltd', occurrence: 0 }],
+      locked: false,
+      draft: {
+        replacedValue: 'Acme Pty Ltd',
+        context: 'Supplier: Acme Pty Ltd',
+        insertAfter: false,
+        evidence: { kind: 'varies', differsIn: 1, of: 1 },
+        confirmed: true,
+      },
+    },
+    {
+      key: 'reference',
+      line: 'Reference',
+      occurrences: [{ sourceText: 'PO-42', occurrence: 0 }],
+      locked: false,
+      draft: {
+        replacedValue: 'PO-42',
+        context: 'Ref: PO-42',
+        insertAfter: false,
+        evidence: { kind: 'checking-pass' },
+        confirmed: false,
+      },
+    },
+  ],
+  sameInEveryExample: [],
+  unplaced: [],
+  comparison: {
+    originalText: 'Supplier: Acme Pty Ltd\nRef: PO-42',
+    taggedText: 'Supplier: {{ Supplier Name }}\nRef: {{ Reference }}',
+    links: [
+      { fieldKey: 'supplier_name', originalStart: 10, originalEnd: 22, taggedStart: 10, taggedEnd: 29 },
+      { fieldKey: 'reference', originalStart: 28, originalEnd: 33, taggedStart: 35, taggedEnd: 50 },
+    ],
+  },
+  taggedDocument: fakeDocx().toString('base64'),
+};
+
+test.describe('enhance: draft a template from examples', () => {
+  test('a tagged template goes through the file picker into the existing flow', async ({ page }) => {
+    await createFlowAndOpenCanvas(page, `Template Choice ${Date.now()}`, { expertRole: 'E2E Template Expert' });
+    await addDocumentStep(page);
+    await mockAnalyse(page, {
+      filename: 'agreement.docx',
+      format: 'docx',
+      classification: 'annotated',
+      documentText: 'Made with {{ Supplier Name }}.',
+      rows: [
+        {
+          key: 'supplier_name',
+          line: 'Supplier Name',
+          occurrences: [{ sourceText: '{{ Supplier Name }}', occurrence: 0 }],
+          locked: false,
+        },
+      ],
+    });
+
+    await openUploadChoice(page);
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: /I have a template with tags/ }).click();
+    await (await chooser).setFiles(examplesFile('agreement.docx'));
+
+    await expect(page.getByText('1 data field found')).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('examples are drafted, reviewed, compared side by side and saved', async ({ page }) => {
+    await createFlowAndOpenCanvas(page, `Template Draft ${Date.now()}`, { expertRole: 'E2E Template Expert' });
+    await addDocumentStep(page);
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/draft$/, async (route: Route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(DRAFT) });
+    });
+    const save = await mockSave(page);
+
+    await openUploadChoice(page);
+    await chooseExamples(page, [examplesFile('contract-2024.docx'), examplesFile('contract-2023.docx')]);
+    await expect(page.getByLabel('contract-2024.docx', { exact: true })).toBeChecked();
+    await page.getByRole('button', { name: 'Draft template' }).click();
+
+    // The review shows what each field replaces and the evidence behind it.
+    await expect(page.getByText('2 data fields drafted')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Replaces “Acme Pty Ltd”')).toBeVisible();
+    await expect(page.getByText('Differs in 1 of 1 other example')).toBeVisible();
+    await expect(page.getByText('Added by the checking pass')).toBeVisible();
+
+    // A field the checking pass added must be confirmed before saving.
+    const compareAndSave = page.getByRole('button', { name: 'Compare and save' });
+    await expect(compareAndSave).toBeDisabled();
+    await page.getByRole('button', { name: 'Looks right' }).click();
+    await compareAndSave.click();
+
+    await expect(page.getByRole('button', { name: '{{ Supplier Name }}' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByRole('button', { name: 'Acme Pty Ltd' })).toBeVisible();
+    await page.screenshot({ path: 'screenshots/enhance-template-draft-compare.png', fullPage: true });
+
+    await page.getByRole('button', { name: 'Save template' }).click();
+    await expect.poll(save.saved, { timeout: 10_000 }).toBe(true);
+    await expect(page.getByText('agreement.docx').first()).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('a file that is not a Word document is named, and a failed draft can be retried', async ({ page }) => {
+    await createFlowAndOpenCanvas(page, `Template Draft Errors ${Date.now()}`, { expertRole: 'E2E Template Expert' });
+    await addDocumentStep(page);
+    await page.route(/\/api\/flows\/[^/]+\/nodes\/[^/]+\/template\/draft$/, async (route: Route) => {
+      await route.fulfill({
+        status: 502,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: "Couldn't draft fields from these examples." }),
+      });
+    });
+
+    await openUploadChoice(page);
+    await chooseExamples(page, [{ ...examplesFile('prices.pdf'), mimeType: 'application/pdf' }]);
+    await expect(page.getByText('Only Word (.docx) files can be used as examples.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Draft template' })).toBeDisabled();
+
+    await page.getByRole('button', { name: 'Remove prices.pdf' }).click();
+    await page.locator('input[type="file"][accept=".docx"]').setInputFiles([examplesFile('contract.docx')]);
+    await page.getByRole('button', { name: 'Draft template' }).click();
+
+    await expect(page.getByText("Couldn't draft fields from these examples.")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await page.getByRole('button', { name: 'Tag it myself' }).click();
+    await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
   });
 });
