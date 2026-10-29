@@ -31,7 +31,7 @@ const requireFlowEditor = async (ctx: TrpcContext & { userId: string }, flowId: 
 // the flow editor's Triggers tab reads and writes through here.
 export const automationRouter = router({
   flowTriggers: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       await requireFlowEditor(ctx, input.flowId);
       const [flow, webhook] = await Promise.all([
@@ -50,7 +50,7 @@ export const automationRouter = router({
     }),
 
   setTriggerInputs: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid(), inputs: z.array(triggerInputSchema).max(50) }))
+    .input(z.object({ flowId: z.string().guid(), inputs: z.array(triggerInputSchema).max(50) }))
     .mutation(async ({ ctx, input }) => {
       await requireFlowEditor(ctx, input.flowId);
       const result = await ctx.container.useCases.setTriggerInputs.execute(input);
@@ -60,7 +60,7 @@ export const automationRouter = router({
 
   configureWebhook: authenticatedProcedure
     .input(
-      z.object({ flowId: z.string().uuid(), enabled: z.boolean(), runAsUserId: z.string().uuid().optional() }),
+      z.object({ flowId: z.string().guid(), enabled: z.boolean(), runAsUserId: z.string().guid().optional() }),
     )
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.configureWebhookTrigger.execute({
@@ -74,7 +74,7 @@ export const automationRouter = router({
     }),
 
   rotateWebhookToken: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.rotateWebhookToken.execute({
         flowId: input.flowId,
@@ -85,7 +85,7 @@ export const automationRouter = router({
     }),
 
   setWebhookHmac: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid(), enabled: z.boolean() }))
+    .input(z.object({ flowId: z.string().guid(), enabled: z.boolean() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.setWebhookHmac.execute({
         flowId: input.flowId,
@@ -97,7 +97,7 @@ export const automationRouter = router({
     }),
 
   webhookRuns: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       await requireFlowEditor(ctx, input.flowId);
       const webhook = await ctx.container.repos.flowTriggers.findByFlow(input.flowId, "webhook");
@@ -112,7 +112,7 @@ export const automationRouter = router({
     }),
 
   retryRun: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       // Retried from All Chats (oversight) or Event Watch's run history
       // (technical), so either area may retry a run it does not own (ADR-066 §4).

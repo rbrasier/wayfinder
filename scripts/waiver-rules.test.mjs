@@ -48,6 +48,27 @@ describe("assessWaiver", () => {
     assert.deepEqual(assessment, { status: "fixable", upgrades: [{ packageName: "zod", from: "3.25.76", to: "3.25.77" }] });
   });
 
+  it("treats a later minor of a 0.x package as a new line the project cannot take", () => {
+    const assessment = assessWaiver({
+      ranges: [{ packageName: "decode-uri-component", introduced: "0", fixed: "0.5.1" }],
+      resolved: { "decode-uri-component": ["0.2.2"] },
+    });
+
+    assert.deepEqual(assessment, { status: "needed", upgrades: [] });
+  });
+
+  it("must give way to a patch on the 0.x line already in use", () => {
+    const assessment = assessWaiver({
+      ranges: [{ packageName: "decode-uri-component", introduced: "0", fixed: "0.2.3" }],
+      resolved: { "decode-uri-component": ["0.2.2"] },
+    });
+
+    assert.deepEqual(assessment, {
+      status: "fixable",
+      upgrades: [{ packageName: "decode-uri-component", from: "0.2.2", to: "0.2.3" }],
+    });
+  });
+
   it("is stale once every resolved copy is outside the vulnerable ranges", () => {
     const backported = [
       { packageName: "zod", introduced: "0", fixed: "3.25.77" },

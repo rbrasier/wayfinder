@@ -9,7 +9,7 @@ import {
   type McpToolCallOutput,
   type Result,
 } from "@rbrasier/domain";
-import { experimental_createMCPClient, type MCPTransport } from "ai";
+import { experimental_createMCPClient, type MCPTransport } from "@ai-sdk/mcp";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { EnvLegacyMcpCredentialSource } from "./env-legacy-mcp-credential-source";
 import type { McpBearerTokenResolver } from "./mcp-bearer-token-resolver";
@@ -29,7 +29,7 @@ type ToolResult = { content?: ToolResultContent[] };
 
 // Talks to remote SSE MCP servers via the Vercel AI SDK MCP client. A fresh
 // client is opened per call and always closed — the SDK recommends one client per
-// server and does not pool connections (verified in node_modules/ai).
+// server and does not pool connections (verified in node_modules/@ai-sdk/mcp).
 export class AiSdkMcpClient implements IMcpClient {
   constructor(private readonly bearerTokens: Pick<McpBearerTokenResolver, "resolve">) {}
 

@@ -9,7 +9,7 @@ export const createUserInputSchema = z.object({
 });
 
 export const updateUserInputSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().guid(),
   email: z.string().email().optional(),
   name: z.string().min(1).max(120).nullable().optional(),
   role: z.string().min(1).max(120).nullable().optional(),
@@ -27,7 +27,7 @@ export const updateProfileInputSchema = z.object({
 });
 
 export const deleteUserInputSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().guid(),
 });
 
 // Admin-initiated reset of another user's password. The 8-character floor
@@ -35,7 +35,7 @@ export const deleteUserInputSchema = z.object({
 // enforces it — this schema rejects the obvious case at the edge so a doomed
 // request never reaches the hasher.
 export const resetUserPasswordInputSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().guid(),
   password: z.string().min(8),
 });
 

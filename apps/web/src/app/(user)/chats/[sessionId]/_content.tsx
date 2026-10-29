@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
+import { DefaultChatTransport } from "ai";
 import { toast } from "sonner";
 import { visitedNodeIdsInOrder, type ApproverSource, type FlowEdge, type FlowNode } from "@rbrasier/domain";
 import { Badge } from "@/components/ui/badge";
@@ -24,25 +25,13 @@ import { AppHeader } from "@/components/layout/app-header";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
 import { buildStepRail, topoSortNodes } from "@/lib/flow-utils";
 import { trpc } from "@/trpc/client";
+import { toFeedMessage, toUiMessages, toWireMessages, type ChatUiMessage } from "@/lib/chat/ui-messages";
 import { automationStepState } from "@/components/chat/automation-step-state";
 import { consultingLabel } from "@/components/chat/turn-activity";
 import { ManualEstimateModal } from "@/components/chat/manual-estimate-modal";
 import { shouldPromptForEstimate } from "@/components/chat/manual-estimate-state";
 
 const NULL_BRANCH_THRESHOLD = 3;
-
-// The shape useChat expects for messages sourced from the persisted history —
-// used both at initialisation and to re-sync the streamed list between turns.
-const toUiMessages = (
-  messages: { id: string; role: string; content: string; confidence: number | null }[],
-) =>
-  messages.map((m) => ({
-    id: m.id,
-    role: m.role as "user" | "assistant" | "system",
-    content: m.content,
-    annotations:
-      m.confidence !== null ? [{ type: "confidence", score: m.confidence }] : undefined,
-  }));
 
 const statusVariant = (status: string) => {
   if (status === "active") return "blue";
@@ -293,12 +282,25 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     [edges, nodes, dbMessages, currentNodeId],
   );
 
-  const { messages, input, handleSubmit, isLoading, setInput, error, reload, append, setMessages } = useChat({
-    api: `/api/chat/${sessionId}/stream`,
-    initialMessages: toUiMessages(dbMessages),
-    experimental_prepareRequestBody: ({ messages: msgs }) => ({
-      messages: msgs.slice(-20),
-    }),
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport<ChatUiMessage>({
+        api: `/api/chat/${sessionId}/stream`,
+        prepareSendMessagesRequest: ({ messages: msgs }) => ({
+          body: { messages: toWireMessages(msgs.slice(-20)) },
+        }),
+      }),
+    [sessionId],
+  );
+  // AI SDK 5 leaves the draft to the page; the composer owns it as v4's useChat did.
+  const [input, setInput] = useState("");
+  const { messages, status, error, regenerate, sendMessage, setMessages } = useChat<ChatUiMessage>({
+    // useChat keeps one Chat until its id changes; without the session id a
+    // client-side move between chats would carry the last one's messages and
+    // transport across (v4 keyed this by the API URL instead).
+    id: sessionId,
+    transport,
+    messages: toUiMessages(dbMessages),
     onFinish: () => {
       turnBoundaryAtRef.current = Date.now();
       void utils.session.get.invalidate({ sessionId });
@@ -308,6 +310,9 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       void utils.session.get.invalidate({ sessionId });
     },
   });
+
+  const isLoading = status === "submitted" || status === "streaming";
+  const feedMessages = useMemo(() => messages.map(toFeedMessage), [messages]);
 
   useEffect(() => {
     void utils.session.get.invalidate({ sessionId });
@@ -357,8 +362,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
       ? `Hi! I'm ready to get started with the "${flowName}" workflow. Let's begin with the first step: ${firstStepName}.`
       : `Hi! I'm ready to get started with the "${flowName}" workflow. Please guide me through the first step.`;
 
-    void append({ role: "user", content: kickoffMessage });
-  }, [sessionData, isReadOnly, messages.length, isLoading, currentNode, append]);
+    void sendMessage({ text: kickoffMessage });
+  }, [sessionData, isReadOnly, messages.length, isLoading, currentNode, sendMessage]);
 
   // Poll while a document is being generated so the spinner resolves
   // automatically. Only the last assistant message per step counts — see
@@ -466,12 +471,14 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     // A new message after a failed turn drops what that turn left unsaved; kept,
     // it would offset the feed's streamed tail and repeat a reply (#308).
     if (error) setMessages(toUiMessages(dbMessages));
-    handleSubmit();
+    const text = input;
+    setInput("");
+    void sendMessage({ text });
   };
 
   const handleRetry = () => {
     turnBoundaryAtRef.current = Date.now();
-    void reload();
+    void regenerate();
   };
 
   const handleRegenerateDocument = useCallback(async (messageId: string) => {
@@ -561,7 +568,7 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
 
       <MessageFeed
         dbMessages={dbMessages}
-        streamingMessages={messages}
+        streamingMessages={feedMessages}
         nodes={nodes}
         isStreaming={isLoading}
         isComplete={session.status === "complete"}

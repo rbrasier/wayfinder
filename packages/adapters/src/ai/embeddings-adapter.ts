@@ -15,15 +15,24 @@ import {
 
 export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small";
 
+type EmbedProviderOptions = Parameters<typeof embed>[0]["providerOptions"];
+
 // Wraps the Vercel AI SDK embed() call behind the IEmbeddingsProvider port. The
 // concrete embedding model is injected so the provider can be swapped without
 // touching this adapter.
 export class EmbeddingsAdapter implements IEmbeddingsProvider {
-  constructor(private readonly model: EmbeddingModel<string>) {}
+  constructor(
+    private readonly model: EmbeddingModel<string>,
+    private readonly providerOptions?: EmbedProviderOptions,
+  ) {}
 
   async embed(text: string): Promise<Result<number[]>> {
     try {
-      const { embedding } = await embed({ model: this.model, value: text });
+      const { embedding } = await embed({
+        model: this.model,
+        value: text,
+        providerOptions: this.providerOptions,
+      });
       return ok(embedding);
     } catch (cause) {
       return err(domainError("AI_PROVIDER_FAILED", "Embedding generation failed.", cause));
@@ -32,15 +41,15 @@ export class EmbeddingsAdapter implements IEmbeddingsProvider {
 }
 
 // OpenAI embeddings, reduced to EMBEDDINGS_DIMENSION via the `dimensions`
-// parameter so the vector column stays provider-agnostic (ADR-017).
+// provider option so the vector column stays provider-agnostic (ADR-017).
 export const createOpenAIEmbeddingsAdapter = (
   apiKey: string | null,
   modelId: string = DEFAULT_OPENAI_EMBEDDING_MODEL,
 ): EmbeddingsAdapter => {
   const openai = createOpenAI(apiKey ? { apiKey } : {});
-  return new EmbeddingsAdapter(
-    openai.textEmbeddingModel(modelId, { dimensions: EMBEDDINGS_DIMENSION }),
-  );
+  return new EmbeddingsAdapter(openai.textEmbeddingModel(modelId), {
+    openai: { dimensions: EMBEDDINGS_DIMENSION },
+  });
 };
 
 export type EmbeddingsAdapterBuilders = Record<

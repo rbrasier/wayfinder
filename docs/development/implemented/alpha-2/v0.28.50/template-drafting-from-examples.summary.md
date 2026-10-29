@@ -1,10 +1,10 @@
-# Implementation Summary — Template Drafting from Examples (v0.28.48)
+# Implementation Summary — Template Drafting from Examples (v0.28.50)
 
 - **Phase doc**: `template-drafting-from-examples.phase.md` (this folder)
 - **PRD**: `docs/development/prd/template-drafting-from-examples.prd.md`
 - **ADR**: `docs/development/adr/067-template-drafting-is-extract-then-code-anchor.adr.md`
 - **Issue**: #347
-- **Version**: PATCH, 0.28.47 → 0.28.48 (the maintainer's choice; no schema change)
+- **Version**: PATCH, 0.28.49 → 0.28.50 (the maintainer's choice; no schema change)
 - **Branch**: `release/alpha-2`, at the maintainer's request. This
   overrides the "no new features on a release branch" rule; it replaces PR
   #369, which targeted `main`.
@@ -86,7 +86,7 @@ tagged-template path does. No example file is ever stored.
 | apps/web | `node-config-modal.tsx`, `node-config-modal-conversational.tsx` | Upload/Replace open the choice (`onStartTemplateUpload`) |
 | apps/web | `template-annotation-modal.tsx` | Export `TemplateErrorPanel`, `Working`, `ReuploadPanel` for reuse |
 | apps/web | `e2e/enhance-template-annotation.spec.ts` | Three tests for the choice and example paths |
-| root | `VERSION`, `package.json` | 0.28.48 |
+| root | `VERSION`, `package.json` | 0.28.50 |
 
 ## Migrations
 

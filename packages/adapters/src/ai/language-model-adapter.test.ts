@@ -41,8 +41,8 @@ describe("LanguageModelAdapter (openai) — generateObject", () => {
   it("returns ok with object + normalized usage when the SDK succeeds", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: { answer: "hi" },
-      usage: { promptTokens: 10, completionTokens: 5 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 10, outputTokens: 5 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -62,8 +62,8 @@ describe("LanguageModelAdapter (openai) — generateObject", () => {
   it("uses gpt-4o-mini for chat purpose by default", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -75,8 +75,8 @@ describe("LanguageModelAdapter (openai) — generateObject", () => {
   it("uses gpt-4o for documentGeneration purpose by default", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -88,8 +88,8 @@ describe("LanguageModelAdapter (openai) — generateObject", () => {
   it("uses gpt-4o-mini for branching purpose by default", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -101,8 +101,8 @@ describe("LanguageModelAdapter (openai) — generateObject", () => {
   it("input.model overrides the runtime config default", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 0, completionTokens: 0 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -131,8 +131,8 @@ describe("LanguageModelAdapter (openai) — generateText", () => {
   it("returns ok with text + normalized usage when the SDK succeeds", async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: "A concise title",
-      usage: { promptTokens: 12, completionTokens: 4 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 12, outputTokens: 4 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -152,9 +152,10 @@ describe("LanguageModelAdapter (openai) — generateText", () => {
   it("carries Anthropic cache tokens through from provider metadata", async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: "cached",
-      usage: { promptTokens: 100, completionTokens: 2 },
-      experimental_providerMetadata: {
-        anthropic: { cacheReadInputTokens: 80, cacheCreationInputTokens: 5 },
+      // AI SDK 5 reports cache reads in usage; Anthropic keeps writes in metadata.
+      usage: { inputTokens: 100, outputTokens: 2, cachedInputTokens: 80 },
+      providerMetadata: {
+        anthropic: { cacheCreationInputTokens: 5 },
       },
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
@@ -165,11 +166,45 @@ describe("LanguageModelAdapter (openai) — generateText", () => {
     expect(result.data?.usage.cacheWriteTokens).toBe(5);
   });
 
+  it("passes the token limit to the SDK as maxOutputTokens", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "t",
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    await adapter.generateText({ purpose: "chat-title", prompt: "hi", maxTokens: 500 });
+
+    const call = vi.mocked(generateText).mock.calls[0]![0] as Record<string, unknown>;
+    expect(call.maxOutputTokens).toBe(500);
+    expect(call).not.toHaveProperty("maxTokens");
+  });
+
+  it("counts token figures the provider did not report as zero", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "t",
+      usage: { inputTokens: undefined, outputTokens: undefined },
+      providerMetadata: undefined,
+    } as never);
+    const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
+
+    const result = await adapter.generateText({ purpose: "chat-title", prompt: "hi" });
+
+    expect(result.data?.usage).toEqual({
+      promptTokens: 0,
+      completionTokens: 0,
+      systemTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+  });
+
   it("input.model overrides the runtime config default", async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: "t",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -202,7 +237,7 @@ describe("LanguageModelAdapter (openai) — streamText", () => {
     }
     vi.mocked(streamText).mockReturnValue({
       textStream: chunks(),
-      usage: Promise.resolve({ promptTokens: 10, completionTokens: 4 }),
+      usage: Promise.resolve({ inputTokens: 10, outputTokens: 4 }),
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -251,7 +286,7 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
     vi.mocked(streamObject).mockReturnValue({
       partialObjectStream: partials(),
       object: Promise.resolve({ step: 2, done: true }),
-      usage: Promise.resolve({ promptTokens: 7, completionTokens: 3 }),
+      usage: Promise.resolve({ inputTokens: 7, outputTokens: 3 }),
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -281,17 +316,14 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
   });
 
-  it("extracts anthropic cache tokens from providerMetadata", async () => {
+  it("reads cache reads from usage and cache writes from Anthropic metadata", async () => {
     async function* partials() { yield {}; }
     vi.mocked(streamObject).mockReturnValue({
       partialObjectStream: partials(),
       object: Promise.resolve({}),
-      usage: Promise.resolve({ promptTokens: 100, completionTokens: 50 }),
+      usage: Promise.resolve({ inputTokens: 100, outputTokens: 50, cachedInputTokens: 30 }),
       providerMetadata: Promise.resolve({
-        anthropic: { cacheReadInputTokens: 30, cacheCreationInputTokens: 20 },
-      }),
-      experimental_providerMetadata: Promise.resolve({
-        anthropic: { cacheReadInputTokens: 30, cacheCreationInputTokens: 20 },
+        anthropic: { cacheCreationInputTokens: 20 },
       }),
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
@@ -308,7 +340,7 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
     vi.mocked(streamObject).mockReturnValue({
       partialObjectStream: partials(),
       object: Promise.resolve({}),
-      usage: Promise.resolve({ promptTokens: 1, completionTokens: 1 }),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -338,7 +370,7 @@ describe("LanguageModelAdapter (openai) — streamObject", () => {
     vi.mocked(streamObject).mockReturnValue({
       partialObjectStream: partials(),
       object: Promise.resolve({}),
-      usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
+      usage: Promise.resolve({ inputTokens: 0, outputTokens: 0 }),
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
     const onError = vi.fn();
@@ -367,8 +399,8 @@ describe("LanguageModelAdapter (openai) — provider/key resolution from runtime
     };
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 0, completionTokens: 0 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(customConfig));
 
@@ -380,8 +412,8 @@ describe("LanguageModelAdapter (openai) — provider/key resolution from runtime
   it("config.provider drives resolution even if the constructor was given a different provider", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 0, completionTokens: 0 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("anthropic", makeConfigStore(openaiConfig));
 
@@ -393,8 +425,8 @@ describe("LanguageModelAdapter (openai) — provider/key resolution from runtime
   it("maps non-canonical purpose strings containing 'document' to documentGeneration", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 0, completionTokens: 0 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -431,8 +463,8 @@ describe("LanguageModelAdapter (bedrock) — credential plumbing", () => {
   it("passes the bedrock credentials object from runtime config to resolveModel", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 0, completionTokens: 0 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("bedrock", makeConfigStore(bedrockConfig));
 
@@ -456,8 +488,8 @@ describe("LanguageModelAdapter (bedrock) — credential plumbing", () => {
     };
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 0, completionTokens: 0 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 0, outputTokens: 0 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("bedrock", makeConfigStore(unconfigured));
 
@@ -489,8 +521,8 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
   it("does not log when the call succeeds outright", async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: "hi",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const errorLogger = makeErrorLogger();
     const adapter = new LanguageModelAdapter(
@@ -571,7 +603,7 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
         cause: new Error("Expected integer, received float at supplier.confidence"),
         text: rawReply,
         response: { id: "r1", timestamp: new Date(0), modelId: "gpt-6-turbo" },
-        usage: { promptTokens: 12000, completionTokens: 4096, totalTokens: 16096 },
+        usage: { inputTokens: 12000, outputTokens: 4096, totalTokens: 16096 },
         finishReason: "length",
       }),
     );
@@ -591,7 +623,7 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
     expect(entry.metadata).toEqual(
       expect.objectContaining({
         finishReason: "length",
-        usage: { promptTokens: 12000, completionTokens: 4096, totalTokens: 16096 },
+        usage: { inputTokens: 12000, outputTokens: 4096, totalTokens: 16096 },
         validationError: "Expected integer, received float at supplier.confidence",
       }),
     );
@@ -624,7 +656,7 @@ describe("LanguageModelAdapter — logging genuine AI call failures", () => {
     vi.mocked(streamObject).mockReturnValue({
       partialObjectStream: (async function* () { yield {}; })(),
       object: Promise.resolve({}),
-      usage: Promise.resolve({ promptTokens: 0, completionTokens: 0 }),
+      usage: Promise.resolve({ inputTokens: 0, outputTokens: 0 }),
       providerMetadata: Promise.resolve(undefined),
     } as never);
     const errorLogger = makeErrorLogger();
@@ -681,8 +713,8 @@ describe("LanguageModelAdapter — surfaces the model and provider the call ran 
   it("reports the purpose-resolved model on generateObject", async () => {
     vi.mocked(generateObject).mockResolvedValue({
       object: {},
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -695,8 +727,8 @@ describe("LanguageModelAdapter — surfaces the model and provider the call ran 
   it("reports the purpose-resolved model on generateText", async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: "hi",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -711,7 +743,7 @@ describe("LanguageModelAdapter — surfaces the model and provider the call ran 
     }
     vi.mocked(streamText).mockReturnValue({
       textStream: chunks(),
-      usage: Promise.resolve({ promptTokens: 1, completionTokens: 1 }),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -727,7 +759,7 @@ describe("LanguageModelAdapter — surfaces the model and provider the call ran 
     vi.mocked(streamObject).mockReturnValue({
       partialObjectStream: partials(),
       object: Promise.resolve({ step: 1 }),
-      usage: Promise.resolve({ promptTokens: 1, completionTokens: 1 }),
+      usage: Promise.resolve({ inputTokens: 1, outputTokens: 1 }),
       providerMetadata: Promise.resolve(undefined),
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
@@ -740,8 +772,8 @@ describe("LanguageModelAdapter — surfaces the model and provider the call ran 
   it("reports an explicit model override rather than the purpose default", async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: "hi",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const adapter = new LanguageModelAdapter("openai", makeConfigStore(openaiConfig));
 
@@ -756,8 +788,8 @@ describe("LanguageModelAdapter — surfaces the model and provider the call ran 
   it("reports the runtime provider, not the one it was constructed with", async () => {
     vi.mocked(generateText).mockResolvedValue({
       text: "hi",
-      usage: { promptTokens: 1, completionTokens: 1 },
-      experimental_providerMetadata: undefined,
+      usage: { inputTokens: 1, outputTokens: 1 },
+      providerMetadata: undefined,
     } as never);
     const anthropicConfig: AiConfig = {
       provider: "anthropic",

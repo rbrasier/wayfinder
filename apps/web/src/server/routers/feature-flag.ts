@@ -51,7 +51,7 @@ export const featureFlagRouter = router({
     }),
 
   setRoles: technicalAdminProcedure
-    .input(z.object({ key: z.string().min(1), roleIds: z.array(z.string().uuid()) }))
+    .input(z.object({ key: z.string().min(1), roleIds: z.array(z.string().guid()) }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.setFeatureFlagRoles.execute(input.key, input.roleIds);
       if (result.error) throw toTrpcError(result.error);

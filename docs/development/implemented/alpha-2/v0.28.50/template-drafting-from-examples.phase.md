@@ -1,7 +1,7 @@
 # Phase — Template Drafting from Examples
 
-- **Status**: Implemented in 0.28.48 — see `template-drafting-from-examples.summary.md`
-- **Target version**: **PATCH**, 0.28.47 → 0.28.48 on `release/alpha-2`.
+- **Status**: Implemented in 0.28.50 — see `template-drafting-from-examples.summary.md`
+- **Target version**: **PATCH**, 0.28.49 → 0.28.50 on `release/alpha-2`.
   CLAUDE.md's rule would make a new feature MINOR on `main`. The maintainer
   chose PATCH on 2026-10-28 because this extends the existing template upload
   flow and changes no schema.

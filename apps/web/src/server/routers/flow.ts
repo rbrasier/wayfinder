@@ -14,7 +14,7 @@ import {
 import { automationStepRejection } from "./automation-step-guard";
 import { toTrpcError } from "../trpc-errors";
 
-const flowIdInput = z.object({ flowId: z.string().uuid() });
+const flowIdInput = z.object({ flowId: z.string().guid() });
 
 // A structured step must not carry a `section` field — it is a document-only
 // concept (ADR-038 §5). The client already blocks it; this re-enforces the same
@@ -102,7 +102,7 @@ const nodeRouter = router({
   previewPrompt: authenticatedProcedure
     .input(
       z.object({
-        flowId: z.string().uuid(),
+        flowId: z.string().guid(),
         aiInstruction: z.string(),
         doneWhen: z.string(),
       }),
@@ -154,7 +154,7 @@ const nodeRouter = router({
   create: authenticatedProcedure
     .input(
       z.object({
-        flowId: z.string().uuid(),
+        flowId: z.string().guid(),
         // Nodes are persisted on type-select with a blank name (v1.36.0); the
         // author names the step afterwards in the config modal. The canvas
         // renders an "Untitled step" fallback while the name is empty.
@@ -163,7 +163,7 @@ const nodeRouter = router({
         type: z.enum(["conversational", "auto", "scheduled", "approval", "mcp", "ai_task", "email"]).optional(),
         positionX: z.number(),
         positionY: z.number(),
-        config: z.record(z.unknown()).default({}),
+        config: z.record(z.string(), z.unknown()).default({}),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -189,13 +189,13 @@ const nodeRouter = router({
   update: authenticatedProcedure
     .input(
       z.object({
-        nodeId: z.string().uuid(),
-        flowId: z.string().uuid(),
+        nodeId: z.string().guid(),
+        flowId: z.string().guid(),
         // Blank names are allowed (v1.36.0) — canvas shows an "Untitled step" fallback.
         name: z.string().optional(),
         colour: z.string().nullable().optional(),
         type: z.enum(["conversational", "auto", "scheduled", "approval", "mcp", "ai_task", "email"]).optional(),
-        config: z.record(z.unknown()).optional(),
+        config: z.record(z.string(), z.unknown()).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -218,8 +218,8 @@ const nodeRouter = router({
   updatePosition: authenticatedProcedure
     .input(
       z.object({
-        nodeId: z.string().uuid(),
-        flowId: z.string().uuid(),
+        nodeId: z.string().guid(),
+        flowId: z.string().guid(),
         x: z.number(),
         y: z.number(),
       }),
@@ -234,7 +234,7 @@ const nodeRouter = router({
     }),
 
   delete: authenticatedProcedure
-    .input(z.object({ nodeId: z.string().uuid(), flowId: z.string().uuid() }))
+    .input(z.object({ nodeId: z.string().guid(), flowId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
@@ -250,9 +250,9 @@ const edgeRouter = router({
   create: authenticatedProcedure
     .input(
       z.object({
-        flowId: z.string().uuid(),
-        fromNodeId: z.string().uuid(),
-        toNodeId: z.string().uuid(),
+        flowId: z.string().guid(),
+        fromNodeId: z.string().guid(),
+        toNodeId: z.string().guid(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -270,8 +270,8 @@ const edgeRouter = router({
   setBranchRule: authenticatedProcedure
     .input(
       z.object({
-        edgeId: z.string().uuid(),
-        flowId: z.string().uuid(),
+        edgeId: z.string().guid(),
+        flowId: z.string().guid(),
         rule: z.string().max(2000).nullable(),
       }),
     )
@@ -289,7 +289,7 @@ const edgeRouter = router({
     }),
 
   delete: authenticatedProcedure
-    .input(z.object({ edgeId: z.string().uuid(), flowId: z.string().uuid() }))
+    .input(z.object({ edgeId: z.string().guid(), flowId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
@@ -356,7 +356,7 @@ export const flowRouter = router({
   update: authenticatedProcedure
     .input(
       z.object({
-        flowId: z.string().uuid(),
+        flowId: z.string().guid(),
         name: z.string().min(1).optional(),
         description: z.string().nullable().optional(),
         icon: z.string().nullable().optional(),
@@ -368,7 +368,7 @@ export const flowRouter = router({
           .discriminatedUnion("kind", [
             z.object({ kind: z.literal("private") }),
             z.object({ kind: z.literal("global") }),
-            z.object({ kind: z.literal("group"), groupIds: z.array(z.string().uuid()).min(1) }),
+            z.object({ kind: z.literal("group"), groupIds: z.array(z.string().guid()).min(1) }),
             z.object({ kind: z.literal("organisation") }),
           ])
           .optional(),
@@ -428,7 +428,7 @@ export const flowRouter = router({
     }),
 
   grantOwner: oversightProcedure
-    .input(z.object({ flowId: z.string().uuid(), userId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid(), userId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const before = await ctx.container.repos.flows.findById(input.flowId);
       const previousPermissions = before.data?.permissions ?? [];
@@ -444,7 +444,7 @@ export const flowRouter = router({
 
   contextDoc: router({
     remove: authenticatedProcedure
-      .input(z.object({ flowId: z.string().uuid(), docId: z.string() }))
+      .input(z.object({ flowId: z.string().guid(), docId: z.string() }))
       .mutation(async ({ ctx, input }) => {
         if (!await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx))) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to edit this flow." });
