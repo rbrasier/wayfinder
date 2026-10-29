@@ -6,6 +6,7 @@ import type {
   ListMcpServersInput,
   McpServer,
   McpServerStatus,
+  McpOAuthChange,
   McpServerUpdate,
   McpTool,
   McpToolCallOutput,
@@ -27,12 +28,23 @@ import {
 class InMemoryMcpServerRepository implements IMcpServerRepository {
   rows: McpServer[] = [];
   credentials = new Map<string, string>();
+  clientSecrets = new Map<string, string>();
   private sequence = 0;
 
   private storeCredential(id: string, credential: string | null | undefined): void {
     if (credential === undefined) return;
     if (credential === null) this.credentials.delete(id);
     else this.credentials.set(id, credential);
+  }
+
+  private storeOAuth(id: string, change: McpOAuthChange): McpServer["oauth"] | undefined {
+    if (change === undefined) return undefined;
+    if (change === null) {
+      this.clientSecrets.delete(id);
+      return null;
+    }
+    if (change.clientSecret) this.clientSecrets.set(id, change.clientSecret);
+    return change.settings;
   }
 
   async create(input: NewMcpServer): Promise<Result<McpServer>> {
@@ -45,6 +57,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       url: input.url,
       credentialRef: input.credentialRef ?? null,
       hasCredential: typeof input.credential === "string",
+      oauth: input.oauth?.settings ?? null,
       communicatesExternally: input.communicatesExternally ?? false,
       status: "active",
       createdByUserId: input.createdByUserId ?? null,
@@ -53,6 +66,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
     };
     this.rows.push(server);
     this.storeCredential(server.id, input.credential);
+    this.storeOAuth(server.id, input.oauth);
     return ok(server);
   }
 
@@ -61,6 +75,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
     if (index === -1) return err(domainError("NOT_FOUND", "MCP server not found."));
     const current = this.rows[index]!;
     this.storeCredential(id, patch.credential);
+    const oauth = this.storeOAuth(id, patch.oauth);
     const updated: McpServer = {
       ...current,
       label: patch.label ?? current.label,
@@ -68,6 +83,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       credentialRef:
         patch.credentialRef === undefined ? current.credentialRef : patch.credentialRef,
       hasCredential: this.credentials.has(id),
+      oauth: oauth === undefined ? current.oauth : oauth,
       communicatesExternally: patch.communicatesExternally ?? current.communicatesExternally,
     };
     this.rows[index] = updated;
@@ -76,6 +92,10 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
 
   async readCredential(id: string): Promise<Result<string | null>> {
     return ok(this.credentials.get(id) ?? null);
+  }
+
+  async readOAuthClientSecret(id: string): Promise<Result<string | null>> {
+    return ok(this.clientSecrets.get(id) ?? null);
   }
 
   async findById(id: string): Promise<Result<McpServer | null>> {
@@ -283,6 +303,144 @@ describe("UpdateMcpServer", () => {
 
     expect(result.data?.credentialRef).toBeNull();
     expect(result.data?.hasCredential).toBe(false);
+  });
+});
+
+describe("OAuth client credentials", () => {
+  const environment: ILegacyMcpCredentialSource = { read: () => null };
+  const oauth = {
+    tokenUrl: "https://login.example.com/oauth2/token",
+    clientId: "wayfinder-service",
+    clientSecret: "client-secret",
+    scope: "mcp.read",
+  };
+
+  it("registers a server that signs in with client credentials, without echoing the secret", async () => {
+    const repository = new InMemoryMcpServerRepository();
+
+    const result = await new RegisterMcpServer(repository).execute({
+      label: "Records",
+      url: "https://mcp.example.com/sse",
+      oauth,
+    });
+
+    expect(result.data?.oauth).toEqual({
+      tokenUrl: "https://login.example.com/oauth2/token",
+      clientId: "wayfinder-service",
+      scope: "mcp.read",
+      audience: null,
+      clientAuthMethod: "client_secret_basic",
+    });
+    expect(result.data?.hasCredential).toBe(false);
+    expect(JSON.stringify(result.data)).not.toContain("client-secret");
+    expect(repository.clientSecrets.get(result.data!.id)).toBe("client-secret");
+  });
+
+  it("refuses a registration that sets both a bearer token and OAuth", async () => {
+    const result = await new RegisterMcpServer(new InMemoryMcpServerRepository()).execute({
+      label: "Records",
+      url: "https://mcp.example.com/sse",
+      credential: "fixed-token",
+      oauth,
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("refuses a new OAuth server without a client secret", async () => {
+    const result = await new RegisterMcpServer(new InMemoryMcpServerRepository()).execute({
+      label: "Records",
+      url: "https://mcp.example.com/sse",
+      oauth: { ...oauth, clientSecret: "" },
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("clears the stored bearer token and legacy reference when a server switches to OAuth", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const created = await repository.create({
+      label: "Records",
+      url: "https://mcp.example.com/sse",
+      credential: "fixed-token",
+      credentialRef: "MCP_CRED_RECORDS",
+    });
+    const id = created.data!.id;
+
+    const result = await new UpdateMcpServer(repository, environment).execute({ id, oauth });
+
+    expect(result.data?.oauth?.clientId).toBe("wayfinder-service");
+    expect(result.data?.hasCredential).toBe(false);
+    expect(result.data?.credentialRef).toBeNull();
+    expect(repository.clientSecrets.get(id)).toBe("client-secret");
+  });
+
+  it("keeps the stored client secret when OAuth settings are edited with the secret left blank", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const created = await new RegisterMcpServer(repository).execute({
+      label: "Records",
+      url: "https://mcp.example.com/sse",
+      oauth,
+    });
+    const id = created.data!.id;
+
+    const result = await new UpdateMcpServer(repository, environment).execute({
+      id,
+      oauth: { ...oauth, clientSecret: "", scope: "mcp.read mcp.write" },
+    });
+
+    expect(result.data?.oauth?.scope).toBe("mcp.read mcp.write");
+    expect(repository.clientSecrets.get(id)).toBe("client-secret");
+  });
+
+  it("refuses to switch a bearer-token server to OAuth without a client secret", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const created = await new RegisterMcpServer(repository).execute({
+      label: "Records",
+      url: "https://mcp.example.com/sse",
+      credential: "fixed-token",
+    });
+
+    const result = await new UpdateMcpServer(repository, environment).execute({
+      id: created.data!.id,
+      oauth: { ...oauth, clientSecret: undefined },
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("drops the OAuth settings and secret when a bearer token is set instead", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const created = await new RegisterMcpServer(repository).execute({
+      label: "Records",
+      url: "https://mcp.example.com/sse",
+      oauth,
+    });
+    const id = created.data!.id;
+
+    const result = await new UpdateMcpServer(repository, environment).execute({ id, credential: "fixed-token" });
+
+    expect(result.data?.oauth).toBeNull();
+    expect(result.data?.hasCredential).toBe(true);
+    expect(repository.clientSecrets.has(id)).toBe(false);
+  });
+
+  it("removes OAuth on null and leaves it untouched when only the label changes", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const created = await new RegisterMcpServer(repository).execute({
+      label: "Records",
+      url: "https://mcp.example.com/sse",
+      oauth,
+    });
+    const id = created.data!.id;
+    const update = new UpdateMcpServer(repository, environment);
+
+    const renamed = await update.execute({ id, label: "Records, renamed" });
+    expect(renamed.data?.oauth?.clientId).toBe("wayfinder-service");
+
+    const removed = await update.execute({ id, oauth: null });
+    expect(removed.data?.oauth).toBeNull();
+    expect(repository.clientSecrets.has(id)).toBe(false);
   });
 });
 

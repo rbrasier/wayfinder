@@ -4,7 +4,6 @@ import {
   err,
   ok,
   type IMcpClient,
-  type IMcpServerRepository,
   type McpServer,
   type McpTool,
   type McpToolCallOutput,
@@ -13,6 +12,7 @@ import {
 import { experimental_createMCPClient, type MCPTransport } from "ai";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { EnvLegacyMcpCredentialSource } from "./env-legacy-mcp-credential-source";
+import type { McpBearerTokenResolver } from "./mcp-bearer-token-resolver";
 
 type SseTransportConfig = { type: "sse"; url: string; headers: Record<string, string> };
 
@@ -31,7 +31,7 @@ type ToolResult = { content?: ToolResultContent[] };
 // client is opened per call and always closed — the SDK recommends one client per
 // server and does not pool connections (verified in node_modules/ai).
 export class AiSdkMcpClient implements IMcpClient {
-  constructor(private readonly credentials: Pick<IMcpServerRepository, "readCredential">) {}
+  constructor(private readonly bearerTokens: Pick<McpBearerTokenResolver, "resolve">) {}
 
   async listTools(server: McpServer): Promise<Result<McpTool[]>> {
     return this.withClient(server, "Failed to list MCP tools.", async (client) => {
@@ -69,12 +69,12 @@ export class AiSdkMcpClient implements IMcpClient {
     failureMessage: string,
     run: (client: Awaited<ReturnType<typeof experimental_createMCPClient>>) => Promise<Result<T>>,
   ): Promise<Result<T>> {
-    const storedToken = server.hasCredential ? await this.credentials.readCredential(server.id) : ok(null);
-    if (storedToken.error) return storedToken;
+    const bearerToken = await this.bearerTokens.resolve(server);
+    if (bearerToken.error) return bearerToken;
     let client: Awaited<ReturnType<typeof experimental_createMCPClient>> | null = null;
     try {
       client = await withTimeout(
-        experimental_createMCPClient({ transport: buildMcpTransport(server, storedToken.data) }),
+        experimental_createMCPClient({ transport: buildMcpTransport(server, bearerToken.data) }),
         MCP_CALL_TIMEOUT_MS,
       );
       return await withTimeout(run(client), MCP_CALL_TIMEOUT_MS);

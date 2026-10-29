@@ -1,6 +1,6 @@
 import { PERMISSIONS, type PermissionKey } from "@rbrasier/domain";
 import { z } from "zod";
-import { adminProcedure, router } from "../trpc";
+import { adminCallerOf, adminProcedure, anyPermissionProcedure, router, userAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const permissionKeySchema = z.enum(
@@ -8,7 +8,8 @@ const permissionKeySchema = z.enum(
 );
 
 export const roleRouter = router({
-  list: adminProcedure.query(async ({ ctx }) => {
+  // Read by user management, the Flags page and spend caps (ADR-066 §4).
+  list: anyPermissionProcedure(["admin:users", "admin:technical", "admin:oversight"]).query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listRoles.execute();
     if (result.error) throw toTrpcError(result.error);
     return result.data;
@@ -62,23 +63,23 @@ export const roleRouter = router({
       return { ok: true };
     }),
 
-  assignUser: adminProcedure
+  assignUser: userAdminProcedure
     .input(z.object({ userId: z.string().uuid(), roleId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.assignUserRole.execute(input.userId, input.roleId);
+      const result = await ctx.container.useCases.assignUserRole.execute(input.userId, input.roleId, adminCallerOf(ctx));
       if (result.error) throw toTrpcError(result.error);
       return { ok: true };
     }),
 
-  removeUser: adminProcedure
+  removeUser: userAdminProcedure
     .input(z.object({ userId: z.string().uuid(), roleId: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const result = await ctx.container.useCases.removeUserRole.execute(input.userId, input.roleId);
+      const result = await ctx.container.useCases.removeUserRole.execute(input.userId, input.roleId, adminCallerOf(ctx));
       if (result.error) throw toTrpcError(result.error);
       return { ok: true };
     }),
 
-  listUsers: adminProcedure
+  listUsers: userAdminProcedure
     .input(z.object({ roleId: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.listUsersForRole.execute(input.roleId);

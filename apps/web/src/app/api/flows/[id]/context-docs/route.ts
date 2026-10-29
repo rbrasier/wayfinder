@@ -5,6 +5,7 @@ import {
 } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { resolveCanOversee } from "@/lib/oversight";
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(CONTEXT_DOCS_ALLOWED_MIME_TYPES);
 
@@ -28,7 +29,7 @@ export async function POST(
 
   const { flow } = canvasResult.data;
   const canEdit =
-    session.isAdmin ||
+    (await resolveCanOversee(container, session)) ||
     flow.ownerUserId === session.userId ||
     flow.permissions.some((p) => p.userId === session.userId && p.role === "owner");
   if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

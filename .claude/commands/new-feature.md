@@ -47,15 +47,16 @@ sections.
 |---|---|
 | Goal | The problem being solved and who it is for, in their terms |
 | Business rules changing | Every rule the feature introduces, stated with its triggering condition and resulting behaviour — e.g. "when `status = "approved"`, the document locks and further revisions are rejected" |
-| UI / visible behaviour | What the user will see — screens, states, copy, empty and error states — each tied to the type, data structure or rule that drives it |
-| Data & types | Domain entities, value objects and TypeScript types the feature introduces, with the shape of each |
-| Files & packages touched | The docs to be generated (PRD, ADRs, phase doc) by path, plus the `domain` / `application` / `adapters` / `apps` packages the phase doc will target, so architecture-boundary problems surface at planning time |
+| UI / visible behaviour | What the user will see differently — screens, states, copy, empty and error states |
 | Database & migration impact | Tables and their group prefix, and whether the phase doc will call for a generated migration and its `-- data-impact:` declaration |
-| Version, branch & PR target | The MINOR or PATCH bump the feature warrants against `main`'s version line — planned here, applied by `/build`, never by this skill — and the `docs/<slug>/claude-<username>` branch the generated docs land on |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being covered by these docs |
+| Deviations | Where the request conflicts with an existing PRD, ADR or the code, and which way the docs will go. Omit when there are none |
+| Build details | One short bullet each, and nothing else — no file paths, no type shapes: **Architecture** — the plan complies with hexagonal architecture ([ADR-001](../../docs/development/adr/001-hexagonal-architecture.adr.md)), or names the breach; **Docs** — the number of PRDs, ADRs and phase docs to be generated; **Version** — the MINOR or PATCH bump the feature warrants against `main`'s version line (planned here, applied by `/build`), and the `docs/<slug>/claude-<username>` branch the docs land on |
 
 **Omit any section that does not apply** — no heading, no "N/A" placeholder.
+**Build details** is the one exception: it always appears, and stays at its
+one-line bullets.
 Since this skill writes no code, sections with nothing to say simply disappear.
 
 **Cap each section at 5 bullets.** If more are warranted, keep the 5 most

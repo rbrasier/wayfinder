@@ -29,7 +29,9 @@ interface FormState {
 
 const empty: FormState = { email: "", name: "", isAdmin: false };
 
-export function AdminUsersContent() {
+// Only a Global Admin may grant or touch Global Admin accounts (ADR-066 §3);
+// the server refuses it anyway, so this only avoids offering a dead control.
+export function AdminUsersContent({ viewerIsGlobalAdmin }: { readonly viewerIsGlobalAdmin: boolean }) {
   const utils = trpc.useUtils();
   const usersQuery = trpc.user.list.useQuery({});
   const rolesQuery = trpc.role.list.useQuery();
@@ -106,7 +108,7 @@ export function AdminUsersContent() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
-                <TableHead>Admin</TableHead>
+                <TableHead>Global Admin</TableHead>
                 <TableHead>Power User</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -118,7 +120,7 @@ export function AdminUsersContent() {
                   <TableCell>{u.name ?? "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{u.email}</TableCell>
                   <TableCell>
-                    {u.isAdmin && <Badge>admin</Badge>}
+                    {u.isAdmin && <Badge>Global Admin</Badge>}
                   </TableCell>
                   <TableCell>
                     <input
@@ -141,6 +143,7 @@ export function AdminUsersContent() {
                     <Button
                       size="sm"
                       variant="outline"
+                      disabled={u.isAdmin && !viewerIsGlobalAdmin}
                       onClick={() =>
                         setEditing({
                           id: u.id,
@@ -155,6 +158,7 @@ export function AdminUsersContent() {
                     <Button
                       size="sm"
                       variant="outline"
+                      disabled={u.isAdmin && !viewerIsGlobalAdmin}
                       onClick={() => setResetTarget(u)}
                     >
                       Reset password
@@ -162,6 +166,7 @@ export function AdminUsersContent() {
                     <Button
                       size="sm"
                       variant="destructive"
+                      disabled={u.isAdmin && !viewerIsGlobalAdmin}
                       onClick={() => setConfirmDelete(u)}
                     >
                       Delete
@@ -206,14 +211,16 @@ export function AdminUsersContent() {
                     onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={editing.isAdmin}
-                    onChange={(e) => setEditing({ ...editing, isAdmin: e.target.checked })}
-                  />
-                  Admin
-                </label>
+                {viewerIsGlobalAdmin && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={editing.isAdmin}
+                      onChange={(e) => setEditing({ ...editing, isAdmin: e.target.checked })}
+                    />
+                    Global Admin
+                  </label>
+                )}
               </DialogBody>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setEditing(null)}>

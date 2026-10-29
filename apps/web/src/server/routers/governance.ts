@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { adminProcedure, router } from "../trpc";
+import { oversightProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const periodEnum = z.enum(["daily", "weekly", "monthly"]);
 const scopeEnum = z.enum(["everyone", "role", "user"]);
 
 export const governanceRouter = router({
-  dashboard: adminProcedure
+  dashboard: oversightProcedure
     .input(z.object({ periodDays: z.number().int().min(1).max(365).optional() }).optional())
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getGovernanceDashboard.execute({
@@ -17,13 +17,13 @@ export const governanceRouter = router({
     }),
 
   budgets: router({
-    list: adminProcedure.query(async ({ ctx }) => {
+    list: oversightProcedure.query(async ({ ctx }) => {
       const result = await ctx.container.useCases.listBudgets.execute();
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-    create: adminProcedure
+    create: oversightProcedure
       .input(
         z.object({
           scope: scopeEnum,
@@ -43,7 +43,7 @@ export const governanceRouter = router({
         return result.data;
       }),
 
-    update: adminProcedure
+    update: oversightProcedure
       .input(
         z.object({
           id: z.string().uuid(),
@@ -60,7 +60,7 @@ export const governanceRouter = router({
         return result.data;
       }),
 
-    delete: adminProcedure
+    delete: oversightProcedure
       .input(z.object({ id: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => {
         const result = await ctx.container.useCases.deleteBudget.execute(input.id);
@@ -70,13 +70,13 @@ export const governanceRouter = router({
   }),
 
   settings: router({
-    getUsageLimitsEnabled: adminProcedure.query(async ({ ctx }) => {
+    getUsageLimitsEnabled: oversightProcedure.query(async ({ ctx }) => {
       const result = await ctx.container.useCases.getUsageLimitsEnabled.execute();
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-    setUsageLimitsEnabled: adminProcedure
+    setUsageLimitsEnabled: oversightProcedure
       .input(z.object({ enabled: z.boolean() }))
       .mutation(async ({ ctx, input }) => {
         const result = await ctx.container.useCases.setUsageLimitsEnabled.execute(input.enabled);

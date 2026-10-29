@@ -16,7 +16,7 @@ import type {
 } from "@rbrasier/domain";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 import type { Container } from "@/lib/container";
-import { authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, canOversee, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export interface DocumentFieldWithValue extends TemplateField {
@@ -123,10 +123,10 @@ const authoriseSession = async (
   container: Container,
   sessionId: string,
   userId: string,
-  isAdmin: boolean,
+  canOverride: boolean,
   requireSend: boolean,
 ): Promise<void> => {
-  const outcome = await authorizeSessionAccess(container, sessionId, userId, isAdmin, {
+  const outcome = await authorizeSessionAccess(container, sessionId, userId, canOverride, {
     requireSend,
     // The approver grant (ADR-018) is read-only, so it opens the field view but
     // never the edit. An approver's *scoped* edit right is a different check —
@@ -147,9 +147,9 @@ const hasSendAccess = async (
   container: Container,
   sessionId: string,
   userId: string,
-  isAdmin: boolean,
+  canOverride: boolean,
 ): Promise<boolean> => {
-  const outcome = await authorizeSessionAccess(container, sessionId, userId, isAdmin, {
+  const outcome = await authorizeSessionAccess(container, sessionId, userId, canOverride, {
     requireSend: true,
     allowApprover: false,
   });
@@ -166,7 +166,7 @@ export const documentRouter = router({
       if (messageResult.error) throw toTrpcError(messageResult.error);
       const message = messageResult.data;
       if (!message) throw toTrpcError(domainError("NOT_FOUND", "Record not found."));
-      await authoriseSession(ctx.container, message.sessionId, ctx.userId, ctx.isAdmin, false);
+      await authoriseSession(ctx.container, message.sessionId, ctx.userId, canOversee(ctx), false);
 
       const record = await ctx.container.repos.sessionStepOutputs.findByMessageId(input.messageId);
       if (record.error) throw toTrpcError(record.error);
@@ -180,7 +180,7 @@ export const documentRouter = router({
       if (messageResult.error) throw toTrpcError(messageResult.error);
       const message = messageResult.data;
       if (!message) throw toTrpcError(domainError("NOT_FOUND", "Record not found."));
-      await authoriseSession(ctx.container, message.sessionId, ctx.userId, ctx.isAdmin, false);
+      await authoriseSession(ctx.container, message.sessionId, ctx.userId, canOversee(ctx), false);
 
       const [sessionResult, nodeResult, stepOutputResult] = await Promise.all([
         ctx.container.repos.sessions.findById(message.sessionId),
@@ -295,7 +295,7 @@ export const documentRouter = router({
         ctx.container,
         message.sessionId,
         ctx.userId,
-        ctx.isAdmin,
+        canOversee(ctx),
       );
       if (!canSend) {
         const approverEdit = await ctx.container.useCases.approverEditSubjectFields.execute({

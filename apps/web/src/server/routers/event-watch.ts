@@ -1,16 +1,16 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, router } from "../trpc";
+import { router, technicalAdminProcedure } from "../trpc";
+import { isAdminSurfaceEnabled } from "../admin-surface-flags";
 import { toTrpcError } from "../trpc-errors";
 import { buildPollDueWatches } from "@/lib/automation/event-watches";
 
 const RUN_HISTORY_LIMIT = 50;
 
-// Admin-only, and only while the event_watch flag is on for the admin (ADR-063 §8).
-const eventWatchProcedure = authenticatedProcedure.use(async ({ ctx, next }) => {
-  if (!ctx.isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
-  const enabled = await ctx.container.useCases.isFeatureEnabledForUser.execute(ctx.userId, "event_watch", true);
-  if (enabled.error || enabled.data !== true) {
+// Technical admin area (ADR-066 §1), and only while the event_watch flag is
+// switched on (ADR-063 §8, ADR-066 §5).
+const eventWatchProcedure = technicalAdminProcedure.use(async ({ ctx, next }) => {
+  if (!(await isAdminSurfaceEnabled(ctx.container, "event_watch"))) {
     throw new TRPCError({ code: "FORBIDDEN", message: "Event Watch is switched off." });
   }
   return next();

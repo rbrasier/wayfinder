@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { AUTOMATION_CONFIG_SETTING_KEY, validateAutomationConfig } from "@rbrasier/domain";
-import { adminProcedure, authenticatedProcedure } from "../trpc";
+import { authenticatedProcedure, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 // Install-wide limits for unattended automation (ADR-063 §6, ADR-065 §4): the
@@ -22,9 +22,9 @@ export const automationConfigInputSchema = z
   });
 
 export const automationSettingsProcedures = {
-  getAutomation: adminProcedure.query(({ ctx }) => ctx.container.runtimeConfig.getAutomationConfig()),
+  getAutomation: technicalAdminProcedure.query(({ ctx }) => ctx.container.runtimeConfig.getAutomationConfig()),
 
-  setAutomation: adminProcedure.input(automationConfigInputSchema).mutation(async ({ ctx, input }) => {
+  setAutomation: technicalAdminProcedure.input(automationConfigInputSchema).mutation(async ({ ctx, input }) => {
     const result = await ctx.container.repos.systemSettings.set(
       AUTOMATION_CONFIG_SETTING_KEY,
       JSON.stringify(input),

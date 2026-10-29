@@ -3,6 +3,7 @@ import { DocxGenerator, XlsxGenerator } from "@rbrasier/adapters";
 import type { DomainErrorDetail, IDocumentGenerator, TemplateField } from "@rbrasier/domain";
 import { getContainer, type Container } from "@/lib/container";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { resolveCanOversee } from "@/lib/oversight";
 
 export const MAX_TEMPLATE_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -50,7 +51,7 @@ export const authoriseTemplateNode = async (
 
   const { flow } = canvasResult.data;
   const canEdit =
-    session.isAdmin ||
+    (await resolveCanOversee(container, session)) ||
     flow.ownerUserId === session.userId ||
     flow.permissions.some((p) => p.userId === session.userId && p.role === "owner");
 
