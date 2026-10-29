@@ -348,7 +348,7 @@ export function TemplateAnnotationModal({
 // A headline the author can act on, plus one row per malformed tag: the text as
 // they typed it in Word, and what is wrong with it. Before v0.28.20 this was a
 // single generic sentence, which in a hundred-tag template named nothing at all.
-function TemplateErrorPanel({ error }: { error: TemplateError }) {
+export function TemplateErrorPanel({ error }: { error: TemplateError }) {
   return (
     <div className="mb-3 rounded-[9px] border border-[#f0c9d4] bg-[#f9e8eb] px-3 py-2 text-[12px] text-[#a8324c]">
       <p>{error.headline}</p>
@@ -368,7 +368,7 @@ function TemplateErrorPanel({ error }: { error: TemplateError }) {
   );
 }
 
-function Working({ message }: { message: string }) {
+export function Working({ message }: { message: string }) {
   return (
     <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-[#666055]">
       <Loader2 size={16} className="animate-spin" />
@@ -444,7 +444,7 @@ function NoFieldsYet({ onOpenReference }: { onOpenReference: () => void }) {
   );
 }
 
-function ReuploadPanel({
+export function ReuploadPanel({
   inputRef,
   onFile,
 }: {

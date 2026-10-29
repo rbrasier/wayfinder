@@ -1,6 +1,4 @@
-export const MAX_EXAMPLE_COUNT = 10;
-export const MAX_EXAMPLE_FILE_SIZE = 10 * 1024 * 1024;
-export const MAX_EXAMPLES_TOTAL_SIZE = 25 * 1024 * 1024;
+import { MAX_EXAMPLE_COUNT, MAX_EXAMPLE_FILE_SIZE, MAX_EXAMPLES_TOTAL_SIZE } from "./template-draft-limits";
 
 export interface UploadedExample {
   filename: string;
