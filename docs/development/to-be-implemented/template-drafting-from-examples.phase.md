@@ -204,3 +204,23 @@ comparison is a domain function; the draft route persists nothing.
 - **Scope check for `/doc-review`.** Only the conversational node config is
   in scope, per the maintainer. The "Generate document" node config
   (`node-config-modal.tsx`) keeps today's flow.
+
+## 9. Approved build summary (/build, 2026-10-29)
+
+Approved as presented, with two deviations found in the build pre-flight:
+
+1. **Download.** The current annotation modal no longer has a download
+   button. The draft route returns the tagged `.docx` as base64, held in the
+   browser and never stored. "Need to add more fields? Download…" hands that
+   file over, and re-uploading it enters today's tagged-template flow.
+2. **Scope correction.** `node-config-modal.tsx` hosts the conversational
+   panel, so it is modified. What keeps today's flow is the extraction
+   editor's separate template upload (`components/extraction/editor-cards.tsx`).
+
+Noted risk: `template-draft-extract` and `template-draft-verify` resolve to
+the **chat** model, because the adapter only maps purposes containing
+"document" or "branch" to other models.
+
+Build order: domain → shared + application → adapter tests → web lib + draft
+route + container → web models → web UI → e2e spec extension, docs and
+version.

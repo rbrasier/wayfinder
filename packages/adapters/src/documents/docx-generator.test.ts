@@ -674,6 +674,77 @@ describe("DocxGenerator", () => {
       );
     });
 
+    // Template drafting (ADR-066) relies on annotate() being a plain text
+    // substitution inside existing runs: a document is never rebuilt, so every
+    // part an edit does not touch must come back exactly as it went in.
+    describe("leaves the rest of a formatted document exactly as it was", () => {
+      const header = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr ${NS}><w:p><w:r><w:rPr><w:i/></w:rPr><w:t>Acme Pty Ltd — Confidential</w:t></w:r></w:p></w:hdr>`;
+      const footer = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr ${NS}><w:p><w:r><w:t>Page footer</w:t></w:r></w:p></w:ftr>`;
+      const image = "<w:r><w:drawing><wp:inline><a:graphic/></wp:inline></w:drawing></w:r>";
+      const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document ${NS} xmlns:wp="wp" xmlns:a="a">
+  <w:body>
+    <w:p><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>Supply Agreement</w:t></w:r></w:p>
+    <w:p>${image}</w:p>
+    <w:tbl><w:tr>
+      <w:tc><w:p><w:r><w:rPr><w:i/></w:rPr><w:t>Supplier</w:t></w:r></w:p></w:tc>
+      <w:tc><w:p><w:r><w:rPr><w:color w:val="1F4E79"/></w:rPr><w:t>Acme Pty Ltd</w:t></w:r></w:p></w:tc>
+    </w:tr></w:tbl>
+  </w:body>
+</w:document>`;
+      const templateBytes = buildTemplateBuffer(documentXml, {
+        "word/header1.xml": header,
+        "word/footer1.xml": footer,
+      });
+      const partOf = (bytes: Buffer, name: string): string => new PizZip(bytes).file(name)!.asText();
+
+      const annotate = () =>
+        generator.annotate({
+          templateBytes,
+          edits: [{ find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name }}" }],
+        });
+
+      it("leaves parts with no edit byte-for-byte unchanged", () => {
+        const bytes = annotate().data!.bytes;
+
+        expect(partOf(bytes, "word/header1.xml")).toBe(header);
+        expect(partOf(bytes, "word/footer1.xml")).toBe(footer);
+      });
+
+      it("changes only the edited characters in the part it edits", () => {
+        const bytes = annotate().data!.bytes;
+
+        expect(partOf(bytes, "word/document.xml")).toBe(
+          documentXml.replace("<w:t>Acme Pty Ltd</w:t>", "<w:t>{{ Supplier Name }}</w:t>"),
+        );
+      });
+
+      it("keeps the edited run's formatting, the image and the table", () => {
+        const annotatedXml = partOf(annotate().data!.bytes, "word/document.xml");
+
+        expect(annotatedXml).toContain('<w:rPr><w:color w:val="1F4E79"/></w:rPr><w:t>{{ Supplier Name }}</w:t>');
+        expect(annotatedXml).toContain(image);
+        expect(annotatedXml).toContain("<w:tbl>");
+      });
+    });
+
+    it("refuses a value that crosses a paragraph break rather than forcing it in", () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document ${NS}>
+  <w:body><w:p><w:r><w:t>Acme Pty</w:t></w:r></w:p><w:p><w:r><w:t>Ltd</w:t></w:r></w:p></w:body>
+</w:document>`;
+
+      const result = generator.annotate({
+        templateBytes: buildTemplateBuffer(xml),
+        edits: [{ find: "Acme Pty\nLtd", occurrence: 0, replacement: "{{ Supplier Name }}" }],
+      });
+
+      expect(result.data?.appliedCount).toBe(0);
+      expect(result.data?.unmatched).toHaveLength(1);
+    });
+
     it("preserves the run formatting at the replaced span", () => {
       const boldRun =
         '<w:r><w:rPr><w:b/></w:rPr><w:t xml:space="preserve">Acme Pty Ltd</w:t></w:r>';
