@@ -30,3 +30,12 @@ CVE-2023-54404
 #   REMOVE WHEN: scripts/waiver-check.mjs reports it — it fails CI and the weekly
 #   waiver review as soon as a fix is reachable or the advisory no longer applies.
 CVE-2023-54404
+
+# CVE-2026-118664 (GHSA-qr28-fpjm-wq7f) — decode-uri-component denial of service
+# via quadratic decoding of percent-encoded input.
+#   WHY: the same advisory is waived for the lockfile gates in
+#   scripts/audit-allowlist.sh, which says why minio's query-string@7 cannot take
+#   the ESM-only 0.5.1 and why the vulnerable decoder is never reached.
+#   REMOVE WHEN: scripts/waiver-check.mjs reports it — it fails CI and the weekly
+#   waiver review as soon as a fix is reachable or the advisory no longer applies.
+CVE-2026-118664

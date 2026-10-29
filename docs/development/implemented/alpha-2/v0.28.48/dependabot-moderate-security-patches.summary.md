@@ -20,6 +20,13 @@ releases, so the lockfile kept nodemailer 10.0.16, fast-uri 3.1.8 and
   rest of the lockfile diff is peer-key labels and `deprecated:` metadata; see
   "Lockfile peer labels" in the bug-fix doc.
 - No source code, schema or migration changes.
+- Added after CI first passed: a waiver for the new high advisory
+  GHSA-qr28-fpjm-wq7f (`decode-uri-component`, CVE-2026-118664), which can't
+  be fixed through minio's `query-string@7` and isn't reached because minio
+  only stringifies. It's in `scripts/audit-allowlist.sh` and `.trivyignore`.
+  `scripts/waiver-rules.mjs` now judges a fix "reachable" within the release
+  line in use (the major, or the minor below 1.0) rather than the bare major,
+  so the waiver isn't misread as fixable.
 
 ## Regression guard
 
@@ -40,6 +47,10 @@ because no resolve can fall back below the patched floors.
 - After a clean install there is still one `@better-auth/core` instance shared by
   better-auth and its drizzle adapter, and better-call loads zod 4.6.7.
 
+- `scripts/waiver-rules.test.mjs`: two new cases. A later 0.x minor fix
+  is "needed", and a patch on the same 0.x line is "fixable". The first failed
+  before the rule change.
+
 ## E2E
 
 None. A dependency bump falls into none of the six groups in
@@ -55,6 +66,9 @@ mock MCP servers, runs on the PR.
   moved to v0.28.47 in the meantime.
 - `@hono/node-server` already had an override (`>=1.19.15 <2`), so it was raised
   rather than added.
+- The decode-uri-component waiver and the waiver-rule correction weren't in
+  the approved summary. The advisory was published after CI first passed, and
+  the scope was approved separately.
 
 ## Not done here
 
