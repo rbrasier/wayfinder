@@ -21,6 +21,11 @@
 # stated REMOVE WHEN condition, so the pins in the root package.json now carry
 # every line to a patched release and the gate is closed again.
 #
+# GHSA-mrhx-c7xc-m3w5 (zod memory exhaustion) was waived while ai@4, the
+# @ai-sdk 1.x providers and LangChain 0.3 held zod 3, which has no fix. The zod 4
+# / AI SDK 5 / LangChain 1.x migration (v0.28.49) left no zod below 4.6.6, its
+# stated REMOVE WHEN, so the waiver is gone.
+#
 # GHSA-vfj7-8cjw-p6xm — braces stack-exhaustion DoS on deeply nested patterns.
 #   WHY: no patched release exists (advisory lists none; 3.0.3 is the latest),
 #   and micromatch@4.0.8 / fast-glob@3.3.x — its only consumers — are also at
@@ -33,19 +38,6 @@
 #   REMOVE WHEN: braces (or micromatch moving off it) publishes a patched
 #   release — then pin it in the root package.json overrides instead — or
 #   both eslint-config-next and @changesets/cli stop depending on micromatch@4.
-#
-# GHSA-mrhx-c7xc-m3w5 (CVE-2023-54404) — zod memory exhaustion validating
-#   oversized arrays. Also waived in .trivyignore under its CVE id.
-#   WHY: patched only in zod 4.6.6, and zod 3.25.76 (the last 3.x) has no fix.
-#   The zod 4 copy (better-auth) is pinned past it in the root package.json
-#   overrides; the zod 3 copy cannot move. Our own schemas are zod 3, and so
-#   are hard dependencies of ai@4, the @ai-sdk/* 1.x providers,
-#   @langchain/core@0.3 and @langchain/langgraph@0.2 — migrating our code
-#   alone leaves zod 3 in the lockfile, and AI SDK 4 turns zod 4 schemas into
-#   an empty JSON schema, which would strip every generateObject call of its
-#   output schema.
-#   REMOVE WHEN: the AI SDK 5+ / LangChain 1.x / zod 4 migration lands and no
-#   package resolves zod below 4.6.6.
 #
 # GHSA-qr28-fpjm-wq7f (CVE-2026-118664) — decode-uri-component denial of service
 #   via quadratic decoding of crafted percent-encoded input. Also waived in
@@ -60,6 +52,5 @@
 # shellcheck disable=SC2034 # read by the scripts that source this file
 ALLOWED_ADVISORIES=(
   "GHSA-vfj7-8cjw-p6xm"
-  "GHSA-mrhx-c7xc-m3w5"
   "GHSA-qr28-fpjm-wq7f"
 )

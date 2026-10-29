@@ -67,7 +67,7 @@ export const mcpServerRouter = router({
   update: technicalAdminProcedure
     .input(
       z.object({
-        id: z.string().uuid(),
+        id: z.string().guid(),
         label: z.string().min(1).optional(),
         url: z.string().min(1).optional(),
         communicatesExternally: z.boolean().optional(),
@@ -83,7 +83,7 @@ export const mcpServerRouter = router({
     }),
 
   disable: technicalAdminProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.disableMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
@@ -91,7 +91,7 @@ export const mcpServerRouter = router({
     }),
 
   enable: technicalAdminProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.enableMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
@@ -101,7 +101,7 @@ export const mcpServerRouter = router({
   // Permanent removal. Steps referencing a deleted server drop the stale tool
   // refs silently at resolve time (ResolveStepTools), so no cascade is needed.
   delete: technicalAdminProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
@@ -111,7 +111,7 @@ export const mcpServerRouter = router({
   // Connection test — lists the server's tools so the admin can confirm reach
   // and credentials before using it in a flow.
   test: technicalAdminProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.testMcpServer.execute(input.id);
       if (result.error) throw toTrpcError(result.error);

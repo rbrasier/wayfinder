@@ -7,7 +7,7 @@ const callbackSchema = z.object({
   correlationId: z.string().optional(),
   nodeId: z.string().min(1),
   status: z.enum(["completed", "pending_approval", "failed"]),
-  data: z.record(z.unknown()).default({}),
+  data: z.record(z.string(), z.unknown()).default({}),
   message: z.string().optional(),
 });
 

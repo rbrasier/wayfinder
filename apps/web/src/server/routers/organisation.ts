@@ -15,7 +15,7 @@ const resolutionSchema: z.ZodType<OrganisationResolution> = z.discriminatedUnion
     strategy: z.literal("email_domain"),
     emailDomain: z.object({
       domainToOrg: z.array(
-        z.object({ domain: z.string().min(1), organisationId: z.string().uuid() }),
+        z.object({ domain: z.string().min(1), organisationId: z.string().guid() }),
       ),
       onUnmatched: z.enum(["unaffiliated", "nominate"]),
     }),
@@ -118,7 +118,7 @@ export const organisationRouter = router({
   update: userAdminProcedure
     .input(
       z.object({
-        organisationId: z.string().uuid(),
+        organisationId: z.string().guid(),
         name: z.string().min(1).optional(),
         emailDomain: z.string().nullable().optional(),
       }),
@@ -133,7 +133,7 @@ export const organisationRouter = router({
     }),
 
   delete: userAdminProcedure
-    .input(z.object({ organisationId: z.string().uuid() }))
+    .input(z.object({ organisationId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteOrganisation.execute(input.organisationId);
       if (result.error) throw toTrpcError(result.error);
@@ -143,8 +143,8 @@ export const organisationRouter = router({
   assignUser: userAdminProcedure
     .input(
       z.object({
-        userId: z.string().uuid(),
-        organisationId: z.string().uuid().nullable(),
+        userId: z.string().guid(),
+        organisationId: z.string().guid().nullable(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -240,7 +240,7 @@ export const organisationRouter = router({
   submitNomination: authenticatedProcedure
     .input(
       z.object({
-        joinOrganisationId: z.string().uuid().optional(),
+        joinOrganisationId: z.string().guid().optional(),
         createName: z.string().min(1).optional(),
       }),
     )

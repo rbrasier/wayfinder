@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
-import type { Message as UIMessage } from "@ai-sdk/react";
+import type { FeedMessage } from "@/lib/chat/ui-messages";
 import { parseRunStartedMessage, type FlowNode, type SessionMessage } from "@rbrasier/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
@@ -74,7 +74,7 @@ function ActivityRow({ initials, label }: { initials: string; label: string }) {
 
 interface MessageFeedProps {
   dbMessages: SessionMessage[];
-  streamingMessages: UIMessage[];
+  streamingMessages: FeedMessage[];
   nodes: FlowNode[];
   isStreaming: boolean;
   isComplete?: boolean;

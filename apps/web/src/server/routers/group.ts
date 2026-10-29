@@ -87,7 +87,7 @@ export const groupRouter = router({
   }),
 
   listMembers: authenticatedProcedure
-    .input(z.object({ groupId: z.string().uuid() }))
+    .input(z.object({ groupId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       await assertCanManageGroup(ctx, input.groupId);
       const result = await ctx.container.useCases.listGroupMembers.execute(input.groupId);
@@ -102,7 +102,7 @@ export const groupRouter = router({
       z.object({
         name: z.string().min(1),
         description: z.string().nullable().optional(),
-        organisationId: z.string().uuid().nullable().optional(),
+        organisationId: z.string().guid().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -118,10 +118,10 @@ export const groupRouter = router({
   update: authenticatedProcedure
     .input(
       z.object({
-        groupId: z.string().uuid(),
+        groupId: z.string().guid(),
         name: z.string().min(1).optional(),
         description: z.string().nullable().optional(),
-        organisationId: z.string().uuid().nullable().optional(),
+        organisationId: z.string().guid().nullable().optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -136,7 +136,7 @@ export const groupRouter = router({
     }),
 
   delete: userAdminProcedure
-    .input(z.object({ groupId: z.string().uuid() }))
+    .input(z.object({ groupId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteGroup.execute(input.groupId);
       if (result.error) throw toTrpcError(result.error);
@@ -146,8 +146,8 @@ export const groupRouter = router({
   addMember: authenticatedProcedure
     .input(
       z.object({
-        groupId: z.string().uuid(),
-        userId: z.string().uuid(),
+        groupId: z.string().guid(),
+        userId: z.string().guid(),
         roleInGroup: groupRoleSchema.default(GROUP_ROLES.member),
       }),
     )
@@ -168,8 +168,8 @@ export const groupRouter = router({
   setMemberRole: authenticatedProcedure
     .input(
       z.object({
-        groupId: z.string().uuid(),
-        userId: z.string().uuid(),
+        groupId: z.string().guid(),
+        userId: z.string().guid(),
         roleInGroup: groupRoleSchema,
       }),
     )
@@ -186,7 +186,7 @@ export const groupRouter = router({
     }),
 
   removeMember: authenticatedProcedure
-    .input(z.object({ groupId: z.string().uuid(), userId: z.string().uuid() }))
+    .input(z.object({ groupId: z.string().guid(), userId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       await assertCanManageGroup(ctx, input.groupId);
       const result = await ctx.container.useCases.removeGroupMember.execute(

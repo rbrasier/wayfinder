@@ -9,10 +9,13 @@ import {
   type Result,
   type TokenUsage,
 } from "@rbrasier/domain";
+import { experimental_createMCPClient } from "@ai-sdk/mcp";
 import {
-  experimental_createMCPClient,
   generateText,
-  type LanguageModelV1,
+  stepCountIs,
+  type LanguageModel,
+  type LanguageModelUsage,
+  type ProviderMetadata,
   type ToolSet,
 } from "ai";
 import { buildMcpTransport } from "./ai-sdk-mcp-client";
@@ -21,7 +24,7 @@ import { recordTokenUsage } from "../observability/usage-tracking-adapter";
 import type { QuotaEnforcer } from "../observability/quota-enforcing-adapter";
 
 export interface McpToolPrepassInput {
-  model: LanguageModelV1;
+  model: LanguageModel;
   // Provider + model name label the usage record the governance stack writes, so
   // the pre-pass appears in spend/quota reporting like every other model call.
   provider: ProviderName;
@@ -159,19 +162,16 @@ export class McpToolPrepass {
         system: input.system,
         messages: input.messages,
         tools,
-        maxSteps: input.maxSteps ?? 4,
+        stopWhen: stepCountIs(input.maxSteps ?? 4),
         abortSignal: controller.signal,
         onStepFinish: (step) => {
           completedSteps.push(step);
         },
       });
 
-      this.recordUsage(input, {
-        promptTokens: result.usage.promptTokens,
-        completionTokens: result.usage.completionTokens,
-        systemTokens: 0,
-        ...extractCacheTokens(result.providerMetadata as Record<string, unknown> | undefined),
-      });
+      // `totalUsage`, not `usage`: ai@5 reports only the final step under `usage`,
+      // which would bill a multi-round tool loop as a single call.
+      this.recordUsage(input, toTokenUsage(result.totalUsage, result.providerMetadata));
 
       const toolCalls = extractToolCalls(result.steps, origins);
       return ok({ summary: result.text.trim(), toolCallCount: toolCalls.length, toolCalls });
@@ -181,8 +181,8 @@ export class McpToolPrepass {
         return err(domainError("AGENT_FAILED", "MCP tool pre-pass failed.", cause));
       }
       this.recordUsage(input, {
-        promptTokens: sumUsage(completedSteps, "promptTokens"),
-        completionTokens: sumUsage(completedSteps, "completionTokens"),
+        promptTokens: sumUsage(completedSteps, "inputTokens"),
+        completionTokens: sumUsage(completedSteps, "outputTokens"),
         systemTokens: 0,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
@@ -217,15 +217,15 @@ export class McpToolPrepass {
 }
 
 interface CompletedStep extends StepLike {
-  usage: { promptTokens: number; completionTokens: number };
+  usage: LanguageModelUsage;
 }
 
-const sumUsage = (steps: readonly CompletedStep[], key: "promptTokens" | "completionTokens"): number =>
+const sumUsage = (steps: readonly CompletedStep[], key: "inputTokens" | "outputTokens"): number =>
   steps.reduce((total, step) => total + (step.usage?.[key] ?? 0), 0);
 
 interface StepLike {
-  toolCalls: { toolCallId: string; toolName: string; args: unknown }[];
-  toolResults: { toolCallId: string; result: unknown }[];
+  toolCalls: readonly { toolCallId: string; toolName: string; input: unknown }[];
+  toolResults: readonly { toolCallId: string; output: unknown }[];
 }
 
 // Pairs each tool call with its result (by call id) into an audit record.
@@ -237,14 +237,14 @@ export function extractToolCalls(
 ): McpToolCallRecord[] {
   const records: McpToolCallRecord[] = [];
   for (const step of steps) {
-    const resultById = new Map(step.toolResults.map((entry) => [entry.toolCallId, entry.result]));
+    const resultById = new Map(step.toolResults.map((entry) => [entry.toolCallId, entry.output]));
     for (const call of step.toolCalls) {
       const origin = origins.get(call.toolName);
       const rawResult = resultById.get(call.toolCallId);
       records.push({
         serverLabel: origin?.serverLabel ?? "unknown",
         toolName: origin?.toolName ?? call.toolName,
-        arguments: truncate(stringify(call.args), AUDIT_ARGUMENTS_MAX_CHARS),
+        arguments: truncate(stringify(call.input), AUDIT_ARGUMENTS_MAX_CHARS),
         result: rawResult === undefined ? "" : truncate(stringify(rawResult), AUDIT_RESULT_MAX_CHARS),
         calledAt: now().toISOString(),
       });
@@ -263,16 +263,20 @@ const stringify = (value: unknown): string => {
 };
 
 interface AnthropicCacheMeta {
-  cacheReadInputTokens?: number;
-  cacheCreationInputTokens?: number;
+  cacheCreationInputTokens?: number | null;
 }
 
-const extractCacheTokens = (
-  providerMetadata: Record<string, unknown> | undefined,
-): { cacheReadTokens: number; cacheWriteTokens: number } => {
+// Cache reads come from usage in ai@5; Anthropic reports writes only in metadata.
+const toTokenUsage = (
+  usage: LanguageModelUsage,
+  providerMetadata: ProviderMetadata | undefined,
+): TokenUsage => {
   const anthropic = providerMetadata?.["anthropic"] as AnthropicCacheMeta | undefined;
   return {
-    cacheReadTokens: anthropic?.cacheReadInputTokens ?? 0,
+    promptTokens: usage.inputTokens ?? 0,
+    completionTokens: usage.outputTokens ?? 0,
+    systemTokens: 0,
+    cacheReadTokens: usage.cachedInputTokens ?? 0,
     cacheWriteTokens: anthropic?.cacheCreationInputTokens ?? 0,
   };
 };

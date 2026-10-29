@@ -13,7 +13,8 @@ const {
   const model = (provider: string) => (modelId: string) => ({
     provider,
     modelId,
-    specificationVersion: "v1" as const,
+    specificationVersion: "v2" as const,
+    supportedUrls: {},
     doGenerate: underlyingGenerate,
     doStream: underlyingStream,
   });
@@ -92,22 +93,18 @@ describe("resolveModel — openai", () => {
   });
 });
 
-// Regression: the Claude 5 family rejects `temperature` outright, and ai@4
-// substitutes `temperature: 0` for an omitted one in `prepareCallSettings`
-// ("TODO v5 remove default 0 for temperature"). Withholding it above the SDK
-// therefore changed nothing — the request still carried it and still failed.
+// Regression: the Claude 5 family rejects `temperature` outright. ai@4 injected
+// `temperature: 0` for an omitted one, so withholding it above the SDK changed
+// nothing; the middleware strips whatever reaches the provider, whichever SDK
+// version put it there.
 describe("resolveModel — temperature never reaches the provider", () => {
-  const callOptions = {
-    inputFormat: "prompt" as const,
-    mode: { type: "regular" as const },
-    prompt: [],
-  };
+  const callOptions = { prompt: [] };
 
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("strips the temperature the SDK injected on a generate call", async () => {
+  it("strips a temperature from a generate call", async () => {
     const model = resolveModel("anthropic", "claude-opus-5", "sk-ant-test");
 
     await model.doGenerate({ ...callOptions, temperature: 0 });
@@ -140,10 +137,10 @@ describe("resolveModel — temperature never reaches the provider", () => {
   it("leaves the rest of the call options untouched", async () => {
     const model = resolveModel("openai", "gpt-4o-mini", "sk-test");
 
-    await model.doGenerate({ ...callOptions, temperature: 0, maxTokens: 512 });
+    await model.doGenerate({ ...callOptions, temperature: 0, maxOutputTokens: 512, topP: 0.9 });
 
     expect(underlyingGenerate).toHaveBeenCalledWith(
-      expect.objectContaining({ maxTokens: 512, mode: { type: "regular" } }),
+      expect.objectContaining({ maxOutputTokens: 512, topP: 0.9, prompt: [] }),
     );
   });
 });

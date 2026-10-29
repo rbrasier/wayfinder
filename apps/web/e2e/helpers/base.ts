@@ -16,6 +16,7 @@ import {
   openaiStreamResponse,
   MOCK_RESPONSES,
 } from '../fixtures/ai-responses';
+import { UI_MESSAGE_STREAM_HEADERS, uiMessageStreamBody } from './chat-mock';
 
 /**
  * The browser-level intercept that stands in for a chat turn.
@@ -207,24 +208,16 @@ async function mockOpenAIRoute(route: Route) {
 }
 
 async function mockInternalChatRoute(route: Route) {
-  // Wayfinder's Next.js API routes stream using the Vercel AI SDK data format
-  // The Vercel AI SDK `useChat` hook consumes a specific text/plain stream format
+  // Wayfinder's chat route answers with an AI SDK 5 UI message stream, which
+  // the `useChat` hook's transport consumes.
   const body = route.request().postData();
   const responseText = pickResponse(body);
 
-  // Vercel AI SDK stream format: '0:"<text chunk>"\n'
   const chunks = responseText.match(/.{1,15}/g) ?? [responseText];
-  const streamBody = chunks
-    .map(chunk => `0:${JSON.stringify(chunk)}\n`)
-    .join('') + `d:{"finishReason":"stop","usage":{"promptTokens":10,"completionTokens":${chunks.length}}}\n`;
 
   await route.fulfill({
     status: 200,
-    headers: {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'x-vercel-ai-data-stream': 'v1',
-      'x-mock-ai': 'true',
-    },
-    body: streamBody,
+    headers: { ...UI_MESSAGE_STREAM_HEADERS, 'x-mock-ai': 'true' },
+    body: uiMessageStreamBody(chunks),
   });
 }

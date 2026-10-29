@@ -2,7 +2,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createMistral } from "@ai-sdk/mistral";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
-import { wrapLanguageModel, type LanguageModel, type LanguageModelV1Middleware } from "ai";
+import { wrapLanguageModel, type LanguageModel, type LanguageModelMiddleware } from "ai";
 import type { BedrockCredentials, ProviderName } from "@rbrasier/domain";
 
 export type ProviderCredentials = string | BedrockCredentials | null;
@@ -71,13 +71,12 @@ const PROVIDERS = {
   },
 } as const satisfies Record<ProviderName, ProviderEntry>;
 
-// Wayfinder passes no temperature on any call, but ai@4 substitutes
-// `temperature: 0` for an omitted one before the request reaches the provider
-// (`prepareCallSettings`, "TODO v5 remove default 0 for temperature"), and the
-// Claude 5 family rejects the parameter outright — "`temperature` is deprecated
-// for this model" — failing the whole call. This middleware runs below that
-// default, so it is the only place the parameter can actually be removed.
-const withoutTemperature: LanguageModelV1Middleware = {
+// The Claude 5 family rejects `temperature` outright — "`temperature` is
+// deprecated for this model" — failing the whole call. Wayfinder passes none,
+// and ai@5 no longer substitutes a default, but the providers forward any value
+// they are given; this middleware sits directly above them, so it is the one
+// place that guarantees the parameter never reaches a request.
+const withoutTemperature: LanguageModelMiddleware = {
   transformParams: async ({ params }) => ({ ...params, temperature: undefined }),
 };
 

@@ -1,4 +1,5 @@
-import { experimental_createMCPClient, generateText, type ToolSet } from "ai";
+import { experimental_createMCPClient } from "@ai-sdk/mcp";
+import { generateText, type ToolSet } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpServer } from "@rbrasier/domain";
 import { buildMcpTransport } from "./ai-sdk-mcp-client";
@@ -7,9 +8,9 @@ import { extractToolCalls, McpToolPrepass, prefixToolName, selectAllowedTools } 
 
 vi.mock("ai", async (importOriginal) => ({
   ...(await importOriginal<typeof import("ai")>()),
-  experimental_createMCPClient: vi.fn(),
   generateText: vi.fn(),
 }));
+vi.mock("@ai-sdk/mcp", () => ({ experimental_createMCPClient: vi.fn() }));
 vi.mock("./ai-sdk-mcp-client", () => ({ buildMcpTransport: vi.fn(() => ({})) }));
 vi.mock("../observability/usage-tracking-adapter", () => ({ recordTokenUsage: vi.fn() }));
 
@@ -65,8 +66,8 @@ describe("extractToolCalls", () => {
   it("pairs a call with its result via the call id and resolves the origin", () => {
     const steps = [
       {
-        toolCalls: [{ toolCallId: "c1", toolName: "Alpha__search", args: { q: "hello" } }],
-        toolResults: [{ toolCallId: "c1", result: { hits: 2 } }],
+        toolCalls: [{ toolCallId: "c1", toolName: "Alpha__search", input: { q: "hello" } }],
+        toolResults: [{ toolCallId: "c1", output: { hits: 2 } }],
       },
     ];
     const records = extractToolCalls(steps, origins, now);
@@ -84,7 +85,7 @@ describe("extractToolCalls", () => {
   it("records an empty result when no matching tool result is present", () => {
     const steps = [
       {
-        toolCalls: [{ toolCallId: "c9", toolName: "Alpha__search", args: {} }],
+        toolCalls: [{ toolCallId: "c9", toolName: "Alpha__search", input: {} }],
         toolResults: [],
       },
     ];
@@ -105,9 +106,9 @@ describe("McpToolPrepass.run", () => {
   } as unknown as McpServer;
 
   const transcriptStep = {
-    toolCalls: [{ toolCallId: "c1", toolName: "ParlView__get_transcript", args: { parlViewId: "5976131" } }],
-    toolResults: [{ toolCallId: "c1", result: "Senators asked about staffing levels." }],
-    usage: { promptTokens: 10, completionTokens: 5 },
+    toolCalls: [{ toolCallId: "c1", toolName: "ParlView__get_transcript", input: { parlViewId: "5976131" } }],
+    toolResults: [{ toolCallId: "c1", output: "Senators asked about staffing levels." }],
+    usage: { inputTokens: 10, outputTokens: 5 },
   };
 
   const prepass = (resolve = vi.fn(async () => ({ data: "stored-token" }))) =>
@@ -138,7 +139,8 @@ describe("McpToolPrepass.run", () => {
     vi.mocked(generateText).mockResolvedValue({
       steps: [],
       text: "",
-      usage: { promptTokens: 1, completionTokens: 1 },
+      usage: { inputTokens: 1, outputTokens: 1 },
+      totalUsage: { inputTokens: 1, outputTokens: 1 },
     } as never);
     const resolve = vi.fn(async () => ({ data: "resolved-token" }));
 
@@ -146,6 +148,48 @@ describe("McpToolPrepass.run", () => {
 
     expect(resolve).toHaveBeenCalledWith(server);
     expect(buildMcpTransport).toHaveBeenCalledWith(server, "resolved-token");
+  });
+
+  // ai@5's `usage` covers only the final step; a tool loop is billed for all of them.
+  it("records the usage of every step of the tool loop, not only the last", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      steps: [transcriptStep],
+      text: "Summary.",
+      usage: { inputTokens: 4, outputTokens: 2 },
+      totalUsage: { inputTokens: 30, outputTokens: 12, cachedInputTokens: 6 },
+      providerMetadata: { anthropic: { cacheCreationInputTokens: 3 } },
+    } as never);
+
+    await prepass().run(input);
+
+    expect(recordTokenUsage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      {
+        promptTokens: 30,
+        completionTokens: 12,
+        systemTokens: 0,
+        cacheReadTokens: 6,
+        cacheWriteTokens: 3,
+      },
+    );
+  });
+
+  it("stops the tool loop after maxSteps rounds", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      steps: [],
+      text: "",
+      usage: { inputTokens: 1, outputTokens: 1 },
+      totalUsage: { inputTokens: 1, outputTokens: 1 },
+    } as never);
+
+    await prepass().run({ ...input, maxSteps: 3 });
+
+    const call = vi.mocked(generateText).mock.calls.at(-1)![0] as unknown as Record<string, unknown>;
+    const stopWhen = call.stopWhen as (options: { steps: unknown[] }) => boolean;
+    expect(call).not.toHaveProperty("maxSteps");
+    expect(stopWhen({ steps: [{}, {}] })).toBe(false);
+    expect(stopWhen({ steps: [{}, {}, {}] })).toBe(true);
   });
 
   it("keeps what the tools returned before the time limit, rather than nothing", async () => {
