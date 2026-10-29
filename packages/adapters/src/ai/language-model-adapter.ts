@@ -15,23 +15,38 @@ import {
   type StreamTextInput,
   type TokenUsage,
 } from "@rbrasier/domain";
-import { NoObjectGeneratedError, generateObject, generateText, streamObject, streamText } from "ai";
+import {
+  NoObjectGeneratedError,
+  generateObject,
+  generateText,
+  streamObject,
+  streamText,
+  type LanguageModelUsage,
+  type ProviderMetadata,
+} from "ai";
+import type { ZodType } from "zod";
 import { resolveModel, type ProviderCredentials } from "./providers";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
 import { LlmCallGovernor } from "./llm-concurrency";
 
 interface AnthropicMeta {
-  cacheCreationInputTokens?: number;
-  cacheReadInputTokens?: number;
+  cacheCreationInputTokens?: number | null;
 }
 
-const extractMeta = (
-  providerMeta: Record<string, unknown> | undefined,
-): Pick<TokenUsage, "cacheReadTokens" | "cacheWriteTokens"> => {
-  const a = providerMeta?.["anthropic"] as AnthropicMeta | undefined;
+// AI SDK 5 reports prompt-cache reads in `usage.cachedInputTokens`; Anthropic
+// still reports cache writes only in its provider metadata. Reading both keeps
+// cached turns from counting as zero against spend caps.
+const toTokenUsage = (
+  usage: LanguageModelUsage,
+  providerMetadata: ProviderMetadata | undefined,
+): TokenUsage => {
+  const anthropic = providerMetadata?.["anthropic"] as AnthropicMeta | undefined;
   return {
-    cacheReadTokens: a?.cacheReadInputTokens ?? 0,
-    cacheWriteTokens: a?.cacheCreationInputTokens ?? 0,
+    promptTokens: usage.inputTokens ?? 0,
+    completionTokens: usage.outputTokens ?? 0,
+    systemTokens: 0,
+    cacheReadTokens: usage.cachedInputTokens ?? 0,
+    cacheWriteTokens: anthropic?.cacheCreationInputTokens ?? 0,
   };
 };
 
@@ -71,7 +86,7 @@ interface FailureDiagnostics {
 const rejectedReplyDiagnostics = (cause: NoObjectGeneratedError): FailureDiagnostics => {
   const usage = cause.usage ?? null;
   const tokens = usage
-    ? `; prompt tokens: ${usage.promptTokens}, completion tokens: ${usage.completionTokens}`
+    ? `; prompt tokens: ${usage.inputTokens}, completion tokens: ${usage.outputTokens}`
     : "";
   return {
     detail: `${cause.message} (finish reason: ${cause.finishReason ?? "unknown"}${tokens})`,
@@ -144,26 +159,18 @@ export class LanguageModelAdapter implements ILanguageModel {
       const result = await this.runGoverned(() =>
         generateObject({
           model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
-          schema: input.schema as never,
+          schema: input.schema as ZodType,
           system: input.system,
           prompt: input.prompt,
           messages: input.messages as never,
-          maxTokens: input.maxTokens,
+          maxOutputTokens: input.maxTokens,
         }),
-      );
-      const meta = extractMeta(
-        result.experimental_providerMetadata as Record<string, unknown> | undefined,
       );
       return ok({
         object: result.object as T,
         provider: resolved.provider,
         model: resolved.model,
-        usage: {
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-          systemTokens: 0,
-          ...meta,
-        },
+        usage: toTokenUsage(result.usage, result.providerMetadata),
       });
     } catch (cause) {
       this.logAiCallFailure("generateObject", provider, model, cause);
@@ -187,22 +194,14 @@ export class LanguageModelAdapter implements ILanguageModel {
           system: input.system,
           prompt: input.prompt,
           messages: input.messages as never,
-          maxTokens: input.maxTokens,
+          maxOutputTokens: input.maxTokens,
         }),
-      );
-      const meta = extractMeta(
-        result.experimental_providerMetadata as Record<string, unknown> | undefined,
       );
       return ok({
         text: result.text,
         provider: resolved.provider,
         model: resolved.model,
-        usage: {
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-          systemTokens: 0,
-          ...meta,
-        },
+        usage: toTokenUsage(result.usage, result.providerMetadata),
       });
     } catch (cause) {
       this.logAiCallFailure("generateText", provider, model, cause);
@@ -227,12 +226,12 @@ export class LanguageModelAdapter implements ILanguageModel {
         system: input.system,
         prompt: input.prompt,
         messages: input.messages as never,
-        maxTokens: input.maxTokens,
+        maxOutputTokens: input.maxTokens,
       });
-      const usage = result.usage.then((u) => ({
-        promptTokens: u.promptTokens,
-        completionTokens: u.completionTokens,
-        systemTokens: 0,
+      // streamText has always reported no cache tokens; v5 would now surface
+      // reads through usage, which would change recorded spend mid-release.
+      const usage = result.usage.then((reported) => ({
+        ...toTokenUsage(reported, undefined),
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       }));
@@ -268,11 +267,11 @@ export class LanguageModelAdapter implements ILanguageModel {
       model = resolved.model;
       const result = streamObject({
         model: resolveModel(resolved.provider, resolved.model, resolved.credentials),
-        schema: input.schema as never,
+        schema: input.schema as ZodType,
         system: input.system,
         prompt: input.prompt,
         messages: input.messages as never,
-        maxTokens: input.maxTokens,
+        maxOutputTokens: input.maxTokens,
         // A mid-stream failure is not logged here: the Result has already
         // resolved to ok(), and the primary chat path logs a broken stream
         // itself (route.ts's onError), so logging it again would duplicate the
@@ -282,15 +281,9 @@ export class LanguageModelAdapter implements ILanguageModel {
       // Await providerMetadata alongside usage so cache tokens survive the port
       // hop: without this the Anthropic prompt-cache readings are lost and every
       // cached turn reports zero cache tokens (double-counting spend caps).
-      const usage = Promise.all([
-        result.usage,
-        result.providerMetadata as Promise<Record<string, unknown> | undefined>,
-      ]).then(([u, meta]) => ({
-        promptTokens: u.promptTokens,
-        completionTokens: u.completionTokens,
-        systemTokens: 0,
-        ...extractMeta(meta),
-      }));
+      const usage = Promise.all([result.usage, result.providerMetadata]).then(
+        ([reported, providerMetadata]) => toTokenUsage(reported, providerMetadata),
+      );
       return ok({
         partialObjectStream: result.partialObjectStream as AsyncIterable<Partial<T>>,
         object: result.object as Promise<T>,

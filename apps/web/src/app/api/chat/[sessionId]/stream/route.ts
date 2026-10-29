@@ -1,4 +1,4 @@
-import { createDataStreamResponse } from "ai";
+import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import {
   buildBranchDescriptors,
   normaliseAdvanceConfidenceThreshold,
@@ -12,7 +12,8 @@ import { tooManyRequestsResponse } from "@/lib/rate-limit";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { executeTurn, type PreparedTurn } from "./execute-turn";
 import { toModelMessages } from "./model-messages";
-import { DataStreamTurnWriter } from "./turn-stream-writer";
+import { UiMessageStreamTurnWriter } from "./turn-stream-writer";
+import type { ChatUiMessage } from "@/lib/chat/ui-messages";
 import {
   buildAttachmentAnnotation,
   buildPromptSessionUploads,
@@ -248,12 +249,12 @@ export async function POST(
   const chatModelName = aiConfig.models.chat;
   const branchingModelName = aiConfig.models.branching;
 
-  return createDataStreamResponse({
-    execute: async (dataStream) => {
+  const stream = createUIMessageStream<ChatUiMessage>({
+    execute: async ({ writer: uiMessageStream }) => {
       // Everything downstream writes through the framework-free TurnStreamWriter
       // port; this adapter is the one place that maps those semantic calls onto
-      // the Vercel data-stream wire format.
-      const writer = new DataStreamTurnWriter(dataStream);
+      // the AI SDK UI message stream.
+      const writer = new UiMessageStreamTurnWriter(uiMessageStream);
       // A doc-gen-heavy turn can outlive the lease window, so re-stamp it while
       // the stream is open; the release in `finally` frees it the instant the
       // turn ends (success or failure) rather than waiting for expiry.
@@ -289,6 +290,8 @@ export async function POST(
           lastUserMessage,
         });
       } finally {
+        // A turn's last bubble is otherwise left open on the client.
+        writer.endBubble();
         clearInterval(heartbeat);
         // Announce the final state so every watching window reconciles: publish
         // the latest message seq (advances their Last-Event-ID) and a state sync,
@@ -316,4 +319,5 @@ export async function POST(
       return "An error occurred during the AI response. Please try again.";
     },
   });
+  return createUIMessageStreamResponse({ stream });
 }

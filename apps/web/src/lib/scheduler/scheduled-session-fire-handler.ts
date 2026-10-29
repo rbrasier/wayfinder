@@ -167,8 +167,8 @@ export class ScheduledSessionFireHandler implements IScheduleFireHandler {
         provider: usage.provider as Parameters<typeof recordTokenUsage>[1]["provider"],
       },
       {
-        promptTokens: branchResult.usage.promptTokens ?? 0,
-        completionTokens: branchResult.usage.completionTokens ?? 0,
+        promptTokens: branchResult.usage.inputTokens ?? 0,
+        completionTokens: branchResult.usage.outputTokens ?? 0,
         systemTokens: 0,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,

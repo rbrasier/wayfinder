@@ -9,8 +9,8 @@ const statusSchema = z.enum(["active", "archived", "draft"]);
 // uploads). Exactly one must be supplied.
 const scopeSchema = z
   .object({
-    flowId: z.string().uuid().optional(),
-    sessionId: z.string().uuid().optional(),
+    flowId: z.string().guid().optional(),
+    sessionId: z.string().guid().optional(),
   })
   .refine(
     (scope) => Boolean(scope.flowId) !== Boolean(scope.sessionId),
@@ -24,7 +24,7 @@ export const knowledgeRouter = router({
   list: permissionProcedure("knowledge:curate")
     .input(
       z.object({
-        flowId: z.string().uuid().nullable().default(null),
+        flowId: z.string().guid().nullable().default(null),
         status: statusSchema.nullable().default(null),
         tag: z.string().nullable().default(null),
         limit: z.number().int().min(1).max(200).default(50),
@@ -60,7 +60,7 @@ export const knowledgeRouter = router({
   edit: permissionProcedure("knowledge:curate")
     .input(
       z.object({
-        chunkId: z.string().uuid(),
+        chunkId: z.string().guid(),
         newText: z.string().min(1),
         reason: z.string().nullable().default(null),
       }),
@@ -79,7 +79,7 @@ export const knowledgeRouter = router({
   setStatus: permissionProcedure("knowledge:curate")
     .input(
       z.object({
-        chunkIds: z.array(z.string().uuid()).min(1),
+        chunkIds: z.array(z.string().guid()).min(1),
         status: statusSchema,
       }),
     )
@@ -92,7 +92,7 @@ export const knowledgeRouter = router({
   tag: permissionProcedure("knowledge:curate")
     .input(
       z.object({
-        chunkIds: z.array(z.string().uuid()).min(1),
+        chunkIds: z.array(z.string().guid()).min(1),
         tag: z.string().min(1),
       }),
     )
@@ -105,8 +105,8 @@ export const knowledgeRouter = router({
   revert: permissionProcedure("knowledge:curate")
     .input(
       z.object({
-        chunkId: z.string().uuid(),
-        versionId: z.string().uuid(),
+        chunkId: z.string().guid(),
+        versionId: z.string().guid(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -120,7 +120,7 @@ export const knowledgeRouter = router({
     }),
 
   versions: permissionProcedure("knowledge:curate")
-    .input(z.object({ chunkId: z.string().uuid() }))
+    .input(z.object({ chunkId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.listChunkVersions.execute(input.chunkId);
       if (result.error) throw toTrpcError(result.error);

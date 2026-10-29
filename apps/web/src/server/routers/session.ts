@@ -217,7 +217,7 @@ export const sessionRouter = router({
     }),
 
   get: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (result.error) throw toTrpcError(result.error);
@@ -264,7 +264,7 @@ export const sessionRouter = router({
     }),
 
   revokeParticipant: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid(), participantUserId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid(), participantUserId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);
@@ -285,7 +285,7 @@ export const sessionRouter = router({
     }),
 
   stepData: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (result.error) throw toTrpcError(result.error);
@@ -316,7 +316,7 @@ export const sessionRouter = router({
   // that every other open window's EventSource receives. The name is resolved
   // client-side from the participant list.
   emitTyping: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       await ctx.container.services.sessionEvents.publish(input.sessionId, {
         type: "typing",
@@ -327,7 +327,7 @@ export const sessionRouter = router({
     }),
 
   create: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.startSession.execute({
         flowId: input.flowId,
@@ -374,7 +374,7 @@ export const sessionRouter = router({
   }),
 
   rename: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid(), title: z.string().min(1).max(200) }))
+    .input(z.object({ sessionId: z.string().guid(), title: z.string().min(1).max(200) }))
     .mutation(async ({ ctx, input }) => {
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);
@@ -389,7 +389,7 @@ export const sessionRouter = router({
     }),
 
   close: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);
@@ -404,7 +404,7 @@ export const sessionRouter = router({
     }),
 
   overrideBranch: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid(), targetNodeId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid(), targetNodeId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);
@@ -429,9 +429,9 @@ export const sessionRouter = router({
   rewindToFork: authenticatedProcedure
     .input(
       z.object({
-        sessionId: z.string().uuid(),
-        forkNodeId: z.string().uuid(),
-        targetNodeId: z.string().uuid(),
+        sessionId: z.string().guid(),
+        forkNodeId: z.string().guid(),
+        targetNodeId: z.string().guid(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -462,7 +462,7 @@ export const sessionRouter = router({
   recordManualEstimate: authenticatedProcedure
     .input(
       z.object({
-        sessionId: z.string().uuid(),
+        sessionId: z.string().guid(),
         minutes: z.number().int().positive().max(MAX_ESTIMATE_MINUTES),
       }),
     )
@@ -477,7 +477,7 @@ export const sessionRouter = router({
     }),
 
   confirmStep: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const sessionResult = await ctx.container.useCases.getSession.execute(input.sessionId);
       if (sessionResult.error) throw toTrpcError(sessionResult.error);

@@ -4,7 +4,7 @@ import { oversightProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export const logInsightsExportInputSchema = z.object({
-  flowId: z.string().uuid(),
+  flowId: z.string().guid(),
   rowCount: z.number().int().min(0),
   columnCount: z.number().int().min(0),
   filters: z
@@ -44,7 +44,7 @@ export const analyticsRouter = router({
         .object({
           periodDays: z.number().int().min(1).max(365).optional(),
           // Scopes every figure on the Value page to a single flow.
-          flowId: z.string().uuid().optional(),
+          flowId: z.string().guid().optional(),
         })
         .optional(),
     )
@@ -58,7 +58,7 @@ export const analyticsRouter = router({
     }),
 
   flowDeepDive: oversightProcedure
-    .input(z.object({ flowId: z.string().uuid().optional() }).optional())
+    .input(z.object({ flowId: z.string().guid().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getFlowDeepDive.execute({
         flowId: input?.flowId,

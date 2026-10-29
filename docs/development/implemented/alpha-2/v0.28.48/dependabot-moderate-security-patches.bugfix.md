@@ -88,6 +88,29 @@ there is one `@better-auth/core`, shared by better-auth and
 `@better-auth/drizzle-adapter`, and one `better-call` (`1.4.4_zod@4.6.7`), which
 loads zod 4.6.7. The warnings go away with the zod 4 migration.
 
+## Added during review — decode-uri-component GHSA-qr28-fpjm-wq7f (high)
+
+Published on 2026-10-29, after this PR's CI had passed. The advisory covers
+`decode-uri-component <=0.5.0` (CVE-2026-118664, quadratic decoding DoS) and
+is high, so the audit gate (`scripts/audit-check.sh`) and the Trivy image gate
+would fail on `release/alpha-2`'s next CI run, whatever the change.
+
+- **It can't be fixed.** The only patched release is 0.5.1. 0.4+ is ESM-only,
+  and the sole consumer, `query-string@7.1.3` (from `minio@8.0.7`, minio's
+  latest, which pins `^7`), loads it with `require()`.
+- **It isn't reached.** minio's `dist/main` and `dist/esm` call `query-string`
+  only through `stringify()` (12 call sites) and never `parse()`, so the decoder
+  never runs. Nothing else in the lockfile depends on `decode-uri-component`.
+- **It's waived** in `scripts/audit-allowlist.sh` and `.trivyignore`, with a
+  REMOVE WHEN of "minio drops query-string@7, or a fix lands on the 0.2 line".
+- **The waiver rule is corrected.** `scripts/waiver-rules.mjs` judged
+  reachability by the bare major, so it called 0.2.2 → 0.5.1 "within the major in
+  use" and would have failed the waiver as fixable. Under semver each 0.x minor is
+  its own breaking line: `^0.2.2` never resolves 0.3, and this upgrade genuinely
+  breaks (ESM-only). The rule now compares release lines (the major, or the minor
+  below 1.0). Two tests pin it: a later 0.x minor is "needed", and a patch on the
+  same 0.x line is still "fixable".
+
 ## Not done here
 
 - **zod 3** (alerts #76, #77, #78, #81). No 3.x fix exists, and it is already

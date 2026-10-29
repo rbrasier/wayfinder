@@ -3,8 +3,9 @@
 //
 // Every advisory waived in scripts/audit-allowlist.sh is looked up in OSV (the
 // database the OSV-Scanner gate already uses) and checked against the lockfile:
-//   - a fix now reachable within the major already in use → fail, naming the
-//     upgrade: take it and remove the waiver;
+//   - a fix now reachable within the release line already in use (the major, or
+//     the minor below 1.0) → fail, naming the upgrade: take it and remove the
+//     waiver;
 //   - nothing in the lockfile is vulnerable any more → fail: remove the waiver;
 //   - otherwise the waiver still stands.
 // .trivyignore may only waive an advisory the allowlist waives (by GHSA or CVE),

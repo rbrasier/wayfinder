@@ -36,7 +36,7 @@ const conditionSchema = z.discriminatedUnion("kind", [
 const connectionSchema = z.object({
   url: z.string().max(2000),
   method: z.enum(["GET", "POST"]),
-  requestBody: z.unknown(),
+  requestBody: z.unknown().optional(),
   authType: z.enum(["none", "bearer", "api_key"]),
   apiKeyPlacement: z.object({ in: z.enum(["header", "query"]), name: z.string().max(200) }).nullable(),
 });
@@ -50,21 +50,21 @@ const watchSchema = connectionSchema.extend({
   fireOncePerItem: z.boolean(),
   maxRunsPerPoll: z.number().int(),
   failureThreshold: z.number().int(),
-  flowId: z.string().uuid(),
+  flowId: z.string().guid(),
   inputMapping: z.record(z.string().max(64), z.string().max(500)),
-  runAsUserId: z.string().uuid(),
+  runAsUserId: z.string().guid(),
 });
 
 // `undefined` keeps the stored secret, `null` clears it, a string replaces it.
 const secretSchema = z.string().max(4000).nullable().optional();
 
-// Zod reads `unknown` as optional; the use cases want a body that is always set.
+// The body is optional on the wire; the use cases want one that is always set.
 const withBody = <T extends { requestBody?: unknown }>(value: T): T & { requestBody: unknown } => ({
   ...value,
   requestBody: value.requestBody ?? null,
 });
 
-const byId = z.object({ id: z.string().uuid() });
+const byId = z.object({ id: z.string().guid() });
 
 // Admin → Event Watch (ADR-063): the list, the editor and run history.
 export const eventWatchRouter = router({
@@ -162,7 +162,7 @@ export const eventWatchRouter = router({
 
   // A failed request is an answer, not an error: the editor shows it in place.
   test: eventWatchProcedure
-    .input(z.object({ watchId: z.string().uuid().optional(), connection: connectionSchema, secret: secretSchema }))
+    .input(z.object({ watchId: z.string().guid().optional(), connection: connectionSchema, secret: secretSchema }))
     .mutation(async ({ ctx, input }) => {
       const sample = await ctx.container.useCases.testEventWatch.execute({
         watchId: input.watchId,

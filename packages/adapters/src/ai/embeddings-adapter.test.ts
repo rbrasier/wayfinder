@@ -1,16 +1,25 @@
 import { describe, it, expect, vi } from "vitest";
-import type { EmbeddingModelV1 } from "@ai-sdk/provider";
+import type { EmbeddingModelV2 } from "@ai-sdk/provider";
 import { ok, type EmbeddingsConfig, type IEmbeddingsProvider } from "@rbrasier/domain";
+import { EMBEDDINGS_DIMENSION } from "@rbrasier/shared";
+
+const { textEmbeddingModel } = vi.hoisted(() => ({ textEmbeddingModel: vi.fn() }));
+
+vi.mock("@ai-sdk/openai", () => ({
+  createOpenAI: vi.fn(() => ({ textEmbeddingModel })),
+}));
+
 import {
   DispatchingEmbeddingsAdapter,
   EmbeddingsAdapter,
+  createOpenAIEmbeddingsAdapter,
   type EmbeddingsAdapterBuilders,
 } from "./embeddings-adapter";
 
 const fakeModel = (
-  doEmbed: EmbeddingModelV1<string>["doEmbed"],
-): EmbeddingModelV1<string> => ({
-  specificationVersion: "v1",
+  doEmbed: EmbeddingModelV2<string>["doEmbed"],
+): EmbeddingModelV2<string> => ({
+  specificationVersion: "v2",
   provider: "fake",
   modelId: "fake-embedding",
   maxEmbeddingsPerCall: 1,
@@ -42,6 +51,35 @@ describe("EmbeddingsAdapter", () => {
 
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+
+  it("forwards its provider options to the model on every call", async () => {
+    const doEmbed = vi.fn(async () => ({ embeddings: [[0.5]] }));
+    const adapter = new EmbeddingsAdapter(fakeModel(doEmbed), { fake: { tuning: 1 } });
+
+    await adapter.embed("hello world");
+
+    expect(doEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({ providerOptions: { fake: { tuning: 1 } } }),
+    );
+  });
+});
+
+// OpenAI returns its native width unless asked otherwise; anything but
+// EMBEDDINGS_DIMENSION would not fit the vector column (ADR-017).
+describe("createOpenAIEmbeddingsAdapter", () => {
+  it("asks OpenAI for EMBEDDINGS_DIMENSION-wide vectors", async () => {
+    const doEmbed = vi.fn(async () => ({ embeddings: [[0.5]] }));
+    textEmbeddingModel.mockReturnValue(fakeModel(doEmbed));
+
+    await createOpenAIEmbeddingsAdapter("sk-test").embed("hello world");
+
+    expect(textEmbeddingModel).toHaveBeenCalledWith("text-embedding-3-small");
+    expect(doEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOptions: { openai: { dimensions: EMBEDDINGS_DIMENSION } },
+      }),
+    );
   });
 });
 

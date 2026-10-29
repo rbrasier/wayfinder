@@ -29,7 +29,7 @@ export const roleRouter = router({
   rename: adminProcedure
     .input(
       z.object({
-        roleId: z.string().uuid(),
+        roleId: z.string().guid(),
         name: z.string().min(1),
         description: z.string().nullable().optional(),
       }),
@@ -45,7 +45,7 @@ export const roleRouter = router({
     }),
 
   delete: adminProcedure
-    .input(z.object({ roleId: z.string().uuid() }))
+    .input(z.object({ roleId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteRole.execute(input.roleId);
       if (result.error) throw toTrpcError(result.error);
@@ -53,7 +53,7 @@ export const roleRouter = router({
     }),
 
   updatePermissions: adminProcedure
-    .input(z.object({ roleId: z.string().uuid(), keys: z.array(permissionKeySchema) }))
+    .input(z.object({ roleId: z.string().guid(), keys: z.array(permissionKeySchema) }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.updateRolePermissions.execute(
         input.roleId,
@@ -64,7 +64,7 @@ export const roleRouter = router({
     }),
 
   assignUser: userAdminProcedure
-    .input(z.object({ userId: z.string().uuid(), roleId: z.string().uuid() }))
+    .input(z.object({ userId: z.string().guid(), roleId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.assignUserRole.execute(input.userId, input.roleId, adminCallerOf(ctx));
       if (result.error) throw toTrpcError(result.error);
@@ -72,7 +72,7 @@ export const roleRouter = router({
     }),
 
   removeUser: userAdminProcedure
-    .input(z.object({ userId: z.string().uuid(), roleId: z.string().uuid() }))
+    .input(z.object({ userId: z.string().guid(), roleId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.removeUserRole.execute(input.userId, input.roleId, adminCallerOf(ctx));
       if (result.error) throw toTrpcError(result.error);
@@ -80,7 +80,7 @@ export const roleRouter = router({
     }),
 
   listUsers: userAdminProcedure
-    .input(z.object({ roleId: z.string().uuid() }))
+    .input(z.object({ roleId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.listUsersForRole.execute(input.roleId);
       if (result.error) throw toTrpcError(result.error);
