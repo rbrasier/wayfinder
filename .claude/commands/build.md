@@ -50,17 +50,16 @@ sections.
 |---|---|
 | Goal | The outcome in the user's terms — what the phase delivers, not the implementation |
 | Business rules changing | Every rule added, altered or removed, stated with its triggering condition and resulting behaviour — e.g. "when `status = "approved"`, the document locks and further revisions are rejected" |
-| UI / visible behaviour | What the user will see differently — screens, states, copy, empty and error states — each tied to the type, data structure or rule that drives it |
-| Data & types | Domain entities, value objects and TypeScript types created or changed, with the shape of each change |
-| Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
+| UI / visible behaviour | What the user will see differently — screens, states, copy, empty and error states |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
-| Tests | The test files written before each implementation file, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
-| Version, branch & PR target | MINOR or PATCH and the resulting version, the `feature/<slug>/claude-<username>` branch name, and `main` as both base and PR target |
-| Source issue | The issue number found in the pre-flight, and **what it actually asked for** in one line. A phase usually delivers more than any one issue asked for — say what of it answers the issue. Omit the section entirely when the phase came from a PRD rather than an issue |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done in this phase |
+| Deviations | Where the phase doc disagrees with what the pre-flight found in the code, and what you will do instead. Omit when there are none |
+| Build details | One short bullet each, and nothing else — no file paths, no type shapes: **Architecture** — complies with hexagonal architecture ([ADR-001](../../docs/development/adr/001-hexagonal-architecture.adr.md)), or names the breach; **Unit tests** — the number of unit test files new or amended, each written before its implementation file; **E2E** — the number of Playwright specs new or amended, with the `e2e-test-policy.md` group, or "none — covered at `<layer>`"; **Version** — MINOR or PATCH and the resulting version, the `feature/<slug>/claude-<username>` branch, and `main` as both base and PR target; **Source issue** — the issue number found in the pre-flight and what it actually asked for, in one line, saying what of the phase answers it; omit the bullet when the phase came from a PRD rather than an issue |
 
 **Omit any section that does not apply** — no heading, no "N/A" placeholder.
+**Build details** is the one exception: it always appears, and stays at its
+one-line bullets.
 
 **Cap each section at 5 bullets.** If more are warranted, keep the 5 most
 significant and close the section with a single `…and N more` bullet.

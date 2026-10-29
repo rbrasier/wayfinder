@@ -57,17 +57,16 @@ sections.
 |---|---|
 | Goal | The outcome in the user's terms — what becomes possible that isn't today, not the implementation |
 | Business rules changing | Every rule added, altered or removed, stated with its triggering condition and resulting behaviour — e.g. "when `status = "approved"`, the document locks and further revisions are rejected" |
-| UI / visible behaviour | What the user will see differently — screens, states, copy, empty and error states — each tied to the type, data structure or rule that drives it |
-| Data & types | Domain entities, value objects and TypeScript types created or changed, with the shape of each change |
-| Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
+| UI / visible behaviour | What the user will see differently — screens, states, copy, empty and error states |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
-| Tests | The test files written before each sub-component, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — behaviour is covered at `<layer>`" |
-| Version, branch & PR target | The bump and resulting version — PATCH when the base branch is a `release/*` branch, MINOR or PATCH only when the base is `main` — the `enhance/<slug>/claude-<username>` branch name, the base branch, and the branch the PR opens against |
-| Source issue | The issue number from question 6, and **what it actually asked for** in one line. Where this enhancement is narrower than the ask, say so here — that gap is what the issue comment has to be honest about. Omit the section entirely when there is no issue |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
+| Deviations | Where the request or an existing doc disagrees with what the code shows, and what you will do instead. Omit when there are none |
+| Build details | One short bullet each, and nothing else — no file paths, no type shapes: **Architecture** — complies with hexagonal architecture ([ADR-001](../../docs/development/adr/001-hexagonal-architecture.adr.md)), or names the breach; **Unit tests** — the number of unit test files new or amended; **E2E** — the number of Playwright specs new or amended, with the `e2e-test-policy.md` group, or "none — covered at `<layer>`"; **Version** — the bump and resulting version — PATCH when the base branch is a `release/*` branch, MINOR or PATCH only when the base is `main` — the `enhance/<slug>/claude-<username>` branch and the base it opens against; **Source issue** — the issue number from question 6 and what it actually asked for, in one line — where this enhancement is narrower than the ask, say so, because the issue comment has to be honest about that gap; omit the bullet when there is no issue |
 
 **Omit any section that does not apply** — no heading, no "N/A" placeholder.
+**Build details** is the one exception: it always appears, and stays at its
+one-line bullets.
 
 **Cap each section at 5 bullets.** If more are warranted, keep the 5 most
 significant and close the section with a single `…and N more` bullet.
@@ -136,6 +135,6 @@ it — and carry the approved summary into the phase doc when step 1 generates i
    - **Call out every deviation** from the approved summary explicitly, in the implementation block's deviations line. "None" if there were none.
    - A section that does not apply gets a one-line reason, never a bare `N/A` and never a deleted heading.
    - **Reference the source issue in the PR body** so GitHub links them: `Closes #<number>` on its own line at the end of `## Why this change is required`, which is where the template asks for it. That link is what lets the daily triage routine close the issue once this merges — a passing mention of the number does not count.
-   - **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked, signing off with the merge promise and the invitation to raise anything further as a new issue. The PR body is written for a maintainer; this comment is written for them. If the **Source issue** row recorded a gap between what was asked and what this delivers, the comment says so in a sentence. Skip this only when question 6 was "no issue".
+   - **Then comment on the source issue** via `mcp__github__add_issue_comment`, before reporting anything back to the user. Read [`docs/guides/issue-updates.md`](../../docs/guides/issue-updates.md) and follow it: casual tone, plain-English business content, answering what the reporter actually asked, signing off with the merge promise and the invitation to raise anything further as a new issue. The PR body is written for a maintainer; this comment is written for them. If the **Source issue** bullet recorded a gap between what was asked and what this delivers, the comment says so in a sentence. Skip this only when question 6 was "no issue".
    - **Then move the issue to `status:in-review`**, by the label mechanics in the same guide — comment first, then the label, sending the union of its existing labels with `status:in-progress` (or any other `status:`) removed.
    - Report the PR URL, and note that the e2e suite runs there rather than locally.
