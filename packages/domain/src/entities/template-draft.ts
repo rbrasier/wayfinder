@@ -84,6 +84,9 @@ const MAX_INFERRED_VALUE_CHARS = 120;
 // "Supplier Name: Acme Pty Ltd", "Supplier Name — Acme Pty Ltd".
 const CAPTION_SEPARATOR = /^[\s:|\-–—]+/;
 const TRAILING_SEPARATOR = /[\s:|\-–—]+$/;
+// A caption sharing its line with a value is followed by punctuation, not just
+// a space — "Equipment: Laptop", never "Equipment Request Form".
+const SAME_LINE_SEPARATOR = /^\s*[:|\-–—]/;
 
 const lineBoundsAt = (text: string, index: number): { start: number; end: number } => {
   const end = text.indexOf("\n", index);
@@ -191,6 +194,23 @@ export const captionBefore = (documentText: string, position: number): string | 
   return previous ? previous.trim() : null;
 };
 
+// Where `caption` stands as a caption: at the start of its line, followed by
+// nothing or by a separator. Its words inside a heading ("Equipment Request
+// Form") or a sentence are not the caption, and reading on from there would
+// collect the heading's tail as if it were a value.
+const captionEndIn = (text: string, caption: string): number | null => {
+  let lineStart = 0;
+  for (const line of text.split("\n")) {
+    const indent = line.length - line.trimStart().length;
+    const rest = line.slice(indent + caption.length);
+    if (line.startsWith(caption, indent) && (!rest.trim() || SAME_LINE_SEPARATOR.test(rest))) {
+      return lineStart + indent + caption.length;
+    }
+    lineStart += line.length + 1;
+  }
+  return null;
+};
+
 // Reads the value the same caption introduces in another example. Used only to
 // collect multi-select choices — never to place a placeholder.
 export const valueAfterCaption = (
@@ -198,10 +218,10 @@ export const valueAfterCaption = (
   exampleText: string,
   reservedLabels: string[],
 ): string | null => {
-  const captionPosition = exampleText.indexOf(caption);
-  if (captionPosition < 0) return null;
+  const captionEnd = captionEndIn(exampleText, caption);
+  if (captionEnd === null) return null;
   const reservedKeys = new Set(reservedLabels.map((label) => deriveFieldKey(label)));
-  return valueIntroducedBy(exampleText, captionPosition + caption.length, reservedKeys)?.value ?? null;
+  return valueIntroducedBy(exampleText, captionEnd, reservedKeys)?.value ?? null;
 };
 
 export const splitChoices = (value: string): string[] =>

@@ -177,6 +177,15 @@ describe("valueAfterCaption", () => {
   it("returns null when the caption is not in that example", () => {
     expect(valueAfterCaption("Equipment", "Something else entirely", [])).toBeNull();
   });
+
+  it("ignores the caption's words inside a heading or sentence", () => {
+    const text = "Equipment Request Form\nWe supply equipment quickly.\nEquipment\nHeadset";
+    expect(valueAfterCaption("Equipment", text, [])).toBe("Headset");
+  });
+
+  it("reads a value after a separator on the caption's own line", () => {
+    expect(valueAfterCaption("Equipment", "Equipment Request Form\nEquipment: Monitor", [])).toBe("Monitor");
+  });
 });
 
 describe("splitChoices", () => {
