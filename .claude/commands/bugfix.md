@@ -53,17 +53,16 @@ so the user can approve on the headline alone without reading the sections.
 |---|---|
 | Goal | The outcome in the user's terms — the symptom that stops happening, not the implementation |
 | Business rules changing | Every rule added, altered or removed, stated with its triggering condition and resulting behaviour — e.g. "when `status = "approved"`, the document locks and further revisions are rejected". For a bug fix, state the rule as it is *meant* to work versus how it behaves today |
-| UI / visible behaviour | What the user will see differently — screens, states, copy, empty and error states — each tied to the type, data structure or rule that drives it |
-| Data & types | Domain entities, value objects and TypeScript types created or changed, with the shape of each change |
-| Files & packages touched | Paths to create, modify or delete, grouped under `domain` / `application` / `adapters` / `apps`, so architecture-boundary violations are visible before any code exists |
+| UI / visible behaviour | What the user will see differently — screens, states, copy, empty and error states |
 | Database & migration impact | Tables and their group prefix, whether a generated migration is required, and the `-- data-impact:` line it will have to carry |
-| Tests | The failing regression test that comes first, and either the named Playwright e2e spec that will be extended (with the `e2e-test-policy.md` group it falls under) or an explicit "no e2e — the regression test is the guard" |
-| Version, branch & PR target | The PATCH bump and resulting version, the `bugfix/<slug>/claude-<username>` branch name, the base branch, and the branch the PR opens against |
-| Source issue | The issue number from question 6, and **what it actually asked for** in one line. Omit the section entirely when there is no issue |
 | Risks | What could break, and anything destructive or irreversible |
 | Out of scope | What is deliberately not being done |
+| Deviations | Where the bug report or an existing doc disagrees with what the code shows, and what you will do instead. Omit when there are none |
+| Build details | One short bullet each, and nothing else — no file paths, no type shapes: **Architecture** — complies with hexagonal architecture ([ADR-001](../../docs/development/adr/001-hexagonal-architecture.adr.md)), or names the breach; **Unit tests** — the failing regression test that comes first, plus the number of other unit tests new or amended; **E2E** — the number of Playwright specs new or amended, with the `e2e-test-policy.md` group, or "none — the regression test is the guard"; **Version** — the PATCH bump and resulting version, the `bugfix/<slug>/claude-<username>` branch and the base it opens against; **Source issue** — the issue number from question 6 and what it actually asked for, in one line; omit the bullet when there is no issue |
 
 **Omit any section that does not apply** — no heading, no "N/A" placeholder.
+**Build details** is the one exception: it always appears, and stays at its
+one-line bullets.
 
 **Cap each section at 5 bullets.** If more are warranted, keep the 5 most
 significant and close the section with a single `…and N more` bullet.

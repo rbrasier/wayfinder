@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# Create the label taxonomy the /daily-triage skill classifies against.
+# Create the status: labels the /daily-triage skill moves issues through.
+# Triage uses status: labels only; nothing else is applied to an issue.
 #
-#   ./labels.sh              create or update the 29 labels (safe to re-run)
-#   ./labels.sh --prune      also delete the 4 labels this scheme orphans
+#   ./labels.sh              create or update the 7 labels (safe to re-run)
+#   ./labels.sh --prune      also delete the 27 labels this scheme orphans
 #
 # Requires the `gh` CLI, authenticated with write access to the repo.
 # `--force` makes creation idempotent: an existing label is updated in place,
@@ -22,73 +23,43 @@ label() {
 echo "==> Creating labels on $REPO"
 
 # ---------------------------------------------------------------------------
-# type: — one per issue. Maps 1:1 to the skill routing table in CLAUDE.md.
-# ---------------------------------------------------------------------------
-label "type:bug"          "d73a4a" "Built behaviour contradicts a stated rule, test or doc — routes to /bugfix"
-label "type:enhancement"  "a2eeef" "Change or extension to behaviour that already ships — routes to /enhance"
-label "type:feature"      "0e8a16" "Something that does not exist yet — routes to /new-feature"
-label "type:docs"         "0075ca" "Documentation wrong, missing or misleading — routes to /doc-review"
-label "type:question"     "d876e3" "A request for understanding, not for change"
-label "type:chore"        "ededed" "Tooling, CI, dependencies, lint, build"
-
-# ---------------------------------------------------------------------------
-# area: — one or more per issue. Derived from pnpm-workspace.yaml plus the two
-# code roots outside it (apps/web/e2e, deploy/lambda).
-# ---------------------------------------------------------------------------
-label "area:web"          "c5def5" "apps/web — UI, route groups, components, tRPC"
-label "area:api"          "c5def5" "apps/api — the standalone API service"
-label "area:domain"       "c5def5" "packages/domain — entities, ports, Result"
-label "area:application"  "c5def5" "packages/application — use cases and services"
-label "area:adapters"     "c5def5" "packages/adapters — Drizzle, AI SDKs, storage, auth, e-mail, MCP"
-label "area:shared"       "c5def5" "packages/shared — schemas shared across boundaries"
-label "area:e2e"          "c5def5" "apps/web/e2e, mocks, the e2e workflow"
-label "area:deploy"       "c5def5" "Docker, deploy/lambda, publish workflow, scripts"
-label "area:docs"         "c5def5" "docs/, README, CONTRIBUTING"
-
-# ---------------------------------------------------------------------------
-# priority: — one per issue. Severity to the product, not to the reporter.
-# ---------------------------------------------------------------------------
-label "priority:p0"       "b60205" "Data loss, corrupted audit log, governance bypass, cross-org leak, or will not boot"
-label "priority:p1"       "d93f0b" "A core flow is blocked with no workaround"
-label "priority:p2"       "fbca04" "Degraded but workable; an obvious workaround exists"
-label "priority:p3"       "c2e0c6" "Cosmetic, copy, refactor, nice-to-have"
-
-# ---------------------------------------------------------------------------
-# size: — one per issue. Sized in /build's unit: sub-components of 3–4 files.
-# ---------------------------------------------------------------------------
-label "size:xs"           "bfd4f2" "One file, plus a case added to an existing test"
-label "size:s"            "bfd4f2" "One sub-component — up to 4 files including its test"
-label "size:m"            "bfd4f2" "Two or three sub-components within a single package or app"
-label "size:l"            "bfd4f2" "Crosses package boundaries, needs a migration, or needs a phase doc first"
-
-# ---------------------------------------------------------------------------
 # status: — the state machine. Absence of any status: label means untriaged,
 # which is what /daily-triage sweeps for.
 # ---------------------------------------------------------------------------
-label "status:analysed"       "0e8a16" "Triaged by /daily-triage; analysis comment posted"
+label "status:analysed"       "0e8a16" "Claimed and triaged by /daily-triage; analysis comment posted"
+label "status:split"          "c5def5" "Split by /daily-triage into one sub-issue per request"
 label "status:needs-info"     "fbca04" "Parked awaiting information from the reporter"
 label "status:in-progress"    "1d76db" "Someone is working on it; a session has claimed the issue"
 label "status:in-review"      "5319e7" "A pull request is open against it, awaiting review and merge"
 label "status:triage-failed"  "b60205" "/daily-triage could not analyse it; needs a human look"
 label "status:fixed"          "6f42c1" "Closed by /daily-triage; a linked pull request merged"
 
-echo "==> Done. 29 labels created or updated."
+echo "==> Done. 7 labels created or updated."
 
 # ---------------------------------------------------------------------------
-# Orphans. These four are GitHub defaults superseded by the type: axis. Only
-# issue #164 carries any (enhancement, question) and it is closed, so nothing
-# in flight loses a label. Kept deliberately: duplicate, invalid, wontfix
-# (terminal states the skill's sweep predicate excludes by name), and
-# good first issue / help wanted (contributor-facing, orthogonal to triage).
+# Orphans. The type:, area:, priority: and size: axes an earlier version of
+# triage applied, plus the four GitHub defaults they superseded. Deleting a
+# label removes it from every issue carrying it — which is the point. Kept
+# deliberately: duplicate, invalid, wontfix (terminal states the sweep excludes
+# by name), and good first issue / help wanted (contributor-facing).
 # ---------------------------------------------------------------------------
+ORPHANS=(
+  "type:bug" "type:enhancement" "type:feature" "type:docs" "type:question" "type:chore"
+  "area:web" "area:api" "area:domain" "area:application" "area:adapters"
+  "area:shared" "area:e2e" "area:deploy" "area:docs"
+  "priority:p0" "priority:p1" "priority:p2" "priority:p3"
+  "size:xs" "size:s" "size:m" "size:l"
+  "bug" "enhancement" "documentation" "question"
+)
+
 if [[ "$PRUNE" == true ]]; then
-  echo "==> Pruning 4 orphaned default labels"
-  for orphan in "bug" "enhancement" "documentation" "question"; do
+  echo "==> Pruning ${#ORPHANS[@]} orphaned labels"
+  for orphan in "${ORPHANS[@]}"; do
     gh label delete "$orphan" --repo "$REPO" --yes || echo "    (skipped: $orphan)"
   done
   echo "==> Prune complete."
 else
   echo
-  echo "Orphaned by this scheme: bug, enhancement, documentation, question"
+  echo "Orphaned by this scheme: ${ORPHANS[*]}"
   echo "Re-run with --prune to delete them."
 fi
