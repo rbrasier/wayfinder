@@ -15,7 +15,7 @@ authenticated:
 ./.claude/skills/daily-triage/labels.sh
 ```
 
-That creates or updates the 8 `status:` labels and is safe to re-run. It then
+That creates or updates the 7 `status:` labels and is safe to re-run. It then
 prints the labels this scheme orphans and stops. To delete them as well — which
 also strips them from every issue carrying them:
 
@@ -25,7 +25,7 @@ also strips them from every issue carrying them:
 
 | | Labels |
 |---|---|
-| **Created** (8) | `status:queued`, `status:analysed`, `status:split`, `status:needs-info`, `status:in-progress`, `status:in-review`, `status:triage-failed`, `status:fixed` |
+| **Created** (7) | `status:analysed`, `status:split`, `status:needs-info`, `status:in-progress`, `status:in-review`, `status:triage-failed`, `status:fixed` |
 | **Orphaned** (27) | The `type:` ×6, `area:` ×9, `priority:` ×4 and `size:` ×4 axes an earlier version applied, plus the GitHub defaults `bug`, `enhancement`, `documentation`, `question` |
 | **Kept** (5) | `duplicate`, `invalid`, `wontfix` — terminal states the sweep excludes by name; `good first issue`, `help wanted` — contributor-facing |
 
@@ -55,19 +55,22 @@ At [claude.ai/code/routines](https://claude.ai/code/routines):
 
 ### The 30-minute wait
 
-Every run claims the untriaged issues (`status:queued`), then pauses 30 minutes
-via `send_later` before reading any of them, so someone raising several issues
-in a row has finished first. The run's session must stay resumable for that
-long — keep the **claude-code-remote** tools available to it, since that is
-where `send_later` lives.
+Every run starts by sleeping 30 minutes — a background `sleep 1800`, the one
+shell command the skill is allowed — before reading any issue, so someone
+raising several issues in a row has finished first.
 
 ### Repeat triggers
 
-Firing the routine again while a run is waiting — one trigger per new issue,
-say — never analyses an issue twice. `status:queued` is the claim: a later run
-does not touch an issue an earlier run queued, even though no comment is on it
-yet. A later run only claims what arrived after the earlier run started, and
-waits its own 30 minutes for it.
+Firing the routine again while a run is sleeping — one trigger per new issue,
+say — never analyses an issue twice. When a run wakes, it marks **every**
+unlabelled issue `status:analysed` before analysing any of them, then works
+through them one by one. A later run waking a few minutes after finds those
+already labelled and leaves them alone, even though their comments are not
+posted yet.
+
+The cost of claiming first: if a run dies part-way through its list, the issues
+it had not reached are left `status:analysed` with no triage comment. Remove the
+label to put one back in scope.
 
 ### Connectors
 
@@ -111,12 +114,12 @@ Work through these in order:
 
 | # | Check | What wrong looks like |
 |---|---|---|
-| 1 | Straight after the trigger, the issue carries `status:queued` and **no comment** for 30 minutes | A comment inside 30 minutes means the wait was skipped |
-| 2 | Trigger the routine a second time inside those 30 minutes. Still exactly **one** comment at the end | Two comments means the `status:queued` claim is not being respected |
+| 1 | For 30 minutes after the trigger, the issue has **no label and no comment** | A comment inside 30 minutes means the sleep was skipped |
+| 2 | Trigger the routine a second time inside those 30 minutes. Still exactly **one** comment at the end | Two comments means the claim — marking everything `status:analysed` before analysing — is not happening first |
 | 3 | The comment opens `<!-- wayfinder-triage:v1 -->` and `@`-mentions the reporter | Missing marker means every future run comments again |
 | 4 | **Bug:** one short paragraph confirming it (naming file and line), then **Proposed fix** with two or three dot points | Headings like `### 1.`, a UI-impact section, or a branch name means the old long shape |
 | 5 | **Single feature / enhancement:** **The change**, at most five points; **Questions**, at most three, only on a vague issue | Questions on a clearly-written issue means they are being written reflexively |
-| 6 | **Multi-request feature:** one comment listing sub-issues; each sub-issue quotes the reporter's words exactly and `@`-mentions them; each sub-issue gets its own analysis in the same run; parent carries `status:split` | Paraphrased quotes, or a sub-issue left on `status:queued`, means the split did not finish |
+| 6 | **Multi-request feature:** one comment listing sub-issues; each sub-issue quotes the reporter's words exactly and `@`-mentions them; each sub-issue gets its own analysis in the same run; parent carries `status:split` | Paraphrased quotes, or a sub-issue with no analysis comment, means the split did not finish |
 | 7 | The issue carries **only** a `status:` label from triage | Any `type:`/`area:`/`priority:`/`size:` label means the old taxonomy is still being applied |
 | 8 | A label you added by hand before the run survives | `issue_write` replaces the whole set — if this fails, triage silently strips human labels |
 | 9 | Every file path named in a comment **exists** | Invented paths are the classic failure mode |

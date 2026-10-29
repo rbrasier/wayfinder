@@ -3,7 +3,7 @@
 # Create the status: labels the /daily-triage skill moves issues through.
 # Triage uses status: labels only; nothing else is applied to an issue.
 #
-#   ./labels.sh              create or update the 8 labels (safe to re-run)
+#   ./labels.sh              create or update the 7 labels (safe to re-run)
 #   ./labels.sh --prune      also delete the 27 labels this scheme orphans
 #
 # Requires the `gh` CLI, authenticated with write access to the repo.
@@ -26,8 +26,7 @@ echo "==> Creating labels on $REPO"
 # status: — the state machine. Absence of any status: label means untriaged,
 # which is what /daily-triage sweeps for.
 # ---------------------------------------------------------------------------
-label "status:queued"         "ededed" "Claimed by /daily-triage; waiting out its 30-minute grace period"
-label "status:analysed"       "0e8a16" "Triaged by /daily-triage; analysis comment posted"
+label "status:analysed"       "0e8a16" "Claimed and triaged by /daily-triage; analysis comment posted"
 label "status:split"          "c5def5" "Split by /daily-triage into one sub-issue per request"
 label "status:needs-info"     "fbca04" "Parked awaiting information from the reporter"
 label "status:in-progress"    "1d76db" "Someone is working on it; a session has claimed the issue"
@@ -35,7 +34,7 @@ label "status:in-review"      "5319e7" "A pull request is open against it, await
 label "status:triage-failed"  "b60205" "/daily-triage could not analyse it; needs a human look"
 label "status:fixed"          "6f42c1" "Closed by /daily-triage; a linked pull request merged"
 
-echo "==> Done. 8 labels created or updated."
+echo "==> Done. 7 labels created or updated."
 
 # ---------------------------------------------------------------------------
 # Orphans. The type:, area:, priority: and size: axes an earlier version of
