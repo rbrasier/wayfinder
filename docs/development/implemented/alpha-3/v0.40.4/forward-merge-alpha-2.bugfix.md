@@ -12,7 +12,7 @@ conflicts with shapes `main` has deliberately taken (see the previous forward-me
 
 ## Fixes carried across
 
-- **Unauthenticated `/v1/users` and `/v1/errors` removed** (alpha-2 v0.28.45, `e97c48cb`). Both
+- **Unauthenticated `/v1/users` and `/v1/errors` removed** (alpha-2 v0.28.46, `e97c48cb`). Both
   API routers let anyone create, promote or delete users and read or edit the error log. User
   and error management live behind Better Auth in the web app's tRPC routers, so the routes,
   their wiring in `apps/api/src/container.ts` and the now-unused use cases there are gone.
@@ -26,15 +26,24 @@ conflicts with shapes `main` has deliberately taken (see the previous forward-me
   Without it every existing Entra user would be relinked by email on next sign-in.
 - **nodemailer, fast-uri, @hono/node-server patches** (v0.28.48, `8e5962ff`): overrides raised to
   `>=10.1.4`, `>=3.1.9` and `>=2.1.3`, clearing eight moderate/low advisories.
-- **decode-uri-component waiver** (v0.28.49, `cd10326c`): GHSA-qr28-fpjm-wq7f / CVE-2026-118664
+- **decode-uri-component waiver** (recorded with v0.28.48, `cd10326c`): GHSA-qr28-fpjm-wq7f / CVE-2026-118664
   waived with its reason, plus the waiver check now judges "fix reachable" by release line
   (minor below 1.0) so a 0.2 → 0.5 jump is not treated as takeable.
 - **`pnpm/action-setup` v6.0.10 → v6.1.0** (Dependabot #357), pinned by SHA in `ci.yml`,
   `e2e.yml` and `dependabot-release-port.yml`.
+- **Multi-turn chat spec on the server AI stub** (`baf69f0f`, test only). The browser-side
+  stream mock's reply is dropped when the page resyncs with stored history, so counting
+  assistant bubbles passed only when the poll beat the resync. The spec now scripts the
+  server's AI and waits for each reply's text. `main`'s spec was identical to alpha-2's
+  before the fix, so it applied unchanged.
+
+The release line's own docs for these fixes came across with them, under
+`implemented/alpha-2/v0.28.45`, `v0.28.46` and `v0.28.48`, as earlier forward-merges kept
+theirs. The docs for the work not carried stay on `release/alpha-2`.
 
 ## Not carried — alpha-3 must decide
 
-- **Admin permission split** (v0.28.44–45, #349, ADR-066) and its fix, **a User Admin could grant
+- **Admin permission split** (v0.28.46, #349, ADR-066) and its fix, **a User Admin could grant
   admin access through a custom role** (`21f0bcb6`). The fix guards code that exists only with
   the split; `main` has no delegated admin roles, so there is nothing to patch. Port both
   together if the split is adopted.

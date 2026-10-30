@@ -307,8 +307,11 @@ test.describe('Code quality Group F: in-process rate limiting', () => {
     // Fire a tight burst of sign-in attempts (bad credentials — we only care about
     // the limiter, which runs before the auth handler). One IP, one bucket: past
     // the configured burst the limiter must start refusing with 429.
+    //
+    // Better Auth's own limiter (on in production builds) refuses sign-in after
+    // three tries, with a 429 that carries only `X-Retry-After`. Ours carries the
+    // standard `Retry-After`, so the burst runs until that one answers.
     const attempts = 60;
-    let sawTooManyRequests = false;
     let retryAfter: string | null = null;
 
     for (let attempt = 0; attempt < attempts; attempt++) {
@@ -316,15 +319,11 @@ test.describe('Code quality Group F: in-process rate limiting', () => {
         data: { email: `burst-${attempt}@example.com`, password: 'wrong-password' },
         failOnStatusCode: false,
       });
-      if (response.status() === 429) {
-        sawTooManyRequests = true;
-        retryAfter = response.headers()['retry-after'] ?? null;
-        break;
-      }
+      retryAfter = response.status() === 429 ? (response.headers()['retry-after'] ?? null) : null;
+      if (retryAfter) break;
     }
 
-    expect(sawTooManyRequests, 'expected a 429 within the burst').toBe(true);
     // A throttled response tells the client when to retry.
-    expect(retryAfter).not.toBeNull();
+    expect(retryAfter, 'expected our limiter to answer 429 with Retry-After within the burst').not.toBeNull();
   });
 });
