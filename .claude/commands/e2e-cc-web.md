@@ -108,9 +108,14 @@ export E2E_OBJECT_STORAGE=1
 
 pnpm install --frozen-lockfile
 pnpm db:migrate
-nohup pnpm --filter @wayfinder/web dev >/tmp/web.log 2>&1 &
+# A production build, as CI runs it. `next dev` keeps every compiled route in
+# memory and is OOM-killed part-way through a full shard in this container.
+pnpm --filter @wayfinder/web build
+nohup pnpm --filter @wayfinder/web start >/tmp/web.log 2>&1 &
 # wait until http://localhost:3000 answers (307 redirect to /login is fine)
 ```
+
+Rebuild after changing app code: `next start` serves the last build.
 
 ---
 
@@ -181,9 +186,10 @@ After the run, produce a structured report:
 
 ## Gotchas
 
-- The app runs in **dev mode**, so the first navigation to a heavy route (the
-  ReactFlow canvas) triggers on-demand compilation and can take >10s — size
-  navigation timeouts accordingly.
+- The app runs as a **production build**, as in CI, so no route compiles
+  inside a spec. Against `next dev` instead, the first navigation to a heavy
+  route (the ReactFlow canvas) compiles on demand and can take >10s, and the
+  server's memory grows with every route it compiles.
 - Specs run sequentially (`workers: 1`, shared auth state) and the DB is **not**
   reset between files, so flows created by `admin-flow-editing` are still there
   when later specs run.
@@ -197,9 +203,9 @@ After the run, produce a structured report:
   booted before `s3rver` was up you'll see one `MinIO initialisation failed`
   warning in `/tmp/web.log`; it's harmless — the adapter reconnects lazily on
   the first upload, no restart needed.
-- The background Postgres/dev-server/s3rver can be reaped on container
+- The background Postgres/app server/s3rver can be reaped on container
   inactivity — just re-run steps 1–3 (`pg_ctl start` / `node run.js` / `pnpm
-  dev`) to bring them back.
+  --filter @wayfinder/web start`) to bring them back.
 
 ---
 
@@ -212,10 +218,6 @@ a MinIO container). Storage specs pass once `E2E_OBJECT_STORAGE=1` and `s3rver`
 are in place: `phase-rag-with-pgvector` (both), `enhance-reindex-documents`,
 `enhance-configurable-embeddings`.
 
-Two remain, and are **out of scope** for this recipe — don't chase them:
-
-- `fix-prior-step-fields-stripped.spec.ts:182` — mocked `.docx` template-upload
-  pill never renders; deterministic, needs an app/test investigation.
-- `enhance-n8n-workflow-context-mapping.spec.ts:102` — flaky: the heavy
-  `/flows/[id]/config` route can exceed the 45s test timeout on its first
-  (cold) dev-mode compile. Usually passes on a warm server.
+Against a production build the whole chromium project passes, apart from
+`fix-session-upload-not-reaching-ai.spec.ts:35`, which skips by design (it needs
+real embeddings).

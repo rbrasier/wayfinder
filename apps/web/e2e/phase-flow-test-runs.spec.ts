@@ -30,6 +30,7 @@
 
 import { test, expect } from './helpers/base';
 import type { Page } from '@playwright/test';
+import { clearAiScript, incompleteTurn, scriptAiFor } from './helpers/ai-script';
 import { createFlowAndOpenCanvas } from './helpers/flow-builder';
 
 const TEST_BANNER = /This is a test run/i;
@@ -62,33 +63,39 @@ test.describe('phase: flow test runs', () => {
     const canvasUrl = page.url();
 
     await openTestModal(page);
+    // The modal creates the session and never puts its id in the DOM; the chat
+    // surface it mounts subscribes to that session's events, which carries it.
+    const eventsRequest = page.waitForRequest(/\/api\/sessions\/[^/]+\/events/);
     await page.getByRole('button', { name: 'Start test run' }).click();
+    const sessionId = new URL((await eventsRequest).url()).pathname.split('/')[3];
 
-    // The composer belongs to the operator's chat surface. Its presence inside
-    // the modal is the evidence that the real surface mounted, not a copy.
-    const composer = page.getByRole('textbox').last();
-    await expect(composer).toBeVisible({ timeout: 20_000 });
+    // The base fixture answers the stream in the browser, and the chat surface
+    // drops that reply when it resyncs with the stored history at the end of the
+    // turn. Scripting the server's AI stores the reply, so it stays.
+    const reply = 'How many laptops, and by when?';
+    await scriptAiFor(page, sessionId, [incompleteTurn(reply)]);
 
-    // Counted from a baseline rather than merely found, matching chat.spec.ts:
-    // asserting "a bubble is visible" would pass on a thread that already had
-    // one, which is about the seed rather than about this turn.
-    const assistantBubbles = page.locator('[data-chat-message="assistant"]');
-    const bubblesBefore = await assistantBubbles.count();
+    try {
+      // The composer belongs to the operator's chat surface. Its presence inside
+      // the modal is the evidence that the real surface mounted, not a copy.
+      const composer = page.getByRole('textbox').last();
+      await expect(composer).toBeVisible({ timeout: 20_000 });
 
-    await composer.fill('We need 40 laptops for the finance team.');
-    // Enter rather than the send button: the Next.js dev overlay portal covers
-    // the button in headless mode (chat.spec.ts hit the same thing).
-    await composer.press('Enter');
+      await composer.fill('We need 40 laptops for the finance team.');
+      await composer.press('Enter');
 
-    // The streamed assistant turn has to reach the DOM inside the modal — the
-    // one fact no unit or adapter test can establish.
-    await expect
-      .poll(() => assistantBubbles.count(), { timeout: 30_000 })
-      .toBeGreaterThan(bubblesBefore);
-    await expect(page.getByText(TEST_BANNER)).toBeVisible();
+      // The streamed assistant turn has to reach the DOM inside the modal — the
+      // one fact no unit or adapter test can establish.
+      await expect(
+        page.locator('[data-chat-message="assistant"]').filter({ hasText: reply }).first(),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByText(TEST_BANNER)).toBeVisible();
 
-    // The author never navigated away: same URL, canvas still behind the modal.
-    expect(page.url()).toBe(canvasUrl);
+      // The author never navigated away: same URL, canvas still behind the modal.
+      expect(page.url()).toBe(canvasUrl);
+    } finally {
+      await clearAiScript(page, sessionId);
+    }
   });
 
   test('closing the modal returns the author to the canvas', async ({ page }) => {

@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import type { MicrosoftEntraIDProfile } from "better-auth/social-providers";
 import { isEntraConfigured, type AuthConfig as AuthMethodsConfig } from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_accounts, core_sessions, core_users, core_verification_tokens } from "../db/schema/core";
@@ -265,8 +266,16 @@ export const createAuth = (db: Database, config: CreateAuthOptions): Auth => {
                     // stock profile-photo call is hardcoded to graph.microsoft.com
                     // and throws when unreachable. Read the identity from the id
                     // token instead.
-                    getUserInfo: async (token: { idToken?: string }) =>
-                      userInfoFromIdToken(token),
+                    getUserInfo: async (token: { idToken?: string }) => {
+                      const userInfo = userInfoFromIdToken(token);
+                      if (!userInfo) return null;
+                      // The claims are the decoded Entra id token, which is
+                      // exactly what Better Auth's profile type describes.
+                      return {
+                        user: userInfo.user,
+                        data: userInfo.data as unknown as MicrosoftEntraIDProfile,
+                      };
+                    },
                   }
                 : {}),
             },

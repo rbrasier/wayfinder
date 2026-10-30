@@ -23,6 +23,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from './helpers/base';
 import { createFlow, FIRST_STEP_BUTTON } from './helpers/flow-builder';
+import { requireSeedFixtures } from './helpers/seed';
 import { COLD_ROUTE_BUDGET } from './helpers/timeouts';
 import type { Page } from '@playwright/test';
 
@@ -42,6 +43,7 @@ const PAGES: { name: string; path: string }[] = [
   { name: 'approvals', path: '/approvals' },
   { name: 'admin event watches', path: '/admin/event-watches' },
   { name: 'new event watch', path: '/admin/event-watches/new' },
+  { name: 'insights', path: '/admin/dashboards/insights' },
 ];
 
 async function runAxe(page: Page, excludeReactFlow = false) {
@@ -81,19 +83,13 @@ test.describe('Accessibility: WCAG 2.2 AA runtime audit', () => {
   test('flow editor canvas (excluding third-party React Flow) has no axe violations', async ({
     page,
   }) => {
-    await page.goto('/admin/flows');
-    await page.waitForLoadState('networkidle');
-
-    // Open the seeded flow to reach the editor route. It appears in the admin
-    // list as a "Configure Flow" link (matched by /flow/i); the seed is a
-    // declared dependency, so a missing entry is a seed failure to surface, not
-    // a reason to skip the editor audit.
-    const flowEntry = page
-      .getByRole('link', { name: /open|edit|flow/i })
-      .or(page.getByRole('button', { name: /open|edit/i }))
-      .first();
-    await expect(flowEntry).toBeVisible();
-    await flowEntry.click();
+    // Open the seeded flow's editor directly. Picking "the first link that says
+    // flow" off /admin/flows landed on the sidebar's Insights link whenever the
+    // sidebar rendered before the table. The seed is a declared dependency, so a
+    // missing flow is a seed failure to surface, not a reason to skip the audit.
+    const { flowId } = requireSeedFixtures();
+    await page.goto(`/flows/${flowId}/config`);
+    await expect(page.locator('.react-flow')).toBeVisible();
     await page.waitForLoadState('networkidle');
 
     const results = await runAxe(page, true);

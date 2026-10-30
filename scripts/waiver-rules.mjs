@@ -21,7 +21,12 @@ export const compareVersions = (first, second) => {
   return 0;
 };
 
-const majorOf = (version) => versionParts(version)[0];
+// Below 1.0 semver gives each minor its own breaking line (`^0.2.2` never
+// reaches 0.3), so 0.2 → 0.5 is as much a breaking upgrade as 3 → 4.
+const releaseLineOf = (version) => {
+  const [major, minor] = versionParts(version);
+  return major === 0 ? `0.${minor ?? 0}` : `${major}`;
+};
 
 const isWithin = (version, range) =>
   compareVersions(version, range.introduced) >= 0 && (!range.fixed || compareVersions(version, range.fixed) < 0);
@@ -29,8 +34,8 @@ const isWithin = (version, range) =>
 // `ranges`: the advisory's affected npm ranges, { packageName, introduced, fixed }
 // (fixed is null while no fix exists). `resolved`: package name → every version
 // the lockfile resolves. Returns "needed" (no reachable fix), "fixable" (upgrade
-// within the major already in use, then drop the waiver) or "stale" (nothing
-// vulnerable is left; drop the waiver). A fix on a later major only is not
+// within the release line already in use, then drop the waiver) or "stale" (nothing
+// vulnerable is left; drop the waiver). A fix on a later line only is not
 // reachable: taking it is the breaking change the waiver exists to defer.
 export const assessWaiver = ({ ranges, resolved }) => {
   const upgrades = [];
@@ -44,7 +49,7 @@ export const assessWaiver = ({ ranges, resolved }) => {
       anyVulnerable = true;
       const fix = affecting
         .map((range) => range.fixed)
-        .filter((fixed) => fixed && majorOf(fixed) === majorOf(version))
+        .filter((fixed) => fixed && releaseLineOf(fixed) === releaseLineOf(version))
         .sort(compareVersions)[0];
       if (fix) upgrades.push({ packageName, from: version, to: fix });
     }
