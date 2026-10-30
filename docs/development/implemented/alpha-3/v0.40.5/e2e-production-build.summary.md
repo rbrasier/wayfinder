@@ -16,7 +16,8 @@ from green to red with only skill docs changed.
   `aria-label`.
 - Specs: the flow editor audit opens the seeded flow directly; the rate-limit burst waits for
   Wayfinder's own 429 (with `Retry-After`) rather than Better Auth's; the sticky-link spec takes the
-  first of its two loading indicators.
+  first of its two loading indicators; the flow test-run and chat send specs script the server-side
+  AI instead of counting a browser-mocked reply the page discards on resync.
 - `/e2e-cc-web` runs the stack the way CI now does.
 
 ## Tests

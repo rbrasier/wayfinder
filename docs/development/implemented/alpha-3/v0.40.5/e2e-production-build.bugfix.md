@@ -60,6 +60,12 @@ The production server also stopped hiding three faults the stalls had masked:
   now bursts until a 429 with the standard `Retry-After` answers, which only Wayfinder's limiter sends.
 - **The sticky-link spec matched two indicators.** On a fast server the progress bar and the skeleton
   are up together, so `progressBar.or(skeleton)` was a strict-mode violation. It takes the first.
+- **Two chat specs counted a reply the page throws away.** The base fixture answers the chat stream in
+  the browser, so the reply is never stored, and the chat surface replaces the thread with the stored
+  history when the turn ends. On `next dev` the count was read before that resync; on a production
+  server the resync wins, and the flow test-run modal's turn failed every time (CI and locally, 0 of
+  5). `phase-flow-test-runs` and chat's "sending a message shows AI response" now script the
+  server-side AI, as the multi-turn chat spec does since `baf69f0f`, and wait for the reply's text.
 
 ## Regression guard
 
@@ -67,7 +73,8 @@ The production server also stopped hiding three faults the stalls had masked:
   failed with `select-name` on the two filters; after it, it passes.
 - The full chromium project (3 shards) and the `pki` project pass locally against a production
   build: 160 passed, 1 skipped by design (`fix-session-upload-not-reaching-ai.spec.ts:35`, which
-  needs real embeddings). `fix-sticky-link-navigation.spec.ts` passed three runs in a row.
+  needs real embeddings). `fix-sticky-link-navigation.spec.ts` passed three runs in a row, `phase-flow-test-runs.spec.ts`
+  five and `chat.spec.ts` three.
 
 ## Known limitations
 
