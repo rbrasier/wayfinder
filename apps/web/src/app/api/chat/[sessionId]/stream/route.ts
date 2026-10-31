@@ -9,6 +9,7 @@ import { buildTurnRetrievalQueries } from "@rbrasier/application";
 import { streamTurnRequestSchema } from "@rbrasier/shared";
 import { getContainer } from "@/lib/container";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
+import { JSON_BODY_LIMIT_BYTES, payloadTooLargeResponse, readJsonWithinLimit } from "@/lib/request-body-limit";
 import { getSessionTokenFromRequest } from "@/lib/session-token";
 import { executeTurn, type PreparedTurn } from "./execute-turn";
 import { toModelMessages } from "./model-messages";
@@ -54,7 +55,10 @@ export async function POST(
 
   // Validate the request body instead of trusting a bare cast (a malformed body
   // otherwise threw deep in the turn). Bad JSON or a bad shape is a clean 400.
-  const parsedBody = streamTurnRequestSchema.safeParse(await req.json().catch(() => null));
+  // Bounded before parsing so an oversized body never reaches the validator.
+  const requestBody = await readJsonWithinLimit(req, JSON_BODY_LIMIT_BYTES);
+  if ("error" in requestBody && requestBody.error === "too_large") return payloadTooLargeResponse();
+  const parsedBody = streamTurnRequestSchema.safeParse("data" in requestBody ? requestBody.data : null);
   if (!parsedBody.success) return new Response("Invalid request body", { status: 400 });
   const incomingMessages = parsedBody.data.messages ?? [];
   const lastUserMessage = incomingMessages.filter((m) => m.role === "user").at(-1)?.content ?? "";
