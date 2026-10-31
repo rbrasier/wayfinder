@@ -261,7 +261,7 @@ describe("McpToolPrepass.run", () => {
     }) => {
       const [onlyTool] = Object.values(options.tools);
       await onlyTool.execute?.({ parlViewId: "5976131" }, { toolCallId: "c1", messages: [] });
-      options.onStepFinish?.({ usage: { promptTokens: 10, completionTokens: 5 } });
+      options.onStepFinish?.({ usage: { inputTokens: 10, outputTokens: 5 } });
       await waitForAbort(options.abortSignal);
     }) as never);
 
@@ -273,6 +273,23 @@ describe("McpToolPrepass.run", () => {
       expect.anything(),
       expect.anything(),
       expect.objectContaining({ promptTokens: 10, completionTokens: 5 }),
+    );
+  });
+
+  it("bills the whole tool loop from totalUsage, not just the last step", async () => {
+    vi.mocked(generateText).mockResolvedValue({
+      text: "done",
+      usage: { inputTokens: 1, outputTokens: 1 },
+      totalUsage: { inputTokens: 30, outputTokens: 12, cachedInputTokens: 4 },
+      providerMetadata: { anthropic: { cacheCreationInputTokens: 7 } },
+    } as never);
+
+    await makePrepass().run(input);
+
+    expect(recordTokenUsage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ promptTokens: 30, completionTokens: 12, cacheReadTokens: 4, cacheWriteTokens: 7 }),
     );
   });
 

@@ -15,7 +15,7 @@ export const usageRouter = router({
     .input(
       z
         .object({
-          userId: z.string().uuid().optional(),
+          userId: z.string().guid().optional(),
           provider: z.string().optional(),
           model: z.string().optional(),
           from: z.date().optional(),

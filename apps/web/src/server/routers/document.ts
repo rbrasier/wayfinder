@@ -160,7 +160,7 @@ export const documentRouter = router({
   // What an Email step sent, for its card in the chat (RunEmailNode): the
   // recipients, subject and message it recorded against its message.
   emailSent: authenticatedProcedure
-    .input(z.object({ messageId: z.string().uuid() }))
+    .input(z.object({ messageId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const messageResult = await ctx.container.repos.sessionMessages.findById(input.messageId);
       if (messageResult.error) throw toTrpcError(messageResult.error);
@@ -174,7 +174,7 @@ export const documentRouter = router({
     }),
 
   getFields: authenticatedProcedure
-    .input(z.object({ messageId: z.string().uuid() }))
+    .input(z.object({ messageId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const messageResult = await ctx.container.repos.sessionMessages.findById(input.messageId);
       if (messageResult.error) throw toTrpcError(messageResult.error);
@@ -276,9 +276,9 @@ export const documentRouter = router({
   updateFields: authenticatedProcedure
     .input(
       z.object({
-        messageId: z.string().uuid(),
-        values: z.record(z.string()),
-        groupItems: z.record(z.array(z.record(z.string()))).optional(),
+        messageId: z.string().guid(),
+        values: z.record(z.string(), z.string()),
+        groupItems: z.record(z.string(), z.array(z.record(z.string(), z.string()))).optional(),
       }),
     )
     .mutation(async ({ ctx, input }) => {

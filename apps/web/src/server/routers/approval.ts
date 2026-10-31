@@ -65,9 +65,9 @@ export const approvalRouter = router({
   suggest: authenticatedProcedure
     .input(
       z.object({
-        sessionId: z.string().uuid(),
-        flowId: z.string().uuid(),
-        nodeId: z.string().uuid(),
+        sessionId: z.string().guid(),
+        flowId: z.string().guid(),
+        nodeId: z.string().guid(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -97,7 +97,7 @@ export const approvalRouter = router({
   // showing "Choose the approver" for a request the previous approver had
   // already sent.
   forNode: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid(), nodeId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid(), nodeId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.loadPendingApproval.execute(input);
       if (result.error) throw toTrpcError(result.error);
@@ -107,8 +107,8 @@ export const approvalRouter = router({
   confirmAndSend: authenticatedProcedure
     .input(
       z.object({
-        approvalId: z.string().uuid(),
-        approverUserId: z.string().uuid().nullish(),
+        approvalId: z.string().guid(),
+        approverUserId: z.string().guid().nullish(),
         approverEmail: z.string().email().nullish(),
         isOverride: z.boolean(),
         // The originator's note to the approver. Bounded like the decision
@@ -137,8 +137,8 @@ export const approvalRouter = router({
   reassign: authenticatedProcedure
     .input(
       z.object({
-        approvalId: z.string().uuid(),
-        approverUserId: z.string().uuid().nullish(),
+        approvalId: z.string().guid(),
+        approverUserId: z.string().guid().nullish(),
         approverEmail: z.string().email().nullish(),
         isOverride: z.boolean().optional(),
         // Undefined keeps the note the request already carries; a supplied
@@ -169,7 +169,7 @@ export const approvalRouter = router({
   withdraw: authenticatedProcedure
     .input(
       z.object({
-        approvalId: z.string().uuid(),
+        approvalId: z.string().guid(),
         reason: z.string().max(2000).nullish(),
       }),
     )
@@ -188,7 +188,7 @@ export const approvalRouter = router({
   decide: authenticatedProcedure
     .input(
       z.object({
-        approvalId: z.string().uuid(),
+        approvalId: z.string().guid(),
         decision: z.enum(["approved", "rejected", "changes_requested"]),
         comment: z.string().max(2000).nullish(),
         // Only consulted for `rejected`: route the session back to the originator
@@ -236,7 +236,7 @@ export const approvalRouter = router({
   recordOffSystem: authenticatedProcedure
     .input(
       z.object({
-        approvalId: z.string().uuid(),
+        approvalId: z.string().guid(),
         // The calendar date the approval happened. Validated against the
         // session it belongs to in the use case, not here.
         approvedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter the date as YYYY-MM-DD."),
@@ -300,7 +300,7 @@ export const approvalRouter = router({
   // on any approval of a session already opens that session (ADR-018), but a
   // decision record is only readable by the people it is about.
   get: authenticatedProcedure
-    .input(z.object({ approvalId: z.string().uuid() }))
+    .input(z.object({ approvalId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const userResult = await ctx.container.repos.users.findById(ctx.userId);
       if (userResult.error) throw toTrpcError(userResult.error);

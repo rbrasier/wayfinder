@@ -5,7 +5,7 @@ import { toTrpcError } from "../trpc-errors";
 import { viewProcedure } from "./extraction-procedures";
 import { canEditFlow } from "./flow";
 
-const flowIdInput = z.object({ flowId: z.string().uuid() });
+const flowIdInput = z.object({ flowId: z.string().guid() });
 
 // The admin size limits as the authoring screen sees them (issue #335). Spread
 // into the extraction router so the client keeps one `extraction.*` namespace.

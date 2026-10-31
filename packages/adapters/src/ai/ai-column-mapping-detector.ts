@@ -10,7 +10,7 @@ import { z } from "zod";
 
 const FIELD_KINDS = ["email", "name", "manager", "position", "band", "unit"] as const;
 
-const mappingSchema = z.record(z.enum(FIELD_KINDS));
+const mappingSchema = z.record(z.string(), z.enum(FIELD_KINDS));
 
 const SYSTEM_PROMPT = [
   "You map the column headers of an uploaded HR spreadsheet to canonical field kinds.",

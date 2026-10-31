@@ -124,31 +124,36 @@ test.describe('Chat: Session', () => {
         if (!/\/api\/chat\/[^/]+\/stream/.test(url)) return originalFetch(input, init);
         const encoder = new TextEncoder();
         const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+        // The AI SDK 5 UI message stream, framed as the route frames it. This
+        // runs in the page, so it cannot import the helpers' framing function.
+        const event = (chunk: unknown) => encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`);
         const body = new ReadableStream({
           async start(controller) {
-            controller.enqueue(encoder.encode('f:{"messageId":"msg-tools"}\n'));
+            controller.enqueue(event({ type: 'start', messageId: 'msg-tools' }));
             await wait(1500);
             controller.enqueue(
-              encoder.encode('8:[{"type":"consulting-tools","active":true,"sources":["ParlView"]}]\n'),
+              event({
+                type: 'data-turn-annotation',
+                data: { type: 'consulting-tools', active: true, sources: ['ParlView'] },
+              }),
             );
             await wait(3000);
-            controller.enqueue(encoder.encode('8:[{"type":"consulting-tools","active":false,"sources":[]}]\n'));
+            controller.enqueue(
+              event({ type: 'data-turn-annotation', data: { type: 'consulting-tools', active: false, sources: [] } }),
+            );
             await wait(3000);
-            controller.enqueue(encoder.encode('0:"The committee examined budget estimates."\n'));
+            controller.enqueue(event({ type: 'text-start', id: 'reply' }));
             controller.enqueue(
-              encoder.encode(
-                'e:{"finishReason":"stop","usage":{"promptTokens":1,"completionTokens":1},"isContinued":false}\n',
-              ),
+              event({ type: 'text-delta', id: 'reply', delta: 'The committee examined budget estimates.' }),
             );
-            controller.enqueue(
-              encoder.encode('d:{"finishReason":"stop","usage":{"promptTokens":1,"completionTokens":1}}\n'),
-            );
+            controller.enqueue(event({ type: 'text-end', id: 'reply' }));
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
             controller.close();
           },
         });
         return new Response(body, {
           status: 200,
-          headers: { 'Content-Type': 'text/plain; charset=utf-8', 'x-vercel-ai-data-stream': 'v1' },
+          headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
         });
       };
     });

@@ -21,7 +21,7 @@ export const skillRouter = router({
     }),
 
   get: authenticatedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getSkill.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
@@ -51,7 +51,7 @@ export const skillRouter = router({
     }),
 
   update: authenticatedProcedure
-    .input(z.object({ id: z.string().uuid(), raw: z.string().min(1) }))
+    .input(z.object({ id: z.string().guid(), raw: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.updateSkill.execute({
@@ -63,7 +63,7 @@ export const skillRouter = router({
     }),
 
   archive: authenticatedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.archiveSkill.execute(input.id);
@@ -72,7 +72,7 @@ export const skillRouter = router({
     }),
 
   restore: authenticatedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.restoreSkill.execute(input.id);

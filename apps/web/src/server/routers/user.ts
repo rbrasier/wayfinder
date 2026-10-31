@@ -94,7 +94,7 @@ export const userRouter = router({
   // out their natural expiry (ADR-035 §1). Lives here because there is no admin
   // router; adminProcedure is the authorisation boundary.
   revokeSessions: adminProcedure
-    .input(z.object({ userId: z.string().uuid() }))
+    .input(z.object({ userId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.revokeUserSessions(input.userId);
       if (result.error) throw toTrpcError(result.error);

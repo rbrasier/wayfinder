@@ -7,7 +7,7 @@ import { toTrpcError } from "../trpc-errors";
 // script, another router — must not be able to reach these unguarded.
 export const flowMemoryRouter = router({
   panel: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getFlowMemoryPanel.execute({
         flowId: input.flowId,
@@ -19,7 +19,7 @@ export const flowMemoryRouter = router({
     }),
 
   lesson: authenticatedProcedure
-    .input(z.object({ lessonId: z.string().uuid() }))
+    .input(z.object({ lessonId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getLessonDetail.execute({
         lessonId: input.lessonId,
@@ -31,7 +31,7 @@ export const flowMemoryRouter = router({
     }),
 
   accept: authenticatedProcedure
-    .input(z.object({ lessonId: z.string().uuid() }))
+    .input(z.object({ lessonId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.acceptLesson.execute({
         lessonId: input.lessonId,
@@ -43,7 +43,7 @@ export const flowMemoryRouter = router({
     }),
 
   reject: authenticatedProcedure
-    .input(z.object({ lessonId: z.string().uuid() }))
+    .input(z.object({ lessonId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.rejectLesson.execute({
         lessonId: input.lessonId,

@@ -22,7 +22,7 @@ import { canEditFlow } from "./flow";
 // single router instance handles both without the caller pre-selecting a format.
 const templateGenerator = new DocumentGeneratorRouter(new DocxGenerator(), new XlsxGenerator());
 
-const flowIdInput = z.object({ flowId: z.string().uuid() });
+const flowIdInput = z.object({ flowId: z.string().guid() });
 
 // Run controls carry a run id, so ownership is re-checked through the run's
 // owning flow — the same flow-edit gate the rest of the router uses. Every
@@ -98,7 +98,7 @@ const batchArchiveSchema = z.object({
   contentBase64: z.string(),
 });
 
-const runIdInput = z.object({ runId: z.string().uuid() });
+const runIdInput = z.object({ runId: z.string().guid() });
 
 export const extractionRouter = router({
   // The user's own extraction flows (the /synthesise list).
@@ -143,7 +143,7 @@ export const extractionRouter = router({
   // "view system prompt" preview matches what the AI actually receives. Mirrors
   // the conversational node's flow.node.previewPrompt.
   previewSystemPrompt: viewProcedure
-    .input(z.object({ flowId: z.string().uuid(), schema: schemaInput }))
+    .input(z.object({ flowId: z.string().guid(), schema: schemaInput }))
     .query(async ({ ctx, input }) => {
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
@@ -168,7 +168,7 @@ export const extractionRouter = router({
     }),
 
   saveSchema: authorProcedure
-    .input(z.object({ flowId: z.string().uuid(), schema: schemaInput }))
+    .input(z.object({ flowId: z.string().guid(), schema: schemaInput }))
     .mutation(async ({ ctx, input }) => {
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
@@ -201,7 +201,7 @@ export const extractionRouter = router({
   parseOutputTemplate: authorProcedure
     .input(
       z.object({
-        flowId: z.string().uuid(),
+        flowId: z.string().guid(),
         filename: z.string().min(1),
         contentBase64: z.string().min(1),
       }),
@@ -274,7 +274,7 @@ export const extractionRouter = router({
   parseContextDoc: authorProcedure
     .input(
       z.object({
-        flowId: z.string().uuid(),
+        flowId: z.string().guid(),
         filename: z.string().min(1),
         mimeType: z.string().min(1),
         contentBase64: z.string().min(1),
@@ -317,7 +317,7 @@ export const extractionRouter = router({
   // Synchronous sample/preview extraction against the flow's authored (draft)
   // schema — 2-3 documents (ADR-033 §8 / phase §8). Full batch is Phase 2.
   runSample: runProcedure
-    .input(z.object({ flowId: z.string().uuid(), documents: z.array(sampleDocumentSchema) }))
+    .input(z.object({ flowId: z.string().guid(), documents: z.array(sampleDocumentSchema) }))
     .mutation(async ({ ctx, input }) => {
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot run this flow." });
@@ -373,7 +373,7 @@ export const extractionRouter = router({
   // Persists staged input documents on upload (auto-save) so the intake survives
   // leaving the editor and can seed a run.
   uploadDraftDocuments: runProcedure
-    .input(z.object({ flowId: z.string().uuid(), files: z.array(batchFileSchema).min(1) }))
+    .input(z.object({ flowId: z.string().guid(), files: z.array(batchFileSchema).min(1) }))
     .mutation(async ({ ctx, input }) => {
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
@@ -410,7 +410,7 @@ export const extractionRouter = router({
   // Removes one staged input document (the author corrected a mistake).
   // Ownership is re-checked through the draft's owning flow.
   removeDraftDocument: runProcedure
-    .input(z.object({ documentId: z.string().uuid() }))
+    .input(z.object({ documentId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const document = await ctx.container.repos.extractionDrafts.getById(input.documentId);
       if (document.error) throw toTrpcError(document.error);
@@ -429,7 +429,7 @@ export const extractionRouter = router({
   // input documents. One run pauses at the sample boundary; "Process all
   // documents" continues the same run (ADR-033 §6). A new sample is a new run.
   startSample: runProcedure
-    .input(z.object({ flowId: z.string().uuid(), sampleSize: z.number().int().min(1).optional() }))
+    .input(z.object({ flowId: z.string().guid(), sampleSize: z.number().int().min(1).optional() }))
     .mutation(async ({ ctx, input }) => {
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You cannot run this flow." });
@@ -523,7 +523,7 @@ export const extractionRouter = router({
   startBatch: runProcedure
     .input(
       z.object({
-        flowId: z.string().uuid(),
+        flowId: z.string().guid(),
         files: z.array(batchFileSchema),
         archives: z.array(batchArchiveSchema).default([]),
       }),
@@ -695,8 +695,8 @@ export const extractionRouter = router({
   editResult: runProcedure
     .input(
       z.object({
-        runId: z.string().uuid(),
-        recordId: z.string().uuid(),
+        runId: z.string().guid(),
+        recordId: z.string().guid(),
         fieldKey: z.string().min(1),
         newValue: z.string(),
       }),

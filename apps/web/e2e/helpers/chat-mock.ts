@@ -9,13 +9,32 @@
  * URL — letting individual tests force a failure (Retry UI) or a delay
  * (assistant typing indicator).
  *
- * The browser hits POST /api/chat/<sessionId>/stream via the Vercel AI SDK
- * `useChat({ api: '/api/chat/<sessionId>/stream' })` hook.
+ * The browser hits POST /api/chat/<sessionId>/stream through the AI SDK 5
+ * `useChat` hook, whose transport reads an SSE "UI message stream".
  */
 
 import type { Page } from '@playwright/test';
 
 const STREAM_URL = /\/api\/chat\/[^/]+\/stream(\?.*)?$/;
+
+/** The headers `createUIMessageStreamResponse` sends; useChat checks the marker. */
+export const UI_MESSAGE_STREAM_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  'x-vercel-ai-ui-message-stream': 'v1',
+};
+
+/**
+ * A UI message stream carrying one assistant bubble, framed exactly as the real
+ * route frames it: one `data:` event per chunk, then `[DONE]`.
+ */
+export function uiMessageStreamBody(textChunks: readonly string[]): string {
+  const chunks = [
+    { type: 'text-start', id: 'mock-text' },
+    ...textChunks.map((delta) => ({ type: 'text-delta', id: 'mock-text', delta })),
+    { type: 'text-end', id: 'mock-text' },
+  ];
+  return chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('') + 'data: [DONE]\n\n';
+}
 
 /**
  * Force the next chat stream to fail with a 500 so `useChat` sets `error`
@@ -33,23 +52,17 @@ export async function failChatStream(page: Page): Promise<void> {
 
 /**
  * Hold the chat stream open for `delayMs` before returning a minimal valid
- * Vercel AI SDK data stream. While the request is pending, `useChat` keeps
- * `isLoading` true with no assistant message yet, so the assistant typing
- * indicator stays on screen long enough to assert.
+ * UI message stream. While the request is pending, `useChat` reports the turn
+ * in flight with no assistant message yet, so the assistant typing indicator
+ * stays on screen long enough to assert.
  */
 export async function delayChatStream(page: Page, delayMs: number): Promise<void> {
   await page.route(STREAM_URL, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    const body =
-      `0:${JSON.stringify('Thanks — let me help you with that.')}\n` +
-      `d:{"finishReason":"stop","usage":{"promptTokens":5,"completionTokens":5}}\n`;
     await route.fulfill({
       status: 200,
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'x-vercel-ai-data-stream': 'v1',
-      },
-      body,
+      headers: UI_MESSAGE_STREAM_HEADERS,
+      body: uiMessageStreamBody(['Thanks — let me help you with that.']),
     });
   });
 }
