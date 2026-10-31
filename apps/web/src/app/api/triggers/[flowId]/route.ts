@@ -2,9 +2,9 @@ import { getContainer } from "@/lib/container";
 import { kickUnattendedRun } from "@/lib/automation/unattended-runs";
 import { bearerTokenOf, parseWebhookBody, webhookResponseFor } from "@/lib/automation/webhook-request";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
+import { JSON_BODY_LIMIT_BYTES, readBodyWithinLimit } from "@/lib/request-body-limit";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const MAX_BODY_BYTES = 1024 * 1024;
 
 // A flow's inbound start address (ADR-064 §3). Public — the bearer token (and
 // HMAC when enabled) is the authentication — and answers before the run does
@@ -17,8 +17,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ flowId:
   const rate = await container.services.webhookRateLimiter.consume(`webhook:${flowId}`);
   if (!rate.error && !rate.data.allowed) return tooManyRequestsResponse(rate.data.retryAfterMs);
 
-  const rawBody = await req.text();
-  if (rawBody.length > MAX_BODY_BYTES) return Response.json({ error: "Body too large." }, { status: 413 });
+  const bounded = await readBodyWithinLimit(req, JSON_BODY_LIMIT_BYTES);
+  if ("error" in bounded) return Response.json({ error: "Body too large." }, { status: 413 });
+  const rawBody = bounded.data;
   const parsed = parseWebhookBody(rawBody);
   if (!parsed.ok) return Response.json({ error: "The body must be JSON." }, { status: 400 });
 
