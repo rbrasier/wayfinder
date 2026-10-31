@@ -4,7 +4,9 @@ const { fetchRequestHandler } = vi.hoisted(() => ({ fetchRequestHandler: vi.fn()
 
 vi.mock("@trpc/server/adapters/fetch", () => ({ fetchRequestHandler }));
 vi.mock("@/server/router", () => ({ appRouter: {} }));
-vi.mock("@/server/trpc", () => ({ createTrpcContext: vi.fn() }));
+vi.mock("@/server/trpc", () => ({
+  createTrpcContext: vi.fn().mockResolvedValue({ userId: null, impersonatorId: null }),
+}));
 
 import { TRPC_BODY_LIMIT_BYTES } from "@/lib/request-body-limit";
 import { GET, POST } from "./route";
