@@ -39,8 +39,8 @@ export const hrRouter = router({
   setMapping: authenticatedProcedure
     .input(
       z.object({
-        datasetId: z.string().uuid(),
-        mapping: z.record(z.enum(["email", "name", "manager", "position", "band", "unit"])),
+        datasetId: z.string().guid(),
+        mapping: z.record(z.string(), z.enum(["email", "name", "manager", "position", "band", "unit"])),
       }),
     )
     .mutation(async ({ ctx, input }) => {

@@ -28,34 +28,36 @@ import {
  * provider.
  */
 
-// The port types `schema` as `unknown`, and walking `_def` structurally keeps
-// this free of a zod import: the stub then survives a zod major that reshapes
-// the public API without touching `_def`, and cannot drift from the zod version
-// the app resolves at runtime.
+// The port types `schema` as `unknown`, and walking zod 4's `_zod.def`
+// structurally keeps this free of a zod import, so it cannot drift from the zod
+// version the app resolves at runtime. The internals are not a stable API: zod 3
+// kept them under `_def.typeName`, and the tests below fail the moment a major
+// reshapes them again.
 interface ZodLike {
-  readonly _def: { readonly typeName: string; readonly [key: string]: unknown };
+  readonly _zod: { readonly def: { readonly type: string; readonly [key: string]: unknown } };
   parse(value: unknown): unknown;
 }
 
 const isZodLike = (value: unknown): value is ZodLike =>
   typeof value === "object" &&
   value !== null &&
-  "_def" in value &&
-  typeof (value as ZodLike)._def?.typeName === "string";
+  "_zod" in value &&
+  typeof (value as ZodLike)._zod?.def?.type === "string";
 
-interface NumberCheck {
-  readonly kind: string;
-  readonly value?: number;
+// zod 4's number schema exposes its bounds directly; an unset bound is ±Infinity.
+interface NumberBounds {
+  readonly minValue: number;
+  readonly maxValue: number;
+  readonly isInt: boolean;
 }
 
 // Sits in the upper half of any declared range. The gates these specs exercise
 // compare a confidence against a threshold, so a default at the floor would
 // park every gated session and a default at the ceiling would wave everything
 // through; neither is a neutral starting point.
-const numberWithinRange = (checks: readonly NumberCheck[]): number => {
-  const min = checks.find((check) => check.kind === "min")?.value;
-  const max = checks.find((check) => check.kind === "max")?.value;
-  const isInt = checks.some((check) => check.kind === "int");
+const numberWithinRange = ({ minValue, maxValue, isInt }: NumberBounds): number => {
+  const min = Number.isFinite(minValue) ? minValue : undefined;
+  const max = Number.isFinite(maxValue) ? maxValue : undefined;
   if (min === undefined && max === undefined) return 1;
   const low = min ?? 0;
   const high = max ?? low + 100;
@@ -71,46 +73,50 @@ const numberWithinRange = (checks: readonly NumberCheck[]): number => {
  */
 export const defaultForSchema = (schema: unknown): unknown => {
   if (!isZodLike(schema)) return {};
-  const def = schema._def;
+  const def = schema._zod.def;
 
-  switch (def.typeName) {
-    case "ZodObject": {
-      const shape = (def.shape as () => Record<string, unknown>)();
+  switch (def.type) {
+    case "object": {
       const value: Record<string, unknown> = {};
-      for (const [key, field] of Object.entries(shape)) {
+      for (const [key, field] of Object.entries(def.shape as Record<string, unknown>)) {
         // An absent optional is what a real model returns when it has nothing
         // to say for the field, and `undefined` would serialise differently.
-        if (isZodLike(field) && field._def.typeName === "ZodOptional") continue;
+        if (isZodLike(field) && field._zod.def.type === "optional") continue;
         value[key] = defaultForSchema(field);
       }
       return value;
     }
-    case "ZodArray":
+    case "array":
       return [];
-    case "ZodString":
+    case "string":
       return "";
-    case "ZodNumber":
-      return numberWithinRange((def.checks as NumberCheck[] | undefined) ?? []);
-    case "ZodBoolean":
+    case "number":
+      return numberWithinRange(schema as unknown as NumberBounds);
+    case "boolean":
       return false;
-    case "ZodNull":
+    case "null":
       return null;
-    case "ZodEnum":
-      return (def.values as readonly string[])[0];
-    case "ZodLiteral":
-      return def.value;
-    case "ZodNullable":
+    case "enum":
+      return Object.values(def.entries as Record<string, unknown>)[0];
+    case "literal":
+      return (def.values as readonly unknown[])[0];
+    case "nullable":
       return null;
-    case "ZodOptional":
+    case "optional":
       return defaultForSchema(def.innerType);
-    case "ZodDefault":
-      return (def.defaultValue as () => unknown)();
-    case "ZodUnion":
+    case "default":
+      return def.defaultValue;
+    case "union":
       return defaultForSchema((def.options as readonly unknown[])[0]);
-    // A refine/transform/preprocess: default what it wraps; the parse applies it.
-    case "ZodEffects":
-      return defaultForSchema(def.schema);
-    case "ZodRecord":
+    // A transform is `pipe(source, transform)` and a preprocess is
+    // `pipe(transform, target)`: default the side that carries the shape and let
+    // the parse apply the function.
+    case "pipe": {
+      const source = def.in;
+      const sourceIsFunction = isZodLike(source) && source._zod.def.type === "transform";
+      return defaultForSchema(sourceIsFunction ? def.out : source);
+    }
+    case "record":
       return {};
     default:
       return {};

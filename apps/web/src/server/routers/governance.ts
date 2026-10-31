@@ -30,7 +30,7 @@ export const governanceRouter = router({
           // The use case validates the scope/target combination; userId and
           // roleKey are conditional on scope.
           roleKey: z.string().min(1).optional(),
-          userId: z.string().uuid().optional(),
+          userId: z.string().guid().optional(),
           period: periodEnum,
           limitUsd: z.number().positive(),
           warnThresholdPct: z.number().int().min(1).max(100).optional(),
@@ -46,7 +46,7 @@ export const governanceRouter = router({
     update: adminProcedure
       .input(
         z.object({
-          id: z.string().uuid(),
+          id: z.string().guid(),
           period: periodEnum.optional(),
           limitUsd: z.number().positive().optional(),
           warnThresholdPct: z.number().int().min(1).max(100).optional(),
@@ -61,7 +61,7 @@ export const governanceRouter = router({
       }),
 
     delete: adminProcedure
-      .input(z.object({ id: z.string().uuid() }))
+      .input(z.object({ id: z.string().guid() }))
       .mutation(async ({ ctx, input }) => {
         const result = await ctx.container.useCases.deleteBudget.execute(input.id);
         if (result.error) throw toTrpcError(result.error);

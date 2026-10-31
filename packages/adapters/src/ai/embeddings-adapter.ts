@@ -34,17 +34,27 @@ import {
 // which providers it may offer, and this module is what `ai/index` publishes.
 export { isLocalEmbeddingsAvailable } from "./local-embeddings-adapter";
 
+type EmbedProviderOptions = Parameters<typeof embed>[0]["providerOptions"];
+
 // One model's raw output, before the dispatcher checks its width and pads it.
 export type TextEmbedder = Pick<IEmbeddingsProvider, "embed">;
 
 // Wraps the Vercel AI SDK embed() call. The concrete embedding model is injected
-// so the provider can be swapped without touching this adapter.
+// so the provider can be swapped without touching this adapter. Provider options
+// ride along on each call because AI SDK 5 no longer takes them at model creation.
 export class EmbeddingsAdapter implements TextEmbedder {
-  constructor(private readonly model: EmbeddingModel<string>) {}
+  constructor(
+    private readonly model: EmbeddingModel<string>,
+    private readonly providerOptions?: EmbedProviderOptions,
+  ) {}
 
   async embed(text: string): Promise<Result<number[]>> {
     try {
-      const { embedding } = await embed({ model: this.model, value: text });
+      const { embedding } = await embed({
+        model: this.model,
+        value: text,
+        providerOptions: this.providerOptions,
+      });
       return ok(embedding);
     } catch (cause) {
       return err(domainError("AI_PROVIDER_FAILED", "Embedding generation failed.", cause));
@@ -207,9 +217,8 @@ export const createEmbeddingsProvider = (
       // OpenAI's text-embedding-3 models shorten natively via `dimensions`.
       openai: (model, credentials) =>
         new EmbeddingsAdapter(
-          createOpenAI({ apiKey: apiKeyOf(credentials) }).textEmbeddingModel(model.id, {
-            dimensions: model.nativeDimension,
-          }),
+          createOpenAI({ apiKey: apiKeyOf(credentials) }).textEmbeddingModel(model.id),
+          { openai: { dimensions: model.nativeDimension } },
         ),
       mistral: (model, credentials) =>
         new EmbeddingsAdapter(
@@ -217,9 +226,8 @@ export const createEmbeddingsProvider = (
         ),
       bedrock: (model, credentials) =>
         new EmbeddingsAdapter(
-          createAmazonBedrock(bedrockSettingsOf(credentials)).embedding(model.id, {
-            dimensions: TITAN_EMBEDDING_DIMENSION,
-          }),
+          createAmazonBedrock(bedrockSettingsOf(credentials)).embedding(model.id),
+          { bedrock: { dimensions: TITAN_EMBEDDING_DIMENSION } },
         ),
     },
     availability: { local: () => isLocalEmbeddingsAvailable() },

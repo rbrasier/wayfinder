@@ -56,10 +56,8 @@ export async function streamTurn<Schema extends z.ZodTypeAny>(
 
   let previousResponseLength = 0;
   for await (const partial of streamResult.data.partialObjectStream) {
-    const currentResponse =
-      typeof (partial as { response?: unknown }).response === "string"
-        ? (partial as { response: string }).response
-        : "";
+    const response = (partial as { response?: unknown }).response;
+    const currentResponse = typeof response === "string" ? response : "";
     if (currentResponse.length > previousResponseLength) {
       const newChars = currentResponse.slice(previousResponseLength);
       input.writer.writeText(newChars);

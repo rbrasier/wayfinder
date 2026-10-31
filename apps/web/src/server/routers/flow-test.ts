@@ -21,13 +21,13 @@ const assertCanEdit = async (
 };
 
 const seedContextItemSchema = z.object({
-  nodeId: z.string().uuid(),
+  nodeId: z.string().guid(),
   key: z.string(),
   value: z.string(),
 });
 
 const seedStepOutputSchema = z.object({
-  nodeId: z.string().uuid(),
+  nodeId: z.string().guid(),
   fields: z.array(
     z.object({
       key: z.string(),
@@ -35,7 +35,7 @@ const seedStepOutputSchema = z.object({
       type: z.string(),
       options: z.array(z.string()).optional(),
       value: z.string(),
-      items: z.array(z.record(z.string())).optional(),
+      items: z.array(z.record(z.string(), z.string())).optional(),
     }),
   ),
 });
@@ -49,8 +49,8 @@ export const flowTestRouter = router({
   start: authenticatedProcedure
     .input(
       z.object({
-        flowId: z.string().uuid(),
-        startNodeId: z.string().uuid().optional(),
+        flowId: z.string().guid(),
+        startNodeId: z.string().guid().optional(),
         seed: seedSchema.optional(),
       }),
     )
@@ -73,7 +73,7 @@ export const flowTestRouter = router({
     }),
 
   report: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getTestRunReport.execute({
         sessionId: input.sessionId,
@@ -85,7 +85,7 @@ export const flowTestRouter = router({
     }),
 
   delete: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteTestSession.execute({
         sessionId: input.sessionId,
@@ -99,7 +99,7 @@ export const flowTestRouter = router({
   // Real sessions on this flow that a seed could be cloned from. Live only —
   // cloning a previous test run would seed a test from invented data.
   listSeedableSessions: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       await assertCanEdit(ctx, input.flowId);
 
@@ -117,7 +117,7 @@ export const flowTestRouter = router({
     }),
 
   cloneSeed: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid(), upToNodeId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid(), upToNodeId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.buildSeedFromSession.execute({
         sessionId: input.sessionId,
@@ -130,7 +130,7 @@ export const flowTestRouter = router({
     }),
 
   generateSeed: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid(), startNodeId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid(), startNodeId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       await assertCanEdit(ctx, input.flowId);
 
@@ -149,7 +149,7 @@ export const flowTestRouter = router({
     // live session can hold real personal data, so "not yours" and "not found"
     // must be the same answer.
     list: authenticatedProcedure
-      .input(z.object({ flowId: z.string().uuid() }))
+      .input(z.object({ flowId: z.string().guid() }))
       .query(async ({ ctx, input }) => {
         await assertCanEdit(ctx, input.flowId);
 
@@ -164,9 +164,9 @@ export const flowTestRouter = router({
     create: authenticatedProcedure
       .input(
         z.object({
-          flowId: z.string().uuid(),
+          flowId: z.string().guid(),
           name: z.string().min(1).max(200),
-          startNodeId: z.string().uuid(),
+          startNodeId: z.string().guid(),
           gatheredContext: z.array(seedContextItemSchema).default([]),
           stepOutputs: z.array(seedStepOutputSchema).default([]),
         }),
@@ -189,9 +189,9 @@ export const flowTestRouter = router({
     update: authenticatedProcedure
       .input(
         z.object({
-          id: z.string().uuid(),
+          id: z.string().guid(),
           name: z.string().min(1).max(200).optional(),
-          startNodeId: z.string().uuid().optional(),
+          startNodeId: z.string().guid().optional(),
           gatheredContext: z.array(seedContextItemSchema).optional(),
           stepOutputs: z.array(seedStepOutputSchema).optional(),
         }),
@@ -208,7 +208,7 @@ export const flowTestRouter = router({
       }),
 
     delete: authenticatedProcedure
-      .input(z.object({ id: z.string().uuid() }))
+      .input(z.object({ id: z.string().guid() }))
       .mutation(async ({ ctx, input }) => {
         const result = await ctx.container.repos.flowTestFixtures.delete(input.id, ctx.userId);
         if (result.error) throw toTrpcError(result.error);

@@ -7,7 +7,7 @@ import { canEditFlow } from "./flow";
 // Version history is owner/admin-only — it mirrors the flow's edit permission.
 export const flowVersionRouter = router({
   list: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to view this flow's history." });
@@ -37,7 +37,7 @@ export const flowVersionRouter = router({
   // unpublished changes open as a draft. Powers the version indicator that sits
   // beside the published-state badge in the flow editor.
   status: authenticatedProcedure
-    .input(z.object({ flowId: z.string().uuid() }))
+    .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
         throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to view this flow's history." });
@@ -56,7 +56,7 @@ export const flowVersionRouter = router({
     }),
 
   get: authenticatedProcedure
-    .input(z.object({ versionId: z.string().uuid() }))
+    .input(z.object({ versionId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getFlowVersion.execute(input.versionId);
       if (result.error) throw toTrpcError(result.error);
@@ -69,7 +69,7 @@ export const flowVersionRouter = router({
   restore: authenticatedProcedure
     .input(
       z.object({
-        versionId: z.string().uuid(),
+        versionId: z.string().guid(),
         changeSummary: z.string().max(500).nullable().optional(),
       }),
     )

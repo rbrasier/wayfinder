@@ -89,7 +89,7 @@ export const mcpServerRouter = router({
   update: authenticatedProcedure
     .input(
       z.object({
-        id: z.string().uuid(),
+        id: z.string().guid(),
         label: z.string().min(1).optional(),
         url: z.string().min(1).optional(),
         dataClassification: classificationSchema.optional(),
@@ -106,7 +106,7 @@ export const mcpServerRouter = router({
     }),
 
   disable: authenticatedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.disableMcpServer.execute(input.id);
@@ -115,7 +115,7 @@ export const mcpServerRouter = router({
     }),
 
   enable: authenticatedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.enableMcpServer.execute(input.id);
@@ -126,7 +126,7 @@ export const mcpServerRouter = router({
   // Permanent removal. Steps referencing a deleted server drop the stale tool
   // refs silently at resolve time (ResolveStepTools), so no cascade is needed.
   delete: authenticatedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.deleteMcpServer.execute(input.id);
@@ -137,7 +137,7 @@ export const mcpServerRouter = router({
   // Connection test — lists the server's tools so the admin can confirm reach
   // and credentials before using it in a flow.
   test: authenticatedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.testMcpServer.execute(input.id);
@@ -147,7 +147,7 @@ export const mcpServerRouter = router({
 
   // The cached tools with their per-tool settings (ADR-062 §5).
   listTools: authenticatedProcedure
-    .input(z.object({ serverId: z.string().uuid() }))
+    .input(z.object({ serverId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.listMcpTools.execute(input.serverId);
@@ -156,7 +156,7 @@ export const mcpServerRouter = router({
     }),
 
   refreshTools: authenticatedProcedure
-    .input(z.object({ serverId: z.string().uuid() }))
+    .input(z.object({ serverId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.refreshMcpTools.execute(input.serverId);
@@ -167,7 +167,7 @@ export const mcpServerRouter = router({
   updateToolSettings: authenticatedProcedure
     .input(
       z.object({
-        serverId: z.string().uuid(),
+        serverId: z.string().guid(),
         toolName: z.string().min(1),
         settings: toolSettingsSchema,
       }),

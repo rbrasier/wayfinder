@@ -10,8 +10,8 @@ export const feedbackRouter = router({
   submit: permissionProcedure("knowledge:submit_feedback")
     .input(
       z.object({
-        sessionId: z.string().uuid(),
-        messageId: z.string().uuid().nullable(),
+        sessionId: z.string().guid(),
+        messageId: z.string().guid().nullable(),
         flaggedAnswer: z.string().min(1),
         correctedText: z.string().min(1),
         reason: reasonSchema,
@@ -47,7 +47,7 @@ export const feedbackRouter = router({
   triage: permissionProcedure("knowledge:curate")
     .input(
       z.object({
-        feedbackId: z.string().uuid(),
+        feedbackId: z.string().guid(),
         status: z.enum(["accepted", "dismissed"]),
       }),
     )

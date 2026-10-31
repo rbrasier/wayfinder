@@ -121,28 +121,28 @@ const serverEnvSchema = z.object({
   MINIO_USE_SSL: z
     .string()
     .transform((v) => v === "true")
-    .default("false"),
+    .default(false),
   // Ignored by MinIO; required by Amazon S3, which signs with the bucket region.
   MINIO_REGION: z.string().default(""),
   // MinIO serves path-style addressing; Amazon S3 wants virtual-hosted style.
   MINIO_PATH_STYLE: z
     .string()
     .transform((v) => v !== "false")
-    .default("true"),
+    .default(true),
   // Email notifications (ADR-023). When SMTP_TRANSPORT_MODE is set the env
   // transport takes precedence over the admin-settings SMTP config, so leaving
   // it blank is what lets the setup wizard's email config take effect.
   NOTIFICATIONS_ENABLED: z
     .string()
     .transform((v) => v === "true")
-    .default("false"),
+    .default(false),
   SMTP_TRANSPORT_MODE: z.enum(["oauth2", "smtp", "stream"]).optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().optional(),
   SMTP_SECURE: z
     .string()
     .transform((v) => v === "true")
-    .default("false"),
+    .default(false),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().optional(),

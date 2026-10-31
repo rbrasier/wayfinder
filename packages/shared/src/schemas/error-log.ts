@@ -8,7 +8,7 @@ export const logErrorInputSchema = z.object({
   message: z.string().min(1).max(2000),
   stack: z.string().nullable().optional(),
   page: z.string().nullable().optional(),
-  metadata: z.record(z.unknown()).nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export const listErrorsInputSchema = z.object({
@@ -20,7 +20,7 @@ export const listErrorsInputSchema = z.object({
 });
 
 export const updateErrorStatusInputSchema = z.object({
-  id: z.string().uuid().optional(),
+  id: z.string().guid().optional(),
   message: z.string().optional(),
   page: z.string().nullable().optional(),
   status: errorStatusSchema,
@@ -28,7 +28,7 @@ export const updateErrorStatusInputSchema = z.object({
 
 export const sendMessageInputSchema = z.object({
   prompt: z.string().min(1).max(4000),
-  conversationId: z.string().uuid().optional(),
+  conversationId: z.string().guid().optional(),
 });
 
 export type LogErrorInput = z.infer<typeof logErrorInputSchema>;

@@ -20,7 +20,7 @@ const sourceInput = z.object({
   name: z.string().min(1),
   label: z.string().min(1),
   kind: z.enum(["directory", "managed", "api"]),
-  config: z.record(z.unknown()).default({}),
+  config: z.record(z.string(), z.unknown()).default({}),
   displayField: z.string().min(1),
   keyField: z.string().optional(),
   // Omitted means "keep the stored secret"; an empty string clears it.
@@ -73,7 +73,7 @@ export const lookupSourceRouter = router({
     .input(
       z.object({
         kind: z.enum(["directory", "managed", "api"]),
-        config: z.record(z.unknown()).default({}),
+        config: z.record(z.string(), z.unknown()).default({}),
         credential: z.string().optional(),
         recordsPath: z.string().optional(),
         displayField: z.string().optional(),

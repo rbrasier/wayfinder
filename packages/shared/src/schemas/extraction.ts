@@ -84,7 +84,7 @@ export const extractionFieldResultSchema = z.object({
 });
 
 // The per-record extraction result: a record keyed by the schema's field keys.
-export const extractionResultSchema = z.record(extractionFieldResultSchema);
+export const extractionResultSchema = z.record(z.string(), extractionFieldResultSchema);
 
 // Builds an explicit object schema with one required property per field key.
 // A free-form z.record lets the provider omit keys it is unsure about — the

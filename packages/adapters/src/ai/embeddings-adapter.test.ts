@@ -1,10 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
-import type { EmbeddingModelV1 } from "@ai-sdk/provider";
+import type { EmbeddingModelV2 } from "@ai-sdk/provider";
 import { ok, type AiConfig, type EmbeddingsConfig } from "@wayfinder/domain";
-import { EMBEDDINGS_DIMENSION } from "@wayfinder/shared";
+import { EMBEDDINGS_DIMENSION, findEmbeddingsModel } from "@wayfinder/shared";
+
+const { textEmbeddingModel } = vi.hoisted(() => ({ textEmbeddingModel: vi.fn() }));
+
+vi.mock("@ai-sdk/openai", () => ({
+  createOpenAI: vi.fn(() => ({ textEmbeddingModel })),
+}));
+
 import {
   DispatchingEmbeddingsAdapter,
   EmbeddingsAdapter,
+  createEmbeddingsProvider,
   embeddingsCredentialsFor,
   type EmbeddingsAdapterBuilders,
   type EmbeddingsCredentials,
@@ -12,9 +20,9 @@ import {
 } from "./embeddings-adapter";
 
 const fakeModel = (
-  doEmbed: EmbeddingModelV1<string>["doEmbed"],
-): EmbeddingModelV1<string> => ({
-  specificationVersion: "v1",
+  doEmbed: EmbeddingModelV2<string>["doEmbed"],
+): EmbeddingModelV2<string> => ({
+  specificationVersion: "v2",
   provider: "fake",
   modelId: "fake-embedding",
   maxEmbeddingsPerCall: 1,
@@ -46,6 +54,40 @@ describe("EmbeddingsAdapter", () => {
 
     expect(result.data).toBeUndefined();
     expect(result.error?.code).toBe("AI_PROVIDER_FAILED");
+  });
+
+  it("forwards its provider options to the model on every call", async () => {
+    const doEmbed = vi.fn(async () => ({ embeddings: [[0.5]] }));
+    const adapter = new EmbeddingsAdapter(fakeModel(doEmbed), { fake: { tuning: 1 } });
+
+    await adapter.embed("hello world");
+
+    expect(doEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({ providerOptions: { fake: { tuning: 1 } } }),
+    );
+  });
+});
+
+// OpenAI returns its native width unless asked otherwise; the model's catalogue
+// dimension is requested per call so the vector fits the stored column (ADR-017).
+describe("createEmbeddingsProvider openai builder", () => {
+  it("asks OpenAI for the catalogue model's dimension on each call", async () => {
+    const model = findEmbeddingsModel("openai", "text-embedding-3-small")!;
+    const doEmbed = vi.fn(async () => ({ embeddings: [new Array<number>(model.nativeDimension).fill(0.5)] }));
+    textEmbeddingModel.mockReturnValue(fakeModel(doEmbed));
+    const provider = createEmbeddingsProvider(
+      async () => ({ provider: "openai", model: model.id }),
+      { getAiConfig: async () => ({ apiKeys: { openai: "sk-test" } }) as unknown as AiConfig },
+    );
+
+    await provider.embed("hello world");
+
+    expect(textEmbeddingModel).toHaveBeenCalledWith(model.id);
+    expect(doEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        providerOptions: { openai: { dimensions: model.nativeDimension } },
+      }),
+    );
   });
 });
 

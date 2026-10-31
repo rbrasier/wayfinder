@@ -20,12 +20,20 @@ import {
   type SessionToolProgressEvent,
   type TokenUsage,
 } from "@wayfinder/domain";
-import { generateText, jsonSchema, tool, type LanguageModelV1, type ToolSet } from "ai";
+import {
+  generateText,
+  jsonSchema,
+  stepCountIs,
+  tool,
+  type LanguageModel,
+  type LanguageModelUsage,
+  type ToolSet,
+} from "ai";
 import { recordTokenUsage } from "../observability/usage-tracking-adapter";
 import type { QuotaEnforcer } from "../observability/quota-enforcing-adapter";
 
 export interface McpToolPrepassInput {
-  model: LanguageModelV1;
+  model: LanguageModel;
   // Provider + model name label the usage record the governance stack writes, so
   // the pre-pass appears in spend/quota reporting like every other model call.
   provider: ProviderName;
@@ -165,7 +173,7 @@ export const buildPrepassTools = (input: BuildPrepassToolsInput): { tools: ToolS
       const origin = { serverId: server.id, serverLabel: server.label, toolName: cachedTool.name };
       tools[key] = tool({
         description: cachedTool.description ?? mcpToolDisplayTitle(cachedTool),
-        parameters: jsonSchema<Record<string, unknown>>(
+        inputSchema: jsonSchema<Record<string, unknown>>(
           (cachedTool.inputSchema ?? { type: "object", properties: {} }) as Parameters<typeof jsonSchema>[0],
         ),
         execute: async (args: Record<string, unknown>, options: { toolCallId: string }) => {
@@ -254,20 +262,17 @@ export class McpToolPrepass {
         system: input.system,
         messages: input.messages,
         tools: built.tools,
-        maxSteps,
+        stopWhen: stepCountIs(maxSteps),
         abortSignal: controller.signal,
         onStepFinish: (step) => {
-          completedRoundUsage.promptTokens += step.usage?.promptTokens ?? 0;
-          completedRoundUsage.completionTokens += step.usage?.completionTokens ?? 0;
+          completedRoundUsage.promptTokens += step.usage?.inputTokens ?? 0;
+          completedRoundUsage.completionTokens += step.usage?.outputTokens ?? 0;
         },
       });
 
-      this.recordUsage(input, {
-        promptTokens: result.usage.promptTokens,
-        completionTokens: result.usage.completionTokens,
-        systemTokens: 0,
-        ...extractCacheTokens(result.providerMetadata as Record<string, unknown> | undefined),
-      });
+      // `totalUsage`, not `usage`: ai@5 reports only the final step under `usage`,
+      // which would bill a multi-step tool loop as a single call.
+      this.recordUsage(input, toTokenUsage(result.totalUsage, result.providerMetadata));
 
       return ok({ summary: result.text.trim(), toolCallCount: built.records.length, toolCalls: built.records });
     } catch (cause) {
@@ -310,16 +315,20 @@ export class McpToolPrepass {
 }
 
 interface AnthropicCacheMeta {
-  cacheReadInputTokens?: number;
-  cacheCreationInputTokens?: number;
+  cacheCreationInputTokens?: number | null;
 }
 
-const extractCacheTokens = (
+// Cache reads come from usage in ai@5; Anthropic reports writes only in metadata.
+const toTokenUsage = (
+  usage: LanguageModelUsage,
   providerMetadata: Record<string, unknown> | undefined,
-): { cacheReadTokens: number; cacheWriteTokens: number } => {
+): TokenUsage => {
   const anthropic = providerMetadata?.["anthropic"] as AnthropicCacheMeta | undefined;
   return {
-    cacheReadTokens: anthropic?.cacheReadInputTokens ?? 0,
+    promptTokens: usage.inputTokens ?? 0,
+    completionTokens: usage.outputTokens ?? 0,
+    systemTokens: 0,
+    cacheReadTokens: usage.cachedInputTokens ?? 0,
     cacheWriteTokens: anthropic?.cacheCreationInputTokens ?? 0,
   };
 };

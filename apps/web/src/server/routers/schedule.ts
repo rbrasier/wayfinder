@@ -17,7 +17,7 @@ const assertOwnsSession = async (
 
 export const scheduleRouter = router({
   listForSession: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       await assertOwnsSession(ctx, input.sessionId);
       const result = await ctx.container.repos.schedules.listForSession(input.sessionId);
@@ -26,7 +26,7 @@ export const scheduleRouter = router({
     }),
 
   cancel: authenticatedProcedure
-    .input(z.object({ sessionId: z.string().uuid(), scheduleId: z.string().uuid() }))
+    .input(z.object({ sessionId: z.string().guid(), scheduleId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       await assertOwnsSession(ctx, input.sessionId);
 
