@@ -125,14 +125,14 @@ Work through these in order:
 | 9 | Every file path named in a comment **exists** | Invented paths are the classic failure mode |
 | 10 | **Re-run the routine.** Nothing changes | A second comment here is a bug in the marker check |
 | 11 | One digest e-mail, to you only | Check `cc`/`bcc` are empty |
-| 12 | The build link opens the right base branch | `release/alpha-2` for a bug, `main` for a feature |
+| 12 | The build link opens the right base branch | `release/alpha-3` for a bug, `main` for a feature |
 
 ### Then test the close-on-merge path
 
 This is the only thing the routine does that changes an issue's state, so prove
 it deliberately rather than waiting to see it happen.
 
-Open a third test issue, then open a throwaway PR against `release/alpha-2`
+Open a third test issue, then open a throwaway PR against `release/alpha-3`
 whose body says `Fixes #<that issue>`. Confirm GitHub shows the link on the
 issue *before* you merge — the routine reads GitHub's own
 `closed_by_pull_requests`, so a PR that merely mentions the number in prose will
@@ -141,7 +141,7 @@ correctly be ignored.
 | # | Check | What wrong looks like |
 |---|---|---|
 | 1 | **Before merging**, run the routine. The issue stays open | A close here means `merged` is not being checked, and every linked-but-unmerged PR will close its issue |
-| 2 | Merge the PR into `release/alpha-2`. GitHub does **not** close the issue by itself | If GitHub did close it, the PR went to `main` — that is the auto-close this step exists to cover, and it is not what you are testing |
+| 2 | Merge the PR into `release/alpha-3`. GitHub does **not** close the issue by itself | If GitHub did close it, the PR went to `main` — that is the auto-close this step exists to cover, and it is not what you are testing |
 | 3 | Run the routine. Exactly one comment, opening `<!-- wayfinder-triage:closed:v1 -->` | Two comments is the marker check; no comment with a close is the ordering reversed |
 | 4 | The comment names the PR number, merge date and base branch, and says what changed **in business terms** | A pasted PR body is the failure — the sentences are supposed to be written, not copied |
 | 5 | The issue is closed as **completed**, carrying `status:fixed` in place of `status:analysed`, with anything you added by hand still on it | `not_planned` is the wrong reason; a stripped label set is the union bug again; both `status:analysed` and `status:fixed` means the `status:` axis is being added to instead of moved |

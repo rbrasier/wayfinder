@@ -12,7 +12,7 @@ This directory holds **phase docs** awaiting implementation.
    writes an implementation summary alongside.
 
    The release line is **not** tied to a version number. It comes from the
-   branch being worked on — `release/alpha-2` → `alpha-2`, `main` → the next
+   branch being worked on — `release/alpha-3` → `alpha-3`, `main` → the next
    release line named in [`CLAUDE.md`](../../../CLAUDE.md). MINOR and PATCH
    count up continuously across lines, so a line never owns a version range.
    See [`versioning.md`](../../guides/versioning.md).
