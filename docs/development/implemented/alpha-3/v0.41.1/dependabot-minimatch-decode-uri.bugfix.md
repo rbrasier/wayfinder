@@ -81,6 +81,10 @@ cannot be overridden. That copy waits for a new upstream release.
   - **`deploy/lambda`:** npm `overrides` for `@typescript-eslint/typescript-estree` → `minimatch` `>=11.0.1 <12`.
     - I edited `package-lock.json` surgically, because `npm install --package-lock-only` re-resolves the whole tree, including esbuild, even with no changes.
     - Checked with CI's exact `npm ci --legacy-peer-deps`, plus the lambda typecheck, lint and tests (19 passed).
+- **Waiver retired:**
+  - `GHSA-qr28-fpjm-wq7f` was already waived in `scripts/audit-allowlist.sh`, and `CVE-2026-118664` in `.trivyignore`, because `query-string@7` could not load the ESM-only 0.5.1.
+  - The patch removes that blocker, so both waivers are removed. `waiver-check.mjs` requires it.
+- **Container image:** the `Dockerfile` copies `patches/` before `pnpm install --frozen-lockfile`, so pnpm can apply the `query-string` patch.
 - **Regression test:** `scripts/lockfile-advisories.test.mjs`, run by `validate.sh` section 11e. It failed 2 of 3 cases before the fix and passes all 3 after.
 - **E2E:** none. No user-facing behaviour changed, and the lockfile test is the guard.
 - **Deviation from the approved summary:**
