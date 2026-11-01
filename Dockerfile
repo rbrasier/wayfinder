@@ -20,6 +20,7 @@ COPY packages/domain/package.json packages/domain/
 COPY packages/application/package.json packages/application/
 COPY packages/shared/package.json packages/shared/
 COPY packages/adapters/package.json packages/adapters/
+COPY patches/ patches/
 RUN pnpm install --frozen-lockfile
 
 COPY . .
