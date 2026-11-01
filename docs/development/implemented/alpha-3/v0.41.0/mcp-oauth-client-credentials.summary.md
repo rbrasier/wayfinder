@@ -30,7 +30,7 @@ of the alpha-2 change (v0.28.47, PR #364) onto `main`'s MCP layer (ADR-062).
 ## Files created
 
 - `packages/adapters/src/mcp/oauth-client-credentials-token-source.ts` (+ test)
-- `packages/adapters/drizzle/0059_mcp_oauth_client_credentials.sql` (+ `meta/0059_snapshot.json`, journal entry)
+- `packages/adapters/drizzle/0060_mcp_oauth_client_credentials.sql` (+ `meta/0060_snapshot.json`, journal entry)
 - `apps/web/src/components/admin/mcp-sign-in-fields.tsx`
 
 ## Files modified
@@ -45,7 +45,7 @@ of the alpha-2 change (v0.28.47, PR #364) onto `main`'s MCP layer (ADR-062).
 
 ## Migrations run
 
-- `0059_mcp_oauth_client_credentials.sql` — six nullable `text` columns on
+- `0060_mcp_oauth_client_credentials.sql` — six nullable `text` columns on
   `admin_mcp_servers`. Additive; no row is touched, so no `-- data-impact:` line.
 
 ## Tests
