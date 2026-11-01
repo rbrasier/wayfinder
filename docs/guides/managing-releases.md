@@ -11,10 +11,10 @@ guide explains the machinery behind it.
 ## The model in one picture
 
 ```
-release/alpha-2  ──o───o───o──▶   current line: bug fixes + enhancements (0.19.x)
+release/alpha-3  ──o───o───o──▶   current line: bug fixes + enhancements (0.41.x)
                   /     \
                  /       \  (maintainers merge forward periodically)
-main  ──────────o─────────o───o──▶   next line: new features (0.20.0 → , = alpha-3)
+main  ──────────o─────────o───o──▶   next line: new features (0.42.0 → , = alpha-4)
 ```
 
 Two long-lived branch types, nothing else:
@@ -108,12 +108,12 @@ Maintainers periodically merge the release branch into `main`:
 
 ```bash
 git checkout main && git pull
-git merge release/alpha-2
+git merge release/alpha-3
 git push
 ```
 
 That's the *only* direction changes move between the long-lived branches.
-A fix made on `release/alpha-2` reaches the next line at the next forward merge —
+A fix made on `release/alpha-3` reaches the next line at the next forward merge —
 nobody has to land it twice. Merging `main` into a release branch is
 forbidden: it would pull unfinished features into the stabilising line.
 
@@ -153,7 +153,7 @@ on:
 Two things worth understanding about this:
 
 - The `pull_request` filter matches the PR's **target** branch, not the
-  branch the work lives on. A PR from `bugfix/whatever/claude-someone` into `release/alpha-2`
+  branch the work lives on. A PR from `bugfix/whatever/claude-someone` into `release/alpha-3`
   runs full CI, whatever the source branch is called. Since all work arrives
   by PR, every contribution is checked before merge.
 - The `push` filter covers direct commits to the long-lived branches
