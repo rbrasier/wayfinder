@@ -52,6 +52,7 @@ export * from "./schedule-run";
 export * from "./template-field";
 export * from "./template-field-set";
 export * from "./template-annotation-validation";
+export * from "./template-draft";
 export * from "./parse-flexible-date";
 export * from "./flow-edge";
 export * from "./flow-graph";
