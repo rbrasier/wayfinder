@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, canOversee, router, type TrpcContext } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { canEditFlow } from "./flow";
 
@@ -8,12 +8,13 @@ import { canEditFlow } from "./flow";
 // helper the flow router uses rather than re-deriving owner/admin: flow
 // permissions already carry group and organisation visibility, and a
 // hand-rolled check would drift from them. A test run of a draft must never
-// become a route for an operator to reach unpublished work (ADR-048 §3).
+// become a route for an operator to reach unpublished work (ADR-048 §3). An
+// oversight holder may test anyone's flow, as they may edit it (ADR-066 §4).
 const assertCanEdit = async (
-  ctx: { container: Parameters<typeof canEditFlow>[0]; userId: string; isAdmin: boolean },
+  ctx: Pick<TrpcContext, "isAdmin" | "permissions"> & { container: Parameters<typeof canEditFlow>[0]; userId: string },
   flowId: string,
 ): Promise<void> => {
-  if (await canEditFlow(ctx.container, flowId, ctx.userId, ctx.isAdmin)) return;
+  if (await canEditFlow(ctx.container, flowId, ctx.userId, canOversee(ctx))) return;
   throw new TRPCError({
     code: "FORBIDDEN",
     message: "You do not have permission to test this flow.",
@@ -60,7 +61,7 @@ export const flowTestRouter = router({
       const result = await ctx.container.useCases.startTestRun.execute({
         flowId: input.flowId,
         userId: ctx.userId,
-        isAdmin: ctx.isAdmin,
+        isAdmin: canOversee(ctx),
         startNodeId: input.startNodeId,
         // Cast: the router validates shape, the domain owns meaning. The seed
         // validator re-checks every value against the node's declared fields
@@ -78,7 +79,7 @@ export const flowTestRouter = router({
       const result = await ctx.container.useCases.getTestRunReport.execute({
         sessionId: input.sessionId,
         userId: ctx.userId,
-        isAdmin: ctx.isAdmin,
+        isAdmin: canOversee(ctx),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
@@ -90,7 +91,7 @@ export const flowTestRouter = router({
       const result = await ctx.container.useCases.deleteTestSession.execute({
         sessionId: input.sessionId,
         userId: ctx.userId,
-        isAdmin: ctx.isAdmin,
+        isAdmin: canOversee(ctx),
       });
       if (result.error) throw toTrpcError(result.error);
       return { deleted: true };
@@ -123,7 +124,7 @@ export const flowTestRouter = router({
         sessionId: input.sessionId,
         upToNodeId: input.upToNodeId,
         userId: ctx.userId,
-        isAdmin: ctx.isAdmin,
+        isAdmin: canOversee(ctx),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
@@ -138,7 +139,7 @@ export const flowTestRouter = router({
         flowId: input.flowId,
         startNodeId: input.startNodeId,
         userId: ctx.userId,
-        isAdmin: ctx.isAdmin,
+        isAdmin: canOversee(ctx),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

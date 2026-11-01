@@ -1,4 +1,4 @@
-# Summary — Admin permission split: Global, Technical and User Admin (v0.28.44)
+# Summary — Admin permission split: Global, Technical and User Admin (v0.28.46)
 
 Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
 `docs/development/prd/admin-permission-split.prd.md`. ADR-066.
@@ -10,7 +10,7 @@ Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
   - `admin:users`: Users, Groups, Organisations, non-admin role assignment.
   - `admin:oversight`: dashboards, usage, audit and legal holds, All Chats, All Flows, Synthesise (all), with full read-and-edit of other people's chats and flows.
 - **Roles.**
-  - Admins is renamed **Global Admin** (seed, plus migration `0049`), keeping its key, its wildcard and its link to `is_admin`.
+  - Admins is renamed **Global Admin** (seed, plus migration `0050`), keeping its key, its wildcard and its link to `is_admin`.
   - New editable system roles **Technical Admin** (`admin:technical`, `knowledge:curate`) and **User Admin** (`admin:users`).
   - No role holds `admin:oversight` by default.
 - **Escalation guards (application).**
@@ -33,7 +33,7 @@ Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
 **Created**
 - `packages/domain/src/entities/role.test.ts`
 - `packages/application/src/use-cases/admin-caller.ts`, `admin-account-guard.ts`, `delegated-user-admin.test.ts`
-- `packages/adapters/drizzle/0049_global_admin_role_name.sql` (+ `meta/0049_snapshot.json`, journal entry)
+- `packages/adapters/drizzle/0050_global_admin_role_name.sql` (+ `meta/0050_snapshot.json`, journal entry)
 - `apps/web/src/lib/admin-areas.ts` (+ test), `admin-page-guard.ts` (+ test), `oversight.ts` (+ test)
 - `apps/web/src/server/admin-surface-flags.ts`, `admin-area-gates.probe.ts`, `admin-area-gates.test.ts`
 - `apps/web/src/server/routers/admin-inline-gates.test.ts`, `oversight-ownership.test.ts`
@@ -43,7 +43,6 @@ Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
 - domain: `entities/permission.ts` (+ test), `entities/role.ts`
 - application: role assign/remove, `create-user.ts`, `update-user.ts`, `delete-user.ts`, `reset-user-password.ts` (+ tests), `use-cases/index.ts`
 - adapters: `auth/seed-roles.ts` (+ test)
-- apps/api: `container.ts`, `routes/users.ts` (system caller)
 - apps/web:
   - `server/trpc.ts` (+ test), `lib/container.ts`, `lib/session-access.ts` (+ test)
   - `lib/template-route-helpers.ts`, `lib/extraction-artifact-access.ts`
@@ -53,9 +52,9 @@ Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
 
 ## Migrations
 
-`0049_global_admin_role_name.sql` (custom, generated with `drizzle-kit generate --custom`) carries `-- data-impact: preserved — renames one role's display name; key, flags and grants are untouched`. It renames only the default name, so a name an admin chose survives. It makes no schema change; the snapshot is identical to `0048`.
+`0050_global_admin_role_name.sql` (custom, generated with `drizzle-kit generate --custom`) carries `-- data-impact: preserved — renames one role's display name; key, flags and grants are untouched`. It renames only the default name, so a name an admin chose survives. It makes no schema change; the snapshot is identical to `0049`.
 
-**Forward-merge to `main`:** `main` numbers its migrations independently (up to `0056` when this was built), so `0049` collides there. Renumber after `main`'s latest and regenerate the journal with the tooling.
+**Forward-merge to `main`:** `main` numbers its migrations independently (up to `0056` when this was built), so `0050` collides there. Renumber after `main`'s latest and regenerate the journal with the tooling.
 
 ## Tests
 
@@ -76,12 +75,13 @@ Issue #349. Phase doc: `admin-permission-split.phase.md` (this folder). PRD:
   - They are redirected from `/admin/users` and `/admin/roles`.
   - The existing matrix assertions now expect the five roles and "Global Admin".
   - Written, not run; CI runs it.
+- **E2E, unrelated fix:** `chat.spec.ts` "multi-turn conversation works" failed on `release/alpha-2` too after PR #362. Its replies came from the browser-side stream mock. The page drops those when it resyncs with the stored history, so counting bubbles only passed when the poll beat the resync. It now scripts the server's AI stub (`scriptAiFor`), so each reply is stored, and it waits for each reply's text.
 
 ## Known limitations
 
 - A User Admin can assign only Power Users from the Users screen. The server allows any non-admin role, but other roles are assigned from the Roles screen, which is Global-only.
 - The Configuration and Users UI gating has no component-render test (the repo has no jsdom or Testing Library). The decisions are tested in `admin-areas`, the page guard and the server gates.
-- `apps/api`'s `/v1/users` routes are unauthenticated (pre-existing). They pass a system caller so their behaviour is unchanged. Raised as a separate task.
+- `apps/api`'s unauthenticated `/v1/users` and `/v1/errors` routes (pre-existing scaffold duplicates of the tRPC user and error routers) are removed — see `api-users-unauthenticated.bugfix.md`. No system caller remains: every caller of the guarded user use cases is an authenticated tRPC procedure.
 - `validate.sh`'s drizzle schema check was skipped locally (no Postgres in the build environment).
 
 ## Deviations from the approved summary

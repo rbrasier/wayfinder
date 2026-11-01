@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { TRPCError } from "@trpc/server";
 import { DEFAULT_CACHE_TTL_SECONDS, MATCH_CANDIDATE_LIMIT } from "@wayfinder/domain";
-import { authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 // A hand-maintained list past this size wants a real source behind it, and the
@@ -11,10 +10,6 @@ const MANAGED_ENTRY_LIMIT = 500;
 // Narrowing runs the ladder once per value, and the semantic rung costs a model
 // call, so one request may not ask for an unbounded batch.
 const MATCH_VALUE_LIMIT = 10;
-
-const requireAdmin = (isAdmin: boolean): void => {
-  if (!isAdmin) throw new TRPCError({ code: "FORBIDDEN", message: "Admin only." });
-};
 
 const sourceInput = z.object({
   name: z.string().min(1),
@@ -30,8 +25,7 @@ const sourceInput = z.object({
 });
 
 export const lookupSourceRouter = router({
-  list: authenticatedProcedure.query(async ({ ctx }) => {
-    requireAdmin(ctx.isAdmin);
+  list: technicalAdminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listLookupSources.execute();
     if (result.error) throw toTrpcError(result.error);
     // Safe to return whole: the read model carries `credentialSet`, a boolean —
@@ -39,17 +33,15 @@ export const lookupSourceRouter = router({
     return result.data;
   }),
 
-  create: authenticatedProcedure.input(sourceInput).mutation(async ({ ctx, input }) => {
-    requireAdmin(ctx.isAdmin);
+  create: technicalAdminProcedure.input(sourceInput).mutation(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.registerLookupSource.execute(input);
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
-  update: authenticatedProcedure
+  update: technicalAdminProcedure
     .input(z.object({ id: z.string().min(1), source: sourceInput }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.updateLookupSource.execute(
         input.id,
         input.source,
@@ -58,10 +50,9 @@ export const lookupSourceRouter = router({
       return result.data;
     }),
 
-  delete: authenticatedProcedure
+  delete: technicalAdminProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.deleteLookupSource.execute(input.id);
       if (result.error) throw toTrpcError(result.error);
       return { deleted: true };
@@ -69,7 +60,7 @@ export const lookupSourceRouter = router({
 
   // Runs against a draft, so an admin sees the source's fields and can pick the
   // display and key before saving anything (ADR-050 §2b).
-  test: authenticatedProcedure
+  test: technicalAdminProcedure
     .input(
       z.object({
         kind: z.enum(["directory", "managed", "api"]),
@@ -84,7 +75,6 @@ export const lookupSourceRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const { sourceId, ...draft } = input;
       const stored = sourceId
         ? await ctx.container.repos.lookupSources.readCredential(sourceId)
@@ -101,16 +91,15 @@ export const lookupSourceRouter = router({
 
   // A managed source's rows are its system of record, so the admin edits them
   // here rather than anywhere else (ADR-050 §2).
-  listEntries: authenticatedProcedure
+  listEntries: technicalAdminProcedure
     .input(z.object({ sourceId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.listManagedEntries.execute(input.sourceId);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),
 
-  replaceEntries: authenticatedProcedure
+  replaceEntries: technicalAdminProcedure
     .input(
       z.object({
         sourceId: z.string().min(1),
@@ -120,7 +109,6 @@ export const lookupSourceRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      requireAdmin(ctx.isAdmin);
       const result = await ctx.container.useCases.replaceManagedEntries.execute(
         input.sourceId,
         input.entries,

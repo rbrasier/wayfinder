@@ -139,3 +139,4 @@ export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: 
       </div>
     </div>
   );
+}

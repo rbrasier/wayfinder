@@ -480,7 +480,7 @@ export const extractionRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot edit this flow." });
     }
 
@@ -498,7 +498,7 @@ export const extractionRouter = router({
   // Reading an analysis's progress is not an authoring act, so a viewer may poll
   // it — the editor that started it is the only caller in practice.
   analysisStatus: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
-    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
     }
 

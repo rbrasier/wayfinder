@@ -1,9 +1,9 @@
 # Phase — Admin Permission Split (Delegated Admin Roles)
 
-- **Status**: Implemented (v0.28.44)
-- **Target version**: 0.28.44  (bump: PATCH — see §Version)
+- **Status**: Implemented (v0.28.46)
+- **Target version**: 0.28.46  (bump: PATCH — see §Version)
 - **Base branch**: `release/alpha-2` → implemented docs go to
-  `docs/development/implemented/alpha-2/v0.28.44/`
+  `docs/development/implemented/alpha-2/v0.28.46/`
 - **PRD**: `docs/development/prd/admin-permission-split.prd.md`
 - **ADRs**: ADR-066 (this phase), ADR-021 and ADR-022 (amended), ADR-063 (Event Watch), ADR-005
 - **Issue**: #349 (parent #346)
@@ -44,7 +44,7 @@ Approved at `/build` Step 0, with two refinements found in the pre-flight read:
   Organisations deployment card stay Global-only; About links and Branding are
   technical. The first-run setup wizard and "Re-run setup" stay Global-only.
 
-Business rules, UI, data, files, tests, version (PATCH `0.28.43 → 0.28.44`,
+Business rules, UI, data, files, tests, version (PATCH `0.28.45 → 0.28.46`,
 base and PR target `release/alpha-2`) and risks are as in the sections below.
 
 Build order:
@@ -52,7 +52,7 @@ Build order:
 1. Domain — permission keys, role keys (`permission.ts`, `role.ts` + tests).
 2. Application — role assign/remove guards (+ `role.test.ts`).
 3. Application — user create/update/delete/reset-password guards (+ tests).
-4. Adapters — seed roles + rename, migration `0049` (+ seed test).
+4. Adapters — seed roles + rename, migration `0050` (+ seed test).
 5. Web core — `anyPermissionProcedure`, `canOversee`, `lib/admin-areas.ts` (+ tests).
 6. Re-gate technical routers.
 7. Re-gate users routers.
@@ -111,7 +111,7 @@ Global-only.
 | application | `packages/application/src/use-cases/role/assign-user-role.ts`, `remove-user-role.ts` (+ `role.test.ts`) | accept caller `{ isAdmin }`; refuse admin-role keys unless Global Admin (`DomainError` FORBIDDEN, Result pattern) |
 | application | `create-user.ts`, `update-user.ts`, `delete-user.ts`, `reset-user-password.ts` (+ `user-mutations.test.ts`, `reset-user-password.test.ts`, `create-user.test.ts`) | accept caller `{ isAdmin }`; refuse `isAdmin` values and admin-held targets unless Global Admin |
 | adapters | `packages/adapters/src/auth/seed-roles.ts` (+ test) | Admins name → "Global Admin"; add Technical Admin (`admin:technical`, `knowledge:curate`) and User Admin (`admin:users`) seeds; `POWER_USER_SCOPED_FLAGS` / `ADMIN_SCOPED_FLAGS` unchanged |
-| adapters | `packages/adapters/drizzle/0049_<name>.sql` + journal | generated migration; `UPDATE admin_roles SET name = 'Global Admin' WHERE key = 'admins';` with `-- data-impact: preserved — renames one row's display name` |
+| adapters | `packages/adapters/drizzle/0050_<name>.sql` + journal | generated migration; `UPDATE admin_roles SET name = 'Global Admin' WHERE key = 'admins';` with `-- data-impact: preserved — renames one row's display name` |
 | web | `apps/web/src/server/trpc.ts` (+ `permission-procedure.test.ts`) | `anyPermissionProcedure(keys)`; `canOversee(ctx)`; `hasAnyAdminArea(permissions, isAdmin)` |
 | web | admin-surface flag check for `skills`, `mcp`, `event_watch` (new helper beside `feature-flag.ts`, + test) | Global Admin → `IsFeatureEnabledForUser` as today; `admin:technical` holder → `IsFeatureEnabled` (switched on, role scoping skipped). Used by the sidebar, the admin pages and the admin procedures of those three surfaces only; `featureFlag.isEnabledForMe` for authoring is unchanged (ADR-066 §5) |
 | web | routers in §4 (+ one test per router) | re-gate per the area map; pass caller into the guarded use cases |
@@ -152,21 +152,21 @@ API in `node_modules/@trpc/server` before writing `anyPermissionProcedure`.
 ## 8. Database & migration
 
 No schema change (`permission_key` is `text`). One generated data migration
-(`0049`, after alpha-2's latest `0048_mcp_stored_credentials`) renames the
+(`0050`, after alpha-2's `0049_entra_account_id_oid`) renames the
 `admins` role row. Generate it with the repo's drizzle
 tooling as a custom migration; never `drizzle-kit push`.
 
 **Forward-merge to `main`:** `main` numbers its migrations independently
-(up to `0056` at time of writing), so `0049` collides there. When `/release`
+(up to `0056` at time of writing), so `0050` collides there. When `/release`
 forward-merges, renumber this migration after `main`'s latest and regenerate
 the journal with the tooling, not by hand. The SQL is idempotent,
 so re-running it is harmless. Record this step in the release PR.
 
 ## 9. Version
 
-PATCH `0.28.41 → 0.28.44`. Open PR #353 (`bugfix/tool-use-and-email-card`)
-already moves `release/alpha-2` to `0.28.43`. If another PR merges first,
-take the next free patch number at build time.
+PATCH, landing as `0.28.46`. PR #353 took `0.28.43`, PR #354 `0.28.44` and
+PR #362 `0.28.45` (with migration `0049`) while this was in review, so the build took the next free number,
+as planned here.
 
 Departures recorded at the maintainer's request:
 - CLAUDE.md routes new features to `main` and classes them as MINOR. This

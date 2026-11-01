@@ -89,6 +89,17 @@ const EXPECTED_GATES: Readonly<Record<string, ExpectedGate>> = {
   "skill.create": technical,
   "skill.restore": technical,
   "skill.update": technical,
+  "lookupSource.create": technical,
+  "lookupSource.delete": technical,
+  "lookupSource.list": technical,
+  "lookupSource.listEntries": technical,
+  "lookupSource.replaceEntries": technical,
+  "lookupSource.test": technical,
+  "lookupSource.update": technical,
+  "mcpServer.listTools": technical,
+  "mcpServer.refreshTools": technical,
+  "mcpServer.updateToolSettings": technical,
+  "settings.embeddingsAttention": technical,
 
   // Users — Users, Groups, Organisations, non-admin role assignment.
   "user.create": users,
@@ -157,6 +168,15 @@ const EXPECTED_GATES: Readonly<Record<string, ExpectedGate>> = {
   "organisation.createForSelf": global,
   "organisation.setEnabled": global,
   "hr.list": global,
+  // Simulating a user is acting with their access (ADR-059).
+  "impersonation.listTargets": global,
+  // Sign-in policy and forced sign-out are access controls (ADR-035).
+  "settings.getSessionPolicy": global,
+  "settings.setSessionPolicy": global,
+  "user.revokeSessions": global,
+  // Scheduled deletion of records is a governance decision, not a technical one.
+  "settings.retention": global,
+  "settings.setRetentionWindow": global,
 
   // Gated by an ordinary (non-admin) permission, unchanged by ADR-066.
   "knowledge.edit": { permission: "knowledge:curate" },

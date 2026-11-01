@@ -442,16 +442,17 @@ export const flowRouter = router({
       return result.data;
     }),
 
-  // Export and duplicate are gated to the flow's owner or an admin, and the
-  // use-cases enforce it again rather than trusting the router (ADR-049 §9). No
-  // separate PermissionKey exists — see the ADR for why.
+  // Export and duplicate are gated to the flow's owner or an admin (oversight
+  // counts, ADR-066 §4), and the use-cases enforce it again rather than trusting
+  // the router (ADR-049 §9). No separate PermissionKey exists — see the ADR for
+  // why.
   duplicate: authenticatedProcedure
     .input(flowIdInput)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.duplicateFlow.execute({
         flowId: input.flowId,
         requestedByUserId: ctx.userId,
-        isAdmin: ctx.isAdmin,
+        isAdmin: canOversee(ctx),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;
