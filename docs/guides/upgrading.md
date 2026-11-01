@@ -275,6 +275,33 @@ This is why step 1 is a backup, every time.
 
 ---
 
+## Moving from alpha-2 (0.28.x) to the alpha-3 line (0.41.0 or later)
+
+**Who needs this:** any deployment running a `0.28.x` image moving to `0.41.0` or
+later. Run the `migrate` step as for every upgrade; nothing else is required.
+
+The two lines numbered their migrations independently, so the migrator first
+recognises an alpha-2 database and brings it onto the alpha-3 history — you will
+see `This database was migrated by the alpha-2 release line…` in its output. It
+applies alpha-3's schema, skips the migrations alpha-2 already ran under other
+numbers, and keeps your data:
+
+- **MCP servers keep their saved bearer tokens and OAuth client-credentials
+  settings.** Both lines encrypt them with `SETTINGS_ENCRYPTION_KEY`, so keep the
+  same value. A server that still named an `MCP_CRED_*` environment variable needs
+  its token entered once on Admin → MCP servers, as on every alpha-3 upgrade.
+- **Global, Technical and User Admin roles carry over unchanged**, with their
+  assignments.
+- **Embeddings are rewritten to 1024 dimensions** (`0053`), under a table lock and
+  with about 2.7× the vector storage. Schedule the upgrade for a large knowledge
+  base.
+
+Everything runs in one transaction, so a failure leaves the alpha-2 database as
+it was. Migrate with `0.41.0` or later — an earlier alpha-3 image would skip most
+of the schema on an alpha-2 database.
+
+---
+
 ## Before you upgrade
 
 - **Read the release notes** for the version you are moving to, and for any you

@@ -1,0 +1,2 @@
+-- data-impact: preserved — adds a nullable column; existing rows keep their credential_ref and keep working through the environment fallback
+ALTER TABLE "admin_mcp_servers" ADD COLUMN "credential_encrypted" text;

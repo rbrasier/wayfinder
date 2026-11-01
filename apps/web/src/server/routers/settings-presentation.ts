@@ -1,4 +1,3 @@
-import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
   ABOUT_LINKS_SETTING_KEY,
@@ -14,10 +13,9 @@ import {
   normaliseSiteBannerLinkUrl,
 } from "@wayfinder/domain";
 import {
-  adminProcedure,
   authenticatedProcedure,
   publicProcedure,
-  type TrpcContext,
+  technicalAdminProcedure,
 } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { toPublicBranding } from "@/lib/public-branding";
@@ -92,34 +90,25 @@ export const loginNoticeInputSchema = z.object({
   text: z.string().max(LOGIN_NOTICE_TEXT_MAX_LENGTH),
 });
 
-// adminProcedure proves the caller is an admin but does not narrow userId, which
-// the audit trail needs.
-const requireActorId = (ctx: TrpcContext): string => {
-  if (!ctx.userId) {
-    throw new TRPCError({ code: "UNAUTHORIZED", message: "Authentication required." });
-  }
-  return ctx.userId;
-};
-
 export const presentationSettingsProcedures = {
   // Public: the sign-in page shows the brand before anyone is signed in.
   getBranding: publicProcedure.query(async ({ ctx }) => {
     return toPublicBranding(await ctx.container.runtimeConfig.getBrandingConfig());
   }),
 
-  setBranding: adminProcedure.input(brandingInputSchema).mutation(async ({ ctx, input }) => {
-    const result = await ctx.container.useCases.setBranding.execute(input, requireActorId(ctx));
+  setBranding: technicalAdminProcedure.input(brandingInputSchema).mutation(async ({ ctx, input }) => {
+    const result = await ctx.container.useCases.setBranding.execute(input, ctx.userId);
     if (result.error) throw toTrpcError(result.error);
     ctx.container.runtimeConfig.invalidateBranding();
     return toPublicBranding(result.data);
   }),
 
-  getLoginNotice: adminProcedure.query(async ({ ctx }) => {
+  getLoginNotice: technicalAdminProcedure.query(async ({ ctx }) => {
     return ctx.container.runtimeConfig.getLoginNoticeConfig();
   }),
 
-  setLoginNotice: adminProcedure.input(loginNoticeInputSchema).mutation(async ({ ctx, input }) => {
-    const result = await ctx.container.useCases.setLoginNotice.execute(input, requireActorId(ctx));
+  setLoginNotice: technicalAdminProcedure.input(loginNoticeInputSchema).mutation(async ({ ctx, input }) => {
+    const result = await ctx.container.useCases.setLoginNotice.execute(input, ctx.userId);
     if (result.error) throw toTrpcError(result.error);
     ctx.container.runtimeConfig.invalidateLoginNotice();
     return result.data;
@@ -152,7 +141,7 @@ export const presentationSettingsProcedures = {
     return ctx.container.runtimeConfig.getSiteBannerConfig();
   }),
 
-  setSiteBanner: adminProcedure
+  setSiteBanner: technicalAdminProcedure
     .input(siteBannerConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.repos.systemSettings.set(
@@ -171,7 +160,7 @@ export const presentationSettingsProcedures = {
     return ctx.container.runtimeConfig.getChatDisclaimerConfig();
   }),
 
-  setChatDisclaimer: adminProcedure
+  setChatDisclaimer: technicalAdminProcedure
     .input(chatDisclaimerConfigInputSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.repos.systemSettings.set(
@@ -189,7 +178,7 @@ export const presentationSettingsProcedures = {
     return ctx.container.runtimeConfig.getAboutLinksConfig();
   }),
 
-  setAboutLinks: adminProcedure.input(aboutLinksInputSchema).mutation(async ({ ctx, input }) => {
+  setAboutLinks: technicalAdminProcedure.input(aboutLinksInputSchema).mutation(async ({ ctx, input }) => {
     const result = await ctx.container.repos.systemSettings.set(
       ABOUT_LINKS_SETTING_KEY,
       JSON.stringify(input),

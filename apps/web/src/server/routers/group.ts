@@ -8,7 +8,7 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, router, userAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const GROUP_MANAGE_PERMISSION: PermissionKey = "group:manage_own";
@@ -20,11 +20,16 @@ interface GroupCaller {
   permissions: Set<PermissionKey>;
 }
 
+// Who may manage every group, as a global admin does (ADR-036). Groups belong to
+// the users admin area, so a User Admin holds this too (ADR-066 §1).
+const managesAllGroups = (caller: GroupCaller): boolean =>
+  caller.isAdmin || caller.permissions.has("admin:users");
+
 // A non-admin needs the group:manage_own capability at all before per-group
 // scoping is even considered — turning that permission off disables delegated-
 // admin self-service globally (ADR-036 §4).
 const hasGroupManageCapability = (caller: GroupCaller): boolean =>
-  caller.isAdmin || caller.permissions.has(GROUP_MANAGE_PERMISSION);
+  managesAllGroups(caller) || caller.permissions.has(GROUP_MANAGE_PERMISSION);
 
 const groupRoleSchema = z.enum([GROUP_ROLES.member, GROUP_ROLES.delegatedAdmin]);
 
@@ -38,7 +43,7 @@ const assertCanManageGroup = async (caller: GroupCaller, groupId: string): Promi
   }
   const context = await caller.container.useCases.resolveGroupAuthorization.execute(
     caller.userId,
-    caller.isAdmin,
+    managesAllGroups(caller),
   );
   if (context.error) throw toTrpcError(context.error);
   if (!canManageGroup(context.data, groupId)) {
@@ -55,7 +60,7 @@ export const groupRouter = router({
     if (!hasGroupManageCapability(caller)) return [];
     const context = await ctx.container.useCases.resolveGroupAuthorization.execute(
       ctx.userId,
-      ctx.isAdmin,
+      managesAllGroups(caller),
     );
     if (context.error) throw toTrpcError(context.error);
     const result = await ctx.container.useCases.listManageableGroups.execute(context.data);
@@ -92,7 +97,7 @@ export const groupRouter = router({
 
   // Creating groups and assigning their first delegated admin is a global-admin
   // action (PRD user story 1); delegated admins never mint new groups.
-  create: adminProcedure
+  create: userAdminProcedure
     .input(
       z.object({
         name: z.string().min(1),
@@ -130,7 +135,7 @@ export const groupRouter = router({
       return result.data;
     }),
 
-  delete: adminProcedure
+  delete: userAdminProcedure
     .input(z.object({ groupId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteGroup.execute(input.groupId);
@@ -148,7 +153,7 @@ export const groupRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       await assertCanManageGroup(ctx, input.groupId);
-      assertRoleAssignable(ctx.isAdmin, input.roleInGroup);
+      assertRoleAssignable(managesAllGroups(ctx), input.roleInGroup);
       const result = await ctx.container.useCases.addGroupMember.execute({
         groupId: input.groupId,
         userId: input.userId,
@@ -170,7 +175,7 @@ export const groupRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       await assertCanManageGroup(ctx, input.groupId);
-      assertRoleAssignable(ctx.isAdmin, input.roleInGroup);
+      assertRoleAssignable(managesAllGroups(ctx), input.roleInGroup);
       const result = await ctx.container.useCases.setGroupMemberRole.execute(
         input.groupId,
         input.userId,

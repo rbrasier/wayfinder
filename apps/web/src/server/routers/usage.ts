@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, oversightProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export const usageRouter = router({
@@ -11,7 +11,7 @@ export const usageRouter = router({
     return result.data;
   }),
 
-  summary: adminProcedure
+  summary: oversightProcedure
     .input(
       z
         .object({

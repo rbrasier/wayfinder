@@ -39,6 +39,7 @@ import { useSidebar } from "@/components/sidebar-context";
 import {
   advancedFlowSettingsStartsCollapsed,
   eventWatchAttention,
+  filterAdminNavGroups,
   formatRecentChatMeta,
   isNewChatShortcut,
   recentChatSessions,
@@ -47,6 +48,8 @@ import {
 import { UsageMeter, UsageRing } from "@/components/usage-meter";
 import { authClient } from "@/lib/auth-client";
 import { ViewAsUserDialog } from "@/components/impersonation/view-as-user-dialog";
+import type { PermissionKey } from "@wayfinder/domain";
+import { canOpenAdminArea, canOpenAdminPath, firstAdminHref, type AdminViewer } from "@/lib/admin-areas";
 import { trpc } from "@/trpc/client";
 import { staleDocumentsMessage } from "./settings/embeddings-provider-state";
 
@@ -424,18 +427,25 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, [accountOpen]);
 
+  // What this viewer's admin areas open (ADR-066). UX only — every admin page
+  // and procedure enforces the same areas server-side.
+  const viewer: AdminViewer = {
+    isAdmin: userQuery.data?.isAdmin ?? false,
+    permissions: new Set((userQuery.data?.permissions ?? []) as PermissionKey[]),
+  };
+  const showsTechnicalArea = isAdmin && canOpenAdminArea(viewer, "technical");
   // Knowledge lives in the admin menu only; the page and its tRPC procedures
   // still enforce knowledge:curate regardless (ADR-021).
-  const canCurate =
-    (userQuery.data?.isAdmin ?? false) ||
-    (userQuery.data?.permissions ?? []).includes("knowledge:curate");
-  const skillsFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery(
+  const canCurate = viewer.isAdmin || viewer.permissions.has("knowledge:curate");
+  // The admin-surface reading of these flags (ADR-066 §5): switched on is
+  // enough here, whoever the flag is scoped to for authoring.
+  const skillsFlagQuery = trpc.featureFlag.isAdminSurfaceEnabled.useQuery(
     { key: "skills" },
-    { enabled: isAdmin },
+    { enabled: showsTechnicalArea },
   );
-  const mcpFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery(
+  const mcpFlagQuery = trpc.featureFlag.isAdminSurfaceEnabled.useQuery(
     { key: "mcp" },
-    { enabled: isAdmin },
+    { enabled: showsTechnicalArea },
   );
   const organisationsEnabledQuery = trpc.organisation.isEnabled.useQuery(undefined, {
     enabled: isAdmin,
@@ -448,19 +458,19 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   // Documents embedded by a model other than the configured one stop matching
   // queries until re-indexed, so the admin is pointed at Configuration.
   const embeddingsAttentionQuery = trpc.settings.embeddingsAttention.useQuery(undefined, {
-    enabled: isAdmin,
+    enabled: showsTechnicalArea,
     staleTime: 60_000,
   });
-  const eventWatchFlagQuery = trpc.featureFlag.isEnabledForMe.useQuery(
+  const eventWatchFlagQuery = trpc.featureFlag.isAdminSurfaceEnabled.useQuery(
     { key: "event_watch" },
-    { enabled: isAdmin },
+    { enabled: showsTechnicalArea },
   );
   const eventWatchEnabled = eventWatchFlagQuery.data ?? false;
   const eventWatchAttentionQuery = trpc.eventWatch.countNeedingAttention.useQuery(undefined, {
-    enabled: isAdmin && eventWatchEnabled,
+    enabled: showsTechnicalArea && eventWatchEnabled,
     refetchInterval: 60_000,
   });
-  const adminNav = buildAdminNav({
+  const adminNav = filterAdminNavGroups(buildAdminNav({
     skillsEnabled: skillsFlagQuery.data ?? false,
     mcpEnabled: mcpFlagQuery.data ?? false,
     canCurate,
@@ -468,14 +478,15 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     extractionEnabled,
     configurationAttention: staleDocumentsMessage(embeddingsAttentionQuery.data?.staleDocumentCount ?? 0),
     eventWatchAttention: eventWatchAttention(eventWatchEnabled, eventWatchAttentionQuery.data),
-  });
+  }), viewer);
   const nav: NavGroup[] = isAdmin
     ? adminNav
     : buildUserNav(extractionEnabled, pendingApprovalsQuery.data?.length ?? 0, () => {
         closeMobile();
         setNewChatOpen(true);
       });
-  const homeHref = isAdmin ? "/admin/flows" : "/chats";
+  const adminHomeHref = firstAdminHref(viewer);
+  const homeHref = isAdmin ? adminHomeHref ?? "/chats" : "/chats";
   const brandingQuery = trpc.settings.getBranding.useQuery(undefined, {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
@@ -572,11 +583,11 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           Exit admin mode
         </button>
       )}
-      {!isAdmin && user?.isAdmin && !isSimulating && (
+      {!isAdmin && adminHomeHref !== null && !isSimulating && (
         <button
           onClick={() => {
             closeMobile();
-            router.push("/admin/sessions");
+            router.push(canOpenAdminPath(viewer, "/admin/sessions") ? "/admin/sessions" : adminHomeHref);
           }}
           className="rounded-[7px] border border-dashed border-[#d8d3c7] px-[9px] py-[5px] text-center text-[11.5px] text-[#5c574c] transition-colors hover:bg-[#efece5] hover:text-[#1c1b19]"
         >

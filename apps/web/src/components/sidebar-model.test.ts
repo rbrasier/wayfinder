@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { SessionStatus } from "@wayfinder/domain";
+import type { PermissionKey, SessionStatus } from "@wayfinder/domain";
 import {
   RECENT_CHATS_LIMIT,
   advancedFlowSettingsStartsCollapsed,
   eventWatchAttention,
+  filterAdminNavGroups,
   formatRecentChatMeta,
   isNewChatShortcut,
   recentChatSessions,
@@ -220,5 +221,47 @@ describe("advancedFlowSettingsStartsCollapsed", () => {
 
   it("opens the group when a watch needs attention, so Event Watch's badge is never hidden", () => {
     expect(advancedFlowSettingsStartsCollapsed(2)).toBe(false);
+  });
+});
+
+describe("filterAdminNavGroups (ADR-066)", () => {
+  const groups = [
+    {
+      label: undefined,
+      items: [{ href: "/admin/dashboards/overview" }, { href: "/admin/sessions" }, { href: "/admin/settings" }],
+    },
+    { label: "Users and Roles", items: [{ href: "/admin/users" }, { href: "/admin/roles" }] },
+    { label: "Advanced Flow Settings", items: [{ href: "/admin/skills" }, { href: "/knowledge" }] },
+    { label: "Advanced", items: [{ href: "/admin/usage" }, { href: "/admin/flags" }, { href: "/admin/audit" }] },
+  ];
+  const viewer = (permissions: PermissionKey[], isAdmin = false) => ({ isAdmin, permissions: new Set(permissions) });
+  const hrefs = (result: ReturnType<typeof filterAdminNavGroups<(typeof groups)[number]>>) =>
+    result.map((group) => group.items.map((item) => item.href));
+
+  it("keeps every item for a Global Admin", () => {
+    expect(hrefs(filterAdminNavGroups(groups, viewer([], true)))).toEqual(groups.map((g) => g.items.map((i) => i.href)));
+  });
+
+  it("shows a Technical Admin only Configuration, Skills, Knowledge and Flags", () => {
+    expect(hrefs(filterAdminNavGroups(groups, viewer(["admin:technical"])))).toEqual([
+      ["/admin/settings"],
+      ["/admin/skills", "/knowledge"],
+      ["/admin/flags"],
+    ]);
+  });
+
+  it("shows a User Admin only Users, and drops groups left empty", () => {
+    expect(hrefs(filterAdminNavGroups(groups, viewer(["admin:users"])))).toEqual([
+      ["/admin/users"],
+      ["/knowledge"],
+    ]);
+  });
+
+  it("shows an oversight holder the dashboards, All Chats, Usage and Audit", () => {
+    expect(hrefs(filterAdminNavGroups(groups, viewer(["admin:oversight"])))).toEqual([
+      ["/admin/dashboards/overview", "/admin/sessions"],
+      ["/knowledge"],
+      ["/admin/usage", "/admin/audit"],
+    ]);
   });
 });

@@ -1,6 +1,7 @@
 import { estimateRunFit } from "@wayfinder/application";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { canOversee } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 import { viewProcedure } from "./extraction-procedures";
 import { canEditFlow } from "./flow";
@@ -23,7 +24,7 @@ export const extractionSizeLimitProcedures = {
   // The pre-run size check: sizes the saved schema against the staged
   // documents' recorded text lengths. Null until a schema exists.
   estimateRunFit: viewProcedure.input(flowIdInput).query(async ({ ctx, input }) => {
-    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, ctx.isAdmin))) {
+    if (!(await canEditFlow(ctx.container, input.flowId, ctx.userId, canOversee(ctx)))) {
       throw new TRPCError({ code: "FORBIDDEN", message: "You cannot view this flow." });
     }
     const schema = await ctx.container.useCases.getExtractionSchema.execute(input.flowId);

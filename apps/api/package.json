@@ -12,7 +12,8 @@
     "recover-admin": "DOTENV_CONFIG_PATH=../../.env tsx src/cli/recover-admin.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "migrate:dev": "DOTENV_CONFIG_PATH=../../.env tsx src/cli/migrate.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

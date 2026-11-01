@@ -6,6 +6,7 @@ import {
 import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
+import { resolveCanOversee } from "@/lib/oversight";
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(CONTEXT_DOCS_ALLOWED_MIME_TYPES);
 
@@ -17,7 +18,6 @@ async function handlePOST(
   const { id: flowId } = await params;
   const container = getContainer();
 
-
   const canvasResult = await container.useCases.getFlowCanvas.execute(flowId);
   if (canvasResult.error || !canvasResult.data) {
     return NextResponse.json({ error: "Flow not found" }, { status: 404 });
@@ -25,7 +25,7 @@ async function handlePOST(
 
   const { flow } = canvasResult.data;
   const canEdit =
-    principal.isAdmin ||
+    (await resolveCanOversee(container, principal)) ||
     flow.ownerUserId === principal.userId ||
     flow.permissions.some((p) => p.userId === principal.userId && p.role === "owner");
   if (!canEdit) return NextResponse.json({ error: "Forbidden" }, { status: 403 });

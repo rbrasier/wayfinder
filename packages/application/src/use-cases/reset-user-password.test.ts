@@ -56,6 +56,17 @@ class RecordingAuditLogger implements IAuditLogger {
 }
 
 const actorId = "22222222-2222-4222-8222-222222222222";
+const caller = { isAdmin: true, userId: "global-admin" };
+
+const noRoles = {
+  listRolesForUser: async () => ok([]),
+  listUsersForRole: async () => ok([]),
+  assign: async () => ok(undefined),
+  remove: async () => ok(undefined),
+};
+// The guard reads role permissions only for a delegated caller; these tests act
+// as a Global Admin, so no role is ever looked up.
+const noRolePermissions = { listPermissions: async () => ok([]) } as never;
 
 describe("ResetUserPassword", () => {
   it("rejects a password shorter than the minimum before touching the resetter", async () => {
@@ -63,12 +74,15 @@ describe("ResetUserPassword", () => {
     const audit = new RecordingAuditLogger();
     const useCase = new ResetUserPassword(
       new StubUsers(buildUser()) as never,
+      noRoles,
+      noRolePermissions,
       resetter,
       audit,
     );
 
     const result = await useCase.execute({
       actorId,
+      caller,
       userId: buildUser().id,
       password: "short",
     });
@@ -81,10 +95,11 @@ describe("ResetUserPassword", () => {
   it("returns NOT_FOUND when the target user does not exist", async () => {
     const resetter = new RecordingResetter(ok({ userId: "unused", sessionsRevoked: 0 }));
     const audit = new RecordingAuditLogger();
-    const useCase = new ResetUserPassword(new StubUsers(null) as never, resetter, audit);
+    const useCase = new ResetUserPassword(new StubUsers(null) as never, noRoles, noRolePermissions, resetter, audit);
 
     const result = await useCase.execute({
       actorId,
+      caller,
       userId: "33333333-3333-4333-8333-333333333333",
       password: "a-long-enough-password",
     });
@@ -97,10 +112,11 @@ describe("ResetUserPassword", () => {
   it("propagates a lookup failure without attempting the reset", async () => {
     const resetter = new RecordingResetter(ok({ userId: "unused", sessionsRevoked: 0 }));
     const audit = new RecordingAuditLogger();
-    const useCase = new ResetUserPassword(new FailingUsers() as never, resetter, audit);
+    const useCase = new ResetUserPassword(new FailingUsers() as never, noRoles, noRolePermissions, resetter, audit);
 
     const result = await useCase.execute({
       actorId,
+      caller,
       userId: buildUser().id,
       password: "a-long-enough-password",
     });
@@ -115,10 +131,11 @@ describe("ResetUserPassword", () => {
       err(domainError("INFRA_FAILURE", "hashing failed")),
     );
     const audit = new RecordingAuditLogger();
-    const useCase = new ResetUserPassword(new StubUsers(user) as never, resetter, audit);
+    const useCase = new ResetUserPassword(new StubUsers(user) as never, noRoles, noRolePermissions, resetter, audit);
 
     const result = await useCase.execute({
       actorId,
+      caller,
       userId: user.id,
       password: "a-long-enough-password",
     });
@@ -131,10 +148,11 @@ describe("ResetUserPassword", () => {
     const user = buildUser();
     const resetter = new RecordingResetter(ok({ userId: user.id, sessionsRevoked: 3 }));
     const audit = new RecordingAuditLogger();
-    const useCase = new ResetUserPassword(new StubUsers(user) as never, resetter, audit);
+    const useCase = new ResetUserPassword(new StubUsers(user) as never, noRoles, noRolePermissions, resetter, audit);
 
     const result = await useCase.execute({
       actorId,
+      caller,
       userId: user.id,
       password: "a-long-enough-password",
     });
@@ -158,9 +176,9 @@ describe("ResetUserPassword", () => {
     const user = buildUser();
     const resetter = new RecordingResetter(ok({ userId: user.id, sessionsRevoked: 0 }));
     const audit = new RecordingAuditLogger();
-    const useCase = new ResetUserPassword(new StubUsers(user) as never, resetter, audit);
+    const useCase = new ResetUserPassword(new StubUsers(user) as never, noRoles, noRolePermissions, resetter, audit);
 
-    await useCase.execute({ actorId, userId: user.id, password: "super-secret-value" });
+    await useCase.execute({ actorId, caller, userId: user.id, password: "super-secret-value" });
 
     expect(JSON.stringify(audit.entries)).not.toContain("super-secret-value");
   });

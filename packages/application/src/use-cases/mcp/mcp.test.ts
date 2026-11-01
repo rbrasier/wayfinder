@@ -49,6 +49,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       callTimeoutMs: input.callTimeoutMs ?? 30_000,
       hasCredential: false,
       customHeaderNames: [],
+      oauth: input.oauth ?? null,
       status: "active",
       createdByUserId: input.createdByUserId ?? null,
       createdAt: now,
@@ -69,6 +70,7 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       dataClassification: patch.dataClassification ?? current.dataClassification,
       verbatimOnly: patch.verbatimOnly ?? current.verbatimOnly,
       callTimeoutMs: patch.callTimeoutMs ?? current.callTimeoutMs,
+      oauth: patch.oauth === undefined ? current.oauth : patch.oauth,
     };
     this.rows[index] = updated;
     return ok(updated);
@@ -107,14 +109,16 @@ class InMemorySecretStore implements IMcpServerSecretStore {
   constructor(private readonly servers: InMemoryMcpServerRepository) {}
 
   async get(serverId: string): Promise<Result<McpServerSecrets>> {
-    return ok(this.secrets.get(serverId) ?? { bearerToken: null, headers: {} });
+    return ok(this.secrets.get(serverId) ?? { bearerToken: null, headers: {}, oauthClientSecret: null });
   }
 
   async set(serverId: string, patch: McpServerSecretsPatch): Promise<Result<void>> {
-    const current = this.secrets.get(serverId) ?? { bearerToken: null, headers: {} };
+    const current = this.secrets.get(serverId) ?? { bearerToken: null, headers: {}, oauthClientSecret: null };
     const next: McpServerSecrets = {
       bearerToken: patch.bearerToken === undefined ? current.bearerToken : patch.bearerToken,
       headers: patch.headers === undefined ? current.headers : (patch.headers ?? {}),
+      oauthClientSecret:
+        patch.oauthClientSecret === undefined ? current.oauthClientSecret : patch.oauthClientSecret,
     };
     this.secrets.set(serverId, next);
     const index = this.servers.rows.findIndex((row) => row.id === serverId);
@@ -264,6 +268,7 @@ describe("RegisterMcpServer", () => {
     expect(secrets.secrets.get(result.data!.id)).toEqual({
       bearerToken: "token-1",
       headers: { "X-Api-Key": "key-1" },
+      oauthClientSecret: null,
     });
   });
 
@@ -340,6 +345,117 @@ describe("UpdateMcpServer", () => {
   it("returns NOT_FOUND for an unknown server", async () => {
     const result = await new UpdateMcpServer(repository, secrets).execute({ id: "missing", label: "Y" });
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("OAuth client credentials", () => {
+  let repository: InMemoryMcpServerRepository;
+  let secrets: InMemorySecretStore;
+
+  beforeEach(() => {
+    repository = new InMemoryMcpServerRepository();
+    secrets = new InMemorySecretStore(repository);
+  });
+
+  const oauth = {
+    tokenUrl: "https://login.example.com/oauth2/token",
+    clientId: "wayfinder-service",
+    clientSecret: "client-secret",
+    scope: "mcp.read",
+  };
+
+  const registerOAuth = () =>
+    new RegisterMcpServer(repository, secrets).execute({ label: "Records", url: "https://x.example/mcp", oauth });
+
+  it("registers a server that signs in with client credentials, keeping the secret in the secret store", async () => {
+    const result = await registerOAuth();
+
+    expect(result.data?.oauth).toEqual({
+      tokenUrl: "https://login.example.com/oauth2/token",
+      clientId: "wayfinder-service",
+      scope: "mcp.read",
+      audience: null,
+      clientAuthMethod: "client_secret_basic",
+    });
+    expect(result.data?.hasCredential).toBe(false);
+    expect(JSON.stringify(result.data)).not.toContain("client-secret");
+    expect(secrets.secrets.get(result.data!.id)?.oauthClientSecret).toBe("client-secret");
+  });
+
+  it("refuses a bearer token and OAuth together, and OAuth without a client secret, before creating anything", async () => {
+    const register = new RegisterMcpServer(repository, secrets);
+
+    const both = await register.execute({ label: "R", url: "https://x.example/mcp", bearerToken: "t", oauth });
+    const noSecret = await register.execute({
+      label: "R",
+      url: "https://x.example/mcp",
+      oauth: { ...oauth, clientSecret: "" },
+    });
+
+    expect(both.error?.code).toBe("VALIDATION_FAILED");
+    expect(noSecret.error?.code).toBe("VALIDATION_FAILED");
+    expect(repository.rows).toHaveLength(0);
+  });
+
+  it("refuses an Authorization header on a server that signs in with OAuth", async () => {
+    const created = await registerOAuth();
+
+    const result = await new UpdateMcpServer(repository, secrets).execute({
+      id: created.data!.id,
+      customHeaders: { Authorization: "Basic abc" },
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("clears the stored bearer token when a server switches to OAuth", async () => {
+    const created = await new RegisterMcpServer(repository, secrets).execute({
+      label: "Records",
+      url: "https://x.example/mcp",
+      bearerToken: "fixed-token",
+    });
+    const id = created.data!.id;
+
+    const result = await new UpdateMcpServer(repository, secrets).execute({ id, oauth });
+
+    expect(result.data?.oauth?.clientId).toBe("wayfinder-service");
+    expect(result.data?.hasCredential).toBe(false);
+    expect(secrets.secrets.get(id)?.oauthClientSecret).toBe("client-secret");
+  });
+
+  it("keeps the stored client secret when OAuth settings are edited with the secret left blank", async () => {
+    const created = await registerOAuth();
+    const id = created.data!.id;
+
+    const result = await new UpdateMcpServer(repository, secrets).execute({
+      id,
+      oauth: { ...oauth, clientSecret: "", scope: "mcp.read mcp.write" },
+    });
+
+    expect(result.data?.oauth?.scope).toBe("mcp.read mcp.write");
+    expect(secrets.secrets.get(id)?.oauthClientSecret).toBe("client-secret");
+  });
+
+  it("drops OAuth and its secret when a bearer token is set instead, or when OAuth is removed", async () => {
+    const first = await registerOAuth();
+    const second = await registerOAuth();
+    const update = new UpdateMcpServer(repository, secrets);
+
+    const switched = await update.execute({ id: first.data!.id, bearerToken: "fixed-token" });
+    const removed = await update.execute({ id: second.data!.id, oauth: null });
+
+    expect(switched.data).toMatchObject({ oauth: null, hasCredential: true });
+    expect(secrets.secrets.get(first.data!.id)?.oauthClientSecret).toBeNull();
+    expect(removed.data?.oauth).toBeNull();
+    expect(secrets.secrets.get(second.data!.id)?.oauthClientSecret).toBeNull();
+  });
+
+  it("leaves OAuth untouched when only the label changes", async () => {
+    const created = await registerOAuth();
+
+    const result = await new UpdateMcpServer(repository, secrets).execute({ id: created.data!.id, label: "Renamed" });
+
+    expect(result.data?.oauth?.clientId).toBe("wayfinder-service");
   });
 });
 

@@ -71,7 +71,7 @@ class InMemoryUsers implements IUserRepository {
 describe("CreateUser", () => {
   it("creates a new user when email is unused", async () => {
     const sut = new CreateUser(new InMemoryUsers());
-    const r = await sut.execute({ email: "a@b.com", name: "Ada" });
+    const r = await sut.execute({ email: "a@b.com", name: "Ada" }, { isAdmin: true, userId: "global-admin" });
     expect(r.error).toBeUndefined();
     expect(r.data?.email).toBe("a@b.com");
   });
@@ -79,8 +79,8 @@ describe("CreateUser", () => {
   it("rejects duplicate email with ALREADY_EXISTS", async () => {
     const repo = new InMemoryUsers();
     const sut = new CreateUser(repo);
-    await sut.execute({ email: "a@b.com" });
-    const r = await sut.execute({ email: "a@b.com" });
+    await sut.execute({ email: "a@b.com" }, { isAdmin: true, userId: "global-admin" });
+    const r = await sut.execute({ email: "a@b.com" }, { isAdmin: true, userId: "global-admin" });
     expect(r.data).toBeUndefined();
     expect(r.error?.code).toBe("ALREADY_EXISTS");
   });

@@ -29,7 +29,7 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
   {
     definition: {
       key: SYSTEM_ROLE_KEYS.admins,
-      name: "Admins",
+      name: "Global Admin",
       description: "Full access; derived from is_admin and always holds every permission.",
       isSystem: true,
       isImmutable: true,
@@ -54,6 +54,29 @@ const SYSTEM_ROLE_SEEDS: SystemRoleSeed[] = [
       "flow:webhook_trigger",
     ],
   },
+  {
+    definition: {
+      key: SYSTEM_ROLE_KEYS.technicalAdmins,
+      name: "Technical Admin",
+      description: "Manages configuration, flags, errors, schedules and advanced flow settings.",
+      isSystem: true,
+    },
+    // Knowledge sits in Advanced Flow Settings, which is technical (ADR-066 §2),
+    // and already has its own key, so the role bundles it rather than the
+    // Knowledge pages learning a second check.
+    defaultPermissions: ["admin:technical", "knowledge:curate"],
+  },
+  {
+    definition: {
+      key: SYSTEM_ROLE_KEYS.userAdmins,
+      name: "User Admin",
+      description: "Manages users, groups and organisations, and assigns non-admin roles.",
+      isSystem: true,
+    },
+    // admin:oversight is deliberately not seeded anywhere: it opens every user's
+    // chats, so only a Global Admin decides who holds it (ADR-066 §2).
+    defaultPermissions: ["admin:users"],
+  },
 ];
 
 // Flags scoped to Power Users on first migrate (ADR-022); admins still pass via
@@ -74,7 +97,7 @@ const POWER_USER_SCOPED_FLAGS = [
 const ADMIN_SCOPED_FLAGS = ["event_watch"];
 
 /**
- * Idempotent seed of the three system roles, their default permission grants, and
+ * Idempotent seed of the five system roles, their default permission grants, and
  * the Power-Users flag scoping. Insert-missing-only: default grants and flag
  * scoping are written only for roles created on this run, so a re-seed never
  * overwrites an admin's later edits.

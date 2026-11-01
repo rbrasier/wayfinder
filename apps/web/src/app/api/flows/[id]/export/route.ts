@@ -2,12 +2,13 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
+import { resolveCanOversee } from "@/lib/oversight";
 import { statusForDomainError } from "@/lib/http-errors";
 
 // Downloads a flow as a portable archive. A binary body, so it is a route
 // handler rather than a tRPC procedure (PRD §7). Authorisation is the
-// use-case's — owner or admin — and it is enforced there rather than here so
-// the rule has one home.
+// use-case's — owner or admin, where oversight counts as admin (ADR-066 §4) —
+// and it is enforced there rather than here so the rule has one home.
 async function handleGET(
   req: NextRequest,
   principal: ResolvedSession,
@@ -16,11 +17,10 @@ async function handleGET(
   const { id: flowId } = await params;
   const container = getContainer();
 
-
   const result = await container.useCases.exportFlow.execute({
     flowId,
     requestedByUserId: principal.userId,
-    isAdmin: principal.isAdmin,
+    isAdmin: await resolveCanOversee(container, principal),
   });
 
   if (result.error) {

@@ -1,5 +1,7 @@
 import { AdminSynthesiseContent } from "./_content";
+import { requireAdminPath } from "@/lib/admin-page-guard";
 
-export default function AdminSynthesisePage() {
+export default async function AdminSynthesisePage() {
+  await requireAdminPath("/admin/synthesise");
   return <AdminSynthesiseContent />;
 }

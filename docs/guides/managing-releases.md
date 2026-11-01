@@ -122,6 +122,22 @@ release branch and a feature on `main`), resolve in favour of `main`'s shape
 while preserving what the fix *does* — the fix's regression test tells you
 whether you succeeded.
 
+#### Migrations on a release line
+
+A release line and `main` generate migrations independently, so the same change
+gets a different number and journal timestamp on each. Drizzle applies only
+migrations newer than the newest one a database recorded, which means a
+database from the release line would silently skip most of `main`'s schema on
+upgrade. `packages/adapters/src/db/release-line-reconciliation.ts` closes that
+gap for alpha-2. Whenever a migration from a release line comes into `main`:
+
+- add the release-line migration (and `main`'s counterpart, if it has one) to
+  the constants and counterpart map in that file;
+- add the release-line SQL and journal to `packages/adapters/drizzle-fixtures/<line>/`;
+- run `pnpm --filter @wayfinder/adapters db:rehearse-upgrade` (validate.sh §29),
+  which upgrades a database migrated exactly as the release line left it and
+  requires the same schema a fresh one gets.
+
 ## CI on release branches
 
 `ci.yml` and `e2e.yml` trigger on:

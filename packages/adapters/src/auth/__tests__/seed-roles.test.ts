@@ -126,7 +126,7 @@ describe("seedRoles", () => {
     await seedRoles(roles, flagRoles);
 
     const all = await roles.list();
-    expect(all.data!.length).toBe(3);
+    expect(all.data!.length).toBe(5);
   });
 
   it("does not overwrite an admin's later permission edit when re-seeding", async () => {
@@ -155,5 +155,62 @@ describe("seedRoles", () => {
 
     const autoNodeRoles = await flagRoles.listRoleIdsForFlag("auto_node");
     expect(autoNodeRoles.data).toEqual([]);
+  });
+
+  it("names the is_admin role Global Admin (ADR-066 §2)", async () => {
+    const roles = new FakeRoleRepository();
+
+    await seedRoles(roles, new FakeFeatureFlagRoleRepository());
+
+    const admins = await roles.findByKey(SYSTEM_ROLE_KEYS.admins);
+    expect(admins.data?.name).toBe("Global Admin");
+    expect(admins.data?.isImmutable).toBe(true);
+  });
+
+  it("creates Technical Admin and User Admin as editable system roles with their area grants", async () => {
+    const roles = new FakeRoleRepository();
+
+    await seedRoles(roles, new FakeFeatureFlagRoleRepository());
+
+    const technical = await roles.findByKey(SYSTEM_ROLE_KEYS.technicalAdmins);
+    const users = await roles.findByKey(SYSTEM_ROLE_KEYS.userAdmins);
+    expect(technical.data).toMatchObject({ name: "Technical Admin", isSystem: true, isImmutable: false });
+    expect(users.data).toMatchObject({ name: "User Admin", isSystem: true, isImmutable: false });
+
+    const technicalGrants = await roles.listPermissions(technical.data!.id);
+    const userGrants = await roles.listPermissions(users.data!.id);
+    expect([...technicalGrants.data!].sort()).toEqual(["admin:technical", "knowledge:curate"]);
+    expect(userGrants.data).toEqual(["admin:users"]);
+  });
+
+  it("grants admin:oversight to no role — only Global Admins hold it, through the wildcard", async () => {
+    const roles = new FakeRoleRepository();
+
+    await seedRoles(roles, new FakeFeatureFlagRoleRepository());
+
+    const all = await roles.list();
+    for (const role of all.data!) {
+      const grants = await roles.listPermissions(role.id);
+      expect(grants.data).not.toContain("admin:oversight");
+    }
+  });
+
+  it("adds the two delegated admin roles to an existing install without touching its edits", async () => {
+    const roles = new FakeRoleRepository();
+    const flagRoles = new FakeFeatureFlagRoleRepository();
+    const everyone = await roles.create({ key: SYSTEM_ROLE_KEYS.everyone, name: "Everyone", isSystem: true, isDefault: true });
+    await roles.create({ key: SYSTEM_ROLE_KEYS.admins, name: "Admins", isSystem: true, isImmutable: true });
+    const powerUsers = await roles.create({ key: SYSTEM_ROLE_KEYS.powerUsers, name: "Power Users", isSystem: true });
+    await roles.replacePermissions(everyone.data!.id, ["chat:create"]);
+    await flagRoles.replaceRolesForFlag("skills", [powerUsers.data!.id]);
+
+    await seedRoles(roles, flagRoles);
+
+    expect((await roles.findByKey(SYSTEM_ROLE_KEYS.technicalAdmins)).data).not.toBeNull();
+    expect((await roles.findByKey(SYSTEM_ROLE_KEYS.userAdmins)).data).not.toBeNull();
+    expect((await roles.listPermissions(everyone.data!.id)).data).toEqual(["chat:create"]);
+    expect((await roles.listPermissions(powerUsers.data!.id)).data).toEqual([]);
+    expect((await flagRoles.listRoleIdsForFlag("skills")).data).toEqual([powerUsers.data!.id]);
+    expect((await flagRoles.listRoleIdsForFlag("event_watch")).data).toEqual([]);
   });
 });

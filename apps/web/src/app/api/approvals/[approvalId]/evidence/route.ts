@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
+import { resolveCanOversee } from "@/lib/oversight";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 
 // Serves the file filed as proof that an approval happened off system
@@ -20,7 +21,6 @@ async function handleGET(
   const { approvalId } = await params;
   const container = getContainer();
 
-
   const approvalResult = await container.repos.approvals.findById(approvalId);
   if (approvalResult.error) return NextResponse.json({ error: "Server error" }, { status: 500 });
 
@@ -31,7 +31,7 @@ async function handleGET(
     container,
     approval.sessionId,
     principal.userId,
-    principal.isAdmin,
+    await resolveCanOversee(container, principal),
     { requireSend: false, allowApprover: true },
   );
   if (!access.authorized) {

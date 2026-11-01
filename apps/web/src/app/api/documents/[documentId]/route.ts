@@ -5,6 +5,7 @@ import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
+import { resolveCanOversee } from "@/lib/oversight";
 
 async function handleGET(
   req: NextRequest,
@@ -29,7 +30,8 @@ async function handleGET(
   // Collaborative sessions: any participant of the document's session may
   // download it. Authorise against participant membership (scaling wall #11) —
   // knowing the message UUID is not itself authorisation.
-  const access = await authorizeSessionAccess(container, message.sessionId, principal.userId, principal.isAdmin, {
+  const canOverride = await resolveCanOversee(container, principal);
+  const access = await authorizeSessionAccess(container, message.sessionId, principal.userId, canOverride, {
     requireSend: false,
     allowApprover: true,
   });

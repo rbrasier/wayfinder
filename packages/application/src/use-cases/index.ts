@@ -23,6 +23,7 @@ export * from "./skill/index";
 export * from "./mcp/index";
 export * from "./automation/index";
 export * from "./event-watch/index";
+export * from "./admin-caller";
 export * from "./create-user";
 export * from "./update-user";
 export * from "./set-welcome-tour-completed";

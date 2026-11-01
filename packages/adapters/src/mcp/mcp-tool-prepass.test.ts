@@ -46,6 +46,7 @@ const server = (overrides: Partial<McpServer> = {}): McpServer => ({
   callTimeoutMs: 30_000,
   hasCredential: false,
   customHeaderNames: [],
+  oauth: null,
   status: "active",
   createdByUserId: null,
   createdAt: new Date("2026-10-01"),

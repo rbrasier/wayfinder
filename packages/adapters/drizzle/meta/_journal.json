@@ -421,6 +421,27 @@
       "when": 1793306597824,
       "tag": "0059_entra_account_id_oid",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793496780690,
+      "tag": "0060_mcp_oauth_client_credentials",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793496787024,
+      "tag": "0061_global_admin_role_name",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1792869293847,
+      "tag": "0049_global_admin_role_name",
+      "breakpoints": true
     }
   ]
 }

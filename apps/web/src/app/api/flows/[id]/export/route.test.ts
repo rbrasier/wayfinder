@@ -2,10 +2,15 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const resolveSession = vi.fn();
+const resolveEffectivePermissions = vi.fn();
 const exportExecute = vi.fn();
 
 vi.mock("@/lib/container", () => ({
-  getContainer: () => ({ resolveSession, useCases: { exportFlow: { execute: exportExecute } } }),
+  getContainer: () => ({
+    resolveSession,
+    resolveEffectivePermissions,
+    useCases: { exportFlow: { execute: exportExecute } },
+  }),
 }));
 
 vi.mock("@/lib/session-token", () => ({
@@ -28,6 +33,7 @@ const params = Promise.resolve({ id: FLOW_ID });
 
 beforeEach(() => {
   resolveSession.mockReset().mockResolvedValue({ userId: "user-1", isAdmin: false });
+  resolveEffectivePermissions.mockReset().mockResolvedValue({ data: new Set() });
   exportExecute.mockReset().mockResolvedValue({
     data: { filename: "procurement-approval-2026-08-17.zip", archive: Buffer.from("zip bytes") },
   });
@@ -51,6 +57,14 @@ describe("GET /api/flows/[id]/export", () => {
       requestedByUserId: "admin-1",
       isAdmin: true,
     });
+  });
+
+  it("treats an admin:oversight holder as an admin, so they can export a flow they do not own", async () => {
+    resolveEffectivePermissions.mockResolvedValue({ data: new Set(["admin:oversight"]) });
+
+    await GET(request(), { params });
+
+    expect(exportExecute).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true }));
   });
 
   it("answers with the archive as a zip attachment named by the use-case", async () => {

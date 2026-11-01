@@ -24,9 +24,9 @@
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --passWithNoTests",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
     "db:check": "drizzle-kit check",
-    "db:drift": "node scripts/check-schema-drift.mjs"
+    "db:drift": "node scripts/check-schema-drift.mjs",
+    "db:rehearse-upgrade": "vitest run --config vitest.rehearsal.config.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

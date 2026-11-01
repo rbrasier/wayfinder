@@ -5,6 +5,7 @@ import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
+import { resolveCanOversee } from "@/lib/oversight";
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set(SESSION_UPLOADS_ALLOWED_MIME_TYPES);
 
@@ -17,7 +18,8 @@ async function handleGET(
   const container = getContainer();
 
 
-  const access = await authorizeSessionAccess(container, sessionId, principal.userId, principal.isAdmin, {
+  const canOverride = await resolveCanOversee(container, principal);
+  const access = await authorizeSessionAccess(container, sessionId, principal.userId, canOverride, {
     requireSend: false,
     allowApprover: true,
   });

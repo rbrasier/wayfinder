@@ -607,6 +607,28 @@ else
   pass "dependabot targets $CURRENT_RELEASE_BRANCH"
 fi
 
+# ── 29. a database from the previous release line upgrades cleanly ───────────
+# Drizzle skips any migration older than the newest one a database recorded, so
+# a release line that numbered its migrations independently could upgrade by
+# silently skipping most of this line's schema. This migrates a throwaway
+# database exactly as release/alpha-2 left it, upgrades it, and requires the
+# same schema a fresh database gets (release-line-reconciliation.ts).
+section "29. an alpha-2 database upgrades to this schema"
+if [ -z "${DATABASE_URL:-}" ]; then
+  skip "upgrade rehearsal — DATABASE_URL not set"
+elif ! node -e "
+  const m = process.env.DATABASE_URL.match(/[@]([^:/]+):?([0-9]*)\//);
+  const s = require('net').createConnection({ host: m?.[1] ?? 'localhost', port: parseInt(m?.[2] || '5432') });
+  s.on('connect', () => { s.destroy(); process.exit(0); });
+  s.on('error', () => process.exit(1));
+" 2>/dev/null; then
+  skip "upgrade rehearsal — database not reachable"
+elif pnpm --filter "@wayfinder/adapters" -s db:rehearse-upgrade; then
+  pass "an alpha-2 database upgrades to the same schema as a fresh one"
+else
+  fail "an alpha-2 database does not upgrade cleanly — see release-line-upgrade.rehearsal.test.ts"
+fi
+
 echo "──────────────────────────────────────────"
 echo "Passed: $PASS"
 echo "Failed: $FAIL"

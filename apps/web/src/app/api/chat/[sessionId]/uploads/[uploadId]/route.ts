@@ -3,6 +3,7 @@ import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
+import { resolveCanOversee } from "@/lib/oversight";
 
 async function handleDELETE(
   req: NextRequest,
@@ -13,7 +14,8 @@ async function handleDELETE(
   const container = getContainer();
 
 
-  const access = await authorizeSessionAccess(container, sessionId, principal.userId, principal.isAdmin, {
+  const canOverride = await resolveCanOversee(container, principal);
+  const access = await authorizeSessionAccess(container, sessionId, principal.userId, canOverride, {
     requireSend: true,
     allowApprover: false,
   });

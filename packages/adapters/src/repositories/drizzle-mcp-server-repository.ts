@@ -4,6 +4,7 @@ import {
   ok,
   type IMcpServerRepository,
   type ListMcpServersInput,
+  type McpOAuthSettings,
   type McpServer,
   type McpServerStatus,
   type McpServerUpdate,
@@ -30,6 +31,33 @@ const readHeaderNames = (ciphertext: string | null, encryption: SettingsEncrypti
   }
 };
 
+const oauthOf = (row: McpServerRow): McpOAuthSettings | null => {
+  if (!row.oauth_token_url || !row.oauth_client_id) return null;
+  return {
+    tokenUrl: row.oauth_token_url,
+    clientId: row.oauth_client_id,
+    scope: row.oauth_scope,
+    audience: row.oauth_audience,
+    clientAuthMethod: row.oauth_client_auth_method ?? "client_secret_basic",
+  };
+};
+
+type OAuthColumns = Partial<
+  Pick<McpServerRow, "oauth_token_url" | "oauth_client_id" | "oauth_scope" | "oauth_audience" | "oauth_client_auth_method">
+>;
+
+// The settings only — the client secret is written by the secret store.
+export const oauthColumns = (oauth: McpOAuthSettings | null | undefined): OAuthColumns => {
+  if (oauth === undefined) return {};
+  return {
+    oauth_token_url: oauth?.tokenUrl ?? null,
+    oauth_client_id: oauth?.clientId ?? null,
+    oauth_scope: oauth?.scope ?? null,
+    oauth_audience: oauth?.audience ?? null,
+    oauth_client_auth_method: oauth?.clientAuthMethod ?? null,
+  };
+};
+
 export const toMcpServerEntity = (row: McpServerRow, encryption: SettingsEncryptionService): McpServer => ({
   id: row.id,
   label: row.label,
@@ -40,6 +68,7 @@ export const toMcpServerEntity = (row: McpServerRow, encryption: SettingsEncrypt
   callTimeoutMs: row.call_timeout_ms,
   hasCredential: row.credential_ciphertext !== null,
   customHeaderNames: readHeaderNames(row.custom_headers_ciphertext, encryption),
+  oauth: oauthOf(row),
   status: row.status,
   createdByUserId: row.created_by_user_id,
   createdAt: row.created_at,
@@ -67,6 +96,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           data_classification: input.dataClassification ?? "internal",
           verbatim_only: input.verbatimOnly ?? false,
           call_timeout_ms: input.callTimeoutMs,
+          ...oauthColumns(input.oauth),
           created_by_user_id: input.createdByUserId ?? null,
         })
         .returning();
@@ -94,6 +124,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           data_classification: patch.dataClassification ?? current.data_classification,
           verbatim_only: patch.verbatimOnly ?? current.verbatim_only,
           call_timeout_ms: patch.callTimeoutMs ?? current.call_timeout_ms,
+          ...oauthColumns(patch.oauth),
           updated_at: new Date(),
         })
         .where(eq(admin_mcp_servers.id, id))

@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { adminProcedure, authenticatedProcedure, router } from "../trpc";
+import { authenticatedProcedure, canOversee, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 const assertOwnsSession = async (
@@ -10,7 +10,7 @@ const assertOwnsSession = async (
   const session = await ctx.container.repos.sessions.findById(sessionId);
   if (session.error) throw toTrpcError(session.error);
   if (!session.data) throw new TRPCError({ code: "NOT_FOUND", message: "Session not found." });
-  if (session.data.userId !== ctx.userId && !ctx.isAdmin) {
+  if (session.data.userId !== ctx.userId && !canOversee(ctx)) {
     throw new TRPCError({ code: "FORBIDDEN", message: "You do not have access to this session." });
   }
 };
@@ -42,7 +42,7 @@ export const scheduleRouter = router({
       return result.data;
     }),
 
-  listRecentRuns: adminProcedure
+  listRecentRuns: technicalAdminProcedure
     .input(z.object({ limit: z.number().int().positive().max(500).optional() }).optional())
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.listScheduleRuns.execute({ limit: input?.limit });

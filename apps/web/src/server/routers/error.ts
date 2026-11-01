@@ -4,7 +4,7 @@ import {
   updateErrorStatusInputSchema,
 } from "@wayfinder/shared";
 import { TRPCError } from "@trpc/server";
-import { adminProcedure, publicProcedure, router } from "../trpc";
+import { publicProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export const errorRouter = router({
@@ -22,13 +22,13 @@ export const errorRouter = router({
     return { ok: true };
   }),
 
-  listGrouped: adminProcedure.input(listErrorsInputSchema).query(async ({ ctx, input }) => {
+  listGrouped: technicalAdminProcedure.input(listErrorsInputSchema).query(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.listErrors.listGrouped(input);
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
-  listInGroup: adminProcedure
+  listInGroup: technicalAdminProcedure
     .input(updateErrorStatusInputSchema.pick({ message: true, page: true }))
     .query(async ({ ctx, input }) => {
       if (!input.message)
@@ -41,13 +41,13 @@ export const errorRouter = router({
       return result.data;
     }),
 
-  deleteAll: adminProcedure.mutation(async ({ ctx }) => {
+  deleteAll: technicalAdminProcedure.mutation(async ({ ctx }) => {
     const result = await ctx.container.useCases.deleteAllErrors.execute();
     if (result.error) throw toTrpcError(result.error);
     return { deleted: result.data };
   }),
 
-  updateStatus: adminProcedure
+  updateStatus: technicalAdminProcedure
     .input(updateErrorStatusInputSchema)
     .mutation(async ({ ctx, input }) => {
       if (input.id) {

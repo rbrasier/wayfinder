@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { NewAuditLog } from "@wayfinder/domain";
-import { adminProcedure, router } from "../trpc";
+import { oversightProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
 export const logInsightsExportInputSchema = z.object({
@@ -38,7 +38,7 @@ export const buildInsightsExportAuditPayload = (
 });
 
 export const analyticsRouter = router({
-  value: adminProcedure
+  value: oversightProcedure
     .input(
       z
         .object({
@@ -57,7 +57,7 @@ export const analyticsRouter = router({
       return result.data;
     }),
 
-  flowDeepDive: adminProcedure
+  flowDeepDive: oversightProcedure
     .input(z.object({ flowId: z.string().guid().optional() }).optional())
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getFlowDeepDive.execute({
@@ -69,7 +69,7 @@ export const analyticsRouter = router({
 
   // Records that an operator exported the field report (data egress). The file
   // itself is generated client-side; this only emits the audit event.
-  logInsightsExport: adminProcedure
+  logInsightsExport: oversightProcedure
     .input(logInsightsExportInputSchema)
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.logAuditEvent.execute(
