@@ -258,6 +258,16 @@ else
   pass "no Semgrep findings"
 fi
 
+# ── 11e. advisory floors held by overrides ───────────────────────────────────
+# Advisories fixed by an override rather than a direct bump: a lockfile
+# regeneration that drops the override fails here, whatever its severity.
+section "11e. lockfile advisory floors"
+if node --test scripts/lockfile-advisories.test.mjs > /dev/null 2>&1; then
+  pass "no lockfile resolves below a pinned advisory floor"
+else
+  fail "a lockfile resolves a vulnerable version — run 'node --test scripts/lockfile-advisories.test.mjs'"
+fi
+
 # ── 12. test files exist in domain and application ────────────────────────────
 section "12. domain and application packages have tests"
 DOMAIN_TESTS=$(find packages/domain/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')
