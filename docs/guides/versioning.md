@@ -24,7 +24,7 @@ Wayfinder is pre-release software, so it follows semver's pre-1.0 rule:
 ### The stage is not in the version number
 
 Which pre-release line a build belongs to — alpha-2, alpha-3, beta-1 — is
-recorded in the **branch name** (`release/alpha-2`) and the **docs folder**
+recorded in the **branch name** (`release/alpha-3`) and the **docs folder**
 (`implemented/alpha-2/`), never in the version digits. Cutting a new line
 creates a branch; it does not bump anything on its own.
 
@@ -53,7 +53,9 @@ docs/development/
     ├── alpha-2/
     │   ├── v2.1.0/
     │   └── ...
-    └── alpha-3/
+    ├── alpha-3/
+    │   └── ...
+    └── alpha-4/
         └── ...
 ```
 
@@ -67,8 +69,8 @@ version number.** Skills read both from the **Release Branching** section of
 
 | Base branch | Release line folder |
 |---|---|
-| `main` | the `Next release line` value — currently `alpha-3` |
-| the current release branch | its own name — currently `alpha-2` |
+| `main` | the `Next release line` value — currently `alpha-4` |
+| the current release branch | its own name — currently `alpha-3` |
 
 ### Version history
 
@@ -83,8 +85,9 @@ record, not a naming convention to extend:
 | Release line | Versions as shipped | Notes |
 |---|---|---|
 | alpha-1 | `v0.1` → `v1.59.2` | Started pre-`1.0`, then moved to the `1.x` line mid-flight. Retired |
-| alpha-2 | `v2.0.2` → `v2.19.1` | The `2.x` line. Renumbered to `0.19.1` at the cutover; later fixes on this branch are `0.19.x` |
-| alpha-3 onwards | `v0.20.0` → | Continuous `0.MINOR.PATCH`; MINOR continues alpha-2's count |
+| alpha-2 | `v2.0.2` → `v2.19.1`, then `v0.19.1` → `v0.28.50` | The `2.x` line, renumbered to `0.19.1` at the cutover; later fixes on this branch were `0.19.x`–`0.28.x`. Retired when alpha-3 was cut; archived as `archive/alpha-2` |
+| alpha-3 | `v0.29.0` → `v0.41.0` at the cut | Developed on `main`, cut to `release/alpha-3` at `0.41.0`; fixes on it are `0.41.x` |
+| alpha-4 onwards | `v0.42.0` → | Continuous `0.MINOR.PATCH`; MINOR continues alpha-3's count |
 
 Nothing was ever tagged or published under the old numbers, so no external
 reference breaks. Cross-references inside historical docs may point at paths

@@ -43,8 +43,8 @@ Wayfinder is a tool designed to created an end-user focused, but strucutred appr
 
 ## Quickstart (Docker Compose)
 
-**Current release: alpha-2** (branch `release/alpha-2`, versions `0.19.x`).
-Install from the release branch — `main` carries the next line (alpha-3) in
+**Current release: alpha-3** (branch `release/alpha-3`, versions `0.41.x`).
+Install from the release branch — `main` carries the next line (alpha-4) in
 active development and is not guaranteed stable. See
 [`docs/guides/managing-releases.md`](docs/guides/managing-releases.md) for
 the release model.
@@ -52,7 +52,7 @@ the release model.
 **Zero-env quick-start — no `.env` editing required.**
 
 ```bash
-git clone --branch release/alpha-2 https://github.com/rbrasier/wayfinder
+git clone --branch release/alpha-3 https://github.com/rbrasier/wayfinder
 cd wayfinder
 docker compose up -d      # Postgres + SeaweedFS object storage (skip if you bring your own)
 ./restart.sh              # generates secrets, migrates, starts the app
