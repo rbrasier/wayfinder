@@ -44,6 +44,8 @@ const callerWith = (container: Container, permissions: PermissionKey[], isAdmin 
     container,
     userId: "viewer",
     authSessionId: null,
+    impersonatorId: null,
+    impersonationCookie: null,
     isAdmin,
     permissions: new Set(permissions),
     headers: new Headers(),

@@ -55,6 +55,8 @@ const contextFor = (identity: ProbeIdentity): TrpcContext => ({
   container: probeContainer,
   userId: "probe-user",
   authSessionId: null,
+  impersonatorId: null,
+  impersonationCookie: null,
   isAdmin: identity.isAdmin,
   permissions: new Set(identity.permissions),
   headers: new Headers(),
