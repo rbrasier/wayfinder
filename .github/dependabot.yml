@@ -38,7 +38,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
-    target-branch: release/alpha-2
+    target-branch: release/alpha-3
     schedule:
       interval: weekly
     cooldown:
@@ -50,7 +50,7 @@ updates:
   # Majors are a Node runtime upgrade, taken deliberately rather than by bot.
   - package-ecosystem: docker
     directory: /
-    target-branch: release/alpha-2
+    target-branch: release/alpha-3
     schedule:
       interval: weekly
     cooldown:

@@ -125,9 +125,9 @@ maintainer runbook live in
 - `release/<line>` — the **current** release line, stabilisation only. Bug fixes
   and enhancements land here; never new features, never a merge from `main`.
 
-**Current release branch: `release/alpha-2`** ← skills read the base branch from
+**Current release branch: `release/alpha-3`** ← skills read the base branch from
 this line; update it when a new line is cut.
-**Next release line (on `main`): `alpha-3`** ← skills read the docs folder name
+**Next release line (on `main`): `alpha-4`** ← skills read the docs folder name
 from this line.
 
 | Skill | Base branch (branch from it, open the PR against it) |
@@ -138,8 +138,8 @@ from this line.
 | `/release` | Operates on `main` and release branches directly (maintainers only) |
 
 Implemented phase docs go to `docs/development/implemented/<release line>/v<version>/`,
-where the release line is read from the two lines above — `alpha-2` when your base
-branch is `release/alpha-2`, `alpha-3` when your base branch is `main`. Never derive
+where the release line is read from the two lines above — `alpha-3` when your base
+branch is `release/alpha-3`, `alpha-4` when your base branch is `main`. Never derive
 it from the version number, and never write into `implemented/` directly.
 
 ---
@@ -156,7 +156,7 @@ until the first stable release**. Every version is `0.MINOR.PATCH`.
 - **PATCH** (`0.0.x`): Bug fixes, UI tweaks, no schema impact
 
 The alpha/beta number is **not** in the version — it lives in the branch name
-(`release/alpha-2`) and the docs folder (`implemented/alpha-2/`). Cutting a new
+(`release/alpha-3`) and the docs folder (`implemented/alpha-3/`). Cutting a new
 pre-release line creates a branch; it does not bump anything by itself. MINOR
 keeps counting up across lines, so versions never restart or go backwards.
 
