@@ -79,7 +79,7 @@ had no area, and they are now classified:
 
 | Surface | Area | Why |
 |---|---|---|
-| Lookup sources (7 admin procedures; `search`/`match` stay open to operators) | Technical | A Configuration card |
+| Lookup sources (7 admin procedures; `search`/`match` stay open to operators) | Technical | A Configuration card, moved from Directory & security (Global-only, ADR-066 §3) to Integrations |
 | MCP tool listing, refresh and tool settings | Technical | Same screen as the rest of MCP servers |
 | Embeddings "needs re-index" indicator | Technical | Drives the Configuration dot |
 | Session policy, Sign out everywhere | Global | Access controls (ADR-035) |

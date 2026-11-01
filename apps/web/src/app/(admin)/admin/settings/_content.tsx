@@ -105,6 +105,7 @@ export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: 
               <RagEmbeddingsCard connectivity={connectivity} />
               <EmailCard connectivity={connectivity} />
               <AutomationCard />
+              <LookupSourcesCard />
             </CollapsibleSection>
 
             <CollapsibleSection title="Storage & uploads" description="Where files live and upload limits.">
@@ -120,20 +121,17 @@ export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: 
               <SiteBannerCard />
             </CollapsibleSection>
 
-            <CollapsibleSection
-              title="Directory & security"
-              description="HR data, directory sync and audit streaming."
-            >
-              {isGlobalAdmin && <HrDataCard />}
-              <LookupSourcesCard />
-              {isGlobalAdmin && (
-                <>
-                  <EntraDirectoryCard connectivity={connectivity} />
-                  <SiemStreamingCard />
-                  <RetentionCard />
-                </>
-              )}
-            </CollapsibleSection>
+            {isGlobalAdmin && (
+              <CollapsibleSection
+                title="Directory & security"
+                description="HR data, directory sync and audit streaming."
+              >
+                <HrDataCard />
+                <EntraDirectoryCard connectivity={connectivity} />
+                <SiemStreamingCard />
+                <RetentionCard />
+              </CollapsibleSection>
+            )}
           </div>
         </div>
       </div>
