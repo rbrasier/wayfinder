@@ -244,7 +244,9 @@ if [ -n "$DB_NAME" ]; then
 fi
 
 ADAPTERS_PKG=$(node -e "process.stdout.write(require('./packages/adapters/package.json').name)")
-pnpm --filter "$ADAPTERS_PKG" db:migrate || {
+# Through the app's migrator, not drizzle-kit: it is the one that knows how to
+# bring a database migrated by an older release line onto this line's history.
+pnpm db:migrate || {
   echo "  migration failed — check DATABASE_URL in .env"
   exit 1
 }
