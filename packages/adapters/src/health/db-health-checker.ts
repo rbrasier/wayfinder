@@ -1,4 +1,4 @@
-import type { ServiceStatus } from "@rbrasier/domain";
+import type { ServiceStatus } from "@wayfinder/domain";
 import { sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 

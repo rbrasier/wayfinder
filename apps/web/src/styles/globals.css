@@ -177,7 +177,7 @@
     --surface:       #ffffff;
     /* The primary ramp. An install's brand colour overrides all of these, plus
        --primary / --ring / --primary-foreground, from a \3c style> block the root
-       layout renders (ADR-060 §2) — so components reference the tokens, never
+       layout renders (ADR-061 §2) — so components reference the tokens, never
        the hex. validate.sh fails on a primary-ramp literal anywhere else. */
     --wf-primary:    #2f56d3;
     --primary-hover: #1f3ea8;

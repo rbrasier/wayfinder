@@ -38,11 +38,6 @@ Thumbs.db
 # Drizzle
 drizzle/meta
 
-# Template version tracking — these must be committed, not ignored
-# .template-version and .framework-scope are intentionally tracked in git
-!.template-version
-!.framework-scope
-
 # Playwright E2E artifacts
 apps/web/e2e/playwright-report/
 apps/web/e2e/playwright-results.json

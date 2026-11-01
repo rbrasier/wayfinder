@@ -12,7 +12,7 @@ import {
   type WatchHttpMethod,
   type WatchInputMapping,
   type WatchPausedReason,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export type JsonRowKind = "object" | "array" | "value" | "more";
 

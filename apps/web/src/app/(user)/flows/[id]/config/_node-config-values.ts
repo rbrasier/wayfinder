@@ -1,5 +1,5 @@
 import type { Node } from "@xyflow/react";
-import { normaliseOutputType, type FieldValueSource } from "@rbrasier/domain";
+import { normaliseOutputType, type FieldValueSource } from "@wayfinder/domain";
 import type { ConversationalNodeData } from "@/components/canvas/conversational-node";
 import type { NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { approvalValuesFromConfig } from "@/components/canvas/approval-config-mapping";

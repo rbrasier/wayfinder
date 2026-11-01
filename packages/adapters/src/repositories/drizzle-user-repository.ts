@@ -8,7 +8,7 @@ import {
   type Result,
   type User,
   type UserUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_users } from "../db/schema/core";

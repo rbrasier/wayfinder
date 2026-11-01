@@ -7,7 +7,7 @@ import {
   type ParsedSpreadsheet,
   type ParseSpreadsheetInput,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { normaliseSheetPath, readSharedStrings, readSheet } from "../spreadsheets/xlsx-workbook";
 
 // CSV/XLSX parser for HR uploads. Rows are returned in the structure they arrived

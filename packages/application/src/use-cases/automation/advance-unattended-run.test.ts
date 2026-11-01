@@ -10,7 +10,7 @@ import {
   type Result,
   type Session,
   type SessionUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { UnattendedIncident } from "../notifications/notify-unattended-incident";
 import { AdvanceUnattendedRun, type UnattendedStepRunners } from "./advance-unattended-run";
 

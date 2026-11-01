@@ -5,14 +5,14 @@ import {
   SetBranding,
   SetLoginNotice,
   UploadBrandingLogo,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import type {
   IAuditLogger,
   IAuditQueryRepository,
   IObjectStorage,
   ISystemSettingsRepository,
   LoginNoticeConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface PresentationUseCaseDeps {
   systemSettings: ISystemSettingsRepository;
@@ -22,7 +22,7 @@ export interface PresentationUseCaseDeps {
   loadLoginNotice: () => Promise<LoginNoticeConfig>;
 }
 
-// Branding and the sign-in notice (ADR-060), factored out of the main container
+// Branding and the sign-in notice (ADR-061), factored out of the main container
 // to keep container.ts under the source-size ceiling. Spread into `useCases`.
 export const buildPresentationUseCases = (deps: PresentationUseCaseDeps) => ({
   setBranding: new SetBranding(deps.systemSettings, deps.auditLogger),

@@ -9,7 +9,7 @@ import {
   type ISessionStepOutputRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { resolveSessionGraph, type SessionGraphDependencies } from "../../services/resolve-session-graph";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 import type { IUnattendedIncidentNotifier } from "../notifications/notify-unattended-incident";

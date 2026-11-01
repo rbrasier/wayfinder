@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
 import type {
   GenerateObjectInput,
   ILanguageModel,
   SessionStepOutput,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { resolveFieldValues } from "./resolve-field-values";
 
 const usage = {

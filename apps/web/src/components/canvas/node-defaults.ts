@@ -1,4 +1,4 @@
-import { DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD } from "@rbrasier/domain";
+import { DEFAULT_AI_TASK_CONFIDENCE_THRESHOLD } from "@wayfinder/domain";
 import type { NodeConfigType } from "./node-config-modal";
 import { TEMPLATE_COMPLETE_SENTINEL } from "./output-type";
 

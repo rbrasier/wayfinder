@@ -6,7 +6,7 @@ import {
   type BrandingConfig,
   type ISystemSettingsRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // A read failure is returned, never replaced with the defaults: every writer
 // merges into the current row, and writing defaults over an unreadable row would

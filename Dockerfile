@@ -42,7 +42,7 @@ RUN if [ "$VENDOR_EMBEDDINGS_MODEL" = "true" ]; then \
 # Dev dependencies are no longer reachable at runtime — the start path stopped
 # invoking drizzle-kit when migrations moved to their own command (ADR-047) — so
 # `pnpm prune --prod` is now possible here. It is deliberately not done: the
-# framework packages are peerDependencies of @rbrasier/adapters and real
+# framework packages are peerDependencies of @wayfinder/adapters and real
 # dependencies of the apps, and whether pruning survives that resolution has not
 # been proven by building and running. Size is the cost; a broken image is not.
 

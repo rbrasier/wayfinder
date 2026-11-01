@@ -5,7 +5,7 @@ import { TOKENS } from "@/lib/design-tokens";
 
 // The tab icon is the unbranded header brand mark. The icon is an SVG file and
 // the mark's colour is the --wf-primary default in globals.css (an install's
-// brand colour overrides the token, not the icon — ADR-060), so these assertions
+// brand colour overrides the token, not the icon — ADR-061), so these assertions
 // are what stops the two defaults drifting apart.
 const readAppFile = (relativePath: string): Buffer =>
   readFileSync(resolve(__dirname, relativePath));

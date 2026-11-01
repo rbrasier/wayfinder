@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EventWatch } from "@rbrasier/domain";
+import type { EventWatch } from "@wayfinder/domain";
 import {
   conditionOfKind,
   describeCondition,

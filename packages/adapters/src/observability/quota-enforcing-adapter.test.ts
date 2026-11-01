@@ -11,7 +11,7 @@ import {
   type NewAuditLog,
   type Role,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { QuotaEnforcer, withQuotaEnforcement } from "./quota-enforcing-adapter";
 
 const usage: TokenUsage = {

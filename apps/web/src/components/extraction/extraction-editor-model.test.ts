@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseTemplateField, SUPPORTED_UPLOAD_EXTENSIONS, type ExtractionSchema } from "@rbrasier/domain";
+import { parseTemplateField, SUPPORTED_UPLOAD_EXTENSIONS, type ExtractionSchema } from "@wayfinder/domain";
 import {
   deriveOutputMode,
   emptyExtractionField,

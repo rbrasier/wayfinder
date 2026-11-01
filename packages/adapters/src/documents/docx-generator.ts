@@ -1,9 +1,9 @@
 import PizZip from "pizzip";
 import Docxtemplater from "docxtemplater";
 import InspectModule from "docxtemplater/js/inspect-module.js";
-import { domainError, err, ok, parseTemplateFields, templateFieldKey } from "@rbrasier/domain";
-import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateInput, GenerateOutput, AnnotateInput, AnnotateOutput, TemplateAnnotationEdit } from "@rbrasier/domain";
-import type { DomainError, DomainErrorDetail, Result } from "@rbrasier/domain";
+import { domainError, err, ok, parseTemplateFields, templateFieldKey } from "@wayfinder/domain";
+import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateInput, GenerateOutput, AnnotateInput, AnnotateOutput, TemplateAnnotationEdit } from "@wayfinder/domain";
+import type { DomainError, DomainErrorDetail, Result } from "@wayfinder/domain";
 import { detailsFromCause, detailsFromTagContent, headlineFor, tagSyntaxIssues } from "./tag-syntax";
 
 // One <w:t> element. Offsets: xml* within its run's XML, *Index within the

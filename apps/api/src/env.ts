@@ -115,6 +115,11 @@ const envSchema = z.object({
     .optional()
     .transform((value) => value === "true"),
   RETENTION_TICK_MS: z.coerce.number().int().positive().default(24 * 60 * 60 * 1000),
+  // Flow memory (ADR-057): off by default, like every other background
+  // poller, so an upgrade never starts spending model calls unasked.
+  FLOW_MEMORY_ENABLED: z.coerce.boolean().default(false),
+  FLOW_MEMORY_TICK_MS: z.coerce.number().int().positive().default(24 * 60 * 60 * 1000),
+  FLOW_MEMORY_EVIDENCE_THRESHOLD: z.coerce.number().int().positive().default(3),
   RETENTION_BATCH_SIZE: z.coerce.number().int().positive().default(500),
   RETENTION_MAX_BATCHES_PER_TARGET: z.coerce.number().int().positive().default(200),
   // Extraction batch engine (ADR-033 §6). On by default: a run that outlives the
@@ -128,17 +133,29 @@ const envSchema = z.object({
     .optional()
     .transform((value) => value !== "false"),
   EXTRACTION_TICK_MS: z.coerce.number().int().positive().default(5000),
+  // Queued MCP node calls (ADR-062 §3). On by default: nothing else runs them, so
+  // an MCP step would wait forever without it. Set it to "false" to opt out.
+  MCP_CALL_WORKER_ENABLED: z
+    .string()
+    .optional()
+    .transform((value) => value !== "false"),
+  MCP_CALL_TICK_MS: z.coerce.number().int().positive().default(2000),
+  MCP_CALL_MAX_IN_FLIGHT: z.coerce.number().int().positive().default(10),
   // Operational/telemetry tables get finite defaults. Audit and conversation
   // history default to 0 (keep forever) — deleting them is a deliberate,
   // compliance-sensitive choice the operator must make.
-  RETENTION_USAGE_EVENTS_DAYS: z.coerce.number().int().nonnegative().default(400),
-  RETENTION_ERROR_LOG_DAYS: z.coerce.number().int().nonnegative().default(90),
-  RETENTION_NOTIFICATION_LOG_DAYS: z.coerce.number().int().nonnegative().default(180),
+  RETENTION_USAGE_EVENTS_DAYS: z.coerce.number().int().nonnegative().default(0),
+  RETENTION_ERROR_LOG_DAYS: z.coerce.number().int().nonnegative().default(0),
+  RETENTION_NOTIFICATION_LOG_DAYS: z.coerce.number().int().nonnegative().default(0),
   RETENTION_AUDIT_LOG_DAYS: z.coerce.number().int().nonnegative().default(0),
   RETENTION_SESSION_MESSAGES_DAYS: z.coerce.number().int().nonnegative().default(0),
   // Extraction runs hold sensitive supplier responses; default keep-forever so
   // deletion is a deliberate operator choice (ADR-033 §9).
   RETENTION_EXTRACTION_RUNS_DAYS: z.coerce.number().int().nonnegative().default(0),
+  // Flow-memory observations outlive the sessions they came from (session_id
+  // is set null, not cascaded), so this window is the only thing that ever
+  // deletes a detail payload. Keep-forever by default, like the other six.
+  RETENTION_FLOW_OBSERVATIONS_DAYS: z.coerce.number().int().nonnegative().default(0),
 });
 
 export type Env = Omit<z.infer<typeof envSchema>, "SCHEDULER_TICK_URL"> & {

@@ -12,7 +12,7 @@ import {
   type Result,
   type Session,
   type TriggerInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { StartSession } from "../session/start-session";
 
 export interface StartUnattendedRunDependencies {

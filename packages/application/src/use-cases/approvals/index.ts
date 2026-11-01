@@ -3,6 +3,7 @@ export * from "./suggest-approver";
 export * from "./load-pending-approval";
 export * from "./confirm-and-send";
 export * from "./decide-approval";
+export * from "./record-off-system-approval";
 export * from "./withdraw-approval";
 export * from "./reassign-approval";
 export * from "./list-approvals";

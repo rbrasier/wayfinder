@@ -9,7 +9,7 @@ import {
   type IFlowVersionRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface SessionGraphDependencies {
   flowVersions: Pick<IFlowVersionRepository, "getById">;

@@ -21,10 +21,11 @@ test.describe("sticky link navigation", () => {
 
     // Either the subtle top progress bar or a loading skeleton must appear right
     // away — both are the instant feedback the fix introduces. We accept either so
-    // the test is not brittle to how fast the destination resolves.
+    // the test is not brittle to how fast the destination resolves. On a fast
+    // server both are up at once, so take whichever matches first.
     const progressBar = page.locator("div[aria-hidden].fixed.top-0");
-    const skeleton = page.locator("[aria-hidden] .animate-pulse").first();
-    await expect(progressBar.or(skeleton)).toBeVisible({ timeout: 2_000 });
+    const skeleton = page.locator("[aria-hidden] .animate-pulse");
+    await expect(progressBar.or(skeleton).first()).toBeVisible({ timeout: 2_000 });
 
     // And the navigation actually follows through to the Flows route.
     await expect(page).toHaveURL(/\/flows(\/|$)/, { timeout: 10_000 });

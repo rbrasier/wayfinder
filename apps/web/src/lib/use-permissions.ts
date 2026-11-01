@@ -1,6 +1,6 @@
 "use client";
 
-import type { PermissionKey } from "@rbrasier/domain";
+import type { PermissionKey } from "@wayfinder/domain";
 import { trpc } from "@/trpc/client";
 
 export interface PermissionState {

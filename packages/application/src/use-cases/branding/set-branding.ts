@@ -5,7 +5,7 @@ import {
   type IAuditLogger,
   type ISystemSettingsRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { readBrandingConfig, writeBrandingConfig } from "./branding-settings";
 
 export interface SetBrandingInput {
@@ -15,7 +15,7 @@ export interface SetBrandingInput {
 }
 
 // Saves the display name and colour, keeping whatever logo is uploaded. The
-// colour must be readable as link text on the page (ADR-060 §3).
+// colour must be readable as link text on the page (ADR-061 §3).
 export class SetBranding {
   constructor(
     private readonly systemSettings: ISystemSettingsRepository,

@@ -1,6 +1,6 @@
 import PizZip from "pizzip";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { IDocumentExtractor, IDocumentGenerator, Result } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { IDocumentExtractor, IDocumentGenerator, Result } from "@wayfinder/domain";
 import { PDFParse } from "pdf-parse";
 import { listSheets, readSharedStrings, readSheet } from "../spreadsheets/xlsx-workbook";
 import { DOCX_MIME, PDF_MIME, sniffMimeType, XLSX_MIME } from "./mime-sniff";

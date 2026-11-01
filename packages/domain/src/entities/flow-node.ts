@@ -1,5 +1,6 @@
 import type { ApprovalSubject, ChangesRequestedTarget } from "./approval-record";
 import type { FieldValueSource } from "./field-value-source";
+import type { FlowExportDependency } from "./flow-export";
 import type { McpToolRef } from "./mcp-server";
 import type { StoredOutputType } from "./node-output";
 import type { ScheduleAnchor, ScheduleKind } from "./session-schedule";
@@ -37,6 +38,11 @@ export interface ApprovalNodeConfig {
   // Absent resolves to the nearest prior editable step. Read through
   // `changesRequestedTargetOf`, never directly.
   changesRequestedTarget?: ChangesRequestedTarget;
+  // Whether someone may record that this approval happened outside Wayfinder
+  // (ADR-055 §4). Absent means allowed, so every approval node authored before
+  // the setting existed gains the capability unedited. Read through
+  // `offSystemApprovalAllowed`, never directly.
+  allowOffSystemApproval?: boolean;
 }
 
 export interface ConversationalNodeConfig {
@@ -81,6 +87,11 @@ export interface ConversationalNodeConfig {
   // editor pre-fills this from applied skills' allowedTools, but this list — not
   // the skill — is the enforcement boundary.
   allowedMcpToolRefs?: McpToolRef[];
+  // Written by an import when a referenced skill or MCP tool does not exist in
+  // this deployment (ADR-049 §4). The stale reference is cleared from the config
+  // above, so this is the only remaining record of what the author intended.
+  // Present means the canvas badges the node and publish refuses the flow.
+  unresolvedDependencies?: FlowExportDependency[];
 }
 
 export type NodeExecutorKind = "n8n" | "mock";
@@ -108,13 +119,18 @@ export interface AutoNodeConfig {
 // response fields are persisted to session_step_outputs (the ADR-020 path).
 export interface McpNodeConfig {
   instruction: string;
-  serverId: string;
+  // Null when an import could not resolve the server this node called (ADR-049
+  // §4). `RunMcpNode` already refuses an unconfigured node, and publish refuses
+  // the flow before it can be run at all.
+  serverId: string | null;
   toolName: string;
   requestFields?: TemplateField[];
   // Value source per request field, keyed by TemplateField.key. A missing entry
   // means `ai` (matching AutoNodeConfig's default).
   requestFieldValues?: Record<string, FieldValueSource>;
   responseFields?: TemplateField[];
+  // See `ConversationalNodeConfig.unresolvedDependencies`.
+  unresolvedDependencies?: FlowExportDependency[];
 }
 
 // Who reviews an AI task result that falls below its confidence threshold

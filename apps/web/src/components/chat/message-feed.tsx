@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import type { FeedMessage } from "@/lib/chat/ui-messages";
-import { parseRunStartedMessage, type FlowNode, type SessionMessage } from "@rbrasier/domain";
+import { parseRunStartedMessage, type FlowNode, type SessionMessage } from "@wayfinder/domain";
 import { ConfidenceBar } from "./confidence-bar";
 import { resolveCrossCheckingState } from "./cross-checking-state";
 import { resolveGeneratingDocumentState } from "./generating-document-state";
@@ -26,6 +26,7 @@ import {
 } from "./milestone-pill";
 import { resolveMilestoneState } from "./milestone-state";
 import { TypingIndicator } from "./typing-indicator";
+import { CitedSources } from "./cited-sources";
 import {
   awaitingFirstText,
   consultingLabel,
@@ -113,6 +114,12 @@ interface MessageFeedProps {
   // recomputes its branch): shows a generic "Advancing…" badge so the operator
   // sees the step is progressing rather than a frozen screen.
   pendingStepAdvance?: boolean;
+  // "Calling <tool>…" beside the typing dots while the turn's tools run
+  // (ADR-062 §4).
+  toolProgressLabel?: string | null;
+  // A queued MCP step is waiting on its source after the turn ended: the dots
+  // and this label stay up until the worker posts the outcome.
+  waitingOnToolLabel?: string | null;
   // The current step is running by itself or waiting on its reviewer: the feed
   // ends on a quiet indicator where that step's result will appear.
   // `reviewApprovalId` is set when an AI task's review falls to the viewer: the
@@ -244,6 +251,8 @@ export function MessageFeed({
   currentUserId,
   pendingDocumentGeneration,
   pendingStepAdvance,
+  toolProgressLabel,
+  waitingOnToolLabel,
   pendingAutomation,
   onAutomationReviewed,
   backgroundActivity,
@@ -421,6 +430,7 @@ export function MessageFeed({
                       content={displayContent}
                       className="text-[14px] leading-[1.6] text-[#26241f]"
                     />
+                    <CitedSources sources={msg.aiPayload?.citations} />
                     <div className="mt-[6px] flex items-center gap-3">
                       <span data-message-time className="font-mono text-[10px] text-[#736d5f]">
                         {formatRelativeTime(msg.createdAt)}
@@ -596,13 +606,18 @@ export function MessageFeed({
       {isStreaming && awaitingFirstText(streamingMessages.at(-1)) && (
         <ActivityRow
           initials={botInitials}
-          label={resolveTurnActivityLabel(
-            streamingMessages.at(-1)?.role === "assistant" ? streamingMessages.at(-1)?.annotations : undefined,
-          )}
+          label={
+            toolProgressLabel ??
+            resolveTurnActivityLabel(
+              streamingMessages.at(-1)?.role === "assistant" ? streamingMessages.at(-1)?.annotations : undefined,
+            )
+          }
         />
       )}
 
-      {!isStreaming && !pendingAutomation && backgroundActivity && (
+      {!isStreaming && waitingOnToolLabel && <ActivityRow initials={botInitials} label={waitingOnToolLabel} />}
+
+      {!isStreaming && !waitingOnToolLabel && !pendingAutomation && backgroundActivity && (
         <ActivityRow initials={botInitials} label={backgroundActivity} />
       )}
 

@@ -9,7 +9,7 @@ import {
   type Result,
   type Role,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { AdminCaller } from "./admin-caller";
 
 // A delegated User Admin must not change an account that holds admin access

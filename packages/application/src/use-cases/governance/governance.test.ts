@@ -15,7 +15,7 @@ import {
   type UsageGroupSummary,
   type UsageSummary,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CreateBudget } from "./create-budget";
 import { UpdateBudget } from "./update-budget";
 import { DeleteBudget } from "./delete-budget";

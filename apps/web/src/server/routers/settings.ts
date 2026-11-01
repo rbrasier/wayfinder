@@ -4,7 +4,6 @@ import { canAccessSettingKey, type AdminViewer } from "@/lib/admin-areas";
 import {
   AI_CONFIG_SETTING_KEY,
   CONNECTIVITY_TARGETS,
-  AUTH_CONFIG_SETTING_KEY,
   DOCUMENT_GENERATION_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   EMBEDDINGS_CONFIG_SETTING_KEY,
@@ -19,10 +18,7 @@ import {
   createDefaultEmailConfig,
   isAiConfigured,
   isAtLeastOneMethodEnabled,
-  isPkiUsable,
-  isSelfServicePasswordResetAvailable,
   isEmailConfigured,
-  isEntraConfigured,
   isN8nConfigured,
   isStorageConfigured,
   type AiConfig,
@@ -34,17 +30,35 @@ import {
   type NotificationPreferences,
   type ProviderName,
   type StorageConfig,
-} from "@rbrasier/domain";
+  RETENTION_TARGET_KEYS,
+  type RetentionTargetKey,
+} from "@wayfinder/domain";
 import {
-  EMBEDDINGS_DEFAULT_MODELS,
+  EMBEDDINGS_DEFAULT_PROVIDER,
   EMBEDDINGS_DIMENSION,
+  EMBEDDINGS_MODELS,
   EMBEDDINGS_PROVIDERS,
-} from "@rbrasier/shared";
-import { DEFAULT_MODELS_FOR, RuntimeConfigStore, resolveContextWindow } from "@rbrasier/adapters";
+  findEmbeddingsModel,
+  isEmbeddingsProvider,
+} from "@wayfinder/shared";
+import {
+  DEFAULT_MODELS_FOR,
+  RuntimeConfigStore,
+  isLocalEmbeddingsAvailable,
+  resolveContextWindow,
+} from "@wayfinder/adapters";
 import { adminProcedure, publicProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
-import { authConfigInputSchema, mergeAuthConfig } from "./settings-auth";
+import { authSettingsProcedures } from "./settings-auth";
 import { directorySettingsProcedures } from "./settings-directory";
+import { apiKeyState } from "./settings-secrets";
+import {
+  countStaleEmbeddedDocuments,
+  embeddingsKeyStatus,
+  embeddingsModelRejection,
+  embeddingsProviderOptions,
+  embeddingsProviderUnavailableReason,
+} from "./settings-embeddings";
 import { automationSettingsProcedures } from "./settings-automation";
 import { presentationSettingsProcedures } from "./settings-presentation";
 import { getReindexStatus, startReindex } from "@/lib/reindex-runner";
@@ -109,6 +123,11 @@ export const extractionConfigInputSchema = z.object({
   maxArchiveEntryBytes: z.number().int().positive(),
   maxArchiveTotalBytes: z.number().int().positive(),
   perRunCostCeilingUsd: z.number().nonnegative(),
+  sampleMaxDocuments: z.number().int().positive(),
+  maxAnalyseDocuments: z.number().int().positive(),
+  summaryRecordCap: z.number().int().positive(),
+  contextBudgetTokens: z.number().int().positive(),
+  maxPromptTokens: z.number().int().positive(),
 });
 
 export const documentGenerationConfigInputSchema = z.object({
@@ -211,9 +230,6 @@ export const mergeApiKeys = (
   bedrock: mergeBedrockCredentials(incoming.bedrock, stored.bedrock),
 });
 
-const apiKeyState = (value: string | null): "set" | "unset" =>
-  value && value.length > 0 ? "set" : "unset";
-
 const bedrockState = (value: BedrockCredentials | null) => ({
   region: value?.region ?? null,
   accessKeyId: apiKeyState(value?.accessKeyId ?? null),
@@ -226,6 +242,35 @@ const requireSettingKeyAccess = (ctx: AdminViewer, key: string): void => {
 };
 
 export const settingsRouter = router({
+  // Data retention (ADR-041 §2: DB-first, env kept as fallback). Global Admin
+  // only — deleting records on a schedule is a governance decision, not a
+  // technical one (ADR-066 §2) — and the use case checks that too rather than
+  // trusting the procedure.
+  retention: adminProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.getRetentionSettings.execute(
+      ctx.container.retentionEnvFallback,
+    );
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  setRetentionWindow: adminProcedure
+    .input(
+      z.object({
+        key: z.enum(RETENTION_TARGET_KEYS as unknown as [string, ...string[]]),
+        retentionDays: z.number().int().nonnegative(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.setRetentionWindow.execute({
+        key: input.key as RetentionTargetKey,
+        retentionDays: input.retentionDays,
+        isAdmin: ctx.isAdmin,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   // Raw rows reach every setting, auth config included, so a Technical Admin is
   // held to the keys the technical cards use (ADR-066 §4).
   get: technicalAdminProcedure
@@ -280,73 +325,7 @@ export const settingsRouter = router({
       return { ok: true };
     }),
 
-  getAuthConfig: adminProcedure.query(async ({ ctx }) => {
-    const config = await ctx.container.runtimeConfig.getAuthConfig();
-    return {
-      emailPasswordEnabled: config.emailPasswordEnabled,
-      entraEnabled: config.entraEnabled,
-      entra: {
-        tenantId: config.entra.tenantId,
-        clientId: config.entra.clientId,
-        clientSecret: apiKeyState(config.entra.clientSecret),
-      },
-      pkiEnabled: config.pkiEnabled,
-      pki: {
-        sessionTtlHours: config.pki.sessionTtlHours,
-        // The boolean only. An admin-scoped response is still a network
-        // payload, and the client has no business knowing which addresses the
-        // trust anchor names (ADR-042 §1).
-        envConfigured: ctx.container.runtimeConfig.isPkiEnvConfigured(),
-      },
-      redirectUri: `${ctx.container.env.BETTER_AUTH_URL}/api/auth/callback/microsoft`,
-    };
-  }),
-
-  setAuthConfig: adminProcedure
-    .input(authConfigInputSchema)
-    .mutation(async ({ ctx, input }) => {
-      const current = await ctx.container.runtimeConfig.getAuthConfig();
-      const merged = mergeAuthConfig(input, current);
-      const envHasTrustedProxies = ctx.container.runtimeConfig.isPkiEnvConfigured();
-
-      // A disabled checkbox is a UI affordance, not an authorisation check.
-      if (merged.pkiEnabled && !envHasTrustedProxies) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "Certificate sign-in cannot be enabled until PKI_TRUSTED_PROXY_IPS is set in the environment.",
-        });
-      }
-
-      if (!isAtLeastOneMethodEnabled(merged, envHasTrustedProxies)) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message:
-            "At least one usable sign-in method must stay enabled. Certificate sign-in does not count while PKI_TRUSTED_PROXY_IPS is unset.",
-        });
-      }
-      const result = await ctx.container.repos.systemSettings.set(
-        AUTH_CONFIG_SETTING_KEY,
-        JSON.stringify(merged),
-      );
-      if (result.error) throw toTrpcError(result.error);
-      ctx.container.runtimeConfig.invalidateAuth();
-      return { ok: true };
-    }),
-
-  // Public so the unauthenticated /login page can render the right controls.
-  enabledAuthMethods: publicProcedure.query(async ({ ctx }) => {
-    const config = await ctx.container.runtimeConfig.getAuthConfig();
-    // Read live rather than from the cached auth instance: an admin who has just
-    // configured email should get the "Forgot password?" link without a restart.
-    const emailConfigured = await ctx.container.services.emailSender.isConfigured();
-    return {
-      emailPassword: config.emailPasswordEnabled,
-      entra: config.entraEnabled && isEntraConfigured(config.entra),
-      pki: isPkiUsable(config, ctx.container.runtimeConfig.isPkiEnvConfigured()),
-      passwordReset: isSelfServicePasswordResetAvailable(config, emailConfigured),
-    };
-  }),
+  ...authSettingsProcedures,
 
   ...directorySettingsProcedures,
   ...presentationSettingsProcedures,
@@ -414,15 +393,45 @@ export const settingsRouter = router({
 
   getEmbeddingsConfig: technicalAdminProcedure.query(async ({ ctx }) => {
     const config = await ctx.container.runtimeConfig.getEmbeddingsConfig();
-    return { ...config, dimension: EMBEDDINGS_DIMENSION };
+    const provider = isEmbeddingsProvider(config.provider) ? config.provider : EMBEDDINGS_DEFAULT_PROVIDER;
+    const staleDocumentCount = await countStaleEmbeddedDocuments(ctx.container);
+    return {
+      ...config,
+      dimension: EMBEDDINGS_DIMENSION,
+      nativeDimension: findEmbeddingsModel(provider, config.model)?.nativeDimension ?? null,
+      providers: embeddingsProviderOptions(isLocalEmbeddingsAvailable()),
+      models: EMBEDDINGS_MODELS,
+      keyStatus: embeddingsKeyStatus(provider, await ctx.container.runtimeConfig.getAiConfig()),
+      staleDocumentCount,
+    };
   }),
 
+  // Cheap enough for the admin sidebar: drives its "needs re-index" dot.
+  embeddingsAttention: technicalAdminProcedure.query(async ({ ctx }) => ({
+    staleDocumentCount: await countStaleEmbeddedDocuments(ctx.container),
+  })),
+
   setEmbeddingsConfig: technicalAdminProcedure
-    .input(z.object({ provider: z.enum(EMBEDDINGS_PROVIDERS) }))
+    .input(z.object({ provider: z.enum(EMBEDDINGS_PROVIDERS), model: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      // Model is derived from the provider; switching providers requires
-      // re-indexing existing documents (ADR-017 Decision 3).
-      const config = { provider: input.provider, model: EMBEDDINGS_DEFAULT_MODELS[input.provider] };
+      // A disabled control in the UI is a courtesy; this is the guard. A
+      // deployment packaged without a provider cannot serve it whatever the
+      // stored setting says (ADR-056 §4).
+      const unavailableReason = embeddingsProviderUnavailableReason(
+        input.provider,
+        isLocalEmbeddingsAvailable(),
+      );
+      if (unavailableReason) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: unavailableReason });
+      }
+      const modelRejection = embeddingsModelRejection(input.provider, input.model);
+      if (modelRejection) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: modelRejection });
+      }
+
+      // Switching model requires re-indexing existing documents (ADR-017
+      // Decision 3); the per-chunk model stamp is what flags them as stale.
+      const config = { provider: input.provider, model: input.model };
       const result = await ctx.container.repos.systemSettings.set(
         EMBEDDINGS_CONFIG_SETTING_KEY,
         JSON.stringify(config),

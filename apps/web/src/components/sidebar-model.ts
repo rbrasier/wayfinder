@@ -1,4 +1,4 @@
-import type { SessionStatus } from "@rbrasier/domain";
+import type { SessionStatus } from "@wayfinder/domain";
 import { canOpenAdminPath, type AdminViewer } from "@/lib/admin-areas";
 
 const MINUTE = 60_000;

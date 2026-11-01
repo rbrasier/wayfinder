@@ -4,7 +4,7 @@ import type {
   Session,
   SessionListPage,
   SessionListPageOptions,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Keyset-paginated variant of ListSessions. Additive: existing callers keep
 // using ListSessions; adopters of pagination call this one and thread the

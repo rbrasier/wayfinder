@@ -7,7 +7,7 @@ import {
   type ILanguageModel,
   type Result,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { AiColumnMappingDetector } from "./ai-column-mapping-detector";
 
 const usage: TokenUsage = {

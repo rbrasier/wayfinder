@@ -4,7 +4,7 @@ import {
   type IRoleRepository,
   type IUserRoleRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { roleGrantsAdminAccess } from "../admin-account-guard";
 import type { AdminCaller } from "../admin-caller";
 

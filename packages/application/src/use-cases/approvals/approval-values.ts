@@ -3,7 +3,7 @@ import {
   type Approval,
   type IApprovalRepository,
   type TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ATTESTATION_TEXT_KEY, SIGNATURE_FIELD_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
 
 // Every value on a step's template that an approval owns rather than the

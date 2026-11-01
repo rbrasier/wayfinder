@@ -7,10 +7,10 @@ import type {
   NewFlowEdge,
   NewFlowNode,
   Result,
-} from "@rbrasier/domain";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { FlowNodeUpdate, FlowUpdate } from "@rbrasier/domain";
-import type { IFlowEdgeRepository, IFlowNodeRepository, IFlowRepository } from "@rbrasier/domain";
+} from "@wayfinder/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { FlowNodeUpdate, FlowUpdate } from "@wayfinder/domain";
+import type { IFlowEdgeRepository, IFlowNodeRepository, IFlowRepository } from "@wayfinder/domain";
 import { CreateFlow } from "./create-flow";
 import { DeleteFlow } from "./delete-flow";
 import { GetFlowCanvas } from "./get-flow-canvas";
@@ -111,7 +111,7 @@ class FakeFlowRepository implements IFlowRepository {
     return ok(updated);
   }
 
-  async addContextDoc(flowId: string, doc: import("@rbrasier/domain").FlowContextDoc): Promise<Result<Flow>> {
+  async addContextDoc(flowId: string, doc: import("@wayfinder/domain").FlowContextDoc): Promise<Result<Flow>> {
     const flow = this.flows.get(flowId);
     if (!flow) return err(domainError("NOT_FOUND", `Flow ${flowId} not found.`));
     const updated = { ...flow, contextDocs: [...flow.contextDocs, doc], updatedAt: new Date() };
@@ -135,7 +135,7 @@ class FakeFlowRepository implements IFlowRepository {
     return ok(updated);
   }
 
-  async setPermission(flowId: string, userId: string, role: import("@rbrasier/domain").FlowPermissionRole): Promise<Result<Flow>> {
+  async setPermission(flowId: string, userId: string, role: import("@wayfinder/domain").FlowPermissionRole): Promise<Result<Flow>> {
     const flow = this.flows.get(flowId);
     if (!flow) return err(domainError("NOT_FOUND", `Flow ${flowId} not found.`));
     const permissions = flow.permissions.filter((p) => p.userId !== userId);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import { DrizzleUnitOfWork } from "./drizzle-unit-of-work";
 import type { Database } from "./client";
 

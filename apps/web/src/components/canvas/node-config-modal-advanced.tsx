@@ -1,6 +1,6 @@
 "use client";
 
-import type { PriorStepField } from "@rbrasier/domain";
+import type { PriorStepField } from "@wayfinder/domain";
 import { Label } from "@/components/ui/label";
 import { AdvancedSection } from "./advanced-section";
 import { NodeConfigModalApprovalAdvanced } from "./node-config-modal-approval";

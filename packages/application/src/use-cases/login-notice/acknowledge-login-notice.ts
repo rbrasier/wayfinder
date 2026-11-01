@@ -7,10 +7,10 @@ import {
   type IAuditLogger,
   type LoginNoticeConfig,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Records that a user read the notice. The audit row is the acknowledgement
-// itself (ADR-060 §5), so unlike an admin change a failed write is an error.
+// itself (ADR-061 §5), so unlike an admin change a failed write is an error.
 export class AcknowledgeLoginNotice {
   constructor(
     private readonly loadConfig: () => Promise<LoginNoticeConfig>,

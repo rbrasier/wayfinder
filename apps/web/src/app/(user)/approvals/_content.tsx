@@ -11,6 +11,7 @@ import {
   ApprovalSubject,
   RequestMessage,
   ApproverStage,
+  OffSystemChip,
   OutcomeChip,
   PreviousStep,
   type ApprovalContext,
@@ -130,6 +131,7 @@ function DecidedRow({ approval }: { approval: ApprovalContext }) {
         </p>
       </div>
       <OutcomeChip approval={approval} />
+      <OffSystemChip approval={approval} />
       <ChevronRight className="h-4 w-4 shrink-0 text-[#666055]" />
     </Link>
   );

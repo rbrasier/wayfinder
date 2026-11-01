@@ -14,6 +14,7 @@ const config: RetentionConfig = {
   appErrorLogDays: 90,
   appNotificationLogDays: 180,
   appExtractionRunsDays: 30,
+  aiFlowObservationsDays: 0,
 };
 
 describe("buildRetentionPolicies", () => {
@@ -31,6 +32,13 @@ describe("buildRetentionPolicies", () => {
     expect(byKey.core_audit_log).toBe(0);
     expect(byKey.app_session_messages).toBe(0);
     expect(byKey.app_extraction_runs).toBe(30);
+    expect(byKey.ai_flow_observations).toBe(0);
+  });
+
+  it("includes flow observations, which outlive the sessions they came from", () => {
+    // `session_id` is set null rather than cascaded so a lesson keeps its
+    // evidence, which is exactly why the rows need a window of their own.
+    expect(RETENTION_TARGET_KEYS).toContain("ai_flow_observations");
   });
 
   it("gives every policy a human-readable label", () => {

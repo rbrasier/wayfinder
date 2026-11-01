@@ -1,4 +1,4 @@
-import { DEFAULT_BRAND_DISPLAY_NAME } from "@rbrasier/domain";
+import { DEFAULT_BRAND_DISPLAY_NAME } from "@wayfinder/domain";
 import type { PublicBranding } from "@/lib/public-branding";
 
 export interface BrandMarkView {

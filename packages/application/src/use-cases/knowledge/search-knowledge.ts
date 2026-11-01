@@ -1,4 +1,4 @@
-import { err, ok } from "@rbrasier/domain";
+import { err, ok } from "@wayfinder/domain";
 import type {
   ChunkSearchResult,
   IEmbeddingsProvider,
@@ -6,7 +6,7 @@ import type {
   RetrievalMode,
   RetrievalScope,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface SearchKnowledgeInput {
   text: string;

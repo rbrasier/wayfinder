@@ -1,4 +1,4 @@
-import type { IJobRepository, Job, Result } from "@rbrasier/domain";
+import type { IJobRepository, Job, Result } from "@wayfinder/domain";
 
 export class RegisterJob {
   constructor(private readonly repo: IJobRepository) {}

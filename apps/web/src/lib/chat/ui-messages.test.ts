@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { streamTurnMessageSchema } from "@rbrasier/shared";
+import { streamTurnMessageSchema } from "@wayfinder/shared";
 import { toFeedMessage, toUiMessages, toWireMessages, type ChatUiMessage } from "./ui-messages";
 
 const streamed: ChatUiMessage = {

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { HelpCircle, Info } from "lucide-react";
-import { expandAboutLinkUrl, helpMenuAboutLinks, isExternalAboutLink } from "@rbrasier/domain";
+import { expandAboutLinkUrl, helpMenuAboutLinks, isExternalAboutLink } from "@wayfinder/domain";
 import { APP_VERSION } from "@/lib/app-version";
 import { trpc } from "@/trpc/client";
 import { AboutModal } from "./about-modal";

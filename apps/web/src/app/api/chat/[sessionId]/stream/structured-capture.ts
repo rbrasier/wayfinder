@@ -4,9 +4,9 @@ import type {
   ResolvedDocumentGenerationBudget,
   Session,
   SessionMessage,
-} from "@rbrasier/domain";
-import { resolveChangeRequests } from "@rbrasier/application";
-import type { DocumentData } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { resolveChangeRequests } from "@wayfinder/application";
+import type { DocumentData } from "@wayfinder/shared";
 import type { getContainer } from "@/lib/container";
 
 type Container = ReturnType<typeof getContainer>;

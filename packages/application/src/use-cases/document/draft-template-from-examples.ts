@@ -21,8 +21,8 @@ import {
   type TemplateDraftField,
   type TemplateField,
   type TextEditLink,
-} from "@rbrasier/domain";
-import { templateDraftExtractionSchema, templateDraftVerificationSchema } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { templateDraftExtractionSchema, templateDraftVerificationSchema } from "@wayfinder/shared";
 
 export interface DraftTemplateFromExamplesInput {
   baseBytes: Buffer;

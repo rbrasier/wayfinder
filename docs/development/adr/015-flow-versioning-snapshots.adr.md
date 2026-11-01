@@ -9,6 +9,12 @@
 
 - **Status**: Proposed (Phase 6+; scoped by `flow-versioning.prd.md`)
 - **Date**: 2026-05-31
+- **Amended by**: [ADR-058](058-lessons-resolve-live-not-from-the-version-snapshot.adr.md)
+  — narrows the guarantee below from "the whole prompt is stable" to "the
+  *graph* is stable". Nodes, edges, branch rules, templates and field sets
+  remain pinned to the snapshot; accepted flow-memory lessons attached to a
+  step resolve live at prompt-build time and are deliberately not written
+  into `app_flow_versions.snapshot`.
 
 ## Context
 

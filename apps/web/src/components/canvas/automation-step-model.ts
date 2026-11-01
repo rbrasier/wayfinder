@@ -16,7 +16,7 @@ import {
   type TemplateField,
   TRIGGER_INPUT_SCOPE,
   type TriggerInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { fieldLineError, parseFieldLines } from "./template-field-editor";
 
 // The AI task and Email step editors' form state, and its mapping to and from

@@ -10,7 +10,7 @@ import {
   domainError,
   err,
   ok,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ResetUserPassword, RESET_PASSWORD_AUDIT_ACTION } from "./reset-user-password";
 
 const buildUser = (overrides: Partial<User> = {}): User => ({

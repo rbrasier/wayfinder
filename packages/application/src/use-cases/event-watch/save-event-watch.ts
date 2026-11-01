@@ -13,7 +13,7 @@ import {
   type Result,
   type SecretChange,
   type WatchInputMapping,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export const EVENT_WATCH_RESOURCE_TYPE = "event_watch";
 

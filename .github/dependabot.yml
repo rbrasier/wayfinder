@@ -15,7 +15,7 @@
 #
 # Version updates are fixes, so they open against the current release branch.
 # Every `target-branch` must equal the `Current release branch:` pointer in
-# CLAUDE.md — validate.sh section 25 enforces it, and /release moves both when a
+# CLAUDE.md — validate.sh section 28 enforces it, and /release moves both when a
 # new line is cut. Dependabot reads this file from `main` only, so a change here
 # takes effect once it is forward-merged.
 #
@@ -38,7 +38,7 @@ updates:
 
   - package-ecosystem: github-actions
     directory: /
-    target-branch: release/alpha-2
+    target-branch: release/alpha-3
     schedule:
       interval: weekly
     cooldown:
@@ -50,7 +50,7 @@ updates:
   # Majors are a Node runtime upgrade, taken deliberately rather than by bot.
   - package-ecosystem: docker
     directory: /
-    target-branch: release/alpha-2
+    target-branch: release/alpha-3
     schedule:
       interval: weekly
     cooldown:

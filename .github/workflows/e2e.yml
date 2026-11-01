@@ -31,7 +31,7 @@ jobs:
   # Three shards. Playwright balances a `--shard=i/n` split by test count (not
   # file count), so the specs land roughly evenly across the three without any
   # manual grouping here. Every extra shard also re-pays the same fixed setup —
-  # install, migrate, browser download, embedding warm-up, app boot — so shards
+  # install, migrate, browser download, embedding warm-up, app build — so shards
   # buy less wall-clock the further you push them.
   #
   # This was six while the suite carried 380 tests. The triage in
@@ -163,24 +163,6 @@ jobs:
           done
           echo "SeaweedFS did not become ready" >&2; docker logs storage || true; exit 1
 
-      # Tee to a file as well as the log: the "Start app" step finishes as soon as
-      # the process is backgrounded, so anything the server prints afterwards is
-      # otherwise lost — including whatever it was doing when a boot hang starts.
-      #
-      # The heap size is load-bearing. `next dev` restarts itself once
-      # used_heap_size exceeds 80% of heap_size_limit ("Server is approaching the
-      # used memory threshold"), and a restart mid-suite drops in-flight requests
-      # — surfacing as ERR_CONNECTION_RESET, ChunkLoadError, or a tRPC mutation
-      # failing with "Unexpected end of JSON input" from a truncated body.
-      #
-      # next-dev.js defaults max-old-space-size to 50% of total RAM (~8 GB here)
-      # unless NODE_OPTIONS already sets it, in which case it defers to that. So
-      # any value below ~8 GB *lowers* the threshold; this raises it instead.
-      # It is a ceiling, not a reservation — V8 still only grows as needed.
-      # At 10 GB a shard compiling the Event Watch admin pages on top of the
-      # other admin routes still crossed the threshold; 12 GB keeps the restart
-      # point near 9.8 GB, leaving the 16 GB runner room for Postgres, Chromium
-      # and the mocks.
       # The shared mocks server (one port, one path per mock). Only the mock
       # Entra identity provider is needed here; it must be up before the app so
       # the OAuth code flow has somewhere to go.
@@ -196,22 +178,27 @@ jobs:
           echo "mocks server did not become ready"; cat /tmp/mocks.log; exit 1
         working-directory: mocks
 
-      - name: Start app
-        env:
-          NODE_OPTIONS: --max-old-space-size=12288
-          # Keeps routes warm-routes.sh compiled instead of letting `next dev`
-          # dispose them after 60s idle (see next.config.ts).
-          E2E_KEEP_ROUTES_COMPILED: "true"
-        run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
+      # The suite runs against a production build, not `next dev`. The dev server
+      # compiled each route on first request and kept every compiled route in
+      # memory: about 8 GB of heap after the old route warm-up, and more as the
+      # suite went on. Near its heap ceiling it stalled in GC, so pages and API
+      # calls timed out in whichever specs ran late in a shard, and a spec's
+      # failure said nothing about the feature it tested. `next start` holds a few
+      # hundred MB, and every route is compiled before the first spec runs.
+      #
+      # The build is the one `next build` ships, so the suite also exercises
+      # production behaviour, such as Better Auth's own sign-in rate limit.
+      - name: Build app
+        run: pnpm --filter @wayfinder/web build
 
-      # Warming the heavy routes here, rather than giving specs longer waits: the
-      # first spec to reach a route pays its compile, which spec that is moves
-      # with every reshard, and the flow canvas has taken longer to compile than
-      # any spec timeout. See warm-routes.sh for how, warm-routes.txt for which.
+      # Tee to a file as well as the log: the "Start app" step finishes as soon as
+      # the process is backgrounded, so anything the server prints afterwards is
+      # otherwise lost — including whatever it was doing when a boot hang starts.
+      - name: Start app
+        run: pnpm --filter @wayfinder/web start > /tmp/app.log 2>&1 &
+
       - name: Wait for app to be ready
-        run: |
-          ./node_modules/.bin/wait-on http://localhost:3000 --timeout 120000
-          ./warm-routes.sh
+        run: ./node_modules/.bin/wait-on http://localhost:3000 --timeout 120000
         working-directory: apps/web/e2e
 
       # `|| true`: this also fires when the failure was infrastructural (a
@@ -232,8 +219,8 @@ jobs:
         run: npx playwright test --config=playwright.config.ts --project=chromium --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
         working-directory: apps/web/e2e
 
-      # A test failing with a connection error means the dev server died or
-      # restarted mid-run; its own log is the only place that says why.
+      # A test failing with a connection error means the server died mid-run;
+      # its own log is the only place that says why.
       - name: Dump app log on test failure
         if: failure()
         run: tail -n 300 /tmp/app.log || true
@@ -339,13 +326,13 @@ jobs:
           echo "mocks server did not become ready"; cat /tmp/mocks.log; exit 1
         working-directory: mocks
 
+      # A production build, as in the shards above. AUTH_METHOD is read at
+      # runtime, so the build itself is the ordinary one.
+      - name: Build app
+        run: pnpm --filter @wayfinder/web build
+
       - name: Start app in PKI mode
-        env:
-          NODE_OPTIONS: --max-old-space-size=10240
-          # Keeps routes warm-routes.sh compiled instead of letting `next dev`
-          # dispose them after 60s idle (see next.config.ts).
-          E2E_KEEP_ROUTES_COMPILED: "true"
-        run: pnpm --filter @wayfinder/web dev > /tmp/app.log 2>&1 &
+        run: pnpm --filter @wayfinder/web start > /tmp/app.log 2>&1 &
 
       - name: Wait for app to be ready
         run: ./node_modules/.bin/wait-on http://localhost:3000 --timeout 120000

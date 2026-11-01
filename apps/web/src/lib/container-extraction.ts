@@ -13,22 +13,26 @@ import {
   ListExtractionFlowsForUser,
   MarkRunComplete,
   ProcessExtractionTask,
+  ProposeExtractionFields,
   RemoveDraftDocument,
   RetryFailed,
   RunSampleExtraction,
   SaveExtractionSchema,
   StartBatchRun,
   UploadDraftDocuments,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import {
+  AiFieldProposer,
+  CsvWriter,
   DrizzleExtractionDraftRepository,
   DrizzleExtractionRunRepository,
   SniffingDocumentTypeDetector,
   XlsxWriter,
   ZipIngestor,
   createDatabase,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import type {
+  ExtractionPromptBudget,
   IAuditLogger,
   IDocumentExtractor,
   IDocumentGenerator,
@@ -36,7 +40,7 @@ import type {
   IFlowVersionRepository,
   ILanguageModel,
   IObjectStorage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 type Database = ReturnType<typeof createDatabase>;
 
@@ -52,6 +56,8 @@ interface ExtractionDependencies {
   // Resolved per tick from the admin ExtractionConfig so a caller-driven tick
   // honours the same per-run spend cap as the background worker (ADR-033 §9).
   resolveCostCeilingUsd: () => Promise<number>;
+  // The admin size limits resolved against the extraction model (issue #335).
+  resolvePromptBudget: () => Promise<ExtractionPromptBudget>;
 }
 
 // The extraction-flow ("Synthesise Information") module (ADR-033), factored out
@@ -67,16 +73,29 @@ export const buildExtractionModule = ({
   objectStorage,
   auditLogger,
   resolveCostCeilingUsd,
+  resolvePromptBudget,
 }: ExtractionDependencies) => {
   const extractionRuns = new DrizzleExtractionRunRepository(db);
   const extractionDrafts = new DrizzleExtractionDraftRepository(db);
   const archiveExtractor = new ZipIngestor();
   const spreadsheetWriter = new XlsxWriter();
+  const csvWriter = new CsvWriter();
+  const proposeExtractionFields = new ProposeExtractionFields(
+    extractionRuns,
+    extractionDrafts,
+    flowVersions,
+    new SaveExtractionSchema(flows, flowVersions),
+    objectStorage,
+    documentExtractor,
+    new AiFieldProposer(languageModel),
+  );
+
   const processExtractionTask = new ProcessExtractionTask(
     extractionRuns,
     objectStorage,
     documentExtractor,
     languageModel,
+    { resolvePromptBudget },
   );
 
   return {
@@ -89,6 +108,7 @@ export const buildExtractionModule = ({
         objectStorage,
         archiveExtractor,
         new SniffingDocumentTypeDetector(),
+        documentExtractor,
       ),
       listDraftDocuments: new ListDraftDocuments(extractionDrafts),
       removeDraftDocument: new RemoveDraftDocument(extractionDrafts, objectStorage),
@@ -104,12 +124,17 @@ export const buildExtractionModule = ({
         archiveExtractor,
         languageModel,
         documentExtractor,
+        extractionDrafts,
         auditLogger,
       ),
       processExtractionTask,
-      advanceBatchRuns: new AdvanceBatchRuns(extractionRuns, flowVersions, processExtractionTask, {
-        resolveCostCeilingUsd,
-      }),
+      advanceBatchRuns: new AdvanceBatchRuns(
+        extractionRuns,
+        flowVersions,
+        processExtractionTask,
+        { resolveCostCeilingUsd },
+        proposeExtractionFields,
+      ),
       cancelRun: new CancelRun(extractionRuns),
       retryFailed: new RetryFailed(extractionRuns),
       continueRun: new ContinueRun(extractionRuns),
@@ -117,6 +142,7 @@ export const buildExtractionModule = ({
         extractionRuns,
         flowVersions,
         spreadsheetWriter,
+        csvWriter,
         objectStorage,
         auditLogger,
       ),

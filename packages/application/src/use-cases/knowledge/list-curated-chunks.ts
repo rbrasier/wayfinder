@@ -3,7 +3,7 @@ import type {
   CuratedChunk,
   IChunkCurationRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class ListCuratedChunks {
   constructor(private readonly chunks: IChunkCurationRepository) {}

@@ -37,7 +37,7 @@ const { container, execute, resumeStalled, pollWatches, setSecret, setFireResult
 });
 
 vi.mock("@/lib/container", () => ({ getContainer: () => container }));
-vi.mock("@rbrasier/application", () => ({
+vi.mock("@wayfinder/application", () => ({
   FireDueSchedules: class {
     execute = execute;
   },
@@ -47,7 +47,7 @@ vi.mock("@rbrasier/application", () => ({
 }));
 vi.mock("@/lib/automation/unattended-runs", () => ({ kickUnattendedRun: vi.fn() }));
 vi.mock("@/lib/automation/event-watches", () => ({ buildPollDueWatches: () => ({ execute: pollWatches }) }));
-vi.mock("@rbrasier/adapters", () => ({ SystemClock: class {} }));
+vi.mock("@wayfinder/adapters", () => ({ SystemClock: class {} }));
 vi.mock("@/lib/scheduler/scheduled-session-fire-handler", () => ({
   ScheduledSessionFireHandler: class {},
 }));

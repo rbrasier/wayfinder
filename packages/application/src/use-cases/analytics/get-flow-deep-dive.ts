@@ -11,7 +11,7 @@ import {
   type ISessionStepOutputRepository,
   type Result,
   type StepFunnelRow,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface SessionSummary {
   total: number;

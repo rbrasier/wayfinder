@@ -17,7 +17,7 @@ import {
   type SendEmailInput,
   type Session,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { NotifyOnSessionComplete } from "./notify-on-session-complete";
 
 class FakeNotificationLogRepository implements INotificationLogRepository {

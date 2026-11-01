@@ -1,15 +1,19 @@
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import {
   buildBranchDescriptors,
+  nodeFieldSet,
   normaliseAdvanceConfidenceThreshold,
+  selectInjectableLessons,
   type ConversationalNodeConfig,
   type SessionEvent,
-} from "@rbrasier/domain";
-import { buildTurnRetrievalQueries } from "@rbrasier/application";
-import { streamTurnRequestSchema } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { buildTurnRetrievalQueries, inlineExternalOptions } from "@wayfinder/application";
+import { streamTurnRequestSchema } from "@wayfinder/shared";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
+import { withPrincipal } from "@/lib/with-principal";
 import { tooManyRequestsResponse } from "@/lib/rate-limit";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { JSON_BODY_LIMIT_BYTES, payloadTooLargeResponse, readJsonWithinLimit } from "@/lib/request-body-limit";
 import { executeTurn, type PreparedTurn } from "./execute-turn";
 import { toModelMessages } from "./model-messages";
 import { UiMessageStreamTurnWriter } from "./turn-stream-writer";
@@ -26,8 +30,9 @@ import { resolveCanOversee } from "@/lib/oversight";
 // client's own slice so the two agree (scaling wall #1).
 const CONTEXT_WINDOW_MESSAGES = 20;
 
-export async function POST(
+async function handlePOST(
   req: Request,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
@@ -39,22 +44,19 @@ export async function POST(
     void container.services.sessionEvents.publish(sessionId, event);
   };
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return new Response("Unauthorized", { status: 401 });
-
-  const authSession = await container.resolveSession(token);
-  if (!authSession) return new Response("Unauthorized", { status: 401 });
-
   // Throttle turns per user so one account cannot stampede the model or the DB
   // (scaling wall #5 at the edge). Fail open if the limiter itself errors.
-  const rateDecision = await container.services.chatRateLimiter.consume(`chat:${authSession.userId}`);
+  const rateDecision = await container.services.chatRateLimiter.consume(`chat:${principal.userId}`);
   if (!rateDecision.error && !rateDecision.data.allowed) {
     return tooManyRequestsResponse(rateDecision.data.retryAfterMs);
   }
 
   // Validate the request body instead of trusting a bare cast (a malformed body
   // otherwise threw deep in the turn). Bad JSON or a bad shape is a clean 400.
-  const parsedBody = streamTurnRequestSchema.safeParse(await req.json().catch(() => null));
+  // Bounded before parsing so an oversized body never reaches the validator.
+  const requestBody = await readJsonWithinLimit(req, JSON_BODY_LIMIT_BYTES);
+  if ("error" in requestBody && requestBody.error === "too_large") return payloadTooLargeResponse();
+  const parsedBody = streamTurnRequestSchema.safeParse("data" in requestBody ? requestBody.data : null);
   if (!parsedBody.success) return new Response("Invalid request body", { status: 400 });
   const incomingMessages = parsedBody.data.messages ?? [];
   const lastUserMessage = incomingMessages.filter((m) => m.role === "user").at(-1)?.content ?? "";
@@ -80,6 +82,7 @@ export async function POST(
     messagesTail: dbMessages,
     gatheredContext: gatheredContextItems,
     currentNodeAssistantMessages,
+    acceptedLessons,
   } = sessionResult.data;
 
   if (session.status !== "active") {
@@ -97,9 +100,9 @@ export async function POST(
   const accessResult = await container.useCases.resolveSessionAccess.execute({
     session,
     flow,
-    userId: authSession.userId,
-    // Ownership override only (ADR-066 §4); flags below keep authSession.isAdmin.
-    isAdmin: await resolveCanOversee(container, authSession),
+    userId: principal.userId,
+    // Ownership override only (ADR-066 §4); flags below keep principal.isAdmin.
+    isAdmin: await resolveCanOversee(container, principal),
     isApprover: false,
     allowAutoEnrol: true,
   });
@@ -118,7 +121,7 @@ export async function POST(
   const claimResult = await container.useCases.turnLease.claim({
     sessionId: session.id,
     turnId,
-    userId: authSession.userId,
+    userId: principal.userId,
     leaseSeconds: container.env.TURN_LEASE_SECONDS,
   });
   if (claimResult.error) return new Response("Server error", { status: 500 });
@@ -150,7 +153,7 @@ export async function POST(
     // message ("here is the solution") retrieves nothing, so without this the
     // agent never sees the file it was just given.
     container.repos.sessionUploads.listBySession(sessionId),
-    container.repos.users.findById(authSession.userId),
+    container.repos.users.findById(principal.userId),
     // Two retrieval keys, not one: the operator's message rarely names the
     // guidance that governs it ("are there any options for a start date?" does
     // not mention the Monday rule), so the step's own instruction and field set
@@ -188,7 +191,15 @@ export async function POST(
 
   // The lease is claimed; tell every open window whose turn it now is so they
   // disable Send and can attribute the hold ("Alex's turn is in progress").
-  publishEvent({ type: "turn.claimed", userId: authSession.userId, userName: userProfile?.name ?? null });
+  publishEvent({ type: "turn.claimed", userId: principal.userId, userName: userProfile?.name ?? null });
+
+  // A field bound to a lookup source gets its set inlined here when it is small
+  // enough, so the assistant can name real values when it asks. A large set stays
+  // out and the operator searches it instead (ADR-050 §4).
+  const templateFields = await inlineExternalOptions(
+    container.services.valueSetProvider,
+    nodeFieldSet(nodeConfig),
+  );
 
   // Conversational tool-loop (ADR-032): when a step allows MCP tools, the model
   // calls them in a non-streaming pre-pass whose results go into the prompt,
@@ -202,15 +213,17 @@ export async function POST(
       lastUserMessage,
       stepBrief: conversationalStepBrief(nodeConfig),
       gatheredContext,
-      userId: authSession.userId,
-      isAdmin: authSession.isAdmin,
+      userId: principal.userId,
+      isAdmin: principal.isAdmin,
       flowId: flow.id,
       sessionId,
       nodeId: session.currentNodeId,
+      publishEvent,
       onActivity: onToolActivity,
     });
     const systemPromptResult = container.services.sessionAgent.buildSystemPrompt({
       nodeConfig,
+      templateFields,
       retrievedChunks,
       sessionUploads,
       gatheredContext,
@@ -220,11 +233,21 @@ export async function POST(
       globalInstructions,
       expertRole: flow.expertRole,
       userProfile,
+      // Filtered to this step and capped before it reaches the prompt: only
+      // accepted guidance/efficiency lessons are injectable, most recently
+      // accepted first (ADR-057 §5).
+      acceptedLessons: selectInjectableLessons(
+        acceptedLessons.filter((lesson) => lesson.nodeId === session.currentNodeId),
+      ),
       now: new Date(),
       resolvedSkills,
     });
     if (systemPromptResult.error) throw new Error(`Failed to build prompt: ${systemPromptResult.error.message}`);
-    return { systemPrompt: systemPromptResult.data, recordToolAudit: toolPrepass.recordAudit };
+    return {
+      systemPrompt: systemPromptResult.data,
+      numberedCitations: toolPrepass.numberedCitations,
+      recordToolAudit: toolPrepass.recordAudit,
+    };
   };
 
   const outgoingEdges = edges.filter((e) => e.fromNodeId === session.currentNodeId);
@@ -285,8 +308,8 @@ export async function POST(
           userProfile,
           chatModelName,
           branchingModelName,
-          userId: authSession.userId,
-          isAdmin: authSession.isAdmin,
+          userId: principal.userId,
+          isAdmin: principal.isAdmin,
           lastUserMessage,
         });
       } finally {
@@ -321,3 +344,10 @@ export async function POST(
   });
   return createUIMessageStreamResponse({ stream });
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const POST = (
+  req: Request,
+  context: { params: Promise<{ sessionId: string }> },
+): Promise<Response> => withPrincipal(req, (principal) => handlePOST(req, principal, context));

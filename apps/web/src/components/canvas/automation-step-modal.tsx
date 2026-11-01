@@ -1,7 +1,7 @@
 "use client";
 
 import { useContext, useEffect, useRef, useState } from "react";
-import type { PriorStepField } from "@rbrasier/domain";
+import type { PriorStepField } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
-import { BRANDING_DISPLAY_NAME_MAX_LENGTH, DEFAULT_BRAND_PALETTE } from "@rbrasier/domain";
+import { BRANDING_DISPLAY_NAME_MAX_LENGTH, DEFAULT_BRAND_PALETTE } from "@wayfinder/domain";
 import { BrandName, BrandTile } from "@/components/branding/brand-mark";
 import { brandMarkView } from "@/components/branding/brand-mark-model";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,7 @@ function ContrastReadout({ check }: { check: BrandColourCheck }) {
   );
 }
 
-// Admin → Settings → Branding (ADR-060). The logo uploads straight to its route;
+// Admin → Settings → Branding (ADR-061). The logo uploads straight to its route;
 // name and colour save together through tRPC. Both refresh the router because
 // the palette and the signed-out mark are rendered on the server.
 export function BrandingCard() {

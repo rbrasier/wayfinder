@@ -24,10 +24,17 @@
 import { createServer } from "node:http";
 import { mock as mcpToolsStreamableHttp } from "./mcp-tools/streamable-http.mjs";
 import { mock as mcpToolsSse } from "./mcp-tools/sse.mjs";
+import {
+  statefulMock as mcpPublicData,
+  statelessMock as mcpPublicDataStateless,
+} from "./mcp-tools/public-data-http.mjs";
 import { mock as entraOidc } from "./entra/oidc.mjs";
 import { mock as graphApi } from "./graph/api.mjs";
 import { mock as hrDownload } from "./hr/download.mjs";
 import { mock as pkiProxy } from "./pki/proxy.mjs";
+import { mock as lookupContractTypes } from "./lookup/contract-types.mjs";
+import { mock as lookupSkills } from "./lookup/skills.mjs";
+import { mock as lookupBusinessUnits } from "./lookup/business-units.mjs";
 import { mock as parlviewFeed } from "./parlview/api.mjs";
 import { mock as parlviewMcp } from "./parlview/mcp.mjs";
 import { SMTP_PORT, createInbox, createInboxMock } from "./smtp/inbox.mjs";
@@ -41,10 +48,15 @@ const smtpInbox = createInboxMock(inbox);
 const MOCKS = [
   mcpToolsStreamableHttp,
   mcpToolsSse,
+  mcpPublicData,
+  mcpPublicDataStateless,
   entraOidc,
   graphApi,
   hrDownload,
   pkiProxy,
+  lookupContractTypes,
+  lookupSkills,
+  lookupBusinessUnits,
   parlviewFeed,
   parlviewMcp,
   smtpInbox,

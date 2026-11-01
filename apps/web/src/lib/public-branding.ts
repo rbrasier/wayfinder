@@ -1,8 +1,8 @@
-import { resolveBrandDisplayName, type BrandingConfig } from "@rbrasier/domain";
+import { resolveBrandDisplayName, type BrandingConfig } from "@wayfinder/domain";
 
 // What any visitor may see of the branding. The storage key stays server-side:
 // the logo is only ever fetched through /api/branding/logo, which reads the key
-// itself (ADR-060 §4).
+// itself (ADR-061 §4).
 export interface PublicBranding {
   readonly displayName: string;
   // The admin's own value, blank when they have not set one; the settings card

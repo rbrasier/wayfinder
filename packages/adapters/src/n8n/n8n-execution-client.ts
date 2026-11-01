@@ -4,7 +4,7 @@ import {
   ok,
   type N8nConfig,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The latest execution of a workflow, reduced to each node's first JSON output.
 // `hasExecutions` tells the caller whether the workflow has ever run, so an

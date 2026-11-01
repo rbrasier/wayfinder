@@ -1,7 +1,8 @@
-import { buildRetentionPolicies } from "@rbrasier/domain";
+import { buildRetentionPolicies } from "@wayfinder/domain";
 import {
   ApplyAutoNodeResult,
   ApplyRetentionPolicies,
+  SweepTestSessions,
   FailJob,
   GetFeatureFlag,
   GetSystemHealth,
@@ -11,6 +12,8 @@ import {
   ListJobs,
   LogAuditEvent,
   AdvanceBatchRuns,
+  ProposeExtractionFields,
+  SaveExtractionSchema,
   NotifyOnSessionComplete,
   NotifyOnStepComplete,
   PingJob,
@@ -18,8 +21,13 @@ import {
   RegisterJob,
   TrackUsage,
   UpsertFeatureFlag,
-} from "@rbrasier/application";
+  SweepFlowMemory,
+  CaptureSessionObservations,
+  DistilFlowLessons,
+  ExecuteQueuedMcpCalls,
+} from "@wayfinder/application";
 import {
+  AiFieldProposer,
   AiHealthChecker,
   CompositeHealthChecker,
   DbHealthChecker,
@@ -32,6 +40,7 @@ import {
   HttpSiemForwarder,
   DrizzleFlowEdgeRepository,
   DrizzleFlowNodeRepository,
+  DrizzleExtractionDraftRepository,
   DrizzleFlowRepository,
   DrizzleJobRepository,
   DrizzleNotificationLogRepository,
@@ -55,15 +64,29 @@ import {
   NodemailerEmailSender,
   PinoLogger,
   RetentionWorker,
+  FlowMemoryWorker,
+  AiLessonDistiller,
+  DrizzleApprovalRepository,
+  DrizzleAnalyticsRepository,
+  DrizzleFlowObservationRepository,
+  DrizzleFlowLessonRepository,
   RuntimeConfigStore,
   SchedulerWorker,
   SystemClock,
   createDatabase,
   withOptionalLangfuse,
   withUsageTracking,
-} from "@rbrasier/adapters";
+  AuditingMcpClient,
+  DrizzleMcpCallQueue,
+  DrizzleMcpServerRepository,
+  DrizzleMcpServerSecretStore,
+  DrizzleMcpToolRepository,
+  McpCallWorker,
+  McpSdkClient,
+  createPostgresSessionEventBus,
+} from "@wayfinder/adapters";
 import { HttpTickFirer } from "./scheduler/http-tick-firer.js";
-import { EMBEDDINGS_DEFAULT_PROVIDER } from "@rbrasier/shared";
+import { EMBEDDINGS_DEFAULT_PROVIDER } from "@wayfinder/shared";
 import type { Env } from "./env.js";
 
 export const buildContainer = (env: Env) => {
@@ -82,9 +105,10 @@ export const buildContainer = (env: Env) => {
   const featureFlags = new DrizzleFeatureFlagRepository(db);
   const usageRepo = new DrizzleUsageRepository(db);
   const jobRepo = new DrizzleJobRepository(db);
+  const settingsEncryption = new SettingsEncryptionService(createSettingsEncryptionKey(env.SETTINGS_ENCRYPTION_KEY));
   const systemSettings = new EncryptedSystemSettingsRepository(
     new DrizzleSystemSettingsRepository(db),
-    new SettingsEncryptionService(createSettingsEncryptionKey(env.SETTINGS_ENCRYPTION_KEY)),
+    settingsEncryption,
   );
   const sessions = new DrizzleSessionRepository(db);
   const flows = new DrizzleFlowRepository(db);
@@ -211,6 +235,7 @@ export const buildContainer = (env: Env) => {
     appErrorLogDays: env.RETENTION_ERROR_LOG_DAYS,
     appNotificationLogDays: env.RETENTION_NOTIFICATION_LOG_DAYS,
     appExtractionRunsDays: env.RETENTION_EXTRACTION_RUNS_DAYS,
+    aiFlowObservationsDays: env.RETENTION_FLOW_OBSERVATIONS_DAYS,
   });
   const applyRetentionPolicies = new ApplyRetentionPolicies(
     retentionRepository,
@@ -222,9 +247,59 @@ export const buildContainer = (env: Env) => {
       maxBatchesPerTarget: env.RETENTION_MAX_BATCHES_PER_TARGET,
     },
   );
+  const sweepTestSessions = new SweepTestSessions(sessions, legalHolds);
+
+  // Both sweeps ride the one retention worker rather than registering a second
+  // job: they run on the same daily cadence, and a 30-day window does not need
+  // its own poller. Composed here because RetentionWorker takes a single
+  // structural sweeper, and a failure in either must not strand the other.
+  const retentionSweeper = {
+    execute: async () => {
+      const policies = await applyRetentionPolicies.execute();
+      const testSessions = await sweepTestSessions.execute();
+      if (policies.error) return policies;
+      return testSessions;
+    },
+  };
+
+  // Flow memory (ADR-057): capture from sessions that finished since the last
+  // successful run, then distil the flows that now carry enough evidence. Off by
+  // default, so an upgrade never starts spending model calls unasked.
+  const memoryApprovals = new DrizzleApprovalRepository(db);
+  const memoryAnalytics = new DrizzleAnalyticsRepository(db);
+  const flowObservations = new DrizzleFlowObservationRepository(db);
+  const flowLessons = new DrizzleFlowLessonRepository(db);
+  const flowMemorySweeper = new SweepFlowMemory(
+    sessions,
+    flowObservations,
+    new CaptureSessionObservations(
+      sessions,
+      sessionMessages,
+      memoryApprovals,
+      memoryAnalytics,
+      flowObservations,
+    ),
+    new DistilFlowLessons(
+      flowObservations,
+      flowLessons,
+      new AiLessonDistiller(llm),
+      flowNodes,
+      auditLogger,
+    ),
+  );
+
+  const flowMemoryWorkers = env.FLOW_MEMORY_ENABLED
+    ? [
+        new FlowMemoryWorker(flowMemorySweeper, jobRepo, logger, {
+          tickIntervalMs: env.FLOW_MEMORY_TICK_MS,
+          evidenceThreshold: env.FLOW_MEMORY_EVIDENCE_THRESHOLD,
+        }),
+      ]
+    : [];
+
   const retentionWorkers = env.RETENTION_ENABLED
     ? [
-        new RetentionWorker(applyRetentionPolicies, jobRepo, logger, {
+        new RetentionWorker(retentionSweeper, jobRepo, logger, {
           tickIntervalMs: env.RETENTION_TICK_MS,
         }),
       ]
@@ -236,21 +311,66 @@ export const buildContainer = (env: Env) => {
   // automatically. Only started when enabled.
   const flowVersions = new DrizzleFlowVersionRepository(db);
   const extractionRuns = new DrizzleExtractionRunRepository(db);
+  const extractionDrafts = new DrizzleExtractionDraftRepository(db);
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const documentExtractor = new DocumentExtractorService(new DocxGenerator());
+  const proposeExtractionFields = new ProposeExtractionFields(
+    extractionRuns,
+    extractionDrafts,
+    flowVersions,
+    new SaveExtractionSchema(flows, flowVersions),
+    objectStorage,
+    documentExtractor,
+    new AiFieldProposer(llm),
+  );
+
   const advanceBatchRuns = new AdvanceBatchRuns(
     extractionRuns,
     flowVersions,
-    new ProcessExtractionTask(extractionRuns, objectStorage, documentExtractor, llm),
+    new ProcessExtractionTask(extractionRuns, objectStorage, documentExtractor, llm, {
+      resolvePromptBudget: () => runtimeConfig.resolveExtractionPromptBudget(),
+    }),
     // The per-run cost ceiling is the admin ExtractionConfig value (resolved each
     // tick from system_settings), not an env var.
     { resolveCostCeilingUsd: () => runtimeConfig.getExtractionConfig().then((c) => c.perRunCostCeilingUsd) },
+    proposeExtractionFields,
   );
   const extractionWorkers = env.EXTRACTION_WORKER_ENABLED
     ? [
         new ExtractionWorker(advanceBatchRuns, jobRepo, logger, {
           tickIntervalMs: env.EXTRACTION_TICK_MS,
         }),
+      ]
+    : [];
+
+  // Queued MCP node calls (ADR-062 §3). The worker publishes on the same session
+  // event bus the web app listens on, so every open window sees the progress.
+  const applyAutoNodeResult = new ApplyAutoNodeResult(
+    sessions,
+    flowNodes,
+    flowEdges,
+    sessionStepOutputs,
+    notifyOnSessionComplete,
+    notifyOnStepComplete,
+  );
+  const mcpServerSecrets = new DrizzleMcpServerSecretStore(db, settingsEncryption);
+  const mcpCallWorkers = env.MCP_CALL_WORKER_ENABLED
+    ? [
+        new McpCallWorker(
+          new ExecuteQueuedMcpCalls({
+            queue: new DrizzleMcpCallQueue(db),
+            servers: new DrizzleMcpServerRepository(db, settingsEncryption),
+            tools: new DrizzleMcpToolRepository(db),
+            client: new AuditingMcpClient(new McpSdkClient(mcpServerSecrets), auditLogger, logger),
+            applyResult: applyAutoNodeResult,
+            flowNodes,
+            sessionMessages,
+            sessionEvents: createPostgresSessionEventBus(env.DATABASE_URL),
+          }),
+          jobRepo,
+          logger,
+          { tickIntervalMs: env.MCP_CALL_TICK_MS, maxInFlight: env.MCP_CALL_MAX_IN_FLIGHT },
+        ),
       ]
     : [];
 
@@ -261,11 +381,13 @@ export const buildContainer = (env: Env) => {
     runtimeConfig,
     schedulerWorkers,
     retentionWorkers,
+    flowMemoryWorkers,
     extractionWorkers,
+    mcpCallWorkers,
     repos: { users, conversations, errorLogs, featureFlags, usageRepo, jobRepo, systemSettings, sessions, flowNodes, flowEdges, sessionStepOutputs },
     services: { llm, errorLogger, auditLogger },
     useCases: {
-      applyAutoNodeResult: new ApplyAutoNodeResult(sessions, flowNodes, flowEdges, sessionStepOutputs, notifyOnSessionComplete, notifyOnStepComplete),
+      applyAutoNodeResult,
       logAuditEvent: new LogAuditEvent(auditLogger),
       getFeatureFlag: new GetFeatureFlag(featureFlags),
       isFeatureEnabled: new IsFeatureEnabled(featureFlags),

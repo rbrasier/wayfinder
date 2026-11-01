@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Flow } from "@rbrasier/domain";
+import type { Flow } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/empty-state";
 import { CardSkeletonGrid } from "@/components/skeleton/card-skeleton";

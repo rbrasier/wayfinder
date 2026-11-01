@@ -1,5 +1,5 @@
-import type { IHealthChecker, IJobRepository, Result, SystemHealth } from "@rbrasier/domain";
-import { ok, err, domainError } from "@rbrasier/domain";
+import type { IHealthChecker, IJobRepository, Result, SystemHealth } from "@wayfinder/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type { AiHealthChecker } from "./ai-health-checker";
 import type { DbHealthChecker } from "./db-health-checker";
 

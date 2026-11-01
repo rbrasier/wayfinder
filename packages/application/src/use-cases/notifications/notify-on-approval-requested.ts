@@ -8,7 +8,7 @@ import {
   type IUserRepository,
   type NotificationLog,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { NotificationConfig } from "./notify-on-session-complete";
 import { buildApprovalRequestedEmail } from "./approval-templates";
 import { SUBJECT_DESCRIPTION_KEY } from "../approvals/approval-record-keys";

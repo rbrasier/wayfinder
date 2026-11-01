@@ -4,7 +4,7 @@ import {
   LOGIN_NOTICE_CONFIG_SETTING_KEY,
   parseLoginNoticeConfig,
   type LoginNoticeConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { InMemoryAuditLog, InMemorySystemSettings } from "../__fixtures__/presentation-doubles";
 import { AcknowledgeLoginNotice } from "./acknowledge-login-notice";
 import { GetLoginNoticeStatus } from "./get-login-notice-status";

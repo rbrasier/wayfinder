@@ -11,7 +11,7 @@ import {
   type ILanguageModel,
   type Result,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   InMemoryApprovals,
   InMemoryMessages,

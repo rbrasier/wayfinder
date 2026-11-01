@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type Flow, type FlowUpdate } from "@rbrasier/domain";
+import { ok, type Flow, type FlowUpdate } from "@wayfinder/domain";
 import { SetTriggerInputs } from "./set-trigger-inputs";
 
 const build = () => {

@@ -6,7 +6,7 @@ import {
   type Result,
   type Session,
   type UnattendedRunStatus,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { resolveSessionGraph, type SessionGraphDependencies } from "../../services/resolve-session-graph";
 
 export interface ListTriggerRunsDependencies {

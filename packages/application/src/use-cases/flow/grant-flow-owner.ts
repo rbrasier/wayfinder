@@ -1,5 +1,5 @@
-import type { Flow, IFlowRepository, Result } from "@rbrasier/domain";
-import { err } from "@rbrasier/domain";
+import type { Flow, IFlowRepository, Result } from "@wayfinder/domain";
+import { err } from "@wayfinder/domain";
 
 export class GrantFlowOwner {
   constructor(private readonly flows: IFlowRepository) {}

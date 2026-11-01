@@ -1,5 +1,5 @@
-import { FireDueSchedules, ResumeStalledRuns } from "@rbrasier/application";
-import { SystemClock } from "@rbrasier/adapters";
+import { FireDueSchedules, ResumeStalledRuns } from "@wayfinder/application";
+import { SystemClock } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { ScheduledSessionFireHandler } from "@/lib/scheduler/scheduled-session-fire-handler";
 import { kickUnattendedRun } from "@/lib/automation/unattended-runs";

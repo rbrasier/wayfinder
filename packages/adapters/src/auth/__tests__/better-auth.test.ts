@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { AuthConfig } from "@rbrasier/domain";
+import type { AuthConfig } from "@wayfinder/domain";
 import { createDatabase } from "../../db/client";
 import { createAuth, microsoftProviderFor, type AuthMethod } from "../better-auth";
 

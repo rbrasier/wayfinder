@@ -1,4 +1,4 @@
-import type { PromptUserProfile } from "@rbrasier/domain";
+import type { PromptUserProfile } from "@wayfinder/domain";
 import type { getContainer } from "@/lib/container";
 
 type Container = ReturnType<typeof getContainer>;

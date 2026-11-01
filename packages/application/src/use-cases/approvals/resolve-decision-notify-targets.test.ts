@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type Approval, type FlowNode, type Result, type Session, type SessionParticipant, type User } from "@rbrasier/domain";
+import { ok, type Approval, type FlowNode, type Result, type Session, type SessionParticipant, type User } from "@wayfinder/domain";
 import { ResolveDecisionNotifyTargets } from "./resolve-decision-notify-targets";
 
 const user = (id: string, name: string): User =>

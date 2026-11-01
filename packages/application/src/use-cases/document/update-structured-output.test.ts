@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   IApprovalRepository,
   IAuditLogger,
@@ -9,7 +9,7 @@ import type {
   ISessionStepOutputRepository,
   SessionStepOutput,
   StepOutputField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { UpdateStructuredStepOutput } from "./update-structured-output";
 
 const structuredFields = [

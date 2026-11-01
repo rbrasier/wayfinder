@@ -1,6 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import type { WebhookActor } from "@rbrasier/application";
+import type { WebhookActor } from "@wayfinder/application";
 import { buildRetryFailedStep } from "@/lib/automation/unattended-runs";
 import { authenticatedProcedure, canOversee, router, type TrpcContext } from "../trpc";
 import { toTrpcError } from "../trpc-errors";

@@ -1,5 +1,5 @@
-import { parseTemplateField } from "@rbrasier/domain";
-import type { DomainErrorDetail } from "@rbrasier/domain";
+import { parseTemplateField } from "@wayfinder/domain";
+import type { DomainErrorDetail } from "@wayfinder/domain";
 
 // Shared {{ tag }} syntax checking for the .docx and .xlsx generators. Both read
 // tags with a non-greedy /\{\{([\s\S]*?)\}\}/, which spans a mistyped opening

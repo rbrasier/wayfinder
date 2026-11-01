@@ -4,7 +4,7 @@ import {
   type IApprovalRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Gathers the three facts the domain lock rule needs and applies it. Shared by
 // the document and structured-record guards so the two cannot come to disagree

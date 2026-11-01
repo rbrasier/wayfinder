@@ -11,7 +11,7 @@ import {
   type NewHrDataset,
   type NewHrRow,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { admin_hr_datasets, admin_hr_rows } from "../db/schema/admin";
 

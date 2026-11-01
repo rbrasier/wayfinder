@@ -14,7 +14,7 @@ The web app migrates the database as part of starting:
 "start": "../../scripts/with-root-env.sh sh -c '../../scripts/migrate-if-configured.sh && exec next start -p ${WEB_PORT:-3000}'"
 ```
 
-`migrate-if-configured.sh` runs `pnpm --filter @rbrasier/adapters db:migrate`,
+`migrate-if-configured.sh` runs `pnpm --filter @wayfinder/adapters db:migrate`,
 which is `drizzle-kit migrate`.
 
 This is a good default for a single machine, and it is why `./restart.sh` works
@@ -23,7 +23,7 @@ built for and which must not regress.
 
 It causes three problems everywhere else:
 
-1. **`drizzle-kit` is a devDependency** of `@rbrasier/adapters`. Because the
+1. **`drizzle-kit` is a devDependency** of `@wayfinder/adapters`. Because the
    production start path invokes it, a production image cannot prune dev
    dependencies without failing on boot. Both cloud guides carry an explicit
    "do not prune dev dependencies" warning as a result.
@@ -88,7 +88,7 @@ set a dozen environment variables — one more is free. Contributors set none.
 ### 3. The start path stops invoking `drizzle-kit`
 
 `migrate-if-configured.sh` is rewritten to call the §1 entrypoint rather than
-`pnpm --filter @rbrasier/adapters db:migrate`. It keeps its existing behaviour of
+`pnpm --filter @wayfinder/adapters db:migrate`. It keeps its existing behaviour of
 skipping silently when `DATABASE_URL` is unset — CI lint and typecheck
 containers depend on that — and gains the `RUN_MIGRATIONS_ON_START` check.
 
@@ -97,7 +97,7 @@ pruning dev dependencies from the production image.
 
 **Pruning is a consequence, not a promise.** Whether `pnpm prune --prod` yields
 a working image also depends on the workspace's peer-dependency resolution
-(the framework libraries are `peerDependencies` of `@rbrasier/adapters` but real
+(the framework libraries are `peerDependencies` of `@wayfinder/adapters` but real
 `dependencies` of `apps/web` and `apps/api`). That must be verified by building
 and running, not assumed. This ADR stands on its multi-instance and
 observability merits regardless of how pruning turns out.
@@ -117,7 +117,7 @@ supported pattern.
 
 ## Alternatives considered
 
-- **Move `drizzle-kit` to a runtime dependency of `@rbrasier/adapters`.**
+- **Move `drizzle-kit` to a runtime dependency of `@wayfinder/adapters`.**
   Rejected: it makes the pruning problem permanent and ships a development tool
   and its dependency tree into every production image, to avoid writing a
   twelve-line CLI over a function that already exists.

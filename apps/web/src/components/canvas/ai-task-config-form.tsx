@@ -7,7 +7,7 @@ import type {
   AiTaskReviewer,
   ApproverSourceMode,
   PriorStepField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Input } from "@/components/ui/input";

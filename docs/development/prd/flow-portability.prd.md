@@ -3,8 +3,9 @@
 - **Status**: Draft
 - **Date**: 2026-08-11
 - **Author**: Solo / Claude Code
-- **Target version**: TBC — **MINOR** (new feature, no schema change). The number
-  is settled at `/doc-review` when the build line is chosen; see §9.
+- **Target version**: **0.30.0** — **MINOR** (new feature, no schema change).
+  Allocated at `/doc-review`; `main` sat at `0.28.4` and `0.29.0` is claimed on
+  another branch. See §9.
 
 ## 1. Problem
 
@@ -55,8 +56,10 @@ outside a database client.
 - **A hosted template gallery or marketplace.** This PRD delivers the format and
   the two operations; distribution is a separate concern.
 - **Exporting instance data** of any kind.
-- **Bundling knowledge-base collection contents.** Collections are referenced by
-  name and reported as dependencies.
+- **Knowledge-base collections.** The product has no collection concept — the
+  `kb_` tables hold context-document content and chunks, and no node config
+  references a collection. A flow's knowledge *is* its context documents, and
+  those are bundled as assets. There is no `kb_collection` dependency kind.
 - **Signing or verifying archives** (provenance, tamper-evidence).
 - **Cross-version migration of flows authored on a newer deployment** beyond the
   refuse-and-report policy in §9.
@@ -69,11 +72,11 @@ outside a database client.
 | ------ | -------- | -------------- | ----- |
 | `FlowExportManifest` | `packages/domain/src/entities/flow-export.ts` | new | `{ formatVersion, exportedAt, exportedFrom, snapshot, dependencies, assets }`. |
 | `FlowExportAsset` | `packages/domain/src/entities/flow-export.ts` | new | `{ id, kind: "template" \| "context_doc", path, filename, mimeType, sizeBytes, sha256 }`. |
-| `FlowExportDependency` | `packages/domain/src/entities/flow-export.ts` | new | `{ kind: "skill" \| "mcp_tool" \| "kb_collection", name, toolName?, nodeIds }`. |
+| `FlowExportDependency` | `packages/domain/src/entities/flow-export.ts` | new | `{ kind: "skill" \| "mcp_tool", name, toolName?, nodeIds }`. For `mcp_tool`, `name` is the server's `label` — see §9. |
 | `FlowImportInspection` | `packages/domain/src/entities/flow-export.ts` | new | `{ manifest, resolved, unresolved, assetCount, warnings }`. |
 | `IFlowArchiveReader` / `IFlowArchiveWriter` | `packages/domain/src/ports/flow-archive.ts` | new | Ports; the zip library lives in adapters only. |
 | `FlowSnapshot` | `packages/domain/src/entities/flow-version.ts` | existing | Embedded verbatim. Reused, not reimplemented — see ADR-049 §2. |
-| `IObjectStorage` | `packages/domain/src/ports/object-storage.ts` | existing | Reads assets on export, writes them under fresh keys on import. |
+| `IObjectStorage` | `packages/domain/src/ports/object-storage.ts` | existing | Reads assets on export, writes them under fresh keys on import. Unchanged: `get` returns a whole `Buffer`, so both sides buffer — the ceilings in §10 are what bounds peak memory. |
 | `IAuditLogger` | existing | existing | Export emits `flow.exported`; import emits `flow.imported`. |
 
 ## 6. User stories
@@ -123,15 +126,22 @@ object-storage keys.
   around the existing `FlowSnapshot`; dependencies exported by stable name;
   unresolved dependencies degrade to a flagged draft; inspect-then-commit; new
   flow always; the untrusted-input guards; and the `formatVersion` policy.
-- **Assumes ADR-015** (flow versioning snapshots) for the serialisation,
-  **ADR-031** (skills library) and **ADR-032** (MCP flags and transport) for the
-  references that need name-based resolution, **ADR-033** (immutable audit log)
-  for the export event, and **ADR-018** for approval nodes — already portable,
-  since `ApproverSourceMode` bakes in no user id.
-- **Branch and version**: new features base off `main` per `CLAUDE.md`. These
-  docs are authored on `release/alpha-2` at the requester's direction; the target
-  version is left **TBC** so it is allocated against whichever line the build is
-  scheduled on. `/doc-review` settles it.
+- **Assumes ADR-015** *(Flow Versioning via Immutable Snapshots)* for the
+  serialisation, **ADR-033** *(Immutable Audit Log & Legal Hold)* for the export
+  event, and **ADR-018** *(Approval Step and Approver Resolution)* for approval
+  nodes — already portable, since `ApproverSourceMode` bakes in no user id.
+  ADRs are cited by title here because 015, 031, 032 and 033 each carry more
+  than one document; the skills-library and MCP decisions the code cites as
+  "ADR-031" / "ADR-032" have no matching ADR file, so this PRD relies on the
+  code (`entities/skill.ts`, `entities/mcp-server.ts`) rather than a number.
+- **Identity of an exported reference**: skills resolve on `app_skills.name`,
+  MCP tools on `admin_mcp_servers.label` plus `McpToolRef.toolName`. Neither
+  column is unique, so resolution can be ambiguous; see §10 for the decided
+  behaviour.
+- **Branch and version**: standard routing per `CLAUDE.md` — new features land on
+  **`main`**, the next release line. Target version **0.30.0**; implemented docs
+  land in `docs/development/implemented/alpha-3/v0.30.0/`, the line `CLAUDE.md`
+  names for `main`.
 
 ## 10. Acceptance criteria
 
@@ -143,14 +153,24 @@ object-storage keys.
       referenced by the flow is present in `assets/` with a matching `sha256`.
 - [ ] The archive contains **no** session, message, document, approval or
       step-output data — asserted by a test over the archive's contents.
-- [ ] `skillRefs` export as skill names and `McpToolRef` as server name plus
-      tool name; no `app_skills` or MCP server id appears in the manifest.
+- [ ] `skillRefs` export as `app_skills.name` and `McpToolRef` as the server's
+      `admin_mcp_servers.label` plus `toolName`; no `app_skills` id and no
+      `admin_mcp_servers` id appears in the manifest.
+- [ ] A dependency matching **more than one** local skill name, or more than one
+      server label, is **not auto-resolved**: it is reported as unresolved with a
+      warning naming the candidates, and the node is flagged. Guessing wires a
+      flow to the wrong tool silently, which is the one outcome this format
+      refuses.
 - [ ] `inspectFlowImport` returns the inspection **without writing any row or
       object** — asserted by a test that counts rows before and after.
 - [ ] Import resolves dependencies by name, rewrites node config to local ids,
       and lists what did not resolve.
 - [ ] An archive with unresolved dependencies imports as `draft`, with the
-      affected nodes flagged and the flow not publishable until resolved.
+      affected nodes flagged and the flow not publishable until resolved. The
+      flag is a node-config field (`unresolvedDependencies?: FlowExportDependency[]`,
+      jsonb — no migration), and `PublishFlowVersion` refuses a flow whose live
+      nodes still carry one, with a `VALIDATION_FAILED` naming them. Without
+      that gate the criterion is a claim with no enforcement.
 - [ ] An imported flow is always new, owned by the importer, and `draft`; no
       existing flow is modified by any import.
 - [ ] Node ids are regenerated and every edge is rewritten against the new ids;
@@ -160,7 +180,11 @@ object-storage keys.
       malicious `../` entry.
 - [ ] Archive size, uncompressed size, asset count and per-asset size ceilings
       are enforced **before** extraction; exceeding any returns
-      `VALIDATION_FAILED`.
+      `VALIDATION_FAILED`. Defaults: **50 MB** compressed (rejected at the upload
+      route, before the reader is called), **200 MB** uncompressed, **100**
+      assets, **25 MB** per asset — the last matching the extraction intake's
+      existing per-entry cap. These bound peak memory, which is what makes
+      buffering acceptable in place of streaming.
 - [ ] An asset whose `sha256` does not match fails the import; the bytes are not
       stored.
 - [ ] An archive whose `formatVersion` exceeds this deployment's support is
@@ -170,7 +194,14 @@ object-storage keys.
       validation each return a Result error with an actionable message — never a
       throw across a boundary.
 - [ ] Export is restricted to the flow owner or an admin and emits
-      `flow.exported` to `core_audit_log`; import emits `flow.imported`.
+      `flow.exported` to `core_audit_log`; import emits `flow.imported`. **No new
+      `PermissionKey` is added** — the registry is developer-owned and a key with
+      no distinct enforcement is meaningless (ADR-021). Splitting export from
+      flow edit is future work, recorded in §11.
+- [ ] A Playwright spec covers the export download and the import upload. This
+      is group 3 of `docs/guides/e2e-test-policy.md` — "file upload and download
+      … exports" — and is the only part of this feature that qualifies;
+      everything else is tested at the layer that owns it.
 - [ ] Duplicate produces an independent draft copy with a suffixed name, its own
       node ids, and its own copies of the assets.
 - [ ] Round trip: export a flow, import it into a clean deployment with the same
@@ -187,7 +218,10 @@ object-storage keys.
 - Import that updates an existing flow, with a diff and a merge decision.
 - A template gallery or marketplace, hosted or in-app.
 - Signed archives and provenance verification.
-- Bundling KB collection contents alongside the flow.
+- A dedicated export permission, distinct from flow edit.
+- Streaming assets end-to-end. `IObjectStorage.get` returns a whole `Buffer`;
+  adding a streaming method would ripple through the MinIO adapter and every
+  caller, for a payload the §10 ceilings already bound.
 - Exporting a *specific* published version rather than the current definition.
 - Bulk export/import of every flow in a deployment.
 
@@ -199,20 +233,29 @@ object-storage keys.
   implementation detail.
 - **Export is an exfiltration path that did not previously exist.** A single
   click removes prompt IP, applied skills and whole context documents. Gating to
-  owner/admin plus auditing narrows it; it does not close it. Open: whether
-  export warrants its own permission distinct from flow edit.
+  owner/admin plus auditing narrows it; it does not close it. **Decided**: no
+  separate permission in this release (§10); revisit if a customer needs to let
+  someone edit a flow without being able to remove it from the building.
 - **`formatVersion` discipline.** The refuse-newer policy only works if the
   version is incremented honestly and the read-side migrations are maintained
   from the first release.
 - **Asset size.** A flow with a large context-document corpus produces a large
-  archive. Ceilings are required; the right defaults are unconfirmed, and
-  streaming rather than buffering is needed on both sides.
-- **Name collisions on resolution.** Two skills with the same name, or two MCP
-  servers exposing the same tool name, make name-based resolution ambiguous.
-  Open: reject as ambiguous, or resolve to the most recently updated and warn.
-- **Zip library choice.** Must be verified in `node_modules` for its real API and
-  its streaming/size-limit support before the phase doc's adapter step —
-  `CLAUDE.md` forbids relying on training data for third-party API shapes.
+  archive. **Decided**: buffer both sides, bounded by the §10 ceilings, rather
+  than reworking `IObjectStorage` for streaming. The residual risk is a peak of
+  roughly one archive's uncompressed size per concurrent import; if that proves
+  too coarse, the ceilings move to `runtime-config-store` alongside the existing
+  archive-intake limits before the port changes.
+- **Name collisions on resolution.** Neither `app_skills.name` nor
+  `admin_mcp_servers.label` carries a unique constraint, so ambiguity is
+  possible today, not hypothetical. **Decided**: never auto-resolve an ambiguous
+  match — report it as unresolved with the candidates named (§10). This is the
+  same "degrade loudly" rule as an absent dependency, and it keeps the resolver
+  free of a heuristic nobody can audit later.
+- **Zip library.** **Decided**: PizZip, already a dependency of
+  `packages/adapters` and already driving `ZipIngestor`. Its real API must still
+  be re-read in `node_modules` at build time (`CLAUDE.md` forbids working from
+  training data) — in particular the generate/write path, which this repo does
+  not yet exercise for archive output.
 - **Duplicate and asset copies.** Duplicating a flow copies its assets rather
   than sharing keys, so storage grows per duplicate. Accepted: shared keys would
   make one flow's template deletion corrupt another's.

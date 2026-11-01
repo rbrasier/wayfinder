@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ExtractionField, FlowContextDoc } from "@rbrasier/domain";
+import type { ExtractionField, FlowContextDoc } from "@wayfinder/domain";
 import { buildExtractionSystemPrompt } from "./build-extraction-prompt";
 
 const supplierName: ExtractionField = {

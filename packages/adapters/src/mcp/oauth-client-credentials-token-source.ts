@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { domainError, err, ok, type McpOAuthSettings, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type McpOAuthSettings, type Result } from "@wayfinder/domain";
 
 type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
 

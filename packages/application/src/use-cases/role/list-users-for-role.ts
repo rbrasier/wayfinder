@@ -4,7 +4,7 @@ import {
   type IRoleRepository,
   type IUserRoleRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class ListUsersForRole {
   constructor(

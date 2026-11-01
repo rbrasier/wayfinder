@@ -1,4 +1,4 @@
-import type { Flow, FlowNode, Session, SessionMessage } from "@rbrasier/domain";
+import type { Flow, FlowNode, Session, SessionMessage } from "@wayfinder/domain";
 import type { getContainer } from "@/lib/container";
 
 type Container = ReturnType<typeof getContainer>;

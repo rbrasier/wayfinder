@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import type { Flow } from "@rbrasier/domain";
+import type { Flow } from "@wayfinder/domain";
 import {
   Dialog,
   DialogBody,

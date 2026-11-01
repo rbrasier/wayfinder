@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Mail } from "lucide-react";
-import { renderMarkdownToHtml } from "@rbrasier/domain";
+import { renderMarkdownToHtml } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/trpc/client";

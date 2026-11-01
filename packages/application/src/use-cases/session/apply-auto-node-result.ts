@@ -1,4 +1,5 @@
 import {
+  citationsForValue,
   domainError,
   err,
   ok,
@@ -12,8 +13,10 @@ import {
   type Result,
   type Session,
   type SessionUpdate,
-} from "@rbrasier/domain";
-import { coerceStructuredFields } from "../document/structured-fields";
+  type StepOutputField,
+  type ToolRecordCitation,
+} from "@wayfinder/domain";
+import { coerceStructuredFields, coerceVerbatimFields } from "../document/structured-fields";
 import type { ISessionCompleteNotifier } from "../notifications/notify-on-session-complete";
 import type { ISessionStepCompleteNotifier } from "../notifications/notify-on-step-complete";
 
@@ -24,7 +27,27 @@ export interface ApplyAutoNodeResultInput {
   status: NodeExecutionOutput["status"];
   data: Record<string, unknown>;
   message?: string;
+  // Set by the MCP dispatch when the step ran a verbatim-only connection
+  // (ADR-053 §5). The ordinary coercion trims, which is itself a
+  // transformation, so the guarantee has to reach as far as the write.
+  verbatim?: boolean;
+  // The source records an MCP result pointed at (ADR-062 §6). Each captured
+  // field carries only the records its own value draws on, so a document built
+  // from the step can be traced back without a field claiming a source it never
+  // used.
+  citations?: ToolRecordCitation[];
 }
+
+const withCitations = (
+  fields: StepOutputField[],
+  citations: ToolRecordCitation[] | undefined,
+): StepOutputField[] => {
+  if (!citations || citations.length === 0) return fields;
+  return fields.map((field) => {
+    const relevant = citationsForValue(field.value, citations);
+    return relevant.length > 0 ? { ...field, citations: relevant } : field;
+  });
+};
 
 export interface ApplyAutoNodeResultOutput {
   applied: boolean;
@@ -120,14 +143,16 @@ export class ApplyAutoNodeResult {
 
     const config = nodeResult.data.config as unknown as AutoNodeConfig;
     const responseFields = config.responseFields ?? [];
-    const fields = coerceStructuredFields(responseFields, input.data);
+    const fields = input.verbatim
+      ? coerceVerbatimFields(responseFields, input.data)
+      : coerceStructuredFields(responseFields, input.data);
 
     await this.sessionStepOutputs.create({
       sessionId: input.sessionId,
       flowId,
       nodeId: input.nodeId,
       messageId: null,
-      fields,
+      fields: withCitations(fields, input.citations),
     });
   }
 

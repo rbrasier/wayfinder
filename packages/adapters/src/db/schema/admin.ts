@@ -13,10 +13,13 @@ import {
 } from "drizzle-orm/pg-core";
 import type {
   HrColumnMapping,
+  McpToolCitationMapping,
+  McpToolPagination,
+  McpToolStatusMapping,
   WatchApiKeyPlacement,
   WatchCondition,
   WatchInputMapping,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { core_organisations, core_users } from "./core";
 import { app_flows } from "./wayfinder";
 
@@ -169,33 +172,41 @@ export const admin_feature_flag_roles = pgTable(
   }),
 );
 
-// Admin-registered remote MCP servers (ADR-032 §1: remote HTTP/SSE). `sse` is
-// the legacy default; `streamable-http` targets the newer MCP streamable-HTTP
-// endpoint. The bearer token is held in `credential_encrypted` (settings
-// encryption) and never returned to a client. `credential_ref` is the legacy
-// alternative: the name of an `MCP_CRED_` environment variable, moved into
-// `credential_encrypted` when the server is next saved.
+// Admin-registered remote MCP servers. `sse` is the legacy default;
+// `streamable-http` targets the newer MCP streamable-HTTP endpoint. The bearer
+// token and custom headers are stored encrypted (`enc:v1:` envelopes) and are
+// never returned to a client (ADR-062 §8).
 export const admin_mcp_servers = pgTable("admin_mcp_servers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   label: text("label").notNull(),
   transport: text("transport", { enum: ["sse", "streamable-http"] }).notNull().default("sse"),
   url: text("url").notNull(),
-  credential_ref: text("credential_ref"),
-  credential_encrypted: text("credential_encrypted"),
+  // What the server does with data (ADR-062 §1). Rows that predate it were
+  // carried across from the dropped `communicates_externally` (0055).
+  data_classification: text("data_classification", {
+    enum: ["internal", "public-read", "external-write"],
+  })
+    .notNull()
+    .default("internal"),
+  // Admin governance of Wayfinder's own handling (ADR-053 §5): when true,
+  // Wayfinder selects from or passes through this connection's tool results and
+  // never transforms them. Existing rows default to the current behaviour.
+  verbatim_only: boolean("verbatim_only").notNull().default(false),
+  call_timeout_ms: integer("call_timeout_ms").notNull().default(30000),
+  credential_ciphertext: text("credential_ciphertext"),
+  // JSON object of header name → value, encrypted as a whole.
+  custom_headers_ciphertext: text("custom_headers_ciphertext"),
   // OAuth 2.0 client credentials (issue #361): set together, or all null for a
-  // server that signs in with a fixed token or not at all. The secret is
-  // encrypted with the same cipher as the bearer token.
+  // server that does not sign in with OAuth. The client secret is write-only
+  // like the token and read only by the secret store.
   oauth_token_url: text("oauth_token_url"),
   oauth_client_id: text("oauth_client_id"),
-  oauth_client_secret_encrypted: text("oauth_client_secret_encrypted"),
   oauth_scope: text("oauth_scope"),
   oauth_audience: text("oauth_audience"),
   oauth_client_auth_method: text("oauth_client_auth_method", {
     enum: ["client_secret_basic", "client_secret_post"],
   }),
-  // Admin classification: does this server communicate outside Wayfinder? Existing
-  // rows default to the safe internal classification (ADR-032).
-  communicates_externally: boolean("communicates_externally").notNull().default(false),
+  oauth_client_secret_ciphertext: text("oauth_client_secret_ciphertext"),
   status: text("status", { enum: ["active", "disabled"] }).notNull().default("active"),
   created_by_user_id: uuid("created_by_user_id").references(() => core_users.id, {
     onDelete: "set null",
@@ -204,8 +215,9 @@ export const admin_mcp_servers = pgTable("admin_mcp_servers", {
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// Cache of tools discovered on a server, refreshed on demand. The flow editor
-// reads this and falls back to a live listTools when stale/empty.
+// Cache of tools discovered on a server, refreshed on demand, plus the admin's
+// per-tool settings (ADR-062 §5). The flow editor reads this and falls back to a
+// live listTools when it is empty.
 export const admin_mcp_tools = pgTable(
   "admin_mcp_tools",
   {
@@ -215,7 +227,11 @@ export const admin_mcp_tools = pgTable(
       .references(() => admin_mcp_servers.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     description: text("description"),
+    title: text("title"),
     input_schema: jsonb("input_schema").$type<Record<string, unknown> | null>(),
+    pagination_config: jsonb("pagination_config").$type<McpToolPagination | null>(),
+    status_config: jsonb("status_config").$type<McpToolStatusMapping | null>(),
+    citation_config: jsonb("citation_config").$type<McpToolCitationMapping | null>(),
     last_synced_at: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import type { DomainError, DomainErrorCode } from "@rbrasier/domain";
+import type { DomainError, DomainErrorCode } from "@wayfinder/domain";
 
 const codeMap: Record<DomainErrorCode, TRPCError["code"]> = {
   NOT_FOUND: "NOT_FOUND",

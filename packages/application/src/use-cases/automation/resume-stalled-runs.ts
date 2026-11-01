@@ -1,4 +1,4 @@
-import { ok, type IUnattendedRunRepository, type Result } from "@rbrasier/domain";
+import { ok, type IUnattendedRunRepository, type Result } from "@wayfinder/domain";
 import type { AdvanceUnattendedRunInput } from "./advance-unattended-run";
 
 export interface ResumeStalledRunsDependencies {

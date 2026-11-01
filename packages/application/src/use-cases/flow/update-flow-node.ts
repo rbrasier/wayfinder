@@ -5,7 +5,7 @@ import {
   type FlowNodeUpdate,
   type IFlowNodeRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class UpdateFlowNode {
   constructor(private readonly nodes: IFlowNodeRepository) {}

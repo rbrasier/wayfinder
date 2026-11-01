@@ -1,5 +1,5 @@
 // WCAG 2.1 colour contrast (https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio).
-// Pure maths, so the brand-colour guard rail (ADR-060 §3) runs the same on the
+// Pure maths, so the brand-colour guard rail (ADR-061 §3) runs the same on the
 // admin's screen as it does on save.
 
 export interface RgbColour {

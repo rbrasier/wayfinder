@@ -1,7 +1,7 @@
 import type { BrandMarkView } from "./brand-mark-model";
 
 // The install's mark: its uploaded logo, or the lettered tile on the brand
-// colour (ADR-060). Shared by the sidebar and the signed-out pages so the two
+// colour (ADR-061). Shared by the sidebar and the signed-out pages so the two
 // can't drift. Plain markup with no hooks, so it renders on either side.
 
 const TILE_SIZES = {

@@ -51,6 +51,7 @@ export function FlowConfigHeader({
   setFlowMenuOpen,
   flowMenuRef,
   onAddStep,
+  onTestFlow,
   onShowExplainer,
   updateFlowMutation,
   refetchVersionStatus,
@@ -74,6 +75,7 @@ export function FlowConfigHeader({
   setFlowMenuOpen: Dispatch<SetStateAction<boolean>>;
   flowMenuRef: RefObject<HTMLDivElement | null>;
   onAddStep: () => void;
+  onTestFlow: () => void;
   onShowExplainer: () => void;
   updateFlowMutation: UpdateFlowMutation;
   refetchVersionStatus: () => void;
@@ -134,6 +136,17 @@ export function FlowConfigHeader({
         <FlowTriggersButton flowId={flowId} />
         <Button size="sm" variant="outline" onClick={onAddStep}>
           + Add step
+        </Button>
+        {/* Runs the working draft, published or not, without leaving the
+            canvas (ADR-048). Offered on a draft precisely because a draft is
+            what the author cannot otherwise exercise. */}
+        <Button size="sm" variant="outline" onClick={onTestFlow}>
+          Test
+        </Button>
+        <Button size="sm" variant="outline" asChild>
+          <a href={`/api/flows/${flowId}/export`} download>
+            Export
+          </a>
         </Button>
         <div className="relative" ref={flowMenuRef}>
           <Button

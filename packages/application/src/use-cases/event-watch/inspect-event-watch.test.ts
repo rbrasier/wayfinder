@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { domainError, err, ok, type NewAuditLog, type OutboundJsonRequest, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type NewAuditLog, type OutboundJsonRequest, type Result } from "@wayfinder/domain";
 import { PreviewEventWatch, TestEventWatch } from "./inspect-event-watch";
 
 const connection = {

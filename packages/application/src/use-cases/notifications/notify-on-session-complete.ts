@@ -9,7 +9,7 @@ import {
   type NotificationTrigger,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { buildSessionCompleteEmail } from "./templates";
 
 export interface NotificationConfig {

@@ -7,7 +7,7 @@ import {
   type Result,
   type ScheduleFiredUpdate,
   type SessionSchedule,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { asc, eq, sql, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_session_schedules } from "../db/schema/wayfinder";

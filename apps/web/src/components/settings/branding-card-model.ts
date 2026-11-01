@@ -3,10 +3,10 @@ import {
   PAGE_BACKGROUND_COLOUR,
   hexContrastRatio,
   validateBrandColour,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The live contrast readout on the branding card. It runs the same domain rule
-// the server applies on save (ADR-060 §3), so Save is disabled for exactly the
+// the server applies on save (ADR-061 §3), so Save is disabled for exactly the
 // colours the server would reject, with the same wording.
 export type BrandColourCheck =
   | { readonly state: "default" }

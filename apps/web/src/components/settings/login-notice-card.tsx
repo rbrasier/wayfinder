@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { LOGIN_NOTICE_TEXT_MAX_LENGTH, type LoginNoticeMode } from "@rbrasier/domain";
+import { LOGIN_NOTICE_TEXT_MAX_LENGTH, type LoginNoticeMode } from "@wayfinder/domain";
 import { loginNoticeSaveHint } from "@/components/login-notice/login-notice-state";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,7 +18,7 @@ const MODE_LABELS: Record<LoginNoticeMode, string> = {
 
 const MODE_ORDER: LoginNoticeMode[] = ["off", "once", "every_sign_in"];
 
-// Admin → Settings → Sign-in notice (ADR-060 §5). Off by default.
+// Admin → Settings → Sign-in notice (ADR-061 §5). Off by default.
 export function LoginNoticeCard() {
   const utils = trpc.useUtils();
   const query = trpc.settings.getLoginNotice.useQuery();

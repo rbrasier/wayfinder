@@ -1,23 +1,24 @@
-import { resolveChangeRequests, type EvaluateStepReadinessOutput } from "@rbrasier/application";
-import { nodeFieldSet } from "@rbrasier/domain";
+import { resolveChangeRequests, type EvaluateStepReadinessOutput } from "@wayfinder/application";
+import { nodeFieldSet } from "@wayfinder/domain";
 import type {
   AiTurnPayload,
   BranchDescriptor,
   ConversationalNodeConfig,
   Flow,
   FlowNode,
+  NumberedCitation,
   PromptUserProfile,
   ResolvedDocumentGenerationBudget,
   Session,
   SessionEvent,
   SessionMessage,
   TurnStreamWriter,
-} from "@rbrasier/domain";
-import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { branchChoiceSchema, turnResponseSchema, type BranchChoice } from "@wayfinder/shared";
 import type { Container } from "@/lib/container";
 import { shouldComputeBranchChoice } from "./branch-gate";
 import { countGateHoldsOnNode } from "./gate-holds";
-import type { ToolActivityListener } from "./mcp-turn-helpers";
+import { citedSourcesFor, type ToolActivityListener } from "./mcp-turn-helpers";
 import type { ModelMessage } from "./model-messages";
 import { shouldEvaluateStepReadiness } from "./readiness-gate";
 import { streamTurn } from "./stream-turn";
@@ -83,6 +84,9 @@ export interface ExecuteTurnInput {
 
 export interface PreparedTurn {
   systemPrompt: string;
+  // The source records the tool pre-pass showed the model, by marker; the reply's
+  // markers resolve against these into the turn's citations (ADR-062 §6).
+  numberedCitations: NumberedCitation[];
   // Writes the note for the MCP tools consulted for this turn.
   recordToolAudit: () => Promise<void>;
 }
@@ -156,7 +160,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
 
   const reportToolActivity: ToolActivityListener = (sources) =>
     writer.writeAnnotation({ type: "consulting-tools", active: sources !== null, sources: sources ?? [] });
-  const { systemPrompt, recordToolAudit } = await prepareTurn(reportToolActivity);
+  const { systemPrompt, numberedCitations, recordToolAudit } = await prepareTurn(reportToolActivity);
   await recordToolAudit();
 
   // Through the ILanguageModel port: the concurrency governor, usage
@@ -181,6 +185,7 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<void> {
     rationale: turnResult.rationale,
     stepCompleteConfidence: turnResult.stepCompleteConfidence,
     contextGathered: turnResult.contextGathered,
+    citations: citedSourcesFor(turnResult.response, numberedCitations),
   };
 
   writer.writeAnnotation({

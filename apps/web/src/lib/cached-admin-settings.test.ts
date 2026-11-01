@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { TtlCache } from "@rbrasier/adapters";
+import { TtlCache } from "@wayfinder/adapters";
 import { createCachedAdminSettings, type AdminSettingsSources } from "./cached-admin-settings";
 
 const uploadConfig = { totalBudgetChars: 1000 } as AdminSettingsSources extends {

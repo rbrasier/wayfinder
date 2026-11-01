@@ -14,7 +14,7 @@ import {
   type StreamObjectInput,
   type StreamTextInput,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   NoObjectGeneratedError,
   generateObject,

@@ -1,4 +1,4 @@
-import { type IBudgetRepository, type Result } from "@rbrasier/domain";
+import { type IBudgetRepository, type Result } from "@wayfinder/domain";
 
 export class DeleteBudget {
   constructor(private readonly budgets: IBudgetRepository) {}

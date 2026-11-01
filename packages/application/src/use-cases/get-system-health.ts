@@ -1,4 +1,4 @@
-import type { IHealthChecker, Result, SystemHealth } from "@rbrasier/domain";
+import type { IHealthChecker, Result, SystemHealth } from "@wayfinder/domain";
 
 export class GetSystemHealth {
   constructor(private readonly checker: IHealthChecker) {}

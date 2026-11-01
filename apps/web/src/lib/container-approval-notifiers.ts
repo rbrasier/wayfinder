@@ -4,14 +4,14 @@ import {
   NotifyOnApprovalRequested,
   NotifyOnApprovalWithdrawn,
   type NotificationConfig,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import type {
   IAuditLogger,
   IEmailSender,
   IFlowRepository,
   INotificationLogRepository,
   IUserRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ApprovalNotifierDeps {
   notificationLog: INotificationLogRepository;

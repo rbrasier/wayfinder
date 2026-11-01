@@ -3,7 +3,7 @@
 // retired there), `smtp` (generic relay with username/password), and `stream`
 // (a local sink that builds but never delivers messages — the dev/test default).
 
-import { domainError, err, ok, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type Result } from "@wayfinder/domain";
 import type SMTPTransport from "nodemailer/lib/smtp-transport";
 import type StreamTransport from "nodemailer/lib/stream-transport";
 

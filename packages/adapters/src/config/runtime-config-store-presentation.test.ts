@@ -5,7 +5,7 @@ import {
   createDefaultBrandingConfig,
   createDefaultLoginNoticeConfig,
   type ISystemSettingsRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { RuntimeConfigStore, type EnvDefaults } from "./runtime-config-store";
 
 const env: EnvDefaults = {

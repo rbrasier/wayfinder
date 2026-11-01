@@ -4,7 +4,7 @@ import {
   BRANDING_LOGO_MAX_BYTES,
   parseBrandingConfig,
   type BrandingConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   InMemoryAuditLog,
   InMemoryObjectStorage,

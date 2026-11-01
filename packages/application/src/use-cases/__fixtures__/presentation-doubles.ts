@@ -18,7 +18,7 @@ import {
   type NewAuditLog,
   type Result,
   type SystemSetting,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class InMemorySystemSettings implements ISystemSettingsRepository {
   readonly values = new Map<string, string>();

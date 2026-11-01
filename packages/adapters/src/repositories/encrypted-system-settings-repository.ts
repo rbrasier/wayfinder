@@ -3,7 +3,7 @@ import {
   type ISystemSettingsRepository,
   type Result,
   type SystemSetting,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { SettingsEncryptionService } from "../config/settings-encryption";
 
 /**

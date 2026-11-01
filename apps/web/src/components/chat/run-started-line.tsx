@@ -1,7 +1,7 @@
 "use client";
 
 import { Zap } from "lucide-react";
-import { RUN_STARTED_SOURCE_TAG, type RunStartedSource } from "@rbrasier/domain";
+import { RUN_STARTED_SOURCE_TAG, type RunStartedSource } from "@wayfinder/domain";
 
 const MAX_VALUE_LENGTH = 80;
 // The rest stay in the run's insights; the line only has to say what it was.

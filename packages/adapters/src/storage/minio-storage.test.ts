@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ok, type ISystemSettingsRepository, type Result, type SystemSetting } from "@rbrasier/domain";
+import { ok, type ISystemSettingsRepository, type Result, type SystemSetting } from "@wayfinder/domain";
 import { MinioStorageAdapter } from "./minio-storage";
 import { RuntimeConfigStore } from "../config/runtime-config-store";
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type Approval, type FlowNode, type SessionStepOutput } from "@rbrasier/domain";
+import { ok, type Approval, type FlowNode, type SessionStepOutput } from "@wayfinder/domain";
 import { ResolveApprovalSubject } from "./resolve-approval-subject";
 
 const at = (iso: string) => new Date(iso);

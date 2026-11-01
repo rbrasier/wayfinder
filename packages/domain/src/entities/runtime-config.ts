@@ -1,4 +1,5 @@
 import type { ProviderName } from "../ports/language-model";
+import { DEFAULT_SESSION_POLICY, type SessionPolicy } from "./session-policy";
 
 export type AiPurpose = "chat" | "documentGeneration" | "branching";
 
@@ -90,6 +91,24 @@ export interface ExtractionConfig {
   // Per-run spend ceiling in USD, checked worker-side before each claim; 0
   // disables it (ADR-033 §9).
   perRunCostCeilingUsd: number;
+  // Size limits that were hardcoded until issue #335; each defaults to the old
+  // constant so behaviour is unchanged until an admin edits it.
+  sampleMaxDocuments: number;
+  maxAnalyseDocuments: number;
+  summaryRecordCap: number;
+  // Flow context material injected into every extraction prompt, in tokens.
+  contextBudgetTokens: number;
+  // Ceiling on one extraction call's prompt; a larger document is read in parts.
+  maxPromptTokens: number;
+}
+
+// The concrete numbers an extraction call consumes. The window is carried
+// separately from the admin ceiling because the reply has to fit inside the
+// window too, and only the caller knows how large the reply will be.
+export interface ExtractionPromptBudget {
+  contextBudgetChars: number;
+  maxPromptTokens: number;
+  contextWindowTokens: number;
 }
 
 // How the document-generation context budget is expressed: a fixed token cap,
@@ -189,7 +208,7 @@ export const isEmailConfigured = (config: EmailConfig): boolean => {
 };
 
 export interface EmbeddingsConfig {
-  // "local" | "openai" — kept as a plain string here so the domain entity stays
+  // "local" | "openai" | "mistral" | "bedrock" — a plain string here so the domain entity stays
   // free of the shared enum; validated at the config-store boundary.
   provider: string;
   model: string;
@@ -220,6 +239,9 @@ export interface AuthConfig {
   // (ADR-042 §1).
   pkiEnabled: boolean;
   pki: PkiSessionConfig;
+  // Idle/absolute timeouts and the concurrency limit (ADR-035). Rides the auth
+  // config so it shares one settings row, one cache entry and one invalidation.
+  sessionPolicy: SessionPolicy;
 }
 
 export const DEFAULT_PKI_SESSION_TTL_HOURS = 8;
@@ -230,6 +252,7 @@ export const createDefaultAuthConfig = (): AuthConfig => ({
   entra: { tenantId: "", clientId: "", clientSecret: "" },
   pkiEnabled: false,
   pki: { sessionTtlHours: DEFAULT_PKI_SESSION_TTL_HOURS },
+  sessionPolicy: { ...DEFAULT_SESSION_POLICY },
 });
 
 export const isEntraConfigured = (entra: EntraCredentials): boolean =>

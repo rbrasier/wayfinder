@@ -1,4 +1,4 @@
-import { isEmailAddressAllowed, type AutomationConfig, type EmailRecipient } from "@rbrasier/domain";
+import { isEmailAddressAllowed, type AutomationConfig, type EmailRecipient } from "@wayfinder/domain";
 
 export interface AutomationStepGuardDependencies {
   isFeatureEnabledForUser: (

@@ -8,7 +8,7 @@ import {
   type NewConversation,
   type NewMessage,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { asc, desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { ai_conversations, ai_messages } from "../db/schema/ai";

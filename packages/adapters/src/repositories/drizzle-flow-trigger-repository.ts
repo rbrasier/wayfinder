@@ -8,7 +8,7 @@ import {
   type FlowTriggerSettings,
   type IFlowTriggerRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_flow_triggers } from "../db/schema/app";
 

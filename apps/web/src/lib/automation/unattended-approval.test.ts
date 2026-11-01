@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type Approval, type FlowNode, type Session } from "@rbrasier/domain";
+import { ok, type Approval, type FlowNode, type Session } from "@wayfinder/domain";
 import { flagForStep, raiseUnattendedApproval } from "./unattended-approval";
 
 const session = { id: "session-1", flowId: "flow-1", userId: "owner-1" } as Session;

@@ -6,7 +6,7 @@ import {
   type Person,
   type Result,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export const userToPerson = (user: User): Person => ({
   source: "user",

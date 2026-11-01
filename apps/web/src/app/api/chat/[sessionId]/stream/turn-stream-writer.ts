@@ -1,5 +1,5 @@
 import { generateId, type UIMessageStreamWriter } from "ai";
-import type { TurnStreamAnnotation, TurnStreamWriter } from "@rbrasier/domain";
+import type { TurnStreamAnnotation, TurnStreamWriter } from "@wayfinder/domain";
 import type { ChatUiMessage } from "@/lib/chat/ui-messages";
 
 // The `ai`-SDK adapter for the TurnStreamWriter port: the single place that maps

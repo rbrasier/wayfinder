@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@rbrasier/domain";
+import type { AiTurnPayload, Flow, FlowNode, SessionMessage, SessionUpload } from "@wayfinder/domain";
 import {
   appendShortcomingsToContext,
   applyAdvanceSideEffects,
@@ -20,11 +20,11 @@ import {
   writeCrossCheckGapNote,
   writeCrossCheckPassNote,
 } from "./turn-helpers";
-import type { Session, TurnStreamWriter } from "@rbrasier/domain";
+import type { Session, TurnStreamWriter } from "@wayfinder/domain";
 import type * as McpTurnHelpers from "./mcp-turn-helpers";
 
 const { runMcpToolPrepass } = vi.hoisted(() => ({
-  runMcpToolPrepass: vi.fn(async () => ({ toolResults: "", recordAudit: async () => {} })),
+  runMcpToolPrepass: vi.fn(async () => ({ toolResults: "", numberedCitations: [], recordAudit: async () => {} })),
 }));
 vi.mock("./mcp-turn-helpers", async (importOriginal) => ({
   ...(await importOriginal<typeof McpTurnHelpers>()),
@@ -249,6 +249,7 @@ describe("generateInitialMessage", () => {
     const onToolActivity = vi.fn();
     runMcpToolPrepass.mockResolvedValueOnce({
       toolResults: "- get_transcript: Senators asked about staffing levels.",
+      numberedCitations: [],
       recordAudit: async () => {
         order.push("tool note");
       },

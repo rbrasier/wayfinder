@@ -1,4 +1,4 @@
-import type { ISessionUploadRepository, Result } from "@rbrasier/domain";
+import type { ISessionUploadRepository, Result } from "@wayfinder/domain";
 
 export class RemoveSessionUpload {
   constructor(private readonly sessionUploads: ISessionUploadRepository) {}

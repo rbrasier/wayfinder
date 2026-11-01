@@ -23,6 +23,9 @@ const MUTATIONS_THAT_CHANGE_A_ROW = [
   "reassign",
   "withdraw",
   "decide",
+  // An off-system nomination decides the row and advances the session, so an
+  // open chat has exactly as much to re-read as it does after a decision.
+  "recordOffSystem",
 ] as const;
 
 // The block of source belonging to one procedure, up to the next one.

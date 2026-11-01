@@ -7,6 +7,7 @@ export interface ChunkVersion {
   chunkId: string;
   chunkText: string;
   embedding: number[];
+  embeddingModel: string | null;
   editedBy: string | null;
   reason: string | null;
   createdAt: Date;
@@ -16,6 +17,7 @@ export interface NewChunkVersion {
   chunkId: string;
   chunkText: string;
   embedding: number[];
+  embeddingModel: string | null;
   editedBy: string | null;
   reason: string | null;
 }

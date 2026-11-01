@@ -60,13 +60,14 @@ import {
   type ResolvedDocumentGenerationBudget,
   type SessionUploadConfig,
   type ExtractionConfig,
+  type ExtractionPromptBudget,
   type SiemConfig,
   type SiteBannerConfig,
   type AboutLinksConfig,
   type ChatDisclaimerConfig,
   type StorageConfig,
   type UsageLimitsConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   DOCUMENT_GENERATION_CHARS_PER_TOKEN,
   DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_PERCENT,
@@ -79,7 +80,7 @@ import {
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
   type EmbeddingsProvider,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import {
   DEFAULT_DOCUMENT_GENERATION_CONFIG,
   DEFAULT_EXTRACTION_CONFIG,
@@ -170,7 +171,7 @@ export class RuntimeConfigStore {
     );
   }
 
-  // Read on every page render (ADR-060), so these go through CachedSetting.
+  // Read on every page render (ADR-061), so these go through CachedSetting.
   getBrandingConfig(): Promise<BrandingConfig> {
     return this.branding.get();
   }
@@ -328,6 +329,19 @@ export class RuntimeConfigStore {
       return config;
     })();
     return this.documentGenerationPending;
+  }
+
+  // Extraction calls resolve to the chat model (see language-model-adapter's
+  // resolvePurpose), so its window is the one an extraction prompt must fit.
+  async resolveExtractionPromptBudget(): Promise<ExtractionPromptBudget> {
+    const config = await this.getExtractionConfig();
+    const aiConfig = await this.getAiConfig();
+    const contextWindow = resolveContextWindow(aiConfig.provider, aiConfig.models.chat);
+    return {
+      contextBudgetChars: config.contextBudgetTokens * DOCUMENT_GENERATION_CHARS_PER_TOKEN,
+      maxPromptTokens: config.maxPromptTokens,
+      contextWindowTokens: contextWindow.tokens,
+    };
   }
 
   // Resolves the stored budget mode against the configured document-generation

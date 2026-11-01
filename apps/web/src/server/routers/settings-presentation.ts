@@ -11,7 +11,7 @@ import {
   SITE_BANNER_MIN_TEXT_SIZE_PT,
   normaliseAboutLinkUrl,
   normaliseSiteBannerLinkUrl,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   authenticatedProcedure,
   publicProcedure,
@@ -79,7 +79,7 @@ export const chatDisclaimerConfigInputSchema = z.object({
 });
 
 // Length and shape only: the readable-colour rule and the display-name limit are
-// the domain's (ADR-060 §3), so the message an admin sees comes from one place.
+// the domain's (ADR-061 §3), so the message an admin sees comes from one place.
 export const brandingInputSchema = z.object({
   displayName: z.string().max(200),
   primaryColour: z.string().max(20).nullable(),

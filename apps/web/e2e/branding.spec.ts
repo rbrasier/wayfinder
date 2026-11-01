@@ -1,7 +1,7 @@
 /**
  * branding.spec.ts
  *
- * Install branding (ADR-060) — the file-upload half, which only a browser can
+ * Install branding (ADR-061) — the file-upload half, which only a browser can
  * prove (e2e policy group 3: file upload). The contrast rule, palette and name
  * are covered by domain, application and route-handler tests.
  *

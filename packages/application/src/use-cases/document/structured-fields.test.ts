@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError, parseTemplateFields } from "@rbrasier/domain";
-import type { FlowContextDoc, ILanguageModel, TemplateField } from "@rbrasier/domain";
+import { ok, err, domainError, parseTemplateFields } from "@wayfinder/domain";
+import type { FlowContextDoc, ILanguageModel, TemplateField } from "@wayfinder/domain";
 import {
   CONTEXT_DOCS_CHAR_BUDGET,
   buildContextDocsSection,
   coerceGroupItems,
   coerceStructuredFields,
+  coerceVerbatimFields,
   estimateTokens,
   extractStructuredFields,
   scalarValues,
@@ -393,6 +394,45 @@ describe("coerceStructuredFields", () => {
   });
 });
 
+describe("coerceVerbatimFields", () => {
+  it("keeps surrounding whitespace the ordinary coercion would strip", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    const result = coerceVerbatimFields(fields, { output: "  4.25 \n" });
+
+    // The whole point: the trim in coerceValue is itself a transformation, and a
+    // verbatim-only connection is one Wayfinder promised not to transform.
+    expect(result[0]!.value).toBe("  4.25 \n");
+    expect(coerceStructuredFields(fields, { output: "  4.25 \n" })[0]!.value).toBe("4.25");
+  });
+
+  it("keeps a value the ordinary coercion would reformat", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    expect(coerceVerbatimFields(fields, { output: "0004.250" })[0]!.value).toBe("0004.250");
+  });
+
+  it("blanks a missing key rather than inventing a value", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    expect(coerceVerbatimFields(fields, {})[0]!.value).toBe("");
+  });
+
+  it("blanks a non-string value, which cannot have been received as bytes", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    expect(coerceVerbatimFields(fields, { output: { nested: true } })[0]!.value).toBe("");
+  });
+
+  it("carries the field's own shape through unchanged", () => {
+    const fields = [field({ key: "output", label: "Output" })];
+
+    expect(coerceVerbatimFields(fields, { output: "x" })).toEqual([
+      { key: "output", label: "Output", type: "text", options: undefined, value: "x" },
+    ]);
+  });
+});
+
 const suppliersGroup = (overrides: Partial<TemplateField> = {}): TemplateField => {
   const parsed = parseTemplateFields([
     "#Suppliers (repeat)",
@@ -487,5 +527,81 @@ describe("extractStructuredFields with groups", () => {
 
     expect(result.error).toBeUndefined();
     expect(result.data!.suppliers).toEqual([]);
+  });
+});
+
+describe("extractStructuredFields — external-sourced fields", () => {
+  const externalField = field({
+    key: "department",
+    label: "Department",
+    optionsSource: "departments",
+    raw: "Department (options-source: departments)",
+  });
+
+  const providerServing = (entries: Array<{ display: string; key?: string }>) => ({
+    list: vi.fn().mockResolvedValue({
+      data: { entries, version: "v1", fetchedAt: new Date(0), stale: false },
+    }),
+    search: vi.fn(),
+    resolve: vi.fn(),
+    probe: vi.fn(),
+  });
+
+  const promptOf = (languageModel: ILanguageModel): string =>
+    (languageModel.generateObject as unknown as { mock: { calls: Array<[{ prompt: string }]> } }).mock
+      .calls[0]![0].prompt;
+
+  it("puts a small set into the field constraints as 'display (key)'", async () => {
+    const languageModel = makeLanguageModel({ department: "Finance" });
+    const valueSetProvider = providerServing([
+      { display: "Finance", key: "FIN-001" },
+      { display: "HR", key: "HR-002" },
+    ]);
+
+    await extractStructuredFields(languageModel, {
+      fields: [externalField],
+      transcript: "the finance team asked for this",
+      contextDocs: [],
+      instruction: "Extract",
+      purpose: "test",
+      valueSetProvider,
+    });
+
+    expect(promptOf(languageModel)).toContain("exactly one of: Finance (FIN-001), HR (HR-002)");
+  });
+
+  it("keeps a large set out of the prompt and names the source instead", async () => {
+    const languageModel = makeLanguageModel({ department: "Finance" });
+    const valueSetProvider = providerServing(
+      Array.from({ length: 31 }, (_, index) => ({ display: `Department ${index}` })),
+    );
+
+    await extractStructuredFields(languageModel, {
+      fields: [externalField],
+      transcript: "the finance team asked for this",
+      contextDocs: [],
+      instruction: "Extract",
+      purpose: "test",
+      valueSetProvider,
+    });
+
+    const prompt = promptOf(languageModel);
+    expect(prompt).not.toContain("Department 30");
+    expect(prompt).toContain('from the "departments" list');
+  });
+
+  it("still extracts when no provider is wired", async () => {
+    const languageModel = makeLanguageModel({ department: "Finance" });
+
+    const result = await extractStructuredFields(languageModel, {
+      fields: [externalField],
+      transcript: "the finance team asked for this",
+      contextDocs: [],
+      instruction: "Extract",
+      purpose: "test",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.data?.department).toBe("Finance");
   });
 });

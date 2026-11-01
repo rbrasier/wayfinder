@@ -1,19 +1,14 @@
 /**
  * helpers/timeouts.ts
  *
- * CI serves the app with `next dev` (.github/workflows/e2e.yml), so every route
- * is compiled on its first request. A spec that is the first to reach a route
- * pays that compile on top of a server render, and the app log has shown single
- * page compiles over eight seconds. The first attempt pays it and the retry
- * finds the route warm — which is what "flaky" has meant here, rather than
- * anything wrong with the feature under test.
+ * CI serves a production build (.github/workflows/e2e.yml), where every route
+ * is compiled before the suite starts. A local run against `next dev` compiles
+ * each route on its first request instead, and a single page compile has taken
+ * over eight seconds. The spec that is first to reach a route pays that compile
+ * on top of a server render.
  *
- * Which spec pays the cost moves whenever the suite is resharded, so these live
- * in one place instead of being rediscovered per spec.
- *
- * CI now compiles the routes in warm-routes.txt before the suite starts, so a
- * route listed there should not need these. They remain for routes that are
- * not, and for a local `next dev` run, which has no warm-up.
+ * Which spec pays the cost moves with the order specs run in, so these live in
+ * one place instead of being rediscovered per spec.
  */
 
 /** A single navigation that may compile the route it lands on. */

@@ -23,6 +23,11 @@ export interface UsageFilter {
 
 export interface IUsageRepository {
   create(event: NewUsageEvent): Promise<Result<UsageEvent>>;
+  // Raw events for one session, oldest first. Needed because usage is recorded
+  // per call with no step attribution — ai_usage_events carries session_id but
+  // no node id — so a per-step report has to attribute each event to the step
+  // that was running when it was recorded. The summaries cannot do that.
+  listBySession(sessionId: string): Promise<Result<UsageEvent[]>>;
   summarize(filter?: UsageFilter): Promise<Result<UsageSummary[]>>;
   summarizeBy(dimension: UsageDimension, filter?: UsageFilter): Promise<Result<UsageGroupSummary[]>>;
 }

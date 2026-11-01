@@ -12,7 +12,7 @@ import type {
   GenerateOutput,
   IDocumentGenerator,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Dispatches each IDocumentGenerator call to the docx or xlsx renderer by
 // sniffing the template bytes (ADR-039). Detection is on the file's own zip

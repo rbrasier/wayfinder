@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FieldReportColumn } from "@rbrasier/domain";
+import type { FieldReportColumn } from "@wayfinder/domain";
 import {
   approvalRevisionNote,
   buildDisplayColumns,

@@ -1,23 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { resolveChangeRequests } from "@rbrasier/application";
-import type { ConversationalNodeConfig } from "@rbrasier/domain";
+import { resolveChangeRequests } from "@wayfinder/application";
+import type { ConversationalNodeConfig } from "@wayfinder/domain";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { withPrincipal } from "@/lib/with-principal";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 import { resolveCanOversee } from "@/lib/oversight";
 
-export async function GET(
+async function handleGET(
   req: NextRequest,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ documentId: string }> },
 ): Promise<NextResponse> {
   const { documentId } = await params;
   const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const authSession = await container.resolveSession(token);
-  if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const messageResult = await container.repos.sessionMessages.findById(documentId);
   if (messageResult.error) {
@@ -33,8 +30,8 @@ export async function GET(
   // Collaborative sessions: any participant of the document's session may
   // download it. Authorise against participant membership (scaling wall #11) —
   // knowing the message UUID is not itself authorisation.
-  const canOverride = await resolveCanOversee(container, authSession);
-  const access = await authorizeSessionAccess(container, message.sessionId, authSession.userId, canOverride, {
+  const canOverride = await resolveCanOversee(container, principal);
+  const access = await authorizeSessionAccess(container, message.sessionId, principal.userId, canOverride, {
     requireSend: false,
     allowApprover: true,
   });
@@ -62,18 +59,14 @@ export async function GET(
   });
 }
 
-export async function POST(
+async function handlePOST(
   req: NextRequest,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ documentId: string }> },
 ): Promise<NextResponse> {
   const { documentId } = await params;
   const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const authSession = await container.resolveSession(token);
-  if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const messageResult = await container.repos.sessionMessages.findById(documentId);
   if (messageResult.error || !messageResult.data) {
@@ -101,8 +94,8 @@ export async function POST(
   const accessResult = await container.useCases.resolveSessionAccess.execute({
     session: detailResult.data.session,
     flow,
-    userId: authSession.userId,
-    isAdmin: authSession.isAdmin,
+    userId: principal.userId,
+    isAdmin: principal.isAdmin,
     isApprover: false,
     allowAutoEnrol: true,
   });
@@ -137,7 +130,7 @@ export async function POST(
     messages,
     flow,
     node,
-    userId: authSession.userId,
+    userId: principal.userId,
     changeRequests,
   });
 
@@ -150,3 +143,16 @@ export async function POST(
 
   return NextResponse.json({ ok: true, filename: result.data.document.filename });
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const GET = (
+  req: NextRequest,
+  context: { params: Promise<{ documentId: string }> },
+): Promise<NextResponse> =>
+  withPrincipal(req, (principal) => handleGET(req, principal, context));
+export const POST = (
+  req: NextRequest,
+  context: { params: Promise<{ documentId: string }> },
+): Promise<NextResponse> =>
+  withPrincipal(req, (principal) => handlePOST(req, principal, context));

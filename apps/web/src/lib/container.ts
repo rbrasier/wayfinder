@@ -44,7 +44,6 @@ import {
   GetSessionForTurn,
   GetUsageSummary,
   GrantFlowOwner,
-  ImportHrDataset,
   IsFeatureEnabled,
   IsFeatureEnabledForUser,
   ListAllSessions,
@@ -100,9 +99,7 @@ import {
   RunTurn,
   TurnLease,
   ScheduleNodeEvent,
-  SearchPeople,
   SendMessage,
-  SetColumnMapping,
   SetFeatureFlagRoles,
   SetWelcomeTourCompleted,
   StartSession,
@@ -114,8 +111,9 @@ import {
   UpdateRolePermissions,
   UpdateUser,
   UpsertFeatureFlag,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import { buildApprovalNotifiers } from "./container-approval-notifiers";
+import { buildFlowTestUseCases } from "./container-flow-test-use-cases";
 import { buildApprovalUseCases } from "./container-approval-use-cases";
 import { buildDocumentUseCases } from "./container-document-use-cases";
 import { buildPresentationUseCases } from "./container-presentation";
@@ -157,6 +155,8 @@ import {
   DrizzleSessionParticipantRepository,
   DrizzleSessionUploadRepository,
   DrizzleSessionStepOutputRepository,
+  DrizzleFlowTestFixtureRepository,
+  AiSeedProposer,
   DrizzleScheduleRepository,
   DrizzleScheduleRunRepository,
   DrizzleAnalyticsRepository,
@@ -171,13 +171,11 @@ import {
   DrizzleUsageRepository,
   DrizzleUserRepository,
   DrizzleUserRoleRepository,
-  AiColumnMappingDetector,
   CompositeConnectivityTester,
   FlowSessionGraph,
   LangGraphAgentRunner,
   LanguageModelAdapter,
   LlmCallGovernor,
-  createEmbeddingsProvider,
   MinioStorageAdapter,
   N8nHttpWorkflowDirectory,
   NodemailerEmailSender,
@@ -189,7 +187,6 @@ import {
   SystemClock,
   sha256Hex,
   TtlCache,
-  createCachedSessionResolver,
   createDatabase,
   createNodeExecutors,
   createPostgresSessionEventBus,
@@ -199,12 +196,15 @@ import {
   withQuotaEnforcement,
   withUsageTracking,
   type AuthMethod,
-  type ResolvedSession,
-} from "@rbrasier/adapters";
-import type { FlowVersion, PermissionKey } from "@rbrasier/domain";
+} from "@wayfinder/adapters";
+import type { FlowVersion } from "@wayfinder/domain";
+import { buildFlowMemory, retentionEnvFallback } from "./container-flow-memory";
 import { buildSkillsAndMcp } from "./container-skills-mcp";
+import { buildFlowPortability } from "./container-flow-portability";
+import { buildSessionAuth } from "./container-session-auth";
 import { buildAutomation } from "./container-automation";
 import { buildExtractionModule } from "./container-extraction";
+import { buildLookupSources } from "./container-lookup-sources";
 import { buildPeopleDirectory } from "./container-people-directory";
 import { entraEnvCredentials, m365EnvCredentials } from "./container-app-registrations";
 import { buildSmtpEnvConfig } from "./container-smtp";
@@ -222,6 +222,7 @@ import {
 } from "./cached-admin-settings";
 import { serverEnv } from "./env";
 import { getScriptedLanguageModel } from "./scripted-llm";
+import { buildEmbeddings } from "./container-embeddings";
 
 const globalForContainer = globalThis as typeof globalThis & {
   _wayfinder_container: ReturnType<typeof build> | undefined;
@@ -232,18 +233,14 @@ const build = () => {
   const db = createDatabase(env.DATABASE_URL, env.DATABASE_POOL_MAX);
   const logger = new PinoLogger(env.NODE_ENV !== "production");
 
-  // Short-TTL caches in front of the two hottest auth lookups (session +
-  // permission resolution). Single-instance correct; promote to a shared store
-  // when running multiple instances. See the scaling-new-infrastructure phase doc.
-  const sessionCache = new TtlCache<ResolvedSession>({
-    ttlMs: env.AUTH_CACHE_TTL_MS,
-    maxEntries: env.AUTH_CACHE_MAX_ENTRIES,
-  });
-  const permissionCache = new TtlCache<Set<PermissionKey>>({
-    ttlMs: env.AUTH_CACHE_TTL_MS,
-    maxEntries: env.AUTH_CACHE_MAX_ENTRIES,
-  });
-  const resolveCachedSession = createCachedSessionResolver(db, sessionCache);
+  const { permissionCache, sessionRevocations, resolveCachedSession, revokeSessionsForUser } =
+    buildSessionAuth({
+      db,
+      cacheTtlMs: env.AUTH_CACHE_TTL_MS,
+      cacheMaxEntries: env.AUTH_CACHE_MAX_ENTRIES,
+      getAuthConfig: () => runtimeConfig.getAuthConfig(),
+      authSecret: env.BETTER_AUTH_SECRET,
+    });
 
   const users = new DrizzleUserRepository(db);
   const conversations = new DrizzleConversationRepository(db);
@@ -279,6 +276,7 @@ const build = () => {
   const sessionMessages = new DrizzleSessionMessageRepository(db);
   const sessionUploads = new DrizzleSessionUploadRepository(db);
   const sessionStepOutputs = new DrizzleSessionStepOutputRepository(db);
+  const flowTestFixtures = new DrizzleFlowTestFixtureRepository(db);
   // Real-time transport replacing the 2 s/3 s polls (scaling wall #2). Backed by
   // Postgres LISTEN/NOTIFY on its own direct connection so it stays correct
   // across instances without adding a new service.
@@ -398,6 +396,7 @@ const build = () => {
     withQuotaEnforcement(withUsageTracking(baseLlm, usageRepo), quotaEnforcer),
     env,
   );
+  const seedProposer = new AiSeedProposer(llm);
   const agent = new LangGraphAgentRunner(llm);
   const sessionAgent = new FlowSessionGraph();
   const docxGenerator = new DocxGenerator();
@@ -476,16 +475,24 @@ const build = () => {
   const hrDatasets = new DrizzleHrDatasetRepository(db);
   const skillsAndMcp = buildSkillsAndMcp({
     db,
-    secretCipher: settingsEncryption,
     usageRepo,
     quotaEnforcer,
     sessions,
     languageModel: llm,
     sessionStepOutputs,
+    encryption: settingsEncryption,
+    auditLogger,
+    logger,
   });
-  const { spreadsheetParser, graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver } =
-    buildPeopleDirectory({ env, hrDatasets, users, runtimeConfig });
-
+  const { graphClient, graphPeopleDirectory, hrPeopleDirectory, userPeopleDirectory, reportingLineResolver, useCases: peopleUseCases } =
+    buildPeopleDirectory({ env, hrDatasets, users, runtimeConfig, languageModel: llm });
+  const lookupSources = buildLookupSources({
+    db,
+    peopleDirectories: [userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory],
+    allowLocalhost: env.NODE_ENV !== "production",
+    encryption: settingsEncryption,
+    languageModel: llm,
+  });
   const objectStorage = new MinioStorageAdapter(runtimeConfig);
   const extraction = buildExtractionModule({
     db,
@@ -498,20 +505,16 @@ const build = () => {
     auditLogger,
     resolveCostCeilingUsd: async () =>
       (await runtimeConfig.getExtractionConfig()).perRunCostCeilingUsd,
+    resolvePromptBudget: () => runtimeConfig.resolveExtractionPromptBudget(),
   });
   const contextDocContent = new DrizzleContextDocContentRepository(db);
   const documentChunks = new DrizzleDocumentChunksRepository(db);
   const chunkCuration = new DrizzleChunkCurationRepository(db);
   const answerFeedback = new DrizzleAnswerFeedbackRepository(db);
+  // Flow memory and the retention settings governing its evidence (ADR-057).
+  const flowMemory = buildFlowMemory({ db, flows, analytics: analyticsRepo, answerFeedback, auditLogger, systemSettings });
   const hybridRetriever = new DrizzleHybridRetriever(db);
-  const embeddings = createEmbeddingsProvider(() => runtimeConfig.getEmbeddingsConfig(), {
-    openaiApiKey: env.OPENAI_API_KEY ?? null,
-    localEnvOptions: {
-      allowRemoteModels: env.EMBEDDINGS_ALLOW_REMOTE_MODELS === "false" ? false : undefined,
-      localModelPath: env.EMBEDDINGS_LOCAL_MODEL_PATH,
-      cacheDir: env.EMBEDDINGS_CACHE_DIR,
-    },
-  });
+  const embeddings = buildEmbeddings({ env, runtimeConfig, documentChunks, logger });
   const documentIndexer = new DocumentIndexingService(embeddings, documentChunks);
   const reindexSource = new DrizzleReindexSourceRepository(db);
   const connectivityTester = new CompositeConnectivityTester({
@@ -519,7 +522,6 @@ const build = () => {
     emailSender,
     graphClient,
     embeddingsProvider: embeddings,
-    openaiApiKey: env.OPENAI_API_KEY ?? null,
     entraAuthority: env.ENTRA_AUTHORITY,
     credentialAccounts: createCredentialAccountProbe(db),
   });
@@ -545,6 +547,7 @@ const build = () => {
     users,
     { trustedProxyIps: pkiEnv.trustedProxyIps },
     runtimeConfig,
+    sessionRevocations,
   );
 
   const { getAuth, passwordResetter, sendPasswordResetEmail } = buildAuthRuntime({
@@ -556,6 +559,7 @@ const build = () => {
     baseURL: env.BETTER_AUTH_URL,
     adminSeedEmail: env.ADMIN_SEED_EMAIL,
     entraAuthority: env.ENTRA_AUTHORITY,
+    sessionRevocations,
   });
 
   const getEffectivePermissions = new GetEffectivePermissions(roles, userRoles);
@@ -591,6 +595,7 @@ const build = () => {
     flowNodes,
     approvals,
     auditLogger,
+    valueSetProvider: lookupSources.valueSetProvider,
   });
   const approvalUseCases = buildApprovalUseCases({
     unitOfWork,
@@ -610,6 +615,7 @@ const build = () => {
     embeddings,
     documentChunks,
     sha256Hex,
+    clock,
     updateDocumentFields: documentUseCases.updateDocumentFields,
     updateStructuredStepOutput: documentUseCases.updateStructuredStepOutput,
     notifyOnApprovalRequested,
@@ -628,12 +634,14 @@ const build = () => {
     logger,
     objectStorage,
     runtimeConfig,
+    retentionEnvFallback: retentionEnvFallback(),
     adminSettings,
     connectivityTester,
     resolveSession: resolveCachedSession,
+    revokeUserSessions: revokeSessionsForUser,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, ...skillsAndMcp.services, ...automation.services },
-    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, ...skillsAndMcp.repos, ...automation.repos },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, valueSetProvider: lookupSources.valueSetProvider, ...skillsAndMcp.services, ...automation.services },
+    repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, flowTestFixtures, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, lookupSources: lookupSources.repository, ...skillsAndMcp.repos, ...automation.repos },
     useCases: {
       ...documentUseCases,
       evaluateStepReadiness: new EvaluateStepReadiness(llm, documentGenerator, objectStorage),
@@ -713,6 +721,7 @@ const build = () => {
       reindexAllDocuments: new ReindexAllDocuments(reindexSource, documentIndexer, jobRepo),
       grantFlowOwner: new GrantFlowOwner(flows),
       startSession: new StartSession(sessions, flows, flowNodes, flowEdges, flowVersions),
+      ...buildFlowTestUseCases({ sessions, sessionMessages, sessionStepOutputs, flows, flowNodes, flowEdges, flowVersions, usage: usageRepo, seedProposer }),
       listSessions: new ListSessions(sessions),
       // Keyset-paginated variants of the two list use cases (phase Group A
       // item 4). Additive server support; tRPC exposure follows.
@@ -723,7 +732,8 @@ const build = () => {
       // Leaner turn-scoped variant of getSession: the tail of the transcript
       // plus a SQL-side aggregation of gathered context, so the streaming route
       // stops loading the whole history on every turn (scaling wall #1).
-      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions),
+      getSessionForTurn: new GetSessionForTurn(sessions, sessionMessages, flows, flowNodes, flowEdges, flowVersions, flowMemory.repos.flowLessons),
+      ...flowMemory.useCases,
       resolveSessionAccess: new ResolveSessionAccess(sessionParticipants, auditLogger),
       revokeSessionParticipant: new RevokeSessionParticipant(sessionParticipants, auditLogger),
       runTurn: new RunTurn(sessionMessages, flowEdges, unitOfWork, notifyOnSessionComplete, notifyOnStepComplete, flowVersions),
@@ -731,7 +741,8 @@ const build = () => {
       // resolution), heartbeat, release — so the stream route stops reaching
       // into the session/user repos directly for the lease.
       turnLease: new TurnLease(sessions, users),
-      publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger),
+      publishFlowVersion: new PublishFlowVersion(flows, flowNodes, flowEdges, flowVersions, auditLogger, skillsAndMcp.repos.mcpServers),
+      ...buildFlowPortability({ flows, flowNodes, flowEdges, objectStorage, auditLogger, skillsAndMcp }),
       listFlowVersions: new ListFlowVersions(flowVersions),
       getFlowVersion: new GetFlowVersion(flowVersions),
       restoreFlowVersion: new RestoreFlowVersion(flowVersions, auditLogger),
@@ -759,16 +770,8 @@ const build = () => {
       setUsageLimitsEnabled: new SetUsageLimitsEnabled(systemSettings),
       getFlowDeepDive: new GetFlowDeepDive(flows, flowNodes, analyticsRepo, sessionStepOutputs, flowEdges),
       ...approvalUseCases,
-      // Accounts first: they are the people who can actually act on what they
-      // are sent, and ranking makes them win a de-dupe against the same address
-      // from Entra or HR. The external directories augment the list (ADR-018).
-      searchPeople: new SearchPeople([userPeopleDirectory, graphPeopleDirectory, hrPeopleDirectory]),
-      importHrDataset: new ImportHrDataset(
-        spreadsheetParser,
-        hrDatasets,
-        new AiColumnMappingDetector(llm),
-      ),
-      setColumnMapping: new SetColumnMapping(hrDatasets),
+      ...peopleUseCases,
+      ...lookupSources.useCases,
       ...skillsAndMcp.useCases,
       ...automation.useCases,
       ...buildPresentationUseCases({ systemSettings, objectStorage, auditLogger, auditQuery, loadLoginNotice: () => runtimeConfig.getLoginNoticeConfig() }),

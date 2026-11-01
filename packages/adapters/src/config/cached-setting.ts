@@ -1,4 +1,4 @@
-import type { ISystemSettingsRepository } from "@rbrasier/domain";
+import type { ISystemSettingsRepository } from "@wayfinder/domain";
 
 // One admin_system_settings row held in memory until invalidated, with a single
 // shared read for concurrent callers. The same cache-and-pending shape the older

@@ -79,46 +79,36 @@ test.describe('Chat: Session', () => {
 
   test('sending a message shows AI response', async ({ page, consoleLogs }) => {
     const { sessionId } = requireSeedFixtures();
+    const reply = 'Hello. Which document are you working on today?';
 
-    await page.goto(`/chats/${sessionId}`);
-    await expect(page.locator('textarea[placeholder*="Wayfinder"]')).toBeVisible();
+    // The base fixture answers the stream in the browser, and the page drops
+    // that reply when it resyncs with the stored history at the end of the
+    // turn, so a reply counted or found in the DOM was only there if it was
+    // read before the resync. Scripting the server's AI stores the reply, so it
+    // stays. Waiting for its text, rather than counting bubbles, also keeps the
+    // seed's existing assistant messages out of the assertion.
+    await scriptAiFor(page, sessionId, [incompleteTurn(reply)]);
 
-    const input = page.locator('textarea[placeholder*="Wayfinder"], textarea[placeholder*="message" i]').first();
-    await expect(input).toBeVisible();
+    try {
+      await page.goto(`/chats/${sessionId}`);
+      const input = page.locator('textarea[placeholder*="Wayfinder"]');
+      await expect(input).toBeVisible();
 
-    // None of the four selectors this used to wait for exist in the feed:
-    // message-feed.tsx has no data-testid, no [role="log"], and its Tailwind
-    // classes contain no "message". It reported "AI response did not appear"
-    // for a reply that was on screen the whole time, and only surfaced at all
-    // once the composer guard stopped skipping the test.
-    //
-    // The reply has to be counted from a baseline, not merely found: the seed
-    // gives every session a thread that already contains assistant messages, so
-    // "an assistant bubble is visible" is true before a single word is sent.
-    // Counting from before the send is what makes this about *this* turn.
-    const assistantBubbles = page.locator('[data-chat-message="assistant"]');
-    const bubblesBefore = await assistantBubbles.count();
+      await input.fill('Hello');
+      // The Next.js dev overlay portal covers the send button in headless mode.
+      // Use Enter on the textarea — same handler, no pointer-event coverage issue.
+      await input.press('Enter');
 
-    await input.fill('Hello');
+      await expect(
+        page.locator('[data-chat-message="assistant"]').filter({ hasText: reply }).first(),
+      ).toBeVisible({ timeout: 15_000 });
+      await page.screenshot({ path: 'screenshots/chat-ai-responded.png', fullPage: true });
 
-    // The Next.js dev overlay portal covers the send button in headless mode.
-    // Use Enter on the textarea — same handler, no pointer-event coverage issue.
-    await input.press('Enter');
-
-    // Wait for AI response (mocked = fast, real = up to 30s)
-    const timeout = process.env.USE_REAL_AI === 'true' ? 30_000 : 8_000;
-
-    // Greater-than rather than exactly one more: a single streamed response can
-    // split into several bubbles at finish_step boundaries (message-feed.tsx),
-    // so an exact count would be asserting the shape of the reply, not that one
-    // arrived.
-    await expect
-      .poll(() => assistantBubbles.count(), { timeout })
-      .toBeGreaterThan(bubblesBefore);
-    await page.screenshot({ path: 'screenshots/chat-ai-responded.png', fullPage: true });
-
-    const errors = consoleLogs.filter(l => l.type === 'error');
-    expect(errors, `Errors during chat:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
+      const errors = consoleLogs.filter(l => l.type === 'error');
+      expect(errors, `Errors during chat:\n${errors.map(e => e.text).join('\n')}`).toHaveLength(0);
+    } finally {
+      await clearAiScript(page, sessionId);
+    }
   });
 
   // Streaming into the DOM (e2e-test-policy group 2): a turn that consults MCP

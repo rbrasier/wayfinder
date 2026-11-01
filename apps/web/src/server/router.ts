@@ -11,11 +11,14 @@ import { flowRouter } from "./routers/flow";
 import { automationRouter } from "./routers/automation";
 import { eventWatchRouter } from "./routers/event-watch";
 import { flowVersionRouter } from "./routers/flow-version";
+import { flowTestRouter } from "./routers/flow-test";
 import { governanceRouter } from "./routers/governance";
 import { groupRouter } from "./routers/group";
+import { impersonationRouter } from "./routers/impersonation";
 import { hrRouter } from "./routers/hr";
 import { knowledgeRouter } from "./routers/knowledge";
 import { legalHoldRouter } from "./routers/legal-hold";
+import { lookupSourceRouter } from "./routers/lookup-source";
 import { mcpServerRouter } from "./routers/mcp-server";
 import { messageRouter } from "./routers/message";
 import { n8nRouter } from "./routers/n8n";
@@ -25,6 +28,7 @@ import { roleRouter } from "./routers/role";
 import { scheduleRouter } from "./routers/schedule";
 import { sessionRouter } from "./routers/session";
 import { settingsRouter } from "./routers/settings";
+import { flowMemoryRouter } from "./routers/flow-memory";
 import { skillRouter } from "./routers/skill";
 import { usageRouter } from "./routers/usage";
 import { userRouter } from "./routers/user";
@@ -41,9 +45,11 @@ export const appRouter = router({
   automation: automationRouter,
   eventWatch: eventWatchRouter,
   flowVersion: flowVersionRouter,
+  flowTest: flowTestRouter,
   extraction: extractionRouter,
   role: roleRouter,
   group: groupRouter,
+  impersonation: impersonationRouter,
   organisation: organisationRouter,
   session: sessionRouter,
   schedule: scheduleRouter,
@@ -58,6 +64,8 @@ export const appRouter = router({
   knowledge: knowledgeRouter,
   feedback: feedbackRouter,
   skill: skillRouter,
+  flowMemory: flowMemoryRouter,
+  lookupSource: lookupSourceRouter,
   mcpServer: mcpServerRouter,
   audit: auditRouter,
   legalHold: legalHoldRouter,

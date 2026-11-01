@@ -3,7 +3,7 @@ import type {
   ApprovalListScope,
   IApprovalRepository,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ListApprovalsInput {
   approverUserId: string;

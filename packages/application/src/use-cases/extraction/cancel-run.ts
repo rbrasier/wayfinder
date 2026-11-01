@@ -4,7 +4,7 @@ import {
   isTerminalRun,
   type IExtractionRunRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Cancels an in-flight run (phase §8). Cancellation is a run-status flag the
 // worker checks before each claim, so in-flight tasks finish but nothing new is

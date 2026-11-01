@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { EmailRecipient } from "@rbrasier/domain";
+import type { EmailRecipient } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";

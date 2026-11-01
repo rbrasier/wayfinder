@@ -61,6 +61,12 @@ Declared `-- data-impact: preserved`. `db:drift` confirms the schema matches
 its snapshot. Not run against a database in this session — no infrastructure
 was available.
 
+On `main` the same statement is numbered `0049_welcome_tour.sql`: the forward
+merge landed it behind alpha-3's `0045`–`0048`, so it was regenerated at the
+next free index and given its backfill again. The release line keeps
+`0045_welcome_tour.sql`, which is the file a deployed alpha-2 database has
+already applied.
+
 ## Tests
 
 - Unit: 4 (use case) + 19 (tour models). Full suite: 3,935 tests across the

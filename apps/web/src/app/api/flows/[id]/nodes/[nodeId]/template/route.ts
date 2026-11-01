@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import type { TemplateAnnotationEdit } from "@rbrasier/domain";
-import { TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS } from "@rbrasier/shared";
+import type { TemplateAnnotationEdit } from "@wayfinder/domain";
+import { TEMPLATE_STRUCTURED_CONTENT_MAX_CHARS } from "@wayfinder/shared";
 import type { Container } from "@/lib/container";
 import { buildAnnotationEdits, type AnnotationRow } from "@/lib/template-annotation";
 import {
@@ -11,6 +11,7 @@ import {
   TEMPLATE_MIME,
   type TemplateFormat,
 } from "@/lib/template-route-helpers";
+import { JSON_BODY_LIMIT_BYTES, readJsonWithinLimit } from "@/lib/request-body-limit";
 
 const parseAnnotationRows = (raw: FormDataEntryValue | null): AnnotationRow[] | null => {
   if (typeof raw !== "string" || !raw.trim()) return null;
@@ -74,6 +75,13 @@ const storeTemplate = async (input: StoreTemplateInput): Promise<NextResponse> =
     return NextResponse.json(extraction.error.body, { status: extraction.error.status });
   }
   const { tags, fields, documentTemplateContent, spreadsheetTemplateMode } = extraction.data;
+
+  // An unregistered (options-source: …) fails here, so the author sees it while
+  // editing the template rather than an operator hitting it mid-session.
+  const sourcesResult = await container.useCases.validateTemplateLookupSources.execute(fields);
+  if (sourcesResult.error) {
+    return NextResponse.json({ error: sourcesResult.error.message }, { status: 422 });
+  }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const storageKey = `templates/${nodeId}/${timestamp}-${safeFilename}`;
@@ -218,8 +226,13 @@ export async function PATCH(
     return NextResponse.json({ error: "This step has no template to edit" }, { status: 404 });
   }
 
-  const body = (await req.json()) as { annotations?: unknown };
-  const rows = Array.isArray(body.annotations) ? (body.annotations as AnnotationRow[]) : null;
+  const requestBody = await readJsonWithinLimit(req, JSON_BODY_LIMIT_BYTES);
+  if ("error" in requestBody && requestBody.error === "too_large") {
+    return NextResponse.json({ error: "Payload too large" }, { status: 413 });
+  }
+  if ("error" in requestBody) return NextResponse.json({ error: "The body must be JSON" }, { status: 400 });
+  const annotations = (requestBody.data as { annotations?: unknown } | null)?.annotations;
+  const rows = Array.isArray(annotations) ? (annotations as AnnotationRow[]) : null;
   if (!rows) {
     return NextResponse.json({ error: "No field changes provided" }, { status: 400 });
   }

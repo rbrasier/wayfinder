@@ -3,7 +3,7 @@ import {
   parseTemplateField,
   validateAnnotationLine,
   type AnnotationWarning,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { AnnotationRow } from "@/lib/template-annotation";
 import { lineToModel, TEMPLATE_TYPE_OPTIONS, type FieldModel } from "./field-row-model";
 

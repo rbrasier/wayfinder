@@ -5,7 +5,7 @@ import {
   type AnswerFeedback,
   type IAnswerFeedbackRepository,
   type NewAnswerFeedback,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { describe, expect, it, vi } from "vitest";
 import { ListAnswerFeedback } from "./list-answer-feedback";
 import { SubmitAnswerFeedback } from "./submit-answer-feedback";

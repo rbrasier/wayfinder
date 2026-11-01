@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { zodSchema } from "ai";
-import { turnResponseSchema } from "@rbrasier/shared";
+import { turnResponseSchema } from "@wayfinder/shared";
 
 // generateObject/streamObject hand the provider the JSON Schema `ai` derives
 // from our zod schemas. ai@4 derived an empty one from zod 4 schemas, silently

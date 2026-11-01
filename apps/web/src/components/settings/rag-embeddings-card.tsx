@@ -8,28 +8,35 @@ import { Dialog, DialogBody, DialogCloseButton, DialogContent, DialogFooter, Dia
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import { ConnectivityTest, type ConnectivityController } from "./connectivity";
+import {
+  embeddingsProviderLabel,
+  isProviderSelectable,
+  missingKeyWarning,
+  modelAfterProviderChange,
+  modelOptionsFor,
+  providerSelectionBlockedReason,
+  staleDocumentsMessage,
+  storedProviderWarning,
+} from "./embeddings-provider-state";
 
-type EmbeddingsProviderChoice = "local" | "openai";
-
-const EMBEDDINGS_PROVIDER_LABEL: Record<EmbeddingsProviderChoice, string> = {
-  local: "Local (in-process)",
-  openai: "OpenAI",
-};
+type EmbeddingsProviderChoice = "local" | "openai" | "mistral" | "bedrock";
 
 export function RagEmbeddingsCard({ connectivity }: { connectivity: ConnectivityController }) {
   const utils = trpc.useUtils();
   const configQuery = trpc.settings.getEmbeddingsConfig.useQuery();
   const saveMutation = trpc.settings.setEmbeddingsConfig.useMutation({
     onSuccess: async () => {
-      toast.success("Embedding provider saved — re-index documents to use it");
+      toast.success("Embedding model saved — re-index documents to use it");
       await utils.settings.getEmbeddingsConfig.invalidate();
+      await utils.settings.embeddingsAttention.invalidate();
       setOpen(false);
     },
-    onError: (error) => toast.error(error.message ?? "Failed to save embedding provider"),
+    onError: (error) => toast.error(error.message ?? "Failed to save embedding model"),
   });
 
   const [open, setOpen] = useState(false);
   const [provider, setProvider] = useState<EmbeddingsProviderChoice>("local");
+  const [model, setModel] = useState("");
   // Only badge runs that completed while this card was on screen, so navigating
   // away and back does not re-surface a stale "Completed" badge.
   const [mountedAt] = useState(() => Date.now());
@@ -37,6 +44,13 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
   const reindexStatusQuery = trpc.settings.reindexStatus.useQuery(undefined, {
     refetchInterval: (query) => (query.state.data?.status === "running" ? 5000 : false),
   });
+  const reindexState = reindexStatusQuery.data?.status;
+  // A finished run re-stamps every chunk, so the stale count must be re-read.
+  useEffect(() => {
+    if (reindexState !== "complete") return;
+    void utils.settings.getEmbeddingsConfig.invalidate();
+    void utils.settings.embeddingsAttention.invalidate();
+  }, [reindexState, utils]);
   const startReindexMutation = trpc.settings.startReindex.useMutation({
     onSuccess: async (result) => {
       if (!result.started) toast.info("A re-index is already running");
@@ -57,11 +71,24 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
   useEffect(() => {
     if (!open || !config) return;
     setProvider(config.provider as EmbeddingsProviderChoice);
+    setModel(config.model);
   }, [open, config]);
 
-  const handleSave = () => {
-    saveMutation.mutate({ provider });
+  const handleProviderChange = (nextProvider: EmbeddingsProviderChoice) => {
+    setProvider(nextProvider);
+    setModel((currentModel) => modelAfterProviderChange(config?.models, nextProvider, currentModel));
   };
+
+  const handleSave = () => {
+    saveMutation.mutate({ provider, model });
+  };
+
+  const selectionBlockedReason = providerSelectionBlockedReason(config?.providers, provider);
+  const canSave = isProviderSelectable(config?.providers, provider);
+  const storedWarning = config ? storedProviderWarning(config.providers, config.provider) : null;
+  const keyWarning = config ? missingKeyWarning(config.provider, config.keyStatus) : null;
+  const staleWarning = config ? staleDocumentsMessage(config.staleDocumentCount) : null;
+  const modelOptions = modelOptionsFor(config?.models, provider);
 
   return (
     <Card>
@@ -74,7 +101,7 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
       <CardContent className="space-y-2 text-sm">
         <p className="text-muted-foreground">
           Which model embeds uploaded documents for retrieval. Local runs in-process with no
-          external API; OpenAI uses the hosted model.
+          external API; hosted models use the key saved under AI provider.
         </p>
         {!config ? (
           <p className="text-muted-foreground">Loading…</p>
@@ -83,26 +110,54 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
             <div className="flex justify-between">
               <span className="text-muted-foreground">Provider</span>
               <span className="font-medium">
-                {EMBEDDINGS_PROVIDER_LABEL[config.provider as EmbeddingsProviderChoice] ??
-                  config.provider}
+                {embeddingsProviderLabel(config.provider)}
               </span>
             </div>
+            {storedWarning ? (
+              <p
+                data-testid="embeddings-stored-provider-warning"
+                className="rounded-md border border-red-300 bg-red-50 p-2 text-xs text-red-900"
+              >
+                {storedWarning} Retrieval will fail until a hosted provider is selected and
+                documents are re-indexed.
+              </p>
+            ) : null}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Model</span>
               <span className="font-mono text-xs">{config.model}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Dimensions</span>
+              <span className="text-muted-foreground">Model dimensions</span>
+              <span className="font-mono text-xs">{config.nativeDimension ?? "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Stored dimensions</span>
               <span className="font-mono text-xs">{config.dimension}</span>
             </div>
+            {keyWarning ? (
+              <p
+                data-testid="embeddings-missing-key"
+                className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+              >
+                {keyWarning}
+              </p>
+            ) : null}
           </>
         )}
 
         <div className="space-y-2 border-t pt-3">
+          {staleWarning ? (
+            <p
+              data-testid="embeddings-stale-documents"
+              className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+            >
+              {staleWarning}
+            </p>
+          ) : null}
           <div className="flex items-center justify-between gap-3">
             <span className="text-muted-foreground">
               Re-embed every stored document (templates, flow context docs, session
-              uploads) with the current provider.
+              uploads) with the current model.
             </span>
             <Button
               size="sm"
@@ -144,7 +199,7 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit embedding provider</DialogTitle>
+            <DialogTitle>Edit embedding model</DialogTitle>
             <DialogCloseButton />
           </DialogHeader>
           <DialogBody className="space-y-4">
@@ -153,24 +208,56 @@ export function RagEmbeddingsCard({ connectivity }: { connectivity: Connectivity
               <select
                 id="embeddings-provider"
                 value={provider}
-                onChange={(e) => setProvider(e.target.value as EmbeddingsProviderChoice)}
+                onChange={(e) => handleProviderChange(e.target.value as EmbeddingsProviderChoice)}
                 className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               >
-                <option value="local">Local (in-process)</option>
-                <option value="openai">OpenAI</option>
+                {(config?.providers ?? []).map((option) => (
+                  <option
+                    key={option.provider}
+                    value={option.provider}
+                    disabled={!option.available}
+                  >
+                    {embeddingsProviderLabel(option.provider)}
+                    {option.available ? "" : " — unavailable"}
+                  </option>
+                ))}
               </select>
             </div>
+            <div className="space-y-1">
+              <Label htmlFor="embeddings-model">Model</Label>
+              <select
+                id="embeddings-model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                {modelOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label} ({option.nativeDimension} dimensions)
+                  </option>
+                ))}
+              </select>
+            </div>
+            {selectionBlockedReason ? (
+              <p
+                data-testid="embeddings-provider-blocked"
+                className="rounded-md border border-red-300 bg-red-50 p-3 text-xs text-red-900"
+              >
+                {selectionBlockedReason}
+              </p>
+            ) : null}
             <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-              Changing the provider changes how documents are embedded. Existing chunks stay embedded
-              with the previous model and will not match queries until each document is re-uploaded or
-              re-indexed. OpenAI also requires an OpenAI API key to be configured.
+              {provider === "local"
+                ? "Runs in-process; no API key needed."
+                : `Uses the ${embeddingsProviderLabel(provider)} key from the AI provider settings.`}{" "}
+              Documents must be re-indexed before they match queries with a new model.
             </p>
           </DialogBody>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)} disabled={saveMutation.isPending}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saveMutation.isPending}>
+            <Button onClick={handleSave} disabled={saveMutation.isPending || !canSave}>
               {saveMutation.isPending ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>

@@ -6,7 +6,7 @@ import {
   type SessionMessage,
   type SessionSchedule,
   type SessionStepOutput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { accumulateInsights } from "../../services/accumulate-insights";
 import type { ScheduleNodeEventInput } from "../scheduling/schedule-node-event";
 import type { ApplyAutoNodeResultInput, ApplyAutoNodeResultOutput } from "../session/apply-auto-node-result";

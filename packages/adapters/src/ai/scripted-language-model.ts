@@ -11,7 +11,7 @@ import {
   type StreamObjectInput,
   type StreamTextInput,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 /**
  * A language model that answers from a script instead of a provider.

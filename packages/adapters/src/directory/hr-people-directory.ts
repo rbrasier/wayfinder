@@ -8,7 +8,7 @@ import {
   type PeopleSearchInput,
   type Person,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // header for a given canonical field within one dataset's mapping.
 const headerFor = (mapping: HrColumnMapping, field: string): string | null => {

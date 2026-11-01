@@ -1,4 +1,4 @@
-import { ok, type IAuditLogger, type IFlowTriggerRepository, type Result } from "@rbrasier/domain";
+import { ok, type IAuditLogger, type IFlowTriggerRepository, type Result } from "@wayfinder/domain";
 import type { StartUnattendedRun } from "./start-unattended-run";
 
 export interface WebhookVerification {

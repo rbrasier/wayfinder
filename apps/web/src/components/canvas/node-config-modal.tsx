@@ -12,8 +12,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { deriveFieldKey } from "@rbrasier/domain";
-import type { FieldValueSource, PriorStepField, TemplateField } from "@rbrasier/domain";
+import { deriveFieldKey } from "@wayfinder/domain";
+import type { FieldValueSource, PriorStepField, TemplateField } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
@@ -72,6 +72,9 @@ interface NodeConfigModalProps {
   initialValues?: Partial<NodeConfigValues>;
   onSave: (values: NodeConfigValues) => void;
   onDelete?: () => void;
+  // Opens the test modal pre-scoped to this step, so the steps before it are
+  // simulated rather than replayed by hand.
+  onTestStep?: () => void;
   onClose: () => void;
   isSaving?: boolean;
   // Fields declared by steps earlier in the flow, offered as value sources.
@@ -100,6 +103,7 @@ export function NodeConfigModal({
   initialValues,
   onSave,
   onDelete,
+  onTestStep,
   onClose,
   isSaving = false,
   priorStepFields = [],
@@ -657,6 +661,11 @@ export function NodeConfigModal({
                   {onDelete && (
                     <Button type="button" variant="danger" size="sm" onClick={() => setConfirmDelete(true)}>
                       Remove step
+                    </Button>
+                  )}
+                  {onTestStep && (
+                    <Button type="button" variant="outline" size="sm" onClick={onTestStep}>
+                      Test this step
                     </Button>
                   )}
                   <div className="ml-auto flex gap-2">

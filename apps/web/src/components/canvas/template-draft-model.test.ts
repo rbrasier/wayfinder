@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DraftEvidence } from "@rbrasier/domain";
+import type { DraftEvidence } from "@wayfinder/domain";
 import type { AnnotationRow } from "@/lib/template-annotation";
 import { toEditableRows } from "./template-annotation-model";
 import {

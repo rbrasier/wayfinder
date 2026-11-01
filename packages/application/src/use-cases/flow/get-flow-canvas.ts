@@ -6,8 +6,8 @@ import type {
   IFlowNodeRepository,
   IFlowRepository,
   Result,
-} from "@rbrasier/domain";
-import { ok } from "@rbrasier/domain";
+} from "@wayfinder/domain";
+import { ok } from "@wayfinder/domain";
 
 export interface FlowCanvas {
   flow: Flow;

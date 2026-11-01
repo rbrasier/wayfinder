@@ -9,7 +9,7 @@ import {
   domainError,
   err,
   ok,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { UpdateUser } from "./update-user";
 import { DeleteUser } from "./delete-user";
 import { ListUsers } from "./list-users";

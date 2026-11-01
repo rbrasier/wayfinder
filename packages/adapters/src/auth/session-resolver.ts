@@ -1,13 +1,23 @@
 import { and, eq, gt } from "drizzle-orm";
+import {
+  DEFAULT_SESSION_POLICY,
+  isSessionTimedOut,
+  shouldRefreshLastActive,
+  type SessionPolicy,
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { core_sessions, core_users } from "../db/schema/core";
 
 export interface ResolvedSession {
   // core_sessions.id: identifies one sign-in without exposing the token, which
-  // is a bearer secret (ADR-060 §5).
+  // is a bearer secret (ADR-061 §5).
   readonly sessionId: string;
   readonly userId: string;
   readonly isAdmin: boolean;
+  // The admin actually driving, when this principal is a simulated view of
+  // someone else (ADR-059). Null whenever the user is themselves. Attribution
+  // only — no authorisation check may read it (ADR-060 §6).
+  readonly impersonatorId: string | null;
 }
 
 // Better Auth writes the session cookie as `<token>.<base64-signature>` (signed
@@ -20,13 +30,36 @@ const stripCookieSignature = (cookieValue: string): string => {
   return dotIndex === -1 ? cookieValue : cookieValue.substring(0, dotIndex);
 };
 
+// Stamping is bookkeeping: a failed write must never cost a legitimate user
+// their session, so it is swallowed rather than surfaced.
+const stampLastActive = async (db: Database, sessionId: string, now: Date): Promise<void> => {
+  try {
+    await db
+      .update(core_sessions)
+      .set({ last_active_at: now })
+      .where(eq(core_sessions.id, sessionId));
+  } catch {
+    // Deliberately ignored — see above.
+  }
+};
+
 /**
  * Looks up a session token and returns the associated user info, or null if the
- * token is missing, expired, or invalid. Never throws — returns null on DB error.
+ * token is missing, expired, invalid, or rejected by the session policy. Never
+ * throws — returns null on DB error.
+ *
+ * Timeouts are evaluated against fields already on the row, so policy costs no
+ * extra query (ADR-035 §2). The last-active stamp is written at most once per
+ * refresh interval, and is written whether or not an idle timeout is currently
+ * set: if it only started when the policy was switched on, every live session
+ * would read as idle since creation at that moment and everyone would be signed
+ * out at once.
  */
 export const resolveSession = async (
   db: Database,
   cookieValue: string,
+  policy: SessionPolicy = DEFAULT_SESSION_POLICY,
+  now: Date = new Date(),
 ): Promise<ResolvedSession | null> => {
   const token = stripCookieSignature(cookieValue);
   try {
@@ -35,12 +68,29 @@ export const resolveSession = async (
         sessionId: core_sessions.id,
         userId: core_sessions.user_id,
         isAdmin: core_users.is_admin,
+        createdAt: core_sessions.created_at,
+        lastActiveAt: core_sessions.last_active_at,
       })
       .from(core_sessions)
       .innerJoin(core_users, eq(core_sessions.user_id, core_users.id))
       .where(and(eq(core_sessions.token, token), gt(core_sessions.expires_at, new Date())))
       .limit(1);
-    return row ?? null;
+    if (!row) return null;
+
+    if (isSessionTimedOut(policy, { createdAt: row.createdAt, lastActiveAt: row.lastActiveAt }, now)) {
+      return null;
+    }
+
+    if (shouldRefreshLastActive(row.lastActiveAt, now)) {
+      await stampLastActive(db, row.sessionId, now);
+    }
+
+    return {
+      sessionId: row.sessionId,
+      userId: row.userId,
+      isAdmin: row.isAdmin,
+      impersonatorId: null,
+    };
   } catch {
     return null;
   }

@@ -1,4 +1,4 @@
-import type { PermissionKey } from "@rbrasier/domain";
+import type { PermissionKey } from "@wayfinder/domain";
 import { TRPCError } from "@trpc/server";
 import { describe, expect, it } from "vitest";
 import type { Container } from "@/lib/container";
@@ -28,6 +28,8 @@ const contextWith = (overrides: Partial<TrpcContext>): TrpcContext => ({
   userId: "user-1",
   authSessionId: null,
   isAdmin: false,
+  impersonatorId: null,
+  impersonationCookie: null,
   permissions: new Set<PermissionKey>(),
   headers: new Headers(),
   ...overrides,

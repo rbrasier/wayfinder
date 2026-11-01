@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    // Bundler resolution, matching tsconfig.base.json: the workspace packages
+    // publish `./src/index.ts` through their exports map, and the deployment
+    // artefact is bundled. Typechecking here is the drift detector for handlers
+    // against container.ts, so it must resolve the way the bundler will.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  // The api app's ambient Express augmentation (`req.validated`) is part of its
+  // own compilation; typechecking its routes from here needs it too.
+  "include": [
+    "handlers/**/*.ts",
+    "infra/**/*.ts",
+    "../../apps/api/src/types/express.d.ts"
+  ]
+}

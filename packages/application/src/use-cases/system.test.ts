@@ -10,7 +10,7 @@ import {
   type Result,
   type SystemHealth,
   ok,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { GetFeatureFlag, IsFeatureEnabled, ListFeatureFlags, UpsertFeatureFlag } from "./get-feature-flag";
 import { GetSystemHealth } from "./get-system-health";
 import { FailJob, ListJobs, PingJob, RegisterJob } from "./job-health";

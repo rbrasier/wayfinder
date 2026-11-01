@@ -1,5 +1,5 @@
-import { groupIdsForMemberships, normaliseOutputType, validateStructuredFieldSet } from "@rbrasier/domain";
-import type { TemplateField } from "@rbrasier/domain";
+import { groupIdsForMemberships, normaliseOutputType, validateStructuredFieldSet } from "@wayfinder/domain";
+import type { TemplateField } from "@wayfinder/domain";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import type { Container } from "@/lib/container";
@@ -441,6 +441,27 @@ export const flowRouter = router({
         .catch(() => undefined);
       return result.data;
     }),
+
+  // Export and duplicate are gated to the flow's owner or an admin (oversight
+  // counts, ADR-066 §4), and the use-cases enforce it again rather than trusting
+  // the router (ADR-049 §9). No separate PermissionKey exists — see the ADR for
+  // why.
+  duplicate: authenticatedProcedure
+    .input(flowIdInput)
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.duplicateFlow.execute({
+        flowId: input.flowId,
+        requestedByUserId: ctx.userId,
+        isAdmin: canOversee(ctx),
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // Export, inspect and import are not tRPC procedures: all three carry an
+  // archive, and base64 through tRPC would inflate a 50 MB upload by a third for
+  // no gain (PRD §7). They live at /api/flows/[id]/export and /api/flows/import,
+  // where the size cap is applied before the reader sees anything.
 
   contextDoc: router({
     remove: authenticatedProcedure

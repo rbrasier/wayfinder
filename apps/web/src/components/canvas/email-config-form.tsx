@@ -7,7 +7,7 @@ import type {
   EmailRecipient,
   PriorStepField,
   StepProblem,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

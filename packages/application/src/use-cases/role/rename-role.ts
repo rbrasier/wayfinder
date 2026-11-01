@@ -1,4 +1,4 @@
-import { domainError, err, type IRoleRepository, type Result, type Role } from "@rbrasier/domain";
+import { domainError, err, type IRoleRepository, type Result, type Role } from "@wayfinder/domain";
 
 export class RenameRole {
   constructor(private readonly roles: IRoleRepository) {}

@@ -5,7 +5,7 @@ import {
   type IObjectStorage,
   type ISystemSettingsRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { readBrandingConfig, writeBrandingConfig } from "./branding-settings";
 
 // Returns the install to the "W" tile. The row is cleared first, so a failed

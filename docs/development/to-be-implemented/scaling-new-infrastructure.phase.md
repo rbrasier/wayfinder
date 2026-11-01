@@ -100,10 +100,14 @@ here until the last code slice lands (the former roadmap's convention).
 5. **Service topology.** ~~Dockerfiles~~ — **done in v0.24.0** (container
    distribution phase, ADR-046). There is **one** image, not one per app: the
    runtime command selects `web`, `api` or `migrate`, so the two processes
-   cannot be built from different trees. `apps/api` still runs as a
-   **separate always-on service** — never serverless, the scheduler is a
-   long-lived polling loop. The load balancer's idle timeout must exceed turn
-   length (~300 s) for both the chat stream and the SSE fan-out.
+   cannot be built from different trees. `apps/api` runs as a
+   **separate always-on service on the container path**. It is no longer true
+   that it can never be serverless: the polling loop is a property of
+   `apps/api/src/index.ts`, not of the workers, which are tick functions an
+   EventBridge rule can drive one invocation at a time. See
+   [`lambda-deployment-target.phase.md`](./lambda-deployment-target.phase.md)
+   and ADR-056. The load balancer's idle timeout must exceed turn length
+   (~300 s) for both the chat stream and the SSE fan-out.
 6. **Object storage parametrisation.** `MinioStorageAdapter` already speaks
    S3 — parametrise endpoint/region/credentials for native S3. Azure Blob
    needs a small new `IObjectStorage` adapter, or keep the S3 API via a
@@ -132,7 +136,7 @@ everything else is ops.
 | Concern | Today | AWS | Azure | Code prerequisite |
 | --- | --- | --- | --- | --- |
 | Web (`apps/web`) | Node process | ECS Fargate (or App Runner) behind ALB | App Service / Container Apps | Dockerfile (item 5); LB idle timeout ≥ turn length (~300 s) for SSE + chat stream |
-| Worker (`apps/api`) | Node process | Separate always-on ECS service | Separate Container App | Already isolated — keep off serverless |
+| Worker (`apps/api`) | Node process | Separate always-on ECS service | Separate Container App | Already isolated. Serverless is also supported — the workers are tick functions (ADR-056) |
 | Postgres + pgvector | Docker compose | RDS/Aurora (pgvector) + RDS Proxy | Flexible Server (pgvector) + PgBouncer | None — pool env-driven; pooler is item 1 |
 | Object storage | MinIO | S3 | Blob (or S3-compatible gateway) | Item 6 |
 | Cache / bus / queue | in-process `TtlCache` only | ElastiCache Redis | Azure Cache for Redis | Item 2 |

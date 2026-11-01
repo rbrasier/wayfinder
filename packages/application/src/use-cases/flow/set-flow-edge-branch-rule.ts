@@ -5,7 +5,7 @@ import {
   type FlowEdge,
   type IFlowEdgeRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface SetFlowEdgeBranchRuleInput {
   edgeId: string;

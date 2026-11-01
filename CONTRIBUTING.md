@@ -52,16 +52,16 @@ two-branch model:
 
 | Branch | What it is | What lands there |
 |---|---|---|
-| `release/alpha-2` | The **current** release line | Bug fixes and enhancements only |
-| `main` | The **next** release line (alpha-3), in active development | New features — plus fixes for things that only exist on `main` |
+| `release/alpha-3` | The **current** release line | Bug fixes and enhancements only |
+| `main` | The **next** release line (alpha-4), in active development | New features — plus fixes for things that only exist on `main` |
 
 The branching strategy in one picture:
 
 ```
-release/alpha-2  ──o───o───o──▶   bug fixes + enhancements
+release/alpha-3  ──o───o───o──▶   bug fixes + enhancements
                   /     \
                  /       \  (maintainers merge forward periodically)
-main  ──────────o─────────o───o──▶   new features (next line = alpha-3)
+main  ──────────o─────────o───o──▶   new features (next line = alpha-4)
 ```
 
 Versions are `0.MINOR.PATCH` — the project stays on `0.x` until its first
@@ -71,8 +71,8 @@ the version digits.
 Rules:
 
 1. **Fixing a bug or enhancing existing behaviour?** Branch from
-   `release/alpha-2` (name it `bugfix/<slug>/claude-<username>` or
-   `enhance/<slug>/claude-<username>`) and open your PR against `release/alpha-2`.
+   `release/alpha-3` (name it `bugfix/<slug>/claude-<username>` or
+   `enhance/<slug>/claude-<username>`) and open your PR against `release/alpha-3`.
 2. **Building a new feature?** Branch from `main` (name it
    `feature/<slug>/claude-<username>`) and open your PR against `main`. New
    features never target a release branch.
@@ -106,9 +106,9 @@ framework it's talking to.
 
 ```
 packages/domain        entities + port interfaces. Zero external imports, relative imports only.
-packages/application   use cases. Imports @rbrasier/domain and @rbrasier/shared only — no frameworks, no ORMs, no AI SDKs.
+packages/application   use cases. Imports @wayfinder/domain and @wayfinder/shared only — no frameworks, no ORMs, no AI SDKs.
 packages/adapters       implements domain ports — Drizzle, Vercel AI SDK, LangGraph.js, Langfuse, Better Auth.
-apps/web / apps/api    imports @rbrasier/application and @rbrasier/adapters only. Wiring lives in lib/container.ts.
+apps/web / apps/api    imports @wayfinder/application and @wayfinder/adapters only. Wiring lives in lib/container.ts.
 ```
 
 This is enforced by ESLint and `validate.sh`, not just convention — a PR

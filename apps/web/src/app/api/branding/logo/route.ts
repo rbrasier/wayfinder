@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { BRANDING_LOGO_MAX_BYTES, type DomainError } from "@rbrasier/domain";
+import { BRANDING_LOGO_MAX_BYTES, type DomainError } from "@wayfinder/domain";
 import { getContainer } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { withPrincipal } from "@/lib/with-principal";
 import { toPublicBranding } from "@/lib/public-branding";
 
-// The install logo (ADR-060 §4). GET is public because the sign-in page shows
+// The install logo (ADR-061 §4). GET is public because the sign-in page shows
 // it to people who are not signed in yet. It serves the one key the branding
 // config names and never takes a key from the request.
 
@@ -34,16 +34,8 @@ export async function GET(request: Request): Promise<Response> {
   });
 }
 
-type AdminCheck = { userId: string } | { response: NextResponse };
-
-const requireAdmin = async (request: Request): Promise<AdminCheck> => {
-  const token = getSessionTokenFromRequest(request);
-  if (!token) return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  const session = await getContainer().resolveSession(token);
-  if (!session) return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  if (!session.isAdmin) return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  return { userId: session.userId };
-};
+// Built per call: a NextResponse body can only be consumed once.
+const forbidden = (): NextResponse => NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
 const errorResponse = (error: DomainError): NextResponse =>
   NextResponse.json(
@@ -52,35 +44,37 @@ const errorResponse = (error: DomainError): NextResponse =>
   );
 
 export async function POST(request: Request): Promise<Response> {
-  const admin = await requireAdmin(request);
-  if ("response" in admin) return admin.response;
+  return withPrincipal(request, async (principal) => {
+    if (!principal.isAdmin) return forbidden();
 
-  const formData = await request.formData();
-  const file = formData.get("file");
-  if (!(file instanceof Blob)) {
-    return NextResponse.json({ error: "Choose an image to upload." }, { status: 400 });
-  }
-  if (file.size > BRANDING_LOGO_MAX_BYTES) {
-    return NextResponse.json({ error: "The logo must be 512 KB or smaller." }, { status: 400 });
-  }
+    const formData = await request.formData();
+    const file = formData.get("file");
+    if (!(file instanceof Blob)) {
+      return NextResponse.json({ error: "Choose an image to upload." }, { status: 400 });
+    }
+    if (file.size > BRANDING_LOGO_MAX_BYTES) {
+      return NextResponse.json({ error: "The logo must be 512 KB or smaller." }, { status: 400 });
+    }
 
-  const container = getContainer();
-  const content = Buffer.from(await file.arrayBuffer());
-  const result = await container.useCases.uploadBrandingLogo.execute(content, admin.userId);
-  if (result.error) return errorResponse(result.error);
+    const container = getContainer();
+    const content = Buffer.from(await file.arrayBuffer());
+    const result = await container.useCases.uploadBrandingLogo.execute(content, principal.userId);
+    if (result.error) return errorResponse(result.error);
 
-  container.runtimeConfig.invalidateBranding();
-  return NextResponse.json(toPublicBranding(result.data));
+    container.runtimeConfig.invalidateBranding();
+    return NextResponse.json(toPublicBranding(result.data));
+  });
 }
 
 export async function DELETE(request: Request): Promise<Response> {
-  const admin = await requireAdmin(request);
-  if ("response" in admin) return admin.response;
+  return withPrincipal(request, async (principal) => {
+    if (!principal.isAdmin) return forbidden();
 
-  const container = getContainer();
-  const result = await container.useCases.removeBrandingLogo.execute(admin.userId);
-  if (result.error) return errorResponse(result.error);
+    const container = getContainer();
+    const result = await container.useCases.removeBrandingLogo.execute(principal.userId);
+    if (result.error) return errorResponse(result.error);
 
-  container.runtimeConfig.invalidateBranding();
-  return NextResponse.json(toPublicBranding(result.data));
+    container.runtimeConfig.invalidateBranding();
+    return NextResponse.json(toPublicBranding(result.data));
+  });
 }

@@ -6,7 +6,7 @@ import {
   type IAuditLogger,
   type IEventWatchRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { EVENT_WATCH_RESOURCE_TYPE } from "./save-event-watch";
 
 export interface EventWatchLifecycleDependencies {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { documentRouter } from "./document";
@@ -91,6 +91,8 @@ const contextWith = (container: Container): TrpcContext => ({
   userId: "user-1",
   authSessionId: null,
   isAdmin: false,
+  impersonatorId: null,
+  impersonationCookie: null,
   permissions: new Set(),
   headers: new Headers(),
 });

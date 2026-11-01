@@ -22,14 +22,14 @@ be discovered by whoever is deploying.
 Two smaller problems compound it:
 
 - The web app's `start` script runs `drizzle-kit migrate` before `next start`.
-  `drizzle-kit` is a **devDependency** of `@rbrasier/adapters`, so a production
+  `drizzle-kit` is a **devDependency** of `@wayfinder/adapters`, so a production
   image cannot prune dev dependencies without breaking on boot. Every deployment
   guide has to warn about this.
 - The same `start` script makes migrations a side effect of web boot, which is
   correct for one instance and a race across several. Both cloud guides work
   around it with a separate one-off task.
 
-`.changeset/config.json` is configured for publishing the four `@rbrasier/*`
+`.changeset/config.json` is configured for publishing the four `@wayfinder/*`
 packages to npm (`"access": "public"`, a `linked` group, no `private: true` on
 any package), but nothing publishes them. That capability is dormant, not
 absent, and has no operator-facing entry point.
@@ -68,7 +68,7 @@ absent, and has no operator-facing entry point.
 
 ## 4. Non-goals
 
-- **Publishing the `@rbrasier/*` packages to npm.** `/publish` is structured for
+- **Publishing the `@wayfinder/*` packages to npm.** `/publish` is structured for
   two artifact streams, but only the container stream ships here. See §11.
 - **Kubernetes manifests or a Helm chart.** No demand yet; the image makes them
   cheap to add later.
@@ -200,7 +200,7 @@ Related planning docs:
 
 ## 11. Out of scope / future work
 
-- **npm publishing of `@rbrasier/*`.** The changesets config is live and the
+- **npm publishing of `@wayfinder/*`.** The changesets config is live and the
   packages are publishable, but shipping it needs an `NPM_TOKEN`, a
   changeset-per-PR convention, and a decision on whether framework versions track
   the app's `VERSION`. Its own phase, its own MINOR bump. `/publish` should be
@@ -226,7 +226,7 @@ Related planning docs:
   it does, the Dockerfile needs a build-time stub value and that must be
   documented, not hidden.
 - **Does `pnpm prune --prod` yield a working image once ADR-047 lands?** The
-  framework libraries are `peerDependencies` of `@rbrasier/adapters` but real
+  framework libraries are `peerDependencies` of `@wayfinder/adapters` but real
   `dependencies` of `apps/web` and `apps/api`, so pruning *should* keep them. Not
   verified. If pruning proves unsafe, ADR-047 still stands on its multi-instance
   merits and the image simply stays large.

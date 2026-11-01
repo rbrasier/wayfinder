@@ -13,17 +13,27 @@ export interface SentApprovalActionsInput {
   // The card is also mounted in the approver's decision modal, where the viewer
   // is the approver and the request is not theirs to manage.
   inChat: boolean;
+  // Whether this approval step's author allows an approval that happened
+  // elsewhere to be recorded against it (ADR-055 §4). Absent means allowed,
+  // matching the runtime default for a node authored before the setting.
+  offSystemAllowed?: boolean;
 }
 
 export interface SentApprovalActions {
   canEmail: boolean;
   canUpdateApprover: boolean;
   canWithdraw: boolean;
+  canNominateOffSystem: boolean;
 }
 
 export const sentApprovalActions = (input: SentApprovalActionsInput): SentApprovalActions => {
   if (!input.inChat) {
-    return { canEmail: false, canUpdateApprover: false, canWithdraw: false };
+    return {
+      canEmail: false,
+      canUpdateApprover: false,
+      canWithdraw: false,
+      canNominateOffSystem: false,
+    };
   }
 
   const known = input.viewerUserId !== null;
@@ -42,5 +52,11 @@ export const sentApprovalActions = (input: SentApprovalActionsInput): SentApprov
     // would drag the session back past a completed signature, which is not what
     // "this is with the wrong person" means — Update approver is that answer.
     canWithdraw: raisedRequest || input.isAdmin,
+    // Owner or requester, matching the server (ADR-055 §3). The step's own
+    // switch overrides all three: a node whose author forbade off-system
+    // recording offers it to nobody, admins included, because the refusal is
+    // the flow's rule rather than a permission level.
+    canNominateOffSystem:
+      input.offSystemAllowed !== false && (ownsSession || raisedRequest || input.isAdmin),
   };
 };

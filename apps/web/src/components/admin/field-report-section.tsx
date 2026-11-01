@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { coalesceValue, parseNumeric } from "@rbrasier/domain";
-import type { FieldReport, FieldReportSessionRow } from "@rbrasier/domain";
-import type { SessionSummary } from "@rbrasier/application";
+import { coalesceValue, parseNumeric } from "@wayfinder/domain";
+import type { FieldReport, FieldReportSessionRow } from "@wayfinder/domain";
+import type { SessionSummary } from "@wayfinder/application";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -493,6 +493,7 @@ export function FieldReportSection({
           <div>
             <span className={labelStyle}>Date range</span>
             <select
+              aria-label="Date range"
               className={selectStyle}
               value={datePreset}
               onChange={(event) => applyFilters({ datePreset: event.target.value as DatePreset })}
@@ -507,6 +508,7 @@ export function FieldReportSection({
           <div>
             <span className={labelStyle}>Filter on</span>
             <select
+              aria-label="Filter on"
               className={selectStyle}
               value={filterColumnKey ?? ""}
               onChange={(event) =>
@@ -531,6 +533,7 @@ export function FieldReportSection({
               <div>
                 <span className={labelStyle}>Operator</span>
                 <select
+                  aria-label="Operator"
                   className={selectStyle}
                   value={filterOperator}
                   onChange={(event) => applyFilters({ filterOperator: event.target.value as FilterOperator })}
@@ -542,6 +545,7 @@ export function FieldReportSection({
               <div>
                 <span className={labelStyle}>Value</span>
                 <Input
+                  aria-label="Value"
                   type="number"
                   className="h-9 w-32"
                   placeholder="0"
@@ -556,6 +560,7 @@ export function FieldReportSection({
             <div>
               <span className={labelStyle}>Value</span>
               <select
+                aria-label="Value"
                 className={selectStyle}
                 value={filterThreshold}
                 onChange={(event) => applyFilters({ filterThreshold: event.target.value })}
@@ -571,6 +576,7 @@ export function FieldReportSection({
             <div>
               <span className={labelStyle}>Value</span>
               <select
+                aria-label="Value"
                 className={selectStyle}
                 value={filterThreshold}
                 onChange={(event) => applyFilters({ filterThreshold: event.target.value })}

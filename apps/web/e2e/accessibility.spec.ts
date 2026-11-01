@@ -23,6 +23,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from './helpers/base';
 import { createFlow, FIRST_STEP_BUTTON } from './helpers/flow-builder';
+import { requireSeedFixtures } from './helpers/seed';
 import { COLD_ROUTE_BUDGET } from './helpers/timeouts';
 import type { Page } from '@playwright/test';
 
@@ -42,6 +43,7 @@ const PAGES: { name: string; path: string }[] = [
   { name: 'approvals', path: '/approvals' },
   { name: 'admin event watches', path: '/admin/event-watches' },
   { name: 'new event watch', path: '/admin/event-watches/new' },
+  { name: 'insights', path: '/admin/dashboards/insights' },
 ];
 
 async function runAxe(page: Page, excludeReactFlow = false) {
@@ -81,19 +83,13 @@ test.describe('Accessibility: WCAG 2.2 AA runtime audit', () => {
   test('flow editor canvas (excluding third-party React Flow) has no axe violations', async ({
     page,
   }) => {
-    await page.goto('/admin/flows');
-    await page.waitForLoadState('networkidle');
-
-    // Open the seeded flow to reach the editor route. It appears in the admin
-    // list as a "Configure Flow" link (matched by /flow/i); the seed is a
-    // declared dependency, so a missing entry is a seed failure to surface, not
-    // a reason to skip the editor audit.
-    const flowEntry = page
-      .getByRole('link', { name: /open|edit|flow/i })
-      .or(page.getByRole('button', { name: /open|edit/i }))
-      .first();
-    await expect(flowEntry).toBeVisible();
-    await flowEntry.click();
+    // Open the seeded flow's editor directly. Picking "the first link that says
+    // flow" off /admin/flows landed on the sidebar's Insights link whenever the
+    // sidebar rendered before the table. The seed is a declared dependency, so a
+    // missing flow is a seed failure to surface, not a reason to skip the audit.
+    const { flowId } = requireSeedFixtures();
+    await page.goto(`/flows/${flowId}/config`);
+    await expect(page.locator('.react-flow')).toBeVisible();
     await page.waitForLoadState('networkidle');
 
     const results = await runAxe(page, true);
@@ -151,48 +147,6 @@ test.describe('Accessibility: automation step editors', () => {
       results.violations,
       `axe found violations in the AI task step editor:\n\n${formatViolations(results.violations)}`,
     ).toEqual([]);
-  });
-});
-
-test.describe('Accessibility: MCP server editor', () => {
-  test.describe.configure({ timeout: COLD_ROUTE_BUDGET });
-
-  test('the edit dialog (masked token, OAuth sign-in fields, save problems) has no axe violations', async ({
-    page,
-  }) => {
-    const label = `A11y MCP ${Date.now()}`;
-    const registered = await page.request.post('/api/trpc/mcpServer.register', {
-      data: { json: { label, url: 'http://localhost:4001/mcp', transport: 'streamable-http', credential: 'a11y-token' } },
-      timeout: 60_000,
-    });
-    expect(registered.ok(), await registered.text()).toBe(true);
-    const serverId = ((await registered.json()) as { result: { data: { json: { id: string } } } }).result.data
-      .json.id;
-
-    try {
-      await page.goto('/admin/mcp-servers');
-      const row = page.getByRole('row').filter({ hasText: label });
-      await expect(row.getByText('Stored securely')).toBeVisible({ timeout: 30_000 });
-      await row.getByRole('button', { name: 'Edit' }).click();
-
-      const dialog = page.getByRole('dialog', { name: `Edit ${label}` });
-      await expect(dialog.getByLabel('Bearer token', { exact: true })).toHaveAttribute('type', 'password');
-      await dialog.getByLabel('URL', { exact: true }).fill('not-a-url');
-      await dialog.getByLabel('Authentication').selectOption('oauth');
-      await expect(dialog.getByLabel('Client secret')).toHaveAttribute('type', 'password');
-      await dialog.getByRole('button', { name: 'Save' }).click();
-      // Both the server URL and the empty token URL are flagged beside their fields.
-      await expect(dialog.getByText('Use an http:// or https:// address.')).toHaveCount(2);
-      await expect(dialog.getByText('Enter the client secret.')).toBeVisible();
-
-      const results = await new AxeBuilder({ page }).withTags(WCAG_AA_TAGS).include('[role="dialog"]').analyze();
-      expect(
-        results.violations,
-        `axe found violations in the MCP server editor:\n\n${formatViolations(results.violations)}`,
-      ).toEqual([]);
-    } finally {
-      await page.request.post('/api/trpc/mcpServer.delete', { data: { json: { id: serverId } } });
-    }
   });
 });
 

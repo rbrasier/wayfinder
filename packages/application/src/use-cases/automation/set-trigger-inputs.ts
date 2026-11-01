@@ -6,7 +6,7 @@ import {
   type IFlowRepository,
   type Result,
   type TriggerInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Saves the inputs a flow expects from a watch or webhook (ADR-064 §1). They
 // take effect for new runs once the flow is next published, like any edit.

@@ -4,6 +4,7 @@ import {
   boolean,
   check,
   customType,
+  date,
   foreignKey,
   index,
   integer,
@@ -18,16 +19,18 @@ import {
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
-import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@rbrasier/domain";
+import type { ExtractionFieldResult, FlowPermission, FlowSnapshot, FlowVersionStatus, FlowVisibility } from "@wayfinder/domain";
 import type {
   AiTurnPayload,
   PendingExecutions,
+  SeedContextItem,
+  SeedStepOutput,
   SessionDocument,
   SessionRunError,
   SessionTriggerPayload,
   StepOutputField,
   TriggerInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { core_users } from "./core";
 
 type StoredContextDoc = {
@@ -173,6 +176,10 @@ export const app_sessions = pgTable(
     status: text("status", { enum: ["active", "complete", "abandoned", "cancelled"] })
       .notNull()
       .default("active"),
+    // Live chat or disposable test run (ADR-048). Defaulted rather than
+    // back-filled: every existing row is a live session, and every production
+    // read filters on this, so a missed predicate is a leak rather than a crash.
+    mode: text("mode", { enum: ["live", "test"] }).notNull().default("live"),
     title: text("title"),
     current_node_id: uuid("current_node_id"),
     awaiting_confirmation_node_id: uuid("awaiting_confirmation_node_id"),
@@ -210,12 +217,15 @@ export const app_sessions = pgTable(
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
-    by_user: index("app_sessions_user_id_created_at_idx").on(t.user_id, t.created_at),
+    // `mode` sits inside the two indexes that back the filtered reads rather
+    // than getting one of its own: it is 'live' for almost every row, so a
+    // standalone index on it would never be chosen (ADR-048 §4).
+    by_user: index("app_sessions_user_id_created_at_idx").on(t.user_id, t.mode, t.created_at),
     by_trigger_source: index("app_sessions_trigger_source_id_created_at_idx").on(
       t.trigger_source_id,
       t.created_at,
     ),
-    by_flow: index("app_sessions_flow_id_idx").on(t.flow_id),
+    by_flow: index("app_sessions_flow_id_idx").on(t.flow_id, t.mode),
     by_flow_version: index("app_sessions_flow_version_id_idx").on(t.flow_version_id),
   }),
 );
@@ -482,6 +492,17 @@ export const app_session_approvals = pgTable(
     // same row — one column would have the decision overwrite the request.
     request_message: text("request_message"),
     record_snapshot: jsonb("record_snapshot").$type<Record<string, unknown>>(),
+    // Set only when the decision was recorded off system (ADR-055). A `date`
+    // rather than a timestamp: the evidence names a day, and a column that
+    // carried a clock time would invite one to be invented.
+    off_system_approved_on: date("off_system_approved_on"),
+    off_system_evidence_filename: text("off_system_evidence_filename"),
+    off_system_evidence_mime_type: text("off_system_evidence_mime_type"),
+    off_system_evidence_size_bytes: integer("off_system_evidence_size_bytes"),
+    off_system_evidence_storage_path: text("off_system_evidence_storage_path"),
+    // Who entered the nomination. Its foreign key is declared below by explicit
+    // name, for the same 63-character reason as suggested_approver_user_id.
+    off_system_nominated_by_user_id: uuid("off_system_nominated_by_user_id"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -495,6 +516,11 @@ export const app_session_approvals = pgTable(
       columns: [t.suggested_approver_user_id],
       foreignColumns: [core_users.id],
       name: "app_session_approvals_suggested_approver_user_id_fk",
+    }).onDelete("set null"),
+    off_system_nominator_fk: foreignKey({
+      columns: [t.off_system_nominated_by_user_id],
+      foreignColumns: [core_users.id],
+      name: "app_session_approvals_off_system_nominator_fk",
     }).onDelete("set null"),
   }),
 );
@@ -616,13 +642,20 @@ export const app_extraction_runs = pgTable(
     flow_id: uuid("flow_id")
       .notNull()
       .references(() => app_flows.id, { onDelete: "cascade" }),
-    flow_version_id: uuid("flow_version_id")
-      .notNull()
-      .references(() => app_flow_versions.id, { onDelete: "restrict" }),
+    // Null for an analyse run, which drafts the schema the first version will be
+    // built from, so there is no version to pin it to (ADR-060 §2).
+    flow_version_id: uuid("flow_version_id").references(() => app_flow_versions.id, {
+      onDelete: "restrict",
+    }),
     initiated_by_user_id: uuid("initiated_by_user_id").references(() => core_users.id, {
       onDelete: "set null",
     }),
-    mode: text("mode", { enum: ["sample", "full"] }).notNull().default("full"),
+    mode: text("mode", { enum: ["sample", "full", "analyse"] }).notNull().default("full"),
+    // When a worker took this analyse run. Sample and full runs claim document
+    // rows instead and leave this null. A claim older than the engine's stale
+    // window is reclaimable, which is how a run survives the worker dying
+    // mid-analysis (ADR-060 §4).
+    analysis_claimed_at: timestamp("analysis_claimed_at", { withTimezone: true }),
     status: text("status", {
       enum: ["running", "paused_preview", "paused_cap", "complete", "partial", "cancelled"],
     })
@@ -682,6 +715,9 @@ export const app_extraction_draft_documents = pgTable(
     tree_path: text("tree_path").notNull(),
     storage_key: text("storage_key").notNull(),
     mime_type: text("mime_type").notNull(),
+    // Readable text characters measured at upload (issue #335). Null for rows
+    // staged before it was recorded, or when extraction failed at upload.
+    text_length: integer("text_length"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -720,5 +756,41 @@ export const app_extraction_documents = pgTable(
     // Backs the worker's FOR UPDATE SKIP LOCKED claim (pending rows per run).
     by_run_status: index("app_extraction_documents_run_status_idx").on(t.run_id, t.status),
     by_record: index("app_extraction_documents_record_id_idx").on(t.record_id),
+  }),
+);
+
+// A saved, re-runnable seed for a flow test (ADR-048). Rows are scoped to their
+// creator on every read: a fixture cloned from a live session can hold real
+// personal or commercially sensitive values, and this is the boundary that
+// contains it. Deliberately not shared with everyone who can edit the flow.
+export const app_flow_test_fixtures = pgTable(
+  "app_flow_test_fixtures",
+  {
+    id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+    flow_id: uuid("flow_id")
+      .notNull()
+      .references(() => app_flows.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // The node the fixture seeds up to. Not a foreign key: a fixture should
+    // survive its node being deleted and re-created during authoring, and the
+    // seed validator already reports a node that is no longer in the flow.
+    start_node_id: uuid("start_node_id").notNull(),
+    gathered_context: jsonb("gathered_context")
+      .$type<SeedContextItem[]>()
+      .notNull()
+      .default([]),
+    step_outputs: jsonb("step_outputs").$type<SeedStepOutput[]>().notNull().default([]),
+    created_by_user_id: uuid("created_by_user_id")
+      .notNull()
+      .references(() => core_users.id, { onDelete: "cascade" }),
+    created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // Backs the only listing there is: this flow's fixtures, for this author.
+    by_flow_creator: index("app_flow_test_fixtures_flow_id_created_by_idx").on(
+      t.flow_id,
+      t.created_by_user_id,
+    ),
   }),
 );

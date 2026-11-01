@@ -20,7 +20,7 @@ import {
   type StreamObjectInput,
   type StreamTextInput,
   type TokenUsage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 interface CapEvaluation {
   budget: Budget;

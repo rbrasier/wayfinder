@@ -1,5 +1,5 @@
-import { ok } from "@rbrasier/domain";
-import type { IDocumentTypeDetector, Result } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
+import type { IDocumentTypeDetector, Result } from "@wayfinder/domain";
 import { sniffMimeType } from "./mime-sniff";
 
 // Types a loose upload the same way a zip entry is typed, so a file is handled

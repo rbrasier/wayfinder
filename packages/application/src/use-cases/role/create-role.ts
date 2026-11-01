@@ -5,7 +5,7 @@ import {
   type IRoleRepository,
   type Result,
   type Role,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 const RESERVED_KEYS = new Set<string>(Object.values(SYSTEM_ROLE_KEYS));
 

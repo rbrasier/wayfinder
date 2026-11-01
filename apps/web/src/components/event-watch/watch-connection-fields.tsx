@@ -1,6 +1,6 @@
 "use client";
 
-import type { WatchAuthType, WatchHttpMethod } from "@rbrasier/domain";
+import type { WatchAuthType, WatchHttpMethod } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";

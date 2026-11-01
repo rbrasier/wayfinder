@@ -1,4 +1,4 @@
-import { domainError, err, type IRoleRepository, type Result } from "@rbrasier/domain";
+import { domainError, err, type IRoleRepository, type Result } from "@wayfinder/domain";
 
 export class DeleteRole {
   constructor(private readonly roles: IRoleRepository) {}

@@ -6,6 +6,7 @@ import {
   ListApprovals,
   ListApprovalsWithContext,
   LoadPendingApproval,
+  RecordOffSystemApproval,
   ResolveApprovalSubject,
   ReassignApproval,
   ResolveDecisionNotifyTargets,
@@ -13,10 +14,11 @@ import {
   WithdrawApproval,
   type UpdateDocumentFields,
   type UpdateStructuredStepOutput,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import type {
   IApprovalRepository,
   IAuditLogger,
+  IClock,
   IDocumentChunkRepository,
   IDocumentGenerator,
   IEmbeddingsProvider,
@@ -32,7 +34,7 @@ import type {
   IUnitOfWork,
   IUserRepository,
   Sha256Hex,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface ApprovalUseCaseDeps {
   unitOfWork: IUnitOfWork;
@@ -52,6 +54,7 @@ export interface ApprovalUseCaseDeps {
   embeddings: IEmbeddingsProvider;
   documentChunks: IDocumentChunkRepository;
   sha256Hex: Sha256Hex;
+  clock: IClock;
   updateDocumentFields: UpdateDocumentFields;
   // An approver correcting a structured record (an AI task's output) has no
   // document to edit, so the record path is wired alongside (ADR-065 §3).
@@ -85,9 +88,38 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
     deps.objectStorage,
   );
 
+  // Shared with the off-system path, which delegates the decision itself rather
+  // than duplicating the commit, advance, projection, signature and
+  // notification (ADR-055 §2).
+  const decideApproval = new DecideApproval(
+    deps.unitOfWork,
+    deps.approvals,
+    deps.sessions,
+    deps.flowEdges,
+    deps.sessionStepOutputs,
+    deps.auditLogger,
+    deps.notifyOnApprovalDecided,
+    deps.sessionMessages,
+    deps.users,
+    deps.flowNodes,
+    deps.sha256Hex,
+    resolveApprovalSubject,
+    applyApprovalSignature,
+  );
+
   return {
     resolveApprovalSubject,
     applyApprovalSignature,
+    decideApproval,
+    recordOffSystemApproval: new RecordOffSystemApproval(
+      deps.approvals,
+      deps.sessions,
+      deps.flowNodes,
+      deps.objectStorage,
+      deps.auditLogger,
+      decideApproval,
+      deps.clock,
+    ),
     approverEditSubjectFields: new ApproverEditSubjectFields(
       deps.approvals,
       deps.users,
@@ -104,6 +136,7 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.flowNodes,
       deps.reportingLineResolver,
       deps.users,
+      deps.sessions,
       deps.embeddings,
       deps.documentChunks,
       deps.languageModel,
@@ -112,21 +145,6 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.approvals,
       deps.auditLogger,
       deps.notifyOnApprovalRequested,
-    ),
-    decideApproval: new DecideApproval(
-      deps.unitOfWork,
-      deps.approvals,
-      deps.sessions,
-      deps.flowEdges,
-      deps.sessionStepOutputs,
-      deps.auditLogger,
-      deps.notifyOnApprovalDecided,
-      deps.sessionMessages,
-      deps.users,
-      deps.flowNodes,
-      deps.sha256Hex,
-      resolveApprovalSubject,
-      applyApprovalSignature,
     ),
     withdrawApproval: new WithdrawApproval(
       deps.unitOfWork,

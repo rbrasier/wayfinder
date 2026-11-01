@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RunAiTaskNodeInput } from "@rbrasier/application";
+import type { RunAiTaskNodeInput } from "@wayfinder/application";
 
 const { runMcpToolPrepass, recordAudit } = vi.hoisted(() => {
   const recordAudit = vi.fn(async () => {});

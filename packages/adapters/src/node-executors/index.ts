@@ -1,4 +1,4 @@
-import type { ILanguageModel, INodeExecutor } from "@rbrasier/domain";
+import type { ILanguageModel, INodeExecutor } from "@wayfinder/domain";
 import { MockNodeExecutor } from "./mock-node-executor";
 import { N8nNodeExecutor } from "./n8n-node-executor";
 

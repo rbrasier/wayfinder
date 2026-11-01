@@ -1,6 +1,6 @@
-import type { LoginNoticeConfig, LoginNoticeMode } from "@rbrasier/domain";
+import type { LoginNoticeConfig, LoginNoticeMode } from "@wayfinder/domain";
 
-// Decisions behind the sign-in notice gate and its settings card (ADR-060 §5),
+// Decisions behind the sign-in notice gate and its settings card (ADR-061 §5),
 // kept out of the components so they can be asserted without rendering.
 
 export interface LoginNoticeStatusView {

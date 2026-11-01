@@ -3,12 +3,13 @@ import {
   err,
   ok,
   SAMPLE_MAX_DOCUMENTS,
+  type ExtractionPromptBudget,
   type ExtractionRecord,
   type ExtractionSchema,
   type IDocumentExtractor,
   type ILanguageModel,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { extractDocumentFields } from "./extract-document-fields";
 import {
   oneRecordPerFile,
@@ -40,6 +41,9 @@ export interface RunSampleExtractionInput {
   documents: SampleInputDocument[];
   userId?: string | null;
   flowId?: string | null;
+  // The admin-configured sample ceiling (issue #335); the code default otherwise.
+  maxDocuments?: number;
+  budget?: ExtractionPromptBudget;
 }
 
 export interface SampleExtractionResult {
@@ -73,11 +77,12 @@ export class RunSampleExtraction {
     if (input.documents.length === 0) {
       return err(domainError("VALIDATION_FAILED", "Upload at least one document to sample."));
     }
-    if (input.documents.length > SAMPLE_MAX_DOCUMENTS) {
+    const maxDocuments = input.maxDocuments ?? SAMPLE_MAX_DOCUMENTS;
+    if (input.documents.length > maxDocuments) {
       return err(
         domainError(
           "VALIDATION_FAILED",
-          `A sample runs over at most ${SAMPLE_MAX_DOCUMENTS} documents. Reduce the selection, then run the full batch (coming in Phase 2).`,
+          `A sample runs over at most ${maxDocuments} documents. Reduce the selection, then run the full batch.`,
         ),
       );
     }
@@ -148,6 +153,7 @@ export class RunSampleExtraction {
 
     for (const [index, group] of groups.entries()) {
       const documentTexts = group.fileIds.map((fileId) => ({
+        documentId: fileId,
         filename: documentById.get(fileId)?.filename ?? fileId,
         text: textById.get(fileId) ?? "",
       }));
@@ -160,6 +166,7 @@ export class RunSampleExtraction {
         instruction: input.schema.input.guidance,
         userId: input.userId,
         flowId: input.flowId,
+        budget: input.budget,
       });
       if (fields.error) return fields;
 

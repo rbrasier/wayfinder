@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDefaultBrandingConfig } from "@rbrasier/domain";
+import { createDefaultBrandingConfig } from "@wayfinder/domain";
 import { buildBrandStyleSheet } from "./brand-style";
 
 describe("buildBrandStyleSheet", () => {

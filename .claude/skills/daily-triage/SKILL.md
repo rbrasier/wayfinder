@@ -168,7 +168,7 @@ Read `CLAUDE.md` → **Release Branching** and `CONTRIBUTING.md` → §2, and ho
 two values for the whole run:
 
 - `RELEASE_BRANCH` — the `Current release branch:` line, verbatim. Do not
-  assume `release/alpha-2`
+  assume `release/alpha-3`
 - `DEFAULT_BRANCH` — `main`
 
 ---
@@ -207,7 +207,7 @@ explanation.
 
 ```markdown
 <!-- wayfinder-triage:closed:v1 -->
-@<originator> **Fixed and shipped** — merged in #217 on 2026-09-08, into `release/alpha-2`
+@<originator> **Fixed and shipped** — merged in #217 on 2026-09-08, into `release/alpha-3`
 
 <one or two sentences, in business terms, on what now behaves differently>
 

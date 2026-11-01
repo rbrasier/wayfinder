@@ -5,7 +5,7 @@ import {
   SummariseTemplate,
   UpdateDocumentFields,
   UpdateStructuredStepOutput,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import type {
   IApprovalRepository,
   IAuditLogger,
@@ -16,7 +16,8 @@ import type {
   ISessionMessageRepository,
   ISessionRepository,
   ISessionStepOutputRepository,
-} from "@rbrasier/domain";
+  IValueSetProvider,
+} from "@wayfinder/domain";
 
 export interface DocumentUseCaseDeps {
   documentGenerator: IDocumentGenerator;
@@ -28,6 +29,7 @@ export interface DocumentUseCaseDeps {
   flowNodes: IFlowNodeRepository;
   approvals: IApprovalRepository;
   auditLogger: IAuditLogger;
+  valueSetProvider: IValueSetProvider;
 }
 
 // The document / structured-record use-case cluster, factored out of the main
@@ -40,6 +42,7 @@ export const buildDocumentUseCases = (deps: DocumentUseCaseDeps) => ({
     deps.languageModel,
     deps.sessionMessages,
     deps.sessionStepOutputs,
+    deps.valueSetProvider,
   ),
   captureStructuredStepOutput: new CaptureStructuredStepOutput(
     deps.languageModel,

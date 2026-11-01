@@ -6,7 +6,7 @@ import {
   type ISessionRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // ~69 days. High enough for any real process, low enough that a mistyped figure
 // cannot swing a flow's median into nonsense.

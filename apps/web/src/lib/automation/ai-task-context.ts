@@ -3,8 +3,8 @@ import {
   type AiTaskNodeConfig,
   type ConversationalNodeConfig,
   type SessionTriggerPayload,
-} from "@rbrasier/domain";
-import type { RunAiTaskNodeInput } from "@rbrasier/application";
+} from "@wayfinder/domain";
+import type { RunAiTaskNodeInput } from "@wayfinder/application";
 import type { getContainer } from "@/lib/container";
 import { resolveIsAdmin } from "@/lib/chat/prompt-context";
 import { runMcpToolPrepass } from "@/app/api/chat/[sessionId]/stream/mcp-turn-helpers";
@@ -67,6 +67,7 @@ export const buildAiTaskContext = async (container: Container, input: RunAiTaskN
     flowId: input.flow.id,
     sessionId: input.session.id,
     nodeId: input.node.id,
+    publishEvent: (event) => void container.services.sessionEvents.publish(input.session.id, event),
     onActivity: publishStepActivity(container, input.session.id, input.node.id),
   });
   await toolPrepass.recordAudit();

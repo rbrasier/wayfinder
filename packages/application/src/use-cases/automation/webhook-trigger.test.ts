@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type Flow, type FlowTrigger, type FlowTriggerSettings, type Result } from "@rbrasier/domain";
+import { ok, type Flow, type FlowTrigger, type FlowTriggerSettings, type Result } from "@wayfinder/domain";
 import { ConfigureWebhookTrigger, RotateWebhookToken, SetWebhookHmac, type WebhookActor } from "./webhook-trigger";
 
 class InMemoryTriggers {

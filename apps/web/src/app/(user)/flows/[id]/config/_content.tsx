@@ -30,7 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ContextDocsStrip } from "@/components/canvas/context-docs-strip";
-import { FlowCanvasViewport } from "@/components/canvas/flow-canvas-viewport";
+import { CanvasRegion } from "./_canvas-region";
 import type { NodeConfigType, NodeConfigValues } from "@/components/canvas/node-config-modal";
 import { NodeConfigModal } from "@/components/canvas/node-config-modal";
 import { NodeTypePickerModal } from "@/components/canvas/node-type-picker-modal";
@@ -49,7 +49,7 @@ import type {
   FlowContextDoc,
   PermissionKey,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { computeStepNumbers } from "@/lib/flow-utils";
 import { followRenameOnCanvas } from "@/lib/canvas/follow-rename";
 import type { NextStepAnchor } from "@/lib/canvas/canvas-guidance";
@@ -59,10 +59,12 @@ import {
   toRfEdge,
   toRfNode,
 } from "@/lib/canvas/rf-adapters";
+import { useFlowTestLauncher } from "./_use-flow-test-launcher";
 import { BranchRuleModal } from "@/components/canvas/branch-rule-modal";
 import { FlowConfigHeader } from "./_flow-config-header";
 import { useBranchRules } from "./_use-branch-rules";
 import { usePriorStepViews } from "./_use-prior-step-views";
+import { useStepFeatureFlags } from "./_use-step-feature-flags";
 import { AUTOMATION_NODE_TYPES, AutomationStepEditor } from "./_automation-step-editor";
 import type { AutomationStepType } from "@/components/canvas/automation-step-modal";
 import { configValuesForNode } from "./_node-config-values";
@@ -98,16 +100,12 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const canPublishToEveryone =
     isAdmin ||
     ((meQuery.data?.permissions ?? []) as PermissionKey[]).includes("workflow:publish_to_everyone");
-  const autoNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "auto_node" }).data ?? false;
-  const scheduledNodeEnabled =
-    trpc.featureFlag.isEnabledForMe.useQuery({ key: "scheduled_node" }).data ?? false;
-  const mcpEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "mcp" }).data ?? false;
-  const skillsEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "skills" }).data ?? false;
-  const aiTaskNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "ai_task_node" }).data ?? false;
-  const emailNodeEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "email_node" }).data ?? false;
+  const { autoNodeEnabled, scheduledNodeEnabled, mcpEnabled, skillsEnabled, aiTaskNodeEnabled, emailNodeEnabled } =
+    useStepFeatureFlags();
   const [editingMetadata, setEditingMetadata] = useState(false);
 
   const [configOpen, setConfigOpen] = useState(false);
+  const flowTest = useFlowTestLauncher(flowId, rfNodes);
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   // The node just created by the picker / a drag-out. If the author cancels the
@@ -620,6 +618,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setFlowMenuOpen={setFlowMenuOpen}
         flowMenuRef={flowMenuRef}
         onAddStep={handleAddStep}
+        onTestFlow={flowTest.openFlowTest}
         onShowExplainer={() => setExplainerOpen(true)}
         updateFlowMutation={updateFlowMutation}
         refetchVersionStatus={() => void versionStatusQuery.refetch()}
@@ -628,7 +627,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         setDeleteConfirmOpen={setDeleteConfirmOpen}
       />
 
-      <FlowCanvasViewport
+      <CanvasRegion
+        flow={{ id: flowId, status: flowStatus }}
         nodes={displayNodes}
         edges={displayEdges}
         onNodesChange={onNodesChange}
@@ -646,6 +646,8 @@ function CanvasInner({ flowId }: { flowId: string }) {
         highlightFirstStep={highlightFirstStep}
         staleReferences={staleReferences}
       />
+
+      {flowTest.modal}
 
       <FlowExplainerCarousel
         open={explainerOpen}
@@ -666,6 +668,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         open={typePickerOpen}
         autoNodeEnabled={autoNodeEnabled}
         scheduledNodeEnabled={scheduledNodeEnabled}
+        mcpNodeEnabled={mcpEnabled}
         aiTaskNodeEnabled={aiTaskNodeEnabled}
         emailNodeEnabled={emailNodeEnabled}
         onSelect={handleSelectNodeType}
@@ -695,6 +698,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         initialValues={initialConfigValues}
         onSave={handleConfigSave}
         onDelete={editingNodeId ? handleNodeDelete : undefined}
+        onTestStep={editingNodeId ? () => flowTest.openStepTest(editingNodeId) : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}

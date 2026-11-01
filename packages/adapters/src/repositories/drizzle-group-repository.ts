@@ -10,7 +10,7 @@ import {
   type NewGroup,
   type NewGroupMembership,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { admin_group_members, admin_groups } from "../db/schema/admin";

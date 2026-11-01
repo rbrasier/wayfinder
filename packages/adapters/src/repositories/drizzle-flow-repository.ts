@@ -10,7 +10,7 @@ import {
   type IFlowRepository,
   type NewFlow,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_flows } from "../db/schema/wayfinder";

@@ -10,7 +10,7 @@ import {
   type SendEmailInput,
   type Session,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { NotifyUnattendedIncident } from "./notify-unattended-incident";
 
 class InMemoryOutbox implements INotificationLogRepository {

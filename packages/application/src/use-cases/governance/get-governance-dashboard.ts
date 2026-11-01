@@ -9,7 +9,7 @@ import {
   type IUserRepository,
   type IUsageRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface GetGovernanceDashboardInput {
   periodDays?: number;

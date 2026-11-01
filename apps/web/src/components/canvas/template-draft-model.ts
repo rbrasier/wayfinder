@@ -1,4 +1,4 @@
-import type { DraftEvidence } from "@rbrasier/domain";
+import type { DraftEvidence } from "@wayfinder/domain";
 import type { AnnotationDraft } from "@/lib/template-annotation";
 import {
   MAX_EXAMPLE_COUNT,

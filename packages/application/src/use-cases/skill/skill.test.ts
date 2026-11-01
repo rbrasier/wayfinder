@@ -1,4 +1,4 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   ConversationalNodeConfig,
   ISkillParser,
@@ -10,7 +10,7 @@ import type {
   Skill,
   SkillStatus,
   SkillUpdate,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   ArchiveSkill,

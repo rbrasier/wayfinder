@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PermissionKey, SessionStatus } from "@rbrasier/domain";
+import type { PermissionKey, SessionStatus } from "@wayfinder/domain";
 import {
   RECENT_CHATS_LIMIT,
   advancedFlowSettingsStartsCollapsed,

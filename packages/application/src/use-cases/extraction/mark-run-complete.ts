@@ -6,7 +6,7 @@ import {
   type IAuditLogger,
   type IExtractionRunRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface MarkRunCompleteInput {
   runId: string;

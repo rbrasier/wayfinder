@@ -7,7 +7,7 @@ import {
   type Result,
   type ScheduleRun,
   type ScheduleRunView,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { desc, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import {
@@ -70,7 +70,12 @@ export class DrizzleScheduleRunRepository implements IScheduleRunRepository {
         .from(app_session_schedule_runs)
         .leftJoin(app_flows, eq(app_flows.id, app_session_schedule_runs.flow_id))
         .leftJoin(app_flow_nodes, eq(app_flow_nodes.id, app_session_schedule_runs.node_id))
-        .leftJoin(app_sessions, eq(app_sessions.id, app_session_schedule_runs.session_id))
+        .innerJoin(app_sessions, eq(app_sessions.id, app_session_schedule_runs.session_id))
+        // The admin-facing run history is a production surface, so a fire on a
+        // test session stays out of it (ADR-048 §4). Deliberately not applied to
+        // claimDue in drizzle-schedule-repository: filtering due-schedule
+        // selection would make a scheduled node impossible to test.
+        .where(eq(app_sessions.mode, "live"))
         .orderBy(desc(app_session_schedule_runs.created_at))
         .limit(limit);
 

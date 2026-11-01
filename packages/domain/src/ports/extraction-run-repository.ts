@@ -5,11 +5,25 @@ import type { Result } from "../result";
 
 export interface CreateRunInput {
   flowId: string;
-  flowVersionId: string;
+  // Null only for an analyse run, which drafts the schema the first version will
+  // be built from (ADR-060 §2). Sample and full runs always supply one.
+  flowVersionId: string | null;
   initiatedByUserId: string;
   mode: RunMode;
   // 0 disables the preview pause (phase §6).
   previewBoundary: number;
+  // Set at creation for an analyse run, whose work is known up front. Sample and
+  // full runs leave it out and derive the total from the documents added.
+  totalCount?: number;
+}
+
+// How an analysis finished: how many documents it read and how many it could not
+// (ADR-060 §5). `partial` means some document was unreadable, whether or not a
+// field set was still produced from the rest.
+export interface AnalysisOutcome {
+  status: "complete" | "partial";
+  documentsRead: number;
+  documentsUnreadable: number;
 }
 
 // A file to ingest as the unit of work. The run's total is derived from the
@@ -68,6 +82,21 @@ export interface IExtractionRunRepository {
   // Worker loop.
   listClaimableRunIds(): Promise<Result<string[]>>;
   claimPendingDocuments(runId: string, limit: number): Promise<Result<ExtractionDocument[]>>;
+
+  // Analyse runs claim the run itself rather than document rows, because the
+  // proposal call is one indivisible step over all the documents (ADR-060 §4).
+  // Returns null when another worker holds the claim, so an overlapping tick
+  // never double-spends. A claim older than `staleAfterMs` is reclaimable, which
+  // is how a run survives the worker dying mid-analysis.
+  claimAnalysisRun(runId: string, staleAfterMs: number): Promise<Result<ExtractionRun | null>>;
+  settleAnalysisRun(
+    runId: string,
+    outcome: AnalysisOutcome,
+    costUsdDelta: number,
+  ): Promise<Result<ExtractionRun>>;
+  // Releases a claim without settling, so a failure that is worth retrying does
+  // not leave the run stuck until its claim goes stale.
+  releaseAnalysisClaim(runId: string): Promise<Result<void>>;
   countByStatus(runId: string): Promise<Result<RunStatusCounts>>;
 
   // Results: attach a document's extracted fields to its record, then settle the

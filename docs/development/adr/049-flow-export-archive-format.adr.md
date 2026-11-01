@@ -1,11 +1,19 @@
 # ADR-049 — Flow Portability: A Zip Archive Around the Existing Snapshot
 
-- **Status**: Proposed (scoped by `flow-portability.prd.md`)
+- **Status**: Proposed (scoped by `flow-portability.prd.md`, target **0.30.0** on
+  `main`)
 - **Date**: 2026-08-11
-- **Builds on**: ADR-015 (flow versioning snapshots — the serialisation this
-  reuses rather than reinvents), ADR-006 (flow schema), ADR-031 (skills library),
-  ADR-032 (MCP flags and transport — the tool references an archive must carry),
-  ADR-033 (immutable audit log — export is an audited event)
+- **Builds on**: ADR-015 *Flow Versioning via Immutable Snapshots* (the
+  serialisation this reuses rather than reinvents), ADR-006 *Wayfinder Flow and
+  Session Schema* (jsonb node config — what lets the unresolved-dependency flag
+  ship without a migration), ADR-033 *Immutable Audit Log & Legal Hold* (export
+  is an audited event).
+
+  Cited by title deliberately: 015, 031, 032 and 033 each number more than one
+  ADR, and the skills-library and MCP decisions the code comments cite as
+  "ADR-031" and "ADR-032" have no ADR file at all. For those two this ADR builds
+  on the code — `entities/skill.ts` and `entities/mcp-server.ts` — not on a
+  document.
 
 ## Context
 
@@ -105,22 +113,43 @@ something that means the same thing on both sides:
 
 ```typescript
 export interface FlowExportDependency {
-  kind: "skill" | "mcp_tool" | "kb_collection";
+  kind: "skill" | "mcp_tool";
   name: string;
   toolName?: string;
   nodeIds: string[];
 }
 ```
 
-Skills resolve by `Skill.name`, MCP tools by server name plus `toolName`. On
-import each dependency is looked up; the node config is rewritten to point at the
-local id where one is found.
+Skills resolve by `Skill.name`; MCP tools by the server's `label` — there is no
+`name` column on `admin_mcp_servers` — plus `toolName`. On import each dependency
+is looked up and the node config is rewritten to point at the local id where
+exactly one match is found.
+
+There is no `kb_collection` kind. The product has no collection concept: the
+`kb_` tables hold context-document content and chunks, and no node config
+references a collection. A flow's knowledge is its context documents, and those
+travel as assets.
+
+**Ambiguity is never resolved by guessing.** Neither `app_skills.name` nor
+`admin_mcp_servers.label` is unique, so two candidates can match one dependency.
+When they do, the dependency is reported as unresolved with both candidates
+named, exactly as if none had matched. The alternative — take the most recently
+updated and warn — silently wires a step to the wrong skill or the wrong server,
+and a warning on an import panel is not where anyone will look for that later.
 
 ### 4. Unresolved dependencies degrade; they do not block
 
 An archive whose dependencies do not all resolve still imports. The flow lands as
 **draft**, the unresolved references are listed on the inspection panel, and the
 affected nodes are badged on the canvas.
+
+The badge is not cosmetic state. The importer writes the gap onto the node it
+belongs to — `unresolvedDependencies?: FlowExportDependency[]` on the node
+config, which is jsonb (ADR-006), so nothing migrates — and `PublishFlowVersion`
+refuses a flow whose live nodes still carry one, naming them. That is what makes
+"never a publishable flow with a dangling reference" a mechanism rather than an
+intention: the flag is written where the canvas reads it and where publish
+checks it, and clearing it means picking a real local skill or tool.
 
 Refusing the import would be the strict reading and the wrong one: a flow is
 mostly steps, prompts and templates, and an author who is missing one MCP server
@@ -156,9 +185,13 @@ handled as such:
   by manifest-assigned id; the importer re-keys every asset into object storage
   under its own generated path. Zip-slip is structurally impossible rather than
   defended against.
-- **Ceilings before extraction**: maximum archive size, maximum uncompressed
-  size, maximum asset count, maximum single-asset size. Exceeding any is a
-  `VALIDATION_FAILED` Result, refused before extraction.
+- **Ceilings before extraction**: **50 MB** compressed (refused at the upload
+  route, before the reader is handed anything), **200 MB** uncompressed, **100**
+  assets, **25 MB** per asset — the per-asset figure matching the extraction
+  intake's existing cap. Exceeding any is a `VALIDATION_FAILED` Result, refused
+  before extraction. These numbers are also what bounds peak memory: assets are
+  buffered, not streamed, because `IObjectStorage.get` returns a whole `Buffer`
+  and reworking that port is a larger change than this payload justifies.
 - **`sha256` per asset** in the manifest, verified on read; a mismatch fails the
   import rather than storing the bytes.
 - **Manifest schema-validated** before any field is read.
@@ -182,9 +215,41 @@ whole context documents — for the customers this product targets, that is
 organisational IP leaving the building in one click, and it belongs in
 `core_audit_log`.
 
+No new `PermissionKey` is introduced. The registry is developer-owned and its
+own rule is that "a permission with no enforcing code is meaningless"; owner-or-
+admin plus an audit event is the enforcement here. A key that separates *export*
+from *edit* is a real requirement the day a customer asks for it, and it can be
+added then without touching this format.
+
+### 10. A second zip reader, sharing one set of guards
+
+The codebase already reads zips: `IArchiveExtractor` /
+`ZipIngestor` (`packages/adapters/src/extraction/zip-ingestor.ts`), which
+enforces exactly the four guards Decision 7 asks for and reads the central
+directory to reject an oversized entry before decompressing it.
+
+It is nonetheless the wrong port to reuse. `ZipIngestor` sniffs every entry's
+MIME and **drops what it does not recognise** — `sniffMimeType` returns null for
+JSON, and for any zip-container file not named `.docx`. Pointed at a flow
+archive it would silently discard `manifest.json` and every `.xlsx` template,
+then fail with "the archive contained no supported documents". Its filtering is
+document-intake policy, correct there and wrong here.
+
+So a flow archive gets its own reader — but **not its own guards**. The
+zip-slip, entry-count, per-entry and decompression-bomb checks are extracted
+into one shared module in `packages/adapters` and used by both. Two
+independently-maintained implementations of a zip-slip check is how one of them
+ends up wrong.
+
+The library question is settled by the same evidence: **PizZip**, already a
+dependency of `packages/adapters` and already proven on the read side here.
+
 ## Alternatives considered
 
 **Single JSON file with base64 assets.** Rejected — see Decision 1.
+
+**Reusing `IArchiveExtractor` for the read side.** Rejected — see Decision 10.
+It would drop the manifest.
 
 **Snapshot-only export, templates re-uploaded by hand.** Rejected: the templates
 *are* the flow's output. An import that generates nothing until an author
@@ -199,10 +264,9 @@ per-deployment, so the match is unreliable; and a successful match makes import 
 destructive operation against an existing flow with live sessions pinned to its
 published versions.
 
-**Bundle referenced KB collections' contents.** Rejected for this format: a
-collection can be arbitrarily large and is usually a deployment-wide asset rather
-than a property of one flow. Collections are referenced by name and reported as
-dependencies.
+**Bundle referenced knowledge-base collections' contents.** Moot: there are no
+collections. A flow's knowledge is its own context documents, and those are
+bundled as assets rather than referenced.
 
 ## Consequences
 
@@ -227,3 +291,10 @@ dependencies.
   the read-side migrations, or Decision 8's refusal becomes a false alarm.
 - An export is an exfiltration path that did not previously exist. Gating and
   auditing narrow it; they do not remove it.
+- Assets are buffered rather than streamed, so a concurrent import costs roughly
+  one archive's uncompressed size in memory. The Decision 7 ceilings are what
+  keep that bounded, which makes them load-bearing rather than hygiene.
+- Because ambiguity is never auto-resolved, a deployment with two
+  same-named skills imports a flow with flagged nodes even though a human would
+  have known which was meant. That is the intended trade: the author fixes it on
+  the canvas once, instead of discovering a wrong tool call in production.

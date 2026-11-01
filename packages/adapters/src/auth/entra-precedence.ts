@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { core_accounts, core_sessions } from "../db/schema/core";
+import type { SessionRevocationRegistry } from "./session-revocation";
 
 export const ENTRA_PROVIDER_ID = "microsoft";
 export const CREDENTIAL_PROVIDER_ID = "credential";
@@ -36,6 +37,7 @@ export interface LinkedAccount {
 export const applyEntraPrecedence = async (
   database: Database,
   account: LinkedAccount,
+  sessionRevocations?: SessionRevocationRegistry,
 ): Promise<void> => {
   if (account.providerId !== ENTRA_PROVIDER_ID) return;
 
@@ -49,4 +51,8 @@ export const applyEntraPrecedence = async (
     );
 
   await database.delete(core_sessions).where(eq(core_sessions.user_id, account.userId));
+  // Deleting the rows is only half of a revocation: a principal cached under the
+  // old password session would otherwise keep resolving until the TTL lapsed
+  // (ADR-035 §1).
+  sessionRevocations?.revoke(account.userId);
 };

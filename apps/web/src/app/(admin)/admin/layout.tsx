@@ -1,28 +1,29 @@
 import type { ReactNode } from "react";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/sidebar";
 import { LoginNoticeGate } from "@/components/login-notice/login-notice-gate";
 import { SetupWizardMount } from "@/components/onboarding/setup-wizard-mount";
 import { SidebarProvider } from "@/components/sidebar-context";
 import { createServerHelpers } from "@/trpc/server";
-import { getContainer } from "@/lib/container";
+import { resolveServerPrincipal } from "@/lib/server-principal";
 import { canOpenAdminArea, hasAnyAdminArea } from "@/lib/admin-areas";
 import { createServerTrpcContext } from "@/server/server-context";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const cookieStore = await cookies();
-  const sessionCookie = cookieStore
-    .getAll()
-    .find((c) => c.name.endsWith(".session_token") || c.name === "better-auth.session_token");
+  const { hasSessionCookie, principal } = await resolveServerPrincipal();
 
-  if (!sessionCookie?.value) {
+  if (!hasSessionCookie) {
     redirect("/login");
   }
-
-  const session = await getContainer().resolveSession(sessionCookie.value);
-  if (!session) {
+  if (!principal) {
     redirect("/login?expired=true");
+  }
+
+  // A simulated session is never an admin session, whoever is being simulated:
+  // deriving this from the target's is_admin would make the rule conditional and
+  // let an admin take admin actions from inside a simulation (ADR-059 §3a).
+  if (principal.impersonatorId) {
+    redirect("/chats");
   }
 
   // Open to Global Admins and to anyone holding an admin area key (ADR-066).
@@ -55,9 +56,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             {children}
           </div>
           {/* First-run setup configures auth and deployment, so it is Global-only. */}
-          {session.isAdmin && <SetupWizardMount />}
+          {principal.isAdmin && <SetupWizardMount />}
           {/* No organisation or welcome prompts here, so no SignInPromptsProvider:
-              the notice gate stands alone (ADR-060 §5). */}
+              the notice gate stands alone (ADR-061 §5). */}
           <LoginNoticeGate />
         </div>
       </HydrateClient>

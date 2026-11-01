@@ -11,7 +11,7 @@ import {
   type IEmailSender,
   type Result,
   type SendEmailInput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   InMemoryMessages,
   InMemoryStepOutputs,

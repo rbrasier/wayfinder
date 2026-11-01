@@ -1,4 +1,4 @@
-import type { EventWatch, OutboundJsonRequest } from "@rbrasier/domain";
+import type { EventWatch, OutboundJsonRequest } from "@wayfinder/domain";
 
 export type WatchConnection = Pick<EventWatch, "url" | "method" | "requestBody" | "authType" | "apiKeyPlacement">;
 

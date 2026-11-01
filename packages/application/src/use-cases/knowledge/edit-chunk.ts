@@ -1,10 +1,10 @@
-import { domainError, err } from "@rbrasier/domain";
+import { domainError, err } from "@wayfinder/domain";
 import type {
   CuratedChunk,
   IChunkCurationRepository,
   IEmbeddingsProvider,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface EditChunkInput {
   chunkId: string;
@@ -28,13 +28,14 @@ export class EditChunk {
       return err(domainError("VALIDATION_FAILED", "Chunk text cannot be empty."));
     }
 
-    const embeddingResult = await this.embeddings.embed(newText);
+    const embeddingResult = await this.embeddings.embedForStorage(newText);
     if (embeddingResult.error) return err(embeddingResult.error);
 
     return this.chunks.applyEdit({
       chunkId: input.chunkId,
       newText,
-      newEmbedding: embeddingResult.data,
+      newEmbedding: embeddingResult.data.vector,
+      newEmbeddingModel: embeddingResult.data.model,
       editedBy: input.editedBy,
       reason: input.reason,
     });

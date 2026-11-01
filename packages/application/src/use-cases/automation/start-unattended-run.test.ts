@@ -7,7 +7,7 @@ import {
   type Session,
   type SessionMessage,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { StartSessionInput } from "../session/start-session";
 import { StartUnattendedRun } from "./start-unattended-run";
 

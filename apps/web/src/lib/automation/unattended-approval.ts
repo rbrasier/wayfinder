@@ -1,5 +1,5 @@
-import { ok, type FlowNode, type FlowNodeType, type Result, type Session } from "@rbrasier/domain";
-import type { ConfirmAndSend, SuggestApprover } from "@rbrasier/application";
+import { ok, type FlowNode, type FlowNodeType, type Result, type Session } from "@wayfinder/domain";
+import type { ConfirmAndSend, SuggestApprover } from "@wayfinder/application";
 
 const STEP_FLAGS: Partial<Record<FlowNodeType, string>> = {
   ai_task: "ai_task_node",

@@ -1,4 +1,4 @@
-import type { EmailRecipient } from "@rbrasier/domain";
+import type { EmailRecipient } from "@wayfinder/domain";
 
 export interface DirectoryPerson {
   userId: string | null;

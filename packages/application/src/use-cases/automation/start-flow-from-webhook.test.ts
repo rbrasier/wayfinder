@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type FlowTrigger, type Session } from "@rbrasier/domain";
+import { ok, type FlowTrigger, type Session } from "@wayfinder/domain";
 import { StartFlowFromWebhook } from "./start-flow-from-webhook";
 import type { StartUnattendedRunInput, StartUnattendedRunOutput } from "./start-unattended-run";
 

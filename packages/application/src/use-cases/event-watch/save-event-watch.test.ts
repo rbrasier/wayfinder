@@ -8,7 +8,7 @@ import {
   type NewEventWatch,
   type SecretChange,
   type User,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CreateEventWatch, UpdateEventWatch, type EventWatchInput } from "./save-event-watch";
 
 const input = (overrides: Partial<EventWatchInput> = {}): EventWatchInput => ({

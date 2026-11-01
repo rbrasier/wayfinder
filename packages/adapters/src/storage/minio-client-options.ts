@@ -1,4 +1,4 @@
-import type { StorageConfig } from "@rbrasier/domain";
+import type { StorageConfig } from "@wayfinder/domain";
 
 export interface MinioClientOptions {
   endPoint: string;

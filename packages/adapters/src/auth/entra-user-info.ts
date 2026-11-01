@@ -1,4 +1,4 @@
-import { normaliseEmail } from "@rbrasier/domain";
+import { normaliseEmail } from "@wayfinder/domain";
 
 export interface EntraUserInfo {
   readonly user: {

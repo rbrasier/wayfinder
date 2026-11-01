@@ -4,7 +4,7 @@ import {
   type User,
   domainError,
   err,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // The one writer of the welcome-tour stamp (ADR-056 §1): completing the tour
 // records when, restarting it clears the record so the gate shows it again.

@@ -1,5 +1,5 @@
-import { coalesceValue, typedDisplayCell } from "@rbrasier/domain";
-import type { FieldReportSessionRow, TemplateFieldType } from "@rbrasier/domain";
+import { coalesceValue, typedDisplayCell } from "@wayfinder/domain";
+import type { FieldReportSessionRow, TemplateFieldType } from "@wayfinder/domain";
 
 // A displayed column reduced to what the export needs: its heading, its field
 // type (for numeric-vs-text cells) and the raw member keys it coalesces.

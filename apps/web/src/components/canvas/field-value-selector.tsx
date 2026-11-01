@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import type { FieldValueSource, PriorStepField, TemplateField, TriggerInput } from "@rbrasier/domain";
+import type { FieldValueSource, PriorStepField, TemplateField, TriggerInput } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 
 const SELECT_CLASS =

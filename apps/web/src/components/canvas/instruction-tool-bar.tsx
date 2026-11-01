@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Plug, Sparkles, X } from "lucide-react";
-import type { McpToolRef } from "@rbrasier/domain";
+import type { McpToolRef } from "@wayfinder/domain";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import { McpPickerModal } from "./mcp-picker-modal";

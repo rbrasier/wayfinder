@@ -12,6 +12,17 @@ export const SAMPLE_MAX_DOCUMENTS = 3;
 // (ADR-033 §6 / phase §6). At or below it, preview defaults off.
 export const PREVIEW_FILE_THRESHOLD = 5;
 
+// How many input documents Auto Analyse may read when proposing a field set,
+// and how many it reads unless the author says otherwise (ADR-059, ADR-060).
+// Deliberately separate from SAMPLE_MAX_DOCUMENTS: that sizes a sample *run* —
+// how many records an author previews before committing to a full batch — and
+// has no business moving because the analysis read ceiling moved.
+export const MAX_ANALYSE_DOCUMENTS = 10;
+export const DEFAULT_ANALYSE_DOCUMENTS = 3;
+
+// How many records the run summary reads by default; the admin can change it.
+export const DEFAULT_SUMMARY_RECORD_CAP = 50;
+
 export const shouldPreviewByDefault = (inputFileCount: number): boolean =>
   inputFileCount > PREVIEW_FILE_THRESHOLD;
 
@@ -47,7 +58,32 @@ export interface ExtractionInputConfig {
   // many_per_record; must be null for one_per_file (ADR-033 §4a).
   selectionCriteria: string | null;
   guidance: string;
+  // Whether uploading documents drafts the field set automatically (ADR-059).
+  // Optional on the way in so no existing author config has to be rewritten;
+  // parseExtractionSchema always returns it populated. Read it through
+  // isAutoAnalyseOn rather than defaulting at each call site.
+  autoAnalyse?: boolean;
+  // How many documents one analysis reads, within MAX_ANALYSE_DOCUMENTS. Same
+  // optional-in/populated-out contract as autoAnalyse; read it through
+  // analyseDocumentCount.
+  analyseSampleSize?: number;
 }
+
+// Absent means "on" only where turning it on changes nothing. A config already
+// describing the manual grouping path was authored before this setting existed,
+// and defaulting it on would silently discard its cardinality and criteria —
+// so absence is read as off there. An explicit value always wins.
+export const isAutoAnalyseOn = (input: ExtractionInputConfig): boolean => {
+  if (input.autoAnalyse !== undefined) return input.autoAnalyse;
+
+  const hasManualGrouping =
+    input.cardinality === "many_per_record" ||
+    (input.selectionCriteria?.trim().length ?? 0) > 0;
+  return !hasManualGrouping;
+};
+
+export const analyseDocumentCount = (input: ExtractionInputConfig): number =>
+  input.analyseSampleSize ?? DEFAULT_ANALYSE_DOCUMENTS;
 
 export interface ExtractionOutputConfig {
   format: ExtractionOutputFormat;
@@ -96,8 +132,44 @@ export const buildExtractionField = (draft: ExtractionFieldDraft): Result<Extrac
   });
 };
 
-const validateInputConfig = (input: ExtractionInputConfig): Result<ExtractionInputConfig> => {
+// Admin-tunable bounds the schema is validated against (issue #335). Omitted
+// means the code default, so a caller without runtime config behaves as before.
+export interface ExtractionSchemaLimits {
+  maxAnalyseDocuments: number;
+}
+
+const validateInputConfig = (
+  input: ExtractionInputConfig,
+  limits: ExtractionSchemaLimits,
+): Result<ExtractionInputConfig> => {
   const criteria = input.selectionCriteria?.trim() ?? "";
+  const autoAnalyse = isAutoAnalyseOn(input);
+  const analyseSampleSize = analyseDocumentCount(input);
+  const ceiling = limits.maxAnalyseDocuments;
+
+  // Checked whether or not auto analyse is currently on, so a bad value cannot
+  // sit dormant in the config and surface the moment the author toggles it back.
+  if (!Number.isInteger(analyseSampleSize) || analyseSampleSize < 1 || analyseSampleSize > ceiling) {
+    return err(
+      domainError(
+        "VALIDATION_FAILED",
+        `Auto analyse reads between 1 and ${ceiling} documents; ${analyseSampleSize} is outside that range.`,
+      ),
+    );
+  }
+
+  // Auto analyse owns the input questions it hides: it always means one file per
+  // record, so criteria left over from a manual config are cleared rather than
+  // rejected (ADR-059). The manual rules below apply only when it is off.
+  if (autoAnalyse) {
+    return ok({
+      cardinality: "one_per_file",
+      selectionCriteria: null,
+      guidance: input.guidance.trim(),
+      autoAnalyse: true,
+      analyseSampleSize,
+    });
+  }
 
   if (input.cardinality === "many_per_record" && criteria.length === 0) {
     return err(
@@ -121,6 +193,8 @@ const validateInputConfig = (input: ExtractionInputConfig): Result<ExtractionInp
     cardinality: input.cardinality,
     selectionCriteria: input.cardinality === "many_per_record" ? criteria : null,
     guidance: input.guidance.trim(),
+    autoAnalyse: false,
+    analyseSampleSize,
   });
 };
 
@@ -134,7 +208,10 @@ const normaliseOutputConfig = (output: ExtractionOutputConfig): ExtractionOutput
   contextDocs: output.contextDocs,
 });
 
-export const parseExtractionSchema = (draft: ExtractionSchemaDraft): Result<ExtractionSchema> => {
+export const parseExtractionSchema = (
+  draft: ExtractionSchemaDraft,
+  limits: ExtractionSchemaLimits = { maxAnalyseDocuments: MAX_ANALYSE_DOCUMENTS },
+): Result<ExtractionSchema> => {
   if (draft.fields.length === 0) {
     return err(
       domainError("VALIDATION_FAILED", "An extraction flow needs at least one field to pull."),
@@ -160,7 +237,7 @@ export const parseExtractionSchema = (draft: ExtractionSchemaDraft): Result<Extr
     fields.push(built.data);
   }
 
-  const input = validateInputConfig(draft.input);
+  const input = validateInputConfig(draft.input, limits);
   if (input.error) return input;
 
   return ok({ fields, input: input.data, output: normaliseOutputConfig(draft.output) });

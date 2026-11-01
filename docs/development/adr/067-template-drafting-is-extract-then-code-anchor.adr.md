@@ -1,6 +1,6 @@
 # ADR-067 — Template Drafting: the AI Extracts, Code Places Tags, the AI Verifies
 
-- **Status**: Accepted — implemented in 0.28.50 (scoped by `template-drafting-from-examples.prd.md`)
+- **Status**: Accepted — implemented in 0.41.1 (scoped by `template-drafting-from-examples.prd.md`)
 - **Date**: 2026-10-28
 - **Assumes**:
   - The v0.21.3 annotation design (`eb5e93e`): `IDocumentGenerator.annotate()`,

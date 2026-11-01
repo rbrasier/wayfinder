@@ -4,6 +4,7 @@ import { Figtree, JetBrains_Mono } from "next/font/google";
 import { connection } from "next/server";
 import { Toaster } from "sonner";
 import { NavigationProgress } from "@/components/navigation-progress";
+import { ImpersonationBanner } from "@/components/impersonation/impersonation-banner";
 import { SiteBanner } from "@/components/site-banner";
 import { buildBrandStyleSheet } from "@/lib/brand-style";
 import { getContainer } from "@/lib/container";
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  // The brand is admin-configured at runtime (ADR-060), so the layout must render
+  // The brand is admin-configured at runtime (ADR-061), so the layout must render
   // per request rather than be prerendered with whatever was set at build time.
   await connection();
   const brandStyleSheet = buildBrandStyleSheet(
@@ -53,6 +54,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <NavigationProgress />
         <TrpcProvider>
           <SiteBanner />
+          <ImpersonationBanner />
           <div className="flex min-h-0 flex-1 flex-col">{children}</div>
         </TrpcProvider>
         {/* `expand` keeps concurrent toasts as a spaced column growing upward

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type IScheduleRunRepository, type ScheduleRunView } from "@rbrasier/domain";
+import { ok, type IScheduleRunRepository, type ScheduleRunView } from "@wayfinder/domain";
 import { ListScheduleRuns } from "./list-schedule-runs";
 
 const makeView = (overrides: Partial<ScheduleRunView> = {}): ScheduleRunView => ({

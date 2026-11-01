@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   ExtractionRun,
   ExtractionSchema,
@@ -8,11 +8,12 @@ import type {
   IArchiveExtractor,
   IAuditLogger,
   IDocumentExtractor,
+  IExtractionDraftDocumentRepository,
   IExtractionRunRepository,
   IFlowVersionRepository,
   ILanguageModel,
   IObjectStorage,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { StartBatchRun } from "./start-batch-run";
 
 const schema: ExtractionSchema = {
@@ -96,6 +97,16 @@ const makeVersions = (
 const makeAuditLogger = (log = vi.fn().mockResolvedValue(ok(true))) =>
   ({ log }) as unknown as IAuditLogger;
 
+// execute() and startSample() never reach the draft-document store — only
+// startAnalysis does — so the calls below just need the shape.
+const makeDrafts = () =>
+  ({
+    add: vi.fn(),
+    listForFlow: vi.fn(),
+    getById: vi.fn(),
+    remove: vi.fn(),
+  }) as unknown as IExtractionDraftDocumentRepository;
+
 const storage = { put: vi.fn().mockResolvedValue(ok({ key: "k" })), get: vi.fn(), delete: vi.fn() } as unknown as IObjectStorage;
 const archive = { expand: vi.fn() } as unknown as IArchiveExtractor;
 const model = {} as unknown as ILanguageModel;
@@ -109,7 +120,7 @@ describe("StartBatchRun.startSample", () => {
   it("runs against the open draft version with a sample-bounded preview breakpoint", async () => {
     const createRun = vi.fn().mockResolvedValue(ok(run()));
     const runs = makeRuns(createRun);
-    const useCase = new StartBatchRun(makeVersions(), runs, storage, archive, model, extractor, makeAuditLogger());
+    const useCase = new StartBatchRun(makeVersions(), runs, storage, archive, model, extractor, makeDrafts(), makeAuditLogger());
 
     const result = await useCase.startSample({ flowId: "flow-1", userId: "user-1", files, sampleSize: 3 });
 
@@ -126,7 +137,7 @@ describe("StartBatchRun.startSample", () => {
 
   it("refuses to sample when no draft schema is configured", async () => {
     const versions = makeVersions(vi.fn().mockResolvedValue(ok(null)));
-    const useCase = new StartBatchRun(versions, makeRuns(), storage, archive, model, extractor, makeAuditLogger());
+    const useCase = new StartBatchRun(versions, makeRuns(), storage, archive, model, extractor, makeDrafts(), makeAuditLogger());
 
     const result = await useCase.startSample({ flowId: "flow-1", userId: "user-1", files });
 
@@ -134,14 +145,14 @@ describe("StartBatchRun.startSample", () => {
   });
 
   it("requires at least one input document", async () => {
-    const useCase = new StartBatchRun(makeVersions(), makeRuns(), storage, archive, model, extractor, makeAuditLogger());
+    const useCase = new StartBatchRun(makeVersions(), makeRuns(), storage, archive, model, extractor, makeDrafts(), makeAuditLogger());
     const result = await useCase.startSample({ flowId: "flow-1", userId: "user-1", files: [] });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
   it("propagates a run-creation failure", async () => {
     const runs = makeRuns(vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "db down"))));
-    const useCase = new StartBatchRun(makeVersions(), runs, storage, archive, model, extractor, makeAuditLogger());
+    const useCase = new StartBatchRun(makeVersions(), runs, storage, archive, model, extractor, makeDrafts(), makeAuditLogger());
     const result = await useCase.startSample({ flowId: "flow-1", userId: "user-1", files });
     expect(result.error?.code).toBe("INFRA_FAILURE");
   });
@@ -155,7 +166,7 @@ describe("StartBatchRun.execute — version resolution", () => {
     const versions = makeVersions(undefined, undefined, createPublished);
     const log = vi.fn().mockResolvedValue(ok(true));
     const createRun = vi.fn().mockResolvedValue(ok(run({ mode: "full" })));
-    const useCase = new StartBatchRun(versions, makeRuns(createRun), storage, archive, model, extractor, makeAuditLogger(log));
+    const useCase = new StartBatchRun(versions, makeRuns(createRun), storage, archive, model, extractor, makeDrafts(), makeAuditLogger(log));
 
     const result = await useCase.execute(fullInput);
 
@@ -189,7 +200,7 @@ describe("StartBatchRun.execute — version resolution", () => {
     );
     const log = vi.fn();
     const createRun = vi.fn().mockResolvedValue(ok(run({ mode: "full" })));
-    const useCase = new StartBatchRun(versions, makeRuns(createRun), storage, archive, model, extractor, makeAuditLogger(log));
+    const useCase = new StartBatchRun(versions, makeRuns(createRun), storage, archive, model, extractor, makeDrafts(), makeAuditLogger(log));
 
     const result = await useCase.execute(fullInput);
 
@@ -202,7 +213,7 @@ describe("StartBatchRun.execute — version resolution", () => {
   it("refuses a full run when there is neither a saved draft nor a published version", async () => {
     const versions = makeVersions(vi.fn().mockResolvedValue(ok(null)));
     const createRun = vi.fn();
-    const useCase = new StartBatchRun(versions, makeRuns(createRun), storage, archive, model, extractor, makeAuditLogger());
+    const useCase = new StartBatchRun(versions, makeRuns(createRun), storage, archive, model, extractor, makeDrafts(), makeAuditLogger());
 
     const result = await useCase.execute(fullInput);
 
@@ -214,7 +225,7 @@ describe("StartBatchRun.execute — version resolution", () => {
   it("does not mint a version when the intake is rejected", async () => {
     const createPublished = vi.fn();
     const versions = makeVersions(undefined, undefined, createPublished);
-    const useCase = new StartBatchRun(versions, makeRuns(), storage, archive, model, extractor, makeAuditLogger(), {
+    const useCase = new StartBatchRun(versions, makeRuns(), storage, archive, model, extractor, makeDrafts(), makeAuditLogger(), {
       maxFiles: 1,
     });
 
@@ -233,11 +244,64 @@ describe("StartBatchRun.execute — version resolution", () => {
       vi.fn().mockResolvedValue(err(domainError("INFRA_FAILURE", "db down"))),
     );
     const createRun = vi.fn();
-    const useCase = new StartBatchRun(versions, makeRuns(createRun), storage, archive, model, extractor, makeAuditLogger());
+    const useCase = new StartBatchRun(versions, makeRuns(createRun), storage, archive, model, extractor, makeDrafts(), makeAuditLogger());
 
     const result = await useCase.execute(fullInput);
 
     expect(result.error?.code).toBe("INFRA_FAILURE");
     expect(createRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("StartBatchRun — admin-configured size limits (issue #335)", () => {
+  const manyFiles = Array.from({ length: 10 }, (_, index) => ({
+    filename: `f${index}.pdf`,
+    treePath: `f${index}.pdf`,
+    mimeType: "application/pdf",
+    buffer: Buffer.from("x"),
+  }));
+
+  it("pauses a sample at the configured sample size when the caller gives none", async () => {
+    const createRun = vi.fn().mockResolvedValue(ok(run()));
+    const useCase = new StartBatchRun(makeVersions(), makeRuns(createRun), storage, archive, model, extractor, makeDrafts(), makeAuditLogger());
+
+    await useCase.startSample({ flowId: "flow-1", userId: "user-1", files: manyFiles, sampleMaxDocuments: 6 });
+
+    expect(createRun).toHaveBeenCalledWith(expect.objectContaining({ previewBoundary: 6 }));
+  });
+
+  const stagedDrafts = () =>
+    ({
+      add: vi.fn(),
+      listForFlow: vi.fn().mockResolvedValue(
+        ok(manyFiles.map((file, index) => ({ id: `draft-${index}`, flowId: "flow-1", filename: file.filename, treePath: file.treePath, storageKey: `k${index}`, mimeType: file.mimeType, textLength: 10 }))),
+      ),
+      getById: vi.fn(),
+      remove: vi.fn(),
+    }) as unknown as IExtractionDraftDocumentRepository;
+
+  const analysisRuns = (createRun = vi.fn().mockResolvedValue(ok(run({ mode: "analyse" })))) =>
+    ({
+      ...makeRuns(createRun),
+      listRunsForFlow: vi.fn().mockResolvedValue(ok([])),
+    }) as unknown as IExtractionRunRepository;
+
+  it("rejects an analysis read count above the configured ceiling", async () => {
+    const useCase = new StartBatchRun(makeVersions(), analysisRuns(), storage, archive, model, extractor, stagedDrafts(), makeAuditLogger());
+
+    const result = await useCase.startAnalysis({ flowId: "flow-1", userId: "user-1", analyseSampleSize: 8, maxAnalyseDocuments: 5 });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toMatch(/between 1 and 5/i);
+  });
+
+  it("accepts a read count the configured ceiling allows", async () => {
+    const createRun = vi.fn().mockResolvedValue(ok(run({ mode: "analyse" })));
+    const useCase = new StartBatchRun(makeVersions(), analysisRuns(createRun), storage, archive, model, extractor, stagedDrafts(), makeAuditLogger());
+
+    const result = await useCase.startAnalysis({ flowId: "flow-1", userId: "user-1", analyseSampleSize: 8, maxAnalyseDocuments: 12 });
+
+    expect(result.error).toBeUndefined();
+    expect(createRun).toHaveBeenCalledWith(expect.objectContaining({ totalCount: 8 }));
   });
 });

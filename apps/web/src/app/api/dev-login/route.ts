@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { getContainer } from "@/lib/container";
-import { schema } from "@rbrasier/adapters";
+import { schema } from "@wayfinder/adapters";
 
 export async function POST(req: Request): Promise<Response> {
   if (process.env.NODE_ENV !== "development") {

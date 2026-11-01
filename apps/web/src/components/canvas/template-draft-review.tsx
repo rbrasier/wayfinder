@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Check, Download, Info, RotateCcw } from "lucide-react";
-import { evidenceNeedsConfirmation } from "@rbrasier/domain";
+import { evidenceNeedsConfirmation } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { FieldRow } from "./field-row";
 import { TEMPLATE_TYPE_OPTIONS, type FieldModel, type FieldRowType } from "./field-row-model";

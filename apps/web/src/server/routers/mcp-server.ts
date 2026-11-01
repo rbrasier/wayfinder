@@ -1,23 +1,56 @@
 import { z } from "zod";
+import { MAX_MCP_CALL_TIMEOUT_MS, MAX_MCP_TOOL_PAGES, MIN_MCP_CALL_TIMEOUT_MS } from "@wayfinder/domain";
 import { authenticatedProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
-// The bearer token itself — stored encrypted, never sent back (ADR-032).
-const credentialInput = z.string().max(4096, "The token is too long.").nullable().optional();
+const classificationSchema = z.enum(["internal", "public-read", "external-write"]);
+const timeoutSchema = z.number().int().min(MIN_MCP_CALL_TIMEOUT_MS).max(MAX_MCP_CALL_TIMEOUT_MS);
+// Write-only: accepted on register/update, never returned by any procedure.
+const secretInputs = {
+  bearerToken: z.string().nullable().optional(),
+  customHeaders: z.record(z.string(), z.string()).nullable().optional(),
+  // OAuth 2.0 client credentials (issue #361). An absent client secret keeps the
+  // saved one; null stops the server using OAuth.
+  oauth: z
+    .object({
+      tokenUrl: z.string().max(2048),
+      clientId: z.string().max(512),
+      clientSecret: z.string().max(4096).optional(),
+      scope: z.string().max(1024).nullable().optional(),
+      audience: z.string().max(2048).nullable().optional(),
+      clientAuthMethod: z.enum(["client_secret_basic", "client_secret_post"]).optional(),
+    })
+    .nullable()
+    .optional(),
+};
 
-// OAuth 2.0 client credentials (issue #361). The client secret is write-only like
-// the token; absent keeps the stored one. Null stops the server using OAuth.
-const oauthInput = z
-  .object({
-    tokenUrl: z.string().max(2048),
-    clientId: z.string().max(512),
-    clientSecret: z.string().max(4096, "The client secret is too long.").optional(),
-    scope: z.string().max(1024).nullable().optional(),
-    audience: z.string().max(2048).nullable().optional(),
-    clientAuthMethod: z.enum(["client_secret_basic", "client_secret_post"]).optional(),
-  })
-  .nullable()
-  .optional();
+const pathSchema = z.string().min(1);
+const toolSettingsSchema = z.object({
+  pagination: z
+    .object({
+      cursorArgument: z.string().min(1),
+      nextCursorPath: pathSchema,
+      itemsPath: pathSchema,
+      maxPages: z.number().int().min(1).max(MAX_MCP_TOOL_PAGES),
+    })
+    .nullable(),
+  status: z
+    .object({
+      statusPath: pathSchema,
+      meanings: z.record(z.string(), z.enum(["ok", "no-data", "source-unavailable", "upstream-gap"])),
+      caveatsPath: pathSchema.nullable(),
+    })
+    .nullable(),
+  citation: z
+    .object({
+      recordsPath: pathSchema,
+      locatorField: pathSchema,
+      titleField: pathSchema.nullable(),
+      urlField: pathSchema.nullable(),
+      timestampField: pathSchema.nullable(),
+    })
+    .nullable(),
+});
 
 export const mcpServerRouter = router({
   list: technicalAdminProcedure
@@ -45,19 +78,15 @@ export const mcpServerRouter = router({
         label: z.string().min(1),
         url: z.string().min(1),
         transport: z.enum(["sse", "streamable-http"]).optional(),
-        communicatesExternally: z.boolean().optional(),
-        credential: credentialInput,
-        oauth: oauthInput,
+        dataClassification: classificationSchema.optional(),
+        verbatimOnly: z.boolean().optional(),
+        callTimeoutMs: timeoutSchema.optional(),
+        ...secretInputs,
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.registerMcpServer.execute({
-        label: input.label,
-        url: input.url,
-        transport: input.transport,
-        communicatesExternally: input.communicatesExternally,
-        credential: input.credential,
-        oauth: input.oauth,
+        ...input,
         createdByUserId: ctx.userId,
       });
       if (result.error) throw toTrpcError(result.error);
@@ -70,10 +99,10 @@ export const mcpServerRouter = router({
         id: z.string().guid(),
         label: z.string().min(1).optional(),
         url: z.string().min(1).optional(),
-        communicatesExternally: z.boolean().optional(),
-        // Absent keeps the stored token, null removes it, a string replaces it.
-        credential: credentialInput,
-        oauth: oauthInput,
+        dataClassification: classificationSchema.optional(),
+        verbatimOnly: z.boolean().optional(),
+        callTimeoutMs: timeoutSchema.optional(),
+        ...secretInputs,
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -114,6 +143,37 @@ export const mcpServerRouter = router({
     .input(z.object({ id: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.testMcpServer.execute(input.id);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // The cached tools with their per-tool settings (ADR-062 §5).
+  listTools: technicalAdminProcedure
+    .input(z.object({ serverId: z.string().guid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.listMcpTools.execute(input.serverId);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  refreshTools: technicalAdminProcedure
+    .input(z.object({ serverId: z.string().guid() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.refreshMcpTools.execute(input.serverId);
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  updateToolSettings: technicalAdminProcedure
+    .input(
+      z.object({
+        serverId: z.string().guid(),
+        toolName: z.string().min(1),
+        settings: toolSettingsSchema,
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.updateMcpToolSettings.execute(input);
       if (result.error) throw toTrpcError(result.error);
       return result.data;
     }),

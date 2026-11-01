@@ -1,4 +1,4 @@
-import { canManageGroup, type GroupAuthorizationContext, type PermissionKey } from "@rbrasier/domain";
+import { canManageGroup, type GroupAuthorizationContext, type PermissionKey } from "@wayfinder/domain";
 import { describe, expect, it } from "vitest";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
@@ -50,6 +50,8 @@ const contextFor = (
   userId: "dana",
   authSessionId: null,
   isAdmin: false,
+  impersonatorId: null,
+  impersonationCookie: null,
   permissions: new Set<PermissionKey>(["group:manage_own"]),
   headers: new Headers(),
   ...overrides,

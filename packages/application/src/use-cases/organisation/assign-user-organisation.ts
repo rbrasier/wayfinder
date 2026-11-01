@@ -5,7 +5,7 @@ import {
   type IOrganisationRepository,
   type IUserRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Sets (or clears) a user's organisation — the `admin` resolution strategy, and
 // the sink every automatic strategy ultimately writes through.

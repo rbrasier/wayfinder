@@ -1,4 +1,4 @@
-import type { Person } from "@rbrasier/domain";
+import type { Person } from "@wayfinder/domain";
 
 // Higher rank wins when the same email appears in more than one source. An
 // existing account beats everything: it is the only record whose person can

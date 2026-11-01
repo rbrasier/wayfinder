@@ -4,7 +4,7 @@ import {
   type PeopleSearchInput,
   type Person,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { appendTypedEmail, mergePeople } from "./merge-people";
 
 export class SearchPeople {

@@ -20,6 +20,7 @@ import { EntraDirectoryCard } from "@/components/settings/entra-directory-card";
 import { GlobalInstructionsCard } from "@/components/settings/global-instructions-card";
 import { HrDataCard } from "@/components/settings/hr-data-card";
 import { LoginNoticeCard } from "@/components/settings/login-notice-card";
+import { LookupSourcesCard } from "@/components/settings/lookup-sources-card";
 import { N8nIntegrationCard } from "@/components/settings/n8n-integration-card";
 import { NotificationSettingsCard } from "@/components/settings/notification-settings-card";
 import { OrganisationsCard } from "@/components/settings/organisations-card";
@@ -27,12 +28,14 @@ import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
 import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
+import { RetentionCard } from "@/components/settings/retention-card";
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
 import { SiteBannerCard } from "@/components/settings/site-banner-card";
 import { StorageCard } from "@/components/settings/storage-card";
 
-// Access, deployment shape and directory settings can grant access, so they
-// stay with Global Admins; a Technical Admin sees the rest (ADR-066 §3).
+// Access, deployment shape, directory and retention settings can grant access
+// or destroy records, so they stay with Global Admins; a Technical Admin sees the
+// rest (ADR-066 §3).
 export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: boolean }) {
   const connectivity = useConnectivity();
   const [rerunSetup, setRerunSetup] = useState(false);
@@ -102,6 +105,7 @@ export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: 
               <RagEmbeddingsCard connectivity={connectivity} />
               <EmailCard connectivity={connectivity} />
               <AutomationCard />
+              <LookupSourcesCard />
             </CollapsibleSection>
 
             <CollapsibleSection title="Storage & uploads" description="Where files live and upload limits.">
@@ -125,6 +129,7 @@ export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: 
                 <HrDataCard />
                 <EntraDirectoryCard connectivity={connectivity} />
                 <SiemStreamingCard />
+                <RetentionCard />
               </CollapsibleSection>
             )}
           </div>

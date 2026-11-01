@@ -54,6 +54,23 @@ export interface Flow {
   updatedAt: Date;
 }
 
+// Who may edit a flow — and therefore who may test-run an unpublished draft of
+// it (ADR-048 §3). Stated once, in the domain, because the same rule is now
+// enforced in two places: the router before a mutation, and StartSession before
+// it bypasses the published-only guard. A test run of a draft must never become
+// a way for an operator to reach unpublished work.
+export const canUserEditFlow = (
+  flow: Pick<Flow, "ownerUserId" | "permissions">,
+  userId: string,
+  isAdmin: boolean,
+): boolean => {
+  if (isAdmin) return true;
+  if (flow.ownerUserId === userId) return true;
+  return flow.permissions.some(
+    (permission) => permission.userId === userId && permission.role === "owner",
+  );
+};
+
 export interface NewFlow {
   name: string;
   description?: string | null;

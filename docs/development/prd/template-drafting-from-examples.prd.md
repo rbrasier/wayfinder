@@ -1,9 +1,9 @@
 # PRD — Template Drafting from Examples
 
-- **Status**: Accepted — implemented in 0.28.50
+- **Status**: Accepted — implemented in 0.41.1
 - **Date**: 2026-10-28
 - **Author**: rbrasier
-- **Target version**: 0.28.50 (bump: PATCH, the maintainer's choice; see the phase doc §1)
+- **Target version**: 0.41.1 (bump: PATCH, the maintainer's choice; see the phase doc §1)
 - **Issue**: #347 (parent #346, "Wayfinder feedback")
 
 ## 1. Problem

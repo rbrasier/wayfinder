@@ -12,6 +12,18 @@ export const DISCARDED_SESSION_STATUSES: readonly SessionStatus[] = ["abandoned"
 export const isSessionDiscarded = (status: SessionStatus): boolean =>
   DISCARDED_SESSION_STATUSES.includes(status);
 
+// A test run is an ordinary session carrying `mode = "test"` (ADR-048). There is
+// no parallel session table and no second runner: the same repository creates
+// it, the same run-turn advances it, and the same components render it. What
+// differs is that it resolves its flow from the live draft rows rather than the
+// pinned published snapshot, and that every production read excludes it.
+export type SessionMode = "live" | "test";
+
+// Absent means `"live"`. Every row written before test runs shipped, and every
+// caller that never sets it, is a live session — so the discriminator can be
+// added without back-filling or touching a single existing call site.
+export const sessionMode = (session: { mode?: SessionMode }): SessionMode => session.mode ?? "live";
+
 // In-flight auto-node execution awaiting an n8n callback, keyed by correlationId
 // on Session.pendingExecutions. sentAt makes a stuck execution observable.
 export interface PendingExecution {
@@ -49,6 +61,8 @@ export interface Session {
   flowId: string;
   userId: string;
   status: SessionStatus;
+  // Optional/back-filled: absent reads as `"live"` (see `sessionMode`).
+  mode?: SessionMode;
   title: string | null;
   currentNodeId: string | null;
   // The flow version this chat is pinned to (ADR-015). Resolved to the latest
@@ -96,6 +110,7 @@ export interface Session {
 export interface NewSession {
   flowId: string;
   userId: string;
+  mode?: SessionMode;
   title?: string | null;
   currentNodeId?: string | null;
   flowVersionId?: string | null;

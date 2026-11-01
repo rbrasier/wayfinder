@@ -1,4 +1,4 @@
-import { ok, type EventWatch, type IEventWatchRepository, type IUnattendedRunRepository, type Result } from "@rbrasier/domain";
+import { ok, type EventWatch, type IEventWatchRepository, type IUnattendedRunRepository, type Result } from "@wayfinder/domain";
 import type { ListTriggerRuns, TriggerRunSummary } from "../automation/list-trigger-runs";
 
 export interface EventWatchListing {

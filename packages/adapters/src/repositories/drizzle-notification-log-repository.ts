@@ -7,7 +7,7 @@ import {
   type NotificationLog,
   type NotificationTrigger,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_notification_log } from "../db/schema/wayfinder";

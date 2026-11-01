@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type Approval, type IApprovalRepository, type TemplateField } from "@rbrasier/domain";
+import { ok, type Approval, type IApprovalRepository, type TemplateField } from "@wayfinder/domain";
 import { approvalValuesForStep } from "./approval-values";
 
 const at = (iso: string) => new Date(iso);

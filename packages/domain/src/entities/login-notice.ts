@@ -1,6 +1,6 @@
 import type { AuditLog } from "./audit-log";
 
-// A notice every user must acknowledge after signing in (ADR-060 §5). Stored as
+// A notice every user must acknowledge after signing in (ADR-061 §5). Stored as
 // one JSON row in admin_system_settings (ADR-041). Acknowledgements are audit
 // events, not state: the tamper-evident log is both the governance record and
 // the answer to "has this person seen it".

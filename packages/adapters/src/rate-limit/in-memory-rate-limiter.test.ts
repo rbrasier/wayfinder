@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { IClock } from "@rbrasier/domain";
+import type { IClock } from "@wayfinder/domain";
 import { InMemoryRateLimiter } from "./in-memory-rate-limiter";
 
 // A clock the test advances by hand so refill behaviour is deterministic.

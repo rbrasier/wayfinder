@@ -21,7 +21,7 @@ import {
   UpdateEventWatch,
   type ConfirmAndSend,
   type NotificationConfig,
-} from "@rbrasier/application";
+} from "@wayfinder/application";
 import {
   DrizzleEventWatchRepository,
   DrizzleFlowTriggerRepository,
@@ -32,7 +32,7 @@ import {
   nodeWebhookCrypto,
   type createDatabase,
   type SecretCipher,
-} from "@rbrasier/adapters";
+} from "@wayfinder/adapters";
 import type {
   AutomationConfig,
   IApprovalRepository,
@@ -51,7 +51,7 @@ import type {
   ISessionRepository,
   ISessionStepOutputRepository,
   IUserRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface AutomationDependencies {
   db: ReturnType<typeof createDatabase>;

@@ -1,4 +1,4 @@
-import { verifyHmacSignature } from "@rbrasier/adapters";
+import { verifyHmacSignature } from "@wayfinder/adapters";
 import { Router, type Request, type Response } from "express";
 import { z } from "zod";
 import type { Container } from "../container.js";

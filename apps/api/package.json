@@ -12,14 +12,15 @@
     "recover-admin": "DOTENV_CONFIG_PATH=../../.env tsx src/cli/recover-admin.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint src",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "migrate:dev": "DOTENV_CONFIG_PATH=../../.env tsx src/cli/migrate.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
-    "@rbrasier/adapters": "workspace:*",
-    "@rbrasier/application": "workspace:*",
-    "@rbrasier/domain": "workspace:*",
-    "@rbrasier/shared": "workspace:*",
+    "@wayfinder/adapters": "workspace:*",
+    "@wayfinder/application": "workspace:*",
+    "@wayfinder/domain": "workspace:*",
+    "@wayfinder/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.2",

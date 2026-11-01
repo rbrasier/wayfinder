@@ -1,24 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
+import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import { withPrincipal } from "@/lib/with-principal";
 import { accessError, authorizeSessionAccess } from "@/lib/session-access";
 import { resolveCanOversee } from "@/lib/oversight";
 
-export async function DELETE(
+async function handleDELETE(
   req: NextRequest,
+  principal: ResolvedSession,
   { params }: { params: Promise<{ sessionId: string; uploadId: string }> },
 ): Promise<NextResponse> {
   const { sessionId, uploadId } = await params;
   const container = getContainer();
 
-  const token = getSessionTokenFromRequest(req);
-  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const authSession = await container.resolveSession(token);
-  if (!authSession) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
-  const canOverride = await resolveCanOversee(container, authSession);
-  const access = await authorizeSessionAccess(container, sessionId, authSession.userId, canOverride, {
+  const canOverride = await resolveCanOversee(container, principal);
+  const access = await authorizeSessionAccess(container, sessionId, principal.userId, canOverride, {
     requireSend: true,
     allowApprover: false,
   });
@@ -44,3 +41,11 @@ export async function DELETE(
 
   return NextResponse.json({ ok: true });
 }
+
+// Resolution and the audit actor scope are one operation, so a route cannot
+// obtain a principal without the scope that attributes what it does (ADR-060 §3a).
+export const DELETE = (
+  req: NextRequest,
+  context: { params: Promise<{ sessionId: string; uploadId: string }> },
+): Promise<NextResponse> =>
+  withPrincipal(req, (principal) => handleDELETE(req, principal, context));

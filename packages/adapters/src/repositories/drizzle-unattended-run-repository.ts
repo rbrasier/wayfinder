@@ -6,7 +6,7 @@ import {
   type IUnattendedRunRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_flow_nodes, app_sessions } from "../db/schema/wayfinder";
 import { toSessionEntity } from "./drizzle-session-repository";

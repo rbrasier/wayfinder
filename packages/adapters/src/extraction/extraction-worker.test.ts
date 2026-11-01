@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { IJobRepository, ILogger, Job, Result } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { IJobRepository, ILogger, Job, Result } from "@wayfinder/domain";
 import { EXTRACTION_JOB_NAME, ExtractionWorker, type BatchTickRunner } from "./extraction-worker";
 
 const job: Job = {

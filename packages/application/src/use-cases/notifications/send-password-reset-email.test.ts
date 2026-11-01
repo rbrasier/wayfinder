@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import type { IEmailSender, Result, SendEmailInput } from "@rbrasier/domain";
-import { domainError, ok, err } from "@rbrasier/domain";
+import type { IEmailSender, Result, SendEmailInput } from "@wayfinder/domain";
+import { domainError, ok, err } from "@wayfinder/domain";
 import { SendPasswordResetEmail } from "./send-password-reset-email";
 
 class RecordingSender implements IEmailSender {

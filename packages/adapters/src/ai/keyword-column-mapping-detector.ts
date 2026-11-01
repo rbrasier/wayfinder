@@ -1,4 +1,4 @@
-import { ok, type HrColumnMapping, type HrFieldKind, type IColumnMappingDetector, type Result } from "@rbrasier/domain";
+import { ok, type HrColumnMapping, type HrFieldKind, type IColumnMappingDetector, type Result } from "@wayfinder/domain";
 
 // Ordered so the first matching rule wins — manager is tested before name so a
 // "Manager Name" column resolves to `manager` rather than `name`.

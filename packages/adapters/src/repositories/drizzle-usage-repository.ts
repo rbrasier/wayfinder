@@ -10,8 +10,8 @@ import {
   type UsageFilter,
   type UsageGroupSummary,
   type UsageSummary,
-} from "@rbrasier/domain";
-import { and, eq, gte, lte, sum, count, type SQL } from "drizzle-orm";
+} from "@wayfinder/domain";
+import { and, asc, eq, gte, lte, sum, count, type SQL } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { ai_usage_events } from "../db/schema/ai";
 
@@ -63,6 +63,19 @@ export class DrizzleUsageRepository implements IUsageRepository {
       return ok(toEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to record usage event.", cause));
+    }
+  }
+
+  async listBySession(sessionId: string): Promise<Result<UsageEvent[]>> {
+    try {
+      const rows = await this.db
+        .select()
+        .from(ai_usage_events)
+        .where(eq(ai_usage_events.session_id, sessionId))
+        .orderBy(asc(ai_usage_events.created_at));
+      return ok(rows.map(toEntity));
+    } catch (cause) {
+      return err(domainError("INFRA_FAILURE", "Failed to list usage events for session.", cause));
     }
   }
 

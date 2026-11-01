@@ -4,7 +4,7 @@ import {
   parseTemplateField,
   type DraftEvidence,
   type TemplateAnnotationEdit,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface AnnotationOccurrence {
   // The exact text to find, as it reads in the extracted document text.

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { toast } from "sonner";
-import { deriveFieldKey, validateTriggerInputs, type TriggerInput, type TriggerInputType } from "@rbrasier/domain";
+import { deriveFieldKey, validateTriggerInputs, type TriggerInput, type TriggerInputType } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/trpc/client";

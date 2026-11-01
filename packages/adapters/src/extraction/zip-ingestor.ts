@@ -1,5 +1,4 @@
-import PizZip from "pizzip";
-import { domainError, err, isSystemFile, ok, unsupportedFileReason } from "@rbrasier/domain";
+import { domainError, err, isSystemFile, ok, unsupportedFileReason } from "@wayfinder/domain";
 import type {
   ArchiveEntry,
   ArchiveLimits,
@@ -7,94 +6,51 @@ import type {
   IArchiveExtractor,
   Result,
   SkippedUpload,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
+import {
+  decompressionBomb,
+  guardDeclaredSizes,
+  guardEntryCount,
+  isUnsafePath,
+  openZip,
+  readableEntries,
+  tooLargeEntry,
+  unsafeEntryPath,
+} from "../archives/zip-guards";
 import { sniffMimeType } from "./mime-sniff";
 
-// PizZip exposes the central-directory uncompressed size on a private field. We
-// read it (best-effort) to reject an oversized entry before decompressing it, so
-// a decompression bomb never gets allocated in the first place.
-interface CompressedMeta {
-  _data?: { uncompressedSize?: number | null };
-}
-
-const declaredUncompressedSize = (entry: PizZip.ZipObject): number | null => {
-  const size = (entry as unknown as CompressedMeta)._data?.uncompressedSize;
-  return typeof size === "number" ? size : null;
-};
-
-// Zip-slip guard: reject absolute paths, Windows drive letters, and any parent
-// segment so a crafted entry can never escape its extraction root (phase §5).
-const isUnsafePath = (name: string): boolean => {
-  if (name.startsWith("/") || name.startsWith("\\")) return true;
-  if (/^[a-zA-Z]:/.test(name)) return true;
-  return name
-    .replace(/\\/g, "/")
-    .split("/")
-    .some((segment) => segment === "..");
-};
-
-const tooLarge = (name: string, limit: number): Result<never> =>
-  err(
-    domainError(
-      "VALIDATION_FAILED",
-      `Archive entry "${name}" exceeds the ${limit}-byte per-file limit.`,
-    ),
-  );
-
-const bomb = (limit: number): Result<never> =>
-  err(
-    domainError(
-      "VALIDATION_FAILED",
-      `The archive decompresses to more than the ${limit}-byte total limit (possible decompression bomb).`,
-    ),
-  );
-
-// Safe, tree-preserving zip expansion (ADR-033 §5, phase §2). Enforces the four
-// hard guards — entry count, per-entry size, decompression bomb, and zip-slip —
-// and sniffs MIME from content. Unrecognised entries are skipped rather than
-// trusted, and each skip is reported with its reason. Never throws: a malformed or unsafe archive comes back as a
-// DomainError.
+// Safe, tree-preserving zip expansion (ADR-033 §5, phase §2). The four hard
+// guards — entry count, per-entry size, decompression bomb, and zip-slip — live
+// in `archives/zip-guards.ts` and are shared with the flow-archive reader. What
+// is specific to this ingestor is the MIME policy: entries are sniffed from
+// content and anything unrecognised is skipped rather than trusted, and each
+// skip is reported with its reason.
+//
+// Never throws: a malformed or unsafe archive comes back as a DomainError.
 export class ZipIngestor implements IArchiveExtractor {
   async expand(archive: Buffer, limits: ArchiveLimits): Promise<Result<ExpandedArchive>> {
-    let zip: PizZip;
-    try {
-      zip = new PizZip(archive, { checkCRC32: false });
-    } catch (cause) {
-      return err(
-        domainError("VALIDATION_FAILED", "The uploaded archive is not a readable zip file.", cause),
-      );
-    }
+    const zip = openZip(archive);
+    if (zip.error) return err(zip.error);
 
-    const files = Object.values(zip.files).filter((entry) => !entry.dir);
-    if (files.length > limits.maxEntries) {
-      return err(
-        domainError(
-          "VALIDATION_FAILED",
-          `The archive holds ${files.length} files, over the ${limits.maxEntries}-file limit.`,
-        ),
-      );
-    }
+    const files = readableEntries(zip.data);
 
-    const declaredGuard = this.guardDeclaredSizes(files, limits);
-    if (declaredGuard.error) return declaredGuard;
+    const countGuard = guardEntryCount(files, limits.maxEntries);
+    if (countGuard.error) return err(countGuard.error);
+
+    const declaredGuard = guardDeclaredSizes(files, limits);
+    if (declaredGuard.error) return err(declaredGuard.error);
 
     const entries: ArchiveEntry[] = [];
     const skipped: SkippedUpload[] = [];
     let totalBytes = 0;
+
     for (const entry of files) {
-      if (isUnsafePath(entry.name)) {
-        return err(
-          domainError(
-            "VALIDATION_FAILED",
-            `Archive entry "${entry.name}" has an unsafe path and was rejected.`,
-          ),
-        );
-      }
+      if (isUnsafePath(entry.name)) return unsafeEntryPath(entry.name);
 
       const buffer = Buffer.from(entry.asNodeBuffer());
-      if (buffer.length > limits.maxEntryBytes) return tooLarge(entry.name, limits.maxEntryBytes);
+      if (buffer.length > limits.maxEntryBytes) return tooLargeEntry(entry.name, limits.maxEntryBytes);
       totalBytes += buffer.length;
-      if (totalBytes > limits.maxTotalBytes) return bomb(limits.maxTotalBytes);
+      if (totalBytes > limits.maxTotalBytes) return decompressionBomb(limits.maxTotalBytes);
 
       const treePath = entry.name.replace(/\\/g, "/");
       const filename = treePath.split("/").pop() ?? treePath;
@@ -118,19 +74,5 @@ export class ZipIngestor implements IArchiveExtractor {
     }
 
     return ok({ entries, skipped });
-  }
-
-  // Rejects an oversized or bomb archive from the central directory's declared
-  // sizes, before any entry is decompressed.
-  private guardDeclaredSizes(files: PizZip.ZipObject[], limits: ArchiveLimits): Result<void> {
-    let declaredTotal = 0;
-    for (const entry of files) {
-      const declared = declaredUncompressedSize(entry);
-      if (declared === null) continue;
-      if (declared > limits.maxEntryBytes) return tooLarge(entry.name, limits.maxEntryBytes);
-      declaredTotal += declared;
-      if (declaredTotal > limits.maxTotalBytes) return bomb(limits.maxTotalBytes);
-    }
-    return ok(undefined);
   }
 }

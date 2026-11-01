@@ -1,6 +1,6 @@
 "use client";
 
-import type { WatchCondition, WatchMatchOperator } from "@rbrasier/domain";
+import type { WatchCondition, WatchMatchOperator } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SampleFieldSelect } from "./sample-field-select";

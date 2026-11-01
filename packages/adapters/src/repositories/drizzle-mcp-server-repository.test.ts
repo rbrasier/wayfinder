@@ -1,34 +1,70 @@
 import { describe, expect, it } from "vitest";
-import { oauthColumns, toMcpServer } from "./drizzle-mcp-server-repository";
+import { SettingsEncryptionService } from "../config/settings-encryption";
+import { oauthColumns, toMcpServerEntity, type McpServerRow } from "./drizzle-mcp-server-repository";
 
-const cipher = {
-  encrypt: (plain: string) => `enc:${plain}`,
-  decrypt: (encrypted: string) => encrypted.replace(/^enc:/, ""),
-};
+const encryption = new SettingsEncryptionService(Buffer.alloc(32, 7));
 
-const row = (overrides: Record<string, unknown> = {}) =>
-  ({
-    id: "server-1",
-    label: "Records",
-    transport: "sse",
-    url: "https://mcp.example.com/sse",
-    credential_ref: null,
-    credential_encrypted: null,
-    oauth_token_url: null,
-    oauth_client_id: null,
-    oauth_client_secret_encrypted: null,
-    oauth_scope: null,
-    oauth_audience: null,
-    oauth_client_auth_method: null,
-    communicates_externally: false,
-    status: "active",
-    created_by_user_id: null,
-    created_at: new Date(),
-    updated_at: new Date(),
-    ...overrides,
-  }) as Parameters<typeof toMcpServer>[0];
+// The mapping is where an admin classification silently goes missing: the column
+// exists, the entity member exists, and nothing fails to compile if the two are
+// never connected. These lock the connection in.
+const row = (overrides: Partial<McpServerRow> = {}): McpServerRow => ({
+  id: "mcp-1",
+  label: "Rate table",
+  transport: "sse",
+  url: "https://mcp.example.com/sse",
+  data_classification: "internal",
+  verbatim_only: false,
+  call_timeout_ms: 30_000,
+  credential_ciphertext: null,
+  custom_headers_ciphertext: null,
+  oauth_token_url: null,
+  oauth_client_id: null,
+  oauth_scope: null,
+  oauth_audience: null,
+  oauth_client_auth_method: null,
+  oauth_client_secret_ciphertext: null,
+  status: "active",
+  created_by_user_id: null,
+  created_at: new Date("2026-01-01"),
+  updated_at: new Date("2026-01-01"),
+  ...overrides,
+});
 
-const settings = {
+describe("toMcpServerEntity", () => {
+  it("carries the classification, timeout and verbatim-only handling onto the entity", () => {
+    const entity = toMcpServerEntity(
+      row({ data_classification: "public-read", call_timeout_ms: 45_000, verbatim_only: true }),
+      encryption,
+    );
+    expect(entity).toMatchObject({ dataClassification: "public-read", callTimeoutMs: 45_000, verbatimOnly: true });
+  });
+
+  it("reports that secrets exist and names the headers without exposing any value", () => {
+    const entity = toMcpServerEntity(
+      row({
+        credential_ciphertext: encryption.encrypt("token-1"),
+        custom_headers_ciphertext: encryption.encrypt(JSON.stringify({ "X-Api-Key": "key-1" })),
+      }),
+      encryption,
+    );
+
+    expect(entity.hasCredential).toBe(true);
+    expect(entity.customHeaderNames).toEqual(["X-Api-Key"]);
+    expect(JSON.stringify(entity)).not.toContain("token-1");
+    expect(JSON.stringify(entity)).not.toContain("key-1");
+  });
+
+  it("reads a server with no secrets as having none", () => {
+    expect(toMcpServerEntity(row(), encryption)).toMatchObject({ hasCredential: false, customHeaderNames: [] });
+  });
+
+  it("reads undecryptable headers as none rather than failing the listing", () => {
+    const entity = toMcpServerEntity(row({ custom_headers_ciphertext: "enc:v1:garbage" }), encryption);
+    expect(entity.customHeaderNames).toEqual([]);
+  });
+});
+
+const oauthSettings = {
   tokenUrl: "https://login.example.com/token",
   clientId: "wayfinder-service",
   scope: "mcp.read",
@@ -36,55 +72,42 @@ const settings = {
   clientAuthMethod: "client_secret_post" as const,
 };
 
-describe("toMcpServer", () => {
+describe("OAuth settings", () => {
   it("reads a server with no OAuth columns as not using OAuth", () => {
-    expect(toMcpServer(row()).oauth).toBeNull();
+    expect(toMcpServerEntity(row(), encryption).oauth).toBeNull();
   });
 
-  it("carries the OAuth settings but never the client secret", () => {
-    const server = toMcpServer(
+  it("carries the OAuth settings onto the entity but never the client secret", () => {
+    const entity = toMcpServerEntity(
       row({
         oauth_token_url: "https://login.example.com/token",
         oauth_client_id: "wayfinder-service",
-        oauth_client_secret_encrypted: "enc:client-secret",
         oauth_scope: "mcp.read",
         oauth_client_auth_method: "client_secret_post",
+        oauth_client_secret_ciphertext: encryption.encrypt("client-secret"),
       }),
+      encryption,
     );
 
-    expect(server.oauth).toEqual(settings);
-    expect(JSON.stringify(server)).not.toContain("client-secret");
-  });
-});
-
-describe("oauthColumns", () => {
-  it("leaves every OAuth column alone when there is no change", () => {
-    expect(oauthColumns(undefined, cipher)).toEqual({});
+    expect(entity.oauth).toEqual(oauthSettings);
+    expect(JSON.stringify(entity)).not.toContain("client-secret");
   });
 
-  it("clears every OAuth column, the secret included, when OAuth is removed", () => {
-    expect(oauthColumns(null, cipher)).toEqual({
-      oauth_token_url: null,
-      oauth_client_id: null,
-      oauth_client_secret_encrypted: null,
-      oauth_scope: null,
-      oauth_audience: null,
-      oauth_client_auth_method: null,
-    });
-  });
-
-  it("writes the settings and encrypts a new client secret", () => {
-    expect(oauthColumns({ settings, clientSecret: "client-secret" }, cipher)).toEqual({
+  it("writes the settings columns, clears them on null and leaves them alone when absent", () => {
+    expect(oauthColumns(undefined)).toEqual({});
+    expect(oauthColumns(oauthSettings)).toEqual({
       oauth_token_url: "https://login.example.com/token",
       oauth_client_id: "wayfinder-service",
       oauth_scope: "mcp.read",
       oauth_audience: null,
       oauth_client_auth_method: "client_secret_post",
-      oauth_client_secret_encrypted: "enc:client-secret",
     });
-  });
-
-  it("keeps the stored client secret when none is given", () => {
-    expect(oauthColumns({ settings }, cipher)).not.toHaveProperty("oauth_client_secret_encrypted");
+    expect(oauthColumns(null)).toEqual({
+      oauth_token_url: null,
+      oauth_client_id: null,
+      oauth_scope: null,
+      oauth_audience: null,
+      oauth_client_auth_method: null,
+    });
   });
 });

@@ -1,5 +1,5 @@
 import type { UIMessage } from "ai";
-import type { TurnStreamAnnotation } from "@rbrasier/domain";
+import type { TurnStreamAnnotation } from "@wayfinder/domain";
 
 // A chat message as AI SDK 5 streams it: text in `text` parts, and each turn
 // annotation (confidence, cross-check, doc-gen, consulting) in a

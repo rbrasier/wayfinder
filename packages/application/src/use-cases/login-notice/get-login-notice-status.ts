@@ -8,7 +8,7 @@ import {
   type LoginNoticeAcknowledgement,
   type LoginNoticeConfig,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface LoginNoticeStatus {
   readonly due: boolean;
@@ -22,7 +22,7 @@ export interface LoginNoticeStatus {
 const ACKNOWLEDGEMENT_LOOKBACK = 20;
 
 // Answers "must this person acknowledge the notice now?" from the audit log
-// (ADR-060 §5). The config comes through the runtime cache, so an install with
+// (ADR-061 §5). The config comes through the runtime cache, so an install with
 // the notice off never queries the audit table.
 export class GetLoginNoticeStatus {
   constructor(

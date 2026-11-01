@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { reconcileReleaseLine } from "./release-line-reconciliation";
 
 // Chosen once and never changed: every process that migrates must agree on this
 // number or the lock does not serialise anything.
@@ -160,6 +161,7 @@ export async function runMigrations(
 
     try {
       const alreadyAppliedCount = await countAppliedMigrations(database);
+      await reconcileReleaseLine(database, migrationsFolder, options.onProgress);
       await migrate(database, { migrationsFolder });
       const totalAppliedCount = await countAppliedMigrations(database);
 

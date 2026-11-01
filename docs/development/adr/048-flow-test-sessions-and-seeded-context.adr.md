@@ -3,10 +3,13 @@
 - **Status**: Proposed (scoped by `flow-test-runs.prd.md`)
 - **Date**: 2026-08-11
 - **Builds on**: ADR-006 (flow/session schema), ADR-007 (session-scoped
-  LangGraph), ADR-015 (flow versioning snapshots — the published/draft split this
-  depends on), ADR-026 (operator-confirmed step completion), ADR-018 (approval
-  step and approver resolution — the one runtime behaviour a test must not
-  reproduce faithfully)
+  LangGraph), `015-flow-versioning-snapshots` — the published/draft split this
+  depends on, `026-operator-confirmed-step-completion`, ADR-018 (approval step
+  and approver resolution — the one runtime behaviour a test must not reproduce
+  faithfully)
+
+  Two of these numbers are used twice in `docs/development/adr/`, so 015 and 026
+  are cited by filename rather than by number alone.
 
 ## Context
 
@@ -116,9 +119,25 @@ not a way for an operator to reach an unpublished flow.
 ### 4. Isolation is enforced at the repository, not at the router
 
 Every production read of sessions — `/chats`, `/admin/sessions`, the dashboards,
-`GetFlowDeepDive`, approval queues, usage attribution — must exclude
-`mode = 'test'`. That predicate belongs in the repository query, with
-`app_sessions (mode)` indexed, not in each caller.
+`GetFlowDeepDive`, approval queues — must exclude `mode = 'test'`. That predicate
+belongs in the repository query, not in each caller.
+
+Usage attribution is the deliberate exception, and Decision 6 explains why: test
+spend is real spend and stays visible everywhere spend is reported.
+
+Two of these reads do not currently touch `app_sessions` at all, and a predicate
+alone will not fix them — the seed materialises ordinary message and step-output
+rows, so the join has to be added first:
+
+- `DrizzleAnalyticsRepository.listAssistantMessages` selects from
+  `app_session_messages` with no session join (its sibling `listMessagesByFlow`
+  has one).
+- `DrizzleSessionStepOutputRepository.listByFlow` filters on `flow_id` only, and
+  feeds `GetFlowDeepDive`'s field report.
+
+Indexing follows the predicate rather than the column: a standalone index on a
+column that reads `'live'` for almost every row earns nothing, so `mode` is
+folded into the two existing composite indexes that back the filtered queries.
 
 Filtering in routers would be correct on the day it shipped and wrong the first
 time someone adds a read path — and the failure mode is a customer's dashboard
@@ -141,7 +160,20 @@ worth having.
 Test sessions can be deleted on demand and are swept after a retention window
 (default 30 days). They consume real tokens against real budgets: the run's cost
 is read back from `ai_usage_events` and shown per step in the modal. Making test
-spend invisible would make it unbounded.
+spend invisible would make it unbounded — so it is neither exempt from budget
+enforcement nor filtered out of usage reporting. This is the exception noted in
+Decision 4.
+
+`ai_usage_events` carries tokens and `cost_usd` but **no duration**, so per-step
+latency is derived from message timestamps — an assistant message's `created_at`
+minus that of the user message that provoked it. That measures the whole
+server-side turn (model call, tool loop, document generation), which is the
+number an author tuning a step actually wants. No column is added for it.
+
+The sweep is its own use-case rather than a `RETENTION_TARGETS` entry, because
+that registry is keyed by table with a whole-table timestamp policy and cannot
+express "rows where `mode = 'test'`". It still honours the two guards that
+registry provides: by-session legal holds and per-batch caps.
 
 ## Alternatives considered
 
@@ -191,5 +223,8 @@ at node N.
   retention sweep.
 - Approval behaviour under test is deliberately not production behaviour.
 - A seed cloned from a real session copies real, possibly personal data into a
-  saved fixture — a privacy surface that did not previously exist, and one the
-  PRD's acceptance criteria must cover.
+  saved fixture — a privacy surface that did not previously exist. Bounded rather
+  than removed: a fixture is visible only to the user who created it, and the
+  save dialog warns that cloned values may carry real data. Redaction was
+  rejected for this version because a redacted value no longer exercises the step
+  realistically, which is the entire reason to clone one.

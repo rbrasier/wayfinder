@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type EventWatch, type NewAuditLog, type WatchPausedReason } from "@rbrasier/domain";
+import { ok, type EventWatch, type NewAuditLog, type WatchPausedReason } from "@wayfinder/domain";
 import { DeleteEventWatch, PauseEventWatch, ResumeEventWatch } from "./event-watch-lifecycle";
 
 const watch = { id: "watch-1", name: "Estimates hearings", status: "active" } as EventWatch;

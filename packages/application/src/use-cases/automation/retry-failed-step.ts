@@ -1,4 +1,4 @@
-import { domainError, err, type IAuditLogger, type ISessionRepository, type Result } from "@rbrasier/domain";
+import { domainError, err, type IAuditLogger, type ISessionRepository, type Result } from "@wayfinder/domain";
 import type { AdvanceUnattendedRunInput, AdvanceUnattendedRunOutput } from "./advance-unattended-run";
 
 export interface RetryFailedStepDependencies {

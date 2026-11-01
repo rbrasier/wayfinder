@@ -1,6 +1,9 @@
-import type { ExtractionRun } from "@rbrasier/domain";
+import type { ExtractionRun } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
-import { getSessionTokenFromRequest } from "@/lib/session-token";
+import {
+  getImpersonationCookieFromRequest,
+  getSessionTokenFromRequest,
+} from "@/lib/session-token";
 import { canEditFlow } from "@/server/routers/flow";
 import { resolveCanOversee } from "@/lib/oversight";
 
@@ -20,7 +23,7 @@ export const authoriseRunAccess = async (
   const token = getSessionTokenFromRequest(request);
   if (!token) return { ok: false, status: 401, error: "Unauthorized" };
 
-  const session = await container.resolveSession(token);
+  const session = await container.resolveSession(token, getImpersonationCookieFromRequest(request));
   if (!session) return { ok: false, status: 401, error: "Unauthorized" };
 
   const flagEnabled = await container.useCases.isFeatureEnabledForUser.execute(

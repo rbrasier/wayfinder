@@ -10,11 +10,12 @@ import {
   type IFlowNodeRepository,
   type ILanguageModel,
   type IReportingLineResolver,
+  type ISessionRepository,
   type IUserRepository,
   type PositionLookupInput,
   type Result,
-} from "@rbrasier/domain";
-import { delegationPositionSchema, type DelegationPosition } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { delegationPositionSchema, type DelegationPosition } from "@wayfinder/shared";
 import {
   describeApprover,
   describeAssignedApprover,
@@ -44,6 +45,10 @@ export class SuggestApprover {
     private readonly flowNodes: IFlowNodeRepository,
     private readonly resolver: IReportingLineResolver,
     private readonly users: IUserRepository,
+    // Read here rather than passed in by the caller. A test run must never place
+    // an approval in a real person's queue (ADR-048 §5), and a caller that
+    // forgets to say "this is a test" is exactly how that would happen.
+    private readonly sessions: ISessionRepository,
     // RAG dependencies for the `dynamic` path. All optional so the use-case stays
     // testable and degrades to a plain roleHint lookup when unwired.
     private readonly embeddings?: IEmbeddingsProvider,
@@ -90,6 +95,15 @@ export class SuggestApprover {
     config: ApprovalNodeConfig,
     input: SuggestApproverInput,
   ): Promise<string | null> {
+    // The one place a test run knowingly diverges from production behaviour.
+    // Faithfully paging a supervisor because someone pressed Test is not a
+    // trade-off worth having, so the approval resolves to the author instead —
+    // and the modal says so rather than letting it look like real routing.
+    const session = await this.sessions.findById(input.sessionId);
+    if (!session.error && session.data && (session.data.mode ?? "live") === "test") {
+      return input.requestedByUserId;
+    }
+
     if (config.approverSource === "dynamic") {
       const lookup = await this.resolveDynamicLookup(config, input);
       const holders = await this.resolver.findPositionHolder(lookup);

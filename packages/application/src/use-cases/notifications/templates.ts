@@ -3,7 +3,7 @@
 // domain+shared-only import rule. Bodies stay minimal (names + link) to keep
 // PII out of email (PRD §12).
 
-import type { FlowPermissionRole } from "@rbrasier/domain";
+import type { FlowPermissionRole } from "@wayfinder/domain";
 
 export interface EmailContent {
   subject: string;

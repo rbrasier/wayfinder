@@ -1,4 +1,4 @@
-import { AUTOMATION_CONFIG_SETTING_KEY } from "@rbrasier/domain";
+import { AUTOMATION_CONFIG_SETTING_KEY } from "@wayfinder/domain";
 import type { Container } from "./container";
 import { unwrap } from "./e2e-fixtures";
 

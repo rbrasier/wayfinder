@@ -2,8 +2,8 @@ import {
   ok,
   type ILanguageModel,
   type Result,
-} from "@rbrasier/domain";
-import { templateStructureSchema } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { templateStructureSchema } from "@wayfinder/shared";
 
 export interface SummariseTemplateInput {
   fullExtractedText: string;

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// The logo route is the one public door onto object storage (ADR-060 §4), so
+// The logo route is the one public door onto object storage (ADR-061 §4), so
 // what it will and won't serve is asserted here rather than through a browser.
 
 const { container, state } = vi.hoisted(() => {
@@ -10,7 +10,12 @@ const { container, state } = vi.hoisted(() => {
       primaryColour: null as string | null,
       logo: null as { key: string; mimeType: string; version: number } | null,
     },
-    session: null as { sessionId: string; userId: string; isAdmin: boolean } | null,
+    session: null as {
+      sessionId: string;
+      userId: string;
+      isAdmin: boolean;
+      impersonatorId: string | null;
+    } | null,
     stored: new Map<string, Buffer>(),
     uploadResult: null as unknown,
   };
@@ -102,7 +107,7 @@ describe("GET /api/branding/logo", () => {
 
 describe("POST /api/branding/logo", () => {
   beforeEach(() => {
-    state.session = { sessionId: "session-1", userId: "admin-1", isAdmin: true };
+    state.session = { sessionId: "session-1", userId: "admin-1", isAdmin: true, impersonatorId: null };
     state.uploadResult = {
       data: {
         displayName: "",
@@ -121,7 +126,7 @@ describe("POST /api/branding/logo", () => {
   });
 
   it("rejects a non-admin", async () => {
-    state.session = { sessionId: "session-2", userId: "user-1", isAdmin: false };
+    state.session = { sessionId: "session-2", userId: "user-1", isAdmin: false, impersonatorId: null };
 
     const response = await POST(uploadRequest(new Blob([PNG])));
 
@@ -170,7 +175,7 @@ describe("POST /api/branding/logo", () => {
 
 describe("DELETE /api/branding/logo", () => {
   it("removes the logo for an admin", async () => {
-    state.session = { sessionId: "session-1", userId: "admin-1", isAdmin: true };
+    state.session = { sessionId: "session-1", userId: "admin-1", isAdmin: true, impersonatorId: null };
 
     const response = await DELETE(
       new Request("http://localhost:3000/api/branding/logo", {

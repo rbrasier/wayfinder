@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
 import type {
   IApprovalRepository,
   IAuditLogger,
@@ -16,7 +16,7 @@ import type {
   SessionMessage,
   SessionStepOutput,
   StepOutputField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { UpdateDocumentFields } from "./update-document-fields";
 
 const FIELDS = [

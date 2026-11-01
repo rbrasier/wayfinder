@@ -1,4 +1,4 @@
-import type { TextEditLink } from "@rbrasier/domain";
+import type { TextEditLink } from "@wayfinder/domain";
 
 export interface DraftComparisonPayload {
   originalText: string;

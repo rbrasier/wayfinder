@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile, access } from "node:fs/promises";
 import { dirname } from "node:path";
-import { domainError, err, ok } from "@rbrasier/domain";
-import type { IDocumentStorage } from "@rbrasier/domain";
-import type { Result } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
+import type { IDocumentStorage } from "@wayfinder/domain";
+import type { Result } from "@wayfinder/domain";
 
 export class LocalDocumentStorage implements IDocumentStorage {
   async readBytes(storagePath: string): Promise<Result<Buffer>> {

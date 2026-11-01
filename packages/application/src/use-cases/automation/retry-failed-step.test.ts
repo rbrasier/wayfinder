@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type Session, type SessionUpdate } from "@rbrasier/domain";
+import { ok, type Session, type SessionUpdate } from "@wayfinder/domain";
 import { RetryFailedStep } from "./retry-failed-step";
 
 const failedSession = (overrides: Partial<Session> = {}): Session =>

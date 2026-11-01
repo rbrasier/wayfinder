@@ -22,8 +22,8 @@ import {
   type SessionMessage,
   type SessionStepOutput,
   type SessionTriggerPayload,
-} from "@rbrasier/domain";
-import { buildAiTaskResultSchema, type AiTaskResult, type DocumentData } from "@rbrasier/shared";
+} from "@wayfinder/domain";
+import { buildAiTaskResultSchema, type AiTaskResult, type DocumentData } from "@wayfinder/shared";
 import { accumulateInsights } from "../../services/accumulate-insights";
 import { resolveFieldValues } from "../../services/resolve-field-values";
 import { SUBJECT_DESCRIPTION_KEY, SUBJECT_NODE_ID_KEY } from "../approvals/approval-record-keys";

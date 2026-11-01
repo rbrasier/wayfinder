@@ -1,4 +1,4 @@
-import { domainError, err, ok, type Result } from "@rbrasier/domain";
+import { domainError, err, ok, type Result } from "@wayfinder/domain";
 
 // Minimal standard 5-field cron (minute hour day-of-month month day-of-week),
 // computed in UTC. Supports `*`, lists (`a,b`), ranges (`a-b`), and steps

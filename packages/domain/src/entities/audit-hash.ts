@@ -5,6 +5,11 @@
 
 export type Sha256Hex = (input: string) => string;
 
+// The same primitive over raw bytes, for hashing binary payloads such as a flow
+// archive's assets (ADR-049 §7). Injected for the same reason: the domain never
+// imports node:crypto, and neither does the application layer.
+export type Sha256Bytes = (bytes: Buffer) => string;
+
 // The subset of an audit row bound into the hash. Explicit so the canonical
 // string is stable no matter how the persisted row is shaped.
 export interface AuditHashInput {

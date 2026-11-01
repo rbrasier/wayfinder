@@ -1,4 +1,4 @@
-import { ok, type PermissionKey } from "@rbrasier/domain";
+import { ok, type PermissionKey } from "@wayfinder/domain";
 import { describe, expect, it, vi } from "vitest";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
@@ -51,6 +51,8 @@ const callerWith = (container: Container, permissions: PermissionKey[], isAdmin 
     container,
     userId: "viewer",
     authSessionId: null,
+    impersonatorId: null,
+    impersonationCookie: null,
     isAdmin,
     permissions: new Set(permissions),
     headers: new Headers(),

@@ -8,7 +8,7 @@ import {
   type ILanguageModel,
   type TemplateAnnotationEdit,
   type TemplateDraftField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { DraftTemplateFromExamples } from "./draft-template-from-examples";
 
 const USAGE = {

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useState } from "react";
 import type { ReactNode } from "react";
 
 // Three prompts can want the screen straight after sign-in, in this order: the
-// sign-in notice (ADR-060 §5), the organisation nomination gate (ADR-038 §4) and
+// sign-in notice (ADR-061 §5), the organisation nomination gate (ADR-038 §4) and
 // the welcome tour (ADR-056 §4). Each later one yields to those before it. The
 // notice goes first because it blocks the app until acknowledged — a
 // nomination dialog stacked over it would be unreachable. The tour yields to the

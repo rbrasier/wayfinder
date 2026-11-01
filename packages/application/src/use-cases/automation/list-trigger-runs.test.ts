@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type Approval, type FlowNode, type Session } from "@rbrasier/domain";
+import { ok, type Approval, type FlowNode, type Session } from "@wayfinder/domain";
 import { ListTriggerRuns } from "./list-trigger-runs";
 
 const node = (id: string, type: FlowNode["type"]): FlowNode =>

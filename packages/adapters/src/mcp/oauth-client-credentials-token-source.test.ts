@@ -1,4 +1,4 @@
-import type { McpOAuthSettings } from "@rbrasier/domain";
+import type { McpOAuthSettings } from "@wayfinder/domain";
 import { describe, expect, it, vi } from "vitest";
 import { OAuthClientCredentialsTokenSource } from "./oauth-client-credentials-token-source";
 

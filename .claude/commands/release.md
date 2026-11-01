@@ -83,7 +83,7 @@ On a working branch off `main` (`release-prep/<next line>`):
   `Next release line (on main):` → `<next line>`
 - Update every `target-branch:` in `.github/dependabot.yml` to
   `release/<new line>` so version-update PRs open against the new line
-  (`validate.sh` section 25 fails until it matches `CLAUDE.md`)
+  (`validate.sh` section 28 fails until it matches `CLAUDE.md`)
 - Update the branch table and diagram in `CONTRIBUTING.md` §2
 - Update the **Quickstart** section of `README.md`: the "Current release" line
   and the `--branch` argument of the `git clone` command must both point at

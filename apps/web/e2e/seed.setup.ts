@@ -10,6 +10,10 @@ import { test as setup, expect } from '@playwright/test';
 import { SEED_FIXTURE_KEYS, writeSeedFixtures, type SeedFixtures } from './helpers/seed';
 
 setup('seed e2e fixtures', async ({ request }) => {
+  // The test must outlive the request: at the suite's 45s default, a seed that
+  // ran past it disposed the request mid-call, and the retry collided with the
+  // half-finished seed ("create member user: Failed to create user").
+  setup.setTimeout(120_000);
   // The route is never warmed (warming it would seed), so this call pays its
   // first dev-mode compile — 17.5s in CI — on top of seeding. Under the
   // default 15s the request gave up while the server kept seeding, and the

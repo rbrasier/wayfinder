@@ -18,7 +18,7 @@ import { isLoginNoticeCleared, shouldShowLoginNotice } from "./login-notice-stat
 
 const preventClose = (event: Event) => event.preventDefault();
 
-// The sign-in notice (ADR-060 §5): a modal the user cannot close without
+// The sign-in notice (ADR-061 §5): a modal the user cannot close without
 // acknowledging it. Mounted in the (user) and (admin) layouts; the organisation
 // and welcome prompts wait for it through SignInPromptsProvider.
 export function LoginNoticeGate() {

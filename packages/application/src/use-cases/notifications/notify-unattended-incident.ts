@@ -9,7 +9,7 @@ import {
   type NotificationTrigger,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { NotificationConfig } from "./notify-on-session-complete";
 import type { EmailContent } from "./templates";
 import { buildAwaitingPersonEmail, buildRunFailedEmail, buildWatchPausedEmail } from "./unattended-templates";

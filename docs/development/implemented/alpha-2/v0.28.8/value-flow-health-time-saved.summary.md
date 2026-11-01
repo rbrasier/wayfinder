@@ -84,6 +84,11 @@ declaration — confirmed by `migration-safety.test.ts`. No backfill: sessions t
 finished before this shipped have no estimate and are excluded from coverage,
 which is the honest treatment rather than inventing history.
 
+On `main` the same statement is numbered `0046_session_manual_estimate.sql`: the
+forward merge landed it behind alpha-3's `0044` and `0045`, so it was regenerated
+at the next free index. The release line keeps `0044_hesitant_monster_badoon.sql`,
+which is the file a deployed alpha-2 database has already applied.
+
 ## Known limitations
 
 - **Estimates are self-reported** and inherently subjective. This is why the

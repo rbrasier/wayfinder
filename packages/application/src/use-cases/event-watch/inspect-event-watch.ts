@@ -9,7 +9,7 @@ import {
   type Result,
   type SecretChange,
   type WatchCondition,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { EVENT_WATCH_RESOURCE_TYPE } from "./save-event-watch";
 import { buildWatchRequest, truncateSample, type WatchConnection } from "./watch-request";
 

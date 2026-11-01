@@ -1,4 +1,4 @@
-import type { SessionMessage } from "@rbrasier/domain";
+import type { SessionMessage } from "@wayfinder/domain";
 
 export interface Insight {
   key: string;

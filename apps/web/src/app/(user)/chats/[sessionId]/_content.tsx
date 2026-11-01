@@ -6,7 +6,13 @@ import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { toast } from "sonner";
-import { visitedNodeIdsInOrder, type ApproverSource, type FlowEdge, type FlowNode } from "@rbrasier/domain";
+import {
+  visitedNodeIdsInOrder,
+  type ApproverSource,
+  type FlowEdge,
+  type FlowNode,
+  type SessionToolProgressEvent,
+} from "@wayfinder/domain";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChatActionsMenu } from "@/components/chat/chat-actions-menu";
@@ -20,6 +26,13 @@ import { toForkHistory } from "@/lib/chat/fork-history";
 import { ConfirmStepCard } from "@/components/chat/confirm-step-card";
 import { hasPendingDocumentGeneration } from "@/components/chat/document-poll-state";
 import { MessageFeed } from "@/components/chat/message-feed";
+import {
+  activeToolProgress,
+  formatToolProgressLabel,
+  pendingToolStepLabel,
+  reduceToolProgress,
+  type ToolProgressState,
+} from "@/components/chat/tool-progress-label-model";
 import { shouldResyncStreamedMessages } from "@/components/chat/stream-resync";
 import { AppHeader } from "@/components/layout/app-header";
 import { TypingIndicator } from "@/components/chat/typing-indicator";
@@ -100,6 +113,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
   // unattended run's step opener) is consulting, from its step.activity events.
   const [stepActivity, setStepActivity] = useState<{ nodeId: string | null; sources: string[] } | null>(null);
   const [typingTick, setTypingTick] = useState(0);
+  // Tool calls in flight on this session, from `tool.progress` events (ADR-062 §4).
+  const [toolProgress, setToolProgress] = useState<ToolProgressState>({});
 
   const [_regeneratingIds, setRegeneratingIds] = useState<Set<string>>(new Set());
   const [overrideOpen, setOverrideOpen] = useState(false);
@@ -235,6 +250,26 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     }
     return active;
   }, [typingTick, myUserId, senderNamesById]);
+
+  // `typingTick` re-renders every 1.5 s, which is what lets a call whose `done`
+  // event was lost drop off the label once it has gone quiet.
+  const toolProgressLabel = useMemo(() => {
+    void typingTick;
+    const active = activeToolProgress(toolProgress, Date.now());
+    return active ? formatToolProgressLabel(active) : null;
+  }, [toolProgress, typingTick]);
+
+  // A queued MCP step on the current node: the turn that reached it has ended,
+  // and the worker will post the outcome (ADR-062 §3).
+  const pendingMcpNodeName = useMemo(() => {
+    const node = rawNodes.find((candidate) => candidate.id === currentNodeId);
+    if (!node || node.type !== "mcp") return null;
+    const pending = Object.values(sessionData?.session.pendingExecutions ?? {});
+    return pending.some((entry) => entry.nodeId === node.id) ? node.name : null;
+  }, [rawNodes, currentNodeId, sessionData?.session.pendingExecutions]);
+  const waitingOnToolLabel = pendingMcpNodeName
+    ? (toolProgressLabel ?? pendingToolStepLabel(pendingMcpNodeName))
+    : null;
 
   // Steps left behind by a rewind. They keep their messages (and so their
   // insights), but they are no longer on the path this chat is taking, so the
@@ -401,6 +436,14 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
     source.addEventListener("session.updated", refetch);
     source.addEventListener("turn.claimed", refetch);
     source.addEventListener("turn.released", refetch);
+    source.addEventListener("tool.progress", (event) => {
+      try {
+        const data = JSON.parse((event as MessageEvent).data) as SessionToolProgressEvent;
+        setToolProgress((current) => reduceToolProgress(current, data, Date.now()));
+      } catch {
+        // Ignore malformed events; the label simply does not update.
+      }
+    });
     source.addEventListener("step.activity", (event) => {
       try {
         const data = JSON.parse((event as MessageEvent).data) as { nodeId?: string | null; sources?: string[] };
@@ -590,6 +633,8 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
         }
         pendingDocumentGeneration={isConfirmingStep && isDocumentTemplateStep}
         pendingStepAdvance={isConfirmingStep && !isDocumentTemplateStep}
+        toolProgressLabel={toolProgressLabel}
+        waitingOnToolLabel={waitingOnToolLabel}
         onAutomationReviewed={() => {
           void utils.session.get.invalidate({ sessionId });
           void pendingReviewQuery.refetch();
@@ -652,6 +697,10 @@ export function ChatSessionContent({ sessionId }: { sessionId: string }) {
             viewerUserId={myUserId}
             sessionOwnerUserId={session.userId}
             viewerIsAdmin={isAdmin}
+            offSystemAllowed={
+              (currentNode.config as { allowOffSystemApproval?: boolean })
+                .allowOffSystemApproval !== false
+            }
           />
         )}
 

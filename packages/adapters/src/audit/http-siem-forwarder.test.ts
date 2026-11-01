@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ILogger, SiemConfig, SiemEvent } from "@rbrasier/domain";
+import type { ILogger, SiemConfig, SiemEvent } from "@wayfinder/domain";
 import { HttpSiemForwarder, type FetchLike } from "./http-siem-forwarder";
 
 const silentLogger: ILogger = {

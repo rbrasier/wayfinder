@@ -13,7 +13,7 @@ import {
   type N8nConfig,
   type Result,
   type StorageConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   probeAiConnectivity,
   probeAuthEmailPassword,
@@ -29,6 +29,8 @@ import {
   type GraphProbe,
   type MinioClientFactory,
 } from "./connectivity-probes";
+import { isEmbeddingsProvider } from "@wayfinder/shared";
+import { embeddingsCredentialsFor } from "../ai/embeddings-adapter";
 
 interface RuntimeConfigSource {
   getAiConfig(): Promise<AiConfig>;
@@ -45,10 +47,7 @@ export interface ConnectivityTesterDeps {
   runtimeConfig: RuntimeConfigSource;
   emailSender: EmailProbe;
   graphClient: GraphProbe;
-  embeddingsProvider: IEmbeddingsProvider;
-  // Embeddings' OpenAI provider uses the environment key, kept separate from the
-  // admin-set AI provider key.
-  openaiApiKey: string | null;
+  embeddingsProvider: Pick<IEmbeddingsProvider, "embed">;
   // Counts accounts that carry a password, for the email + password sign-in
   // probe: the method can be enabled with nobody able to use it.
   credentialAccounts: CredentialAccountProbe;
@@ -85,6 +84,19 @@ export class CompositeConnectivityTester implements IConnectivityTester {
     }
   }
 
+  // Embeddings share the AI provider settings' keys (env-backed), the same
+  // credentials the embedding adapter resolves per call.
+  private async probeEmbeddings(): Promise<ConnectivityResult> {
+    const config = await this.deps.runtimeConfig.getEmbeddingsConfig();
+    const provider = isEmbeddingsProvider(config.provider) ? config.provider : "local";
+    const credentials = embeddingsCredentialsFor(provider, await this.deps.runtimeConfig.getAiConfig());
+    return probeEmbeddingsConnectivity(config, {
+      embeddingsProvider: this.deps.embeddingsProvider,
+      credentials,
+      timeoutMs: this.deps.timeoutMs,
+    });
+  }
+
   private async runProbe(target: ConnectivityTarget): Promise<ConnectivityResult> {
     const { deps } = this;
     const timeoutMs = deps.timeoutMs;
@@ -105,12 +117,7 @@ export class CompositeConnectivityTester implements IConnectivityTester {
           timeoutMs,
         });
       case "embeddings":
-        return probeEmbeddingsConnectivity(await deps.runtimeConfig.getEmbeddingsConfig(), {
-          embeddingsProvider: deps.embeddingsProvider,
-          openaiApiKey: deps.openaiApiKey,
-          fetchFn: deps.fetchFn,
-          timeoutMs,
-        });
+        return this.probeEmbeddings();
       case "email":
         return probeEmailConnectivity(deps.emailSender, { timeoutMs });
       case "entra":

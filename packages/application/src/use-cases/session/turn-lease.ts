@@ -5,7 +5,7 @@ import {
   type IUserRepository,
   type Result,
   type Session,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Outcome of a claim attempt. On a successful claim the caller gets the leased
 // session; on a contended one it gets the holder's display name (or null) so it

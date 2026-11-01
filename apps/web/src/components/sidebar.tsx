@@ -13,6 +13,7 @@ import {
   FlaskConical,
   Flag,
   GitBranch,
+  Eye,
   LogOut,
   Menu,
   MessageSquare,
@@ -46,9 +47,11 @@ import {
 } from "@/components/sidebar-model";
 import { UsageMeter, UsageRing } from "@/components/usage-meter";
 import { authClient } from "@/lib/auth-client";
-import type { PermissionKey } from "@rbrasier/domain";
+import { ViewAsUserDialog } from "@/components/impersonation/view-as-user-dialog";
+import type { PermissionKey } from "@wayfinder/domain";
 import { canOpenAdminArea, canOpenAdminPath, firstAdminHref, type AdminViewer } from "@/lib/admin-areas";
 import { trpc } from "@/trpc/client";
+import { staleDocumentsMessage } from "./settings/embeddings-provider-state";
 
 interface NavItem {
   // Omitted for an action row (New chat), which opens a modal rather than
@@ -60,6 +63,9 @@ interface NavItem {
   // Count of items awaiting the user on that surface. Rendered as a pill on the
   // right of the link; omitted or zero renders nothing.
   badgeCount?: number;
+  // Something on that surface needs an admin's action; rendered as an amber dot
+  // with this text as its accessible label.
+  attention?: string | null;
   // Overrides the group's mark for this row alone — New chat takes a plus where
   // its siblings take dots.
   mark?: NavMark;
@@ -112,6 +118,7 @@ interface AdminNavContext {
   readonly canCurate: boolean;
   readonly organisationsEnabled: boolean;
   readonly extractionEnabled: boolean;
+  readonly configurationAttention: string | null;
   // Null while the event_watch flag is off for this admin (ADR-063 §8).
   readonly eventWatchAttention: number | null;
 }
@@ -122,6 +129,7 @@ const buildAdminNav = ({
   canCurate,
   organisationsEnabled,
   extractionEnabled,
+  configurationAttention,
   eventWatchAttention,
 }: AdminNavContext): NavGroup[] => {
   // Skills + MCP Servers are hidden when their feature flag is disabled — an
@@ -154,7 +162,12 @@ const buildAdminNav = ({
         ...(extractionEnabled
           ? [{ href: "/admin/synthesise", icon: FlaskConical, label: "Synthesise Information" }]
           : []),
-        { href: "/admin/settings", icon: Settings, label: "Configuration" },
+        {
+          href: "/admin/settings",
+          icon: Settings,
+          label: "Configuration",
+          attention: configurationAttention,
+        },
       ],
     },
     {
@@ -263,7 +276,7 @@ function NavGroups({
 
             {!isCollapsed &&
               group.items.map((item) => {
-                const { href, onSelect, icon: Icon, label, badgeCount, trailing } = item;
+                const { href, onSelect, icon: Icon, label, badgeCount, attention, trailing } = item;
                 const active = href !== undefined && href === activeHref;
                 const rowMark = item.mark ?? mark;
 
@@ -304,6 +317,15 @@ function NavGroups({
                       >
                         {badgeCount > 99 ? "99+" : badgeCount}
                       </span>
+                    )}
+                    {attention && (
+                      <span
+                        role="img"
+                        aria-label={attention}
+                        title={attention}
+                        data-testid="nav-attention"
+                        className="h-[7px] w-[7px] shrink-0 rounded-full bg-amber-500"
+                      />
                     )}
                     {trailing}
                   </>
@@ -349,9 +371,14 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   const { mobileOpen, openMobile, closeMobile } = useSidebar();
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [viewAsOpen, setViewAsOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
 
   const userQuery = trpc.user.me.useQuery();
+  // Drives both the "View as user" entry and the hiding of admin mode below:
+  // a simulated session is never an admin session (ADR-059 §3a).
+  const impersonationQuery = trpc.impersonation.current.useQuery();
+  const isSimulating = impersonationQuery.data != null;
   const sessionsQuery = trpc.session.list.useQuery(undefined, {
     enabled: !isAdmin,
   });
@@ -428,6 +455,12 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     key: "extraction_flows",
   });
   const extractionEnabled = extractionFlagQuery.data ?? false;
+  // Documents embedded by a model other than the configured one stop matching
+  // queries until re-indexed, so the admin is pointed at Configuration.
+  const embeddingsAttentionQuery = trpc.settings.embeddingsAttention.useQuery(undefined, {
+    enabled: showsTechnicalArea,
+    staleTime: 60_000,
+  });
   const eventWatchFlagQuery = trpc.featureFlag.isAdminSurfaceEnabled.useQuery(
     { key: "event_watch" },
     { enabled: showsTechnicalArea },
@@ -443,6 +476,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
     canCurate,
     organisationsEnabled: organisationsEnabledQuery.data ?? false,
     extractionEnabled,
+    configurationAttention: staleDocumentsMessage(embeddingsAttentionQuery.data?.staleDocumentCount ?? 0),
     eventWatchAttention: eventWatchAttention(eventWatchEnabled, eventWatchAttentionQuery.data),
   }), viewer);
   const nav: NavGroup[] = isAdmin
@@ -549,7 +583,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
           Exit admin mode
         </button>
       )}
-      {!isAdmin && adminHomeHref !== null && (
+      {!isAdmin && adminHomeHref !== null && !isSimulating && (
         <button
           onClick={() => {
             closeMobile();
@@ -616,10 +650,28 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                 <LogOut className="h-[14px] w-[14px] shrink-0 text-[#5c574c]" />
                 Sign out
               </button>
+              {user.isAdmin && !isSimulating && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  data-testid="view-as-user"
+                  onClick={() => {
+                    setAccountOpen(false);
+                    closeMobile();
+                    setViewAsOpen(true);
+                  }}
+                  className="flex w-full items-center gap-[8px] border-t border-[#e7e3db] px-[12px] py-[7px] text-left text-[13px] text-[#1c1b19] hover:bg-[#efece5]"
+                >
+                  <Eye className="h-[14px] w-[14px] shrink-0 text-[#5c574c]" />
+                  View as user
+                </button>
+              )}
             </div>
           )}
         </div>
       )}
+
+      <ViewAsUserDialog open={viewAsOpen} onOpenChange={setViewAsOpen} />
     </div>
   );
 

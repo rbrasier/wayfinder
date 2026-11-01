@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   type Person,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { SuggestApprover } from "./suggest-approver";
-import { InMemoryApprovals, InMemoryFlowNodes, InMemoryUsers, StubDocumentChunks, StubEmbeddings, StubLanguageModel, StubResolver, approvalNode, policyChunk, session, user } from "./__fixtures__/approval-doubles";
+import { InMemoryApprovals, InMemoryFlowNodes, InMemorySessions, InMemoryUsers, StubDocumentChunks, StubEmbeddings, StubLanguageModel, StubResolver, approvalNode, policyChunk, session, user } from "./__fixtures__/approval-doubles";
 
 describe("SuggestApprover", () => {
   it("suggests the first-level supervisor from the resolver and writes a pending row", async () => {
@@ -13,7 +13,7 @@ describe("SuggestApprover", () => {
     const users = new InMemoryUsers();
     users.add(user("manager-1", "manager@corp.test"));
     const resolver = new StubResolver({ suggestedApproverUserId: "manager-1" });
-    const sut = new SuggestApprover(approvals, nodes, resolver, users);
+    const sut = new SuggestApprover(approvals, nodes, resolver, users, new InMemorySessions());
 
     const result = await sut.execute({
       sessionId: "session-1",
@@ -37,6 +37,7 @@ describe("SuggestApprover", () => {
       nodes,
       new StubResolver({ unresolved: true }),
       new InMemoryUsers(),
+      new InMemorySessions(),
     );
     const input = {
       sessionId: "session-1",
@@ -60,6 +61,7 @@ describe("SuggestApprover", () => {
       nodes,
       new StubResolver({ unresolved: true }),
       new InMemoryUsers(),
+      new InMemorySessions(),
     );
 
     const result = await sut.execute({
@@ -92,6 +94,7 @@ describe("SuggestApprover", () => {
       nodes,
       new StubResolver({ unresolved: true }, [holder]),
       users,
+      new InMemorySessions(),
     );
 
     const result = await sut.execute({
@@ -124,6 +127,7 @@ describe("SuggestApprover", () => {
       nodes,
       resolver,
       users,
+      new InMemorySessions(),
       new StubEmbeddings(),
       new StubDocumentChunks([policyChunk("Spend above $1m is approved by the Chief Financial Officer.")]),
       new StubLanguageModel({ role: "Chief Financial Officer" }),
@@ -149,6 +153,7 @@ describe("SuggestApprover", () => {
       nodes,
       resolver,
       new InMemoryUsers(),
+      new InMemorySessions(),
       new StubEmbeddings(),
       new StubDocumentChunks([]),
       new StubLanguageModel({ role: "should not be used" }),
@@ -173,6 +178,7 @@ describe("SuggestApprover", () => {
       nodes,
       resolver,
       new InMemoryUsers(),
+      new InMemorySessions(),
       new StubEmbeddings(),
       new StubDocumentChunks([policyChunk("Delegations are listed in the schedule.")]),
       new StubLanguageModel({}),
@@ -196,6 +202,7 @@ describe("SuggestApprover", () => {
       nodes,
       new StubResolver({ unresolved: true }),
       new InMemoryUsers(),
+      new InMemorySessions(),
     );
 
     const result = await sut.execute({
@@ -207,4 +214,79 @@ describe("SuggestApprover", () => {
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
+
+  it("resolves the approver to the testing author when the session is a test run", async () => {
+    const approvals = new InMemoryApprovals();
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode());
+    const users = new InMemoryUsers();
+    users.add(user("author-1", "author@corp.test"));
+    const sessions = new InMemorySessions();
+    sessions.add(session({ id: "session-1", mode: "test" }));
+    // The resolver would name a real supervisor. Under test it must not be asked.
+    const resolver = new StubResolver({ suggestedApproverUserId: "real-manager" });
+
+    const sut = new SuggestApprover(approvals, nodes, resolver, users, sessions);
+
+    const result = await sut.execute({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "author-1",
+    });
+
+    expect(result.data?.approval.suggestedApproverUserId).toBe("author-1");
+    expect(result.data?.approval.suggestedApproverUserId).not.toBe("real-manager");
+  });
+
+  it("still creates a real approval row under test, so the mechanism is exercised", async () => {
+    const approvals = new InMemoryApprovals();
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode());
+    const sessions = new InMemorySessions();
+    sessions.add(session({ id: "session-1", mode: "test" }));
+
+    const sut = new SuggestApprover(
+      approvals,
+      nodes,
+      new StubResolver({ suggestedApproverUserId: "real-manager" }),
+      new InMemoryUsers(),
+      sessions,
+    );
+
+    const result = await sut.execute({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "author-1",
+    });
+
+    expect(result.data?.approval.status).toBe("pending");
+    expect(result.data?.approval.sessionId).toBe("session-1");
+  });
+
+  it("uses the real reporting line when the session is live", async () => {
+    const nodes = new InMemoryFlowNodes();
+    nodes.add(approvalNode());
+    const sessions = new InMemorySessions();
+    sessions.add(session({ id: "session-1", mode: "live" }));
+
+    const sut = new SuggestApprover(
+      new InMemoryApprovals(),
+      nodes,
+      new StubResolver({ suggestedApproverUserId: "real-manager" }),
+      new InMemoryUsers(),
+      sessions,
+    );
+
+    const result = await sut.execute({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-appr",
+      requestedByUserId: "operator-1",
+    });
+
+    expect(result.data?.approval.suggestedApproverUserId).toBe("real-manager");
+  });
+
 });

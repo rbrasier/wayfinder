@@ -2,7 +2,7 @@
 
 - **Status**: Accepted — implemented in 0.28.25
 - **Date**: 2026-09-23
-- **Author**: Claude Code (for @rbrasier), from issue #304 (split from #302)
+- **Author**: Claude Code (for rbrasier), from issue #304 (split from #302)
 - **Target version**: 0.28.25 (bump: **PATCH** — see §9 and the phase doc for
   why this ships on `release/alpha-2` rather than `main`)
 
@@ -51,7 +51,7 @@ a chat, not to signing in, and the Site Banner cannot be acknowledged.
 - A second (secondary/accent) configurable colour, custom fonts, a dark theme,
   a custom favicon.
 - Branding emails or generated documents.
-- SVG logos (script-injection surface; see ADR-060).
+- SVG logos (script-injection surface; see ADR-061).
 - Changing the existing Site Banner or Chat disclaimers.
 
 ## 5. Key entities
@@ -115,7 +115,7 @@ binary lives in object storage behind `IObjectStorage`. No migration.
 
 - Assumes ADR-041 (DB-first runtime config), ADR-038 (organisations are a
   sharing scope), ADR-033 (append-only, hash-chained audit log).
-- **New: ADR-060 — Install-wide branding and theme tokens** (scope, palette
+- **New: ADR-061 — Install-wide branding and theme tokens** (scope, palette
   derivation, contrast rule, logo storage/serving, sign-in notice
   acknowledgement via the audit log).
 - **Release-line override:** CLAUDE.md routes new features to `main`. The

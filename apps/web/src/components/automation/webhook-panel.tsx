@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import type { FlowTrigger } from "@rbrasier/domain";
+import type { FlowTrigger } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/trpc/client";
 

@@ -1,6 +1,7 @@
 export * from "./select-record-files";
 export * from "./build-extraction-prompt";
 export * from "./draft-documents";
+export * from "./estimate-run-fit";
 export * from "./extract-document-fields";
 export * from "./run-sample-extraction";
 export * from "./start-batch-run";
@@ -14,3 +15,5 @@ export * from "./export-run-results";
 export * from "./generate-run-documents";
 export * from "./edit-record-field";
 export * from "./mark-run-complete";
+export * from "./merge-proposed-fields";
+export * from "./propose-extraction-fields";

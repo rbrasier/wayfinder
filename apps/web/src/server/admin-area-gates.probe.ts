@@ -1,4 +1,4 @@
-import type { PermissionKey } from "@rbrasier/domain";
+import type { PermissionKey } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
 import { appRouter } from "./router";
 import { createCallerFactory, type TrpcContext } from "./trpc";
@@ -55,6 +55,8 @@ const contextFor = (identity: ProbeIdentity): TrpcContext => ({
   container: probeContainer,
   userId: "probe-user",
   authSessionId: null,
+  impersonatorId: null,
+  impersonationCookie: null,
   isAdmin: identity.isAdmin,
   permissions: new Set(identity.permissions),
   headers: new Headers(),

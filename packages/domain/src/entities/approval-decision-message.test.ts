@@ -11,6 +11,7 @@ const base = {
   comment: null,
   routedBack: false,
   routingError: null,
+  offSystemApprovedOn: null,
 };
 
 describe("buildApprovalDecisionMessage", () => {
@@ -78,5 +79,43 @@ describe("buildApprovalDecisionMessage", () => {
     expect(content).toContain("Approval granted");
     expect(content).not.toContain("null");
     expect(content).not.toContain("()");
+  });
+});
+
+describe("buildApprovalDecisionMessage — recorded off system", () => {
+  const base = {
+    status: "approved" as const,
+    approverName: "Jane Doe",
+    approverEmail: "jane.doe@example.com",
+    decidedAt: new Date("2026-08-20T14:00:00.000Z"),
+    comment: null,
+    routedBack: false,
+    routingError: null,
+  };
+
+  it("says the approval was recorded off system, and on what date", () => {
+    const message = buildApprovalDecisionMessage({
+      ...base,
+      offSystemApprovedOn: "2026-08-14",
+    });
+
+    expect(message).toContain("recorded off system");
+    expect(message).toContain("14-08-2026");
+  });
+
+  it("still attributes the decision to the approver, not whoever entered it", () => {
+    const message = buildApprovalDecisionMessage({
+      ...base,
+      offSystemApprovedOn: "2026-08-14",
+    });
+
+    expect(message).toContain("Jane Doe (jane.doe@example.com)");
+  });
+
+  it("reads exactly as before for a decision made in the system", () => {
+    const message = buildApprovalDecisionMessage({ ...base, offSystemApprovedOn: null });
+
+    expect(message).toContain("Approval granted.");
+    expect(message).not.toContain("off system");
   });
 });

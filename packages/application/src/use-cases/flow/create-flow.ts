@@ -1,4 +1,4 @@
-import type { Flow, IFlowRepository, NewFlow, Result } from "@rbrasier/domain";
+import type { Flow, IFlowRepository, NewFlow, Result } from "@wayfinder/domain";
 
 export class CreateFlow {
   constructor(private readonly flows: IFlowRepository) {}

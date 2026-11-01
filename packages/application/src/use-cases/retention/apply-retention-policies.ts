@@ -11,7 +11,7 @@ import {
   type RetentionPolicy,
   type RetentionTargetKey,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface RetentionSweepResult {
   readonly key: RetentionTargetKey;

@@ -60,7 +60,7 @@ export interface SendEmailInput {
 The implementation is the existing `NodemailerEmailSender` in
 `packages/adapters/src/email/nodemailer-email-sender.ts`, extended with
 environment-driven transport selection (`packages/adapters/src/email/smtp-transport.ts`).
-Nodemailer is a dependency of `@rbrasier/adapters` only. The port returns the
+Nodemailer is a dependency of `@wayfinder/adapters` only. The port returns the
 Result pattern; it never throws across the boundary.
 
 **Subject and body composition stays in the application layer** as pure string

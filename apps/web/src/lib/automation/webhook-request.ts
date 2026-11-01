@@ -1,4 +1,4 @@
-import type { StartFlowFromWebhookOutput } from "@rbrasier/application";
+import type { StartFlowFromWebhookOutput } from "@wayfinder/application";
 
 // The HTTP edges of a flow's webhook (ADR-064 §3), kept apart from the route so
 // they can be tested without a running server.

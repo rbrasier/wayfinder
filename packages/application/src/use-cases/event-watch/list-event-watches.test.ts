@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok, type EventWatch } from "@rbrasier/domain";
+import { ok, type EventWatch } from "@wayfinder/domain";
 import type { TriggerRunSummary } from "../automation/list-trigger-runs";
 import { CountWatchesNeedingAttention, ListEventWatches } from "./list-event-watches";
 

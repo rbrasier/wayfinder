@@ -1,6 +1,6 @@
 "use client";
 
-import type { Flow } from "@rbrasier/domain";
+import type { Flow } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

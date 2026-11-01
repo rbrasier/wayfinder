@@ -13,7 +13,7 @@ import {
   type ISystemSettingsRepository,
   type IUserRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // What the caller (a first-login gate) should do next.
 export type OrganisationSignInOutcome =

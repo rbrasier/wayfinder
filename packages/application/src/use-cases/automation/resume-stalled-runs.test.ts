@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
 import { ResumeStalledRuns } from "./resume-stalled-runs";
 
 describe("ResumeStalledRuns", () => {

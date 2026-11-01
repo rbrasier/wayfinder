@@ -7,7 +7,7 @@ import {
   type IFlowNodeRepository,
   type NewFlowNode,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { eq } from "drizzle-orm";
 import type { Database } from "../db/client";
 import { app_flow_nodes } from "../db/schema/wayfinder";

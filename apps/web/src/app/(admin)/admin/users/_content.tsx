@@ -1,7 +1,8 @@
 "use client";
 
-import type { User } from "@rbrasier/domain";
+import type { User } from "@wayfinder/domain";
 import { useState } from "react";
+import { toast } from "sonner";
 import { ResetPasswordModal } from "@/components/admin/reset-password-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,9 +69,21 @@ export function AdminUsersContent({ viewerIsGlobalAdmin }: { readonly viewerIsGl
   const deleteMutation = trpc.user.delete.useMutation({
     onSuccess: () => utils.user.list.invalidate(),
   });
+  const revokeSessionsMutation = trpc.user.revokeSessions.useMutation({
+    onSuccess: ({ revokedCount }) => {
+      toast.success(
+        revokedCount === 0
+          ? "That user had no active sessions"
+          : `Signed out ${revokedCount} ${revokedCount === 1 ? "session" : "sessions"}`,
+      );
+      setConfirmRevoke(null);
+    },
+    onError: (error) => toast.error(error.message ?? "Failed to sign the user out"),
+  });
 
   const [editing, setEditing] = useState<FormState | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<User | null>(null);
+  const [confirmRevoke, setConfirmRevoke] = useState<User | null>(null);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
 
   const onSubmit = async (form: FormState): Promise<void> => {
@@ -158,6 +171,16 @@ export function AdminUsersContent({ viewerIsGlobalAdmin }: { readonly viewerIsGl
                     <Button
                       size="sm"
                       variant="outline"
+                      data-testid={`revoke-sessions-${u.email}`}
+                      // Revoking sessions stays Global-only (user.revokeSessions).
+                      disabled={!viewerIsGlobalAdmin}
+                      onClick={() => setConfirmRevoke(u)}
+                    >
+                      Sign out everywhere
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
                       disabled={u.isAdmin && !viewerIsGlobalAdmin}
                       onClick={() => setResetTarget(u)}
                     >
@@ -230,6 +253,37 @@ export function AdminUsersContent({ viewerIsGlobalAdmin }: { readonly viewerIsGl
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmRevoke !== null} onOpenChange={(o) => !o && setConfirmRevoke(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sign out everywhere?</DialogTitle>
+            <DialogCloseButton />
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-sm text-muted-foreground">
+              This ends every active session for <strong>{confirmRevoke?.email}</strong> on every
+              device. They can sign in again unless you also remove their access.
+            </p>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmRevoke(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              data-testid="revoke-sessions-confirm"
+              disabled={revokeSessionsMutation.isPending}
+              onClick={() => {
+                if (!confirmRevoke) return;
+                revokeSessionsMutation.mutate({ userId: confirmRevoke.id });
+              }}
+            >
+              Sign out everywhere
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { Node } from "@xyflow/react";
-import { flowStepKeys, type PriorStepField } from "@rbrasier/domain";
+import { flowStepKeys, type PriorStepField } from "@wayfinder/domain";
 import { toast } from "sonner";
 import { AutomationStepModal, type AutomationStepType } from "@/components/canvas/automation-step-modal";
 import type { DocumentStepOption } from "@/components/canvas/email-config-form";

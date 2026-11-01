@@ -3,7 +3,7 @@ import {
   AUTOMATION_CONFIG_SETTING_KEY,
   DEFAULT_AUTOMATION_CONFIG,
   type ISystemSettingsRepository,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { RuntimeConfigStore, type EnvDefaults } from "./runtime-config-store";
 
 const env: EnvDefaults = {

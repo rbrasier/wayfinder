@@ -1,7 +1,8 @@
 import type {
+  Session,
   NewSession,
   PendingExecutions,
-  Session,
+  SessionMode,
   SessionRunError,
   SessionStatus,
 } from "../entities/session";
@@ -19,6 +20,12 @@ export interface SessionListPageOptions {
   // Opaque cursor from the previous page's `nextCursor`. When omitted, the
   // first page is returned.
   cursor?: SessionListCursor;
+  // Which sessions to list. Omitted means `"live"` — production surfaces get
+  // isolation without asking for it, and a test-only surface opts in explicitly
+  // (ADR-048 §4). Every list method applies this; `findById` deliberately does
+  // not, because the test modal must be able to load the run it just started, so
+  // authorisation guards that path instead.
+  mode?: SessionMode;
 }
 
 export interface SessionListPage<T> {
@@ -52,8 +59,10 @@ export type ClaimTurnResult =
 export interface ISessionRepository {
   create(input: NewSession): Promise<Result<Session>>;
   findById(id: string): Promise<Result<Session | null>>;
-  listByUser(userId: string): Promise<Result<Session[]>>;
-  listAll(): Promise<Result<Session[]>>;
+  // `mode` defaults to `"live"` on both, so no existing caller changes and none
+  // can see a test session without naming it.
+  listByUser(userId: string, mode?: SessionMode): Promise<Result<Session[]>>;
+  listAll(mode?: SessionMode): Promise<Result<Session[]>>;
   // Keyset-paginated variants. Sort is newest-first on (created_at DESC, id
   // DESC); items respect the `limit`; `nextCursor` is non-null iff at least
   // one more row exists after `items`. The additive contract lets the client
@@ -64,6 +73,23 @@ export interface ISessionRepository {
   ): Promise<Result<SessionListPage<Session>>>;
   listAllPage(options: SessionListPageOptions): Promise<Result<SessionListPage<Session>>>;
   update(id: string, patch: SessionUpdate): Promise<Result<Session>>;
+  // Deletes a session only if it is a test run. The mode check is in the SQL as
+  // well as in the calling use-case: this is the only delete path sessions have,
+  // and a live session is a customer's record of work (ADR-048 §6).
+  deleteTestSession(id: string): Promise<Result<void>>;
+  // Live sessions that reached a terminal state at or after `since`, oldest
+  // first, for the flow-memory capture sweep. `since` null means "everything",
+  // which is what the first run after the feature ships needs. Bounded by
+  // `limit`; test runs are excluded in the SQL as well as in the use case,
+  // because a test run must never become evidence (ADR-057 §2).
+  listTerminalSince(since: Date | null, limit: number): Promise<Result<Session[]>>;
+  // Test runs older than the cutoff, oldest first, excluding any session under
+  // a legal hold. Bounded by `limit` so one sweep cannot rewrite the table.
+  listTestSessionsOlderThan(
+    cutoff: Date,
+    limit: number,
+    excludedSessionIds: readonly string[],
+  ): Promise<Result<Session[]>>;
   // Atomically take the turn lease if it is free or expired. `leaseSeconds` is
   // the staleness window after which a stamped-but-crashed turn can be taken over.
   claimTurn(

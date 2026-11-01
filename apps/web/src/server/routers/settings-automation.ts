@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { AUTOMATION_CONFIG_SETTING_KEY, validateAutomationConfig } from "@rbrasier/domain";
+import { AUTOMATION_CONFIG_SETTING_KEY, validateAutomationConfig } from "@wayfinder/domain";
 import { authenticatedProcedure, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 

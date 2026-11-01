@@ -1,4 +1,4 @@
-import type { UnattendedRunStatus } from "@rbrasier/domain";
+import type { UnattendedRunStatus } from "@wayfinder/domain";
 
 export type RunStatusTone = "danger" | "attention" | "active" | "neutral";
 

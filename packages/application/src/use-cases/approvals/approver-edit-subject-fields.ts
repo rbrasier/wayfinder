@@ -12,7 +12,7 @@ import {
   type ISessionStepOutputRepository,
   type IUserRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type {
   UpdateDocumentFields,
   UpdateDocumentFieldsOutput,

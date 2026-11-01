@@ -5,7 +5,7 @@ import {
   type IColumnMappingDetector,
   type ILanguageModel,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { z } from "zod";
 
 const FIELD_KINDS = ["email", "name", "manager", "position", "band", "unit"] as const;

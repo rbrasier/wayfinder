@@ -1,5 +1,6 @@
 import type { MessageRole } from "./conversation";
 import type { McpToolCallRecord } from "./mcp-server";
+import type { CitedSource } from "./tool-citation";
 
 export type { MessageRole };
 
@@ -47,6 +48,17 @@ export interface AiTurnPayload {
   // Audit trail for the conversational tool-loop pre-pass (ADR-032): the tool
   // calls whose results shaped this step. Absent on turns that called no tools.
   toolCalls?: McpToolCallRecord[];
+  // The source records the reply cited by marker (ADR-062 §6). Absent on turns
+  // that cited none.
+  citations?: CitedSource[];
+  // What the readiness gate found still outstanding on this turn, and how many
+  // chunks retrieval returned above threshold. Both are written for the
+  // `knowledge_gap` capture rule (ADR-057 §1), which has no other source: the
+  // gate's finding is otherwise rendered into prose and discarded, and retrieval
+  // results are not persisted anywhere. Absent on turns written before this
+  // release, which reads as "not recorded" and never as a gap.
+  missingInformation?: string[];
+  retrievedChunkCount?: number;
 }
 
 export type DocumentStatus = "pending" | "complete" | "failed";

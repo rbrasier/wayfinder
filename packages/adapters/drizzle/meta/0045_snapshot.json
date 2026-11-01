@@ -1,6 +1,6 @@
 {
-  "id": "2d3ebdc3-4c26-47aa-963f-ad7d3894a022",
-  "prevId": "ac6b56b1-401d-44f0-9299-b6e25cbeba83",
+  "id": "38f9a407-a187-465d-81a2-6929eb6d046b",
+  "prevId": "f3bb0400-ca72-4585-8913-cc067ed21c5f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -387,6 +387,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "last_active_at": {
+          "name": "last_active_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -502,12 +508,6 @@
         "cert_subject_dn": {
           "name": "cert_subject_dn",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "welcome_tour_completed_at": {
-          "name": "welcome_tour_completed_at",
-          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },
@@ -3109,6 +3109,127 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.app_flow_test_fixtures": {
+      "name": "app_flow_test_fixtures",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "flow_id": {
+          "name": "flow_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_node_id": {
+          "name": "start_node_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "gathered_context": {
+          "name": "gathered_context",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "step_outputs": {
+          "name": "step_outputs",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'[]'::jsonb"
+        },
+        "created_by_user_id": {
+          "name": "created_by_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "app_flow_test_fixtures_flow_id_created_by_idx": {
+          "name": "app_flow_test_fixtures_flow_id_created_by_idx",
+          "columns": [
+            {
+              "expression": "flow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "app_flow_test_fixtures_flow_id_app_flows_id_fk": {
+          "name": "app_flow_test_fixtures_flow_id_app_flows_id_fk",
+          "tableFrom": "app_flow_test_fixtures",
+          "tableTo": "app_flows",
+          "columnsFrom": [
+            "flow_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "app_flow_test_fixtures_created_by_user_id_core_users_id_fk": {
+          "name": "app_flow_test_fixtures_created_by_user_id_core_users_id_fk",
+          "tableFrom": "app_flow_test_fixtures",
+          "tableTo": "core_users",
+          "columnsFrom": [
+            "created_by_user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.app_flow_versions": {
       "name": "app_flow_versions",
       "schema": "",
@@ -4796,6 +4917,13 @@
           "notNull": true,
           "default": "'active'"
         },
+        "mode": {
+          "name": "mode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'live'"
+        },
         "title": {
           "name": "title",
           "type": "text",
@@ -4858,12 +4986,6 @@
           "notNull": true,
           "default": 1
         },
-        "manual_estimate_minutes": {
-          "name": "manual_estimate_minutes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4890,6 +5012,12 @@
               "nulls": "last"
             },
             {
+              "expression": "mode",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
               "expression": "created_at",
               "isExpression": false,
               "asc": true,
@@ -4906,6 +5034,12 @@
           "columns": [
             {
               "expression": "flow_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "mode",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -34,7 +34,7 @@ code, run `./validate.sh` and fix all failures before declaring done.
 ## Project Identity
 
 This repo implements **Wayfinder**, an AI-guided workflow agent for document-heavy
-processes. Framework packages live under `@rbrasier/*` in `packages/`. The two
+processes. Framework packages live under `@wayfinder/*` in `packages/`. The two
 application packages (`apps/web`, `apps/api`) contain all Wayfinder-specific logic.
 
 Run `./validate.sh` once infrastructure (Postgres, Redis, MinIO) is running.
@@ -46,9 +46,9 @@ Run `./validate.sh` once infrastructure (Postgres, Redis, MinIO) is running.
 Enforced by `validate.sh` and ESLint — skills that write code must respect these:
 
 - `packages/domain` has **zero external dependencies**. Pure TypeScript, relative imports only.
-- `packages/application` imports only `@rbrasier/domain` and `@rbrasier/shared`. No frameworks, no ORMs, no AI SDKs.
+- `packages/application` imports only `@wayfinder/domain` and `@wayfinder/shared`. No frameworks, no ORMs, no AI SDKs.
 - `packages/adapters` implements interfaces from `packages/domain`. Drizzle, Vercel AI SDK, LangGraph.js, Langfuse, and Better Auth live here.
-- Apps (`apps/*`) import from `@rbrasier/application` and `@rbrasier/adapters` only. Wiring lives in `lib/container.ts`.
+- Apps (`apps/*`) import from `@wayfinder/application` and `@wayfinder/adapters` only. Wiring lives in `lib/container.ts`.
 - All port interfaces use the **Result pattern**: `{ data: T } | { error: DomainError }`. Never throw across boundaries.
 - Domain entities are plain TypeScript — no decorators, no ORM annotations.
 - DB table names use group prefixes: `core_`, `ai_`, `kb_`, `admin_`, `app_`, `job_`. Columns are snake_case. Every table has `id` (uuid), `created_at`, `updated_at`.
@@ -81,9 +81,9 @@ maintainer runbook live in
 - `release/<line>` — the **current** release line, stabilisation only. Bug fixes
   and enhancements land here; never new features, never a merge from `main`.
 
-**Current release branch: `release/alpha-2`** ← skills read the base branch from
+**Current release branch: `release/alpha-3`** ← skills read the base branch from
 this line; update it when a new line is cut.
-**Next release line (on `main`): `alpha-3`** ← skills read the docs folder name
+**Next release line (on `main`): `alpha-4`** ← skills read the docs folder name
 from this line.
 
 | Skill | Base branch (branch from it, open the PR against it) |
@@ -94,8 +94,8 @@ from this line.
 | `/release` | Operates on `main` and release branches directly (maintainers only) |
 
 Implemented phase docs go to `docs/development/implemented/<release line>/v<version>/`,
-where the release line is read from the two lines above — `alpha-2` when your base
-branch is `release/alpha-2`, `alpha-3` when your base branch is `main`. Never derive
+where the release line is read from the two lines above — `alpha-3` when your base
+branch is `release/alpha-3`, `alpha-4` when your base branch is `main`. Never derive
 it from the version number, and never write into `implemented/` directly.
 
 ---
@@ -112,7 +112,7 @@ until the first stable release**. Every version is `0.MINOR.PATCH`.
 - **PATCH** (`0.0.x`): Bug fixes, UI tweaks, no schema impact
 
 The alpha/beta number is **not** in the version — it lives in the branch name
-(`release/alpha-2`) and the docs folder (`implemented/alpha-2/`). Cutting a new
+(`release/alpha-3`) and the docs folder (`implemented/alpha-3/`). Cutting a new
 pre-release line creates a branch; it does not bump anything by itself. MINOR
 keeps counting up across lines, so versions never restart or go backwards.
 

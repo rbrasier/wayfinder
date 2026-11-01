@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import type { SkippedUpload } from "@rbrasier/domain";
+import type { SkippedUpload } from "@wayfinder/domain";
 
 // Lists the files the last upload left out and why, so missing evidence is never
 // mistaken for an extraction fault. Shown until dismissed or the next upload.
@@ -34,7 +34,7 @@ export function SkippedUploadsNotice({
       </div>
       <ul className="mt-1 space-y-0.5">
         {skipped.map((file) => (
-          <li key={file.treePath} className="wrap-break-word">
+          <li key={file.treePath} className="break-words">
             <span className="font-mono">{file.treePath}</span> — {file.reason}
           </li>
         ))}

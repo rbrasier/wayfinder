@@ -8,7 +8,7 @@ import {
   type OutboundJsonRequest,
   type OutboundJsonResponse,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 const MAX_REDIRECTS = 3;
 

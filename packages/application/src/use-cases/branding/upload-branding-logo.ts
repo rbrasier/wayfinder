@@ -9,10 +9,10 @@ import {
   type IObjectStorage,
   type ISystemSettingsRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { readBrandingConfig, writeBrandingConfig } from "./branding-settings";
 
-// Stores a new logo and points the branding row at it (ADR-060 §4). The type is
+// Stores a new logo and points the branding row at it (ADR-061 §4). The type is
 // taken from the file's bytes, so a renamed SVG is refused.
 export class UploadBrandingLogo {
   constructor(

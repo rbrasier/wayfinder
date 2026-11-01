@@ -1,4 +1,4 @@
-import type { IFlowEdgeRepository, Result } from "@rbrasier/domain";
+import type { IFlowEdgeRepository, Result } from "@wayfinder/domain";
 
 export class DeleteFlowEdge {
   constructor(private readonly edges: IFlowEdgeRepository) {}

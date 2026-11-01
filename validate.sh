@@ -63,7 +63,7 @@ elif ! node -e "
 " 2>/dev/null; then
   skip "drizzle schema check — database not reachable (run ./validate.sh once docker compose is up)"
 else
-  if pnpm --filter "@rbrasier/adapters" -s db:check; then
+  if pnpm --filter "@wayfinder/adapters" -s db:check; then
     pass "drizzle schema"
   else
     fail "drizzle schema"
@@ -284,16 +284,6 @@ else
   fail "coverage below thresholds — see output above (targets: 70% lines, 70% functions)"
 fi
 
-# ── 14. restart.sh uses runMigrations in scaffolded mode ─────────────────────
-section "14. restart.sh uses runMigrations for scaffolded projects"
-# In a scaffolded project pnpm --filter finds no workspace package for adapters.
-# restart.sh must detect scaffolded mode and call runMigrations() instead.
-if grep -q "runMigrations" restart.sh; then
-  pass "restart.sh calls runMigrations in scaffolded mode"
-else
-  fail "restart.sh does not call runMigrations — scaffolded projects cannot run migrations"
-fi
-
 # ── 15. web accessibility (WCAG 2.2 AA — jsx-a11y) ───────────────────────────
 # Runs the jsx-a11y "strict" ruleset over apps/web in isolation so a11y
 # regressions fail CI even if the general lint config is weakened. Covers the
@@ -352,17 +342,17 @@ fi
 
 # ── 17. application layer purity ─────────────────────────────────────────────
 # Allowlist counterpart to the ESLint denylist: packages/application may import
-# only @rbrasier/domain and @rbrasier/shared. A denylist misses newly added
+# only @wayfinder/domain and @wayfinder/shared. A denylist misses newly added
 # dependencies; this catches any non-relative import outside the two packages.
-section "17. packages/application imports only @rbrasier/domain and @rbrasier/shared"
+section "17. packages/application imports only @wayfinder/domain and @wayfinder/shared"
 APPLICATION_LEAKS=$(grep -rnE "from ['\"][^.]" packages/application/src \
     --include="*.ts" --exclude="*.test.ts" 2>/dev/null \
-  | grep -vE "from ['\"]@rbrasier/(domain|shared)['\"/]" \
+  | grep -vE "from ['\"]@wayfinder/(domain|shared)['\"/]" \
   | grep -vE "^[^:]+:[0-9]+:\s*//")
 if [ -z "$APPLICATION_LEAKS" ]; then
   pass "application purity"
 else
-  fail "application purity — imports outside @rbrasier/domain and @rbrasier/shared:"
+  fail "application purity — imports outside @wayfinder/domain and @wayfinder/shared:"
   echo "$APPLICATION_LEAKS"
 fi
 
@@ -378,7 +368,7 @@ APP_ORM_LEAKS=$(grep -rnE "from ['\"](drizzle-orm|postgres)['\"/]" apps/web/src 
 if [ -z "$APP_ORM_LEAKS" ]; then
   pass "apps do not import the ORM"
 else
-  fail "apps import the ORM directly — go through @rbrasier/adapters:"
+  fail "apps import the ORM directly — go through @wayfinder/adapters:"
   echo "$APP_ORM_LEAKS"
 fi
 
@@ -485,7 +475,7 @@ fi
 # database and runs in CI. Catches a schema edit that was never generated into a
 # migration — the state that used to be papered over by `drizzle-kit push`.
 section "22. schema matches its generated migrations"
-if pnpm --filter "@rbrasier/adapters" -s db:drift; then
+if pnpm --filter "@wayfinder/adapters" -s db:drift; then
   pass "schema matches its migrations"
 else
   fail "schema has changes with no migration — run pnpm db:generate and commit the SQL"
@@ -507,13 +497,84 @@ else
   echo "$PUSH_CALLS" | sed 's/^/  /'
 fi
 
-# ── 24. the primary colour is only ever a token ──────────────────────────────
+# ── 24. retired: the session runner guard ────────────────────────────────────
+# This was a regression fence for ADR-048: while flow test runs were being built,
+# nothing in the runner was allowed to change, because a test run had to reuse it
+# untouched. That phase shipped, and the fence has now been overtaken by ADR-057
+# and ADR-058, which require the runner to change: an accepted flow-memory lesson
+# renders as a <learned_guidance> block in buildSystemPrompt and is resolved live
+# on the turn path. Keeping the guard would fail every future prompt change, so
+# it is retired rather than base-ref-bumped — bumping only defers the same
+# failure to the next release. ADR-048's actual invariant (a test run reuses the
+# live runner rather than forking it) is asserted where it belongs, in the
+# flow-test use-case tests.
+
+# ── Summary ───────────────────────────────────────────────────────────────────
+echo
+# ── 25. every deployment guide documents every required env var ──────────────
+# Adding a required variable to a zod schema is a one-line change that silently
+# invalidates five deployment guides at once, and nobody finds out until an
+# operator hits a startup crash the docs never mentioned. Delegated to a script
+# so the parsing lives somewhere it can be read and fixed.
+section "25. deployment guides document every required environment variable"
+if GUIDE_ENV_OUTPUT=$(node scripts/check-guide-env-coverage.mjs 2>&1); then
+  pass "$GUIDE_ENV_OUTPUT"
+else
+  fail "deployment guides are out of step with the environment schemas:"
+  echo "$GUIDE_ENV_OUTPUT" | sed 's/^/  /'
+fi
+
+
+# ── 26. no template residue ──────────────────────────────────────────────────
+# Wayfinder was cloned from ai-app-template and kept its framework packages
+# in-tree, so the template's detach path never ran to completion. What it left
+# behind was actively dangerous: `pnpm run init` would `rm -rf packages/` and
+# reset git history, guarded only by the presence of a single dotfile. The
+# scripts and their marker files are gone; this stops them coming back with the
+# next clone-and-rename, and holds the package scope at @wayfinder.
+#
+# docs/development/implemented/ is exempt: those files record what was true at
+# the time of each past release, and the old scope is part of that record.
+section "26. no ai-app-template residue (scripts, marker files, old package scope)"
+TEMPLATE_RESIDUE=""
+
+for stale in scripts/init-project.sh scripts/update-framework.sh \
+             .framework-scope .template-version \
+             docs/guides/updating-the-framework.md; do
+  if [ -e "$stale" ]; then
+    TEMPLATE_RESIDUE+="  template file is back: $stale"$'\n'
+  fi
+done
+
+# Bracketed first letter so this script does not match its own search, the same
+# trick as `ps aux | grep '[s]shd'`. -a because two source files use a literal
+# NUL as a delimiter in a template literal, which makes grep call them binary
+# and skip them without saying so.
+OLD_SCOPE_PATTERN='@[r]brasier'
+SCOPE_LEAKS=$(grep -ral "$OLD_SCOPE_PATTERN" . \
+    --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.next \
+    --exclude-dir=.turbo --exclude-dir=dist --exclude-dir=coverage 2>/dev/null \
+  | grep -v "^./docs/development/implemented/" \
+  | sort)
+if [ -n "$SCOPE_LEAKS" ]; then
+  TEMPLATE_RESIDUE+="  old template package scope outside docs/development/implemented/:"$'\n'
+  TEMPLATE_RESIDUE+=$(echo "$SCOPE_LEAKS" | sed 's/^/    /')$'\n'
+fi
+
+if [ -z "$TEMPLATE_RESIDUE" ]; then
+  pass "no template residue"
+else
+  fail "ai-app-template residue found:"
+  printf '%b' "$TEMPLATE_RESIDUE"
+fi
+
+# ── 27. the primary colour is only ever a token ──────────────────────────────
 # An install's brand colour replaces the primary ramp by overriding its CSS
-# variables (ADR-060 §2). A hard-coded Wayfinder blue is a spot the brand never
+# variables (ADR-061 §2). A hard-coded Wayfinder blue is a spot the brand never
 # reaches, so outside the token definitions, their TypeScript mirror, the named
 # data colours and test files (which render nothing), the ramp must be
 # referenced as a token.
-section "24. no primary-ramp colour literals in apps/web/src"
+section "27. no primary-ramp colour literals in apps/web/src"
 RAMP_LITERALS=$(grep -rniE "#(2f56d3|1f3ea8|eaeefb|c3cef2)|rgba\(47, *86, *211" apps/web/src \
     --include="*.ts" --include="*.tsx" --include="*.css" \
     --exclude="*.test.ts" --exclude="*.test.tsx" 2>/dev/null \
@@ -527,10 +588,10 @@ else
   echo "$RAMP_LITERALS" | sed 's/^/  /'
 fi
 
-# ── 25. dependabot targets the current release branch ────────────────────────
+# ── 28. dependabot targets the current release branch ────────────────────────
 # Dependency bumps are fixes, so they belong on the release line. Cutting a new
 # line moves the CLAUDE.md pointer; this catches a dependabot.yml left behind.
-section "25. dependabot target-branch matches the current release branch"
+section "28. dependabot target-branch matches the current release branch"
 CURRENT_RELEASE_BRANCH=$(sed -nE 's/^\*\*Current release branch: `([^`]+)`.*/\1/p' CLAUDE.md)
 STALE_TARGETS=$(grep -nE '^[[:space:]]*target-branch:' .github/dependabot.yml \
   | grep -vE "target-branch:[[:space:]]*\"?${CURRENT_RELEASE_BRANCH}\"?[[:space:]]*$" || true)
@@ -546,8 +607,28 @@ else
   pass "dependabot targets $CURRENT_RELEASE_BRANCH"
 fi
 
-# ── Summary ───────────────────────────────────────────────────────────────────
-echo
+# ── 29. a database from the previous release line upgrades cleanly ───────────
+# Drizzle skips any migration older than the newest one a database recorded, so
+# a release line that numbered its migrations independently could upgrade by
+# silently skipping most of this line's schema. This migrates a throwaway
+# database exactly as release/alpha-2 left it, upgrades it, and requires the
+# same schema a fresh database gets (release-line-reconciliation.ts).
+section "29. an alpha-2 database upgrades to this schema"
+if [ -z "${DATABASE_URL:-}" ]; then
+  skip "upgrade rehearsal — DATABASE_URL not set"
+elif ! node -e "
+  const m = process.env.DATABASE_URL.match(/[@]([^:/]+):?([0-9]*)\//);
+  const s = require('net').createConnection({ host: m?.[1] ?? 'localhost', port: parseInt(m?.[2] || '5432') });
+  s.on('connect', () => { s.destroy(); process.exit(0); });
+  s.on('error', () => process.exit(1));
+" 2>/dev/null; then
+  skip "upgrade rehearsal — database not reachable"
+elif pnpm --filter "@wayfinder/adapters" -s db:rehearse-upgrade; then
+  pass "an alpha-2 database upgrades to the same schema as a fresh one"
+else
+  fail "an alpha-2 database does not upgrade cleanly — see release-line-upgrade.rehearsal.test.ts"
+fi
+
 echo "──────────────────────────────────────────"
 echo "Passed: $PASS"
 echo "Failed: $FAIL"

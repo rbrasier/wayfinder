@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok } from "@rbrasier/domain";
+import { ok } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { extractionRouter } from "./extraction";
@@ -29,6 +29,8 @@ const contextWith = (container: Container, isAdmin = true): TrpcContext => ({
   userId: "user-1",
   authSessionId: null,
   isAdmin,
+  impersonatorId: null,
+  impersonationCookie: null,
   permissions: new Set(["extraction:run" as never]),
   headers: new Headers(),
 });

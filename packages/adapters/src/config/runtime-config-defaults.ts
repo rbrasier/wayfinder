@@ -7,6 +7,9 @@ import {
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
   DEFAULT_SIEM_CONFIG,
+  DEFAULT_SUMMARY_RECORD_CAP,
+  MAX_ANALYSE_DOCUMENTS,
+  SAMPLE_MAX_DOCUMENTS,
   DEFAULT_USAGE_LIMITS_CONFIG,
   SIEM_CONFIG_SETTING_KEY,
   parseSiemConfig,
@@ -47,6 +50,7 @@ import {
   type OrganisationResolution,
   type ProviderName,
   type ResolvedDocumentGenerationBudget,
+  type SessionPolicy,
   type SessionUploadConfig,
   type ExtractionConfig,
   type SiemConfig,
@@ -54,7 +58,7 @@ import {
   type AboutLinksConfig,
   type StorageConfig,
   type UsageLimitsConfig,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import {
   DOCUMENT_GENERATION_CHARS_PER_TOKEN,
   DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_PERCENT,
@@ -63,11 +67,12 @@ import {
   DOCUMENT_GENERATION_DEFAULT_FIELD_BATCH_SIZE,
   DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
   EMBEDDINGS_DEFAULT_MODELS,
+  isEmbeddingsModel,
   isEmbeddingsProvider,
   SESSION_UPLOADS_DEFAULT_MAX_FILE_SIZE_BYTES,
   SESSION_UPLOADS_DEFAULT_TOTAL_BUDGET_CHARS,
   type EmbeddingsProvider,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 
 export const ALL_PURPOSES: AiPurpose[] = ["chat", "documentGeneration", "branching"];
 export const ALL_PROVIDERS: ProviderName[] = ["anthropic", "openai", "mistral", "bedrock"];
@@ -242,10 +247,20 @@ export const DEFAULT_EXTRACTION_CONFIG: ExtractionConfig = {
   maxArchiveEntryBytes: 25 * 1024 * 1024,
   maxArchiveTotalBytes: 500 * 1024 * 1024,
   perRunCostCeilingUsd: 0,
+  sampleMaxDocuments: SAMPLE_MAX_DOCUMENTS,
+  maxAnalyseDocuments: MAX_ANALYSE_DOCUMENTS,
+  summaryRecordCap: DEFAULT_SUMMARY_RECORD_CAP,
+  // Extraction shares document generation's defaults so the 400k-char context
+  // cut and the 180k-token guard it always meant to have stay where they were.
+  contextBudgetTokens: DOCUMENT_GENERATION_DEFAULT_CONTEXT_BUDGET_TOKENS,
+  maxPromptTokens: DOCUMENT_GENERATION_DEFAULT_MAX_PROMPT_TOKENS,
 };
 
 export const isNonNegativeNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+const positiveIntegerOr = (value: unknown, fallback: number): number =>
+  isPositiveInteger(value) ? value : fallback;
 
 export const parseExtractionConfig = (raw: string, fallback: ExtractionConfig): ExtractionConfig => {
   try {
@@ -267,6 +282,11 @@ export const parseExtractionConfig = (raw: string, fallback: ExtractionConfig): 
       perRunCostCeilingUsd: isNonNegativeNumber(parsed.perRunCostCeilingUsd)
         ? parsed.perRunCostCeilingUsd
         : fallback.perRunCostCeilingUsd,
+      sampleMaxDocuments: positiveIntegerOr(parsed.sampleMaxDocuments, fallback.sampleMaxDocuments),
+      maxAnalyseDocuments: positiveIntegerOr(parsed.maxAnalyseDocuments, fallback.maxAnalyseDocuments),
+      summaryRecordCap: positiveIntegerOr(parsed.summaryRecordCap, fallback.summaryRecordCap),
+      contextBudgetTokens: positiveIntegerOr(parsed.contextBudgetTokens, fallback.contextBudgetTokens),
+      maxPromptTokens: positiveIntegerOr(parsed.maxPromptTokens, fallback.maxPromptTokens),
     };
   } catch {
     return fallback;
@@ -391,12 +411,12 @@ export const parseEmbeddingsConfig = (raw: string, fallback: EmbeddingsConfig): 
     const parsed = JSON.parse(raw);
     if (!isObject(parsed)) return fallback;
     const provider = isEmbeddingsProvider(parsed.provider) ? parsed.provider : fallback.provider;
-    const model =
-      typeof parsed.model === "string" && parsed.model.trim().length > 0
-        ? parsed.model
-        : isEmbeddingsProvider(provider)
-          ? EMBEDDINGS_DEFAULT_MODELS[provider]
-          : fallback.model;
+    // A model outside the provider's catalogue cannot be built by the adapter, so
+    // a hand-edited or legacy row falls back rather than breaking indexing.
+    if (typeof parsed.model === "string" && isEmbeddingsModel(provider, parsed.model)) {
+      return { provider, model: parsed.model };
+    }
+    const model = isEmbeddingsProvider(provider) ? EMBEDDINGS_DEFAULT_MODELS[provider] : fallback.model;
     return { provider, model };
   } catch {
     return fallback;
@@ -417,6 +437,9 @@ export const buildEnvAuthConfig = (env: EnvDefaults): AuthConfig => {
     // nothing once the row exists (ADR-042 §3).
     pkiEnabled: env.pki?.authMethodNamesPki ?? defaults.pkiEnabled,
     pki: { sessionTtlHours: env.pki?.sessionTtlHours ?? defaults.pki.sessionTtlHours },
+    // No env seed: session policy is admin-configured state from the start, so
+    // an unconfigured install enforces nothing (ADR-035 §4).
+    sessionPolicy: defaults.sessionPolicy,
   };
 };
 
@@ -506,10 +529,35 @@ export const parseAuthConfig = (raw: string, fallback: AuthConfig): AuthConfig =
       // fall back rather than reading as undefined.
       pkiEnabled: typeof parsed.pkiEnabled === "boolean" ? parsed.pkiEnabled : fallback.pkiEnabled,
       pki: { sessionTtlHours: parsePkiSessionTtlHours(parsed.pki, fallback.pki.sessionTtlHours) },
+      sessionPolicy: parseSessionPolicy(parsed.sessionPolicy, fallback.sessionPolicy),
     };
   } catch {
     return fallback;
   }
+};
+
+// A count that is not a whole non-negative number means enforcement of unknown
+// strength; fall back to the default rather than guess at what was intended.
+const parseMinuteCount = (raw: unknown, fallback: number): number =>
+  typeof raw === "number" && Number.isInteger(raw) && raw >= 0 ? raw : fallback;
+
+const parseSessionPolicy = (raw: unknown, fallback: SessionPolicy): SessionPolicy => {
+  if (!isObject(raw)) return fallback;
+  return {
+    idleTimeoutMinutes: parseMinuteCount(raw.idleTimeoutMinutes, fallback.idleTimeoutMinutes),
+    absoluteTimeoutMinutes: parseMinuteCount(
+      raw.absoluteTimeoutMinutes,
+      fallback.absoluteTimeoutMinutes,
+    ),
+    concurrentSessionLimit: parseMinuteCount(
+      raw.concurrentSessionLimit,
+      fallback.concurrentSessionLimit,
+    ),
+    evictionStrategy:
+      raw.evictionStrategy === "refuse" || raw.evictionStrategy === "evict_oldest"
+        ? raw.evictionStrategy
+        : fallback.evictionStrategy,
+  };
 };
 
 const parsePkiSessionTtlHours = (raw: unknown, fallback: number): number => {

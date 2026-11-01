@@ -8,7 +8,7 @@ import {
   type IFlowRepository,
   type IFlowTriggerRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Randomness and hashing for webhook credentials, supplied by the app so this
 // layer stays free of runtime crypto imports.

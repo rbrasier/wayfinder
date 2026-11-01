@@ -1,5 +1,5 @@
-import { domainError, err, gatherableTemplateContent, ok } from "@rbrasier/domain";
-import type { IReindexSourceRepository, ReindexableDocument, Result } from "@rbrasier/domain";
+import { domainError, err, gatherableTemplateContent, ok } from "@wayfinder/domain";
+import type { IReindexSourceRepository, ReindexableDocument, Result } from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { app_flow_nodes, app_flows, app_session_uploads } from "../db/schema/wayfinder";
 import { kb_context_doc_content } from "../db/schema/kb";

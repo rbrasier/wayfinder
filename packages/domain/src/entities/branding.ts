@@ -10,7 +10,7 @@ import {
   type RgbColour,
 } from "./colour-contrast";
 
-// Install-wide branding (ADR-060): one logo, one display name and one primary
+// Install-wide branding (ADR-061): one logo, one display name and one primary
 // colour for everyone. Stored as one JSON row in admin_system_settings
 // (ADR-041), so it changes without a redeploy.
 
@@ -164,7 +164,7 @@ export const resolveBrandDisplayName = (config: BrandingConfig): string => {
 };
 
 // The brand colour is used as link text on the page background, so it must be
-// readable there (ADR-060 §3). Returns the colour normalised to lower case.
+// readable there (ADR-061 §3). Returns the colour normalised to lower case.
 export const validateBrandColour = (value: string): Result<string> => {
   const colour = parseHexColour(value.trim());
   const background = parseHexColour(PAGE_BACKGROUND_COLOUR);
@@ -207,7 +207,7 @@ const WEBP_SIGNATURE = [0x57, 0x45, 0x42, 0x50];
 
 // The type comes from the file's own bytes, never its name or the browser's
 // claim. SVG has no signature here and so is refused: served from our origin it
-// can run script (ADR-060 §4).
+// can run script (ADR-061 §4).
 export const sniffLogoMimeType = (content: Uint8Array): BrandingLogoMimeType | null => {
   if (startsWithBytes(content, PNG_SIGNATURE)) return "image/png";
   if (startsWithBytes(content, JPEG_SIGNATURE)) return "image/jpeg";

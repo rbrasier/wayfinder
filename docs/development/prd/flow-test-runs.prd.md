@@ -1,10 +1,10 @@
 # PRD — Flow Test Runs (Preview & Seeded Step Test)
 
-- **Status**: Draft
+- **Status**: Reviewed — `/doc-review` passed 2026-08-16
 - **Date**: 2026-08-11
 - **Author**: Solo / Claude Code
-- **Target version**: TBC — **MINOR** (new feature + additive schema). The number
-  is settled at `/doc-review` when the build line is chosen; see §9.
+- **Target version**: **0.29.0** — **MINOR** (new feature + additive schema).
+  Allocated at `/doc-review`; see §9 for the line it was allocated against.
 
 ## 1. Problem
 
@@ -65,12 +65,12 @@ code — this is the gap between authoring and guessing.
 | Entity | Lives in | New / existing | Notes |
 | ------ | -------- | -------------- | ----- |
 | `SessionMode` | `packages/domain/src/entities/session.ts` | new | `"live" \| "test"`. Added to `Session` and `NewSession`; absent reads as `"live"`. |
-| `FlowTestFixture` | `packages/domain/src/entities/flow-test-fixture.ts` | new | Saved, re-runnable seed: `{ id, flowId, name, startNodeId, gatheredContext, stepOutputs }`. |
+| `FlowTestFixture` | `packages/domain/src/entities/flow-test-fixture.ts` | new | Saved, re-runnable seed: `{ id, flowId, name, startNodeId, gatheredContext, stepOutputs, createdByUserId }`. Visible only to its creator (§12). |
 | `TestSeedSource` | `packages/domain/src/entities/flow-test-fixture.ts` | new | `"clone" \| "fixture" \| "generated"`. |
 | `FlowTestStepReport` | `packages/domain/src/entities/flow-test-report.ts` | new | Per-node run metrics, assembled from `ai_usage_events` and session rows. |
 | `ISeedProposer` | `packages/domain/src/ports/seed-proposer.ts` | new | AI-generated seed. `propose({ nodes, fields }) -> Result<SeedProposal>`. |
 | `IFlowTestFixtureRepository` | `packages/domain/src/ports/flow-test-fixture-repository.ts` | new | `listByFlow`, `findById`, `create`, `update`, `delete`. |
-| `GatheredContextItem` | `packages/domain/src/entities/session-message.ts` | existing | The `{ key, value }` pairs a seed materialises onto synthetic assistant messages. |
+| `GatheredContextItem` | `packages/domain/src/ports/session-message-repository.ts` | existing | The `{ key, value }` pairs a seed materialises onto synthetic assistant messages. |
 | `StepOutputField` | `packages/domain/src/entities/session-step-output.ts` | existing | The seed's per-node field values. Reused unchanged — it is already the right shape. |
 
 ## 6. User stories
@@ -115,8 +115,13 @@ code — this is the gap between authoring and guessing.
 | Table | Change | Prefix valid? |
 | ----- | ------ | ------------- |
 | `app_sessions` | add column `mode text not null default 'live'` | n/a |
-| `app_sessions` | add index on `(mode)` | n/a |
+| `app_sessions` | rebuild `app_sessions_user_id_created_at_idx` as `(user_id, mode, created_at)` | n/a |
+| `app_sessions` | rebuild `app_sessions_flow_id_idx` as `(flow_id, mode)` | n/a |
 | `app_flow_test_fixtures` | NEW — `id`, `flow_id`, `name`, `start_node_id`, `gathered_context jsonb`, `step_outputs jsonb`, `created_by_user_id`, `created_at`, `updated_at` | yes (`app_`) |
+
+No standalone index on `(mode)`: the column reads `'live'` for almost every row,
+so the planner would ignore it. The predicate is folded into the two existing
+composite indexes that back the queries actually gaining it.
 
 The `mode` column is additive with a default, so existing rows backfill to
 `live`; the migration declares `-- data-impact: preserved`. Generated migration
@@ -133,14 +138,21 @@ writes ordinary rows into them, which is the mechanism, not a workaround.
   overriding the runner; resolving the definition from live rows rather than the
   pinned published snapshot; repository-level isolation; and approval resolution
   short-circuiting to the author.
-- **Assumes ADR-015** (flow versioning) for the published/draft split,
-  **ADR-007** (session-scoped LangGraph) and **ADR-026** (operator-confirmed step
-  completion) for the runner this feature deliberately does not touch, and
-  **ADR-018** for the approver resolution it deliberately overrides under test.
-- **Branch and version**: new features base off `main` per `CLAUDE.md`. These
-  docs are authored on `release/alpha-2` at the requester's direction; the target
-  version is left **TBC** so it is allocated against whichever line the build is
-  scheduled on. `/doc-review` settles it.
+- **Assumes** `015-flow-versioning-snapshots` for the published/draft split,
+  **ADR-007** (session-scoped LangGraph) and
+  `026-operator-confirmed-step-completion` for the runner this feature
+  deliberately does not touch, and **ADR-018** for the approver resolution it
+  deliberately overrides under test. Where an ADR number is used twice in
+  `docs/development/adr/`, it is cited here by filename.
+- **Branch and version**: this builds on **`main`**, at version **0.29.0**, with
+  the implemented doc landing in
+  `docs/development/implemented/alpha-3/v0.29.0/` — the routing `CLAUDE.md`
+  specifies for a new feature.
+
+  It was built on `release/alpha-2` first, at the requester's direction, and
+  moved to `main` before review. The version is unaffected: `main` already
+  carries 0.28.4 after the alpha-2 forward-merge, so a MINOR bump lands on
+  0.29.0 either way.
 
 ## 10. Acceptance criteria
 
@@ -155,21 +167,33 @@ writes ordinary rows into them, which is the mechanism, not a workaround.
 - [ ] `aggregateGatheredContext` returns the seeded items with **no change to its
       query**, and `buildSystemPrompt` renders them in `<gathered_context>`.
 - [ ] `run-turn`, `evaluate-step-readiness`, `buildSystemPrompt` and the stream
-      route are unchanged — asserted by the diff, not merely by intent.
+      route are unchanged — enforced by a `validate.sh` check that fails if the
+      diff against the base branch touches any of those four paths, not by
+      reviewer intent.
 - [ ] A seed can be cloned from a real session up to a chosen node; the clone
       copies gathered context and step outputs and nothing else.
 - [ ] A seed can be edited and saved as a named `FlowTestFixture`, re-loaded, and
       re-run, producing a second run against identical inputs.
+- [ ] A fixture is readable only by the user who created it — asserted against
+      the repository, not the router — and the save dialog warns that cloned
+      values may carry real session data.
 - [ ] A generated seed returns values that satisfy each prior node's declared
       field types; values that do not are reported, not silently substituted.
 - [ ] A document step under test generates a downloadable file from the seeded
       field values.
-- [ ] The step report shows cost, prompt/completion tokens, latency, turns to
-      advance, confidence trajectory, gate pass/fail and `missingInformation`,
-      sourced from `ai_usage_events` and session rows.
+- [ ] The step report shows cost, prompt/completion tokens, turns to advance,
+      confidence trajectory, gate pass/fail and `missingInformation`, sourced
+      from `ai_usage_events` and session rows.
+- [ ] The step report shows per-turn latency, derived from message timestamps —
+      an assistant message's `created_at` minus that of the user message that
+      provoked it. `ai_usage_events` carries no duration column and none is
+      added.
 - [ ] Test sessions are excluded from `/chats`, `/admin/sessions`, every
       dashboard, `GetFlowDeepDive` and approval queues — **one test per read
-      path**, with the predicate applied in the repository.
+      path**, with the predicate applied in the repository. The enumerated paths
+      are those in the phase doc's step 6, and they include the two reads that
+      need a session join added before a predicate can apply
+      (`listAssistantMessages`, `SessionStepOutput.listByFlow`).
 - [ ] An approval node under test resolves to the testing author; no approval row
       reaches a real supervisor's queue, and the modal states that it was
       substituted.
@@ -180,9 +204,13 @@ writes ordinary rows into them, which is the mechanism, not a workaround.
 - [ ] The modal renders at approximately `max-w-[92vw] h-[88vh]` and the canvas
       is never navigated away from; closing it returns the author to the canvas
       with their position intact.
+- [ ] One Playwright spec covers the two behaviours the e2e policy reserves for a
+      browser: the streamed transcript reaching the DOM (group 2) and the
+      generated document downloading from a seeded step (group 3). Everything
+      else about the modal is a component test.
 - [ ] Architecture boundaries intact — `domain` dependency-free, ports in domain,
-      Result at every boundary. `VERSION` matches `package.json#version`;
-      `./validate.sh` passes.
+      Result at every boundary. `VERSION` matches `package.json#version` at
+      `0.29.0`; `./validate.sh` passes.
 
 ## 11. Out of scope / future work
 
@@ -198,25 +226,37 @@ writes ordinary rows into them, which is the mechanism, not a workaround.
 
 ## 12. Risks / open questions
 
-- **The isolation predicate is the principal risk.** Every session read path must
-  exclude `mode = 'test'`, and a missed path leaks an author's experiments into a
-  customer's reporting. Mitigated by enforcing at the repository and requiring a
-  test per path; the phase doc must enumerate the call sites explicitly.
-- **Approval divergence.** Substituting the approver is necessary and means
-  approval routing is the one behaviour a test does not faithfully reproduce.
-  Open: whether a test should instead *simulate* a decision without creating an
-  approval row at all.
-- **Cloned seeds carry real data.** A fixture cloned from a live session may hold
-  personal or commercially sensitive values and persists indefinitely. Open:
-  redact on clone, warn at save, or restrict fixture visibility to the author.
+- **The isolation predicate is the principal risk, and it remains open-ended.**
+  Every session read path must exclude `mode = 'test'`, and a missed path leaks
+  an author's experiments into a customer's reporting. The `/doc-review` sweep
+  found two paths the first draft missed, both because they read the materialised
+  seed rows without touching `app_sessions` at all — a predicate is not enough,
+  the join has to be added. Mitigated by enforcing at the repository and
+  requiring a test per path; the phase doc enumerates the call sites. Any session
+  read path added later must be added there too.
+- **Approval divergence.** Settled: a test creates a real approval row resolved
+  to the initiating author, so the approval mechanism is genuinely exercised
+  (row, notification suppression, decision, signature) with the author standing
+  in for the supervisor. The modal states the substitution. Simulating a decision
+  with no row was rejected — it would leave the approval path the one thing a
+  test never runs.
+- **Cloned seeds carry real data.** Settled: fixtures are visible only to their
+  creator, and the save dialog warns that cloned values may carry real data.
+  Redaction was rejected for this version — a redacted value no longer exercises
+  the step realistically, which is the whole reason to clone one. The residual
+  risk is a persistent author-scoped store of real values, bounded by nothing
+  except the author deleting it.
 - **Generated seeds can mislead.** A value that violates a field constraint makes
   a sound step look broken. Mitigated by validating against `TemplateField` types
   before materialising and reporting rejects.
-- **Cost visibility.** Test runs spend real money. Open: whether test spend needs
-  its own budget scope (ADR-031) rather than sharing the flow's.
-- **Retention default.** 30 days is proposed; confirm against the deployment's
-  retention posture, which is otherwise undefined (no retention policy exists
-  product-wide).
+- **Cost visibility.** Settled: test spend counts against budgets and stays
+  visible in usage reporting like any other spend. A dedicated test budget scope
+  (ADR-031) was considered and deferred — it is a governance change, not a
+  testing one.
+- **Retention default.** Settled at 30 days: long enough that a fixture-driven
+  regression check still has its prior run to compare against, short enough to
+  bound row growth. It is the product's first retention default of any kind, so
+  it is a judgement call rather than a policy application.
 - **Modal vs. route.** A near-full-screen modal keeps the author on the canvas as
   required, but a long run cannot be deep-linked or shared. Accepted for this
   version; a shareable read-only test-run view is a candidate follow-up.

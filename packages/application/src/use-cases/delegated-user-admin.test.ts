@@ -17,7 +17,7 @@ import {
   domainError,
   err,
   ok,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { CreateUser } from "./create-user";
 import { DeleteUser } from "./delete-user";
 import { ResetUserPassword } from "./reset-user-password";

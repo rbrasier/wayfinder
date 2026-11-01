@@ -3,7 +3,7 @@ import type {
   NewSessionUpload,
   Result,
   SessionUpload,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export class AddSessionUpload {
   constructor(private readonly sessionUploads: ISessionUploadRepository) {}

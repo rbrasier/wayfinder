@@ -1,5 +1,5 @@
 import type { Node } from "@xyflow/react";
-import { emailConfigsAfterRename } from "@rbrasier/domain";
+import { emailConfigsAfterRename } from "@wayfinder/domain";
 
 interface CanvasNodeData {
   name?: string;

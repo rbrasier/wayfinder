@@ -6,7 +6,7 @@ import {
   type ISystemSettingsRepository,
   type OrganisationResolution,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 // Read the membership-resolution strategy (ADR-038 §4). A missing/malformed row
 // defaults to the admin strategy — an administrator keeps control until they opt

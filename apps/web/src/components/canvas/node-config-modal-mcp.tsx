@@ -5,13 +5,17 @@ import type {
   McpServerWithTools,
   PriorStepField,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { FieldGroupLabel } from "@/components/ui/field-group-label";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { TemplateFieldEditor } from "./template-field-editor";
 import { FieldValueList } from "./field-value-selector";
+import {
+  describeInputSchemaParameters,
+  requestFieldLinesFromInputSchema,
+} from "./request-fields-from-input-schema";
 import type { NodeConfigValues } from "./node-config-modal";
 
 const SELECT_CLASS =
@@ -48,6 +52,18 @@ export function NodeConfigModalMcp({
   requestFields,
   setFieldValue,
 }: NodeConfigModalMcpProps) {
+  const selectedTool = selectedMcpServer?.tools.find((tool) => tool.name === values.mcpToolName) ?? null;
+  const parameters = describeInputSchemaParameters(selectedTool?.inputSchema ?? null);
+
+  // Starting from the tool's real arguments; a node whose author already wrote
+  // request fields keeps them.
+  const chooseTool = (toolName: string) => {
+    set("mcpToolName", toolName);
+    const tool = selectedMcpServer?.tools.find((entry) => entry.name === toolName);
+    const hasRequestFields = requestLines.some((line) => line.trim().length > 0);
+    if (tool && !hasRequestFields) setRequestLines(requestFieldLinesFromInputSchema(tool.inputSchema));
+  };
+
   return (
     <>
       <div className="space-y-1">
@@ -65,6 +81,7 @@ export function NodeConfigModalMcp({
           {mcpServers.map((entry) => (
             <option key={entry.server.id} value={entry.server.id}>
               {entry.server.label}
+              {entry.server.dataClassification === "public-read" ? " (public data)" : ""}
             </option>
           ))}
         </select>
@@ -90,15 +107,26 @@ export function NodeConfigModalMcp({
             className={SELECT_CLASS}
             value={values.mcpToolName}
             disabled={!selectedMcpServer}
-            onChange={(e) => set("mcpToolName", e.target.value)}
+            onChange={(e) => chooseTool(e.target.value)}
           >
             <option value="">Select a tool…</option>
             {selectedMcpServer?.tools.map((tool) => (
               <option key={tool.name} value={tool.name}>
-                {tool.name}
+                {tool.title ?? tool.name}
               </option>
             ))}
           </select>
+        )}
+        {parameters.length > 0 && (
+          <ul className="mt-1 space-y-0.5 rounded-[9px] border border-[#e7e3db] px-3 py-2 text-[12px] text-[#5c574c]">
+            {parameters.map((parameter) => (
+              <li key={parameter.name}>
+                <code className="text-[#1c1b19]">{parameter.name}</code> · {parameter.type}
+                {parameter.required ? " · required" : ""}
+                {parameter.description ? ` — ${parameter.description}` : ""}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 

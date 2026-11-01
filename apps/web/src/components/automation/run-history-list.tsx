@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { UnattendedRunStatus } from "@rbrasier/domain";
+import type { UnattendedRunStatus } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { runStatusLabel, runStatusTone, type RunStatusTone } from "./run-status";
 

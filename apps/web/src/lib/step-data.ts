@@ -1,4 +1,4 @@
-import type { StepOutputField } from "@rbrasier/domain";
+import type { StepOutputField } from "@wayfinder/domain";
 import { orderStepIds } from "./step-order";
 
 const COMPLETE_CONFIDENCE_THRESHOLD = 90;

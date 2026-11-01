@@ -11,7 +11,7 @@ import {
   type IOutboundHttpClient,
   type Result,
   type WatchPausedReason,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { IUnattendedIncidentNotifier } from "../notifications/notify-unattended-incident";
 import type { StartUnattendedRun } from "../automation/start-unattended-run";
 import { buildWatchRequest } from "./watch-request";

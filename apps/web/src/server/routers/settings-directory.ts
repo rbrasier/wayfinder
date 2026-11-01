@@ -4,8 +4,8 @@ import {
   DIRECTORY_CONFIG_SETTING_KEY,
   isEntraConfigured,
   type DirectoryConfig,
-} from "@rbrasier/domain";
-import { RuntimeConfigStore } from "@rbrasier/adapters";
+} from "@wayfinder/domain";
+import { RuntimeConfigStore } from "@wayfinder/adapters";
 import { adminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 

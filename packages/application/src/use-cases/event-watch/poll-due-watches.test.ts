@@ -9,7 +9,7 @@ import {
   type Session,
   type WatchItemState,
   type WatchPausedReason,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { UnattendedIncident } from "../notifications/notify-unattended-incident";
 import { PollDueWatches } from "./poll-due-watches";
 import type { StartUnattendedRunInput, StartUnattendedRunOutput } from "../automation/start-unattended-run";

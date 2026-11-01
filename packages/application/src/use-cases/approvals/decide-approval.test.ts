@@ -5,7 +5,7 @@ import {
   type Approval,
   type NewApproval,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { DecideApproval } from "./decide-approval";
 import { ResolveApprovalSubject } from "./resolve-approval-subject";
 import { FakeUnitOfWork, InMemoryApprovals, InMemoryFlowEdges, InMemoryFlowNodes, InMemoryMessages, InMemorySessions, InMemoryStepOutputs, InMemoryUsers, RecordingAuditLogger, RecordingNotifier, approvalNode, session, unitOfWorkFor, user } from "./__fixtures__/approval-doubles";

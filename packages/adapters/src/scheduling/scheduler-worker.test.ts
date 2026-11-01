@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, err, domainError } from "@rbrasier/domain";
-import type { IJobRepository, ILogger, Job, Result } from "@rbrasier/domain";
+import { ok, err, domainError } from "@wayfinder/domain";
+import type { IJobRepository, ILogger, Job, Result } from "@wayfinder/domain";
 import { SCHEDULER_JOB_NAME, SchedulerWorker, type DueScheduleFirer } from "./scheduler-worker";
 
 const job: Job = {

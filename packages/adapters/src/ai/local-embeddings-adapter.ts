@@ -1,4 +1,37 @@
-import { domainError, err, ok, type IEmbeddingsProvider, type Result } from "@rbrasier/domain";
+import { createRequire } from "node:module";
+import { domainError, err, ok, type Result } from "@wayfinder/domain";
+
+// Whether this artefact can run the local provider at all. A Lambda zip ships
+// without onnxruntime-node so that cold starts stay sane (ADR-056 §4), which
+// makes availability a property of the build rather than of configuration.
+// Resolution, not execution: the pipeline itself stays behind the lazy import
+// below, and the native runtime is checked because it is the half that is
+// actually dropped. Never sniff the platform — a container built without the
+// embeddings path is the same fact arrived at differently.
+//
+// The native runtime is resolved from transformers' own location, not from
+// here: it is transformers' dependency, and pnpm links only a package's direct
+// dependencies beside it. Resolving it from adapters succeeded only when
+// NODE_PATH happened to reach pnpm's hidden hoist directory.
+const requireFromAdapters = createRequire(import.meta.url);
+
+// Returns the resolved file path; `fromPath` defaults to this module.
+export type ModuleResolver = (specifier: string, fromPath?: string) => string;
+
+const resolveModule: ModuleResolver = (specifier, fromPath) => {
+  if (fromPath === undefined) return requireFromAdapters.resolve(specifier);
+  return createRequire(fromPath).resolve(specifier);
+};
+
+export const isLocalEmbeddingsAvailable = (resolve: ModuleResolver = resolveModule): boolean => {
+  try {
+    const transformersEntry = resolve("@huggingface/transformers", undefined);
+    resolve("onnxruntime-node", transformersEntry);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export interface FeatureExtractionOptions {
   pooling: "mean";
@@ -39,7 +72,7 @@ export const createTransformersExtractorFactory = (
 
 // In-process embeddings (ADR-017) — no external API, works air-gapped. The
 // pipeline is built once on first use and reused.
-export class LocalEmbeddingsAdapter implements IEmbeddingsProvider {
+export class LocalEmbeddingsAdapter {
   private extractor: Promise<FeatureExtractor> | null = null;
 
   constructor(

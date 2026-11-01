@@ -23,7 +23,7 @@ import {
   type Result,
   type Session,
   type SessionStepOutput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface RunEmailNodeDependencies {
   users: Pick<IUserRepository, "findById">;

@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   domainError,
   err,
@@ -8,9 +8,9 @@ import {
   type Result,
   type SessionStepOutput,
   type StepOutputField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
-import { app_session_step_outputs } from "../db/schema/wayfinder";
+import { app_session_step_outputs, app_sessions } from "../db/schema/wayfinder";
 
 const toEntity = (row: typeof app_session_step_outputs.$inferSelect): SessionStepOutput => ({
   id: row.id,
@@ -47,12 +47,17 @@ export class DrizzleSessionStepOutputRepository implements ISessionStepOutputRep
 
   async listByFlow(flowId: string): Promise<Result<SessionStepOutput[]>> {
     try {
+      // Joined to app_sessions purely to exclude test runs (ADR-048 §4). A seed
+      // materialises step-output rows for the steps it stands in for, so without
+      // this join GetFlowDeepDive's field report counts invented values as real
+      // ones. Filtering on flow_id alone is not enough.
       const rows = await this.db
-        .select()
+        .select({ output: app_session_step_outputs })
         .from(app_session_step_outputs)
-        .where(eq(app_session_step_outputs.flow_id, flowId))
+        .innerJoin(app_sessions, eq(app_session_step_outputs.session_id, app_sessions.id))
+        .where(and(eq(app_session_step_outputs.flow_id, flowId), eq(app_sessions.mode, "live")))
         .orderBy(desc(app_session_step_outputs.created_at));
-      return ok(rows.map(toEntity));
+      return ok(rows.map((row) => toEntity(row.output)));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list session step outputs.", cause));
     }

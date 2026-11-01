@@ -1,4 +1,4 @@
-import type { IGroupRepository, Result } from "@rbrasier/domain";
+import type { IGroupRepository, Result } from "@wayfinder/domain";
 
 export class DeleteGroup {
   constructor(private readonly groups: IGroupRepository) {}

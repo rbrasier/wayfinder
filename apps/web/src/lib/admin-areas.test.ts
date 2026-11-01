@@ -1,4 +1,4 @@
-import type { PermissionKey } from "@rbrasier/domain";
+import type { PermissionKey } from "@wayfinder/domain";
 import { describe, expect, it } from "vitest";
 import {
   adminAreaForPath,

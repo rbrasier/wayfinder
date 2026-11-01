@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { ok, err, domainError, type AuthConfig } from "@rbrasier/domain";
+import { ok, err, domainError, type AuthConfig } from "@wayfinder/domain";
 
 const { authenticate, container, setPkiState } = vi.hoisted(() => {
   let authConfig: AuthConfig = {
@@ -8,6 +8,12 @@ const { authenticate, container, setPkiState } = vi.hoisted(() => {
     entra: { tenantId: "", clientId: "", clientSecret: "" },
     pkiEnabled: true,
     pki: { sessionTtlHours: 8 },
+    sessionPolicy: {
+      idleTimeoutMinutes: 0,
+      absoluteTimeoutMinutes: 0,
+      concurrentSessionLimit: 0,
+      evictionStrategy: "evict_oldest",
+    },
   };
   let envConfigured = true;
   return {

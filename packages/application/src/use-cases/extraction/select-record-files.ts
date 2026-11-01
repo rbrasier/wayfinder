@@ -1,5 +1,5 @@
-import { domainError, err, ok, type ILanguageModel, type Result } from "@rbrasier/domain";
-import { fileGroupingSchema, type FileGroupingData } from "@rbrasier/shared";
+import { domainError, err, ok, type ILanguageModel, type Result } from "@wayfinder/domain";
+import { fileGroupingSchema, type FileGroupingData } from "@wayfinder/shared";
 import { clampOutputBudget } from "./output-budget";
 
 // A file offered to the grouping pass: its id, display name, preserved tree path

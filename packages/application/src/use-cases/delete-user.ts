@@ -5,7 +5,7 @@ import {
   type Result,
   domainError,
   err,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { refuseAdminAccountForDelegate } from "./admin-account-guard";
 import type { AdminCaller } from "./admin-caller";
 

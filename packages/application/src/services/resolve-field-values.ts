@@ -2,10 +2,11 @@ import type {
   FieldValueSource,
   FlowContextDoc,
   ILanguageModel,
+  IValueSetProvider,
   Result,
   SessionStepOutput,
   TemplateField,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { extractStructuredFields } from "../use-cases/document/structured-fields";
 
 export interface ResolveFieldValuesInput {
@@ -21,6 +22,10 @@ export interface ResolveFieldValuesInput {
   userId?: string | null;
   flowId?: string | null;
   sessionId?: string | null;
+  // Supplies the valid set for fields bound to a lookup source, so a small set
+  // reaches the extraction prompt (ADR-050 §4). Optional — omitted, external
+  // fields simply stay uninlined.
+  valueSetProvider?: IValueSetProvider;
   // What the watch or webhook that started the session supplied (ADR-064 §2).
   // Absent for a session a person started.
   triggerInputs?: Record<string, unknown>;
@@ -90,6 +95,7 @@ export const resolveFieldValues = async (
     sessionId: input.sessionId,
     priorStepOutputs: input.priorStepOutputs,
     insights: input.insights,
+    valueSetProvider: input.valueSetProvider,
   });
   if (extracted.error) return extracted;
 

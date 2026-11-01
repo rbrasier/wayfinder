@@ -1,6 +1,6 @@
 import { MarkerType, type Edge, type Node } from "@xyflow/react";
-import { normaliseOutputType, readBranchRule } from "@rbrasier/domain";
-import type { TemplateField } from "@rbrasier/domain";
+import { normaliseOutputType, readBranchRule } from "@wayfinder/domain";
+import type { TemplateField } from "@wayfinder/domain";
 import { BranchRuleEdge } from "@/components/canvas/branch-rule-edge";
 import type { AutoNodeData } from "@/components/canvas/auto-node";
 import { AutoNode } from "@/components/canvas/auto-node";

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Search } from "lucide-react";
-import type { McpServerWithTools } from "@rbrasier/domain";
+import type { McpServerWithTools } from "@wayfinder/domain";
 import {
   Dialog,
   DialogBody,
@@ -41,7 +41,7 @@ export function McpPickerModal({
         .map((entry) => ({
           ...entry,
           tools: entry.tools.filter((tool) =>
-            `${entry.server.label} ${tool.name} ${tool.description ?? ""}`
+            `${entry.server.label} ${tool.title ?? ""} ${tool.name} ${tool.description ?? ""}`
               .toLowerCase()
               .includes(needle),
           ),
@@ -82,14 +82,11 @@ export function McpPickerModal({
             <div className="max-h-[46vh] space-y-3 overflow-y-auto rounded-[9px] border border-[#e7e3db] p-2.5">
               {filtered.map((entry) => (
                 <div key={entry.server.id} className="space-y-1.5">
-                  <p className="flex items-center gap-1.5 text-[12px] font-medium text-[#5c574c]">
+                  <p className="text-[12px] font-medium text-[#5c574c]">
                     {entry.server.label}
-                    {entry.server.communicatesExternally ? (
-                      <span
-                        title="Sends data outside Wayfinder"
-                        className="rounded-full border border-[#e7e3db] px-1.5 text-[10px] font-medium text-[#5c574c]"
-                      >
-                        External
+                    {entry.server.dataClassification === "public-read" ? (
+                      <span className="ml-2 rounded-[6px] bg-[#e8f1ec] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-[#1f6b4d]">
+                        Public data
                       </span>
                     ) : null}
                   </p>
@@ -108,7 +105,7 @@ export function McpPickerModal({
                           onChange={() => toggleAllowedTool(entry.server.id, tool.name)}
                         />
                         <span>
-                          <span className="font-medium">{tool.name}</span>
+                          <span className="font-medium">{tool.title ?? tool.name}</span>
                           {tool.description ? (
                             <span className="text-[#736d5f]"> — {tool.description}</span>
                           ) : null}

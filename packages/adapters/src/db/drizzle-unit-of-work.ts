@@ -6,7 +6,7 @@ import {
   type IUnitOfWork,
   type Result,
   type TransactionalRepositories,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "./client";
 import { DrizzleSessionRepository } from "../repositories/drizzle-session-repository";
 import { DrizzleSessionMessageRepository } from "../repositories/drizzle-session-message-repository";

@@ -3,7 +3,7 @@ import {
   type Approval,
   type ApprovalStatus,
   type FlowNode,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { ListApprovalsWithContext } from "./list-approvals-with-context";
 import { ResolveApprovalSubject } from "./resolve-approval-subject";
 import { InMemoryApprovals, InMemoryFlowNodes, InMemoryMessages, InMemorySessions, InMemoryStepOutputs, InMemoryUsers, approvalNode, session, user } from "./__fixtures__/approval-doubles";

@@ -7,8 +7,10 @@
 - **Status**: Draft
 - **Date**: 2026-07-18
 - **Author**: richy.brasier@gmail.com
-- **Target version**: 2.8.0 (bump: **MINOR** — new admin capability; policy is
-  runtime config, likely no schema change. Tentative sequencing.)
+- **Target version**: 0.31.0 (bump: **MINOR** — new admin capability plus the
+  additive `core_sessions.last_active_at` column confirmed in §8. Base branch is
+  `main` (alpha-3 line, `VERSION` at `0.30.0`); re-confirm against `VERSION` on
+  the base branch at build time. See `docs/guides/versioning.md`.)
 
 ## 1. Problem
 
@@ -53,7 +55,7 @@ idle/absolute timeouts and concurrent-session limits.
 | ------ | -------- | -------------- | ----- |
 | `SessionPolicy` | `packages/domain/src/entities/session-policy.ts` | new | Idle/absolute timeout minutes, concurrent limit, eviction strategy. |
 | `AuthConfig` | `packages/domain/src/entities/runtime-config.ts` | existing | Carries `SessionPolicy` (runtime config). |
-| `core_sessions` | adapters schema | existing | Read for enforcement; rows deleted on revoke. |
+| `core_sessions` | adapters schema | existing | Read for enforcement; rows deleted on revoke; gains `last_active_at` (§8). |
 
 ## 6. User stories
 
@@ -65,22 +67,30 @@ idle/absolute timeouts and concurrent-session limits.
 ## 7. Pages / surfaces affected
 
 - `/admin/users` (user detail) — **new** "Sign out everywhere" action.
-- `/admin/settings` — **new** Session policy card (idle, absolute, concurrency, eviction).
+- `/admin/settings` — **new** "Set session policies" button on the Authentication
+  card, opening a modal for idle, absolute, concurrency and eviction. Session
+  lifetime is part of how sign-in behaves, so it sits behind that card rather
+  than competing for space as a card of its own.
 - `packages/adapters/src/auth/session-resolver.ts` + `cached-session-resolver.ts`
   — enforce idle/absolute timeout; invalidate cache on revoke.
-- Login path — enforce the concurrent-session limit.
-- tRPC: `admin.revokeUserSessions` (admin), `settings.getSessionPolicy` /
-  `settings.setSessionPolicy` (admin).
+- Session creation — enforce the concurrent-session limit in one shared adapter
+  function, called from Better Auth's session-create hook and from
+  `pki-cert-adapter.ts`. Not `api/dev-login` (dev-only).
+- tRPC: `user.revokeSessions` (admin — there is no `admin` router),
+  `settings.getSessionPolicy` / `settings.setSessionPolicy` (admin).
 
 ## 8. Database changes
 
-**Likely none.** Policy lives in `admin_system_settings` (runtime config, per
-ADR-025); revocation is a delete of the user's `core_sessions` rows plus cache
-invalidation; timeouts are computed against existing `core_sessions` columns
-(`created_at`, `updated_at`/last-active, `expires_at`). If "last active" is not
-already tracked with enough granularity for idle timeout, add a single
-`last_active_at timestamptz` column to `core_sessions` — **confirm during
-`/doc-review` / Build.**
+**One additive column.** Policy lives in `admin_system_settings` (runtime config,
+per ADR-025); revocation is a delete of the user's `core_sessions` rows plus cache
+invalidation; the absolute timeout is computed against the existing `created_at`.
+
+Idle timeout needs a new column: `core_sessions.last_active_at timestamptz`
+(nullable, so the migration is additive and needs no `-- data-impact:`
+declaration). Confirmed at `/doc-review` — `updated_at` is not a last-activity
+signal on this codebase: `resolveSession` never writes it, and the PKI adapter and
+`dev-login` insert sessions without ever updating them, so only Better Auth's own
+coarse refresh touches it.
 
 ## 9. Architectural decisions
 
@@ -96,7 +106,9 @@ already tracked with enough granularity for idle timeout, add a single
 - [ ] A session older than the absolute timeout is rejected regardless of activity.
 - [ ] With a concurrency limit of N, an (N+1)th login applies the configured eviction/refusal strategy.
 - [ ] Policy changes take effect without a redeploy.
-- [ ] All new procedures reject non-admin callers; an admin cannot lock every admin out via policy (guard analogous to ADR-025's "one method always enabled").
+- [ ] All new procedures reject non-admin callers.
+- [ ] An admin cannot lock every admin out via policy: under `refuse`, an admin at the concurrency limit still signs in, evicting their oldest session (ADR-035 §4).
+- [ ] Revoking sessions also clears the cached principal on the paths that already delete sessions (`admin-recovery`, Entra precedence).
 
 ## 11. Out of scope / future work
 
@@ -107,9 +119,12 @@ already tracked with enough granularity for idle timeout, add a single
 
 - **Cache coherence:** `cached-session-resolver` must bust on revoke or a revoked
   user keeps access until TTL — the core correctness risk; needs explicit tests.
-- **Eviction vs refusal** on concurrency — pick a default (evict oldest) and make
-  it explicit.
-- **Idle-timeout data:** whether `core_sessions` already records last activity
-  finely enough, or a `last_active_at` column is required.
-- **Admin lockout:** timeout/concurrency policy must not be able to strand all
-  admins.
+- **Eviction vs refusal** on concurrency — settled: `evict_oldest` is the default,
+  and `refuse` never applies to an admin (ADR-035 §4).
+- **Idle-timeout data:** ~~whether `core_sessions` already records last activity
+  finely enough~~ — settled at `/doc-review`: `last_active_at` is required (§8).
+  The remaining question is the throttle interval for the write on resolution.
+- **Admin lockout:** settled — an admin always evicts rather than being refused,
+  so no policy can strand them (ADR-035 §4).
+- **Concurrency coverage:** enforced for Better Auth and PKI sign-ins; the dev-only
+  `api/dev-login` route is deliberately excluded.

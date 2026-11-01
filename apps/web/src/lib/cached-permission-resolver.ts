@@ -1,5 +1,5 @@
-import { isOk, ok, type PermissionKey, type Result } from "@rbrasier/domain";
-import type { TtlCache } from "@rbrasier/adapters";
+import { isOk, ok, type PermissionKey, type Result } from "@wayfinder/domain";
+import type { TtlCache } from "@wayfinder/adapters";
 
 type PermissionLoader = (
   userId: string,

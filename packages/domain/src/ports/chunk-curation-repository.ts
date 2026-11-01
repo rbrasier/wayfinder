@@ -19,6 +19,7 @@ export interface ChunkEdit {
   chunkId: string;
   newText: string;
   newEmbedding: number[];
+  newEmbeddingModel: string;
   editedBy: string | null;
   reason: string | null;
 }
@@ -33,8 +34,8 @@ export interface IChunkCurationRepository {
   list(filter: ChunkListFilter): Promise<Result<CuratedChunk[]>>;
   findById(chunkId: string): Promise<Result<CuratedChunk | null>>;
   applyEdit(edit: ChunkEdit): Promise<Result<CuratedChunk>>;
-  // Snapshots the current text/embedding, then restores the chosen version's
-  // text and embedding onto the chunk. Nothing is destroyed.
+  // Snapshots the current text/embedding/model, then restores the chosen
+  // version's text, embedding and model onto the chunk. Nothing is destroyed.
   revert(input: ChunkRevert): Promise<Result<CuratedChunk>>;
   setStatus(chunkIds: string[], status: ChunkStatus): Promise<Result<void>>;
   addTag(chunkIds: string[], tag: string): Promise<Result<void>>;

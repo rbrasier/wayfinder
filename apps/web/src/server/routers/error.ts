@@ -2,7 +2,7 @@ import {
   listErrorsInputSchema,
   logErrorInputSchema,
   updateErrorStatusInputSchema,
-} from "@rbrasier/shared";
+} from "@wayfinder/shared";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";

@@ -13,7 +13,7 @@ import {
   type Session,
   type SessionSchedule,
   type SessionStepOutput,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { lookupStepField, resolveFieldValues } from "../../services/resolve-field-values";
 import { computeNextFireAt } from "./compute-next-fire";
 

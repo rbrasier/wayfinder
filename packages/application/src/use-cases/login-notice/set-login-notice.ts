@@ -14,7 +14,7 @@ import {
   type LoginNoticeConfig,
   type LoginNoticeMode,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface SetLoginNoticeInput {
   readonly mode: LoginNoticeMode;
@@ -22,7 +22,7 @@ export interface SetLoginNoticeInput {
 }
 
 // Saves the sign-in notice. Rewording it bumps the version, which re-asks every
-// user; changing only the mode does not (ADR-060 §5).
+// user; changing only the mode does not (ADR-061 §5).
 export class SetLoginNotice {
   constructor(
     private readonly systemSettings: ISystemSettingsRepository,

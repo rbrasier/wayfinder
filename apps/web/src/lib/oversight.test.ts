@@ -1,4 +1,4 @@
-import { ok, type PermissionKey } from "@rbrasier/domain";
+import { ok, type PermissionKey } from "@wayfinder/domain";
 import { describe, expect, it, vi } from "vitest";
 import type { Container } from "./container";
 import { resolveCanOversee } from "./oversight";

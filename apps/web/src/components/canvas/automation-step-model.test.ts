@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PriorStepField } from "@rbrasier/domain";
+import type { PriorStepField } from "@wayfinder/domain";
 import {
   aiTaskConfigFromForm,
   aiTaskFormFromConfig,

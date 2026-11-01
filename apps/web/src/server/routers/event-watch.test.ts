@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { domainError, err, ok, type PermissionKey } from "@rbrasier/domain";
+import { domainError, err, ok, type PermissionKey } from "@wayfinder/domain";
 import type { Container } from "@/lib/container";
 import { createCallerFactory, router, type TrpcContext } from "../trpc";
 import { eventWatchRouter } from "./event-watch";
@@ -24,6 +24,8 @@ const caller = (container: Container, isAdmin: boolean, permissions: PermissionK
     userId: "admin-1",
     authSessionId: null,
     isAdmin,
+    impersonatorId: null,
+    impersonationCookie: null,
     permissions: new Set(permissions),
     headers: new Headers(),
   } satisfies TrpcContext);

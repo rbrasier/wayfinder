@@ -11,7 +11,7 @@ import {
   type SecretChange,
   type WatchItemState,
   type WatchPausedReason,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import type { Database } from "../db/client";
 import { admin_event_watch_item_states, admin_event_watches } from "../db/schema/admin";
 import type { SecretCipher } from "./drizzle-flow-trigger-repository";

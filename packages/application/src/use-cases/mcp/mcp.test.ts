@@ -1,51 +1,40 @@
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
-  ILegacyMcpCredentialSource,
+  CachedMcpTool,
   IMcpClient,
   IMcpServerRepository,
+  IMcpServerSecretStore,
+  IMcpToolRepository,
   ListMcpServersInput,
   McpServer,
+  McpServerSecrets,
+  McpServerSecretsPatch,
   McpServerStatus,
-  McpOAuthChange,
   McpServerUpdate,
   McpTool,
   McpToolCallOutput,
+  McpToolSettings,
   NewMcpServer,
   Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   DeleteMcpServer,
   DisableMcpServer,
   EnableMcpServer,
   ListMcpServers,
+  ListMcpTools,
+  RefreshMcpTools,
   RegisterMcpServer,
   ResolveStepTools,
   TestMcpServer,
   UpdateMcpServer,
+  UpdateMcpToolSettings,
 } from "./mcp";
 
 class InMemoryMcpServerRepository implements IMcpServerRepository {
   rows: McpServer[] = [];
-  credentials = new Map<string, string>();
-  clientSecrets = new Map<string, string>();
   private sequence = 0;
-
-  private storeCredential(id: string, credential: string | null | undefined): void {
-    if (credential === undefined) return;
-    if (credential === null) this.credentials.delete(id);
-    else this.credentials.set(id, credential);
-  }
-
-  private storeOAuth(id: string, change: McpOAuthChange): McpServer["oauth"] | undefined {
-    if (change === undefined) return undefined;
-    if (change === null) {
-      this.clientSecrets.delete(id);
-      return null;
-    }
-    if (change.clientSecret) this.clientSecrets.set(id, change.clientSecret);
-    return change.settings;
-  }
 
   async create(input: NewMcpServer): Promise<Result<McpServer>> {
     this.sequence += 1;
@@ -55,18 +44,18 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
       label: input.label,
       transport: input.transport ?? "sse",
       url: input.url,
-      credentialRef: input.credentialRef ?? null,
-      hasCredential: typeof input.credential === "string",
-      oauth: input.oauth?.settings ?? null,
-      communicatesExternally: input.communicatesExternally ?? false,
+      dataClassification: input.dataClassification ?? "internal",
+      verbatimOnly: input.verbatimOnly ?? false,
+      callTimeoutMs: input.callTimeoutMs ?? 30_000,
+      hasCredential: false,
+      customHeaderNames: [],
+      oauth: input.oauth ?? null,
       status: "active",
       createdByUserId: input.createdByUserId ?? null,
       createdAt: now,
       updatedAt: now,
     };
     this.rows.push(server);
-    this.storeCredential(server.id, input.credential);
-    this.storeOAuth(server.id, input.oauth);
     return ok(server);
   }
 
@@ -74,28 +63,17 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
     const index = this.rows.findIndex((row) => row.id === id);
     if (index === -1) return err(domainError("NOT_FOUND", "MCP server not found."));
     const current = this.rows[index]!;
-    this.storeCredential(id, patch.credential);
-    const oauth = this.storeOAuth(id, patch.oauth);
     const updated: McpServer = {
       ...current,
       label: patch.label ?? current.label,
       url: patch.url ?? current.url,
-      credentialRef:
-        patch.credentialRef === undefined ? current.credentialRef : patch.credentialRef,
-      hasCredential: this.credentials.has(id),
-      oauth: oauth === undefined ? current.oauth : oauth,
-      communicatesExternally: patch.communicatesExternally ?? current.communicatesExternally,
+      dataClassification: patch.dataClassification ?? current.dataClassification,
+      verbatimOnly: patch.verbatimOnly ?? current.verbatimOnly,
+      callTimeoutMs: patch.callTimeoutMs ?? current.callTimeoutMs,
+      oauth: patch.oauth === undefined ? current.oauth : patch.oauth,
     };
     this.rows[index] = updated;
     return ok(updated);
-  }
-
-  async readCredential(id: string): Promise<Result<string | null>> {
-    return ok(this.credentials.get(id) ?? null);
-  }
-
-  async readOAuthClientSecret(id: string): Promise<Result<string | null>> {
-    return ok(this.clientSecrets.get(id) ?? null);
   }
 
   async findById(id: string): Promise<Result<McpServer | null>> {
@@ -123,9 +101,81 @@ class InMemoryMcpServerRepository implements IMcpServerRepository {
   }
 }
 
+// Mirrors the adapter: secrets live apart from the server row, and the row only
+// reports whether they exist.
+class InMemorySecretStore implements IMcpServerSecretStore {
+  secrets = new Map<string, McpServerSecrets>();
+
+  constructor(private readonly servers: InMemoryMcpServerRepository) {}
+
+  async get(serverId: string): Promise<Result<McpServerSecrets>> {
+    return ok(this.secrets.get(serverId) ?? { bearerToken: null, headers: {}, oauthClientSecret: null });
+  }
+
+  async set(serverId: string, patch: McpServerSecretsPatch): Promise<Result<void>> {
+    const current = this.secrets.get(serverId) ?? { bearerToken: null, headers: {}, oauthClientSecret: null };
+    const next: McpServerSecrets = {
+      bearerToken: patch.bearerToken === undefined ? current.bearerToken : patch.bearerToken,
+      headers: patch.headers === undefined ? current.headers : (patch.headers ?? {}),
+      oauthClientSecret:
+        patch.oauthClientSecret === undefined ? current.oauthClientSecret : patch.oauthClientSecret,
+    };
+    this.secrets.set(serverId, next);
+    const index = this.servers.rows.findIndex((row) => row.id === serverId);
+    if (index !== -1) {
+      this.servers.rows[index] = {
+        ...this.servers.rows[index]!,
+        hasCredential: next.bearerToken !== null,
+        customHeaderNames: Object.keys(next.headers),
+      };
+    }
+    return ok(undefined);
+  }
+}
+
+const emptySettings: McpToolSettings = { pagination: null, status: null, citation: null };
+
+class InMemoryToolRepository implements IMcpToolRepository {
+  rows: CachedMcpTool[] = [];
+
+  async listByServer(serverId: string): Promise<Result<CachedMcpTool[]>> {
+    return ok(this.rows.filter((row) => row.serverId === serverId));
+  }
+
+  async replaceForServer(serverId: string, tools: McpTool[]): Promise<Result<CachedMcpTool[]>> {
+    const previous = new Map(
+      this.rows.filter((row) => row.serverId === serverId).map((row) => [row.name, row]),
+    );
+    const replaced = tools.map((tool) => {
+      const kept = previous.get(tool.name);
+      return {
+        ...tool,
+        serverId,
+        lastSyncedAt: new Date(),
+        pagination: kept?.pagination ?? null,
+        status: kept?.status ?? null,
+        citation: kept?.citation ?? null,
+      };
+    });
+    this.rows = [...this.rows.filter((row) => row.serverId !== serverId), ...replaced];
+    return ok(replaced);
+  }
+
+  async updateSettings(
+    serverId: string,
+    toolName: string,
+    settings: McpToolSettings,
+  ): Promise<Result<CachedMcpTool>> {
+    const index = this.rows.findIndex((row) => row.serverId === serverId && row.name === toolName);
+    if (index === -1) return err(domainError("NOT_FOUND", "Tool not found."));
+    this.rows[index] = { ...this.rows[index]!, ...settings };
+    return ok(this.rows[index]!);
+  }
+}
+
 const stubTools: McpTool[] = [
-  { name: "search", description: "Search the web", inputSchema: null },
-  { name: "fetch", description: null, inputSchema: null },
+  { name: "search", title: "Search", description: "Search the web", inputSchema: { type: "object" } },
+  { name: "fetch", title: null, description: null, inputSchema: null },
 ];
 
 const okClient: IMcpClient = {
@@ -133,7 +183,14 @@ const okClient: IMcpClient = {
     return ok(stubTools);
   },
   async callTool(): Promise<Result<McpToolCallOutput>> {
-    return ok({ output: "done" });
+    return ok({
+      output: "done",
+      structuredContent: null,
+      citations: [],
+      pagesFetched: 1,
+      truncatedAtPageLimit: false,
+      sourceStatus: null,
+    });
   },
 };
 
@@ -148,166 +205,158 @@ const failingClient: IMcpClient = {
 
 describe("RegisterMcpServer", () => {
   let repository: InMemoryMcpServerRepository;
+  let secrets: InMemorySecretStore;
 
   beforeEach(() => {
     repository = new InMemoryMcpServerRepository();
+    secrets = new InMemorySecretStore(repository);
   });
 
   it("creates a server with a trimmed label and url", async () => {
-    const result = await new RegisterMcpServer(repository).execute({
+    const result = await new RegisterMcpServer(repository, secrets).execute({
       label: "  GitHub  ",
       url: "https://mcp.example.com/sse",
     });
     expect(result.data?.label).toBe("GitHub");
     expect(result.data?.status).toBe("active");
+    expect(result.data?.dataClassification).toBe("internal");
   });
 
   it("rejects an empty label", async () => {
-    const result = await new RegisterMcpServer(repository).execute({ label: "  ", url: "https://x.y" });
+    const result = await new RegisterMcpServer(repository, secrets).execute({ label: "  ", url: "https://x.y" });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
   it("rejects a non-http url", async () => {
-    const result = await new RegisterMcpServer(repository).execute({
+    const result = await new RegisterMcpServer(repository, secrets).execute({
       label: "Bad",
       url: "ftp://nope",
     });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it("stores a token given at registration, and never echoes it back", async () => {
-    const result = await new RegisterMcpServer(repository).execute({
-      label: "GitHub",
-      url: "https://mcp.example.com/sse",
-      credential: "  ghp_secret  ",
+  it("registers a public-data reader with its timeout", async () => {
+    const result = await new RegisterMcpServer(repository, secrets).execute({
+      label: "Legislation",
+      url: "https://legislation.example/mcp",
+      dataClassification: "public-read",
+      callTimeoutMs: 45_000,
     });
-
-    expect(result.data?.hasCredential).toBe(true);
-    expect(result.data?.credentialRef).toBeNull();
-    expect(JSON.stringify(result.data)).not.toContain("ghp_secret");
-    expect(repository.credentials.get(result.data!.id)).toBe("ghp_secret");
+    expect(result.data).toMatchObject({ dataClassification: "public-read", callTimeoutMs: 45_000 });
   });
 
-  it("registers without a token when none is given", async () => {
-    const result = await new RegisterMcpServer(repository).execute({
-      label: "Spellcheck",
-      url: "https://mcp.example.com/sse",
-      credential: "   ",
+  it("rejects a timeout outside the allowed range", async () => {
+    const result = await new RegisterMcpServer(repository, secrets).execute({
+      label: "Slow",
+      url: "https://slow.example/mcp",
+      callTimeoutMs: 500,
+    });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(repository.rows).toHaveLength(0);
+  });
+
+  it("stores the bearer token and headers apart from the server and reports only that they exist", async () => {
+    const result = await new RegisterMcpServer(repository, secrets).execute({
+      label: "Stats",
+      url: "https://stats.example/mcp",
+      bearerToken: "  token-1  ",
+      customHeaders: { "X-Api-Key": "key-1" },
     });
 
-    expect(result.data?.hasCredential).toBe(false);
+    expect(result.data).toMatchObject({ hasCredential: true, customHeaderNames: ["X-Api-Key"] });
+    expect(JSON.stringify(result.data)).not.toContain("token-1");
+    expect(secrets.secrets.get(result.data!.id)).toEqual({
+      bearerToken: "token-1",
+      headers: { "X-Api-Key": "key-1" },
+      oauthClientSecret: null,
+    });
+  });
+
+  it("rejects a reserved header before creating anything", async () => {
+    const result = await new RegisterMcpServer(repository, secrets).execute({
+      label: "Bad headers",
+      url: "https://x.example/mcp",
+      customHeaders: { "Mcp-Session-Id": "fixed" },
+    });
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(repository.rows).toHaveLength(0);
   });
 });
 
 describe("UpdateMcpServer", () => {
-  const environment = (values: Record<string, string>): ILegacyMcpCredentialSource => ({
-    read: (credentialRef) => values[credentialRef] ?? null,
+  let repository: InMemoryMcpServerRepository;
+  let secrets: InMemorySecretStore;
+
+  beforeEach(() => {
+    repository = new InMemoryMcpServerRepository();
+    secrets = new InMemorySecretStore(repository);
   });
 
-  const legacyServer = async (repository: InMemoryMcpServerRepository): Promise<string> => {
-    const created = await repository.create({
-      label: "Legacy",
-      url: "https://legacy.example.com/sse",
-      credentialRef: "MCP_CRED_LEGACY",
-    });
-    return created.data!.id;
-  };
+  const register = () =>
+    new RegisterMcpServer(repository, secrets).execute({ label: "X", url: "https://x.y" });
 
   it("rejects an invalid url on update", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const created = await new RegisterMcpServer(repository).execute({
-      label: "X",
-      url: "https://x.y",
-    });
-    const result = await new UpdateMcpServer(repository, environment({})).execute({
+    const created = await register();
+    const result = await new UpdateMcpServer(repository, secrets).execute({
       id: created.data!.id,
       url: "not-a-url",
     });
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it("returns NOT_FOUND for an unknown server", async () => {
-    const result = await new UpdateMcpServer(new InMemoryMcpServerRepository(), environment({})).execute({
-      id: "missing",
-      label: "X",
+  it("reclassifies a server and changes its timeout", async () => {
+    const created = await register();
+    const result = await new UpdateMcpServer(repository, secrets).execute({
+      id: created.data!.id,
+      dataClassification: "public-read",
+      callTimeoutMs: 60_000,
     });
-    expect(result.error?.code).toBe("NOT_FOUND");
+    expect(result.data).toMatchObject({ dataClassification: "public-read", callTimeoutMs: 60_000 });
   });
 
-  it("keeps a stored token when none is sent, replaces it when one is, and removes it on null", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const created = await new RegisterMcpServer(repository).execute({
+  it("leaves secrets alone when they are not sent, and clears them on null", async () => {
+    const created = await new RegisterMcpServer(repository, secrets).execute({
       label: "X",
       url: "https://x.y",
-      credential: "first",
+      bearerToken: "token-1",
     });
     const id = created.data!.id;
-    const update = new UpdateMcpServer(repository, environment({}));
 
-    await update.execute({ id, label: "Renamed", credential: "  " });
-    expect(repository.credentials.get(id)).toBe("first");
+    await new UpdateMcpServer(repository, secrets).execute({ id, label: "Renamed" });
+    expect(secrets.secrets.get(id)?.bearerToken).toBe("token-1");
 
-    await update.execute({ id, credential: "second" });
-    expect(repository.credentials.get(id)).toBe("second");
-
-    const removed = await update.execute({ id, credential: null });
-    expect(repository.credentials.has(id)).toBe(false);
-    expect(removed.data?.hasCredential).toBe(false);
+    const cleared = await new UpdateMcpServer(repository, secrets).execute({ id, bearerToken: null });
+    expect(cleared.data?.hasCredential).toBe(false);
   });
 
-  it("moves a legacy server's environment token into storage when it is saved", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const id = await legacyServer(repository);
-
-    const result = await new UpdateMcpServer(repository, environment({ MCP_CRED_LEGACY: "from-env" })).execute({
-      id,
-      label: "Legacy, renamed",
+  it("refuses an Authorization header while the server keeps a bearer token", async () => {
+    const created = await new RegisterMcpServer(repository, secrets).execute({
+      label: "X",
+      url: "https://x.y",
+      bearerToken: "token-1",
     });
-
-    expect(result.data?.credentialRef).toBeNull();
-    expect(result.data?.hasCredential).toBe(true);
-    expect(repository.credentials.get(id)).toBe("from-env");
-  });
-
-  it("stores a newly typed token on a legacy server and drops its environment reference", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const id = await legacyServer(repository);
-
-    const result = await new UpdateMcpServer(repository, environment({ MCP_CRED_LEGACY: "from-env" })).execute({
-      id,
-      credential: "typed",
+    const result = await new UpdateMcpServer(repository, secrets).execute({
+      id: created.data!.id,
+      customHeaders: { Authorization: "Basic abc" },
     });
-
-    expect(result.data?.credentialRef).toBeNull();
-    expect(repository.credentials.get(id)).toBe("typed");
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it("keeps a legacy reference when its environment variable is empty, so the server works as before", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const id = await legacyServer(repository);
-
-    const result = await new UpdateMcpServer(repository, environment({})).execute({ id, label: "Renamed" });
-
-    expect(result.data?.credentialRef).toBe("MCP_CRED_LEGACY");
-    expect(result.data?.hasCredential).toBe(false);
-  });
-
-  it("clears a legacy reference when the token is removed", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const id = await legacyServer(repository);
-
-    const result = await new UpdateMcpServer(repository, environment({ MCP_CRED_LEGACY: "from-env" })).execute({
-      id,
-      credential: null,
-    });
-
-    expect(result.data?.credentialRef).toBeNull();
-    expect(result.data?.hasCredential).toBe(false);
+  it("returns NOT_FOUND for an unknown server", async () => {
+    const result = await new UpdateMcpServer(repository, secrets).execute({ id: "missing", label: "Y" });
+    expect(result.error?.code).toBe("NOT_FOUND");
   });
 });
 
 describe("OAuth client credentials", () => {
-  const environment: ILegacyMcpCredentialSource = { read: () => null };
+  let repository: InMemoryMcpServerRepository;
+  let secrets: InMemorySecretStore;
+
+  beforeEach(() => {
+    repository = new InMemoryMcpServerRepository();
+    secrets = new InMemorySecretStore(repository);
+  });
+
   const oauth = {
     tokenUrl: "https://login.example.com/oauth2/token",
     clientId: "wayfinder-service",
@@ -315,14 +364,11 @@ describe("OAuth client credentials", () => {
     scope: "mcp.read",
   };
 
-  it("registers a server that signs in with client credentials, without echoing the secret", async () => {
-    const repository = new InMemoryMcpServerRepository();
+  const registerOAuth = () =>
+    new RegisterMcpServer(repository, secrets).execute({ label: "Records", url: "https://x.example/mcp", oauth });
 
-    const result = await new RegisterMcpServer(repository).execute({
-      label: "Records",
-      url: "https://mcp.example.com/sse",
-      oauth,
-    });
+  it("registers a server that signs in with client credentials, keeping the secret in the secret store", async () => {
+    const result = await registerOAuth();
 
     expect(result.data?.oauth).toEqual({
       tokenUrl: "https://login.example.com/oauth2/token",
@@ -333,121 +379,90 @@ describe("OAuth client credentials", () => {
     });
     expect(result.data?.hasCredential).toBe(false);
     expect(JSON.stringify(result.data)).not.toContain("client-secret");
-    expect(repository.clientSecrets.get(result.data!.id)).toBe("client-secret");
+    expect(secrets.secrets.get(result.data!.id)?.oauthClientSecret).toBe("client-secret");
   });
 
-  it("refuses a registration that sets both a bearer token and OAuth", async () => {
-    const result = await new RegisterMcpServer(new InMemoryMcpServerRepository()).execute({
-      label: "Records",
-      url: "https://mcp.example.com/sse",
-      credential: "fixed-token",
-      oauth,
-    });
+  it("refuses a bearer token and OAuth together, and OAuth without a client secret, before creating anything", async () => {
+    const register = new RegisterMcpServer(repository, secrets);
 
-    expect(result.error?.code).toBe("VALIDATION_FAILED");
-  });
-
-  it("refuses a new OAuth server without a client secret", async () => {
-    const result = await new RegisterMcpServer(new InMemoryMcpServerRepository()).execute({
-      label: "Records",
-      url: "https://mcp.example.com/sse",
+    const both = await register.execute({ label: "R", url: "https://x.example/mcp", bearerToken: "t", oauth });
+    const noSecret = await register.execute({
+      label: "R",
+      url: "https://x.example/mcp",
       oauth: { ...oauth, clientSecret: "" },
     });
 
+    expect(both.error?.code).toBe("VALIDATION_FAILED");
+    expect(noSecret.error?.code).toBe("VALIDATION_FAILED");
+    expect(repository.rows).toHaveLength(0);
+  });
+
+  it("refuses an Authorization header on a server that signs in with OAuth", async () => {
+    const created = await registerOAuth();
+
+    const result = await new UpdateMcpServer(repository, secrets).execute({
+      id: created.data!.id,
+      customHeaders: { Authorization: "Basic abc" },
+    });
+
     expect(result.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it("clears the stored bearer token and legacy reference when a server switches to OAuth", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const created = await repository.create({
+  it("clears the stored bearer token when a server switches to OAuth", async () => {
+    const created = await new RegisterMcpServer(repository, secrets).execute({
       label: "Records",
-      url: "https://mcp.example.com/sse",
-      credential: "fixed-token",
-      credentialRef: "MCP_CRED_RECORDS",
+      url: "https://x.example/mcp",
+      bearerToken: "fixed-token",
     });
     const id = created.data!.id;
 
-    const result = await new UpdateMcpServer(repository, environment).execute({ id, oauth });
+    const result = await new UpdateMcpServer(repository, secrets).execute({ id, oauth });
 
     expect(result.data?.oauth?.clientId).toBe("wayfinder-service");
     expect(result.data?.hasCredential).toBe(false);
-    expect(result.data?.credentialRef).toBeNull();
-    expect(repository.clientSecrets.get(id)).toBe("client-secret");
+    expect(secrets.secrets.get(id)?.oauthClientSecret).toBe("client-secret");
   });
 
   it("keeps the stored client secret when OAuth settings are edited with the secret left blank", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const created = await new RegisterMcpServer(repository).execute({
-      label: "Records",
-      url: "https://mcp.example.com/sse",
-      oauth,
-    });
+    const created = await registerOAuth();
     const id = created.data!.id;
 
-    const result = await new UpdateMcpServer(repository, environment).execute({
+    const result = await new UpdateMcpServer(repository, secrets).execute({
       id,
       oauth: { ...oauth, clientSecret: "", scope: "mcp.read mcp.write" },
     });
 
     expect(result.data?.oauth?.scope).toBe("mcp.read mcp.write");
-    expect(repository.clientSecrets.get(id)).toBe("client-secret");
+    expect(secrets.secrets.get(id)?.oauthClientSecret).toBe("client-secret");
   });
 
-  it("refuses to switch a bearer-token server to OAuth without a client secret", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const created = await new RegisterMcpServer(repository).execute({
-      label: "Records",
-      url: "https://mcp.example.com/sse",
-      credential: "fixed-token",
-    });
+  it("drops OAuth and its secret when a bearer token is set instead, or when OAuth is removed", async () => {
+    const first = await registerOAuth();
+    const second = await registerOAuth();
+    const update = new UpdateMcpServer(repository, secrets);
 
-    const result = await new UpdateMcpServer(repository, environment).execute({
-      id: created.data!.id,
-      oauth: { ...oauth, clientSecret: undefined },
-    });
+    const switched = await update.execute({ id: first.data!.id, bearerToken: "fixed-token" });
+    const removed = await update.execute({ id: second.data!.id, oauth: null });
 
-    expect(result.error?.code).toBe("VALIDATION_FAILED");
-  });
-
-  it("drops the OAuth settings and secret when a bearer token is set instead", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const created = await new RegisterMcpServer(repository).execute({
-      label: "Records",
-      url: "https://mcp.example.com/sse",
-      oauth,
-    });
-    const id = created.data!.id;
-
-    const result = await new UpdateMcpServer(repository, environment).execute({ id, credential: "fixed-token" });
-
-    expect(result.data?.oauth).toBeNull();
-    expect(result.data?.hasCredential).toBe(true);
-    expect(repository.clientSecrets.has(id)).toBe(false);
-  });
-
-  it("removes OAuth on null and leaves it untouched when only the label changes", async () => {
-    const repository = new InMemoryMcpServerRepository();
-    const created = await new RegisterMcpServer(repository).execute({
-      label: "Records",
-      url: "https://mcp.example.com/sse",
-      oauth,
-    });
-    const id = created.data!.id;
-    const update = new UpdateMcpServer(repository, environment);
-
-    const renamed = await update.execute({ id, label: "Records, renamed" });
-    expect(renamed.data?.oauth?.clientId).toBe("wayfinder-service");
-
-    const removed = await update.execute({ id, oauth: null });
+    expect(switched.data).toMatchObject({ oauth: null, hasCredential: true });
+    expect(secrets.secrets.get(first.data!.id)?.oauthClientSecret).toBeNull();
     expect(removed.data?.oauth).toBeNull();
-    expect(repository.clientSecrets.has(id)).toBe(false);
+    expect(secrets.secrets.get(second.data!.id)?.oauthClientSecret).toBeNull();
+  });
+
+  it("leaves OAuth untouched when only the label changes", async () => {
+    const created = await registerOAuth();
+
+    const result = await new UpdateMcpServer(repository, secrets).execute({ id: created.data!.id, label: "Renamed" });
+
+    expect(result.data?.oauth?.clientId).toBe("wayfinder-service");
   });
 });
 
 describe("Disable / Enable / List", () => {
   it("excludes disabled servers by default and includes them on request", async () => {
     const repository = new InMemoryMcpServerRepository();
-    const register = new RegisterMcpServer(repository);
+    const register = new RegisterMcpServer(repository, new InMemorySecretStore(repository));
     const first = await register.execute({ label: "A", url: "https://a.example/sse" });
     await register.execute({ label: "B", url: "https://b.example/sse" });
 
@@ -468,7 +483,7 @@ describe("Disable / Enable / List", () => {
 describe("DeleteMcpServer", () => {
   it("permanently removes a server so it no longer lists", async () => {
     const repository = new InMemoryMcpServerRepository();
-    const register = new RegisterMcpServer(repository);
+    const register = new RegisterMcpServer(repository, new InMemorySecretStore(repository));
     const first = await register.execute({ label: "A", url: "https://a.example/sse" });
     await register.execute({ label: "B", url: "https://b.example/sse" });
 
@@ -489,33 +504,101 @@ describe("DeleteMcpServer", () => {
 
 describe("TestMcpServer", () => {
   let repository: InMemoryMcpServerRepository;
+  let tools: InMemoryToolRepository;
 
   beforeEach(() => {
     repository = new InMemoryMcpServerRepository();
+    tools = new InMemoryToolRepository();
   });
 
-  it("returns the discovered tool count for a reachable server", async () => {
-    const created = await new RegisterMcpServer(repository).execute({
+  const register = () =>
+    new RegisterMcpServer(repository, new InMemorySecretStore(repository)).execute({
       label: "X",
       url: "https://x.example/sse",
     });
-    const result = await new TestMcpServer(repository, okClient).execute(created.data!.id);
+
+  it("returns the discovered tools for a reachable server and caches them", async () => {
+    const created = await register();
+    const result = await new TestMcpServer(repository, okClient, tools).execute(created.data!.id);
     expect(result.data?.toolCount).toBe(2);
     expect(result.data?.tools[0]?.name).toBe("search");
+    expect(tools.rows.map((row) => row.name)).toEqual(["search", "fetch"]);
   });
 
-  it("propagates a client failure as an error", async () => {
-    const created = await new RegisterMcpServer(repository).execute({
-      label: "X",
-      url: "https://x.example/sse",
-    });
-    const result = await new TestMcpServer(repository, failingClient).execute(created.data!.id);
+  it("propagates a client failure as an error and leaves the cache alone", async () => {
+    const created = await register();
+    const result = await new TestMcpServer(repository, failingClient, tools).execute(created.data!.id);
     expect(result.error?.code).toBe("INFRA_FAILURE");
+    expect(tools.rows).toEqual([]);
   });
 
   it("returns NOT_FOUND for an unknown server", async () => {
-    const result = await new TestMcpServer(repository, okClient).execute("missing");
+    const result = await new TestMcpServer(repository, okClient, tools).execute("missing");
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("RefreshMcpTools / ListMcpTools", () => {
+  it("replaces the cache from a live listing and keeps settings for surviving tools", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const tools = new InMemoryToolRepository();
+    const created = await new RegisterMcpServer(repository, new InMemorySecretStore(repository)).execute({
+      label: "X",
+      url: "https://x.example/mcp",
+    });
+    const id = created.data!.id;
+    await tools.replaceForServer(id, [
+      { name: "search", title: null, description: null, inputSchema: null },
+      { name: "retired", title: null, description: null, inputSchema: null },
+    ]);
+    const pagination = { cursorArgument: "cursor", nextCursorPath: "next", itemsPath: "items", maxPages: 3 };
+    await tools.updateSettings(id, "search", { ...emptySettings, pagination });
+
+    const refreshed = await new RefreshMcpTools(repository, okClient, tools).execute(id);
+
+    expect(refreshed.data?.map((tool) => tool.name)).toEqual(["search", "fetch"]);
+    const listed = await new ListMcpTools(tools).execute(id);
+    expect(listed.data?.find((tool) => tool.name === "search")).toMatchObject({ title: "Search", pagination });
+  });
+
+  it("returns NOT_FOUND for an unknown server", async () => {
+    const result = await new RefreshMcpTools(new InMemoryMcpServerRepository(), okClient, new InMemoryToolRepository()).execute(
+      "missing",
+    );
+    expect(result.error?.code).toBe("NOT_FOUND");
+  });
+});
+
+describe("UpdateMcpToolSettings", () => {
+  it("saves valid settings", async () => {
+    const tools = new InMemoryToolRepository();
+    await tools.replaceForServer("server-1", stubTools);
+    const status = { statusPath: "status", meanings: { down: "source-unavailable" as const }, caveatsPath: null };
+
+    const result = await new UpdateMcpToolSettings(tools).execute({
+      serverId: "server-1",
+      toolName: "search",
+      settings: { ...emptySettings, status },
+    });
+
+    expect(result.data?.status).toEqual(status);
+  });
+
+  it("rejects invalid settings without saving", async () => {
+    const tools = new InMemoryToolRepository();
+    await tools.replaceForServer("server-1", stubTools);
+
+    const result = await new UpdateMcpToolSettings(tools).execute({
+      serverId: "server-1",
+      toolName: "search",
+      settings: {
+        ...emptySettings,
+        pagination: { cursorArgument: "cursor", nextCursorPath: "next", itemsPath: "items", maxPages: 0 },
+      },
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(tools.rows[0]?.pagination).toBeNull();
   });
 });
 
@@ -528,7 +611,7 @@ describe("ResolveStepTools", () => {
 
   it("keeps allowed tools on active servers and dedupes the server list", async () => {
     const repository = new InMemoryMcpServerRepository();
-    const server = await new RegisterMcpServer(repository).execute({
+    const server = await new RegisterMcpServer(repository, new InMemorySecretStore(repository)).execute({
       label: "S",
       url: "https://s.example/sse",
     });
@@ -545,7 +628,7 @@ describe("ResolveStepTools", () => {
 
   it("drops refs to a disabled server (deny-by-default)", async () => {
     const repository = new InMemoryMcpServerRepository();
-    const server = await new RegisterMcpServer(repository).execute({
+    const server = await new RegisterMcpServer(repository, new InMemorySecretStore(repository)).execute({
       label: "S",
       url: "https://s.example/sse",
     });
@@ -560,19 +643,34 @@ describe("ResolveStepTools", () => {
     expect(result.data?.servers).toEqual([]);
   });
 
-  it("keeps refs to a server that sends data outside Wayfinder — the classification is a label", async () => {
+  it("keeps refs to a public-data reader", async () => {
     const repository = new InMemoryMcpServerRepository();
-    const server = await new RegisterMcpServer(repository).execute({
-      label: "Integration",
-      url: "https://ext.example/sse",
-      communicatesExternally: true,
+    const server = await new RegisterMcpServer(repository, new InMemorySecretStore(repository)).execute({
+      label: "Legislation",
+      url: "https://legislation.example/mcp",
+      dataClassification: "public-read",
     });
 
     const result = await new ResolveStepTools(repository).execute([
       { serverId: server.data!.id, toolName: "search" },
     ]);
 
-    expect(result.data?.refs).toEqual([{ serverId: server.data!.id, toolName: "search" }]);
-    expect(result.data?.servers.map((entry) => entry.label)).toEqual(["Integration"]);
+    expect(result.data?.refs).toHaveLength(1);
+  });
+
+  it("drops refs to a server that sends records out", async () => {
+    const repository = new InMemoryMcpServerRepository();
+    const server = await new RegisterMcpServer(repository, new InMemorySecretStore(repository)).execute({
+      label: "Integration",
+      url: "https://ext.example/sse",
+      dataClassification: "external-write",
+    });
+
+    const result = await new ResolveStepTools(repository).execute([
+      { serverId: server.data!.id, toolName: "search" },
+    ]);
+
+    expect(result.data?.refs).toEqual([]);
+    expect(result.data?.servers).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import type { IUserRepository } from "@rbrasier/domain";
+import type { IUserRepository } from "@wayfinder/domain";
 
 /**
  * Promotes the user matching ADMIN_SEED_EMAIL to admin if they exist

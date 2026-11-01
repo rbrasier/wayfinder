@@ -1,4 +1,4 @@
-import type { ChatMessage, ILanguageModel, TokenUsage, TurnStreamWriter } from "@rbrasier/domain";
+import type { ChatMessage, ILanguageModel, TokenUsage, TurnStreamWriter } from "@wayfinder/domain";
 import type { z } from "zod";
 
 // Callers pass a fully-decorated ILanguageModel from the container. Usage

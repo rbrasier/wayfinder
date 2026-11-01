@@ -1,4 +1,4 @@
-import { ADMIN_AREA_PERMISSIONS, type PermissionKey } from "@rbrasier/domain";
+import { ADMIN_AREA_PERMISSIONS, type PermissionKey } from "@wayfinder/domain";
 
 // The delegable parts of the admin section (ADR-066 §1). "global" names what
 // only a Global Admin may open; no permission key unlocks it.

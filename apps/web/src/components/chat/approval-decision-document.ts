@@ -1,4 +1,4 @@
-import type { SessionMessage } from "@rbrasier/domain";
+import type { SessionMessage } from "@wayfinder/domain";
 
 // The document an approval decision signed. Resolved from the messages already
 // loaded, like `resolveApproverEditDocument` — but by position rather than by

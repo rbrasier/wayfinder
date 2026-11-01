@@ -7,9 +7,10 @@ import {
   type Database,
   type PkiEnvDefaults,
   type RuntimeConfigStore,
-} from "@rbrasier/adapters";
-import { SendPasswordResetEmail } from "@rbrasier/application";
-import type { IEmailSender } from "@rbrasier/domain";
+  type SessionRevocationRegistry,
+} from "@wayfinder/adapters";
+import { SendPasswordResetEmail } from "@wayfinder/application";
+import type { IEmailSender } from "@wayfinder/domain";
 
 interface PkiEnv {
   AUTH_METHOD: string;
@@ -126,6 +127,7 @@ export interface AuthRuntimeDependencies {
   readonly baseURL: string;
   readonly adminSeedEmail: string | undefined;
   readonly entraAuthority: string | undefined;
+  readonly sessionRevocations: SessionRevocationRegistry;
 }
 
 export interface AuthRuntime {
@@ -161,6 +163,7 @@ export const buildAuthRuntime = (dependencies: AuthRuntimeDependencies): AuthRun
       authMethod: dependencies.authMethod,
       authConfig,
       entraAuthority: dependencies.entraAuthority,
+      sessionRevocations: dependencies.sessionRevocations,
       // Errors are swallowed on purpose: Better Auth answers a reset request
       // with the same "if this address exists" message either way, so letting a
       // bounce surface here would turn the form into an address oracle. The

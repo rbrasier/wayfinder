@@ -7,7 +7,7 @@ import {
   type IBudgetRepository,
   type NewBudget,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 
 export interface CreateBudgetInput {
   scope: BudgetScope;

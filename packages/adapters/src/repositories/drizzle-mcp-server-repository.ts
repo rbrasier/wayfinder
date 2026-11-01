@@ -4,21 +4,32 @@ import {
   ok,
   type IMcpServerRepository,
   type ListMcpServersInput,
-  type McpCredentialChange,
-  type McpOAuthChange,
   type McpOAuthSettings,
   type McpServer,
   type McpServerStatus,
   type McpServerUpdate,
   type NewMcpServer,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { desc, eq } from "drizzle-orm";
+import type { SettingsEncryptionService } from "../config/settings-encryption";
 import type { Database } from "../db/client";
 import { admin_mcp_servers } from "../db/schema/admin";
-import type { SecretCipher } from "./drizzle-flow-trigger-repository";
 
-type McpServerRow = typeof admin_mcp_servers.$inferSelect;
+export type McpServerRow = typeof admin_mcp_servers.$inferSelect;
+
+// Header names only — values never leave the secret store (ADR-062 §8). A
+// ciphertext that will not decrypt (rotated key, tampered row) lists as no
+// headers rather than failing every read of the server list.
+const readHeaderNames = (ciphertext: string | null, encryption: SettingsEncryptionService): string[] => {
+  if (!ciphertext) return [];
+  try {
+    const parsed: unknown = JSON.parse(encryption.decrypt(ciphertext));
+    return typeof parsed === "object" && parsed !== null ? Object.keys(parsed) : [];
+  } catch {
+    return [];
+  }
+};
 
 const oauthOf = (row: McpServerRow): McpOAuthSettings | null => {
   if (!row.oauth_token_url || !row.oauth_client_id) return null;
@@ -31,67 +42,47 @@ const oauthOf = (row: McpServerRow): McpOAuthSettings | null => {
   };
 };
 
-export const toMcpServer = (row: McpServerRow): McpServer => ({
+type OAuthColumns = Partial<
+  Pick<McpServerRow, "oauth_token_url" | "oauth_client_id" | "oauth_scope" | "oauth_audience" | "oauth_client_auth_method">
+>;
+
+// The settings only — the client secret is written by the secret store.
+export const oauthColumns = (oauth: McpOAuthSettings | null | undefined): OAuthColumns => {
+  if (oauth === undefined) return {};
+  return {
+    oauth_token_url: oauth?.tokenUrl ?? null,
+    oauth_client_id: oauth?.clientId ?? null,
+    oauth_scope: oauth?.scope ?? null,
+    oauth_audience: oauth?.audience ?? null,
+    oauth_client_auth_method: oauth?.clientAuthMethod ?? null,
+  };
+};
+
+export const toMcpServerEntity = (row: McpServerRow, encryption: SettingsEncryptionService): McpServer => ({
   id: row.id,
   label: row.label,
   transport: row.transport,
   url: row.url,
-  credentialRef: row.credential_ref,
-  hasCredential: row.credential_encrypted !== null,
+  dataClassification: row.data_classification,
+  verbatimOnly: row.verbatim_only,
+  callTimeoutMs: row.call_timeout_ms,
+  hasCredential: row.credential_ciphertext !== null,
+  customHeaderNames: readHeaderNames(row.custom_headers_ciphertext, encryption),
   oauth: oauthOf(row),
-  communicatesExternally: row.communicates_externally,
   status: row.status,
   createdByUserId: row.created_by_user_id,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
 
-type OAuthColumns = Partial<
-  Pick<
-    McpServerRow,
-    | "oauth_token_url"
-    | "oauth_client_id"
-    | "oauth_client_secret_encrypted"
-    | "oauth_scope"
-    | "oauth_audience"
-    | "oauth_client_auth_method"
-  >
->;
-
-// The secret column is written only when a new secret is given, so editing the
-// other settings keeps the stored one.
-export const oauthColumns = (change: McpOAuthChange, cipher: SecretCipher): OAuthColumns => {
-  if (change === undefined) return {};
-  if (change === null) {
-    return {
-      oauth_token_url: null,
-      oauth_client_id: null,
-      oauth_client_secret_encrypted: null,
-      oauth_scope: null,
-      oauth_audience: null,
-      oauth_client_auth_method: null,
-    };
-  }
-  const { settings, clientSecret } = change;
-  return {
-    oauth_token_url: settings.tokenUrl,
-    oauth_client_id: settings.clientId,
-    oauth_scope: settings.scope,
-    oauth_audience: settings.audience,
-    oauth_client_auth_method: settings.clientAuthMethod,
-    ...(clientSecret ? { oauth_client_secret_encrypted: cipher.encrypt(clientSecret) } : {}),
-  };
-};
-
 export class DrizzleMcpServerRepository implements IMcpServerRepository {
   constructor(
     private readonly db: Database,
-    private readonly cipher: SecretCipher,
+    private readonly encryption: SettingsEncryptionService,
   ) {}
 
-  private encrypted(credential: McpCredentialChange): { credential_encrypted?: string | null } {
-    if (credential === undefined) return {};
-    return { credential_encrypted: credential === null ? null : this.cipher.encrypt(credential) };
+  private toEntity(row: McpServerRow): McpServer {
+    return toMcpServerEntity(row, this.encryption);
   }
 
   async create(input: NewMcpServer): Promise<Result<McpServer>> {
@@ -102,15 +93,15 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
           label: input.label,
           transport: input.transport ?? "sse",
           url: input.url,
-          credential_ref: input.credentialRef ?? null,
-          ...this.encrypted(input.credential),
-          ...oauthColumns(input.oauth, this.cipher),
-          communicates_externally: input.communicatesExternally ?? false,
+          data_classification: input.dataClassification ?? "internal",
+          verbatim_only: input.verbatimOnly ?? false,
+          call_timeout_ms: input.callTimeoutMs,
+          ...oauthColumns(input.oauth),
           created_by_user_id: input.createdByUserId ?? null,
         })
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Insert returned no row."));
-      return ok(toMcpServer(row));
+      return ok(this.toEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to create MCP server.", cause));
     }
@@ -130,18 +121,16 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .set({
           label: patch.label ?? current.label,
           url: patch.url ?? current.url,
-          credential_ref:
-            patch.credentialRef === undefined ? current.credential_ref : patch.credentialRef,
-          ...this.encrypted(patch.credential),
-          ...oauthColumns(patch.oauth, this.cipher),
-          communicates_externally:
-            patch.communicatesExternally ?? current.communicates_externally,
+          data_classification: patch.dataClassification ?? current.data_classification,
+          verbatim_only: patch.verbatimOnly ?? current.verbatim_only,
+          call_timeout_ms: patch.callTimeoutMs ?? current.call_timeout_ms,
+          ...oauthColumns(patch.oauth),
           updated_at: new Date(),
         })
         .where(eq(admin_mcp_servers.id, id))
         .returning();
       if (!row) return err(domainError("INFRA_FAILURE", "Update returned no row."));
-      return ok(toMcpServer(row));
+      return ok(this.toEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update MCP server.", cause));
     }
@@ -154,35 +143,9 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .from(admin_mcp_servers)
         .where(eq(admin_mcp_servers.id, id))
         .limit(1);
-      return ok(row ? toMcpServer(row) : null);
+      return ok(row ? this.toEntity(row) : null);
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to find MCP server.", cause));
-    }
-  }
-
-  async readCredential(id: string): Promise<Result<string | null>> {
-    try {
-      const [row] = await this.db
-        .select({ credential: admin_mcp_servers.credential_encrypted })
-        .from(admin_mcp_servers)
-        .where(eq(admin_mcp_servers.id, id))
-        .limit(1);
-      return ok(row?.credential ? this.cipher.decrypt(row.credential) : null);
-    } catch (cause) {
-      return err(domainError("INFRA_FAILURE", "Failed to read the MCP server's token.", cause));
-    }
-  }
-
-  async readOAuthClientSecret(id: string): Promise<Result<string | null>> {
-    try {
-      const [row] = await this.db
-        .select({ secret: admin_mcp_servers.oauth_client_secret_encrypted })
-        .from(admin_mcp_servers)
-        .where(eq(admin_mcp_servers.id, id))
-        .limit(1);
-      return ok(row?.secret ? this.cipher.decrypt(row.secret) : null);
-    } catch (cause) {
-      return err(domainError("INFRA_FAILURE", "Failed to read the MCP server's OAuth client secret.", cause));
     }
   }
 
@@ -195,7 +158,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
             .from(admin_mcp_servers)
             .where(eq(admin_mcp_servers.status, "active"))
             .orderBy(desc(admin_mcp_servers.updated_at));
-      return ok(rows.map(toMcpServer));
+      return ok(rows.map((row) => this.toEntity(row)));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to list MCP servers.", cause));
     }
@@ -209,7 +172,7 @@ export class DrizzleMcpServerRepository implements IMcpServerRepository {
         .where(eq(admin_mcp_servers.id, id))
         .returning();
       if (!row) return err(domainError("NOT_FOUND", "MCP server not found."));
-      return ok(toMcpServer(row));
+      return ok(this.toEntity(row));
     } catch (cause) {
       return err(domainError("INFRA_FAILURE", "Failed to update MCP server status.", cause));
     }

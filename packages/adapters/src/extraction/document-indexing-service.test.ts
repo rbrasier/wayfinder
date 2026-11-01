@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { domainError, err, ok } from "@rbrasier/domain";
+import { domainError, err, ok } from "@wayfinder/domain";
 import type {
   DocumentChunkSearch,
   IDocumentChunkRepository,
@@ -7,7 +7,8 @@ import type {
   NewDocumentChunk,
   Result,
   RetrievedChunk,
-} from "@rbrasier/domain";
+  StoredEmbedding,
+} from "@wayfinder/domain";
 import { DocumentIndexingService } from "./document-indexing-service";
 
 class FakeEmbeddings implements IEmbeddingsProvider {
@@ -19,6 +20,11 @@ class FakeEmbeddings implements IEmbeddingsProvider {
       return err(domainError("AI_PROVIDER_FAILED", "boom"));
     }
     return ok([text.length, 0, 1]);
+  }
+  async embedForStorage(text: string): Promise<Result<StoredEmbedding>> {
+    const embedded = await this.embed(text);
+    if (embedded.error) return err(embedded.error);
+    return ok({ vector: embedded.data, model: "openai:text-embedding-3-large" });
   }
 }
 
@@ -35,6 +41,12 @@ class FakeChunkRepo implements IDocumentChunkRepository {
   }
   async search(_input: DocumentChunkSearch): Promise<Result<RetrievedChunk[]>> {
     return ok([]);
+  }
+  async countDocumentsEmbeddedWithOtherModel(_modelKey: string): Promise<Result<number>> {
+    return ok(0);
+  }
+  async labelUnlabelledEmbeddings(_modelKey: string): Promise<Result<void>> {
+    return ok(undefined);
   }
 }
 
@@ -56,7 +68,7 @@ describe("DocumentIndexingService", () => {
     expect(chunks.deletedPaths).toEqual(["context/flow-1/policy.pdf"]);
   });
 
-  it("embeds each chunk and inserts them with ascending chunk indexes", async () => {
+  it("embeds each chunk and inserts them with ascending chunk indexes and the embedding model", async () => {
     const embeddings = new FakeEmbeddings();
     const chunks = new FakeChunkRepo();
     const service = new DocumentIndexingService(embeddings, chunks);
@@ -75,6 +87,7 @@ describe("DocumentIndexingService", () => {
       expect(chunk.flowId).toBe("flow-1");
       expect(chunk.sessionId).toBeNull();
       expect(chunk.embedding).toHaveLength(3);
+      expect(chunk.embeddingModel).toBe("openai:text-embedding-3-large");
     });
   });
 

@@ -6,7 +6,7 @@ import {
   type IExtractionRunRepository,
   type IFlowVersionRepository,
   type Result,
-} from "@rbrasier/domain";
+} from "@wayfinder/domain";
 import { loadExtractionSchemaForVersion } from "../extraction/run-schema";
 
 export interface GetExtractionRunReportInput {
