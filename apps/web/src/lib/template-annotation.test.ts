@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildAnnotationEdits, rowsFromDocumentTags } from "./template-annotation";
+import { buildAnnotationEdits, rowsFromDocumentTags, rowsFromDraft, type DraftedFieldPayload } from "./template-annotation";
 
 describe("rowsFromDocumentTags", () => {
   it("returns one row per tag, in document order", () => {
@@ -110,5 +110,66 @@ describe("buildAnnotationEdits", () => {
       { ...tagRow, line: "Supplier Name", occurrences: [{ sourceText: "{{ Supplier Name }}", occurrence: 0 }] },
     ]);
     expect(edits).toEqual([]);
+  });
+});
+
+describe("drafted rows", () => {
+  const drafted = (overrides: Partial<DraftedFieldPayload> = {}): DraftedFieldPayload => ({
+    field: { key: "supplier_name", label: "Supplier Name" },
+    line: "Supplier Name",
+    sourceText: "Acme Pty Ltd",
+    occurrence: 0,
+    insertAfter: false,
+    replacedValue: "Acme Pty Ltd",
+    context: "Supplier Name: Acme Pty Ltd",
+    evidence: { kind: "single-example" },
+    ...overrides,
+  });
+
+  it("points each row at the value it replaces", () => {
+    const rows = rowsFromDraft([drafted()]);
+    expect(rows[0]).toMatchObject({
+      key: "supplier_name",
+      line: "Supplier Name",
+      occurrences: [{ sourceText: "Acme Pty Ltd", occurrence: 0 }],
+      locked: false,
+      draft: { replacedValue: "Acme Pty Ltd", insertAfter: false, confirmed: true },
+    });
+  });
+
+  it("leaves a checking-pass row unconfirmed until the author confirms it", () => {
+    const rows = rowsFromDraft([drafted({ evidence: { kind: "checking-pass" } })]);
+    expect(rows[0]?.draft?.confirmed).toBe(false);
+  });
+
+  it("collapses two drafted places for one field into one row", () => {
+    const rows = rowsFromDraft([drafted(), drafted({ occurrence: 1 })]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.occurrences.map((entry) => entry.occurrence)).toEqual([0, 1]);
+  });
+
+  it("replaces a drafted value with its placeholder", () => {
+    expect(buildAnnotationEdits(rowsFromDraft([drafted()]))).toEqual([
+      { find: "Acme Pty Ltd", occurrence: 0, replacement: "{{ Supplier Name }}" },
+    ]);
+  });
+
+  it("keeps the caption in front of a placeholder that goes after it", () => {
+    const rows = rowsFromDraft([
+      drafted({ sourceText: "Equipment Type", insertAfter: true, line: "Equipment Type", field: { key: "equipment_type", label: "Equipment Type" } }),
+    ]);
+    expect(buildAnnotationEdits(rows)).toEqual([
+      { find: "Equipment Type", occurrence: 0, replacement: "Equipment Type {{ Equipment Type }}" },
+    ]);
+  });
+
+  it("writes nothing for a cleared go-after row, so the caption is never deleted", () => {
+    const rows = rowsFromDraft([drafted({ sourceText: "Equipment Type", insertAfter: true, line: "" })]);
+    expect(buildAnnotationEdits(rows)).toEqual([]);
+  });
+
+  it("leaves a drafted value in place when the author cleared its row", () => {
+    const rows = rowsFromDraft([drafted({ line: "" })]);
+    expect(buildAnnotationEdits(rows)).toEqual([]);
   });
 });

@@ -41,6 +41,8 @@ export interface NodeConfigModalConversationalProps {
   uploadError: string | null;
   setUploadError: (value: string | null) => void;
   onOpenHelpDialog: (variant: HelpVariant) => void;
+  // Opens the choice between a tagged template and a filled example (ADR-067).
+  onStartTemplateUpload: () => void;
   // Re-opens the field editor for the attached template without re-uploading.
   onEditTemplateFields?: () => void;
   // Present once a template is attached; null before then.
@@ -68,6 +70,7 @@ export function NodeConfigModalConversational({
   uploadError,
   setUploadError,
   onOpenHelpDialog,
+  onStartTemplateUpload,
   onEditTemplateFields,
   templateDownloadUrl = null,
   skillsEnabled,
@@ -163,7 +166,7 @@ export function NodeConfigModalConversational({
                 <button
                   type="button"
                   className="shrink-0 text-[12px] text-[#666055] hover:text-[#5c574c]"
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={onStartTemplateUpload}
                   disabled={isUploading}
                 >
                   Replace
@@ -220,7 +223,7 @@ export function NodeConfigModalConversational({
             <button
               type="button"
               className="w-full rounded-[9px] border border-dashed border-[#e7e3db] bg-[#faf9f7] p-4 text-center text-[13px] text-[#666055] transition-colors hover:border-wf-primary-dim hover:bg-wf-primary-light hover:text-wf-primary disabled:opacity-50"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={onStartTemplateUpload}
               disabled={isUploading}
             >
               {isUploading ? "Setting up…" : "Click to upload a .docx or .xlsx template"}
