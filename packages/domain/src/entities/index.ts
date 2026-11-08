@@ -118,3 +118,5 @@ export * from "./flow-observation-rules";
 export * from "./lookup-source";
 export * from "./value-set-matching";
 export * from "./template-field-value";
+export * from "./signature-config";
+export * from "./drawn-signature";

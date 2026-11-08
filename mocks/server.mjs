@@ -38,6 +38,7 @@ import { mock as lookupBusinessUnits } from "./lookup/business-units.mjs";
 import { mock as parlviewFeed } from "./parlview/api.mjs";
 import { mock as parlviewMcp } from "./parlview/mcp.mjs";
 import { SMTP_PORT, createInbox, createInboxMock } from "./smtp/inbox.mjs";
+import { mock as gotenberg } from "./signing/gotenberg.mjs";
 import { createSmtpServer } from "./smtp/server.mjs";
 
 const PORT = Number(process.env.MOCKS_PORT ?? 4001);
@@ -60,6 +61,7 @@ const MOCKS = [
   parlviewFeed,
   parlviewMcp,
   smtpInbox,
+  gotenberg,
 ];
 
 const routes = new Map();

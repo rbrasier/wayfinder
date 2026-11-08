@@ -15,6 +15,7 @@ export * from "./analytics/index";
 export * from "./governance/index";
 export * from "./notifications/index";
 export * from "./approvals/index";
+export * from "./signing/index";
 export * from "./people/index";
 export * from "./hr/index";
 export * from "./feedback/index";

@@ -185,6 +185,19 @@ export const approvalRouter = router({
       return result.data;
     }),
 
+  // What the decision UI must collect first — a drawing, a certificate
+  // signature, or nothing (ADR-067 §1). The decide mutation enforces the same.
+  signingRequirement: authenticatedProcedure
+    .input(z.object({ approvalId: z.string().guid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.getSigningRequirement.execute({
+        approvalId: input.approvalId,
+        userId: ctx.userId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   decide: authenticatedProcedure
     .input(
       z.object({
@@ -204,6 +217,7 @@ export const approvalRouter = router({
         comment: input.comment ?? null,
         routeBack: input.routeBack,
         isAdmin: ctx.isAdmin,
+        impersonatorId: ctx.impersonatorId,
       });
       if (result.error) throw toTrpcError(result.error);
       publishSessionUpdated(ctx, result.data.approval.sessionId);

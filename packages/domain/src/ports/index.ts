@@ -91,3 +91,6 @@ export * from "./value-set-provider";
 export * from "./value-set-shortlister";
 export * from "./lookup-source-repository";
 export * from "./field-proposer";
+export * from "./pdf-converter";
+export * from "./drawn-signature-repository";
+export * from "./signature-services-probe";

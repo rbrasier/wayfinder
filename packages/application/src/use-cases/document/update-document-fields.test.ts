@@ -487,6 +487,81 @@ describe("UpdateDocumentFields", () => {
     expect(result.error?.code).toBe("FORBIDDEN");
   });
 
+  it("refuses to edit a document frozen for certificate signing", async () => {
+    const sessionMessages = makeSessionMessages();
+    (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(
+        makeMessage({
+          document: {
+            ...baseDocument(),
+            pdf: { storagePath: "generated/sess-1/rft.pdf", sha256: "abc", generatedAt: "x", status: "frozen" },
+          },
+        }),
+      ),
+    );
+    const { useCase, deps } = build({ sessionMessages });
+
+    const result = await useCase.execute({ messageId: "msg-1", editedByUserId: "user-1", values: validValues });
+
+    expect(result.error?.code).toBe("FORBIDDEN");
+    expect(result.error?.message).toBe("This document is frozen for signing and can no longer be edited.");
+    expect(deps.objectStorage.put).not.toHaveBeenCalled();
+  });
+
+  it("drops a rendered PDF the edit has made stale", async () => {
+    const sessionMessages = makeSessionMessages();
+    (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(
+        makeMessage({
+          document: {
+            ...baseDocument(),
+            pdf: { storagePath: "generated/sess-1/rft.pdf", sha256: "abc", generatedAt: "x", status: "rendered" },
+          },
+        }),
+      ),
+    );
+    const { useCase } = build({ sessionMessages });
+
+    const result = await useCase.execute({ messageId: "msg-1", editedByUserId: "user-1", values: validValues });
+
+    expect(result.data?.document?.pdf).toBeUndefined();
+  });
+
+  it("carries an earlier approver's drawn signature through the re-render", async () => {
+    const approvals = makeApprovals();
+    (approvals.listBySession as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok([
+        {
+          id: "appr-1",
+          status: "approved",
+          comment: null,
+          decidedAt: new Date("2026-06-02T00:00:00Z"),
+          createdAt: new Date("2026-06-01T00:00:00Z"),
+          recordSnapshot: {
+            subjectNodeId: "node-1",
+            signatureFieldKey: "delegate_signature",
+            attestationText: "Approved by:   Jane Doe",
+            drawnSignatureStoragePath: "signatures/drawn/manager-1/1.png",
+          },
+        },
+      ]),
+    );
+    const flowNodes = makeFlowNodes(
+      makeNode({
+        documentTemplateFields: [
+          ...FIELDS,
+          { key: "delegate_signature", label: "Delegate Signature", type: "signature", optional: true, raw: "x" },
+        ],
+      }),
+    );
+    const { useCase, deps } = build({ approvals, flowNodes });
+
+    await useCase.execute({ messageId: "msg-1", editedByUserId: "user-1", values: validValues });
+
+    const generateCall = (deps.documentGenerator.generate as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(Object.keys(generateCall.images)).toEqual(["delegate_signature"]);
+  });
+
   it("errors when the message has no document", async () => {
     const sessionMessages = makeSessionMessages();
     (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(

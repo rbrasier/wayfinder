@@ -35,6 +35,7 @@ import type { IApprovalDecidedNotifier } from "../notifications/notify-on-approv
 import type { ApplyApprovalSignature } from "./apply-approval-signature";
 import {
   ATTESTATION_TEXT_KEY,
+  DRAWN_SIGNATURE_PATH_KEY,
   SIGNATURE_FIELD_KEY,
   STEP_KEY,
   SUBJECT_DESCRIPTION_KEY,
@@ -42,6 +43,7 @@ import {
 } from "./approval-record-keys";
 import type { ResolveApprovalSubject } from "./resolve-approval-subject";
 import { loneSignatureSlot } from "./signature-slot";
+import { decisionSigningGate, type DecisionSigningDeps } from "./decision-signing-gate";
 
 // A decision that happened outside Wayfinder, being recorded by someone other
 // than the approver (ADR-055). Its presence is what switches the four
@@ -71,6 +73,9 @@ export interface DecideApprovalInput {
   // decide mutation, whose input schema has no such field — and even if it
   // were, the authorisation branch below is the gate, not the caller.
   offSystem?: OffSystemNomination;
+  // Set when an admin is viewing as the decider (ADR-059). Nobody may sign on
+  // another person's behalf, so a signing step refuses (ADR-067 §2).
+  impersonatorId?: string | null;
 }
 
 export interface DecideApprovalOutput {
@@ -168,6 +173,7 @@ export class DecideApproval {
     private readonly sha256Hex?: Sha256Hex,
     private readonly approvalSubject?: ResolveApprovalSubject,
     private readonly applySignature?: ApplyApprovalSignature,
+    private readonly signing?: DecisionSigningDeps,
   ) {}
 
   async execute(input: DecideApprovalInput): Promise<Result<DecideApprovalOutput>> {
@@ -195,6 +201,8 @@ export class DecideApproval {
       this.recordedDeciderId(approval, input),
       input.offSystem ? approval.approverEmail : null,
     );
+    const signing = await decisionSigningGate(this.signing, approval, input, subject.signatureFieldKey);
+    if (signing.error) return signing;
     const edits = await this.approverEdits(approval, input, subject.nodeId);
     const status = derivedStatus(input.decision, edits.length > 0);
     const recordSnapshot = await this.buildRecord({
@@ -205,6 +213,7 @@ export class DecideApproval {
       editedFieldKeys: edits,
       subject,
       approver,
+      drawnSignaturePath: signing.data.drawnSignaturePath,
     });
 
     // The concurrency-gated approval update and the session advance/route commit
@@ -279,6 +288,7 @@ export class DecideApproval {
     editedFieldKeys: string[];
     subject: ResolvedSubject;
     approver: ApproverIdentity;
+    drawnSignaturePath: string | null;
   }): Promise<Record<string, unknown> | null> {
     const { approval, input, decidedAt, status, editedFieldKeys, subject, approver } = parts;
     const existing = approval.recordSnapshot ?? {};
@@ -344,6 +354,7 @@ export class DecideApproval {
       ...record,
       [SIGNATURE_FIELD_KEY]: subject.signatureFieldKey,
       [ATTESTATION_TEXT_KEY]: attestation.text,
+      ...(parts.drawnSignaturePath ? { [DRAWN_SIGNATURE_PATH_KEY]: parts.drawnSignaturePath } : {}),
       [`${stepKey}.verification_code`]: attestation.verificationCode,
     };
   }

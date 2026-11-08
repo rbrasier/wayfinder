@@ -1,5 +1,6 @@
 import type { ProviderName } from "../ports/language-model";
 import { DEFAULT_SESSION_POLICY, type SessionPolicy } from "./session-policy";
+import { SIGNATURE_CONFIG_SETTING_KEY } from "./signature-config";
 
 export type AiPurpose = "chat" | "documentGeneration" | "branching";
 
@@ -506,6 +507,7 @@ export const SENSITIVE_SETTING_KEYS: ReadonlySet<string> = new Set([
   DIRECTORY_CONFIG_SETTING_KEY,
   EMAIL_CONFIG_SETTING_KEY,
   SIEM_CONFIG_SETTING_KEY,
+  SIGNATURE_CONFIG_SETTING_KEY,
 ]);
 
 export const isSensitiveSettingKey = (key: string): boolean =>

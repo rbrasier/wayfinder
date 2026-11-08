@@ -1,4 +1,5 @@
 export * from "./drizzle-user-repository";
+export * from "./drizzle-drawn-signature-repository";
 export * from "./drizzle-context-doc-content-repository";
 export * from "./drizzle-document-chunks-repository";
 export * from "./drizzle-chunk-curation-repository";

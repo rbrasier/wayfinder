@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type AiConfig, type AuthConfig, type EmbeddingsConfig, type N8nConfig, type StorageConfig } from "@wayfinder/domain";
+import {
+  DEFAULT_SIGNATURE_CONFIG,
+  ok,
+  type AiConfig,
+  type AuthConfig,
+  type EmbeddingsConfig,
+  type N8nConfig,
+  type SignatureConfig,
+  type StorageConfig,
+} from "@wayfinder/domain";
 import { CompositeConnectivityTester, type ConnectivityTesterDeps } from "./composite-connectivity-tester";
 
 const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): ConnectivityTesterDeps => ({
@@ -27,6 +36,10 @@ const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): Connectivit
       pki: { sessionTtlHours: 8 },
     }),
     isPkiEnvConfigured: () => false,
+    getSignatureConfig: async (): Promise<SignatureConfig> => ({
+      ...DEFAULT_SIGNATURE_CONFIG,
+      gotenbergUrl: "http://gotenberg:3000",
+    }),
   },
   emailSender: { isConfigured: async () => false, testConnectivity: async () => ok(true as const) },
   graphClient: { isConfigured: async () => false, get: vi.fn() },
@@ -100,7 +113,29 @@ describe("CompositeConnectivityTester", () => {
       "auth-entra",
       "auth-pki",
       "auth-email-password",
+      "pdf-converter",
+      "signature-engine",
+      "timestamp-authority",
+      "signing-provider",
     ]);
+  });
+
+  it("probes a signing target against the saved signature config", async () => {
+    const probe = vi.fn(async (target: "pdf-converter") => ({ target, ok: true }));
+    const tester = new CompositeConnectivityTester(buildDeps({ signatureProbe: { probe } as never }));
+
+    const result = await tester.test("pdf-converter");
+
+    expect(result.data).toMatchObject({ target: "pdf-converter", ok: true });
+    expect(probe).toHaveBeenCalledWith("pdf-converter", expect.objectContaining({ gotenbergUrl: "http://gotenberg:3000" }));
+  });
+
+  it("skips signing targets when no probe is wired", async () => {
+    const tester = new CompositeConnectivityTester(buildDeps());
+
+    const result = await tester.test("signing-provider");
+
+    expect(result.data).toMatchObject({ skipped: true });
   });
 
   it("maps a thrown config lookup into a DomainError instead of throwing", async () => {

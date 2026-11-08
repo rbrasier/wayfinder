@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ApproverPicker } from "@/components/chat/approver-picker";
+import { SignaturePad } from "@/components/signatures/signature-pad";
 import { trpc } from "@/trpc/client";
 import {
   ApprovalSubject,
@@ -84,6 +85,13 @@ export function DecisionModal({
     typeof window !== "undefined"
       ? `${window.location.origin}/chats/${approval.sessionId}`
       : `/chats/${approval.sessionId}`;
+
+  // Only an approval signs, so only an approval asks for a drawing first.
+  const signing = trpc.approval.signingRequirement.useQuery(
+    { approvalId: approval.approval.id },
+    { enabled: decision === "approved" },
+  );
+  const needsDrawing = decision === "approved" && signing.data?.needsDrawing === true;
 
   const decide = trpc.approval.decide.useMutation({
     onSuccess: async (data) => {
@@ -260,6 +268,7 @@ export function DecisionModal({
             {/* Editable here: their approval is still pending, and fixing a
                 typo beats sending the whole thing back (ADR-045 §5). */}
             <PreviousStep previousStep={approval.previousStep} canEdit />
+            {needsDrawing && <SignaturePad />}
             <Textarea
               ref={commentRef}
               aria-label="Decision comment"
@@ -302,7 +311,7 @@ export function DecisionModal({
             <Button
               size="sm"
               onClick={() => submit()}
-              disabled={decide.isPending || (commentRequired && !comment.trim())}
+              disabled={decide.isPending || needsDrawing || (commentRequired && !comment.trim())}
             >
               {decision === "approved" ? "Confirm approval" : "Request changes"}
             </Button>

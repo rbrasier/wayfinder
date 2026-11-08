@@ -30,6 +30,24 @@ export interface SessionDocument {
   editedByUserId?: string | null;
   // Append-only audit of manual edits; preserved across regeneration.
   editHistory?: DocumentEdit[];
+  // The PDF rendering of this document, present once an approval step converted
+  // it on signing (ADR-067 §3). Absent for every document that never did.
+  pdf?: SessionDocumentPdf;
+}
+
+// `rendered`: regenerated on each decision (attestation / drawn). `frozen`: the
+// signed record once a certificate signature exists — never regenerated
+// (ADR-068 §1). `superseded`: a frozen PDF a later change request replaced.
+// `failed`: conversion was attempted and did not produce a PDF.
+export type SessionDocumentPdfStatus = "rendered" | "frozen" | "superseded" | "failed";
+
+export interface SessionDocumentPdf {
+  storagePath: string | null;
+  sha256: string | null;
+  generatedAt: string;
+  status: SessionDocumentPdfStatus;
+  // Why conversion failed, when it did. Shown to the operator, never a stack.
+  failureReason?: string | null;
 }
 
 export interface DocumentGenerationConfidence {

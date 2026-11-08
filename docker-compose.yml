@@ -64,6 +64,17 @@ services:
       SALT: replace-me
       TELEMETRY_ENABLED: "false"
 
+  # PDF converter for "Convert to PDF on signing" and certificate signatures
+  # (ADR-067 §3). Opt-in: `docker compose --profile pdf up -d`, then set
+  # Settings → PDF signatures → PDF converter URL to http://localhost:3100.
+  gotenberg:
+    image: gotenberg/gotenberg:8.25.0@sha256:e304e45acee3c400f8ef76afa195c76b1d0eaf0ab6fe9651e305067ab6a1560c
+    container_name: wayfinder-gotenberg
+    restart: unless-stopped
+    profiles: ["pdf"]
+    ports:
+      - "3100:3000"
+
 # minio-data is deliberately no longer declared: SeaweedFS cannot read MinIO's
 # on-disk format, and leaving the old volume undeclared keeps
 # `docker compose down -v` from deleting it before it has been migrated (see

@@ -18,6 +18,11 @@ export const ALL_CONNECTIVITY_TARGETS: ConnectivityTarget[] = [
   "auth-email-password",
   "auth-entra",
   "auth-pki",
+  // Signing services. Unconfigured ones report skipped and show no badge.
+  "pdf-converter",
+  "signature-engine",
+  "timestamp-authority",
+  "signing-provider",
 ];
 
 export type BadgeState =

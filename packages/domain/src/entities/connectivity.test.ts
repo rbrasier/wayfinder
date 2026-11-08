@@ -13,6 +13,10 @@ describe("CONNECTIVITY_TARGETS", () => {
       "auth-entra",
       "auth-pki",
       "auth-email-password",
+      "pdf-converter",
+      "signature-engine",
+      "timestamp-authority",
+      "signing-provider",
     ]);
     expect(new Set(CONNECTIVITY_TARGETS).size).toBe(CONNECTIVITY_TARGETS.length);
   });

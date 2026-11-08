@@ -31,10 +31,10 @@ export function DocumentCard({
   const [isDownloading, setIsDownloading] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
 
-  const handleDownload = async () => {
+  const handleDownload = async (format: "original" | "pdf" = "original") => {
     setIsDownloading(true);
     try {
-      const res = await fetch(`/api/documents/${messageId}`);
+      const res = await fetch(`/api/documents/${messageId}${format === "pdf" ? "?format=pdf" : ""}`);
       if (res.status === 410) {
         setIsUnavailable(true);
         return;
@@ -45,7 +45,7 @@ export function DocumentCard({
       const url = URL.createObjectURL(blob);
       const a = window.document.createElement("a");
       a.href = url;
-      a.download = document.filename;
+      a.download = format === "pdf" ? document.filename.replace(/\.[a-z0-9]+$/i, "") + ".pdf" : document.filename;
       a.click();
       URL.revokeObjectURL(url);
       toast.success("Downloading…");
@@ -87,6 +87,14 @@ export function DocumentCard({
             <p className="mt-1 font-mono text-[10px] text-[#666055]">
               Generated {new Date(document.generatedAt).toLocaleDateString()}
             </p>
+            {document.pdf?.status === "failed" && (
+              <p className="mt-0.5 text-[10px] font-medium text-[#8a5a1d]" data-testid="document-pdf-failed">
+                PDF not produced: {document.pdf.failureReason ?? "conversion failed"}
+              </p>
+            )}
+            {document.pdf?.status === "frozen" && (
+              <p className="mt-0.5 text-[10px] font-medium text-[#1f6b4d]">Signed PDF — no longer editable</p>
+            )}
             {document.editedAt && (
               <div className="mt-0.5 flex items-center gap-1">
                 <p className="text-[10px] font-medium text-[#8a5a1d]">
@@ -110,9 +118,21 @@ export function DocumentCard({
             </div>
           ) : (
             <>
-              <Button size="sm" onClick={handleDownload} disabled={isDownloading} className="flex-1">
+              <Button size="sm" onClick={() => void handleDownload()} disabled={isDownloading} className="flex-1">
                 {isDownloading ? "Downloading…" : "↓ Download"}
               </Button>
+              {document.pdf?.storagePath && document.pdf.status !== "superseded" && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="document-download-pdf"
+                  onClick={() => void handleDownload("pdf")}
+                  disabled={isDownloading}
+                  className="shrink-0"
+                >
+                  ↓ PDF
+                </Button>
+              )}
               {canEdit && (
                 <Button
                   size="sm"

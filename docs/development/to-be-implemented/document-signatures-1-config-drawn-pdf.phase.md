@@ -100,3 +100,24 @@ Additive nullable columns: no `-- data-impact:` declaration needed. Settings use
 
 See the "Approved change summary" section of the PRD — approved 2026-11-08 for
 issue #386 and carried here unchanged.
+
+## 9. Approved build summary (all three phases, 2026-11-08)
+
+Approved at the `/build` gate. Deviations from these phase docs, found in the
+pre-flight read of the code:
+
+- **Settings storage** — one parsed JSON config under
+  `SIGNATURE_CONFIG_SETTING_KEY` through `RuntimeConfigStore`, matching AI / auth /
+  email, instead of separate `signature.*` keys and a new repository port.
+- **Image support** — `GenerateInput` gains an optional `images` map keyed by slot,
+  because `data` carries only strings, booleans and arrays.
+- **Probes** — new `ConnectivityTarget`s (`pdf-converter`, `signing-provider`,
+  `timestamp-authority`, `signature-engine`) on the existing `IConnectivityTester`;
+  `ITimestampAuthority` is folded into the probe rather than a separate port.
+- **Audit sequencing** — `signature.signed` / `signature.rejected` ship in phase 2;
+  phase 3 adds `signature.validated` and the export (fixes the doc-review WARN).
+- **Branch / PR** — built on `claude/issue-386-triage-9qb2ii`, PR into
+  `release/alpha-3`; PATCH bumps 0.41.2 → 0.41.4, both by maintainer decision.
+- **Verification limits** — no Docker daemon or LibreOffice in the build
+  environment: Gotenberg and DSS adapters are verified against `mocks/` endpoints;
+  the real-sidecar job first runs in CI.

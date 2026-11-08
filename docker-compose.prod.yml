@@ -116,6 +116,15 @@ services:
       # The scheduler heartbeat POSTs the web app's internal tick endpoint.
       WEB_BASE_URL: http://web:3000
 
+  # PDF converter (ADR-067 §3). Runs only when asked for:
+  #   docker compose -f docker-compose.prod.yml --profile pdf up -d
+  # then set Settings → PDF signatures → PDF converter URL to http://gotenberg:3000.
+  # Not published: only the app talks to it.
+  gotenberg:
+    image: gotenberg/gotenberg:8.25.0@sha256:e304e45acee3c400f8ef76afa195c76b1d0eaf0ab6fe9651e305067ab6a1560c
+    restart: unless-stopped
+    profiles: ["pdf"]
+
 # minio-data is deliberately no longer declared, so `docker compose down -v`
 # cannot delete a MinIO volume that has not been migrated yet.
 volumes:
