@@ -1,8 +1,8 @@
 # Phase — Document Signatures 1: Signing Config, Drawn Signatures, PDF Conversion
 
 - **Status**: Draft — run `/doc-review` before `/build`
-- **Target version**: MINOR — 0.41.1 → 0.42.0 (schema change: nullable columns on
-  `core_users`; new feature)
+- **Target version**: PATCH — 0.41.1 → 0.41.2 (schema change: nullable columns on
+  `core_users`; PATCH rather than MINOR by maintainer decision — see PRD §12)
 - **Base branch**: `release/alpha-3` (maintainer override — see PRD §12)
 - **PRD**: `docs/development/prd/document-signatures.prd.md`
 - **ADRs**: ADR-067 (§1–3, §6–7), ADR-068 (§4)
@@ -65,7 +65,7 @@ Additive nullable columns: no `-- data-impact:` declaration needed. Settings use
 6. `/gotenberg` mock + test; compose profile; env coverage
    (`check-guide-env-coverage.mjs`).
 7. tRPC and UI.
-8. Bump `VERSION` and root `package.json` to 0.42.0; `./validate.sh`.
+8. Bump `VERSION` and root `package.json` to 0.41.2; `./validate.sh`.
 
 ## 5. Tests
 

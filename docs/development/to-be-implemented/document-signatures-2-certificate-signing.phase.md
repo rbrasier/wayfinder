@@ -1,8 +1,9 @@
 # Phase — Document Signatures 2: Certificate Signing (CSC + PAdES)
 
 - **Status**: Draft — run `/doc-review` before `/build`
-- **Target version**: MINOR — 0.42.0 → 0.43.0 (schema change: nullable
-  `digital_signature` on `app_session_approvals`; new feature)
+- **Target version**: PATCH — 0.41.2 → 0.41.3 (schema change: nullable
+  `digital_signature` on `app_session_approvals`; PATCH rather than MINOR by
+  maintainer decision — see PRD §12)
 - **Base branch**: `release/alpha-3` (maintainer override — see PRD §12)
 - **PRD**: `docs/development/prd/document-signatures.prd.md`
 - **ADRs**: ADR-067 (§1, §4–7), ADR-068 (§1–3, §6)
@@ -70,7 +71,7 @@ Additive nullable column: no `-- data-impact:` declaration needed.
 7. Callback route, tRPC, UI.
 8. Adapter integration job: real Gotenberg + DSS containers against `/csc`,
    `/tsa`, `/ocsp`, asserting B-LTA output validates.
-9. Bump to 0.43.0; `./validate.sh`.
+9. Bump to 0.41.3; `./validate.sh`.
 
 ## 5. Tests
 

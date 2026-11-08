@@ -3,9 +3,10 @@
 - **Status**: Draft
 - **Date**: 2026-11-08
 - **Author**: richy.brasier (from issue #386, raised by johntooth)
-- **Target version**: 0.42.0 → 0.44.0 across three phases (bump: MINOR each —
-  schema change in phases 1 and 2, new feature in phase 3). Targets
-  `release/alpha-3` by explicit maintainer decision (see §12).
+- **Target version**: 0.41.2 → 0.41.4 across three phases (bump: PATCH each, on
+  `release/alpha-3`'s 0.41.x line). Phases 1 and 2 carry schema changes, which
+  `CLAUDE.md` would make MINOR; PATCH is an explicit maintainer decision (see
+  §12). Targets `release/alpha-3` by the same decision.
 - **Builds on**: ADR-043 (signature tag, attestation block), ADR-033 (audit log),
   ADR-041/042 (DB-first config, live Test, deploy-time trust anchors), ADR-055
   (off-system approval), ADR-030 (sidecar pattern)
@@ -205,10 +206,12 @@ belongs on the approval row (ADR-006 — jsonb over join tables).
 
 ## 12. Risks / open questions
 
-- **Release line.** This is a new feature on `release/alpha-3`, which normally
-  takes fixes only. The maintainer chose this deliberately. Version numbers
-  claimed here (0.42.0–0.44.0) must be skipped by `main`'s next MINOR on forward
-  merge so versions never collide.
+- **Release line and versioning.** This is a new feature on `release/alpha-3`,
+  which normally takes fixes only, and it ships as PATCH bumps (0.41.2–0.41.4)
+  although phases 1 and 2 change the schema — both by deliberate maintainer
+  decision, overriding the `CLAUDE.md` rules. `main` already carries 0.41.2 from
+  the last forward-merge; the next forward-merge of `release/alpha-3` must bump
+  `main` above 0.41.4 so versions never collide or go backwards.
 - **Conversion fidelity.** LibreOffice may lay out some `.docx` differently from
   Word; the PDF the approver previews and signs is the record.
 - **New infrastructure.** First compose profiles in the repo (`pdf`, `signing`);

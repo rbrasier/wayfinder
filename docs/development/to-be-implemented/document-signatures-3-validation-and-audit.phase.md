@@ -1,7 +1,8 @@
 # Phase — Document Signatures 3: Validation Panel, Off-System Signed PDFs, Audit Export
 
 - **Status**: Draft — run `/doc-review` before `/build`
-- **Target version**: MINOR — 0.43.0 → 0.44.0 (new feature; no schema change)
+- **Target version**: PATCH — 0.41.3 → 0.41.4 (no schema change; PATCH by
+  maintainer decision — see PRD §12)
 - **Base branch**: `release/alpha-3` (maintainer override — see PRD §12)
 - **PRD**: `docs/development/prd/document-signatures.prd.md`
 - **ADRs**: ADR-067 (§4), ADR-068 (§5–6)
@@ -39,7 +40,7 @@ None. Uses `app_session_approvals.digital_signature` from phase 2 and
 2. Off-system rules: non-PDF, invalid, wrong base revision, wrong signer, valid.
 3. Audit event types and hash input.
 4. tRPC and UI.
-5. Bump to 0.44.0; `./validate.sh`.
+5. Bump to 0.41.4; `./validate.sh`.
 
 ## 5. Tests
 
