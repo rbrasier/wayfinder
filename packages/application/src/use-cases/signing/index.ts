@@ -4,3 +4,8 @@ export * from "./get-signature-config";
 export * from "./save-drawn-signature";
 export * from "./get-drawn-signature";
 export * from "./signing-requirement";
+export * from "./certificate-signing-deps";
+export * from "./freeze-document-for-signing";
+export * from "./start-certificate-signing";
+export * from "./complete-certificate-signing";
+export * from "./signing-slot";

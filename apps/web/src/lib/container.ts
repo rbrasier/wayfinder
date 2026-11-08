@@ -203,7 +203,7 @@ import { buildSkillsAndMcp } from "./container-skills-mcp";
 import { buildFlowPortability } from "./container-flow-portability";
 import { buildSessionAuth } from "./container-session-auth";
 import { buildAutomation } from "./container-automation";
-import { buildSigning } from "./container-signing";
+import { buildCertificateSigning, buildSigning } from "./container-signing";
 import { buildExtractionModule } from "./container-extraction";
 import { buildLookupSources } from "./container-lookup-sources";
 import { buildPeopleDirectory } from "./container-people-directory";
@@ -779,6 +779,7 @@ const build = () => {
       ...skillsAndMcp.useCases,
       ...automation.useCases,
       ...signing.useCases,
+      ...buildCertificateSigning({ approvals, flowNodes, sessionMessages, sessionStepOutputs, objectStorage, users, documentGenerator, auditLogger, drawnSignatures: signing.drawnSignatures, loadSignatureConfig: () => runtimeConfig.getSignatureConfig(), pdfConverter: signing.pdfConverter, resolveSubject: approvalUseCases.resolveApprovalSubject, decide: approvalUseCases.decideApproval }),
       ...buildPresentationUseCases({ systemSettings, objectStorage, auditLogger, auditQuery, loadLoginNotice: () => runtimeConfig.getLoginNoticeConfig() }),
     },
   };

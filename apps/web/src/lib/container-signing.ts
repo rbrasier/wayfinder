@@ -1,15 +1,23 @@
+import { randomBytes } from "node:crypto";
 import {
+  CompleteCertificateSigning,
   GetDrawnSignature,
   GetSignatureConfig,
   SaveDrawnSignature,
   SaveSignatureConfig,
+  StartCertificateSigning,
   TestSignatureConfig,
+  type CertificateSigningDeps,
 } from "@wayfinder/application";
 import {
+  CscRemoteSigningAdapter,
   DrizzleDrawnSignatureRepository,
+  DssSignatureEngine,
   GotenbergPdfConverter,
   HttpSignatureServicesProbe,
+  PdfJsAnchorLocator,
   sha256Bytes,
+  sha256Hex,
 } from "@wayfinder/adapters";
 import type { Database } from "@wayfinder/adapters";
 import type {
@@ -38,6 +46,7 @@ export const buildSigning = (deps: SigningDeps) => {
 
   return {
     drawnSignatures,
+    pdfConverter,
     signatureProbe,
     pdfRendering: {
       converter: pdfConverter,
@@ -55,5 +64,30 @@ export const buildSigning = (deps: SigningDeps) => {
       saveDrawnSignature: new SaveDrawnSignature(deps.objectStorage, drawnSignatures, deps.auditLogger),
       getDrawnSignature: new GetDrawnSignature(deps.objectStorage, drawnSignatures),
     },
+  };
+};
+
+// What certificate signing needs beyond the signing services themselves: the
+// repositories and the decision it completes. Built after the approval use
+// cases, because it finishes by recording an approval decision.
+export type CertificateSigningWiring = Omit<
+  CertificateSigningDeps,
+  "provider" | "engine" | "anchorLocator" | "randomToken" | "sha256Hex" | "hashBytes" | "now"
+>;
+
+export const buildCertificateSigning = (wiring: CertificateSigningWiring) => {
+  const deps: CertificateSigningDeps = {
+    ...wiring,
+    provider: new CscRemoteSigningAdapter(),
+    engine: new DssSignatureEngine(),
+    anchorLocator: new PdfJsAnchorLocator(),
+    randomToken: () => randomBytes(24).toString("base64url"),
+    sha256Hex,
+    hashBytes: sha256Bytes,
+    now: () => new Date(),
+  };
+  return {
+    startCertificateSigning: new StartCertificateSigning(deps),
+    completeCertificateSigning: new CompleteCertificateSigning(deps),
   };
 };

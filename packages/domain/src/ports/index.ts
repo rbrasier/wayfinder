@@ -94,3 +94,6 @@ export * from "./field-proposer";
 export * from "./pdf-converter";
 export * from "./drawn-signature-repository";
 export * from "./signature-services-probe";
+export * from "./remote-signing-provider";
+export * from "./signature-engine";
+export * from "./pdf-anchor-locator";

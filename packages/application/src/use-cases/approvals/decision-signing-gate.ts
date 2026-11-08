@@ -24,6 +24,7 @@ export interface SigningGateInput {
   decidedByUserId: string;
   offSystem?: unknown;
   impersonatorId?: string | null;
+  digitalSignature?: { status: string };
 }
 
 interface SigningGateOutcome {
@@ -50,7 +51,8 @@ export const decisionSigningGate = async (
   }
   if (input.decision !== "approved") return NONE;
   if (method === "certificate") {
-    return input.offSystem ? NONE : err(domainError("VALIDATION_FAILED", CERTIFICATE_REQUIRED_MESSAGE));
+    const signed = input.digitalSignature?.status === "signed";
+    return input.offSystem || signed ? NONE : err(domainError("VALIDATION_FAILED", CERTIFICATE_REQUIRED_MESSAGE));
   }
   return approverDrawing(signing, approval, input);
 };

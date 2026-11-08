@@ -49,6 +49,16 @@
       <artifactId>dss-validation</artifactId>
     </dependency>
     <dependency>
+      <!-- DSS picks its CMS implementation from the classpath; signing fails without one. -->
+      <groupId>eu.europa.ec.joinup.sd-dss</groupId>
+      <artifactId>dss-cms-object</artifactId>
+    </dependency>
+    <dependency>
+      <!-- The default validation policy (constraint.xml) the validator applies. -->
+      <groupId>eu.europa.ec.joinup.sd-dss</groupId>
+      <artifactId>dss-policy-jaxb</artifactId>
+    </dependency>
+    <dependency>
       <groupId>eu.europa.ec.joinup.sd-dss</groupId>
       <artifactId>dss-utils-apache-commons</artifactId>
     </dependency>

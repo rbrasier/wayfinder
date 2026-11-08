@@ -125,6 +125,19 @@ services:
     restart: unless-stopped
     profiles: ["pdf"]
 
+  # Signature engine for digital certificate signatures (ADR-067 §4). Runs only
+  # when asked for, alongside the PDF converter:
+  #   docker compose -f docker-compose.prod.yml --profile pdf --profile signing up -d
+  # then set Settings → PDF signatures → Signature engine URL to http://dss:8080.
+  # Trust anchors are deployment configuration, never an admin setting: put the
+  # CA certificates your signers' digital IDs chain to in ./trust (PEM or DER).
+  dss:
+    image: ghcr.io/rbrasier/wayfinder-dss:${WAYFINDER_VERSION:-latest}
+    restart: unless-stopped
+    profiles: ["signing"]
+    volumes:
+      - ./trust:/trust:ro
+
 # minio-data is deliberately no longer declared, so `docker compose down -v`
 # cannot delete a MinIO volume that has not been migrated yet.
 volumes:

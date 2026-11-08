@@ -48,6 +48,16 @@ export interface SessionDocumentPdf {
   status: SessionDocumentPdfStatus;
   // Why conversion failed, when it did. Shown to the operator, never a stack.
   failureReason?: string | null;
+  // Set once frozen for certificate signing (ADR-068 §1): when, and where on
+  // the page each signature slot's marker landed.
+  frozenAt?: string | null;
+  slotAnchors?: Record<string, SlotAnchor>;
+}
+
+export interface SlotAnchor {
+  page: number;
+  x: number;
+  y: number;
 }
 
 export interface DocumentGenerationConfidence {

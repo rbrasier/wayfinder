@@ -25,6 +25,7 @@ import {
   type ISessionStepOutputRepository,
   type IUnitOfWork,
   type IUserRepository,
+  type DigitalSignatureRecord,
   type OffSystemApprovalEvidence,
   type Result,
   type Sha256Hex,
@@ -76,6 +77,9 @@ export interface DecideApprovalInput {
   // Set when an admin is viewing as the decider (ADR-059). Nobody may sign on
   // another person's behalf, so a signing step refuses (ADR-067 §2).
   impersonatorId?: string | null;
+  // Set only by `CompleteCertificateSigning`, once the signature has been made
+  // and validated. Written in the same guarded update as the decision.
+  digitalSignature?: DigitalSignatureRecord;
 }
 
 export interface DecideApprovalOutput {
@@ -484,6 +488,7 @@ export class DecideApproval {
             offSystemNominatedByUserId: input.offSystem.nominatedByUserId,
           }
         : {}),
+      ...(input.digitalSignature ? { digitalSignature: input.digitalSignature } : {}),
     });
     if (updated.error) return updated;
     if (!updated.data) {

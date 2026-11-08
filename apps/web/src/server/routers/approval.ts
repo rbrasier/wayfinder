@@ -4,6 +4,7 @@ import type { Container } from "@/lib/container";
 import { continueRunAtNode } from "@/lib/automation/unattended-runs";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { signingCallbackUrl } from "@/lib/signing-callback";
 
 // 10 MB of evidence, expressed as the base64 that carries it — a scan or a
 // photographed page fits comfortably, and a payload larger than this is a
@@ -193,6 +194,22 @@ export const approvalRouter = router({
       const result = await ctx.container.useCases.getSigningRequirement.execute({
         approvalId: input.approvalId,
         userId: ctx.userId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // Begins a certificate signature: the approver is sent to their signing
+  // provider, and returns to /api/signing/csc/callback (ADR-067 §4).
+  startCertificateSigning: authenticatedProcedure
+    .input(z.object({ approvalId: z.string().guid(), comment: z.string().max(2000).nullish() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.startCertificateSigning.execute({
+        approvalId: input.approvalId,
+        userId: ctx.userId,
+        impersonatorId: ctx.impersonatorId,
+        comment: input.comment ?? null,
+        redirectUri: signingCallbackUrl(),
       });
       if (result.error) throw toTrpcError(result.error);
       return result.data;

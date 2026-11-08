@@ -39,9 +39,18 @@ import { mock as parlviewFeed } from "./parlview/api.mjs";
 import { mock as parlviewMcp } from "./parlview/mcp.mjs";
 import { SMTP_PORT, createInbox, createInboxMock } from "./smtp/inbox.mjs";
 import { mock as gotenberg } from "./signing/gotenberg.mjs";
+import { createTestAuthority } from "./signing/test-ca.mjs";
+import { createCscMock, createRevocationMock } from "./signing/csc.mjs";
+import { createTsaMock } from "./signing/tsa.mjs";
+import { mock as dssEngine } from "./signing/dss.mjs";
 import { createSmtpServer } from "./smtp/server.mjs";
 
 const PORT = Number(process.env.MOCKS_PORT ?? 4001);
+
+// Where the DSS sidecar reaches this server: the test CA bakes its CRL URL into
+// every certificate it issues, so it must be an address the sidecar can resolve.
+const PUBLIC_URL = process.env.MOCKS_PUBLIC_URL ?? `http://localhost:${PORT}`;
+const signingAuthority = createTestAuthority(PUBLIC_URL);
 
 const inbox = createInbox();
 const smtpInbox = createInboxMock(inbox);
@@ -62,6 +71,10 @@ const MOCKS = [
   parlviewMcp,
   smtpInbox,
   gotenberg,
+  createCscMock(signingAuthority, PUBLIC_URL),
+  createTsaMock(signingAuthority),
+  createRevocationMock(signingAuthority),
+  dssEngine,
 ];
 
 const routes = new Map();

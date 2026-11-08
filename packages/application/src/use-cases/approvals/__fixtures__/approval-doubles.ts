@@ -40,6 +40,7 @@ import {
   type NewSessionMessage,
   type NewSessionStepOutput,
   type NewUser,
+  type SessionDocument,
   type SessionMessage,
   type NotificationLog,
   type Person,
@@ -422,6 +423,9 @@ export class InMemoryStepOutputs implements ISessionStepOutputRepository {
   async listBySession(sessionId: string): Promise<Result<SessionStepOutput[]>> {
     return ok(this.rows.filter((row) => row.sessionId === sessionId));
   }
+  async findByMessageId(messageId: string): Promise<Result<SessionStepOutput | null>> {
+    return ok(this.rows.find((row) => row.messageId === messageId) ?? null);
+  }
 }
 
 export class InMemoryMessages implements ISessionMessageRepository {
@@ -450,8 +454,11 @@ export class InMemoryMessages implements ISessionMessageRepository {
   async listBySession(sessionId: string): Promise<Result<SessionMessage[]>> {
     return ok(this.rows.filter((row) => row.sessionId === sessionId));
   }
-  async updateDocument(): Promise<Result<SessionMessage>> {
-    return err(domainError("VALIDATION_FAILED", "unused"));
+  async updateDocument(id: string, document: SessionDocument): Promise<Result<SessionMessage>> {
+    const row = this.rows.find((candidate) => candidate.id === id);
+    if (!row) return err(domainError("NOT_FOUND", `Message ${id} not found.`));
+    row.document = document;
+    return ok(row);
   }
   async updateDocumentStatus(): Promise<Result<SessionMessage>> {
     return err(domainError("VALIDATION_FAILED", "unused"));

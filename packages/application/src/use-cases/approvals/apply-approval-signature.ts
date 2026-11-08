@@ -24,7 +24,8 @@ import { DOCUMENT_MIME, templateFormat } from "../document/document-format";
 import { buildRenderData } from "../document/render-data";
 import { nextRevisionPath } from "../document/update-document-fields";
 import { SIGNATURE_FIELD_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
-import { approvalOwnedForStep, loadSlotImages } from "./approval-values";
+import { loadSlotImages } from "./approval-values";
+import { loadSubjectDocument, subjectRenderValues, type SubjectDocumentDeps } from "./subject-document";
 
 export interface ApplyApprovalSignatureInput {
   // The approval whose decision triggered this render. Every *other* decided
@@ -78,53 +79,59 @@ export class ApplyApprovalSignature {
     const subjectNodeId = readString(approval.recordSnapshot, SUBJECT_NODE_ID_KEY);
     if (!subjectNodeId) return ok({ applied: false, reason: "no_document" });
 
-    const nodeResult = await this.flowNodes.findById(subjectNodeId);
-    if (nodeResult.error) return nodeResult;
-    const config = (nodeResult.data?.config ?? {}) as unknown as ConversationalNodeConfig;
-    const fields = config.documentTemplateFields ?? [];
-    if (!fields.some((field) => field.key === slotKey)) {
+    const subject = await loadSubjectDocument(this.deps(), approval.sessionId, subjectNodeId);
+    if (!subject) return ok({ applied: false, reason: "no_document" });
+    if (!subject.fields.some((field) => field.key === slotKey)) {
       return ok({ applied: false, reason: "no_signature_slot" });
     }
 
-    const message = await this.latestDocumentMessage(approval.sessionId, subjectNodeId);
-    if (!message) return ok({ applied: false, reason: "no_document" });
     // The frozen PDF is the signed record; certificate signatures are added to
-    // it, never by regenerating the docx underneath (ADR-068 §1).
-    if (message.document.pdf?.status === "frozen") return ok({ applied: false, reason: "frozen" });
+    // it, never by regenerating the docx underneath (ADR-068 §1). Only a
+    // decision that sends the document back reopens it, superseding the PDF.
+    const frozen = subject.document.pdf?.status === "frozen";
+    if (frozen && !REOPENING_STATUSES.has(approval.status)) return ok({ applied: false, reason: "frozen" });
 
-    if (!config.documentTemplatePath) return ok({ applied: false, reason: "no_document" });
-    const templateResult = await this.objectStorage.get(config.documentTemplatePath);
-    if (templateResult.error) return templateResult;
-
-    const { values, imagePaths } = await this.renderValues(approval, subjectNodeId, fields, message.id);
+    const { values, imagePaths } = await subjectRenderValues(this.deps(), approval.sessionId, subjectNodeId, subject);
     const generated = this.documentGenerator.generate({
-      templateBytes: templateResult.data,
-      data: buildRenderData(fields, values),
+      templateBytes: subject.templateBytes,
+      data: buildRenderData(subject.fields, values),
       images: await loadSlotImages(this.objectStorage, imagePaths),
     });
     if (generated.error) return generated;
 
-    const newStoragePath = nextRevisionPath(message.document.storagePath);
+    const newStoragePath = nextRevisionPath(subject.document.storagePath);
     const put = await this.objectStorage.put(
       newStoragePath,
       generated.data.bytes,
-      DOCUMENT_MIME[templateFormat(config)],
+      DOCUMENT_MIME[templateFormat(subject.config)],
     );
     if (put.error) return put;
 
-    const pdf = await this.renderPdf(approval, message.document, templateFormat(config), {
-      docxBytes: generated.data.bytes,
-      docxPath: newStoragePath,
-    });
+    const pdf = frozen
+      ? { ...subject.document.pdf!, status: "superseded" as const }
+      : await this.renderPdf(approval, subject.document, templateFormat(subject.config), {
+          docxBytes: generated.data.bytes,
+          docxPath: newStoragePath,
+        });
     const document: SessionDocument = {
-      ...message.document,
+      ...subject.document,
       storagePath: newStoragePath,
       ...(pdf ? { pdf } : {}),
     };
-    const updated = await this.sessionMessages.updateDocument(message.id, document);
+    const updated = await this.sessionMessages.updateDocument(subject.messageId, document);
     if (updated.error) return updated;
 
     return ok({ applied: true, document });
+  }
+
+  private deps(): SubjectDocumentDeps {
+    return {
+      approvals: this.approvals,
+      flowNodes: this.flowNodes,
+      sessionMessages: this.sessionMessages,
+      sessionStepOutputs: this.sessionStepOutputs,
+      objectStorage: this.objectStorage,
+    };
   }
 
   // Converts when the deciding step asks for it, or when the document already
@@ -159,47 +166,12 @@ export class ApplyApprovalSignature {
       status: "rendered",
     };
   }
-
-  private async latestDocumentMessage(
-    sessionId: string,
-    nodeId: string,
-  ): Promise<{ id: string; document: SessionDocument } | null> {
-    const result = await this.sessionMessages.listBySession(sessionId);
-    if (result.error) return null;
-
-    const latest = result.data
-      .filter((message) => message.stepNodeId === nodeId && message.document)
-      .sort((first, second) => second.createdAt.getTime() - first.createdAt.getTime())[0];
-    return latest?.document ? { id: latest.id, document: latest.document } : null;
-  }
-
-  // The gathered values plus every decided approval's frozen attestation and the
-  // comment beside it, so approvals may decide in any order and each fills only
-  // its own slot.
-  private async renderValues(
-    approval: Approval,
-    subjectNodeId: string,
-    fields: TemplateField[],
-    messageId: string,
-  ): Promise<{ values: DocumentData; imagePaths: Record<string, string> }> {
-    const values: DocumentData = {};
-
-    const stepOutput = await this.sessionStepOutputs.findByMessageId(messageId);
-    if (!stepOutput.error && stepOutput.data) {
-      for (const field of stepOutput.data.fields) {
-        values[field.key] = field.items ?? field.value;
-      }
-    }
-
-    const approvalOwned = await approvalOwnedForStep(
-      this.approvals,
-      approval.sessionId,
-      subjectNodeId,
-      fields,
-    );
-    return { values: { ...values, ...approvalOwned.values }, imagePaths: approvalOwned.imagePaths };
-  }
 }
+
+// A change request or rejection sends the document back to be reworked, so a
+// frozen PDF stops being the record and the next signing starts afresh
+// (ADR-068 §3).
+const REOPENING_STATUSES: ReadonlySet<string> = new Set(["rejected", "changes_requested"]);
 
 const failedPdf = (generatedAt: string, failureReason: string): SessionDocumentPdf => ({
   storagePath: null,

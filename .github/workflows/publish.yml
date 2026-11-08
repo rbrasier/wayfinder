@@ -136,6 +136,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The signature engine sidecar (ADR-067 §4), published at the same version
+      # as the app so the two halves of a signing deployment cannot drift.
+      - name: Build and push the DSS signature engine
+        id: push_dss
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: deploy/dss
+          push: true
+          sbom: true
+          tags: |
+            ghcr.io/rbrasier/wayfinder-dss:${{ steps.resolve.outputs.version }}
+            ${{ steps.resolve.outputs.publish_latest == 'true' && 'ghcr.io/rbrasier/wayfinder-dss:latest' || '' }}
+          cache-from: type=gha,scope=dss
+          cache-to: type=gha,mode=max,scope=dss
+
       # The Release is created by /publish after the tag is pushed, so on a tag
       # push it may not exist yet. Then the SBOM stays on the workflow run, and
       # /publish attaches it when it fills in the digest.
@@ -164,6 +179,7 @@ jobs:
             echo "|---|---|"
             echo "| Version | \`${{ steps.resolve.outputs.version }}\` |"
             echo "| Digest | \`${{ steps.push.outputs.digest }}\` |"
+            echo "| DSS sidecar digest | \`${{ steps.push_dss.outputs.digest }}\` |"
             echo "| Moved \`latest\` | ${{ steps.resolve.outputs.publish_latest }} |"
             echo "| SBOM on Release | ${{ steps.sbom.outputs.attached }} |"
             echo ""

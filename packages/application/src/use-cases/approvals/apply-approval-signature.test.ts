@@ -372,4 +372,18 @@ describe("ApplyApprovalSignature", () => {
     expect(result.data).toEqual({ applied: false, reason: "frozen" });
     expect(documentGenerator.generate).not.toHaveBeenCalled();
   });
+
+  it("supersedes a frozen PDF when a change request sends the document back", async () => {
+    const sentBack = approval({ status: "changes_requested" });
+    const { useCase, documentGenerator, updatedDocuments } = build({
+      rows: [sentBack],
+      existingPdf: { storagePath: "generated/sess-1/instrument.pdf", sha256: "x", generatedAt: "t", status: "frozen" },
+    });
+
+    const result = await useCase.execute({ approvalId: "approval-a" });
+
+    expect(result.data?.applied).toBe(true);
+    expect(documentGenerator.generate).toHaveBeenCalledTimes(1);
+    expect(updatedDocuments[0]?.pdf?.status).toBe("superseded");
+  });
 });

@@ -2,7 +2,6 @@ import {
   domainError,
   err,
   ok,
-  type ApprovalNodeConfig,
   type IApprovalRepository,
   type IDrawnSignatureRepository,
   type IFlowNodeRepository,
@@ -11,7 +10,7 @@ import {
   type SignatureMethod,
 } from "@wayfinder/domain";
 import type { ResolveApprovalSubject } from "../approvals/resolve-approval-subject";
-import { loneSignatureSlot } from "../approvals/signature-slot";
+import { resolveSigningSlot } from "./signing-slot";
 
 export interface SigningRequirement {
   method: SignatureMethod;
@@ -40,22 +39,12 @@ export class GetSigningRequirement {
     if (!found.data) return err(domainError("NOT_FOUND", `Approval ${input.approvalId} not found.`));
 
     const { method } = await this.loadSignatureConfig();
-    const signs = await this.claimsSlot(input.approvalId, found.data.flowId, found.data.nodeId);
+    const signs = (await resolveSigningSlot(this.flowNodes, this.approvalSubject, found.data)) !== null;
     const drawing = await this.drawnSignatures.findByUserId(input.userId);
     if (drawing.error) return drawing;
     const hasDrawing = drawing.data !== null;
 
     const drawingApplies = signs && method !== "attestation";
     return ok({ method, signs, needsDrawing: drawingApplies && method === "drawn" && !hasDrawing, hasDrawing });
-  }
-
-  private async claimsSlot(approvalId: string, flowId: string, nodeId: string): Promise<boolean> {
-    const nodes = await this.flowNodes.listByFlow(flowId);
-    if (nodes.error) return false;
-    const config = (nodes.data.find((node) => node.id === nodeId)?.config ?? {}) as unknown as ApprovalNodeConfig;
-    if (config.signatureFieldKey) return true;
-    const subject = await this.approvalSubject.execute({ approvalId });
-    const subjectNodeId = subject.error ? null : subject.data.subjectNodeId;
-    return loneSignatureSlot(nodes.data, subjectNodeId) !== null;
   }
 }
