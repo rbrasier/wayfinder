@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import type { ConnectivityResult, SignatureMethod } from "@wayfinder/domain";
+import type { ConnectivityResult, EngineSource, SignatureMethod } from "@wayfinder/domain";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -18,6 +18,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/trpc/client";
 import { ConnectivityTest, type ConnectivityController } from "./connectivity";
+import {
+  EMPTY_FORM,
+  engineStatusLabel,
+  formFromConfig,
+  inputFromForm,
+  testTargetLabel,
+  type FormState,
+} from "./signature-card-model";
 
 const METHOD_OPTIONS: ReadonlyArray<{ value: SignatureMethod; label: string; description: string }> = [
   {
@@ -39,72 +47,67 @@ const METHOD_OPTIONS: ReadonlyArray<{ value: SignatureMethod; label: string; des
   },
 ];
 
-const TARGET_LABELS: Record<string, string> = {
-  "pdf-converter": "PDF converter",
-  "signature-engine": "Signature engine",
-  "timestamp-authority": "Timestamp authority",
-  "signing-provider": "Signing provider",
-};
-
-interface FormState {
-  method: SignatureMethod;
-  gotenbergUrl: string;
-  dssUrl: string;
-  tsaUrl: string;
-  cscBaseUrl: string;
-  cscClientId: string;
-  cscClientSecret: string;
-  hasClientSecret: boolean;
-}
-
-const EMPTY_FORM: FormState = {
-  method: "attestation",
-  gotenbergUrl: "",
-  dssUrl: "",
-  tsaUrl: "",
-  cscBaseUrl: "",
-  cscClientId: "",
-  cscClientSecret: "",
-  hasClientSecret: false,
-};
-
-const toInput = (form: FormState) => ({
-  method: form.method,
-  gotenbergUrl: form.gotenbergUrl,
-  dssUrl: form.dssUrl,
-  tsaUrl: form.tsaUrl,
-  csc:
-    form.cscBaseUrl.trim() && form.cscClientId.trim()
-      ? { baseUrl: form.cscBaseUrl, clientId: form.cscClientId, clientSecret: form.cscClientSecret }
-      : null,
-});
-
 const methodLabel = (method: SignatureMethod): string =>
   METHOD_OPTIONS.find((option) => option.value === method)?.label ?? method;
 
-function UrlField(props: {
-  id: string;
-  label: string;
-  value: string;
-  placeholder: string;
-  help: string;
-  onChange: (value: string) => void;
-}) {
+function SummaryRow({ label, value, testId }: { label: string; value: string; testId?: string }) {
   return (
-    <div className="space-y-1">
-      <Label htmlFor={props.id}>{props.label}</Label>
-      <Input
-        id={props.id}
-        value={props.value}
-        placeholder={props.placeholder}
-        onChange={(event) => props.onChange(event.target.value)}
-      />
-      <p className="text-xs text-muted-foreground">{props.help}</p>
+    <div className="flex justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium" data-testid={testId}>
+        {value}
+      </span>
     </div>
   );
 }
 
-function TestResults({ results }: { results: ConnectivityResult[] | null }) {
+// Built-in or External for one engine (ADR-069 §2). The URL only matters for
+// External, so it only appears then.
+function EngineField(props: {
+  id: string;
+  label: string;
+  source: EngineSource;
+  url: string;
+  placeholder: string;
+  builtInHelp: string;
+  externalHelp: string;
+  onSourceChange: (source: EngineSource) => void;
+  onUrlChange: (url: string) => void;
+}) {
+  return (
+    <fieldset className="space-y-2" data-testid={`${props.id}-field`}>
+      <legend className="text-sm font-medium">{props.label}</legend>
+      <div className="flex gap-4 text-sm">
+        {(["built-in", "external"] as const).map((source) => (
+          <label key={source} className="flex items-center gap-2">
+            <input
+              type="radio"
+              name={`${props.id}-source`}
+              data-testid={`${props.id}-${source}`}
+              checked={props.source === source}
+              onChange={() => props.onSourceChange(source)}
+            />
+            {source === "built-in" ? "Built-in" : "External"}
+          </label>
+        ))}
+      </div>
+      {props.source === "external" ? (
+        <Input
+          id={`${props.id}-url`}
+          aria-label={`${props.label} URL`}
+          value={props.url}
+          placeholder={props.placeholder}
+          onChange={(event) => props.onUrlChange(event.target.value)}
+        />
+      ) : null}
+      <p className="text-xs text-muted-foreground">
+        {props.source === "external" ? props.externalHelp : props.builtInHelp}
+      </p>
+    </fieldset>
+  );
+}
+
+function TestResults({ results, form }: { results: ConnectivityResult[] | null; form: FormState }) {
   if (!results) return null;
   if (results.length === 0) {
     return <p className="text-sm text-muted-foreground">Nothing to test for this method.</p>;
@@ -113,7 +116,7 @@ function TestResults({ results }: { results: ConnectivityResult[] | null }) {
     <ul className="space-y-1 text-sm" data-testid="signature-test-results">
       {results.map((result) => (
         <li key={result.target} className="flex justify-between gap-4">
-          <span>{TARGET_LABELS[result.target] ?? result.target}</span>
+          <span>{testTargetLabel(result.target, form)}</span>
           <span className={result.ok ? "text-emerald-700" : "text-destructive"}>
             {result.ok ? "OK" : (result.message ?? "Failed")}
           </span>
@@ -124,8 +127,9 @@ function TestResults({ results }: { results: ConnectivityResult[] | null }) {
 }
 
 // Install-wide document signatures (ADR-067): how a claimed signature slot is
-// signed, and the services that needs. Saving runs the same live Test, so a
-// method can never be enabled with its services broken.
+// signed, and the engines that needs — built into this image or deployed
+// separately (ADR-069). Saving runs the same live Test, so a method can never
+// be enabled with its engines broken.
 export function SignatureCard({ connectivity }: { connectivity: ConnectivityController }) {
   const utils = trpc.useUtils();
   const configQuery = trpc.settings.getSignature.useQuery();
@@ -135,7 +139,10 @@ export function SignatureCard({ connectivity }: { connectivity: ConnectivityCont
   const config = configQuery.data;
 
   const testMutation = trpc.settings.testSignature.useMutation({
-    onSuccess: (results) => setTestResults(results),
+    onSuccess: async (results) => {
+      setTestResults(results);
+      await utils.settings.getSignature.invalidate();
+    },
     onError: (error) => toast.error(error.message ?? "Test failed"),
   });
   const saveMutation = trpc.settings.setSignature.useMutation({
@@ -148,19 +155,19 @@ export function SignatureCard({ connectivity }: { connectivity: ConnectivityCont
     onError: (error) => toast.error(error.message ?? "Failed to save signature settings"),
   });
 
+  // Filled once per opening. The query refetches while the dialog is open (a
+  // Test refreshes the engines' status), and refilling then would throw away
+  // the admin's unsaved edits along with the Test results.
+  const filledForThisOpening = useRef(false);
   useEffect(() => {
-    if (!open || !config) return;
+    if (!open) {
+      filledForThisOpening.current = false;
+      return;
+    }
+    if (!config || filledForThisOpening.current) return;
+    filledForThisOpening.current = true;
     setTestResults(null);
-    setForm({
-      method: config.method,
-      gotenbergUrl: config.gotenbergUrl ?? "",
-      dssUrl: config.dssUrl ?? "",
-      tsaUrl: config.tsaUrl ?? "",
-      cscBaseUrl: config.csc?.baseUrl ?? "",
-      cscClientId: config.csc?.clientId ?? "",
-      cscClientSecret: "",
-      hasClientSecret: config.csc?.hasClientSecret ?? false,
-    });
+    setForm(formFromConfig(config));
   }, [open, config]);
 
   const update = (patch: Partial<FormState>) => {
@@ -168,6 +175,8 @@ export function SignatureCard({ connectivity }: { connectivity: ConnectivityCont
     setForm((current) => ({ ...current, ...patch }));
   };
   const isCertificate = form.method === "certificate";
+  const converterUsable =
+    config && (config.pdfConverter.source === "external" || config.builtInStatus.pdfConverter !== "unavailable");
 
   return (
     <Card data-testid="signature-card">
@@ -185,23 +194,24 @@ export function SignatureCard({ connectivity }: { connectivity: ConnectivityCont
           <p className="text-muted-foreground">Loading…</p>
         ) : (
           <>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">Signature method</span>
-              <span className="text-right font-medium" data-testid="signature-method">
-                {methodLabel(config.method)}
-              </span>
-            </div>
-            <div className="flex justify-between gap-4">
-              <span className="text-muted-foreground">PDF converter</span>
-              <span className="text-right font-medium">{config.gotenbergUrl ?? "Not configured"}</span>
-            </div>
+            <SummaryRow label="Signature method" value={methodLabel(config.method)} testId="signature-method" />
+            <SummaryRow
+              label="PDF converter"
+              value={engineStatusLabel(config.pdfConverter, config.builtInStatus.pdfConverter)}
+              testId="signature-pdf-converter-status"
+            />
             {config.method === "certificate" && (
-              <div className="flex justify-between gap-4">
-                <span className="text-muted-foreground">Signing provider</span>
-                <span className="text-right font-medium">{config.csc?.baseUrl ?? "Not configured"}</span>
-              </div>
+              <>
+                <SummaryRow
+                  label="Signature engine"
+                  value={engineStatusLabel(config.signatureEngine, config.builtInStatus.signatureEngine)}
+                  testId="signature-engine-status"
+                />
+                <SummaryRow label="Timestamp authority" value={config.tsaUrl ?? "DigiCert (default)"} />
+                <SummaryRow label="Signing provider" value={config.csc?.baseUrl ?? "Not configured"} />
+              </>
             )}
-            {config.gotenbergUrl && (
+            {converterUsable && (
               <ConnectivityTest target="pdf-converter" controller={connectivity} label="PDF converter" />
             )}
             {config.method === "certificate" && (
@@ -248,45 +258,43 @@ export function SignatureCard({ connectivity }: { connectivity: ConnectivityCont
               ))}
             </fieldset>
 
-            <UrlField
-              id="signature-gotenberg-url"
-              label="PDF converter URL"
-              value={form.gotenbergUrl}
+            <EngineField
+              id="signature-pdf-converter"
+              label="PDF converter"
+              source={form.pdfConverterSource}
+              url={form.pdfConverterUrl}
               placeholder="http://gotenberg:3000"
-              help={
-                isCertificate
-                  ? "Required. The Gotenberg sidecar that turns documents into PDF/A."
-                  : "Optional. Needed for approval steps set to Convert to PDF on signing."
-              }
-              onChange={(value) => update({ gotenbergUrl: value })}
+              builtInHelp="Converts documents to PDF/A with the LibreOffice inside this Wayfinder image. Nothing else to deploy."
+              externalHelp="A Gotenberg service you run yourself."
+              onSourceChange={(source) => update({ pdfConverterSource: source })}
+              onUrlChange={(url) => update({ pdfConverterUrl: url })}
             />
 
             {isCertificate && (
               <>
-                <UrlField
-                  id="signature-dss-url"
-                  label="Signature engine (DSS) URL"
-                  value={form.dssUrl}
+                <EngineField
+                  id="signature-engine"
+                  label="Signature engine"
+                  source={form.signatureEngineSource}
+                  url={form.signatureEngineUrl}
                   placeholder="http://dss:8080"
-                  help="The DSS sidecar that builds and validates PAdES signatures. Trust anchors are set where it is deployed, not here."
-                  onChange={(value) => update({ dssUrl: value })}
+                  builtInHelp="Builds and checks digital signatures with the EU DSS engine inside this Wayfinder image. It starts when first needed."
+                  externalHelp="A DSS sidecar you run yourself. Trust anchors are set where it is deployed, not here."
+                  onSourceChange={(source) => update({ signatureEngineSource: source })}
+                  onUrlChange={(url) => update({ signatureEngineUrl: url })}
                 />
-                <UrlField
-                  id="signature-tsa-url"
-                  label="Timestamp authority URL"
-                  value={form.tsaUrl}
-                  placeholder="https://timestamp.example.com/tsr"
-                  help="An RFC 3161 timestamp service. Keeps signatures verifiable after the signer's certificate expires."
-                  onChange={(value) => update({ tsaUrl: value })}
-                />
-                <UrlField
-                  id="signature-csc-url"
-                  label="Signing provider (CSC API) URL"
-                  value={form.cscBaseUrl}
-                  placeholder="https://provider.example.com/csc/v2"
-                  help="The remote signing service approvers authorise their signature with."
-                  onChange={(value) => update({ cscBaseUrl: value })}
-                />
+                <div className="space-y-1">
+                  <Label htmlFor="signature-csc-url">Signing provider (CSC API) URL</Label>
+                  <Input
+                    id="signature-csc-url"
+                    value={form.cscBaseUrl}
+                    placeholder="https://provider.example.com/csc/v2"
+                    onChange={(event) => update({ cscBaseUrl: event.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The remote signing service approvers authorise their signature with.
+                  </p>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label htmlFor="signature-csc-client-id">Client ID</Label>
@@ -307,10 +315,29 @@ export function SignatureCard({ connectivity }: { connectivity: ConnectivityCont
                     />
                   </div>
                 </div>
+                {/* A timestamp authority is a third party by design, so it is
+                    never built in; most installs never need to change it. */}
+                <details className="rounded-md border px-3 py-2" data-testid="signature-advanced">
+                  <summary className="cursor-pointer text-sm font-medium">Advanced</summary>
+                  <div className="mt-3 space-y-1">
+                    <Label htmlFor="signature-tsa-url">Timestamp authority URL</Label>
+                    <Input
+                      id="signature-tsa-url"
+                      value={form.tsaUrl}
+                      placeholder="DigiCert (default)"
+                      onChange={(event) => update({ tsaUrl: event.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      An independent RFC 3161 service that vouches for when each signature was made, so it stays
+                      verifiable after the signer&apos;s certificate expires. Leave blank to use DigiCert&apos;s free
+                      service; air-gapped installs set their organisation&apos;s own.
+                    </p>
+                  </div>
+                </details>
               </>
             )}
 
-            <TestResults results={testResults} />
+            <TestResults results={testResults} form={form} />
           </DialogBody>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -319,14 +346,14 @@ export function SignatureCard({ connectivity }: { connectivity: ConnectivityCont
             <Button
               variant="secondary"
               data-testid="signature-test"
-              onClick={() => testMutation.mutate(toInput(form))}
+              onClick={() => testMutation.mutate(inputFromForm(form))}
               disabled={testMutation.isPending}
             >
               {testMutation.isPending ? "Testing…" : "Test"}
             </Button>
             <Button
               data-testid="signature-save"
-              onClick={() => saveMutation.mutate(toInput(form))}
+              onClick={() => saveMutation.mutate(inputFromForm(form))}
               disabled={saveMutation.isPending}
             >
               {saveMutation.isPending ? "Saving…" : "Save"}

@@ -45,14 +45,13 @@ export class OffSystemSignedEvidence {
     if (!isPdf) {
       return err(domainError("VALIDATION_FAILED", "On this step the evidence must be the PDF the approver digitally signed."));
     }
-    if (!config.dssUrl) return err(domainError("INFRA_FAILURE", SIGNATURE_FAILURE_MESSAGES.unavailable));
 
     const subject = await loadSubjectDocument(this.deps, approval.sessionId, slot.subjectNodeId);
     if (!subject) return err(domainError("VALIDATION_FAILED", "There is no document for this approval to sign."));
     const frozenProblem = await this.frozenBaseProblem(subject.document, evidence.bytes);
     if (frozenProblem) return err(domainError("VALIDATION_FAILED", frozenProblem));
 
-    const reports = await this.deps.engine.validate(config.dssUrl, evidence.bytes);
+    const reports = await this.deps.engine.validate(config.signatureEngine, evidence.bytes);
     if (reports.error) return reports;
     const newest = reports.data.at(-1);
     if (!newest) return err(domainError("VALIDATION_FAILED", "The PDF carries no digital signature."));

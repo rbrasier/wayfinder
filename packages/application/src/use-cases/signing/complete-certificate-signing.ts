@@ -4,6 +4,7 @@ import {
   domainError,
   err,
   ok,
+  resolveTsaUrl,
   type Approval,
   type CscProviderConfig,
   type DigitalSignatureRecord,
@@ -50,7 +51,7 @@ const formatSigningTime = (iso: string): string => `${iso.slice(0, 16).replace("
 interface Leg {
   approval: Approval;
   pending: PendingCertificateSigning;
-  config: SignatureConfig & { csc: CscProviderConfig; dssUrl: string; tsaUrl: string };
+  config: SignatureConfig & { csc: CscProviderConfig };
   input: CompleteCertificateSigningInput;
 }
 
@@ -81,10 +82,10 @@ export class CompleteCertificateSigning {
     }
 
     const config = await this.deps.loadSignatureConfig();
-    if (config.method !== "certificate" || !config.csc || !config.dssUrl || !config.tsaUrl) {
+    if (config.method !== "certificate" || !config.csc) {
       return this.reject(approval, input.userId, "unavailable", "Certificate signing is no longer configured.");
     }
-    const leg: Leg = { approval, pending, config: { ...config, csc: config.csc, dssUrl: config.dssUrl, tsaUrl: config.tsaUrl }, input };
+    const leg: Leg = { approval, pending, config: { ...config, csc: config.csc }, input };
     return pending.stage === "service" ? this.serviceLeg(leg) : this.credentialLeg(leg);
   }
 
@@ -107,7 +108,7 @@ export class CompleteCertificateSigning {
       signingTime,
     };
     const prepared = await this.deps.engine.prepare({
-      engineUrl: config.dssUrl,
+      engine: config.signatureEngine,
       pdf: frozen.data.pdf,
       certificateChain: chain.data,
       signingTime,
@@ -155,18 +156,18 @@ export class CompleteCertificateSigning {
     const frozen = await freezeDocumentForSigning(this.deps, approval, pending.subjectNodeId);
     if (frozen.error) return this.rejectFor(approval, input.userId, frozen.error);
     const signed = await this.deps.engine.sign({
-      engineUrl: config.dssUrl,
+      engine: config.signatureEngine,
       pdf: frozen.data.pdf,
       certificateChain: pending.certificateChain,
       signingTime: pending.signingTime,
       reason: pending.comment,
       appearance: await this.appearance(pending, frozen.data.document),
       signatureValue: signatureValue.data,
-      tsaUrl: config.tsaUrl,
+      tsaUrl: resolveTsaUrl(config),
     });
     if (signed.error) return this.rejectFor(approval, input.userId, signed.error);
 
-    const reports = await this.deps.engine.validate(config.dssUrl, signed.data);
+    const reports = await this.deps.engine.validate(config.signatureEngine, signed.data);
     if (reports.error) return this.rejectFor(approval, input.userId, reports.error);
     const newest = reports.data.at(-1);
     if (!newest) return this.reject(approval, input.userId, "indeterminate", "The signed document carries no signature.");

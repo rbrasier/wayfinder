@@ -1,8 +1,8 @@
 # PRD — Built-in Signing Engines
 
-- **Status**: Draft — run `/doc-review` before `/build`
+- **Status**: Implemented (v0.41.5)
 - **Date**: 2026-11-09
-- **Author**: Claude (for @rbrasier), follow-on to issue #386 / PR #390
+- **Author**: Claude, follow-on to issue #386 / PR #390
 - **Target version**: 0.41.5 (bump: PATCH — maintainer decision, see §12)
 
 ## 1. Problem

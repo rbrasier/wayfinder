@@ -1,11 +1,21 @@
 import { createHash } from "node:crypto";
-import type {
-  ConnectivityResult,
-  ISignatureServicesProbe,
-  SignatureConfig,
-  SignatureServiceTarget,
+import {
+  resolveTsaUrl,
+  type ConnectivityResult,
+  type EngineChoice,
+  type IPdfConverter,
+  type ISignatureServicesProbe,
+  type SignatureConfig,
+  type SignatureServiceTarget,
 } from "@wayfinder/domain";
+import { buildMinimalDocx } from "../documents/minimal-docx";
+import type { BuiltInEngineHandle } from "./dss-signature-engine";
 import { buildTimeStampRequest, readTimeStampResponseStatus } from "./rfc3161";
+
+export interface BuiltInProbeTargets {
+  pdfConverter: IPdfConverter;
+  signatureEngine: BuiltInEngineHandle;
+}
 
 const DEFAULT_TIMEOUT_MS = 8_000;
 
@@ -17,13 +27,18 @@ interface HttpOutcome {
   response?: Response;
 }
 
+const NO_BUILT_IN: HttpOutcome = { ok: false, message: "There is no built-in engine here." };
+
 // Live, side-effect-free probes for the signing services (ADR-067 §6): a health
-// check for each sidecar, a throwaway timestamp over a fixed digest, and the
-// CSC `info` call, which every CSC provider answers without credentials.
+// check for each external engine, a throwaway timestamp over a fixed digest,
+// and the CSC `info` call, which every CSC provider answers without
+// credentials. A built-in converter is checked by converting a one-line
+// document, and a built-in signature engine by starting it (ADR-069 §2).
 export class HttpSignatureServicesProbe implements ISignatureServicesProbe {
   constructor(
     private readonly fetchFn: typeof fetch = globalThis.fetch,
     private readonly timeoutMs: number = DEFAULT_TIMEOUT_MS,
+    private readonly builtIn: BuiltInProbeTargets | null = null,
   ) {}
 
   async probe(target: SignatureServiceTarget, config: SignatureConfig): Promise<ConnectivityResult> {
@@ -41,14 +56,33 @@ export class HttpSignatureServicesProbe implements ISignatureServicesProbe {
   private async run(target: SignatureServiceTarget, config: SignatureConfig): Promise<HttpOutcome | null> {
     switch (target) {
       case "pdf-converter":
-        return config.gotenbergUrl ? this.get(`${trimSlash(config.gotenbergUrl)}/health`) : null;
+        return this.probeEngine(config.pdfConverter, (builtIn) => this.probeBuiltInConverter(builtIn));
       case "signature-engine":
-        return config.dssUrl ? this.get(`${trimSlash(config.dssUrl)}/health`) : null;
+        return this.probeEngine(config.signatureEngine, (builtIn) => this.probeBuiltInSignatureEngine(builtIn));
       case "timestamp-authority":
-        return config.tsaUrl ? this.probeTimestampAuthority(config.tsaUrl) : null;
+        return this.probeTimestampAuthority(resolveTsaUrl(config));
       case "signing-provider":
         return config.csc ? this.probeCsc(config.csc.baseUrl) : null;
     }
+  }
+
+  private probeEngine(
+    choice: EngineChoice,
+    probeBuiltIn: (builtIn: BuiltInProbeTargets) => Promise<HttpOutcome>,
+  ): Promise<HttpOutcome> {
+    if (choice.source === "external") return this.get(`${trimSlash(choice.url)}/health`);
+    return this.builtIn ? probeBuiltIn(this.builtIn) : Promise.resolve(NO_BUILT_IN);
+  }
+
+  private async probeBuiltInConverter(builtIn: BuiltInProbeTargets): Promise<HttpOutcome> {
+    const converted = await builtIn.pdfConverter.convertDocxToPdfA(buildMinimalDocx(["Wayfinder converter check"]));
+    return converted.error ? { ok: false, message: converted.error.message } : { ok: true };
+  }
+
+  private async probeBuiltInSignatureEngine(builtIn: BuiltInProbeTargets): Promise<HttpOutcome> {
+    const started = await builtIn.signatureEngine.ensureRunning();
+    if (started.error) return { ok: false, message: started.error.message };
+    return this.get(`${started.data}/health`);
   }
 
   private async probeTimestampAuthority(url: string): Promise<HttpOutcome> {

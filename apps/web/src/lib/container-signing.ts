@@ -19,9 +19,10 @@ import {
   CsvWriter,
   DrizzleDrawnSignatureRepository,
   DssSignatureEngine,
-  GotenbergPdfConverter,
   HttpSignatureServicesProbe,
   PdfJsAnchorLocator,
+  RoutingPdfConverter,
+  createBuiltInEngines,
   sha256Bytes,
   sha256Hex,
 } from "@wayfinder/adapters";
@@ -48,12 +49,22 @@ export interface SigningDeps {
 // under the source-size ceiling.
 export const buildSigning = (deps: SigningDeps) => {
   const drawnSignatures = new DrizzleDrawnSignatureRepository(deps.db);
-  const signatureProbe = new HttpSignatureServicesProbe();
-  const pdfConverter = new GotenbergPdfConverter(async () => (await deps.loadSignatureConfig()).gotenbergUrl);
+  // One set of built-in engines per web process (ADR-069 §1); the container is
+  // a process-wide singleton, so this is too. Nothing starts until used.
+  const builtInEngines = createBuiltInEngines();
+  process.once("exit", () => builtInEngines.signatureEngine.stop());
+  const signatureEngine = new DssSignatureEngine(undefined, undefined, builtInEngines.signatureEngine);
+  const signatureProbe = new HttpSignatureServicesProbe(undefined, undefined, builtInEngines);
+  const pdfConverter = new RoutingPdfConverter(
+    async () => (await deps.loadSignatureConfig()).pdfConverter,
+    builtInEngines.pdfConverter,
+  );
   const testSignatureConfig = new TestSignatureConfig(signatureProbe);
 
   return {
     drawnSignatures,
+    builtInEngines,
+    signatureEngine,
     pdfConverter,
     signatureProbe,
     pdfRendering: {
@@ -80,7 +91,7 @@ export const buildSigning = (deps: SigningDeps) => {
 // cases, because it finishes by recording an approval decision.
 export type CertificateSigningWiring = Omit<
   CertificateSigningDeps,
-  "provider" | "engine" | "anchorLocator" | "randomToken" | "sha256Hex" | "hashBytes" | "now"
+  "provider" | "anchorLocator" | "randomToken" | "sha256Hex" | "hashBytes" | "now"
 >;
 
 // Off-system approvals on a certificate step must carry a validly signed PDF
@@ -97,7 +108,6 @@ export const buildCertificateSigning = (wiring: CertificateSigningWiring & OffSy
   const deps: CertificateSigningDeps = {
     ...wiring,
     provider: new CscRemoteSigningAdapter(),
-    engine: new DssSignatureEngine(),
     anchorLocator: new PdfJsAnchorLocator(),
     randomToken: () => randomBytes(24).toString("base64url"),
     sha256Hex,

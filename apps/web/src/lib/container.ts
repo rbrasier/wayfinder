@@ -644,7 +644,7 @@ const build = () => {
     resolveSession: resolveCachedSession,
     revokeUserSessions: revokeSessionsForUser,
     resolveEffectivePermissions,
-    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, valueSetProvider: lookupSources.valueSetProvider, ...skillsAndMcp.services, ...automation.services },
+    services: { llm, agent, sessionAgent, errorLogger, auditLogger, documentExtractor, documentIndexer, emailSender, n8nWorkflowDirectory, quotaEnforcer, llmGovernor, sessionEvents, authRateLimiter, chatRateLimiter, valueSetProvider: lookupSources.valueSetProvider, builtInEngines: signing.builtInEngines, ...skillsAndMcp.services, ...automation.services },
     repos: { users, conversations, errorLogs, featureFlags, featureFlagRoles, roles, userRoles, groups, organisations, usageRepo, budgets, jobRepo, flows, flowNodes, flowEdges, flowVersions, sessions, sessionParticipants, sessionMessages, sessionUploads, sessionStepOutputs, flowTestFixtures, schedules, scheduleRuns, systemSettings, contextDocContent, documentChunks, chunkCuration, answerFeedback, hybridRetriever, reindexSource, notificationLog, approvals, hrDatasets, auditQuery, legalHolds, extractionRuns: extraction.repository, extractionDrafts: extraction.draftRepository, lookupSources: lookupSources.repository, ...skillsAndMcp.repos, ...automation.repos },
     useCases: {
       ...documentUseCases,
@@ -779,7 +779,7 @@ const build = () => {
       ...skillsAndMcp.useCases,
       ...automation.useCases,
       ...signing.useCases,
-      ...buildCertificateSigning({ approvals, flowNodes, sessionMessages, sessionStepOutputs, objectStorage, users, documentGenerator, auditLogger, drawnSignatures: signing.drawnSignatures, loadSignatureConfig: () => runtimeConfig.getSignatureConfig(), pdfConverter: signing.pdfConverter, resolveSubject: approvalUseCases.resolveApprovalSubject, decide: approvalUseCases.decideApproval, decideApproval: approvalUseCases.decideApproval, sessions, clock }),
+      ...buildCertificateSigning({ approvals, flowNodes, sessionMessages, sessionStepOutputs, objectStorage, users, documentGenerator, auditLogger, drawnSignatures: signing.drawnSignatures, loadSignatureConfig: () => runtimeConfig.getSignatureConfig(), pdfConverter: signing.pdfConverter, engine: signing.signatureEngine, resolveSubject: approvalUseCases.resolveApprovalSubject, decide: approvalUseCases.decideApproval, decideApproval: approvalUseCases.decideApproval, sessions, clock }),
       ...buildPresentationUseCases({ systemSettings, objectStorage, auditLogger, auditQuery, loadLoginNotice: () => runtimeConfig.getLoginNoticeConfig() }),
     },
   };

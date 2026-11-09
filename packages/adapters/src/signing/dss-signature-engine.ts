@@ -2,6 +2,7 @@ import {
   domainError,
   err,
   ok,
+  type EngineChoice,
   type EngineSignatureReport,
   type ISignatureEngine,
   type PreparedSignature,
@@ -13,20 +14,27 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 const trimSlash = (url: string): string => url.replace(/\/+$/, "");
 
-// The DSS sidecar's JSON API (deploy/dss, ADR-067 §4). Long timeout: signing
-// fetches a timestamp and revocation data, and validation walks every chain.
+export interface BuiltInEngineHandle {
+  ensureRunning(): Promise<Result<string>>;
+}
+
+// The DSS engine's JSON API (deploy/dss, ADR-067 §4), whether it runs as a
+// sidecar or inside the Wayfinder container (ADR-069 §1) — one protocol, one
+// code path. Long timeout: signing fetches a timestamp and revocation data, and
+// validation walks every chain.
 export class DssSignatureEngine implements ISignatureEngine {
   constructor(
     private readonly fetchFn: typeof fetch = globalThis.fetch,
     private readonly timeoutMs: number = DEFAULT_TIMEOUT_MS,
+    private readonly builtIn: BuiltInEngineHandle | null = null,
   ) {}
 
   prepare(parameters: SigningParameters): Promise<Result<PreparedSignature>> {
-    return this.post<PreparedSignature>(parameters.engineUrl, "prepare", this.signingBody(parameters));
+    return this.post<PreparedSignature>(parameters.engine, "prepare", this.signingBody(parameters));
   }
 
   async sign(parameters: SigningParameters & { signatureValue: string; tsaUrl: string }): Promise<Result<Buffer>> {
-    const response = await this.post<{ pdf: string }>(parameters.engineUrl, "sign", {
+    const response = await this.post<{ pdf: string }>(parameters.engine, "sign", {
       ...this.signingBody(parameters),
       signatureValue: parameters.signatureValue,
       // The mock and every CSC provider Wayfinder supports sign with RSA.
@@ -37,9 +45,9 @@ export class DssSignatureEngine implements ISignatureEngine {
     return ok(Buffer.from(response.data.pdf, "base64"));
   }
 
-  async validate(engineUrl: string, pdf: Buffer): Promise<Result<EngineSignatureReport[]>> {
+  async validate(engine: EngineChoice, pdf: Buffer): Promise<Result<EngineSignatureReport[]>> {
     const response = await this.post<{ signatures: Array<EngineSignatureReport & { bestSignatureTime?: string }> }>(
-      engineUrl,
+      engine,
       "validate",
       { pdf: pdf.toString("base64") },
     );
@@ -73,10 +81,18 @@ export class DssSignatureEngine implements ISignatureEngine {
     };
   }
 
-  private async post<T>(engineUrl: string, operation: string, body: unknown): Promise<Result<T>> {
+  private async baseUrl(engine: EngineChoice): Promise<Result<string>> {
+    if (engine.source === "external") return ok(engine.url);
+    if (!this.builtIn) return err(domainError("INFRA_FAILURE", "There is no built-in signature engine here."));
+    return this.builtIn.ensureRunning();
+  }
+
+  private async post<T>(engine: EngineChoice, operation: string, body: unknown): Promise<Result<T>> {
+    const baseUrl = await this.baseUrl(engine);
+    if (baseUrl.error) return baseUrl;
     let response: Response;
     try {
-      response = await this.fetchFn(`${trimSlash(engineUrl)}/${operation}`, {
+      response = await this.fetchFn(`${trimSlash(baseUrl.data)}/${operation}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

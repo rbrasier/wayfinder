@@ -1,4 +1,5 @@
 import type { CertificateCheck, EngineSignatureReport } from "../entities/digital-signature";
+import type { EngineChoice } from "../entities/signature-config";
 import type { Result } from "../result";
 
 // Where and how a signature is drawn on the page (ADR-068 §2). Coordinates are
@@ -14,7 +15,9 @@ export interface SignatureAppearance {
 }
 
 export interface SigningParameters {
-  engineUrl: string;
+  // Built-in or external (ADR-069 §2); the adapter turns it into an address,
+  // starting the built-in engine if it has to.
+  engine: EngineChoice;
   pdf: Buffer;
   // Base64 DER, signing certificate first.
   certificateChain: string[];
@@ -29,9 +32,10 @@ export interface PreparedSignature {
   certificateCheck: CertificateCheck;
 }
 
-// The PAdES engine — the DSS sidecar (ADR-067 §4). Never holds a key.
+// The PAdES engine — EU DSS, built in or as a sidecar (ADR-067 §4, ADR-069).
+// Never holds a key.
 export interface ISignatureEngine {
   prepare(parameters: SigningParameters): Promise<Result<PreparedSignature>>;
   sign(parameters: SigningParameters & { signatureValue: string; tsaUrl: string }): Promise<Result<Buffer>>;
-  validate(engineUrl: string, pdf: Buffer): Promise<Result<EngineSignatureReport[]>>;
+  validate(engine: EngineChoice, pdf: Buffer): Promise<Result<EngineSignatureReport[]>>;
 }

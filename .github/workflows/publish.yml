@@ -136,6 +136,44 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # The -slim image (ADR-069 §3): no built-in signing engines, for installs
+      # that sign with attestation or drawings only, or use external engines.
+      # Scanned before it is pushed, like the default image.
+      - name: Build -slim image for scanning
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime-slim
+          push: false
+          load: true
+          tags: wayfinder:scan-slim
+          build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
+          cache-from: type=gha
+
+      - name: Scan -slim image for CVEs (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wayfinder:scan-slim
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+          skip-setup-trivy: true
+
+      - name: Build and push -slim
+        id: push_slim
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime-slim
+          push: true
+          sbom: true
+          build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
+          tags: |
+            ghcr.io/rbrasier/wayfinder:${{ steps.resolve.outputs.version }}-slim
+            ${{ steps.resolve.outputs.publish_latest == 'true' && 'ghcr.io/rbrasier/wayfinder:slim' || '' }}
+          cache-from: type=gha
+
       # The signature engine sidecar (ADR-067 §4), published at the same version
       # as the app so the two halves of a signing deployment cannot drift.
       - name: Build and push the DSS signature engine
@@ -179,6 +217,7 @@ jobs:
             echo "|---|---|"
             echo "| Version | \`${{ steps.resolve.outputs.version }}\` |"
             echo "| Digest | \`${{ steps.push.outputs.digest }}\` |"
+            echo "| -slim digest | \`${{ steps.push_slim.outputs.digest }}\` |"
             echo "| DSS sidecar digest | \`${{ steps.push_dss.outputs.digest }}\` |"
             echo "| Moved \`latest\` | ${{ steps.resolve.outputs.publish_latest }} |"
             echo "| SBOM on Release | ${{ steps.sbom.outputs.attached }} |"

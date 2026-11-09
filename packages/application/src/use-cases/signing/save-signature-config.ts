@@ -5,6 +5,7 @@ import {
   parseSignatureConfig,
   SIGNATURE_CONFIG_SETTING_KEY,
   validateSignatureConfig,
+  type EngineChoice,
   type IAuditLogger,
   type ISystemSettingsRepository,
   type Result,
@@ -15,8 +16,8 @@ import type { TestSignatureConfig } from "./test-signature-config";
 
 export interface SignatureConfigInput {
   method: SignatureMethod;
-  gotenbergUrl: string | null;
-  dssUrl: string | null;
+  pdfConverter: EngineChoice;
+  signatureEngine: EngineChoice;
   tsaUrl: string | null;
   // A blank secret keeps the stored one, so an admin editing a URL does not
   // have to re-enter a credential they cannot see.
@@ -61,8 +62,8 @@ export class SaveSignatureConfig {
       resourceId: SIGNATURE_CONFIG_SETTING_KEY,
       metadata: {
         method: config.method,
-        gotenbergUrl: config.gotenbergUrl,
-        dssUrl: config.dssUrl,
+        pdfConverter: config.pdfConverter,
+        signatureEngine: config.signatureEngine,
         tsaUrl: config.tsaUrl,
         cscBaseUrl: config.csc?.baseUrl ?? null,
       },

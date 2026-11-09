@@ -3,6 +3,7 @@ import {
   parseSignatureConfig,
   SIGNATURE_CONFIG_SETTING_KEY,
   type ISystemSettingsRepository,
+  type EngineChoice,
   type Result,
   type SignatureMethod,
 } from "@wayfinder/domain";
@@ -11,8 +12,8 @@ import {
 // the card only learns whether one is set.
 export interface SignatureConfigView {
   method: SignatureMethod;
-  gotenbergUrl: string | null;
-  dssUrl: string | null;
+  pdfConverter: EngineChoice;
+  signatureEngine: EngineChoice;
   tsaUrl: string | null;
   csc: { baseUrl: string; clientId: string; hasClientSecret: boolean } | null;
 }
@@ -26,8 +27,8 @@ export class GetSignatureConfig {
     const config = parseSignatureConfig(stored.data?.value ?? "");
     return ok({
       method: config.method,
-      gotenbergUrl: config.gotenbergUrl,
-      dssUrl: config.dssUrl,
+      pdfConverter: config.pdfConverter,
+      signatureEngine: config.signatureEngine,
       tsaUrl: config.tsaUrl,
       csc: config.csc
         ? { baseUrl: config.csc.baseUrl, clientId: config.csc.clientId, hasClientSecret: true }

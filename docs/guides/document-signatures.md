@@ -7,7 +7,7 @@ Pick one install-wide method in **Settings → Signatures → PDF signatures**.
 | --- | --- | --- | --- |
 | **Attestation only** (default) | Approves | The approval block: name, decision, date, verification code | Nothing |
 | **Drawn signature** | Draws a signature once (remembered on their profile), then approves | Their drawing above the approval block, in the `.docx` and the PDF | A PDF converter only if a step converts to PDF |
-| **Digital certificate** | Clicks **Approve & sign** and authorises at their signing provider | A PAdES B-LTA signature on a frozen PDF/A, verifiable in Acrobat or the EU DSS validator | PDF converter, signature engine, timestamp authority, CSC signing provider |
+| **Digital certificate** | Clicks **Approve & sign** and authorises at their signing provider | A PAdES B-LTA signature on a frozen PDF/A, verifiable in Acrobat or the EU DSS validator | A CSC signing provider (the PDF converter and signature engine are built in; the timestamp authority defaults to DigiCert) |
 
 Which approvals sign is still decided by the template: an approval step signs
 when it claims a `{{ … (approval) }}` slot. **Convert to PDF on signing** on an
@@ -16,29 +16,52 @@ approval step adds a PDF/A copy; it is always on under *Digital certificate*.
 A drawn signature is a simple electronic signature. Only the digital
 certificate method produces a signature anyone can verify outside Wayfinder.
 
-## The services
+## The engines
 
-Both run as opt-in compose profiles; installs that never sign with
-certificates run neither.
+The default Wayfinder image converts and signs by itself (ADR-069). For each
+engine, **Settings → Signatures → PDF signatures** offers **Built-in** (the
+default) or **External** with a URL.
 
-| Service | Profile | Settings field | Production URL |
+| Engine | Built in | External alternative | External URL (compose) |
 | --- | --- | --- | --- |
-| Gotenberg (LibreOffice → PDF/A-2b) | `pdf` | PDF converter URL | `http://gotenberg:3000` |
-| Wayfinder DSS sidecar (`ghcr.io/rbrasier/wayfinder-dss`) | `signing` | Signature engine URL | `http://dss:8080` |
+| PDF converter | LibreOffice → PDF/A-2b | Gotenberg, compose profile `pdf` | `http://gotenberg:3000` |
+| Signature engine | EU DSS on a trimmed Java runtime | Wayfinder DSS sidecar (`ghcr.io/rbrasier/wayfinder-dss`), profile `signing` | `http://dss:8080` |
 
-```bash
-docker compose -f docker-compose.prod.yml --profile pdf --profile signing up -d
-```
+Built-in engines start only when the chosen method needs them, so an
+attestation-only install runs neither. The signature engine stops again after
+30 minutes idle. The card shows each engine's state: *Built-in · running*,
+*Built-in · idle*, or *Not included in this image*.
+
+**Images.** `ghcr.io/rbrasier/wayfinder:<version>` includes both engines.
+`…:<version>-slim` leaves them out (about 600 MB smaller); on it, choose
+External or stay on attestation. The engines cannot run inside the AWS Lambda
+topology, which must use External services.
+
+**Memory.** The signature engine's Java runtime needs roughly 300–500 MB while
+it runs. Give the web container that headroom when certificate signing is in
+use.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SIGNING_ENGINE_HEAP` | `384m` | Java heap for the built-in signature engine |
+| `SIGNING_ENGINE_IDLE_MINUTES` | `30` | Stop the engine after this long unused |
+| `PDF_CONVERTER_CONCURRENCY` | `2` | Conversions LibreOffice runs at once |
+| `TRUST_ANCHORS_DIR` | `/app/trust` | Where the built-in engine reads trust anchors |
 
 **Trust anchors are deployment configuration**, never an admin setting: put
 the CA certificates your signers' digital IDs chain to (PEM or DER) in
-`./trust`, which the `dss` service mounts read-only. Whoever controls that list
-controls what counts as a valid signature — the same split as
-`PKI_TRUSTED_PROXY_IPS` (ADR-042 §1).
+`./trust`. `docker-compose.prod.yml` mounts it read-only into the web service
+(`/app/trust`) for the built-in engine and into the `dss` service for the
+external one. Whoever controls that list controls what counts as a valid
+signature — the same split as `PKI_TRUSTED_PROXY_IPS` (ADR-042 §1).
 
-The **timestamp authority** is any RFC 3161 service your organisation or
-provider offers. The **signing provider** is a CSC v2 remote-signing service
-(ETSI TS 119 432); register `https://<your Wayfinder origin>/api/signing/csc/callback`
+The **timestamp authority** is an independent RFC 3161 service that vouches
+for when each signature was made, which keeps signatures verifiable after the
+signer's certificate expires. It is a third party by design, so it is never
+built in. Leave it blank (under **Advanced**) to use DigiCert's free service,
+`http://timestamp.digicert.com`; air-gapped installs set their organisation's
+own. The **signing provider** is a CSC v2 remote-signing service (ETSI TS
+119 432); register `https://<your Wayfinder origin>/api/signing/csc/callback`
 as its redirect URI and enter its base URL, client ID and secret.
 
 Saving the *Digital certificate* method runs a live Test of all four services
@@ -71,7 +94,18 @@ The shared mocks server (`mocks/`, port 4001) stands in for every service:
 | `/ocsp/root.crl` | The test CA's revocation list |
 | `/dss` | The DSS sidecar (canned; used by the e2e suite) |
 
-For real signatures locally, run the sidecar against the mocks' throwaway CA:
+For real signatures locally with the built-in engines, install LibreOffice and
+point the app at a JDK and a locally built jar, trusting the mocks' CA:
+
+```bash
+cd deploy/dss && mvn -B package -DskipTests && cd ../..
+export SIGNING_ENGINE_JAVA="$(command -v java)" SIGNING_ENGINE_JAR="$PWD/deploy/dss/target/wayfinder-dss.jar"
+export SIGNING_TRUST_MOCK_CA=http://localhost:4001/csc/test-ca.pem DSS_ENVIRONMENT=development
+pnpm dev
+```
+
+`deploy/dss/smoke-built-in.sh` runs the same checks CI runs inside the default
+image. Or run the sidecar on its own against the mocks' throwaway CA:
 
 ```bash
 cd deploy/dss && mvn -B package -DskipTests
@@ -80,5 +114,5 @@ SIGNING_TRUST_MOCK_CA=http://localhost:4001/csc/test-ca.pem DSS_ENVIRONMENT=deve
 node smoke-test.mjs   # signs, extends, validates and tampers against the mocks
 ```
 
-The sidecar refuses to trust the mock CA unless `DSS_ENVIRONMENT=development`;
-its image defaults to `production`. See `deploy/dss/README.md`.
+The engine refuses to trust the mock CA unless `DSS_ENVIRONMENT=development`;
+both images default to `production`. See `deploy/dss/README.md`.

@@ -28,8 +28,8 @@ class ScriptedProbe implements ISignatureServicesProbe {
 
 const certificateInput = (overrides: Partial<SignatureConfigInput> = {}): SignatureConfigInput => ({
   method: "certificate",
-  gotenbergUrl: "http://gotenberg:3000",
-  dssUrl: "http://dss:8080",
+  pdfConverter: { source: "external", url: "http://gotenberg:3000" },
+  signatureEngine: { source: "external", url: "http://dss:8080" },
   tsaUrl: "http://localhost:4001/tsa",
   csc: { baseUrl: "http://localhost:4001/csc/v2", clientId: "wayfinder", clientSecret: "s3cret" },
   ...overrides,
@@ -57,7 +57,11 @@ describe("TestSignatureConfig", () => {
   it("probes only what the method needs", async () => {
     const { tester, probe } = build();
 
-    const result = await tester.execute({ ...DEFAULT_SIGNATURE_CONFIG, method: "drawn", gotenbergUrl: "http://g" });
+    const result = await tester.execute({
+      ...DEFAULT_SIGNATURE_CONFIG,
+      method: "drawn",
+      pdfConverter: { source: "external", url: "http://g" },
+    });
 
     expect(result.map((entry) => entry.target)).toEqual(["pdf-converter"]);
     expect(probe.probed).toHaveLength(1);
@@ -116,11 +120,28 @@ describe("SaveSignatureConfig", () => {
   it("refuses an incomplete certificate config before probing", async () => {
     const { save, probe } = build();
 
-    const result = await save.execute(certificateInput({ tsaUrl: null }), ADMIN_ID);
+    const result = await save.execute(certificateInput({ csc: null }), ADMIN_ID);
 
     expect(result.error?.code).toBe("VALIDATION_FAILED");
-    expect(result.error?.message).toContain("timestamp authority URL is required");
+    expect(result.error?.message).toContain("remote signing provider is required");
     expect(probe.probed).toEqual([]);
+  });
+
+  it("saves certificate signing on built-in engines with no timestamp authority set", async () => {
+    const { save, settings, probe } = build();
+
+    const result = await save.execute(
+      certificateInput({ pdfConverter: { source: "built-in" }, signatureEngine: { source: "built-in" }, tsaUrl: null }),
+      ADMIN_ID,
+    );
+
+    expect(result.error).toBeUndefined();
+    expect(stored(settings)).toMatchObject({
+      pdfConverter: { source: "built-in" },
+      signatureEngine: { source: "built-in" },
+      tsaUrl: null,
+    });
+    expect(probe.probed.map((entry) => entry.target)).toContain("timestamp-authority");
   });
 
   it("keeps the stored client secret when the form leaves it blank", async () => {
@@ -153,6 +174,18 @@ describe("GetSignatureConfig", () => {
 
     expect(result.data?.method).toBe("attestation");
     expect(result.data?.csc).toBeNull();
+    expect(result.data?.pdfConverter).toEqual({ source: "built-in" });
+    expect(result.data?.signatureEngine).toEqual({ source: "built-in" });
+  });
+
+  it("returns the engine choices that were saved", async () => {
+    const { save, get } = build();
+    await save.execute(certificateInput(), ADMIN_ID);
+
+    const result = await get.execute();
+
+    expect(result.data?.pdfConverter).toEqual({ source: "external", url: "http://gotenberg:3000" });
+    expect(result.data?.signatureEngine).toEqual({ source: "external", url: "http://dss:8080" });
   });
 
   it("masks the client secret, reporting only that one is set", async () => {

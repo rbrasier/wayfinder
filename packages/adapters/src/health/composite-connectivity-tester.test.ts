@@ -38,7 +38,7 @@ const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): Connectivit
     isPkiEnvConfigured: () => false,
     getSignatureConfig: async (): Promise<SignatureConfig> => ({
       ...DEFAULT_SIGNATURE_CONFIG,
-      gotenbergUrl: "http://gotenberg:3000",
+      pdfConverter: { source: "external", url: "http://gotenberg:3000" },
     }),
   },
   emailSender: { isConfigured: async () => false, testConnectivity: async () => ok(true as const) },
@@ -127,7 +127,7 @@ describe("CompositeConnectivityTester", () => {
     const result = await tester.test("pdf-converter");
 
     expect(result.data).toMatchObject({ target: "pdf-converter", ok: true });
-    expect(probe).toHaveBeenCalledWith("pdf-converter", expect.objectContaining({ gotenbergUrl: "http://gotenberg:3000" }));
+    expect(probe).toHaveBeenCalledWith("pdf-converter", expect.objectContaining({ pdfConverter: { source: "external", url: "http://gotenberg:3000" } }));
   });
 
   it("skips signing targets when no probe is wired", async () => {

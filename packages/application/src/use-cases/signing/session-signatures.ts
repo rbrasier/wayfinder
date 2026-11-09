@@ -117,14 +117,14 @@ export class RevalidateSessionSignatures {
   private async currentReports(sessionId: string): Promise<EngineSignatureReport[] | null> {
     const config = await this.deps.loadSignatureConfig();
     const messages = await this.deps.sessionMessages.listBySession(sessionId);
-    if (messages.error || !config.dssUrl) return null;
+    if (messages.error) return null;
     const reports: EngineSignatureReport[] = [];
     for (const message of messages.data) {
       const pdf = message.document?.pdf;
       if (pdf?.status !== "frozen" || !pdf.storagePath) continue;
       const bytes = await this.deps.objectStorage.get(pdf.storagePath);
       if (bytes.error) return null;
-      const validated = await this.deps.engine.validate(config.dssUrl, bytes.data);
+      const validated = await this.deps.engine.validate(config.signatureEngine, bytes.data);
       if (validated.error) return null;
       reports.push(...validated.data);
     }

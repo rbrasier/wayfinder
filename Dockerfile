@@ -48,7 +48,30 @@ RUN if [ "$VENDOR_EMBEDDINGS_MODEL" = "true" ]; then \
 # been proven by building and running. Size is the cost; a broken image is not.
 
 
-FROM base AS runtime
+# ── Built-in signing engines (ADR-069) ───────────────────────────────────────
+# The DSS signature engine jar, the same one the standalone sidecar runs.
+FROM maven:3.9.11-eclipse-temurin-21@sha256:6fdc855a6ed81d288ca7ca37ac6ff5e9308b612485c0801d70b25a858c83d237 AS dss-build
+WORKDIR /build
+COPY deploy/dss/pom.xml .
+RUN mvn -q -B dependency:go-offline
+COPY deploy/dss/src ./src
+RUN mvn -q -B package -DskipTests
+
+
+# A Java runtime cut down to the modules the engine uses (from `jdeps
+# --print-module-deps` on the jar, plus jdk.crypto.ec for TLS to a timestamp
+# authority). A full JRE would roughly double this layer.
+FROM eclipse-temurin:21.0.8_9-jdk-noble@sha256:03b731a231066bd04ada0a7ee9003cdbc1460083344f9277245b233e5ffcbf47 AS jre
+RUN jlink \
+      --add-modules java.base,java.compiler,java.desktop,java.naming,java.net.http,java.security.jgss,java.sql,jdk.httpserver,jdk.net,jdk.crypto.ec \
+      --strip-debug --no-man-pages --no-header-files --compress=zip-6 \
+      --output /jre
+
+
+# The -slim image: Wayfinder without the built-in engines, for installs that
+# sign with attestation or drawn signatures only, or that point at external
+# engines (`docker build --target runtime-slim`, published as `:<version>-slim`).
+FROM base AS runtime-slim
 ENV NODE_ENV=production
 
 # Only the final stage's labels reach the published image. `image.source` is the
@@ -92,3 +115,31 @@ USER node
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["web"]
+
+
+# The default image: everything above plus the PDF converter (LibreOffice) and
+# the signature engine (EU DSS on a trimmed Java runtime), started only when the
+# chosen signature method needs them (ADR-069 §1). Last stage, so a plain
+# `docker build` produces it.
+FROM runtime-slim AS runtime
+USER root
+
+# Writer only, headless, with metric-compatible stand-ins for the Office fonts
+# templates use (Carlito for Calibri, Caladea for Cambria, Liberation for
+# Arial/Times/Courier), so converted PDFs keep the layout Word gave them.
+ARG SECURITY_REFRESH
+RUN apt-get update --error-on=any \
+  && apt-get install -y --no-install-recommends \
+       libreoffice-writer-nogui \
+       fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea fonts-dejavu-core fonts-noto-core \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --from=jre /jre /opt/wayfinder/jre
+COPY --from=dss-build /build/target/wayfinder-dss.jar /opt/wayfinder/dss/wayfinder-dss.jar
+
+# Trust anchors are deployment configuration (ADR-067 §5): mount the CA
+# certificates here. Nothing in the UI can add one.
+ENV TRUST_ANCHORS_DIR=/app/trust
+RUN mkdir -p /app/trust && chown node:node /app/trust
+
+USER node

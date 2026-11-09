@@ -43,14 +43,18 @@ public final class Server {
     CommonTrustedCertificateSource trusted = loadTrustAnchors();
     Engine engine = new Engine(trusted);
 
-    HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+    // Built into the Wayfinder image (ADR-069 §1) the engine binds to loopback
+    // only; as a sidecar it keeps listening on every interface.
+    String bindAddress = env("BIND_ADDRESS", "0.0.0.0");
+    HttpServer server = HttpServer.create(new InetSocketAddress(bindAddress, port), 0);
     server.setExecutor(Executors.newFixedThreadPool(8));
     server.createContext("/health", exchange -> respond(exchange, 200, healthBody(trusted)));
     server.createContext("/prepare", exchange -> handle(exchange, engine::prepare));
     server.createContext("/sign", exchange -> handle(exchange, engine::sign));
     server.createContext("/validate", exchange -> handle(exchange, engine::validate));
     server.start();
-    System.out.printf("[dss] listening on :%d with %d trust anchor(s)%n", port, trusted.getNumberOfCertificates());
+    System.out.printf(
+        "[dss] listening on %s:%d with %d trust anchor(s)%n", bindAddress, port, trusted.getNumberOfCertificates());
   }
 
   interface Operation {

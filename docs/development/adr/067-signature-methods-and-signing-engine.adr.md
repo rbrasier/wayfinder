@@ -10,6 +10,10 @@
   block, and under the certificate method the block is accompanied by a PAdES
   signature (see ADR-068 for the record itself).
 - **Numbering**: 067 is free on both `release/alpha-3` and `main`.
+- **Amended by**: ADR-069 — §3 and §4: the PDF converter and signature engine
+  are built into the default Wayfinder image, and Gotenberg and the DSS sidecar
+  become the *External* option; §5: the built-in engine reads trust anchors from
+  the app container's `/app/trust`.
 
 ## Context
 

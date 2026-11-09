@@ -64,9 +64,10 @@ services:
       SALT: replace-me
       TELEMETRY_ENABLED: "false"
 
-  # PDF converter for "Convert to PDF on signing" and certificate signatures
-  # (ADR-067 §3). Opt-in: `docker compose --profile pdf up -d`, then set
-  # Settings → PDF signatures → PDF converter URL to http://localhost:3100.
+  # Optional external PDF converter (ADR-067 §3). `pnpm dev` uses the built-in
+  # one when LibreOffice is installed locally (ADR-069). To use Gotenberg
+  # instead: `docker compose --profile pdf up -d`, then set Settings → PDF
+  # signatures → PDF converter to External, http://localhost:3100.
   gotenberg:
     image: gotenberg/gotenberg:8.25.0@sha256:e304e45acee3c400f8ef76afa195c76b1d0eaf0ab6fe9651e305067ab6a1560c
     container_name: wayfinder-gotenberg
@@ -75,10 +76,11 @@ services:
     ports:
       - "3100:3000"
 
-  # Signature engine for digital certificate signatures (ADR-067 §4), built from
-  # deploy/dss. Opt-in: `docker compose --profile pdf --profile signing up -d`,
-  # then set Settings → PDF signatures → Signature engine URL to
-  # http://localhost:8085. Trusts the mocks server's throwaway CA, which is why
+  # Optional external signature engine (ADR-067 §4), built from deploy/dss. The
+  # built-in one needs SIGNING_ENGINE_JAVA and SIGNING_ENGINE_JAR set for local
+  # development (see docs/guides/document-signatures.md). To use this instead:
+  # `docker compose --profile pdf --profile signing up -d`, then set Settings →
+  # PDF signatures → Signature engine to External, http://localhost:8085. Trusts the mocks server's throwaway CA, which is why
   # it is development-only; run the mocks with
   # MOCKS_PUBLIC_URL=http://host.docker.internal:4001 so the CRL URLs baked into
   # the test certificates resolve from inside this container.

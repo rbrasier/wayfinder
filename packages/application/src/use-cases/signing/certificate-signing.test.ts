@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SIGNATURE_CONFIG } from "@wayfinder/domain";
+import { DEFAULT_SIGNATURE_CONFIG, DEFAULT_TSA_URL } from "@wayfinder/domain";
 import { StartCertificateSigning } from "./start-certificate-signing";
 import { CompleteCertificateSigning } from "./complete-certificate-signing";
-import { passedCheck, passedReport, seed, sha256Hex } from "./__fixtures__/certificate-signing-doubles";
+import { CERTIFICATE_CONFIG, passedCheck, passedReport, seed, sha256Hex } from "./__fixtures__/certificate-signing-doubles";
 
 const REDIRECT = "http://app/api/signing/csc/callback";
 
@@ -255,6 +255,24 @@ describe("CompleteCertificateSigning — credential leg", () => {
     expect(pdf.storagePath).toBe("generated/session-1/instrument-signed-r1.pdf");
     expect(context.storage.objects.get(pdf.storagePath!)!.data.toString()).toContain("%signed");
     expect(context.audit.entries.map((entry) => entry.action)).toContain("signature.signed");
+  });
+
+  it("signs on the configured engine choice and timestamps with DigiCert when no authority is set", async () => {
+    const context = await seed();
+    context.setConfig({ ...CERTIFICATE_CONFIG, signatureEngine: { source: "built-in" }, tsaUrl: null });
+    const state = await throughServiceLeg(context);
+
+    await new CompleteCertificateSigning(context.deps).execute({
+      state,
+      code: "credential-code",
+      userId: "manager-1",
+      impersonatorId: null,
+      redirectUri: REDIRECT,
+    });
+
+    expect(context.engine.prepared[0]!.engine).toEqual({ source: "built-in" });
+    expect(context.engine.signedWith[0]).toMatchObject({ engine: { source: "built-in" }, tsaUrl: DEFAULT_TSA_URL });
+    expect(context.engine.validatedWith).toEqual([{ source: "built-in" }]);
   });
 
   it("keeps the freeze when a later signer is refused, because earlier signatures depend on it", async () => {

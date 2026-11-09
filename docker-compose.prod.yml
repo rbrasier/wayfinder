@@ -100,6 +100,11 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?generate with openssl rand -hex 32}
     ports:
       - "${WEB_PORT:-3000}:3000"
+    # Trust anchors for the built-in signature engine (ADR-069 §5): the CA
+    # certificates your signers' digital IDs chain to, PEM or DER. Deployment
+    # configuration, never an admin setting.
+    volumes:
+      - ./trust:/app/trust:ro
 
   api:
     image: ghcr.io/rbrasier/wayfinder:${WAYFINDER_VERSION:-latest}
@@ -116,19 +121,23 @@ services:
       # The scheduler heartbeat POSTs the web app's internal tick endpoint.
       WEB_BASE_URL: http://web:3000
 
-  # PDF converter (ADR-067 §3). Runs only when asked for:
+  # Optional external PDF converter (ADR-067 §3). The default Wayfinder image
+  # converts documents itself (ADR-069), so this is only for installs that run
+  # the -slim image or prefer a separate service:
   #   docker compose -f docker-compose.prod.yml --profile pdf up -d
-  # then set Settings → PDF signatures → PDF converter URL to http://gotenberg:3000.
-  # Not published: only the app talks to it.
+  # then set Settings → PDF signatures → PDF converter to External,
+  # http://gotenberg:3000. Not published: only the app talks to it.
   gotenberg:
     image: gotenberg/gotenberg:8.25.0@sha256:e304e45acee3c400f8ef76afa195c76b1d0eaf0ab6fe9651e305067ab6a1560c
     restart: unless-stopped
     profiles: ["pdf"]
 
-  # Signature engine for digital certificate signatures (ADR-067 §4). Runs only
-  # when asked for, alongside the PDF converter:
+  # Optional external signature engine (ADR-067 §4). The default Wayfinder image
+  # carries the same engine built in (ADR-069), so this is only for installs
+  # that run the -slim image or prefer a separate service:
   #   docker compose -f docker-compose.prod.yml --profile pdf --profile signing up -d
-  # then set Settings → PDF signatures → Signature engine URL to http://dss:8080.
+  # then set Settings → PDF signatures → Signature engine to External,
+  # http://dss:8080.
   # Trust anchors are deployment configuration, never an admin setting: put the
   # CA certificates your signers' digital IDs chain to in ./trust (PEM or DER).
   dss:

@@ -1,6 +1,6 @@
 # Phase — Built-in Signing Engines
 
-- **Status**: Draft — run `/doc-review` before `/build`
+- **Status**: Implemented (v0.41.5)
 - **Target version**: PATCH — 0.41.4 → 0.41.5 (no schema change; feature on a
   release branch by maintainer decision)
 - **Base branch**: `release/alpha-3` (maintainer override — PRD §12), stacked on
@@ -201,3 +201,20 @@ None.
   fixes land; use the existing waiver process, never a blanket ignore.
 - **Image size** may exceed what some registries or hosts expect; `-slim` is the
   documented escape hatch.
+
+## 9. Approved build summary (Step 0)
+
+Approved as planned, with these deviations found in pre-flight:
+
+- **Engine port takes the choice, not a URL.** `ISignatureEngine` and three
+  use cases passed a fixed `dssUrl`, but a built-in engine's address exists only
+  once the supervisor starts it. The port takes `engine: EngineChoice` instead;
+  the adapter resolves it, and use cases pass `config.signatureEngine` and
+  `resolveTsaUrl(config)`.
+- **Engine status** is read by the settings router straight from the adapter
+  wiring, not through a new use case.
+- **Built-in smoke test in CI** runs inside the built default image, pointing the
+  existing smoke test at the in-container supervisor through a small boot script.
+- **ADR-067** gains an "Amended by ADR-069" note in its header.
+- **PR:** PR #390 is updated rather than a new PR opened (maintainer override:
+  base `release/alpha-3`, branch `claude/issue-386-triage-9qb2ii`).

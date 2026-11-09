@@ -4,6 +4,7 @@ import {
   err,
   ok,
   type CertificateCheck,
+  type EngineChoice,
   type EngineSignatureReport,
   type IPdfAnchorLocator,
   type IPdfConverter,
@@ -37,8 +38,8 @@ export const sha256Hex = (input: string) => `hash(${input})`;
 export const CERTIFICATE_CONFIG: SignatureConfig = {
   ...DEFAULT_SIGNATURE_CONFIG,
   method: "certificate",
-  gotenbergUrl: "http://gotenberg",
-  dssUrl: "http://dss",
+  pdfConverter: { source: "external", url: "http://gotenberg" },
+  signatureEngine: { source: "external", url: "http://dss" },
   tsaUrl: "http://tsa",
   csc: { baseUrl: "http://csc/v2", clientId: "wayfinder", clientSecret: "secret" },
 };
@@ -85,17 +86,27 @@ export class FakeProvider implements IRemoteSigningProvider {
 export class FakeEngine implements ISignatureEngine {
   check: CertificateCheck = passedCheck;
   report: EngineSignatureReport = passedReport;
-  prepared: Array<{ signingTime: string; appearance: unknown }> = [];
-  signedWith: Array<{ signingTime: string; appearance: unknown; signatureValue: string }> = [];
-  async prepare(parameters: { signingTime: string; appearance: unknown }) {
+  prepared: Array<{ engine: EngineChoice; signingTime: string; appearance: unknown }> = [];
+  signedWith: Array<{ engine: EngineChoice; signingTime: string; appearance: unknown; signatureValue: string; tsaUrl: string }> =
+    [];
+  validatedWith: EngineChoice[] = [];
+  async prepare(parameters: { engine: EngineChoice; signingTime: string; appearance: unknown }) {
     this.prepared.push(parameters);
     return ok({ dataToSignDigest: "ZGlnZXN0", certificateCheck: this.check });
   }
-  async sign(parameters: { pdf: Buffer; signingTime: string; appearance: unknown; signatureValue: string }) {
+  async sign(parameters: {
+    engine: EngineChoice;
+    pdf: Buffer;
+    signingTime: string;
+    appearance: unknown;
+    signatureValue: string;
+    tsaUrl: string;
+  }) {
     this.signedWith.push(parameters);
     return ok(Buffer.concat([parameters.pdf, Buffer.from("\n%signed")]));
   }
-  async validate(): Promise<Result<EngineSignatureReport[]>> {
+  async validate(engine: EngineChoice): Promise<Result<EngineSignatureReport[]>> {
+    this.validatedWith.push(engine);
     return ok([this.report]);
   }
 }

@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { SIGNATURE_METHODS, parseSignatureConfig, type SignatureMethod } from "@wayfinder/domain";
+import {
+  SIGNATURE_METHODS,
+  parseSignatureConfig,
+  type BuiltInEngineStatus,
+  type EngineChoice,
+  type SignatureMethod,
+} from "@wayfinder/domain";
 import { authenticatedProcedure, technicalAdminProcedure } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
 
@@ -15,10 +21,17 @@ const optionalUrl = z
     return trimmed.length > 0 ? trimmed : null;
   });
 
+// An External choice may arrive with a blank URL; the domain's validation turns
+// that into a message the admin can act on, rather than a schema error.
+const engineChoice = z.discriminatedUnion("source", [
+  z.object({ source: z.literal("built-in") }),
+  z.object({ source: z.literal("external"), url: z.string().trim().max(500) }),
+]);
+
 export const signatureConfigInputSchema = z.object({
   method: z.enum(SIGNATURE_METHODS as [SignatureMethod, ...SignatureMethod[]]),
-  gotenbergUrl: optionalUrl,
-  dssUrl: optionalUrl,
+  pdfConverter: engineChoice,
+  signatureEngine: engineChoice,
   tsaUrl: optionalUrl,
   csc: z
     .object({
@@ -29,11 +42,17 @@ export const signatureConfigInputSchema = z.object({
     .nullable(),
 });
 
+// Whether a flow author's "Convert to PDF on signing" switch has a converter to
+// use: an external one always counts; the built-in one only on an image that
+// carries LibreOffice (ADR-069 §3).
+export const pdfConverterAvailable = (choice: EngineChoice, builtInStatus: BuiltInEngineStatus): boolean =>
+  choice.source === "external" || builtInStatus !== "unavailable";
+
 export const signatureSettingsProcedures = {
   getSignature: technicalAdminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.getSignatureConfig.execute();
     if (result.error) throw toTrpcError(result.error);
-    return result.data;
+    return { ...result.data, builtInStatus: ctx.container.services.builtInEngines.status() };
   }),
 
   // Runs the probes against the form's values without saving them.
@@ -62,6 +81,7 @@ export const signatureSettingsProcedures = {
   // forced on, and whether a converter exists for it to use. No URLs.
   getSignatureCapabilities: authenticatedProcedure.query(async ({ ctx }) => {
     const config = await ctx.container.runtimeConfig.getSignatureConfig();
-    return { method: config.method, pdfConverterConfigured: config.gotenbergUrl !== null };
+    const builtInStatus = ctx.container.services.builtInEngines.status().pdfConverter;
+    return { method: config.method, pdfConverterConfigured: pdfConverterAvailable(config.pdfConverter, builtInStatus) };
   }),
 };

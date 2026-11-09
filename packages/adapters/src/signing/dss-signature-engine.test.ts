@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { SigningParameters } from "@wayfinder/domain";
+import { domainError, err, ok, type SigningParameters } from "@wayfinder/domain";
 import { DssSignatureEngine } from "./dss-signature-engine";
 
 const parameters: SigningParameters = {
-  engineUrl: "http://dss:8080/",
+  engine: { source: "external", url: "http://dss:8080/" },
   pdf: Buffer.from("%PDF-1.7 doc"),
   certificateChain: ["c2lnbmVy", "cm9vdA=="],
   signingTime: "2026-11-08T10:00:00.000Z",
@@ -67,7 +67,7 @@ describe("DssSignatureEngine", () => {
     };
     const { fetchFn } = capture(() => Response.json({ signatures: [reportEntry] }));
 
-    const result = await new DssSignatureEngine(fetchFn).validate("http://dss:8080", Buffer.from("%PDF"));
+    const result = await new DssSignatureEngine(fetchFn).validate({ source: "external", url: "http://dss:8080" }, Buffer.from("%PDF"));
 
     expect(result.data).toEqual([
       {
@@ -97,8 +97,35 @@ describe("DssSignatureEngine", () => {
       throw new TypeError("fetch failed");
     }) as unknown as typeof fetch;
 
-    const result = await new DssSignatureEngine(fetchFn).validate("http://dss:8080", Buffer.from("%PDF"));
+    const result = await new DssSignatureEngine(fetchFn).validate({ source: "external", url: "http://dss:8080" }, Buffer.from("%PDF"));
 
     expect(result.error?.message).toBe("The signature engine is unreachable.");
+  });
+
+  it("sends built-in requests to the engine the supervisor started", async () => {
+    const { fetchFn, calls } = capture(() => Response.json({ signatures: [] }));
+    const builtIn = { ensureRunning: async () => ok("http://127.0.0.1:40000") };
+
+    await new DssSignatureEngine(fetchFn, 1_000, builtIn).validate({ source: "built-in" }, Buffer.from("%PDF"));
+
+    expect(calls[0]!.url).toBe("http://127.0.0.1:40000/validate");
+  });
+
+  it("fails closed when the built-in engine cannot be started, without calling anything", async () => {
+    const { fetchFn, calls } = capture(() => Response.json({}));
+    const builtIn = { ensureRunning: async () => err(domainError("INFRA_FAILURE", "did not start")) };
+
+    const result = await new DssSignatureEngine(fetchFn, 1_000, builtIn).prepare({ ...parameters, engine: { source: "built-in" } });
+
+    expect(result.error?.message).toBe("did not start");
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses a built-in request when no built-in engine is wired, as on the Lambda topology", async () => {
+    const { fetchFn } = capture(() => Response.json({}));
+
+    const result = await new DssSignatureEngine(fetchFn).validate({ source: "built-in" }, Buffer.from("%PDF"));
+
+    expect(result.error?.code).toBe("INFRA_FAILURE");
   });
 });

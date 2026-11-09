@@ -24,7 +24,7 @@ export const seedSigningSession = async (
 ): Promise<{ sessionId: string }> => {
   const saved = await container.repos.systemSettings.set(
     SIGNATURE_CONFIG_SETTING_KEY,
-    JSON.stringify({ ...DEFAULT_SIGNATURE_CONFIG, gotenbergUrl: MOCK_GOTENBERG_URL }),
+    JSON.stringify({ ...DEFAULT_SIGNATURE_CONFIG, pdfConverter: { source: "external", url: MOCK_GOTENBERG_URL } }),
   );
   if (saved.error) throw new Error(`seed signature config: ${saved.error.message}`);
   container.runtimeConfig.invalidateSignature();

@@ -1,6 +1,6 @@
 # ADR-069 — Built-in Signing Engines and Image Variants
 
-- **Status**: Proposed (scoped by `built-in-signing-engines.prd.md`)
+- **Status**: Accepted (scoped by `built-in-signing-engines.prd.md`; as built v0.41.5)
 - **Date**: 2026-11-09
 - **Builds on**: ADR-001 (hexagonal architecture), ADR-046 (container image
   distribution), ADR-067 (signature methods and signing engine), ADR-068 (frozen
@@ -142,3 +142,32 @@ UI can add a trust anchor.
   attestation-only installs would pay for a JVM they never use. Rejected in favour
   of on-demand start.
 - **An internal TSA.** Rejected (§4).
+
+## As built (v0.41.5)
+
+- **Port shape.** `ISignatureEngine` takes the engine *choice*
+  (`EngineChoice`) rather than a URL, because a built-in engine's address only
+  exists once the supervisor has started it. `DssSignatureEngine` resolves the
+  choice (external URL, or `EngineSupervisor.ensureRunning()`); the use cases
+  pass `config.signatureEngine` and `resolveTsaUrl(config)`.
+- **Supervisor.** `packages/adapters/src/signing/engine-supervisor.ts`, with its
+  process, port, health check, clock and timers injected; all ADR §1 behaviour
+  (one JVM for concurrent first requests, crash restart, three failed starts in
+  five minutes, idle stop) is unit-tested against fakes. The real wiring is
+  `createBuiltInEngines()` in `built-in-engines.ts`, which hands the JVM an
+  allowlisted environment only (no database URL or model keys).
+- **Loopback.** The DSS server gained `BIND_ADDRESS` (default `0.0.0.0`, so the
+  sidecar is unchanged); the built-in engine sets `127.0.0.1`.
+- **Converter routing.** `RoutingPdfConverter` reads the choice per call, so
+  switching between Built-in and External needs no restart.
+- **Probes.** A built-in converter is tested by converting a one-line document;
+  a built-in engine by starting it and calling `/health`. A built-in converter
+  is only probed under the certificate method, so saving attestation or drawn
+  never starts LibreOffice and never fails on `-slim`.
+- **Image.** `jlink` modules are `jdeps --print-module-deps` on the jar plus
+  `jdk.crypto.ec`; the trimmed runtime is about 60 MB. `.dockerignore` now lets
+  `deploy/dss` (minus `target/`) into the build context; the Lambda target stays
+  out.
+- **CI.** The image job builds, scans and sizes both targets and checks `-slim`
+  carries neither engine; the DSS job runs `deploy/dss/smoke-built-in.sh` inside
+  the default image against the mocks.
