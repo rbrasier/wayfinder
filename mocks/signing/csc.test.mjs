@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { createHash, createVerify, X509Certificate } from "node:crypto";
 import { json, request, response } from "../test-support/http.mjs";
 import { createTestAuthority } from "./test-ca.mjs";
@@ -7,6 +7,10 @@ import { createCscMock, createRevocationMock } from "./csc.mjs";
 const authorityPromise = createTestAuthority("http://localhost:4001");
 const mock = createCscMock(authorityPromise, "http://localhost:4001");
 const REDIRECT = "http://localhost:3000/api/signing/csc/callback";
+
+// Generating the test CA's RSA keys takes several seconds on a busy CI runner;
+// pay for it once here so no single test's timeout has to absorb it.
+beforeAll(() => authorityPromise, 60_000);
 
 const call = async (method, url, body = null, headers = {}) => {
   const res = response();
