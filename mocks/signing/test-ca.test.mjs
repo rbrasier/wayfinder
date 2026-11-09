@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createHash, createVerify, X509Certificate } from "node:crypto";
 import { createTestAuthority, signDigest } from "./test-ca.mjs";
+import * as x509 from "@peculiar/x509";
 
 const authority = await createTestAuthority("http://localhost:4001");
 
@@ -25,6 +26,15 @@ describe("the mock test CA", () => {
     const crl = await authority.currentCrl();
 
     expect(crl.includes(Buffer.from(revoked, "hex"))).toBe(true);
+  });
+
+  it("never dates a CRL before the moment it was asked for, despite whole-second CRL dates", async () => {
+    const askedAt = new Date();
+
+    const crl = new x509.X509Crl(await authority.currentCrl());
+
+    expect(crl.thisUpdate.getTime()).toBeGreaterThanOrEqual(askedAt.getTime());
+    expect(crl.thisUpdate.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it("produces a PKCS#1 signature over a digest that verifies as SHA-256 with RSA", () => {

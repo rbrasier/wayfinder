@@ -129,13 +129,19 @@ export const createTestAuthority = async (publicBaseUrl) => {
 
   const revoked = signers.find((signer) => signer.id === "revoked");
   // Issued fresh on every fetch, like a real CA's CRL. A validator adding
-  // long-term validation data for a later signature needs revocation data newer
-  // than that signature; a single CRL fixed at startup would leave every
-  // signature after the first stuck below B-LT.
+  // long-term validation data for a signature needs revocation data newer than
+  // its timestamp; a single CRL fixed at startup would leave every signature
+  // after the first stuck below B-LT. CRL dates hold whole seconds only, so a
+  // CRL issued in the same second as a timestamp would read as older than it:
+  // wait for the next whole second and date the CRL then.
   const currentCrl = async () => {
+    const thisUpdate = Math.ceil(Date.now() / 1000) * 1000;
+    while (Date.now() < thisUpdate) {
+      await new Promise((resolve) => setTimeout(resolve, thisUpdate - Date.now()));
+    }
     const crl = await x509.X509CrlGenerator.create({
       issuer: roots.trusted.certificate.subject,
-      thisUpdate: new Date(),
+      thisUpdate: new Date(thisUpdate),
       nextUpdate: new Date(Date.now() + 7 * DAY),
       signingAlgorithm: SIGNING_ALGORITHM,
       signingKey: roots.trusted.keys.privateKey,
