@@ -268,6 +268,16 @@ else
   fail "a lockfile resolves a vulnerable version — run 'node --test scripts/lockfile-advisories.test.mjs'"
 fi
 
+# ── 11f. e2e Playwright supports the CI runner OS ────────────────────────────
+# ubuntu-latest is Ubuntu 26.04; Playwright below 1.62 cannot install browsers
+# there, so every e2e job would fail before running a spec.
+section "11f. e2e Playwright supports the CI runner OS"
+if node --test scripts/e2e-playwright-platform.test.mjs > /dev/null 2>&1; then
+  pass "e2e lockfile resolves a Playwright with Ubuntu 26.04 support"
+else
+  fail "e2e Playwright too old for the CI runner — run 'node --test scripts/e2e-playwright-platform.test.mjs'"
+fi
+
 # ── 12. test files exist in domain and application ────────────────────────────
 section "12. domain and application packages have tests"
 DOMAIN_TESTS=$(find packages/domain/src -name "*.test.ts" 2>/dev/null | wc -l | tr -d ' ')
