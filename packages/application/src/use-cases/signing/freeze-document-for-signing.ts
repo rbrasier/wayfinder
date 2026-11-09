@@ -84,3 +84,25 @@ export const freezeDocumentForSigning = async (
   if (updated.error) return updated;
   return ok({ messageId: subject.messageId, document, pdf: converted.data });
 };
+
+// A document stays frozen only once it carries a signature. A first attempt
+// that is refused — a revoked certificate, a provider that is down — would
+// otherwise leave the document locked with nothing signed on it.
+export const releaseUnsignedFreeze = async (
+  deps: CertificateSigningDeps,
+  sessionId: string,
+  subjectNodeId: string,
+): Promise<void> => {
+  const subject = await loadSubjectDocument(deps, sessionId, subjectNodeId);
+  if (subject?.document.pdf?.status !== "frozen") return;
+  const approvals = await deps.approvals.listBySession(sessionId);
+  if (approvals.error) return;
+  const signed = approvals.data.some(
+    (approval) =>
+      approval.digitalSignature?.status === "signed" &&
+      approval.recordSnapshot?.["subjectNodeId"] === subjectNodeId,
+  );
+  if (signed) return;
+  const { pdf: _frozen, ...unfrozen } = subject.document;
+  await deps.sessionMessages.updateDocument(subject.messageId, unfrozen);
+};

@@ -224,12 +224,17 @@ final class Engine {
 
     SignatureImageParameters image = new SignatureImageParameters();
     image.setFieldParameters(field);
+    // Opaque, so the appearance covers the slot marker it is placed over.
+    image.setBackgroundColor(java.awt.Color.WHITE);
     String png = appearance.path("imagePng").asText("");
     if (!png.isEmpty()) image.setImage(new InMemoryDocument(DECODE.decode(png)));
     String text = appearance.path("text").asText("");
     if (!text.isEmpty()) {
       SignatureImageTextParameters textParameters = new SignatureImageTextParameters();
       textParameters.setText(text);
+      // Under the drawing rather than beside it, so a narrow slot keeps both.
+      textParameters.setSignerTextPosition(eu.europa.esig.dss.enumerations.SignerTextPosition.BOTTOM);
+      textParameters.setBackgroundColor(java.awt.Color.WHITE);
       image.setTextParameters(textParameters);
     }
     return image;

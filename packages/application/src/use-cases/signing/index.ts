@@ -9,3 +9,5 @@ export * from "./freeze-document-for-signing";
 export * from "./start-certificate-signing";
 export * from "./complete-certificate-signing";
 export * from "./signing-slot";
+export * from "./off-system-signed-evidence";
+export * from "./session-signatures";

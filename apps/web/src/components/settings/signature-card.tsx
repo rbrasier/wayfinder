@@ -216,12 +216,15 @@ export function SignatureCard({ connectivity }: { connectivity: ConnectivityCont
       </CardContent>
 
       <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && setOpen(false)}>
-        <DialogContent className="max-w-xl">
+        {/* Capped to the screen with only the body scrolling: the certificate
+            fields push the form past a laptop screen, and the Test and Save
+            buttons must stay reachable. */}
+        <DialogContent className="flex max-h-[90vh] max-w-xl flex-col">
           <DialogHeader>
             <DialogTitle>PDF signatures</DialogTitle>
             <DialogCloseButton />
           </DialogHeader>
-          <DialogBody className="space-y-5">
+          <DialogBody className="min-h-0 flex-1 space-y-5 overflow-y-auto">
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Signature method</legend>
               {METHOD_OPTIONS.map((option) => (

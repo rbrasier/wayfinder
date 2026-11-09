@@ -8,6 +8,7 @@ import type { DocumentGenerationConfidence, SessionDocument } from "@wayfinder/d
 import { DocumentInfoModal } from "./document-info-modal";
 import { DocumentEditDialog } from "./document-edit-dialog";
 import { DocumentEditHistoryModal } from "./document-edit-history-modal";
+import { SignaturesPanel } from "@/components/signatures/signatures-panel";
 
 interface DocumentCardProps {
   messageId: string;
@@ -17,6 +18,8 @@ interface DocumentCardProps {
   canEdit?: boolean;
   onEdited?: () => void;
   onRegenerate?: (messageId: string) => void;
+  // Set where the card can show the signatures panel for its session.
+  sessionId?: string;
 }
 
 export function DocumentCard({
@@ -26,6 +29,7 @@ export function DocumentCard({
   canEdit = false,
   onEdited,
   onRegenerate,
+  sessionId,
 }: DocumentCardProps) {
   const [isUnavailable, setIsUnavailable] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -147,6 +151,7 @@ export function DocumentCard({
             </>
           )}
         </div>
+        {sessionId && document.pdf?.status === "frozen" && <SignaturesPanel sessionId={sessionId} />}
       </div>
 
       {canEdit && (

@@ -9,7 +9,7 @@ import {
   type Result,
 } from "@wayfinder/domain";
 import { DecideApproval } from "./decide-approval";
-import { RecordOffSystemApproval } from "./record-off-system-approval";
+import { RecordOffSystemApproval, type SignedEvidencePolicy } from "./record-off-system-approval";
 import {
   InMemoryApprovals,
   InMemoryFlowEdges,
@@ -65,6 +65,7 @@ describe("RecordOffSystemApproval", () => {
   const build = async (options: {
     approval?: Partial<NewApproval>;
     allowOffSystemApproval?: boolean;
+    signedEvidence?: SignedEvidencePolicy;
   } = {}) => {
     const approvals = new InMemoryApprovals();
     const created = await approvals.create({
@@ -119,9 +120,16 @@ describe("RecordOffSystemApproval", () => {
       flowNodes,
       sha256Hex,
     );
-    const sut = new RecordOffSystemApproval(approvals, sessions, flowNodes, storage, audit, decide, {
-      now: () => today,
-    });
+    const sut = new RecordOffSystemApproval(
+      approvals,
+      sessions,
+      flowNodes,
+      storage,
+      audit,
+      decide,
+      { now: () => today },
+      options.signedEvidence,
+    );
 
     return { approval, approvals, audit, storage, sut };
   };
@@ -281,5 +289,47 @@ describe("RecordOffSystemApproval", () => {
     expect(approvals.rows.get(approval.id)!.comment).toBe(
       "Signed at the delegation committee.",
     );
+  });
+
+  describe("on a step signed with digital certificates", () => {
+    const signedRecord = {
+      status: "signed" as const,
+      method: "off_system" as const,
+      validation: { badge: "valid" as const, reason: null, checkedAt: "2026-08-20T14:00:00.000Z" },
+    };
+
+    it("refuses evidence the signed-evidence policy rejects, filing nothing", async () => {
+      const policy: SignedEvidencePolicy = {
+        check: async () => err(domainError("VALIDATION_FAILED", "The signing certificate has been revoked.")),
+        adopt: async () => ok(undefined),
+      };
+      const { approval, approvals, storage, sut } = await build({ signedEvidence: policy });
+
+      const result = await sut.execute(validInput(approval.id));
+
+      expect(result.error?.message).toBe("The signing certificate has been revoked.");
+      expect(approvals.rows.get(approval.id)!.status).toBe("pending");
+      expect(storage.objects.size).toBe(0);
+    });
+
+    it("records the signature with the decision and adopts the PDF as the signed record", async () => {
+      const adopted: string[] = [];
+      const policy: SignedEvidencePolicy = {
+        check: async () => ok({ required: true, record: signedRecord, messageId: "msg-1", document: {} }),
+        adopt: async (_accepted, storagePath) => {
+          adopted.push(storagePath);
+          return ok(undefined);
+        },
+      };
+      const { approval, approvals, sut } = await build({ signedEvidence: policy });
+
+      await sut.execute(validInput(approval.id));
+
+      const row = approvals.rows.get(approval.id)!;
+      expect(row.status).toBe("approved");
+      expect(row.digitalSignature).toMatchObject({ status: "signed", method: "off_system" });
+      expect(row.digitalSignature!.pdfStoragePath).toBe(row.offSystemEvidenceStoragePath);
+      expect(adopted).toEqual([row.offSystemEvidenceStoragePath]);
+    });
   });
 });

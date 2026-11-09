@@ -1,208 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
-import {
-  DEFAULT_SIGNATURE_CONFIG,
-  domainError,
-  err,
-  ok,
-  type CertificateCheck,
-  type EngineSignatureReport,
-  type IPdfAnchorLocator,
-  type IPdfConverter,
-  type IRemoteSigningProvider,
-  type ISignatureEngine,
-  type Result,
-  type SignatureConfig,
-} from "@wayfinder/domain";
-import {
-  InMemoryApprovals,
-  InMemoryFlowNodes,
-  InMemoryMessages,
-  InMemoryStepOutputs,
-  InMemoryUsers,
-  RecordingAuditLogger,
-  approvalNode,
-  user,
-} from "../approvals/__fixtures__/approval-doubles";
-import { InMemoryObjectStorage } from "../__fixtures__/presentation-doubles";
-import { ResolveApprovalSubject } from "../approvals/resolve-approval-subject";
-import type { DecideApprovalInput } from "../approvals/decide-approval";
+import { DEFAULT_SIGNATURE_CONFIG } from "@wayfinder/domain";
 import { StartCertificateSigning } from "./start-certificate-signing";
 import { CompleteCertificateSigning } from "./complete-certificate-signing";
-import type { CertificateSigningDeps } from "./certificate-signing-deps";
-
-const sha256Hex = (input: string) => createHash("sha256").update(input, "utf8").digest("hex");
-
-const CERTIFICATE_CONFIG: SignatureConfig = {
-  ...DEFAULT_SIGNATURE_CONFIG,
-  method: "certificate",
-  gotenbergUrl: "http://gotenberg",
-  dssUrl: "http://dss",
-  tsaUrl: "http://tsa",
-  csc: { baseUrl: "http://csc/v2", clientId: "wayfinder", clientSecret: "secret" },
-};
-
-const passedCheck: CertificateCheck = {
-  keyUsageAllowsSigning: true,
-  validNow: true,
-  revoked: false,
-  indication: "PASSED",
-  subIndication: null,
-};
-
-const passedReport: EngineSignatureReport = {
-  id: "S-1",
-  indication: "TOTAL_PASSED",
-  subIndication: null,
-  signedBy: "Jane Doe",
-  signingTime: "2026-11-08T10:00:00Z",
-  level: "PAdES_BASELINE_LTA",
-  timestampTimes: ["2026-11-08T10:00:01Z"],
-  certificate: { subject: "CN=Jane Doe", issuer: "CN=Root", serialNumber: "4096", notAfter: "2027-11-08T00:00:00Z", sha256: "ab" },
-};
-
-class FakeProvider implements IRemoteSigningProvider {
-  readonly signed: string[] = [];
-  async authorizationUrl(_config: unknown, request: { scope: string; state: string; hash?: string }) {
-    return ok(`http://csc/authorize?scope=${request.scope}&state=${encodeURIComponent(request.state)}&hash=${request.hash ?? ""}`);
-  }
-  async exchangeCode(_config: unknown, code: string) {
-    return code === "bad" ? err(domainError("INFRA_FAILURE", "The signing provider refused: invalid_grant")) : ok(`token-${code}`);
-  }
-  async firstCredential() {
-    return ok("valid");
-  }
-  async certificateChain() {
-    return ok(["c2lnbmVy", "cm9vdA=="]);
-  }
-  async signHash(_config: unknown, _token: string, _credential: string, hash: string) {
-    this.signed.push(hash);
-    return ok("c2lnbmF0dXJl");
-  }
-}
-
-class FakeEngine implements ISignatureEngine {
-  check: CertificateCheck = passedCheck;
-  report: EngineSignatureReport = passedReport;
-  prepared: Array<{ signingTime: string; appearance: unknown }> = [];
-  signedWith: Array<{ signingTime: string; appearance: unknown; signatureValue: string }> = [];
-  async prepare(parameters: { signingTime: string; appearance: unknown }) {
-    this.prepared.push(parameters);
-    return ok({ dataToSignDigest: "ZGlnZXN0", certificateCheck: this.check });
-  }
-  async sign(parameters: { pdf: Buffer; signingTime: string; appearance: unknown; signatureValue: string }) {
-    this.signedWith.push(parameters);
-    return ok(Buffer.concat([parameters.pdf, Buffer.from("\n%signed")]));
-  }
-  async validate(): Promise<Result<EngineSignatureReport[]>> {
-    return ok([this.report]);
-  }
-}
-
-const converter: IPdfConverter = { convertDocxToPdfA: async () => ok(Buffer.from("%PDF-frozen")) };
-const locator: IPdfAnchorLocator = {
-  locate: async (_pdf, markers) =>
-    ok(Object.fromEntries(markers.map((marker) => [marker, { page: 1, x: 72, y: 500, width: 100, height: 12 }]))),
-};
-
-const seed = async () => {
-  const approvals = new InMemoryApprovals();
-  const nodes = new InMemoryFlowNodes();
-  nodes.add(approvalNode({ id: "node-appr", config: { approverSource: "first_level_supervisor", signatureFieldKey: "delegate_signature" } }));
-  nodes.add(
-    approvalNode({
-      id: "node-draft",
-      type: "conversational",
-      name: "Prepare instrument",
-      config: {
-        outputType: "generate_document",
-        documentTemplatePath: "templates/instrument.docx",
-        documentTemplateFields: [
-          { key: "delegate_signature", label: "Delegate Signature", type: "signature", optional: true, raw: "x" },
-        ],
-      },
-    }),
-  );
-  const messages = new InMemoryMessages();
-  await messages.create({
-    sessionId: "session-1",
-    role: "assistant",
-    content: "Generated",
-    stepNodeId: "node-draft",
-    document: { filename: "instrument.docx", storagePath: "generated/session-1/instrument.docx", summary: null, generatedAt: "2026-11-08T09:00:00Z" },
-  });
-  const storage = new InMemoryObjectStorage();
-  await storage.put("templates/instrument.docx", Buffer.from("template"), "application/octet-stream");
-  const users = new InMemoryUsers();
-  users.add({ ...user("manager-1", "manager@corp.test"), name: "Jane Doe" });
-  const created = await approvals.create({
-    sessionId: "session-1",
-    flowId: "flow-1",
-    nodeId: "node-appr",
-    requestedByUserId: "operator-1",
-    approverSource: "first_level_supervisor",
-    approverUserId: "manager-1",
-    recordSnapshot: { subjectNodeId: "node-draft", subjectDescription: "The instrument" },
-  });
-
-  const provider = new FakeProvider();
-  const engine = new FakeEngine();
-  const decisions: DecideApprovalInput[] = [];
-  const audit = new RecordingAuditLogger();
-  let config = CERTIFICATE_CONFIG;
-  let tokenCounter = 0;
-  const stepOutputs = new InMemoryStepOutputs();
-
-  const deps: CertificateSigningDeps = {
-    approvals,
-    flowNodes: nodes,
-    sessionMessages: messages,
-    sessionStepOutputs: stepOutputs,
-    objectStorage: storage,
-    users,
-    documentGenerator: {
-      extractTags: () => ok({ tags: [] }),
-      extractFields: () => ok({ fields: [] }),
-      extractFullText: () => ok({ text: "" }),
-      annotate: () => ok({ bytes: Buffer.alloc(0), appliedCount: 0, unmatched: [] }),
-      generate: (input) => ok({ bytes: Buffer.from(JSON.stringify(input.data)) }),
-    },
-    drawnSignatures: { findByUserId: async () => ok(null), save: async () => ok(undefined) },
-    loadSignatureConfig: async () => config,
-    provider,
-    engine,
-    pdfConverter: converter,
-    anchorLocator: locator,
-    resolveSubject: new ResolveApprovalSubject(approvals, nodes, stepOutputs, messages),
-    decide: {
-      execute: async (input: DecideApprovalInput) => {
-        decisions.push(input);
-        await approvals.update(input.approvalId, { status: "approved", digitalSignature: input.digitalSignature });
-        return ok({ approval: approvals.rows.get(input.approvalId)!, advanced: true, newNodeId: null, sessionCompleted: false });
-      },
-    },
-    auditLogger: audit,
-    randomToken: () => `random-${(tokenCounter += 1)}`,
-    sha256Hex,
-    hashBytes: (bytes: Buffer) => `sha-${bytes.length}`,
-    now: () => new Date("2026-11-08T10:00:00.000Z"),
-  };
-
-  return {
-    deps,
-    approvals,
-    messages,
-    storage,
-    provider,
-    engine,
-    decisions,
-    audit,
-    approvalId: created.data!.id,
-    setConfig: (next: SignatureConfig) => {
-      config = next;
-    },
-  };
-};
+import { passedCheck, passedReport, seed, sha256Hex } from "./__fixtures__/certificate-signing-doubles";
 
 const REDIRECT = "http://app/api/signing/csc/callback";
 
@@ -313,7 +113,8 @@ describe("CompleteCertificateSigning — service leg", () => {
     expect(document.pdf!.slotAnchors).toEqual({ delegate_signature: { page: 1, x: 72, y: 500 } });
     expect(context.engine.prepared[0]).toMatchObject({
       signingTime: "2026-11-08T10:00:00.000Z",
-      appearance: { page: 1, x: 72, y: 500 },
+      // Lifted a few points so the opaque box covers the marker's ascenders.
+      appearance: { page: 1, x: 72, y: 497 },
     });
     const pending = context.approvals.rows.get(context.approvalId)!.digitalSignature!.pending!;
     expect(pending).toMatchObject({ stage: "credential", credentialId: "valid", dataToSignDigest: "ZGlnZXN0" });
@@ -337,6 +138,22 @@ describe("CompleteCertificateSigning — service leg", () => {
     expect(approval.status).toBe("pending");
     expect(approval.digitalSignature).toMatchObject({ status: "rejected", rejection: { reason: "revoked" } });
     expect(context.audit.entries.map((entry) => entry.action)).toContain("signature.rejected");
+  });
+
+  it("releases the freeze when the first signature is refused, so the document stays editable", async () => {
+    const context = await seed();
+    context.engine.check = { ...passedCheck, revoked: true, indication: "INDETERMINATE", subIndication: "REVOKED_NO_POE" };
+    const state = await startAndReturnState(context);
+
+    await new CompleteCertificateSigning(context.deps).execute({
+      state,
+      code: "service-code",
+      userId: "manager-1",
+      impersonatorId: null,
+      redirectUri: REDIRECT,
+    });
+
+    expect(context.messages.rows[0]!.document!.pdf).toBeUndefined();
   });
 
   it("fails closed when the provider cannot be reached, leaving the approval pending", async () => {
@@ -438,6 +255,34 @@ describe("CompleteCertificateSigning — credential leg", () => {
     expect(pdf.storagePath).toBe("generated/session-1/instrument-signed-r1.pdf");
     expect(context.storage.objects.get(pdf.storagePath!)!.data.toString()).toContain("%signed");
     expect(context.audit.entries.map((entry) => entry.action)).toContain("signature.signed");
+  });
+
+  it("keeps the freeze when a later signer is refused, because earlier signatures depend on it", async () => {
+    const context = await seed();
+    await context.approvals.create({
+      sessionId: "session-1",
+      flowId: "flow-1",
+      nodeId: "node-earlier",
+      requestedByUserId: "operator-1",
+      approverSource: "first_level_supervisor",
+      approverUserId: "someone",
+      status: "approved",
+      recordSnapshot: { subjectNodeId: "node-draft" },
+    });
+    const earlier = [...context.approvals.rows.values()].find((row) => row.nodeId === "node-earlier")!;
+    await context.approvals.update(earlier.id, { digitalSignature: { status: "signed", method: "certificate" } });
+    const state = await throughServiceLeg(context);
+    context.engine.report = { ...passedReport, indication: "INDETERMINATE", subIndication: "NO_CERTIFICATE_CHAIN_FOUND" };
+
+    await new CompleteCertificateSigning(context.deps).execute({
+      state,
+      code: "credential-code",
+      userId: "manager-1",
+      impersonatorId: null,
+      redirectUri: REDIRECT,
+    });
+
+    expect(context.messages.rows[0]!.document!.pdf?.status).toBe("frozen");
   });
 
   it("refuses a signature the engine does not validate, and records no decision", async () => {

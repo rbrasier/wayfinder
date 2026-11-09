@@ -779,7 +779,7 @@ const build = () => {
       ...skillsAndMcp.useCases,
       ...automation.useCases,
       ...signing.useCases,
-      ...buildCertificateSigning({ approvals, flowNodes, sessionMessages, sessionStepOutputs, objectStorage, users, documentGenerator, auditLogger, drawnSignatures: signing.drawnSignatures, loadSignatureConfig: () => runtimeConfig.getSignatureConfig(), pdfConverter: signing.pdfConverter, resolveSubject: approvalUseCases.resolveApprovalSubject, decide: approvalUseCases.decideApproval }),
+      ...buildCertificateSigning({ approvals, flowNodes, sessionMessages, sessionStepOutputs, objectStorage, users, documentGenerator, auditLogger, drawnSignatures: signing.drawnSignatures, loadSignatureConfig: () => runtimeConfig.getSignatureConfig(), pdfConverter: signing.pdfConverter, resolveSubject: approvalUseCases.resolveApprovalSubject, decide: approvalUseCases.decideApproval, decideApproval: approvalUseCases.decideApproval, sessions, clock }),
       ...buildPresentationUseCases({ systemSettings, objectStorage, auditLogger, auditQuery, loadLoginNotice: () => runtimeConfig.getLoginNoticeConfig() }),
     },
   };

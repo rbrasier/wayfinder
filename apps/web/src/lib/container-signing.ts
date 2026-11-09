@@ -1,6 +1,11 @@
 import { randomBytes } from "node:crypto";
 import {
   CompleteCertificateSigning,
+  ExportSignatureMetadata,
+  ListSessionSignatures,
+  OffSystemSignedEvidence,
+  RecordOffSystemApproval,
+  RevalidateSessionSignatures,
   GetDrawnSignature,
   GetSignatureConfig,
   SaveDrawnSignature,
@@ -11,6 +16,7 @@ import {
 } from "@wayfinder/application";
 import {
   CscRemoteSigningAdapter,
+  CsvWriter,
   DrizzleDrawnSignatureRepository,
   DssSignatureEngine,
   GotenbergPdfConverter,
@@ -21,6 +27,8 @@ import {
 } from "@wayfinder/adapters";
 import type { Database } from "@wayfinder/adapters";
 import type {
+  IClock,
+  ISessionRepository,
   IAuditLogger,
   IObjectStorage,
   ISystemSettingsRepository,
@@ -75,7 +83,17 @@ export type CertificateSigningWiring = Omit<
   "provider" | "engine" | "anchorLocator" | "randomToken" | "sha256Hex" | "hashBytes" | "now"
 >;
 
-export const buildCertificateSigning = (wiring: CertificateSigningWiring) => {
+// Off-system approvals on a certificate step must carry a validly signed PDF
+// (ADR-068 §5), so the recorder is rebuilt here with that check and replaces the
+// one the approval cluster built — the spread order in container.ts is what
+// makes this one win.
+export interface OffSystemWiring {
+  sessions: ISessionRepository;
+  clock: IClock;
+  decideApproval: ConstructorParameters<typeof RecordOffSystemApproval>[5];
+}
+
+export const buildCertificateSigning = (wiring: CertificateSigningWiring & OffSystemWiring) => {
   const deps: CertificateSigningDeps = {
     ...wiring,
     provider: new CscRemoteSigningAdapter(),
@@ -89,5 +107,18 @@ export const buildCertificateSigning = (wiring: CertificateSigningWiring) => {
   return {
     startCertificateSigning: new StartCertificateSigning(deps),
     completeCertificateSigning: new CompleteCertificateSigning(deps),
+    listSessionSignatures: new ListSessionSignatures(deps),
+    revalidateSessionSignatures: new RevalidateSessionSignatures(deps),
+    exportSignatureMetadata: new ExportSignatureMetadata(deps, new CsvWriter()),
+    recordOffSystemApproval: new RecordOffSystemApproval(
+      wiring.approvals,
+      wiring.sessions,
+      wiring.flowNodes,
+      wiring.objectStorage,
+      wiring.auditLogger,
+      wiring.decideApproval,
+      wiring.clock,
+      new OffSystemSignedEvidence(deps),
+    ),
   };
 };

@@ -82,6 +82,10 @@ This starts:
 
 Wait a few seconds for Postgres to be healthy before continuing.
 
+Document signatures add two opt-in profiles — `pdf` (Gotenberg) and `signing`
+(the DSS sidecar) — started with `docker compose --profile pdf --profile signing up -d`.
+See [document-signatures.md](document-signatures.md).
+
 ---
 
 ## 5. Start the development servers

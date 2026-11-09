@@ -22,7 +22,7 @@ import {
   signingState,
   type CertificateSigningDeps,
 } from "./certificate-signing-deps";
-import { freezeDocumentForSigning } from "./freeze-document-for-signing";
+import { freezeDocumentForSigning, releaseUnsignedFreeze } from "./freeze-document-for-signing";
 
 export interface CompleteCertificateSigningInput {
   state: string;
@@ -37,8 +37,10 @@ export type CertificateSigningOutcome =
   | { outcome: "rejected"; approvalId: string; reason: SignatureFailureReason }
   | { outcome: "signed"; approvalId: string; sessionId: string };
 
-const APPEARANCE_WIDTH = 200;
-const APPEARANCE_HEIGHT = 60;
+const APPEARANCE_WIDTH = 260;
+const APPEARANCE_HEIGHT = 90;
+// Raised slightly so the box's top edge covers the marker's ascenders.
+const APPEARANCE_LIFT = 3;
 
 const reasonFor = (error: DomainError): SignatureFailureReason =>
   error.code === "INFRA_FAILURE" ? "unavailable" : "indeterminate";
@@ -229,7 +231,7 @@ export class CompleteCertificateSigning {
     return {
       page: anchor.page,
       x: anchor.x,
-      y: anchor.y,
+      y: Math.max(0, anchor.y - APPEARANCE_LIFT),
       width: APPEARANCE_WIDTH,
       height: APPEARANCE_HEIGHT,
       imagePng: image && !image.error ? image.data : null,
@@ -247,7 +249,9 @@ export class CompleteCertificateSigning {
     reason: SignatureFailureReason,
     detail: string | null,
   ): Promise<Result<CertificateSigningOutcome>> {
+    const subjectNodeId = approval.digitalSignature?.pending?.subjectNodeId ?? null;
     await rejectSigning(this.deps, approval, reason, actorId, detail);
+    if (subjectNodeId) await releaseUnsignedFreeze(this.deps, approval.sessionId, subjectNodeId);
     return ok({ outcome: "rejected", approvalId: approval.id, reason });
   }
 }

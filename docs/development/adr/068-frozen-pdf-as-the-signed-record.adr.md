@@ -1,6 +1,6 @@
 # ADR-068 — The Frozen PDF Is the Signed Record
 
-- **Status**: Proposed (scoped by `document-signatures.prd.md`)
+- **Status**: Accepted (scoped by `document-signatures.prd.md`; as built v0.41.2–v0.41.4)
 - **Date**: 2026-11-08
 - **Builds on**: ADR-067 (signature methods, engine), ADR-043 (signature slot and
   re-render path), ADR-045 (approver field editing), ADR-055 (off-system approval),
@@ -111,3 +111,21 @@ hash input of the decision's audit entry.
   slots on the page, with the signatures visible only in Acrobat's panel.
 - **Defer conversion to the last approval** — earlier approvers would have nothing
   to sign.
+
+## As built (v0.41.2–v0.41.4)
+
+- **Freezing happens on the provider's return**, in the service leg, once the
+  signer's certificate is known. The approver confirms the signature at their
+  provider; there is no separate in-app preview of the frozen PDF before then.
+- **A slot whose marker cannot be found is signed invisibly** rather than on an
+  appended page: the signature is still in the document and in every
+  validator's panel. Markers are plain ASCII (`WFSLOT_<key>_WF`) so every font
+  renders them and text extraction finds them whole; the appearance is drawn
+  over them.
+- **Off-system evidence on a document not yet frozen becomes its frozen
+  record**, provided it validates and was signed by the nominated approver
+  (matched by common name, or by email in the certificate subject).
+- **Revalidation matches each record to a signature in the current PDF** by
+  certificate fingerprint and signing time. A signed approval with no match in
+  the document as it stands reads `invalid-modified`; an engine that cannot be
+  reached reads `unverifiable`, never the last good result.

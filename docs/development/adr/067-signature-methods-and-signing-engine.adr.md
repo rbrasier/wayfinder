@@ -1,6 +1,6 @@
 # ADR-067 — Signature Methods, the Signing Engine, and the Signing Sidecars
 
-- **Status**: Proposed (scoped by `document-signatures.prd.md`)
+- **Status**: Accepted (scoped by `document-signatures.prd.md`; as built v0.41.2–v0.41.4)
 - **Date**: 2026-11-08
 - **Builds on**: ADR-001 (hexagonal architecture), ADR-030 (sidecar behind a
   domain port), ADR-041 (DB-first config, live Test), ADR-042 §1 (the switch in
@@ -197,3 +197,35 @@ to start with that flag set when `NODE_ENV=production`.
   must cover.
 - **A separate signing reason field** — rejected in favour of the approver's
   comment (§1).
+
+## As built (v0.41.2–v0.41.4)
+
+Where the build departs from the text above, and why:
+
+- **Settings are one JSON row.** `signature_config` in `admin_system_settings`,
+  read through `RuntimeConfigStore` and encrypted at rest as a sensitive key
+  (it carries the CSC client secret) — the pattern every other integration
+  uses, rather than separate `signature.*` keys.
+- **The Test probes candidate values.** `ISignatureServicesProbe` checks the
+  four services against the config about to be saved; the four new
+  `ConnectivityTarget`s reuse it against the saved config for **Test all**.
+  The timestamp authority is probed with a real RFC 3161 request.
+- **The mock-CA guard lives in the sidecar, not the app.** The DSS sidecar is
+  what trusts certificates, so it is what refuses `SIGNING_TRUST_MOCK_CA`
+  unless `DSS_ENVIRONMENT=development`; its image defaults to `production`.
+- **Revocation is CRL-based in the mocks.** `/ocsp/root.crl` serves a CRL
+  issued fresh per request; DSS accepts CRLs for B-LT. No OCSP responder is
+  mocked. A CRL fixed at startup left every signature after the first at B-T.
+- **Later signatures get one more LTA extension.** A second signature whose
+  certificate's revocation data is already in the document stops at B-T; the
+  sidecar extends once more so every signature reaches B-LTA.
+- **Drawings sign approvals only, and only the approver's own.** A rejection or
+  change request carries the attestation text alone; an admin deciding on an
+  approver's behalf, or an off-system nomination, places no drawing.
+- **Nobody signs while impersonated.** Signing refuses when `impersonatorId` is
+  set. This amends ADR-060 §6, which keeps that field for attribution only:
+  signing on someone else's behalf is the one thing an impersonated session
+  must not be able to do, so here it is read for authorisation.
+- **No paid image module.** The drawing is written as inline OOXML
+  (`docx-signature-image.ts`), verified to render in LibreOffice and
+  python-docx.
