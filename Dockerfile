@@ -31,6 +31,10 @@ COPY . .
 # build-time stub hiding in here.
 RUN pnpm build
 
+# deploy/dss is in the build context only for the dss-build stage below; the
+# app image itself carries no deployment target (ADR-056 §2, checked in CI).
+RUN rm -rf deploy
+
 # Air-gapped installs need the embedding model resident in the image rather than
 # fetched on first use, which would be slow at best and impossible behind
 # restricted egress. Off by default because it is a large addition.

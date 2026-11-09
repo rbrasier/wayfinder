@@ -5,7 +5,8 @@
 # test against the mocks server.
 #
 #   docker run --rm --network host -e MOCKS_URL=http://localhost:4001 \
-#     wayfinder:ci bash /app/deploy/dss/smoke-built-in.sh
+#     -v "$PWD/deploy/dss:/smoke/deploy/dss:ro" -v "$PWD/mocks:/smoke/mocks:ro" \
+#     --entrypoint bash wayfinder:ci /smoke/deploy/dss/smoke-built-in.sh
 set -euo pipefail
 
 MOCKS_URL="${MOCKS_URL:-http://localhost:4001}"

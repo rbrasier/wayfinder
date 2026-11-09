@@ -146,11 +146,14 @@ jobs:
           docker run --rm --entrypoint sh wayfinder:ci -c \
             'test -x /usr/bin/soffice && test -x /opt/wayfinder/jre/bin/java && test -f /opt/wayfinder/dss/wayfinder-dss.jar'
 
+      # Measured inside each image: `docker image inspect .Size` mixes
+      # compressed and unpacked layer sizes depending on how an image was
+      # loaded, so the two tags' numbers were not comparable.
       - name: Report image sizes
         run: |
           for tag in ci ci-slim; do
-            SIZE=$(docker image inspect "wayfinder:$tag" --format '{{.Size}}')
-            echo "wayfinder:$tag image size: $((SIZE / 1024 / 1024)) MiB"
+            SIZE=$(docker run --rm --entrypoint sh "wayfinder:$tag" -c 'du -sxm / 2>/dev/null | cut -f1')
+            echo "wayfinder:$tag unpacked size: ${SIZE} MiB"
           done
 
   # Exercises the one deployment artifact CI can run end to end, on the runner
@@ -549,7 +552,10 @@ jobs:
           tags: wayfinder:ci
           cache-from: type=gha
 
+      # The image carries no deploy/ (ADR-056 §2), so the smoke scripts and the
+      # mocks' fixture PDF are mounted in from the checkout.
       - name: Sign, extend and validate with the built-in engines
         run: |
           docker run --rm --network host -e MOCKS_URL=http://localhost:4001 \
-            --entrypoint bash wayfinder:ci /app/deploy/dss/smoke-built-in.sh
+            -v "$PWD/deploy/dss:/smoke/deploy/dss:ro" -v "$PWD/mocks:/smoke/mocks:ro" \
+            --entrypoint bash wayfinder:ci /smoke/deploy/dss/smoke-built-in.sh
