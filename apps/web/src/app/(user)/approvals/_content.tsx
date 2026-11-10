@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Stamp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DecisionModal } from "@/components/approvals/decision-modal";
 import { isDecided } from "@/components/approvals/approval-outcome";
 import { AppHeader } from "@/components/layout/app-header";
+import { SigningResultBanner } from "@/components/signatures/signing-result-banner";
 import {
   ApprovalSubject,
   RequestMessage,
@@ -149,6 +150,9 @@ export function ApprovalsContent() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <AppHeader title="Approvals" />
+      <Suspense fallback={null}>
+        <SigningResultBanner />
+      </Suspense>
 
       <div className="flex shrink-0 gap-1 border-b border-[#e7e3db] px-5">
         {TABS.map(({ key, label }) => (

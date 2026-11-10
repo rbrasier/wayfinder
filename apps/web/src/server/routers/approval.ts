@@ -4,6 +4,7 @@ import type { Container } from "@/lib/container";
 import { continueRunAtNode } from "@/lib/automation/unattended-runs";
 import { authenticatedProcedure, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { signingCallbackUrl } from "@/lib/signing-callback";
 
 // 10 MB of evidence, expressed as the base64 that carries it — a scan or a
 // photographed page fits comfortably, and a payload larger than this is a
@@ -185,6 +186,35 @@ export const approvalRouter = router({
       return result.data;
     }),
 
+  // What the decision UI must collect first — a drawing, a certificate
+  // signature, or nothing (ADR-067 §1). The decide mutation enforces the same.
+  signingRequirement: authenticatedProcedure
+    .input(z.object({ approvalId: z.string().guid() }))
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.getSigningRequirement.execute({
+        approvalId: input.approvalId,
+        userId: ctx.userId,
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
+  // Begins a certificate signature: the approver is sent to their signing
+  // provider, and returns to /api/signing/csc/callback (ADR-067 §4).
+  startCertificateSigning: authenticatedProcedure
+    .input(z.object({ approvalId: z.string().guid(), comment: z.string().max(2000).nullish() }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.startCertificateSigning.execute({
+        approvalId: input.approvalId,
+        userId: ctx.userId,
+        impersonatorId: ctx.impersonatorId,
+        comment: input.comment ?? null,
+        redirectUri: signingCallbackUrl(),
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return result.data;
+    }),
+
   decide: authenticatedProcedure
     .input(
       z.object({
@@ -204,6 +234,7 @@ export const approvalRouter = router({
         comment: input.comment ?? null,
         routeBack: input.routeBack,
         isAdmin: ctx.isAdmin,
+        impersonatorId: ctx.impersonatorId,
       });
       if (result.error) throw toTrpcError(result.error);
       publishSessionUpdated(ctx, result.data.approval.sessionId);

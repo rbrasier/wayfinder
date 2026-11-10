@@ -24,6 +24,10 @@ export interface GenerateInput {
   // {{#group (repeat)}} … {{/group}} block (docxtemplater's paragraphLoop
   // renders the inner tags once per item).
   data: Record<string, string | boolean | Array<Record<string, string>>>;
+  // PNG images placed above the text of the same-keyed signature slot — a
+  // drawn signature (ADR-067 §2). A generator that cannot place images (xlsx)
+  // ignores them and renders the text alone.
+  images?: Record<string, Buffer>;
 }
 
 export interface GenerateOutput {

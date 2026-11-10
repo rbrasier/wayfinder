@@ -43,6 +43,10 @@ export interface ApprovalNodeConfig {
   // the setting existed gains the capability unedited. Read through
   // `offSystemApprovalAllowed`, never directly.
   allowOffSystemApproval?: boolean;
+  // Whether the signed document is also rendered as a PDF/A when this approval
+  // decides (ADR-067 §1). Absent means off. Forced on under the certificate
+  // method — read through `convertsToPdfOnSigning`, never directly.
+  convertToPdfOnSigning?: boolean;
 }
 
 export interface ConversationalNodeConfig {

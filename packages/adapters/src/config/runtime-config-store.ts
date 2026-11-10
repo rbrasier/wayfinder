@@ -3,6 +3,10 @@ import {
   DEFAULT_AUTOMATION_CONFIG,
   parseAutomationConfig,
   type AutomationConfig,
+  DEFAULT_SIGNATURE_CONFIG,
+  SIGNATURE_CONFIG_SETTING_KEY,
+  parseSignatureConfig,
+  type SignatureConfig,
   AI_CONFIG_SETTING_KEY,
   AUTH_CONFIG_SETTING_KEY,
   DIRECTORY_CONFIG_SETTING_KEY,
@@ -156,6 +160,7 @@ export class RuntimeConfigStore {
   private readonly branding: CachedSetting<BrandingConfig>;
   private readonly loginNotice: CachedSetting<LoginNoticeConfig>;
   private readonly automation: CachedSetting<AutomationConfig>;
+  private readonly signature: CachedSetting<SignatureConfig>;
 
   constructor(
     private readonly settingsRepo: ISystemSettingsRepository,
@@ -168,6 +173,12 @@ export class RuntimeConfigStore {
       AUTOMATION_CONFIG_SETTING_KEY,
       (raw) => parseAutomationConfig(raw),
       () => DEFAULT_AUTOMATION_CONFIG,
+    );
+    this.signature = new CachedSetting(
+      settingsRepo,
+      SIGNATURE_CONFIG_SETTING_KEY,
+      (raw) => parseSignatureConfig(raw),
+      () => DEFAULT_SIGNATURE_CONFIG,
     );
   }
 
@@ -195,6 +206,15 @@ export class RuntimeConfigStore {
 
   invalidateAutomation(): void {
     this.automation.invalidate();
+  }
+
+  // Read on every signing decision and PDF render (ADR-067 §1).
+  getSignatureConfig(): Promise<SignatureConfig> {
+    return this.signature.get();
+  }
+
+  invalidateSignature(): void {
+    this.signature.invalidate();
   }
 
   async getAiConfig(): Promise<AiConfig> {

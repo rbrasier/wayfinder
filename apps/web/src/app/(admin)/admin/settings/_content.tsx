@@ -27,6 +27,7 @@ import { OrganisationsCard } from "@/components/settings/organisations-card";
 import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
+import { SignatureCard } from "@/components/settings/signature-card";
 import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
 import { RetentionCard } from "@/components/settings/retention-card";
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
@@ -95,6 +96,14 @@ export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: 
               <GlobalInstructionsCard />
               <AiProviderCard connectivity={connectivity} />
               <DocumentGenerationCard />
+            </CollapsibleSection>
+
+            <CollapsibleSection
+              title="Signatures"
+              description="How approvers sign documents, and PDF output."
+              testId="settings-section-signatures"
+            >
+              <SignatureCard connectivity={connectivity} />
             </CollapsibleSection>
 
             <CollapsibleSection

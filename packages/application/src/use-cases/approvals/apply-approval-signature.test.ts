@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { ok, type Approval, type TemplateField } from "@wayfinder/domain";
+import {
+  DEFAULT_SIGNATURE_CONFIG,
+  domainError,
+  err,
+  ok,
+  type Approval,
+  type SessionDocumentPdf,
+  type SignatureMethod,
+  type TemplateField,
+} from "@wayfinder/domain";
 import { ApplyApprovalSignature } from "./apply-approval-signature";
 
 const at = (iso: string) => new Date(iso);
@@ -49,6 +58,11 @@ interface Fakes {
   rows: Approval[];
   templateFields: TemplateField[];
   documentPath: string | null;
+  approvalNodeConfig: Record<string, unknown>;
+  method: SignatureMethod;
+  existingPdf: SessionDocumentPdf | null;
+  pdfFails: boolean;
+  withPdfRendering: boolean;
 }
 
 const build = (overrides: Partial<Fakes> = {}) => {
@@ -56,6 +70,11 @@ const build = (overrides: Partial<Fakes> = {}) => {
     rows: [approval()],
     templateFields,
     documentPath: "generated/sess-1/instrument.docx",
+    approvalNodeConfig: { approverSource: "first_level_supervisor" },
+    method: "attestation",
+    existingPdf: null,
+    pdfFails: false,
+    withPdfRendering: true,
     ...overrides,
   };
 
@@ -64,8 +83,8 @@ const build = (overrides: Partial<Fakes> = {}) => {
     listBySession: vi.fn(async () => ok(fakes.rows)),
   };
   const flowNodes = {
-    findById: vi.fn(async () =>
-      ok({
+    findById: vi.fn(async (id: string) =>
+      ok(id === "node-appr-a" ? { id, config: fakes.approvalNodeConfig } : {
         id: "node-draft",
         config: {
           outputType: "generate_document",
@@ -75,7 +94,7 @@ const build = (overrides: Partial<Fakes> = {}) => {
       }),
     ),
   };
-  const updatedDocuments: Array<{ messageId: string; storagePath: string }> = [];
+  const updatedDocuments: Array<{ messageId: string; storagePath: string; pdf?: SessionDocumentPdf }> = [];
   const sessionMessages = {
     listBySession: vi.fn(async () =>
       ok(
@@ -90,14 +109,15 @@ const build = (overrides: Partial<Fakes> = {}) => {
                   storagePath: fakes.documentPath,
                   summary: "s",
                   generatedAt: "2026-08-01T11:00:00.000Z",
+                  ...(fakes.existingPdf ? { pdf: fakes.existingPdf } : {}),
                 },
               },
             ]
           : [],
       ),
     ),
-    updateDocument: vi.fn(async (messageId: string, document: { storagePath: string }) => {
-      updatedDocuments.push({ messageId, storagePath: document.storagePath });
+    updateDocument: vi.fn(async (messageId: string, document: { storagePath: string; pdf?: SessionDocumentPdf }) => {
+      updatedDocuments.push({ messageId, storagePath: document.storagePath, pdf: document.pdf });
       return ok({ id: messageId });
     }),
   };
@@ -110,19 +130,29 @@ const build = (overrides: Partial<Fakes> = {}) => {
     ),
   };
   const rendered: Array<Record<string, unknown>> = [];
+  const renderedImages: Array<Record<string, Buffer> | undefined> = [];
   const documentGenerator = {
-    generate: vi.fn((input: { data: Record<string, unknown> }) => {
+    generate: vi.fn((input: { data: Record<string, unknown>; images?: Record<string, Buffer> }) => {
       rendered.push(input.data);
+      renderedImages.push(input.images);
       return ok({ bytes: Buffer.from("docx") });
     }),
   };
   const stored: string[] = [];
   const objectStorage = {
-    get: vi.fn(async () => ok(Buffer.from("template"))),
+    get: vi.fn(async (path: string) => ok(Buffer.from(path.endsWith(".png") ? "drawing" : "template"))),
     put: vi.fn(async (path: string) => {
       stored.push(path);
       return ok(undefined);
     }),
+  };
+
+  const converter = {
+    convertDocxToPdfA: vi.fn(async () =>
+      fakes.pdfFails
+        ? err(domainError("INFRA_FAILURE", "Gotenberg is unreachable."))
+        : ok(Buffer.from("%PDF-1.7")),
+    ),
   };
 
   const useCase = new ApplyApprovalSignature(
@@ -132,9 +162,26 @@ const build = (overrides: Partial<Fakes> = {}) => {
     sessionStepOutputs as never,
     documentGenerator as never,
     objectStorage as never,
+    fakes.withPdfRendering
+      ? {
+          converter,
+          loadSignatureConfig: async () => ({ ...DEFAULT_SIGNATURE_CONFIG, method: fakes.method }),
+          hashBytes: (bytes: Buffer) => `sha-of-${bytes.length}`,
+        }
+      : undefined,
   );
 
-  return { useCase, fakes, rendered, stored, updatedDocuments, sessionMessages, documentGenerator };
+  return {
+    useCase,
+    fakes,
+    rendered,
+    renderedImages,
+    stored,
+    updatedDocuments,
+    sessionMessages,
+    documentGenerator,
+    converter,
+  };
 };
 
 describe("ApplyApprovalSignature", () => {
@@ -245,5 +292,98 @@ describe("ApplyApprovalSignature", () => {
     const result = await useCase.execute({ approvalId: "missing" });
 
     expect(result.error?.code).toBe("NOT_FOUND");
+  });
+
+  it("passes the deciding approval's frozen drawing to the renderer for its slot", async () => {
+    const drawn = approval({
+      recordSnapshot: {
+        subjectNodeId: "node-draft",
+        signatureFieldKey: "delegate_signature",
+        attestationText: "Approved by:   Jane Doe",
+        drawnSignatureStoragePath: "signatures/drawn/manager-1/1.png",
+      },
+    });
+    const { useCase, renderedImages } = build({ rows: [drawn] });
+
+    await useCase.execute({ approvalId: "approval-a" });
+
+    expect(renderedImages[0]?.delegate_signature?.toString()).toBe("drawing");
+  });
+
+  it("renders a PDF beside the signed revision when the approval step converts on signing", async () => {
+    const { useCase, stored, updatedDocuments, converter } = build({
+      approvalNodeConfig: { approverSource: "first_level_supervisor", convertToPdfOnSigning: true },
+    });
+
+    await useCase.execute({ approvalId: "approval-a" });
+
+    expect(converter.convertDocxToPdfA).toHaveBeenCalledTimes(1);
+    expect(stored).toContain("generated/sess-1/instrument-r1.pdf");
+    expect(updatedDocuments[0]?.pdf).toMatchObject({
+      storagePath: "generated/sess-1/instrument-r1.pdf",
+      sha256: "sha-of-8",
+      status: "rendered",
+    });
+  });
+
+  it("does not convert when the step leaves the toggle off", async () => {
+    const { useCase, converter, updatedDocuments } = build();
+
+    await useCase.execute({ approvalId: "approval-a" });
+
+    expect(converter.convertDocxToPdfA).not.toHaveBeenCalled();
+    expect(updatedDocuments[0]?.pdf).toBeUndefined();
+  });
+
+  it("keeps an existing rendered PDF current even when this step's toggle is off", async () => {
+    const { useCase, converter } = build({
+      existingPdf: { storagePath: "generated/sess-1/instrument.pdf", sha256: "x", generatedAt: "t", status: "rendered" },
+    });
+
+    await useCase.execute({ approvalId: "approval-a" });
+
+    expect(converter.convertDocxToPdfA).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a failed conversion on the document instead of losing the signed docx", async () => {
+    const { useCase, updatedDocuments } = build({
+      approvalNodeConfig: { approverSource: "first_level_supervisor", convertToPdfOnSigning: true },
+      pdfFails: true,
+    });
+
+    const result = await useCase.execute({ approvalId: "approval-a" });
+
+    expect(result.data?.applied).toBe(true);
+    expect(updatedDocuments[0]?.storagePath).toBe("generated/sess-1/instrument-r1.docx");
+    expect(updatedDocuments[0]?.pdf).toMatchObject({
+      status: "failed",
+      storagePath: null,
+      failureReason: "Gotenberg is unreachable.",
+    });
+  });
+
+  it("never re-renders a document frozen for certificate signing", async () => {
+    const { useCase, documentGenerator } = build({
+      existingPdf: { storagePath: "generated/sess-1/instrument.pdf", sha256: "x", generatedAt: "t", status: "frozen" },
+    });
+
+    const result = await useCase.execute({ approvalId: "approval-a" });
+
+    expect(result.data).toEqual({ applied: false, reason: "frozen" });
+    expect(documentGenerator.generate).not.toHaveBeenCalled();
+  });
+
+  it("supersedes a frozen PDF when a change request sends the document back", async () => {
+    const sentBack = approval({ status: "changes_requested" });
+    const { useCase, documentGenerator, updatedDocuments } = build({
+      rows: [sentBack],
+      existingPdf: { storagePath: "generated/sess-1/instrument.pdf", sha256: "x", generatedAt: "t", status: "frozen" },
+    });
+
+    const result = await useCase.execute({ approvalId: "approval-a" });
+
+    expect(result.data?.applied).toBe(true);
+    expect(documentGenerator.generate).toHaveBeenCalledTimes(1);
+    expect(updatedDocuments[0]?.pdf?.status).toBe("superseded");
   });
 });

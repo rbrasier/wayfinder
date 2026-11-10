@@ -300,3 +300,12 @@ exception and must bypass it.
 - **EC2 with Docker Compose** — the smallest footprint: one instance running
   `docker-compose.prod.yml`. Fine for a pilot, but you own patching and backups.
 - **Azure Container Apps** — [`setup-azure.md`](setup-azure.md).
+
+## Document signatures
+
+The built-in PDF converter and signature engine run as child processes of the
+web server (ADR-069), which Lambda cannot host. On this topology, set both to
+**External** in **Settings → Signatures → PDF signatures** and point them at a
+Gotenberg service and a `ghcr.io/rbrasier/wayfinder-dss` sidecar you run
+elsewhere (for example on ECS). Attestation-only installs need neither. See
+[document-signatures.md](document-signatures.md).

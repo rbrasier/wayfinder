@@ -5,6 +5,7 @@ import type { PriorStepField } from "@wayfinder/domain";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { trpc } from "@/trpc/client";
 import {
   approvalSubjectChoice,
   approvalSubjectFromChoice,
@@ -267,6 +268,11 @@ export function NodeConfigModalApprovalAdvanced({
         </button>
       </div>
 
+      <ConvertToPdfSwitch
+        checked={values.convertToPdfOnSigning}
+        onToggle={() => set("convertToPdfOnSigning", !values.convertToPdfOnSigning)}
+      />
+
       <div className="space-y-1">
         <Label htmlFor="approval-instructions">Instructions (optional)</Label>
         <Textarea
@@ -278,5 +284,46 @@ export function NodeConfigModalApprovalAdvanced({
         />
       </div>
     </>
+  );
+}
+
+// Forced on under the certificate method, which has nothing to sign without a
+// PDF; unavailable until an admin has configured a converter (ADR-067 §1).
+function ConvertToPdfSwitch({ checked, onToggle }: { checked: boolean; onToggle: () => void }) {
+  const capabilities = trpc.settings.getSignatureCapabilities.useQuery();
+  const forced = capabilities.data?.method === "certificate";
+  const unavailable = !forced && capabilities.data?.pdfConverterConfigured === false;
+  const on = forced || checked;
+  const hint = forced
+    ? "Always on: this install signs with digital certificates, which are applied to a PDF."
+    : unavailable
+      ? "Needs a PDF converter. An admin sets one up in Settings → PDF signatures."
+      : "When this step signs the document, also produce a PDF/A copy for sharing.";
+
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <div className="space-y-0.5">
+        <Label htmlFor="approval-convert-to-pdf">Convert to PDF on signing</Label>
+        <p className={HINT_CLASS}>{hint}</p>
+      </div>
+      <button
+        id="approval-convert-to-pdf"
+        type="button"
+        role="switch"
+        data-approval-convert-to-pdf
+        aria-checked={on}
+        disabled={forced || unavailable}
+        onClick={onToggle}
+        className={`relative mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 ${
+          on ? "bg-[#1f6b4d]" : "bg-[#dedad2]"
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            on ? "translate-x-4" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+    </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   type ApprovalListScope,
   type ApprovalUpdate,
   type ApproverQuery,
+  type DigitalSignatureRecord,
   type IApprovalRepository,
   type NewApproval,
   type Result,
@@ -52,6 +53,7 @@ const toEntity = (row: typeof app_session_approvals.$inferSelect): Approval => (
   offSystemEvidenceSizeBytes: row.off_system_evidence_size_bytes ?? null,
   offSystemEvidenceStoragePath: row.off_system_evidence_storage_path ?? null,
   offSystemNominatedByUserId: row.off_system_nominated_by_user_id ?? null,
+  digitalSignature: (row.digital_signature as DigitalSignatureRecord | null) ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -287,6 +289,7 @@ export const approvalPatchToColumns = (patch: ApprovalUpdate): Record<string, un
       ...(patch.offSystemNominatedByUserId !== undefined
         ? { off_system_nominated_by_user_id: patch.offSystemNominatedByUserId }
         : {}),
+      ...(patch.digitalSignature !== undefined ? { digital_signature: patch.digitalSignature } : {}),
       updated_at: new Date(),
   };
 };

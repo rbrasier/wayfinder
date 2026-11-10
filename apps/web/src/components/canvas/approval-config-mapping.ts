@@ -35,6 +35,9 @@ export const approvalConfigFromValues = (
     // `true` would be storing the default — and a node that never opened this
     // modal would then differ from one that did.
     ...(values.allowOffSystemApproval ? {} : { allowOffSystemApproval: false }),
+    // Written only when on: absent means off, and forced on at runtime under
+    // the certificate method whatever is stored (ADR-067 §1).
+    ...(values.convertToPdfOnSigning ? { convertToPdfOnSigning: true } : {}),
     notifyOnComplete: values.notifyOnComplete,
   };
 };
@@ -49,6 +52,7 @@ export const approvalValuesFromConfig = (
   | "signatureFieldKey"
   | "changesRequestedTargetNodeId"
   | "allowOffSystemApproval"
+  | "convertToPdfOnSigning"
 > => {
   const subject = encodeApprovalSubject(config.approvalSubject as ApprovalSubject | undefined);
   return {
@@ -63,5 +67,6 @@ export const approvalValuesFromConfig = (
     // `false` is allowed, so the box opens checked on a node authored before the
     // setting existed.
     allowOffSystemApproval: config.allowOffSystemApproval !== false,
+    convertToPdfOnSigning: config.convertToPdfOnSigning === true,
   };
 };

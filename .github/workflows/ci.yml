@@ -114,10 +114,47 @@ jobs:
           exit-code: "1"
           trivyignores: .trivyignore
 
-      - name: Report image size
+      # The -slim image (ADR-069 §3): the same layers minus the built-in
+      # signing engines. Built from the cache the default build just filled.
+      - name: Build -slim image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime-slim
+          push: false
+          load: true
+          tags: wayfinder:ci-slim
+          build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
+          cache-from: type=gha
+
+      - name: Scan -slim image for CVEs (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wayfinder:ci-slim
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+          skip-setup-trivy: true
+
+      # A -slim image carrying either engine would defeat its purpose, and the
+      # app's "not included in this image" message depends on their absence.
+      - name: Check -slim leaves the built-in engines out
         run: |
-          SIZE=$(docker image inspect wayfinder:ci --format '{{.Size}}')
-          echo "image size: $((SIZE / 1024 / 1024)) MiB"
+          docker run --rm --entrypoint sh wayfinder:ci-slim -c \
+            'test ! -e /usr/bin/soffice && test ! -e /opt/wayfinder/jre && test ! -e /opt/wayfinder/dss'
+          docker run --rm --entrypoint sh wayfinder:ci -c \
+            'test -x /usr/bin/soffice && test -x /opt/wayfinder/jre/bin/java && test -f /opt/wayfinder/dss/wayfinder-dss.jar'
+
+      # Measured inside each image: `docker image inspect .Size` mixes
+      # compressed and unpacked layer sizes depending on how an image was
+      # loaded, so the two tags' numbers were not comparable.
+      - name: Report image sizes
+        run: |
+          for tag in ci ci-slim; do
+            SIZE=$(docker run --rm --entrypoint sh "wayfinder:$tag" -c 'du -sxm / 2>/dev/null | cut -f1')
+            echo "wayfinder:$tag unpacked size: ${SIZE} MiB"
+          done
 
   # Exercises the one deployment artifact CI can run end to end, on the runner
   # itself: the whole stack comes up, migrations apply as their own service, and
@@ -447,3 +484,78 @@ jobs:
 
       - name: Coverage — application
         run: pnpm --filter "@wayfinder/application" test:coverage
+
+  # The certificate signing chain against real crypto (ADR-067 §7): the mocks
+  # server's CSC provider, timestamp authority and CRL, and the DSS sidecar
+  # built from source. The e2e suite uses a canned /dss mock instead, so this
+  # is the job that proves real PAdES B-LTA signatures validate.
+  dss-integration:
+    name: Signature engine (DSS) against the mock CA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The runner image ships Java 21 and Maven; no setup action needed.
+      - name: Build the DSS sidecar
+        working-directory: deploy/dss
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          mvn -q -B package -DskipTests
+
+      - name: Start the mocks server
+        working-directory: mocks
+        run: |
+          node server.mjs > /tmp/mocks.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:4001/healthz >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          cat /tmp/mocks.log; exit 1
+
+      - name: Start the DSS sidecar trusting the mock CA
+        working-directory: deploy/dss
+        run: |
+          PORT=8085 DSS_ENVIRONMENT=development \
+            SIGNING_TRUST_MOCK_CA=http://localhost:4001/csc/test-ca.pem \
+            "$JAVA_HOME_21_X64/bin/java" -jar target/wayfinder-dss.jar > /tmp/dss.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8085/health >/dev/null 2>&1 && exit 0
+            sleep 1
+          done
+          cat /tmp/dss.log; exit 1
+
+      - name: Sign, extend and validate
+        working-directory: deploy/dss
+        run: node smoke-test.mjs || (cat /tmp/dss.log; exit 1)
+
+      # The same checks against the engines built into the default image
+      # (ADR-069): its LibreOffice, its trimmed Java runtime and its jar, run
+      # inside the container against the mocks server on this runner.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the default image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: wayfinder:ci
+          cache-from: type=gha
+
+      # The image carries no deploy/ (ADR-056 §2), so the smoke scripts and the
+      # mocks' fixture PDF are mounted in from the checkout.
+      - name: Sign, extend and validate with the built-in engines
+        run: |
+          docker run --rm --network host -e MOCKS_URL=http://localhost:4001 \
+            -v "$PWD/deploy/dss:/smoke/deploy/dss:ro" -v "$PWD/mocks:/smoke/mocks:ro" \
+            --entrypoint bash wayfinder:ci /smoke/deploy/dss/smoke-built-in.sh

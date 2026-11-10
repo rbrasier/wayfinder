@@ -94,6 +94,7 @@ describe("scheduledConfigFromValues", () => {
     approvalSubjectInstruction: "",
     signatureFieldKey: "",
   allowOffSystemApproval: true,
+    convertToPdfOnSigning: false,
     changesRequestedTargetNodeId: "",
     notifyOnComplete: true,
   };

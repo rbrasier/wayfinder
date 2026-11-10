@@ -4,6 +4,7 @@ import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
 import { seedForkFlow, seedConfirmationSession } from "./e2e-fixtures-flows";
 import { seedStorageObjects } from "./e2e-fixtures-storage";
+import { seedSigningSession } from "./e2e-fixtures-signing";
 import { seedAutomationFlow } from "./e2e-fixtures-automation";
 import { seedStructuredSession } from "./e2e-fixtures-structured";
 import { seedExtractionRun } from "./e2e-fixtures-extraction";
@@ -81,6 +82,9 @@ export interface SeedResult {
   approvalWithdrawDraftStepName: string;
   offSystemApprovalSessionId: string;
   offSystemApprovalNextStepName: string;
+  // A pending approval that signs a real .docx and converts it to PDF through
+  // the mocks server's Gotenberg (ADR-067).
+  signingSessionId: string;
   // One signature bound by an approval left on the default subject, and one
   // nothing signs — the two states the canvas advisory must tell apart.
   signatureWarningFlowId: string;
@@ -487,6 +491,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const approvalWithdraw = await seedWithdrawableApprovalSession(container, ownerUserId);
   const offSystemApproval = await seedOffSystemApprovalSession(container, ownerUserId);
   const signatureWarningFlowId = await seedSignatureWarningFlow(container, ownerUserId);
+  const signing = await seedSigningSession(container, ownerUserId);
   const extraction = await seedExtractionRun(container, ownerUserId);
   const automationFlowId = await seedAutomationFlow(container, ownerUserId);
 
@@ -506,6 +511,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     offSystemApprovalSessionId: offSystemApproval.sessionId,
     offSystemApprovalNextStepName: offSystemApproval.nextStepName,
     signatureWarningFlowId,
+    signingSessionId: signing.sessionId,
     extractionFlowId: extraction.flowId,
     extractionRunId: extraction.runId,
     automationFlowId,

@@ -55,6 +55,16 @@ processes; the ECS task definition picks which one runs by setting the command
 (`web`, `api` or `migrate`). Pin the version rather than using `latest`, so a
 scale-out event can never pull a different build than the one you tested.
 
+**Default or `-slim`.** The image above includes the built-in PDF converter
+(LibreOffice) and signature engine (EU DSS) used by document signatures; they
+start only if an admin turns on a method that needs them.
+`ghcr.io/rbrasier/wayfinder:0.41.1-slim` is
+the same image without them, about 600 MB smaller, for installs that never
+sign with drawings or certificates or that run those engines separately. With
+certificate signing in use, give the web container roughly 500 MB more memory
+and mount your signers' CA certificates at `/app/trust`. See
+[document-signatures.md](document-signatures.md).
+
 **Optional: mirror it into ECR.** Pulling from GHCR works, but a copy in ECR
 gives you lower pull latency, no cross-internet egress on every scale-out, and
 scanning in your own account:

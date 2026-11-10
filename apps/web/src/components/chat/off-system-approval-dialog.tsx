@@ -44,6 +44,10 @@ export function OffSystemApprovalDialog({
   onRecorded,
 }: OffSystemApprovalDialogProps) {
   const recordMutation = trpc.approval.recordOffSystem.useMutation();
+  // A certificate install needs the PDF the approver digitally signed, not a
+  // memo or an email (ADR-068 §5) — said up front rather than after a refusal.
+  const capabilities = trpc.settings.getSignatureCapabilities.useQuery();
+  const needsSignedPdf = capabilities.data?.method === "certificate";
 
   const [file, setFile] = useState<File | null>(null);
   const [approvedOn, setApprovedOn] = useState("");
@@ -126,11 +130,19 @@ export function OffSystemApprovalDialog({
                 setError(null);
               }}
             />
-            <p className={HINT_CLASS}>
-              The signed memo, the approval email, the minute — whatever shows the approval
-              happened. Up to {Math.round(MAX_EVIDENCE_BYTES / (1024 * 1024))} MB, and it is filed
-              against this approval rather than added to the chat.
-            </p>
+            {needsSignedPdf ? (
+              <p className={HINT_CLASS} data-off-system-signed-pdf-hint>
+                If this step signs the document, upload the PDF the approver signed with their
+                digital ID. It must carry a valid signature from them over the document as it was
+                sent for signing. Up to {Math.round(MAX_EVIDENCE_BYTES / (1024 * 1024))} MB.
+              </p>
+            ) : (
+              <p className={HINT_CLASS}>
+                The signed memo, the approval email, the minute — whatever shows the approval
+                happened. Up to {Math.round(MAX_EVIDENCE_BYTES / (1024 * 1024))} MB, and it is filed
+                against this approval rather than added to the chat.
+              </p>
+            )}
           </div>
 
           <div className="space-y-1">

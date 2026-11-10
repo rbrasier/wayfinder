@@ -442,6 +442,20 @@
       "when": 1792869293847,
       "tag": "0049_global_admin_role_name",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1794164654279,
+      "tag": "0062_drawn_signature",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1794166678928,
+      "tag": "0063_digital_signature",
+      "breakpoints": true
     }
   ]
 }

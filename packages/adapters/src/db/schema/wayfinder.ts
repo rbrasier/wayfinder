@@ -503,6 +503,9 @@ export const app_session_approvals = pgTable(
     // Who entered the nomination. Its foreign key is declared below by explicit
     // name, for the same 63-character reason as suggested_approver_user_id.
     off_system_nominated_by_user_id: uuid("off_system_nominated_by_user_id"),
+    // The certificate signature on this decision, or the attempt in flight
+    // while the signer is at their provider (ADR-068 §6). Null otherwise.
+    digital_signature: jsonb("digital_signature"),
     created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

@@ -3,6 +3,7 @@ import { approvalRouter } from "./routers/approval";
 import { auditRouter } from "./routers/audit";
 import { bootstrapRouter } from "./routers/bootstrap";
 import { documentRouter } from "./routers/document";
+import { signaturesRouter } from "./routers/signatures";
 import { errorRouter } from "./routers/error";
 import { extractionRouter } from "./routers/extraction";
 import { feedbackRouter } from "./routers/feedback";
@@ -59,6 +60,7 @@ export const appRouter = router({
   governance: governanceRouter,
   approval: approvalRouter,
   document: documentRouter,
+  signatures: signaturesRouter,
   people: peopleRouter,
   hr: hrRouter,
   knowledge: knowledgeRouter,

@@ -3,6 +3,7 @@ import {
   ApproverEditSubjectFields,
   ConfirmAndSend,
   DecideApproval,
+  GetSigningRequirement,
   ListApprovals,
   ListApprovalsWithContext,
   LoadPendingApproval,
@@ -12,6 +13,8 @@ import {
   ResolveDecisionNotifyTargets,
   SuggestApprover,
   WithdrawApproval,
+  type DecisionSigningDeps,
+  type PdfRenderingDeps,
   type UpdateDocumentFields,
   type UpdateStructuredStepOutput,
 } from "@wayfinder/application";
@@ -63,6 +66,10 @@ export interface ApprovalUseCaseDeps {
   notifyOnApprovalDecided: ConstructorParameters<typeof DecideApproval>[6];
   notifyOnApprovalWithdrawn: ConstructorParameters<typeof WithdrawApproval>[8];
   notifyOnApprovalReassigned: ConstructorParameters<typeof ReassignApproval>[5];
+  // Document signatures (ADR-067): rendering a PDF beside the signed revision,
+  // and the signature-method gate on the decision itself.
+  pdfRendering: PdfRenderingDeps;
+  decisionSigning: DecisionSigningDeps;
 }
 
 // The approval use-case cluster, factored out of the main container to keep
@@ -86,6 +93,7 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
     deps.sessionStepOutputs,
     deps.documentGenerator,
     deps.objectStorage,
+    deps.pdfRendering,
   );
 
   // Shared with the off-system path, which delegates the decision itself rather
@@ -105,6 +113,7 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
     deps.sha256Hex,
     resolveApprovalSubject,
     applyApprovalSignature,
+    deps.decisionSigning,
   );
 
   return {
@@ -167,6 +176,13 @@ export const buildApprovalUseCases = (deps: ApprovalUseCaseDeps) => {
       deps.notifyOnApprovalRequested,
     ),
     loadPendingApproval: new LoadPendingApproval(deps.approvals, deps.users),
+    getSigningRequirement: new GetSigningRequirement(
+      deps.approvals,
+      deps.flowNodes,
+      resolveApprovalSubject,
+      deps.decisionSigning.loadSignatureConfig,
+      deps.decisionSigning.drawnSignatures,
+    ),
     listApprovals: new ListApprovals(deps.approvals),
     listApprovalsWithContext: new ListApprovalsWithContext(
       deps.approvals,

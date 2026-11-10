@@ -15,7 +15,12 @@ export type ConnectivityTarget =
   // which method is broken, not that "authentication" is (ADR-042 §5).
   | "auth-entra"
   | "auth-pki"
-  | "auth-email-password";
+  | "auth-email-password"
+  // Document signing services (ADR-067 §6), probed against the signature config.
+  | "pdf-converter"
+  | "signature-engine"
+  | "timestamp-authority"
+  | "signing-provider";
 
 export const CONNECTIVITY_TARGETS: readonly ConnectivityTarget[] = [
   "ai",
@@ -27,6 +32,10 @@ export const CONNECTIVITY_TARGETS: readonly ConnectivityTarget[] = [
   "auth-entra",
   "auth-pki",
   "auth-email-password",
+  "pdf-converter",
+  "signature-engine",
+  "timestamp-authority",
+  "signing-provider",
 ];
 
 export interface ConnectivityResult {
