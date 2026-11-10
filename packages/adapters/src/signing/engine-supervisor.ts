@@ -40,6 +40,10 @@ export class EngineSupervisor {
   private starting: Promise<Result<string>> | null = null;
   private failureTimes: number[] = [];
   private idleTimer: unknown = null;
+  private requestsInFlight = 0;
+  // Bumped by stop(), so a start still waiting on its health check knows it
+  // was cancelled.
+  private stopCount = 0;
 
   constructor(private readonly options: SupervisorOptions) {}
 
@@ -65,7 +69,23 @@ export class EngineSupervisor {
     return this.starting;
   }
 
+  // Runs one request against the engine. The idle stop is held off until the
+  // last request finishes: a signing can outlast the idle period's final
+  // seconds, and stopping the JVM under it would fail the approver's signing.
+  async withEngine<T>(work: (baseUrl: string) => Promise<Result<T>>): Promise<Result<T>> {
+    this.requestsInFlight += 1;
+    try {
+      const started = await this.ensureRunning();
+      if (started.error) return started;
+      return await work(started.data);
+    } finally {
+      this.requestsInFlight -= 1;
+      if (this.running) this.scheduleIdleStop();
+    }
+  }
+
   stop(): void {
+    this.stopCount += 1;
     this.clearIdleStop();
     const running = this.running;
     this.running = null;
@@ -73,18 +93,29 @@ export class EngineSupervisor {
   }
 
   private async start(): Promise<Result<string>> {
+    const stopCountAtStart = this.stopCount;
     const port = await this.options.freePort();
     const baseUrl = `http://127.0.0.1:${port}`;
     let exited = false;
     const process = this.options.spawn(port);
     process.onExit(() => {
       exited = true;
-      if (this.running?.process === process) this.running = null;
+      if (this.running?.process !== process) return;
+      // Still registered as running, so nothing here stopped it: it crashed.
+      // Counted like a failed start, so a crash loop gives up too.
+      this.running = null;
+      this.clearIdleStop();
+      this.failureTimes.push(this.options.now());
     });
 
     const deadline = this.options.now() + this.options.startTimeoutMs;
     while (!exited && this.options.now() < deadline) {
-      if (await this.options.isHealthy(baseUrl)) {
+      const healthy = await this.options.isHealthy(baseUrl);
+      if (this.stopCount !== stopCountAtStart) {
+        process.kill();
+        return err(domainError("INFRA_FAILURE", "The built-in signature engine was stopped while starting."));
+      }
+      if (healthy) {
         this.running = { process, baseUrl };
         this.scheduleIdleStop();
         return ok(baseUrl);
@@ -105,6 +136,7 @@ export class EngineSupervisor {
 
   private scheduleIdleStop(): void {
     this.clearIdleStop();
+    if (this.requestsInFlight > 0) return;
     this.idleTimer = this.options.setTimer(() => this.stop(), this.options.idleStopMs);
   }
 

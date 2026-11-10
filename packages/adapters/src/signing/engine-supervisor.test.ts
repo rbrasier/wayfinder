@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { EngineSupervisor, type EngineProcess, type SupervisorOptions } from "./engine-supervisor";
 
 class FakeProcess implements EngineProcess {
@@ -174,6 +174,89 @@ describe("EngineSupervisor", () => {
 
     supervisor.stop();
 
+    expect(spawned[0]!.process.killed).toBe(true);
+    expect(supervisor.status()).toBe("idle");
+  });
+
+  it("does not stop the engine while a request is still using it", async () => {
+    const { supervisor, spawned, fireTimers } = world();
+    let finish: () => void = () => undefined;
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => (markStarted = resolve));
+    const request = supervisor.withEngine(
+      () =>
+        new Promise<{ data: string }>((resolve) => {
+          finish = () => resolve({ data: "signed" });
+          markStarted();
+        }),
+    );
+    await started;
+
+    fireTimers();
+
+    expect(spawned[0]!.process.killed).toBe(false);
+    finish();
+    expect((await request).data).toBe("signed");
+
+    fireTimers();
+
+    expect(spawned[0]!.process.killed).toBe(true);
+  });
+
+  it("fails a request closed when the engine cannot be started", async () => {
+    const { supervisor, setHealthy } = world();
+    setHealthy(false);
+    let called = false;
+
+    const result = await supervisor.withEngine(async () => {
+      called = true;
+      return { data: "never" };
+    });
+
+    expect(result.error?.code).toBe("INFRA_FAILURE");
+    expect(called).toBe(false);
+  });
+
+  it("gives up on an engine that keeps crashing after it has started", async () => {
+    const { supervisor, spawned } = world();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await supervisor.ensureRunning();
+      spawned[attempt]!.process.exit(137);
+    }
+
+    const refused = await supervisor.ensureRunning();
+
+    expect(refused.error?.code).toBe("INFRA_FAILURE");
+    expect(spawned).toHaveLength(3);
+    expect(supervisor.status()).toBe("unavailable");
+  });
+
+  it("does not count its own idle stop as a crash", async () => {
+    const { supervisor, spawned, fireTimers } = world();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await supervisor.ensureRunning();
+      fireTimers();
+    }
+
+    const result = await supervisor.ensureRunning();
+
+    expect(result.error).toBeUndefined();
+    expect(spawned).toHaveLength(4);
+  });
+
+  it("cancels a start that is still in progress on shutdown, without counting a failure", async () => {
+    let answerHealth: (healthy: boolean) => void = () => undefined;
+    const { supervisor, spawned } = world({
+      isHealthy: () => new Promise<boolean>((resolve) => (answerHealth = resolve)),
+    });
+    const starting = supervisor.ensureRunning();
+    await vi.waitFor(() => expect(spawned).toHaveLength(1));
+
+    supervisor.stop();
+    answerHealth(true);
+    const result = await starting;
+
+    expect(result.error?.code).toBe("INFRA_FAILURE");
     expect(spawned[0]!.process.killed).toBe(true);
     expect(supervisor.status()).toBe("idle");
   });

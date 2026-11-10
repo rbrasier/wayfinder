@@ -10,6 +10,7 @@ import {
   type IPdfConverter,
   type Result,
 } from "@wayfinder/domain";
+import { findOutsideContent } from "./docx-outside-content";
 import { NOT_INCLUDED_MESSAGE } from "./engine-supervisor";
 
 const PDF_MAGIC = "%PDF-";
@@ -35,6 +36,10 @@ export interface LocalPdfConverterOptions {
 // same engine Gotenberg wraps, so the PDF is the same. LibreOffice will not run
 // two conversions on one profile, so each job gets its own, and a small queue
 // keeps a burst of approvals from starting a LibreOffice per request.
+//
+// LibreOffice fetches whatever a document links to, and here it would do so
+// from inside the web container, so a document that links to outside content
+// is refused before LibreOffice sees it (ADR-069 §6).
 export class LocalPdfConverter implements IPdfConverter {
   private active = 0;
   private readonly waiting: Array<() => void> = [];
@@ -48,6 +53,16 @@ export class LocalPdfConverter implements IPdfConverter {
 
   async convertDocxToPdfA(docxBytes: Buffer): Promise<Result<Buffer>> {
     if (!this.options.isInstalled()) return err(domainError("INFRA_FAILURE", NOT_INCLUDED_MESSAGE));
+    const outside = findOutsideContent(docxBytes);
+    if (outside.error) return outside;
+    if (outside.data.length > 0) {
+      return err(
+        domainError(
+          "VALIDATION_FAILED",
+          `This document links to content outside itself (${outside.data.join(", ")}), which the built-in PDF converter will not fetch. Embed it in the template instead.`,
+        ),
+      );
+    }
     await this.acquire();
     try {
       return await this.convert(docxBytes);

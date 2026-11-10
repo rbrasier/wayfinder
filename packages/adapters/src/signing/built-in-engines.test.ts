@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ok, type EngineChoice, type IPdfConverter } from "@wayfinder/domain";
-import { RoutingPdfConverter, createBuiltInEngines } from "./built-in-engines";
+import { RoutingPdfConverter, childEnvironment, createBuiltInEngines, killProcessGroup } from "./built-in-engines";
 
 const converterNamed = (name: string, calls: string[]): IPdfConverter => ({
   convertDocxToPdfA: async () => {
@@ -49,5 +49,36 @@ describe("createBuiltInEngines", () => {
     });
 
     expect(engines.status()).toEqual({ pdfConverter: "unavailable", signatureEngine: "unavailable" });
+  });
+});
+
+describe("childEnvironment", () => {
+  it("hands a child process only the allowlisted variables, never the web server's secrets", () => {
+    const environment = childEnvironment(
+      { PATH: "/usr/bin", HOME: "/home/node", DATABASE_URL: "postgres://secret", ENCRYPTION_KEY: "secret" },
+      ["PATH", "HOME", "TZ"],
+    );
+
+    expect(environment).toEqual({ PATH: "/usr/bin", HOME: "/home/node" });
+  });
+});
+
+describe("killProcessGroup", () => {
+  it("does not throw when the process has already gone", () => {
+    const alreadyGone = () => {
+      throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+    };
+
+    expect(() => killProcessGroup(12345, alreadyGone)).not.toThrow();
+  });
+
+  it("signals the whole group, so LibreOffice's helper processes die too", () => {
+    const signalled: Array<[number, string]> = [];
+
+    killProcessGroup(12345, (pid, signal) => {
+      signalled.push([pid, signal]);
+    });
+
+    expect(signalled).toEqual([[-12345, "SIGKILL"]]);
   });
 });

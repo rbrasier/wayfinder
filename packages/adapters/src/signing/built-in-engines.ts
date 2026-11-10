@@ -32,15 +32,47 @@ export class RoutingPdfConverter implements IPdfConverter {
   }
 }
 
+// The child processes get only what they need. The web server's own secrets
+// (database, encryption and model keys) are never handed to LibreOffice or the
+// JVM, both of which parse documents.
+export const childEnvironment = (env: Env, keys: readonly string[]): Env => {
+  const passed: Env = {};
+  for (const key of keys) {
+    if (env[key] !== undefined) passed[key] = env[key];
+  }
+  return passed;
+};
+
+// The group may already be gone when a timeout fires in the same instant the
+// process exits; an uncaught ESRCH from a timer would take the web server down.
+export const killProcessGroup = (
+  pid: number,
+  kill: (pid: number, signal: "SIGKILL") => void = (target, signal) => process.kill(target, signal),
+): void => {
+  try {
+    kill(-pid, "SIGKILL");
+  } catch {
+    // Nothing left to kill.
+  }
+};
+
+const CONVERTER_ENV_KEYS = ["PATH", "HOME", "TZ", "LANG", "LC_ALL", "TMPDIR"] as const;
+
 // Runs LibreOffice in its own process group, so a timeout kills every helper
 // process it forked rather than leaving them behind.
-const runProcess: ConverterRun = (command, args, timeoutMs) =>
+const runProcess =
+  (env: Env): ConverterRun =>
+  (command, args, timeoutMs) =>
   new Promise((resolve) => {
-    const child = spawn(command, args, { detached: true, stdio: "ignore" });
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+      env: childEnvironment(env, CONVERTER_ENV_KEYS) as NodeJS.ProcessEnv,
+    });
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      if (child.pid) process.kill(-child.pid, "SIGKILL");
+      if (child.pid) killProcessGroup(child.pid);
     }, timeoutMs);
     child.on("error", () => {
       clearTimeout(timer);
@@ -72,8 +104,6 @@ const isHealthy = async (baseUrl: string): Promise<boolean> => {
   }
 };
 
-// Only what the engine needs. The web server's own secrets (database, model
-// keys) are never handed to the JVM.
 const ENGINE_ENV_KEYS = [
   "PATH",
   "HOME",
@@ -84,18 +114,12 @@ const ENGINE_ENV_KEYS = [
   "SIGNING_TRUST_MOCK_CA",
 ] as const;
 
-const engineEnv = (env: Env, port: number): Env => {
-  const passed: Env = {};
-  for (const key of ENGINE_ENV_KEYS) {
-    if (env[key] !== undefined) passed[key] = env[key];
-  }
-  return {
-    ...passed,
-    PORT: String(port),
-    BIND_ADDRESS: "127.0.0.1",
-    TRUST_ANCHORS_DIR: env.TRUST_ANCHORS_DIR ?? "/app/trust",
-  };
-};
+const engineEnv = (env: Env, port: number): Env => ({
+  ...childEnvironment(env, ENGINE_ENV_KEYS),
+  PORT: String(port),
+  BIND_ADDRESS: "127.0.0.1",
+  TRUST_ANCHORS_DIR: env.TRUST_ANCHORS_DIR ?? "/app/trust",
+});
 
 const spawnEngine = (javaPath: string, jarPath: string, heap: string, env: Env, port: number): EngineProcess => {
   const child = spawn(javaPath, [`-Xmx${heap}`, "-jar", jarPath], {
@@ -138,7 +162,7 @@ export const createBuiltInEngines = (env: Env = process.env): BuiltInEngines => 
   const pdfConverter = new LocalPdfConverter({
     sofficePath,
     isInstalled: () => existsSync(sofficePath),
-    run: runProcess,
+    run: runProcess(env),
     concurrency: positiveNumber(env.PDF_CONVERTER_CONCURRENCY, 2),
     timeoutMs: 60_000,
   });

@@ -14,8 +14,10 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 const trimSlash = (url: string): string => url.replace(/\/+$/, "");
 
+// Starts the built-in engine if need be and keeps it up for the length of one
+// request (EngineSupervisor.withEngine).
 export interface BuiltInEngineHandle {
-  ensureRunning(): Promise<Result<string>>;
+  withEngine<T>(work: (baseUrl: string) => Promise<Result<T>>): Promise<Result<T>>;
 }
 
 // The DSS engine's JSON API (deploy/dss, ADR-067 §4), whether it runs as a
@@ -81,18 +83,18 @@ export class DssSignatureEngine implements ISignatureEngine {
     };
   }
 
-  private async baseUrl(engine: EngineChoice): Promise<Result<string>> {
-    if (engine.source === "external") return ok(engine.url);
-    if (!this.builtIn) return err(domainError("INFRA_FAILURE", "There is no built-in signature engine here."));
-    return this.builtIn.ensureRunning();
+  private post<T>(engine: EngineChoice, operation: string, body: unknown): Promise<Result<T>> {
+    if (engine.source === "external") return this.postTo<T>(engine.url, operation, body);
+    if (!this.builtIn) {
+      return Promise.resolve(err(domainError("INFRA_FAILURE", "There is no built-in signature engine here.")));
+    }
+    return this.builtIn.withEngine((baseUrl) => this.postTo<T>(baseUrl, operation, body));
   }
 
-  private async post<T>(engine: EngineChoice, operation: string, body: unknown): Promise<Result<T>> {
-    const baseUrl = await this.baseUrl(engine);
-    if (baseUrl.error) return baseUrl;
+  private async postTo<T>(baseUrl: string, operation: string, body: unknown): Promise<Result<T>> {
     let response: Response;
     try {
-      response = await this.fetchFn(`${trimSlash(baseUrl.data)}/${operation}`, {
+      response = await this.fetchFn(`${trimSlash(baseUrl)}/${operation}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

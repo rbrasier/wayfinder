@@ -32,6 +32,11 @@ attestation-only install runs neither. The signature engine stops again after
 30 minutes idle. The card shows each engine's state: *Built-in · running*,
 *Built-in · idle*, or *Not included in this image*.
 
+The built-in converter runs inside the Wayfinder container, so it will not fetch
+anything a document links to. A template with a linked (not embedded) image,
+a linked object or a remote template is refused with a message saying so; embed
+the content in the template instead. Ordinary hyperlinks are fine.
+
 **Images.** `ghcr.io/rbrasier/wayfinder:<version>` includes both engines.
 `…:<version>-slim` leaves them out (about 600 MB smaller); on it, choose
 External or stay on attestation. The engines cannot run inside the AWS Lambda

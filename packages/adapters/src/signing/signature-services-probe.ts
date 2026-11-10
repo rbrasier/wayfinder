@@ -4,17 +4,17 @@ import {
   type ConnectivityResult,
   type EngineChoice,
   type IPdfConverter,
+  type Result,
   type ISignatureServicesProbe,
   type SignatureConfig,
   type SignatureServiceTarget,
 } from "@wayfinder/domain";
 import { buildMinimalDocx } from "../documents/minimal-docx";
-import type { BuiltInEngineHandle } from "./dss-signature-engine";
 import { buildTimeStampRequest, readTimeStampResponseStatus } from "./rfc3161";
 
 export interface BuiltInProbeTargets {
   pdfConverter: IPdfConverter;
-  signatureEngine: BuiltInEngineHandle;
+  signatureEngine: { ensureRunning(): Promise<Result<string>> };
 }
 
 const DEFAULT_TIMEOUT_MS = 8_000;

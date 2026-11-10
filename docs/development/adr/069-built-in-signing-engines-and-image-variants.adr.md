@@ -1,6 +1,6 @@
 # ADR-069 — Built-in Signing Engines and Image Variants
 
-- **Status**: Accepted (scoped by `built-in-signing-engines.prd.md`; as built v0.41.5)
+- **Status**: Accepted (scoped by `built-in-signing-engines.prd.md`; as built v0.41.5, hardened v0.41.6)
 - **Date**: 2026-11-09
 - **Builds on**: ADR-001 (hexagonal architecture), ADR-046 (container image
   distribution), ADR-067 (signature methods and signing engine), ADR-068 (frozen
@@ -115,6 +115,26 @@ The built-in engine reads trust anchors from `TRUST_ANCHORS_DIR` (default
 sidecar. `SIGNING_TRUST_MOCK_CA` keeps its development-only guard. Nothing in the
 UI can add a trust anchor.
 
+### 6. The engines parse documents inside the web container
+
+A sidecar isolated LibreOffice and the JVM from the web server for free;
+built in, they share its container, network position and user. Two rules
+make up for that (added in v0.41.6):
+
+- **Minimal environment.** LibreOffice and the JVM each get an allowlisted
+  environment. Neither sees the database URL, the encryption key or model keys.
+- **No outside content.** LibreOffice fetches whatever a document links to. The
+  built-in converter therefore refuses a `.docx` that declares an external
+  relationship other than a hyperlink (linked images, linked objects, remote
+  templates), and refuses bytes that are not a `.docx`. The signed PDF is the
+  record (ADR-068), so a document is refused, not silently converted without
+  the linked part.
+
+The external converter is not checked this way: where Gotenberg runs and what it
+can reach is the operator's choice. LibreOffice still runs as the web server's
+user with its filesystem; an operator who wants stronger isolation keeps the
+engines external.
+
 ## Consequences
 
 - One container covers every signature method; Compose's `pdf` and `signing`
@@ -168,6 +188,9 @@ UI can add a trust anchor.
   `jdk.crypto.ec`; the trimmed runtime is about 60 MB. `.dockerignore` now lets
   `deploy/dss` (minus `target/`) into the build context; the Lambda target stays
   out.
+- **Supervisor, v0.41.6.** Requests go through `withEngine`, which holds the
+  idle stop off until the last one finishes; a crash after a healthy start
+  counts toward giving up; `stop()` cancels a start in progress.
 - **CI.** The image job builds, scans and sizes both targets and checks `-slim`
   carries neither engine; the DSS job runs `deploy/dss/smoke-built-in.sh` inside
   the default image against the mocks.

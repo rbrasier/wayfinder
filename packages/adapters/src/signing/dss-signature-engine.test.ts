@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { domainError, err, ok, type SigningParameters } from "@wayfinder/domain";
-import { DssSignatureEngine } from "./dss-signature-engine";
+import { DssSignatureEngine, type BuiltInEngineHandle } from "./dss-signature-engine";
 
 const parameters: SigningParameters = {
   engine: { source: "external", url: "http://dss:8080/" },
@@ -104,7 +104,7 @@ describe("DssSignatureEngine", () => {
 
   it("sends built-in requests to the engine the supervisor started", async () => {
     const { fetchFn, calls } = capture(() => Response.json({ signatures: [] }));
-    const builtIn = { ensureRunning: async () => ok("http://127.0.0.1:40000") };
+    const builtIn: BuiltInEngineHandle = { withEngine: (work) => work("http://127.0.0.1:40000") };
 
     await new DssSignatureEngine(fetchFn, 1_000, builtIn).validate({ source: "built-in" }, Buffer.from("%PDF"));
 
@@ -113,7 +113,7 @@ describe("DssSignatureEngine", () => {
 
   it("fails closed when the built-in engine cannot be started, without calling anything", async () => {
     const { fetchFn, calls } = capture(() => Response.json({}));
-    const builtIn = { ensureRunning: async () => err(domainError("INFRA_FAILURE", "did not start")) };
+    const builtIn: BuiltInEngineHandle = { withEngine: async () => err(domainError("INFRA_FAILURE", "did not start")) };
 
     const result = await new DssSignatureEngine(fetchFn, 1_000, builtIn).prepare({ ...parameters, engine: { source: "built-in" } });
 
