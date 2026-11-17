@@ -22,7 +22,10 @@ const registeredSource = {
   updatedAt: new Date("2026-08-01T00:00:00.000Z"),
 };
 
-const spies = () => ({
+const spies = (lookupSourcesEnabled = true) => ({
+  isFeatureEnabled: {
+    execute: vi.fn(async (key: string) => ({ data: key === "lookup_sources" && lookupSourcesEnabled })),
+  },
   listLookupSources: { execute: vi.fn(async () => ({ data: [registeredSource] })) },
   registerLookupSource: { execute: vi.fn(async () => ({ data: registeredSource })) },
   updateLookupSource: { execute: vi.fn(async () => ({ data: registeredSource })) },
@@ -191,6 +194,26 @@ describe("lookup source router — admin operations", () => {
     const caller = createCaller(contextFor(useCases));
 
     await expect(caller.lookupSource.create(draft)).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+});
+
+describe("lookup source router — lookup_sources flag", () => {
+  it("refuses the admin operations while the flag is off", async () => {
+    const caller = createCaller(contextFor(spies(false)));
+
+    await expect(caller.lookupSource.list()).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.lookupSource.create(draft)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.lookupSource.delete({ id: "source-1" })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+  });
+
+  // Sources created while the flag was on keep resolving, so a session already
+  // relying on one does not break when an admin switches the surface off.
+  it("keeps the operator search open while the flag is off", async () => {
+    const caller = createCaller(contextFor(spies(false), { isAdmin: false }));
+
+    await expect(caller.lookupSource.search({ sourceName: "departments", query: "fin" })).resolves.toBeDefined();
   });
 });
 

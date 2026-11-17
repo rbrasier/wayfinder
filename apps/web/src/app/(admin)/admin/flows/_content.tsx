@@ -72,6 +72,10 @@ export function AdminFlowsContent() {
   });
 
   const [importing, setImporting] = useState(false);
+  // Import and duplicate are experimental in alpha-3 (flow_portability); the
+  // route and procedure enforce the same flag.
+  const portabilityEnabled =
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "flow_portability" }).data ?? false;
 
   const duplicateMutation = trpc.flow.duplicate.useMutation({
     onSuccess: () => {
@@ -134,9 +138,11 @@ export function AdminFlowsContent() {
       <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-[#e7e3db] bg-white pl-5 pr-[52px]">
         <h1 className="text-[16px] font-bold tracking-[-0.3px] text-[#1c1b19]">All Flows</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setImporting(true)}>
-            Import Flow
-          </Button>
+          {portabilityEnabled && (
+            <Button variant="outline" onClick={() => setImporting(true)}>
+              Import Flow
+            </Button>
+          )}
           <Button onClick={() => setCreating(true)}>New Flow</Button>
         </div>
       </header>
@@ -227,13 +233,15 @@ export function AdminFlowsContent() {
                             Share
                           </Button>
                         )}
-                        <FlowRowActions
-                          flowId={flow.id}
-                          flowName={flow.name}
-                          onDuplicate={async (flowId) => {
-                            await duplicateMutation.mutateAsync({ flowId });
-                          }}
-                        />
+                        {portabilityEnabled && (
+                          <FlowRowActions
+                            flowId={flow.id}
+                            flowName={flow.name}
+                            onDuplicate={async (flowId) => {
+                              await duplicateMutation.mutateAsync({ flowId });
+                            }}
+                          />
+                        )}
                         <Button size="sm" asChild>
                           <Link href={`/flows/${flow.id}/config`} onClick={busy.start}>
                             Configure Flow

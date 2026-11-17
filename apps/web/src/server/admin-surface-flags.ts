@@ -4,7 +4,7 @@ import type { Container } from "@/lib/container";
 // scoping (ADR-022, ADR-063 §8) narrows who may *author* with the capability; on
 // the admin screen an area key holder only needs the flag switched on, as a
 // Global Admin always has. Never use this for flow-authoring checks.
-export const ADMIN_SURFACE_FLAGS = ["skills", "mcp", "event_watch"] as const;
+export const ADMIN_SURFACE_FLAGS = ["skills", "mcp", "event_watch", "lookup_sources"] as const;
 
 export type AdminSurfaceFlag = (typeof ADMIN_SURFACE_FLAGS)[number];
 

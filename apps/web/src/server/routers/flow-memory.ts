@@ -1,14 +1,17 @@
 import { z } from "zod";
-import { authenticatedProcedure, canOversee, router } from "../trpc";
+import { canOversee, router } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { featureProcedure } from "../feature-gates";
 
 // Every procedure delegates its authorisation to the use case rather than
 // duplicating the `canUserEditFlow` check here. A second caller — a job, a
 // script, another router — must not be able to reach these unguarded. The
 // use cases' `isAdmin` means "may edit any flow", which oversight grants
 // (ADR-066 §4).
+const flowMemoryProcedure = featureProcedure("flow_memory");
+
 export const flowMemoryRouter = router({
-  panel: authenticatedProcedure
+  panel: flowMemoryProcedure
     .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getFlowMemoryPanel.execute({
@@ -20,7 +23,7 @@ export const flowMemoryRouter = router({
       return result.data;
     }),
 
-  lesson: authenticatedProcedure
+  lesson: flowMemoryProcedure
     .input(z.object({ lessonId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getLessonDetail.execute({
@@ -32,7 +35,7 @@ export const flowMemoryRouter = router({
       return result.data;
     }),
 
-  accept: authenticatedProcedure
+  accept: flowMemoryProcedure
     .input(z.object({ lessonId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.acceptLesson.execute({
@@ -44,7 +47,7 @@ export const flowMemoryRouter = router({
       return result.data;
     }),
 
-  reject: authenticatedProcedure
+  reject: flowMemoryProcedure
     .input(z.object({ lessonId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.rejectLesson.execute({

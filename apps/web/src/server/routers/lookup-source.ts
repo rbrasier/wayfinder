@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { DEFAULT_CACHE_TTL_SECONDS, MATCH_CANDIDATE_LIMIT } from "@wayfinder/domain";
+import { TRPCError } from "@trpc/server";
 import { authenticatedProcedure, router, technicalAdminProcedure } from "../trpc";
+import { isAdminSurfaceEnabled } from "../admin-surface-flags";
 import { toTrpcError } from "../trpc-errors";
 
 // A hand-maintained list past this size wants a real source behind it, and the
@@ -24,8 +26,18 @@ const sourceInput = z.object({
   enabled: z.boolean().default(true),
 });
 
+// The admin registry is an experimental alpha-3 surface, hidden until the
+// lookup_sources flag is switched on (ADR-066 §5). Operator search and match stay
+// open so a source registered while the flag was on keeps resolving.
+const lookupSourceAdminProcedure = technicalAdminProcedure.use(async ({ ctx, next }) => {
+  if (!(await isAdminSurfaceEnabled(ctx.container, "lookup_sources"))) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Lookup sources are switched off." });
+  }
+  return next();
+});
+
 export const lookupSourceRouter = router({
-  list: technicalAdminProcedure.query(async ({ ctx }) => {
+  list: lookupSourceAdminProcedure.query(async ({ ctx }) => {
     const result = await ctx.container.useCases.listLookupSources.execute();
     if (result.error) throw toTrpcError(result.error);
     // Safe to return whole: the read model carries `credentialSet`, a boolean —
@@ -33,13 +45,13 @@ export const lookupSourceRouter = router({
     return result.data;
   }),
 
-  create: technicalAdminProcedure.input(sourceInput).mutation(async ({ ctx, input }) => {
+  create: lookupSourceAdminProcedure.input(sourceInput).mutation(async ({ ctx, input }) => {
     const result = await ctx.container.useCases.registerLookupSource.execute(input);
     if (result.error) throw toTrpcError(result.error);
     return result.data;
   }),
 
-  update: technicalAdminProcedure
+  update: lookupSourceAdminProcedure
     .input(z.object({ id: z.string().min(1), source: sourceInput }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.updateLookupSource.execute(
@@ -50,7 +62,7 @@ export const lookupSourceRouter = router({
       return result.data;
     }),
 
-  delete: technicalAdminProcedure
+  delete: lookupSourceAdminProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteLookupSource.execute(input.id);
@@ -60,7 +72,7 @@ export const lookupSourceRouter = router({
 
   // Runs against a draft, so an admin sees the source's fields and can pick the
   // display and key before saving anything (ADR-050 §2b).
-  test: technicalAdminProcedure
+  test: lookupSourceAdminProcedure
     .input(
       z.object({
         kind: z.enum(["directory", "managed", "api"]),
@@ -91,7 +103,7 @@ export const lookupSourceRouter = router({
 
   // A managed source's rows are its system of record, so the admin edits them
   // here rather than anywhere else (ADR-050 §2).
-  listEntries: technicalAdminProcedure
+  listEntries: lookupSourceAdminProcedure
     .input(z.object({ sourceId: z.string().min(1) }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.listManagedEntries.execute(input.sourceId);
@@ -99,7 +111,7 @@ export const lookupSourceRouter = router({
       return result.data;
     }),
 
-  replaceEntries: technicalAdminProcedure
+  replaceEntries: lookupSourceAdminProcedure
     .input(
       z.object({
         sourceId: z.string().min(1),

@@ -3,7 +3,6 @@ import {
   buildBranchDescriptors,
   nodeFieldSet,
   normaliseAdvanceConfidenceThreshold,
-  selectInjectableLessons,
   type ConversationalNodeConfig,
   type SessionEvent,
 } from "@wayfinder/domain";
@@ -25,6 +24,7 @@ import {
 } from "./turn-helpers";
 import { conversationalStepBrief, runMcpToolPrepass, type ToolActivityListener } from "./mcp-turn-helpers";
 import { resolveCanOversee } from "@/lib/oversight";
+import { lessonsForStep } from "./flow-memory-lessons";
 
 // The most recent turns the model is given as context, mirrored from the
 // client's own slice so the two agree (scaling wall #1).
@@ -205,6 +205,8 @@ async function handlePOST(
   // calls them in a non-streaming pre-pass whose results go into the prompt,
   // leaving the structured streaming turn untouched. It runs inside the stream
   // so the person waiting is told what is being consulted.
+  const stepLessons = await lessonsForStep(container, acceptedLessons, session.currentNodeId);
+
   const prepareTurn = async (onToolActivity: ToolActivityListener): Promise<PreparedTurn> => {
     const toolPrepass = await runMcpToolPrepass({
       container,
@@ -233,12 +235,7 @@ async function handlePOST(
       globalInstructions,
       expertRole: flow.expertRole,
       userProfile,
-      // Filtered to this step and capped before it reaches the prompt: only
-      // accepted guidance/efficiency lessons are injectable, most recently
-      // accepted first (ADR-057 §5).
-      acceptedLessons: selectInjectableLessons(
-        acceptedLessons.filter((lesson) => lesson.nodeId === session.currentNodeId),
-      ),
+      acceptedLessons: stepLessons,
       now: new Date(),
       resolvedSkills,
     });

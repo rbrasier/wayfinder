@@ -1,5 +1,6 @@
 import type { Result } from "@wayfinder/domain";
 import { schema } from "@wayfinder/adapters";
+import { EXPERIMENTAL_FEATURE_FLAGS } from "@wayfinder/application";
 import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
 import { seedForkFlow, seedConfirmationSession } from "./e2e-fixtures-flows";
@@ -279,6 +280,15 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     await container.useCases.upsertFeatureFlag.execute({ key: "extraction_flows", enabled: true }),
     "enable extraction_flows flag",
   );
+  // alpha-3's experimental features default off. The suite exercises test runs,
+  // flow memory, portability, view-as-user and lookup sources, so switch them on
+  // here rather than letting their specs fail or skip.
+  for (const key of EXPERIMENTAL_FEATURE_FLAGS) {
+    unwrap(
+      await container.useCases.upsertFeatureFlag.execute({ key, enabled: true }),
+      `enable ${key} flag`,
+    );
+  }
 
   // Seed a library skill so the flow-editor skill picker is populated — its
   // search box only renders once the library is non-empty.

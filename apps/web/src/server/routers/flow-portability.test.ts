@@ -12,10 +12,16 @@ const FLOW_ID = "55555555-5555-5555-5555-555555555555";
 // The router hands identity to the use-case, which owns the owner-or-admin rule
 // (ADR-049 §9). These tests assert the hand-off, and that a refusal from the
 // use-case reaches the caller as FORBIDDEN rather than being swallowed.
-const containerWith = (duplicateFlow: { execute: ReturnType<typeof vi.fn> }): Container =>
+const containerWith = (
+  duplicateFlow: { execute: ReturnType<typeof vi.fn> },
+  portabilityEnabled = true,
+): Container =>
   ({
     services: { errorLogger: { log: async () => undefined } },
-    useCases: { duplicateFlow },
+    useCases: {
+      duplicateFlow,
+      isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue({ data: portabilityEnabled }) },
+    },
   }) as unknown as Container;
 
 const contextFor = (container: Container, overrides: Partial<TrpcContext> = {}): TrpcContext => ({
@@ -31,6 +37,14 @@ const contextFor = (container: Container, overrides: Partial<TrpcContext> = {}):
 });
 
 describe("flow.duplicate", () => {
+  it("refuses while flow_portability is off, before reaching the use-case", async () => {
+    const execute = vi.fn();
+    const caller = createCaller(contextFor(containerWith({ execute }, false)));
+
+    await expect(caller.flow.duplicate({ flowId: FLOW_ID })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   it("passes the caller's id and admin flag to the use-case", async () => {
     const execute = vi.fn().mockResolvedValue({ data: { id: "flow-copy", name: "Flow (copy)" } });
     const caller = createCaller(contextFor(containerWith({ execute })));
