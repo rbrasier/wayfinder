@@ -21,6 +21,37 @@ const DEFAULT_ENABLED_FLAGS = new Set([
   "email_node",
 ]);
 
+// Capabilities built after alpha-2 that are still experimental. They default off
+// so an upgrade to alpha-3 shows a conservative surface until an admin opts in;
+// none has a seeded row, so the absence of a row is what keeps them off.
+export const EXPERIMENTAL_FEATURE_FLAGS = [
+  "flow_memory",
+  "flow_test_runs",
+  "view_as_user",
+  "flow_portability",
+  "lookup_sources",
+] as const;
+
+export type ExperimentalFeatureFlag = (typeof EXPERIMENTAL_FEATURE_FLAGS)[number];
+
+const EXPERIMENTAL_FLAG_DESCRIPTIONS: Record<ExperimentalFeatureFlag, string> = {
+  flow_memory: "Flow memory: lessons proposed from finished sessions, shown beside the canvas and added to step prompts",
+  flow_test_runs: "Test runs: run a draft flow or a single step from the flow editor",
+  view_as_user: "Admin 'View as user': simulate another user's session",
+  flow_portability: "Flow export, import and duplicate",
+  lookup_sources: "External lookup sources for field options (admin settings)",
+};
+
+const experimentalDefault = (key: ExperimentalFeatureFlag): FeatureFlag => ({
+  id: `default:${key}`,
+  key,
+  enabled: false,
+  rolloutPct: 100,
+  description: EXPERIMENTAL_FLAG_DESCRIPTIONS[key],
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+});
+
 // Flags surfaced in admin UI even before a row exists. skills and mcp are listed
 // (off) so their toggles appear on a fresh install without seeding a row
 // (ADR-041 §4); extraction_flows is listed on, matching its migration seed, so
@@ -90,6 +121,7 @@ const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
     createdAt: new Date(0),
     updatedAt: new Date(0),
   },
+  ...EXPERIMENTAL_FEATURE_FLAGS.map(experimentalDefault),
 ];
 
 export class GetFeatureFlag {

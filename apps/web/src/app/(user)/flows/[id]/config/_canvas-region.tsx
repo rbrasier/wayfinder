@@ -21,7 +21,7 @@ export function CanvasRegion({ flow, ...viewportProps }: CanvasRegionProps) {
   // this component reads it, and the screen is already at the size guard.
   // A draft shows neither the panel nor the affordance that reopens it.
   const memory = useFlowMemoryPanel(flow.id, viewportProps.nodes, flow.status);
-  const { isPublished, state, changeState } = memory;
+  const { showsMemory, state, changeState } = memory;
 
   return (
     // FlowCanvasViewport's own root is `relative flex-1` — it is already the
@@ -33,7 +33,7 @@ export function CanvasRegion({ flow, ...viewportProps }: CanvasRegionProps) {
       <FlowCanvasViewport
         {...viewportProps}
         memoryToggle={
-          isPublished && state === "hidden" ? (
+          showsMemory && state === "hidden" ? (
             <FlowMemoryToggle
               proposedCount={0}
               onReopen={() => changeState(stateAfterReopening())}
@@ -42,7 +42,7 @@ export function CanvasRegion({ flow, ...viewportProps }: CanvasRegionProps) {
         }
       />
 
-      {isPublished ? (
+      {showsMemory ? (
         <FlowMemoryPanel
           flowId={flow.id}
           state={state}
