@@ -1,7 +1,8 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { authenticatedProcedure, canOversee, router, type TrpcContext } from "../trpc";
+import { canOversee, router, type TrpcContext } from "../trpc";
 import { toTrpcError } from "../trpc-errors";
+import { featureProcedure } from "../feature-gates";
 import { canEditFlow } from "./flow";
 
 // Every procedure here is gated on edit rights for the flow, reusing the same
@@ -46,8 +47,10 @@ const seedSchema = z.object({
   stepOutputs: z.array(seedStepOutputSchema).default([]),
 });
 
+const flowTestProcedure = featureProcedure("flow_test_runs");
+
 export const flowTestRouter = router({
-  start: authenticatedProcedure
+  start: flowTestProcedure
     .input(
       z.object({
         flowId: z.string().guid(),
@@ -73,7 +76,7 @@ export const flowTestRouter = router({
       return result.data;
     }),
 
-  report: authenticatedProcedure
+  report: flowTestProcedure
     .input(z.object({ sessionId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.getTestRunReport.execute({
@@ -85,7 +88,7 @@ export const flowTestRouter = router({
       return result.data;
     }),
 
-  delete: authenticatedProcedure
+  delete: flowTestProcedure
     .input(z.object({ sessionId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.deleteTestSession.execute({
@@ -99,7 +102,7 @@ export const flowTestRouter = router({
 
   // Real sessions on this flow that a seed could be cloned from. Live only —
   // cloning a previous test run would seed a test from invented data.
-  listSeedableSessions: authenticatedProcedure
+  listSeedableSessions: flowTestProcedure
     .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
       await assertCanEdit(ctx, input.flowId);
@@ -117,7 +120,7 @@ export const flowTestRouter = router({
         }));
     }),
 
-  cloneSeed: authenticatedProcedure
+  cloneSeed: flowTestProcedure
     .input(z.object({ sessionId: z.string().guid(), upToNodeId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       const result = await ctx.container.useCases.buildSeedFromSession.execute({
@@ -130,7 +133,7 @@ export const flowTestRouter = router({
       return result.data;
     }),
 
-  generateSeed: authenticatedProcedure
+  generateSeed: flowTestProcedure
     .input(z.object({ flowId: z.string().guid(), startNodeId: z.string().guid() }))
     .mutation(async ({ ctx, input }) => {
       await assertCanEdit(ctx, input.flowId);
@@ -149,7 +152,7 @@ export const flowTestRouter = router({
     // Scoped to the caller in the repository, not here: a fixture cloned from a
     // live session can hold real personal data, so "not yours" and "not found"
     // must be the same answer.
-    list: authenticatedProcedure
+    list: flowTestProcedure
       .input(z.object({ flowId: z.string().guid() }))
       .query(async ({ ctx, input }) => {
         await assertCanEdit(ctx, input.flowId);
@@ -162,7 +165,7 @@ export const flowTestRouter = router({
         return result.data;
       }),
 
-    create: authenticatedProcedure
+    create: flowTestProcedure
       .input(
         z.object({
           flowId: z.string().guid(),
@@ -187,7 +190,7 @@ export const flowTestRouter = router({
         return result.data;
       }),
 
-    update: authenticatedProcedure
+    update: flowTestProcedure
       .input(
         z.object({
           id: z.string().guid(),
@@ -208,7 +211,7 @@ export const flowTestRouter = router({
         return result.data;
       }),
 
-    delete: authenticatedProcedure
+    delete: flowTestProcedure
       .input(z.object({ id: z.string().guid() }))
       .mutation(async ({ ctx, input }) => {
         const result = await ctx.container.repos.flowTestFixtures.delete(input.id, ctx.userId);

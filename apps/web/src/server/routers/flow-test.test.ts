@@ -17,7 +17,7 @@ const STRANGER = "66666666-6666-6666-6666-666666666666";
 // A container stub whose flow carries a real owner, so `canEditFlow` runs its
 // genuine rule rather than a stubbed yes/no. Every use-case records the userId
 // it was handed, which is what the scoping assertions inspect.
-const containerFor = (calls: { seen: Record<string, unknown>[] }): Container =>
+const containerFor = (calls: { seen: Record<string, unknown>[] }, testRunsEnabled = true): Container =>
   ({
     services: { errorLogger: { log: async () => undefined } },
     repos: {
@@ -47,6 +47,9 @@ const containerFor = (calls: { seen: Record<string, unknown>[] }): Container =>
       },
     },
     useCases: {
+      isFeatureEnabledForUser: {
+        execute: async (_userId: string, key: string) => ({ data: key === "flow_test_runs" && testRunsEnabled }),
+      },
       getFlowCanvas: {
         execute: async () => ({
           data: { flow: { id: FLOW, ownerUserId: OWNER, permissions: [] } },
@@ -101,6 +104,19 @@ const contextFor = (
 });
 
 const freshCalls = () => ({ seen: [] as Record<string, unknown>[] });
+
+describe("flowTest router — flow_test_runs flag", () => {
+  it("refuses to start a test run while the flag is off, before any use-case runs", async () => {
+    const calls = freshCalls();
+    const caller = createCaller({ ...contextFor(OWNER, calls), container: containerFor(calls, false) });
+
+    await expect(caller.flowTest.start({ flowId: FLOW })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      caller.flowTest.generateSeed({ flowId: FLOW, startNodeId: NODE }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(calls.seen).toEqual([]);
+  });
+});
 
 describe("flowTest router — authorisation boundary", () => {
   it("lets the flow owner start a test run", async () => {

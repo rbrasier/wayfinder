@@ -379,6 +379,9 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
   // a simulated session is never an admin session (ADR-059 §3a).
   const impersonationQuery = trpc.impersonation.current.useQuery();
   const isSimulating = impersonationQuery.data != null;
+  // Experimental in alpha-3; the start route enforces the same flag.
+  const viewAsUserEnabled =
+    trpc.featureFlag.isEnabledForMe.useQuery({ key: "view_as_user" }).data ?? false;
   const sessionsQuery = trpc.session.list.useQuery(undefined, {
     enabled: !isAdmin,
   });
@@ -650,7 +653,7 @@ export function AppSidebar({ isAdmin = false }: AppSidebarProps) {
                 <LogOut className="h-[14px] w-[14px] shrink-0 text-[#5c574c]" />
                 Sign out
               </button>
-              {user.isAdmin && !isSimulating && (
+              {user.isAdmin && !isSimulating && viewAsUserEnabled && (
                 <button
                   type="button"
                   role="menuitem"
