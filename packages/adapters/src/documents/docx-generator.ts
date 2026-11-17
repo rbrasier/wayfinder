@@ -5,6 +5,7 @@ import { domainError, err, ok, parseTemplateFields, templateFieldKey } from "@wa
 import type { IDocumentGenerator, ExtractTagsInput, ExtractTagsOutput, ExtractFieldsInput, ExtractFieldsOutput, ExtractFullTextInput, ExtractFullTextOutput, GenerateInput, GenerateOutput, AnnotateInput, AnnotateOutput, TemplateAnnotationEdit } from "@wayfinder/domain";
 import type { DomainError, DomainErrorDetail, Result } from "@wayfinder/domain";
 import { detailsFromCause, detailsFromTagContent, headlineFor, tagSyntaxIssues } from "./tag-syntax";
+import { embedSignatureImages, markSignatureSlots } from "./docx-signature-image";
 
 // One <w:t> element. Offsets: xml* within its run's XML, *Index within the
 // paragraph's decoded text.
@@ -139,7 +140,9 @@ export class DocxGenerator implements IDocumentGenerator {
         linebreaks: true,
         delimiters: { start: "{{", end: "}}" },
       });
-      doc.render(input.data);
+      const images = input.images ?? {};
+      doc.render(markSignatureSlots(input.data, images));
+      embedSignatureImages(doc.getZip(), images);
       const bytes = doc.getZip().generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
       return ok({ bytes });
     } catch (cause) {

@@ -160,6 +160,37 @@ describe("GenerateDocument", () => {
     expect(sessionMessages.updateDocument).toHaveBeenCalledWith("msg-1", expect.objectContaining({ filename: expect.stringMatching(/\.docx$/) }));
   });
 
+  it("refuses to regenerate a document frozen for certificate signing", async () => {
+    const sessionMessages = makeSessionMessages();
+    (sessionMessages.findById as ReturnType<typeof vi.fn>).mockResolvedValue(
+      ok(
+        makeMessage({
+          document: {
+            filename: "rft.docx",
+            storagePath: "generated/sess-1/rft.docx",
+            summary: null,
+            generatedAt: "2026-11-08T00:00:00Z",
+            pdf: { storagePath: "generated/sess-1/rft-signed.pdf", sha256: "x", generatedAt: "t", status: "frozen" },
+          },
+        }),
+      ),
+    );
+    const objectStorage = makeObjectStorage();
+    const useCase = new GenerateDocument(makeDocumentGenerator(), objectStorage, makeLanguageModel(), sessionMessages, makeStepOutputs());
+
+    const result = await useCase.execute({
+      messageId: "msg-1",
+      sessionId: "sess-1",
+      messages: [makeMessage()],
+      flow: makeFlow(),
+      node: makeNode(),
+    });
+
+    expect(result.error?.code).toBe("VALIDATION_FAILED");
+    expect(result.error?.message).toBe("This document has been digitally signed and can no longer be regenerated.");
+    expect(objectStorage.put).not.toHaveBeenCalled();
+  });
+
   it("names the file .xlsx and stores it with the spreadsheet MIME type when the template format is xlsx", async () => {
     const documentGenerator = makeDocumentGenerator();
     (documentGenerator.generate as ReturnType<typeof vi.fn>).mockReturnValue(ok({ bytes: Buffer.from("fake-xlsx") }));

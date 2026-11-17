@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { showsDocumentCard, showsEditAffordance } from "./document-card-state";
+import { downloadOptions, showsDocumentCard, showsEditAffordance } from "./document-card-state";
 
 describe("showsDocumentCard", () => {
   it("shows the card for a message carrying a document", () => {
@@ -53,5 +53,37 @@ describe("showsEditAffordance", () => {
 
   it("respects a read-only or closed session", () => {
     expect(showsEditAffordance({ ...base, canEditDocuments: false })).toBe(false);
+  });
+});
+
+describe("downloadOptions", () => {
+  it("offers the PDF first and the Word file second once a PDF exists", () => {
+    const options = downloadOptions({ filename: "contract.docx", pdf: { storagePath: "a/contract.pdf", status: "frozen" } });
+
+    expect(options).toEqual([
+      { format: "pdf", label: "↓ PDF", primary: true },
+      { format: "original", label: "↓ DOCX", primary: false },
+    ]);
+  });
+
+  it("offers the PDF first for a rendered, unsigned PDF too", () => {
+    const options = downloadOptions({ filename: "memo.docx", pdf: { storagePath: "a/memo.pdf", status: "rendered" } });
+
+    expect(options.map((option) => option.format)).toEqual(["pdf", "original"]);
+  });
+
+  it("offers the original file alone when there is no PDF", () => {
+    expect(downloadOptions({ filename: "contract.docx" })).toEqual([
+      { format: "original", label: "↓ Download", primary: true },
+    ]);
+  });
+
+  // A failed conversion stores no file, and a superseded PDF is no longer the
+  // record: neither is offered.
+  it.each([
+    { storagePath: null, status: "failed" },
+    { storagePath: "a/contract.pdf", status: "superseded" },
+  ])("offers no PDF when it is $status", (pdf) => {
+    expect(downloadOptions({ filename: "contract.docx", pdf }).map((option) => option.format)).toEqual(["original"]);
   });
 });

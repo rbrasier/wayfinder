@@ -363,3 +363,26 @@ describe("allowOffSystemApproval round-trip", () => {
     expect(approvalValuesFromConfig(stored).allowOffSystemApproval).toBe(false);
   });
 });
+
+describe("convertToPdfOnSigning round-trip", () => {
+  const values = (overrides: Partial<NodeConfigValues> = {}): NodeConfigValues => ({
+    ...DEFAULT_VALUES,
+    type: "approval",
+    ...overrides,
+  });
+
+  it("opens off for a node authored before the setting existed", () => {
+    expect(approvalValuesFromConfig({}).convertToPdfOnSigning).toBe(false);
+  });
+
+  it("stores nothing when left off, so the node keeps its default", () => {
+    expect(approvalConfigFromValues(values())).not.toHaveProperty("convertToPdfOnSigning");
+  });
+
+  it("stores and reads back an author's choice to convert", () => {
+    const stored = approvalConfigFromValues(values({ convertToPdfOnSigning: true }));
+
+    expect(stored.convertToPdfOnSigning).toBe(true);
+    expect(approvalValuesFromConfig(stored).convertToPdfOnSigning).toBe(true);
+  });
+});
