@@ -15,15 +15,6 @@ const BADGE_COPY: Record<SignatureBadge, { label: string; className: string }> =
 
 const formatTime = (iso: string | null): string => (iso ? `${iso.slice(0, 16).replace("T", " ")} UTC` : "—");
 
-const download = (filename: string, content: string, type: string): void => {
-  const url = URL.createObjectURL(new Blob([content], { type }));
-  const link = window.document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-};
-
 // Who signed a session's documents, with what certificate and when, and
 // whether each signature still validates (PRD §3). Re-checking runs the engine
 // against the document as it stands now.
@@ -37,19 +28,10 @@ export function SignaturesPanel({ sessionId }: { sessionId: string }) {
     },
     onError: (error) => toast.error(error.message ?? "Could not re-check signatures"),
   });
-  const exportMetadata = trpc.signatures.exportMetadata.useMutation({
-    onError: (error) => toast.error(error.message ?? "Could not export"),
-  });
   const [open, setOpen] = useState(true);
 
   const entries = signatures.data ?? [];
   if (entries.length === 0) return null;
-
-  const exportAs = async (format: "csv" | "json") => {
-    const result = await exportMetadata.mutateAsync({ sessionId });
-    if (format === "csv") download(`signatures-${sessionId}.csv`, result.csv, "text/csv");
-    else download(`signatures-${sessionId}.json`, JSON.stringify(result.records, null, 2), "application/json");
-  };
 
   return (
     <div className="mt-3 rounded-[10px] border border-[#e7e3db] bg-[#faf9f7] p-3" data-testid="signatures-panel">
@@ -62,17 +44,9 @@ export function SignaturesPanel({ sessionId }: { sessionId: string }) {
         >
           Signatures ({entries.length})
         </button>
-        <div className="flex gap-1">
-          <Button size="sm" variant="ghost" onClick={() => revalidate.mutate({ sessionId })} disabled={revalidate.isPending}>
-            {revalidate.isPending ? "Checking…" : "Re-check"}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => void exportAs("csv")} disabled={exportMetadata.isPending}>
-            CSV
-          </Button>
-          <Button size="sm" variant="ghost" onClick={() => void exportAs("json")} disabled={exportMetadata.isPending}>
-            JSON
-          </Button>
-        </div>
+        <Button size="sm" variant="ghost" onClick={() => revalidate.mutate({ sessionId })} disabled={revalidate.isPending}>
+          {revalidate.isPending ? "Checking…" : "Re-check"}
+        </Button>
       </div>
       {open && (
         <ul className="mt-2 space-y-2">

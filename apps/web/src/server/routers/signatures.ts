@@ -37,6 +37,8 @@ export const signaturesRouter = router({
     return { ok: true };
   }),
 
+  // Not offered in the Signatures panel since 0.41.7; kept for the audit export
+  // the document-signatures PRD describes, so restoring it is UI work only.
   exportMetadata: authenticatedProcedure.input(sessionInput).mutation(async ({ ctx, input }) => {
     await authoriseRead(ctx, input.sessionId);
     const result = await ctx.container.useCases.exportSignatureMetadata.execute(input.sessionId);

@@ -9,6 +9,7 @@ import { DocumentInfoModal } from "./document-info-modal";
 import { DocumentEditDialog } from "./document-edit-dialog";
 import { DocumentEditHistoryModal } from "./document-edit-history-modal";
 import { SignaturesPanel } from "@/components/signatures/signatures-panel";
+import { downloadOptions } from "./document-card-state";
 
 interface DocumentCardProps {
   messageId: string;
@@ -122,21 +123,19 @@ export function DocumentCard({
             </div>
           ) : (
             <>
-              <Button size="sm" onClick={() => void handleDownload()} disabled={isDownloading} className="flex-1">
-                {isDownloading ? "Downloading…" : "↓ Download"}
-              </Button>
-              {document.pdf?.storagePath && document.pdf.status !== "superseded" && (
+              {downloadOptions(document).map((option) => (
                 <Button
+                  key={option.format}
                   size="sm"
-                  variant="secondary"
-                  data-testid="document-download-pdf"
-                  onClick={() => void handleDownload("pdf")}
+                  variant={option.primary ? "default" : "secondary"}
+                  data-testid={option.format === "pdf" ? "document-download-pdf" : "document-download-original"}
+                  onClick={() => void handleDownload(option.format)}
                   disabled={isDownloading}
-                  className="shrink-0"
+                  className={option.primary ? "flex-1" : "shrink-0"}
                 >
-                  ↓ PDF
+                  {option.primary && isDownloading ? "Downloading…" : option.label}
                 </Button>
-              )}
+              ))}
               {canEdit && (
                 <Button
                   size="sm"

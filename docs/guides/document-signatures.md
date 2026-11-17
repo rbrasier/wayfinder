@@ -81,7 +81,8 @@ when an approver signs, the approval stays pending with the reason shown.
   signing starts again on the reworked document.
 - Each signed document shows a **Signatures** panel: signer, certificate,
   time, timestamp, level and a badge — valid, valid-but-expired,
-  invalid-modified or unverifiable — with **Re-check** and CSV/JSON export.
+  invalid-modified or unverifiable — with **Re-check**. A document with a PDF offers the PDF as its main
+download and the `.docx` beside it.
 - An approval recorded **off system** on a certificate step must upload the PDF
   the approver digitally signed; it is validated, and its signer must be the
   nominated approver.

@@ -45,6 +45,9 @@ test.describe.serial('Document signatures: PDF on signing', () => {
     await estimate.getByRole('button', { name: 'Skip' }).click();
     const pdfButton = page.getByTestId('document-download-pdf').first();
     await expect(pdfButton).toBeVisible({ timeout: ROUTE_COMPILE_TIMEOUT });
+    // The PDF is the main download once it exists; the editable original sits
+    // beside it under its own format.
+    await expect(page.getByTestId('document-download-original').first()).toHaveText('↓ DOCX');
 
     const downloadPromise = page.waitForEvent('download');
     await pdfButton.click();
