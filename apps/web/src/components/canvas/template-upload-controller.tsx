@@ -49,7 +49,7 @@ export interface TemplateUploadController {
 // Owns the handoff from the node-config upload button to the modals. Upload now
 // opens a choice: a tagged template goes through the file picker into the guided
 // annotation modal as before; a filled example opens the drafting modal
-// (ADR-067). Nothing is persisted until a modal saves the reviewed result.
+// (ADR-070). Nothing is persisted until a modal saves the reviewed result.
 export function useTemplateUpload(
   fileInputRef: RefObject<HTMLInputElement | null>,
   onApply: (result: TemplateUploadResult) => void,

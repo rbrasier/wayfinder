@@ -9,7 +9,7 @@
  * Since #347 the upload button first asks whether the author has a tagged
  * template or a filled example. The tagged path is the flow above, unchanged;
  * the example path drafts placeholders from one or more filled .docx copies
- * (ADR-067). The draft route is stubbed here — what it drafts is covered by the
+ * (ADR-070). The draft route is stubbed here — what it drafts is covered by the
  * use-case and route unit tests; this covers the files crossing the browser.
  *
  * What is tested:

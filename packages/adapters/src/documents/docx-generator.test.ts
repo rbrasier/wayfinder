@@ -674,7 +674,7 @@ describe("DocxGenerator", () => {
       );
     });
 
-    // Template drafting (ADR-067) relies on annotate() being a plain text
+    // Template drafting (ADR-070) relies on annotate() being a plain text
     // substitution inside existing runs: a document is never rebuilt, so every
     // part an edit does not touch must come back exactly as it went in.
     describe("leaves the rest of a formatted document exactly as it was", () => {

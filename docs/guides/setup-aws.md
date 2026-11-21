@@ -47,13 +47,23 @@ callback webhook (`/v1/webhooks`), which is the one route an outside caller hits
 Wayfinder publishes a container image, so there is nothing to build:
 
 ```
-ghcr.io/rbrasier/wayfinder:0.28.44
+ghcr.io/rbrasier/wayfinder:0.41.1
 ```
 
 It is public — no credential, no `imagePullSecret`. One image contains both
 processes; the ECS task definition picks which one runs by setting the command
 (`web`, `api` or `migrate`). Pin the version rather than using `latest`, so a
 scale-out event can never pull a different build than the one you tested.
+
+**Default or `-slim`.** The image above includes the built-in PDF converter
+(LibreOffice) and signature engine (EU DSS) used by document signatures; they
+start only if an admin turns on a method that needs them.
+`ghcr.io/rbrasier/wayfinder:0.41.1-slim` is
+the same image without them, about 600 MB smaller, for installs that never
+sign with drawings or certificates or that run those engines separately. With
+certificate signing in use, give the web container roughly 500 MB more memory
+and mount your signers' CA certificates at `/app/trust`. See
+[document-signatures.md](document-signatures.md).
 
 **Optional: mirror it into ECR.** Pulling from GHCR works, but a copy in ECR
 gives you lower pull latency, no cross-internet egress on every scale-out, and
@@ -68,9 +78,9 @@ aws ecr create-repository --repository-name wayfinder --region "$AWS_REGION"
 aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
 
-docker pull ghcr.io/rbrasier/wayfinder:0.28.44
-docker tag ghcr.io/rbrasier/wayfinder:0.28.44 "$REPO:0.28.44"
-docker push "$REPO:0.28.44"
+docker pull ghcr.io/rbrasier/wayfinder:0.41.1
+docker tag ghcr.io/rbrasier/wayfinder:0.41.1 "$REPO:0.41.1"
+docker push "$REPO:0.41.1"
 ```
 
 **Air-gapped or egress-restricted?** The published image fetches the local

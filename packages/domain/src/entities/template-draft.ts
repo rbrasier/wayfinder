@@ -1,6 +1,6 @@
 import { deriveFieldKey, type TemplateField } from "./template-field";
 
-// Drafting a template from filled examples (ADR-067). The AI proposes fields and
+// Drafting a template from filled examples (ADR-070). The AI proposes fields and
 // the values they replace; everything here is the code that decides whether a
 // proposal can be trusted and where its placeholder lands.
 

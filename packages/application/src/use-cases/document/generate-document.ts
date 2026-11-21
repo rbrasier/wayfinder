@@ -87,6 +87,15 @@ export class GenerateDocument {
       return err(domainError("VALIDATION_FAILED", "No template configured for this node."));
     }
 
+    // Regenerating would replace the signed record with an unsigned rewrite;
+    // only a change request may reopen a frozen document (ADR-068 §1, §3).
+    const current = await this.sessionMessages.findById(input.messageId);
+    if (current.data?.document?.pdf?.status === "frozen") {
+      return err(
+        domainError("VALIDATION_FAILED", "This document has been digitally signed and can no longer be regenerated."),
+      );
+    }
+
     const templateResult = await this.objectStorage.get(config.documentTemplatePath);
     if (templateResult.error) return templateResult;
 

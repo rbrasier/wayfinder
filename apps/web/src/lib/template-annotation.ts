@@ -22,7 +22,7 @@ export interface AnnotationRow {
   // Section and group tags are multi-line Word constructs that cannot be
   // meaningfully edited in a flat grid. They ride through untouched.
   locked: boolean;
-  // Present only on a row drafted from a filled example (ADR-067).
+  // Present only on a row drafted from a filled example (ADR-070).
   draft?: AnnotationDraft;
 }
 

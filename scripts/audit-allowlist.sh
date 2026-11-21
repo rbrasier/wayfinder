@@ -38,19 +38,7 @@
 #   REMOVE WHEN: braces (or micromatch moving off it) publishes a patched
 #   release — then pin it in the root package.json overrides instead — or
 #   both eslint-config-next and @changesets/cli stop depending on micromatch@4.
-#
-# GHSA-qr28-fpjm-wq7f (CVE-2026-118664) — decode-uri-component denial of service
-#   via quadratic decoding of crafted percent-encoded input. Also waived in
-#   .trivyignore under its CVE id.
-#   WHY: patched only in 0.5.1, a new release line that is ESM-only, while the
-#   sole consumer, query-string@7, loads it with require(). query-string@7 comes
-#   from minio@8.0.7, minio's latest, which pins query-string ^7. minio only ever
-#   calls query-string's stringify(), never parse(), so the vulnerable decoder
-#   is not reached; nothing else in the lockfile depends on it.
-#   REMOVE WHEN: minio drops query-string@7 (or decode-uri-component publishes a
-#   fix on the 0.2 line) — then take that upgrade instead.
 # shellcheck disable=SC2034 # read by the scripts that source this file
 ALLOWED_ADVISORIES=(
   "GHSA-vfj7-8cjw-p6xm"
-  "GHSA-qr28-fpjm-wq7f"
 )

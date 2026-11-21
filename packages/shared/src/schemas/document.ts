@@ -24,7 +24,7 @@ export const templateStructureSchema = z.object({
 });
 export type TemplateStructure = z.infer<typeof templateStructureSchema>;
 
-// One field drafted from a filled example (ADR-067). The model names the field
+// One field drafted from a filled example (ADR-070). The model names the field
 // and quotes the value; the annotation line is serialised server-side and the
 // placeholder is placed by code, so neither can carry a syntax error.
 export const templateDraftFieldSchema = z.object({

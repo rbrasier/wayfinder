@@ -41,7 +41,7 @@ export interface NodeConfigModalConversationalProps {
   uploadError: string | null;
   setUploadError: (value: string | null) => void;
   onOpenHelpDialog: (variant: HelpVariant) => void;
-  // Opens the choice between a tagged template and a filled example (ADR-067).
+  // Opens the choice between a tagged template and a filled example (ADR-070).
   onStartTemplateUpload: () => void;
   // Re-opens the field editor for the attached template without re-uploading.
   onEditTemplateFields?: () => void;

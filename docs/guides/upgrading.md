@@ -3,7 +3,7 @@
 Wayfinder is distributed as a container image. Upgrading means pointing at a
 newer tag and applying any migrations that came with it.
 
-Every published tag is immutable — `0.28.44` is always the same image — so an
+Every published tag is immutable — `0.41.1` is always the same image — so an
 upgrade is a deliberate change of version, and a rollback is the same change in
 reverse.
 
@@ -36,7 +36,7 @@ Migrations are a **discrete step**, never a side effect of the web app starting
 
 ```bash
 docker run --rm -e DATABASE_URL="postgresql://…" \
-  ghcr.io/rbrasier/wayfinder:0.28.44 migrate
+  ghcr.io/rbrasier/wayfinder:0.41.1 migrate
 ```
 
 It reports what it did and exits `0` on success, non-zero on failure:
@@ -76,7 +76,7 @@ docker compose -f docker-compose.prod.yml exec -T postgres \
   pg_dump -U postgres wayfinder | gzip > wayfinder-$(date +%F).sql.gz
 
 # 2. Point at the new version
-sed -i 's/^WAYFINDER_VERSION=.*/WAYFINDER_VERSION=0.28.44/' .env
+sed -i 's/^WAYFINDER_VERSION=.*/WAYFINDER_VERSION=0.41.1/' .env
 
 # 3. Pull and restart — migrations run automatically, before the app starts
 docker compose -f docker-compose.prod.yml pull
@@ -306,7 +306,7 @@ of the schema on an alpha-2 database.
 
 - **Read the release notes** for the version you are moving to, and for any you
   are skipping. Version numbers are continuous across release lines, so going
-  from `0.26.x` to `0.28.44` means you are taking `0.27.x`'s migrations too.
+  from `0.26.x` to `0.41.1` means you take the migrations of every release in between.
 - **Back up `SETTINGS_ENCRYPTION_KEY`** — separately from the database. It
   encrypts every integration credential the setup wizard stored. Restoring a
   database without it leaves those rows unreadable, and every integration has to

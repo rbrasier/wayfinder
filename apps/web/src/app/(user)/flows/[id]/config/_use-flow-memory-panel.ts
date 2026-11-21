@@ -6,6 +6,7 @@ import {
   writePanelState,
   type FlowMemoryPanelState,
 } from "@/components/canvas/flow-memory-panel-model";
+import { trpc } from "@/trpc/client";
 
 // Panel state, persisted per user per flow. Read on mount and written on every
 // transition; the model handles a storage that is absent or throws, so this hook
@@ -21,6 +22,8 @@ export function useFlowMemoryPanel(
   flowStatus: "draft" | "published",
 ) {
   const [state, setState] = useState<FlowMemoryPanelState>("narrow");
+  // Flow memory is experimental in alpha-3 and off until flow_memory is enabled.
+  const memoryEnabled = trpc.featureFlag.isEnabledForMe.useQuery({ key: "flow_memory" }).data ?? false;
 
   const store = () => (typeof window === "undefined" ? null : window.localStorage);
 
@@ -44,6 +47,6 @@ export function useFlowMemoryPanel(
 
   // Everything the canvas region needs to render the panel, as one object, so
   // the config screen passes a single prop rather than five.
-  // Only a published flow has sessions to learn from.
-  return { flowId, state, changeState, nodeNamesById, isPublished: flowStatus === "published" };
+  // Only a published flow has sessions to learn from, and only while the flag is on.
+  return { flowId, state, changeState, nodeNamesById, showsMemory: memoryEnabled && flowStatus === "published" };
 }

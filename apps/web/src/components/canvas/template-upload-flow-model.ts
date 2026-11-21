@@ -1,5 +1,5 @@
 // Which template-upload surface is open. `choosing` is the two-button choice;
-// `examples` is the draft-from-examples path (ADR-067). A picked or re-uploaded
+// `examples` is the draft-from-examples path (ADR-070). A picked or re-uploaded
 // file, or field editing, opens the existing tagged-template annotation flow.
 export type UploadStage = "idle" | "choosing" | "examples";
 

@@ -50,7 +50,7 @@ the n8n callback webhook (`/v1/webhooks`), if you use it.
 Wayfinder publishes a container image, so there is nothing to build:
 
 ```
-ghcr.io/rbrasier/wayfinder:0.28.44
+ghcr.io/rbrasier/wayfinder:0.41.1
 ```
 
 It is public — no registry credential and no pull secret on the Container App.
@@ -58,6 +58,16 @@ One image contains both processes; each Container App picks which one runs by
 setting the command (`web`, `api` or `migrate`). Pin the version rather than
 using `latest`, so a scale event can never pull a different build than the one
 you tested.
+
+**Default or `-slim`.** The image above includes the built-in PDF converter
+(LibreOffice) and signature engine (EU DSS) used by document signatures; they
+start only if an admin turns on a method that needs them.
+`ghcr.io/rbrasier/wayfinder:0.41.1-slim` is
+the same image without them, about 600 MB smaller, for installs that never
+sign with drawings or certificates or that run those engines separately. With
+certificate signing in use, give the web container roughly 500 MB more memory
+and mount your signers' CA certificates at `/app/trust`. See
+[document-signatures.md](document-signatures.md).
 
 **Optional: import it into ACR.** Pulling from GHCR works, but a copy in ACR
 gives lower pull latency, no cross-internet egress on every scale event, and
@@ -70,8 +80,8 @@ ACR=wayfinderacr
 az group create --name "$RG" --location uksouth
 az acr create --resource-group "$RG" --name "$ACR" --sku Basic
 az acr import --name "$ACR" \
-  --source ghcr.io/rbrasier/wayfinder:0.28.44 \
-  --image wayfinder:0.28.44
+  --source ghcr.io/rbrasier/wayfinder:0.41.1 \
+  --image wayfinder:0.41.1
 ```
 
 `az acr import` copies registry-to-registry — no local Docker, and nothing
@@ -219,7 +229,7 @@ something several replicas race to do during a rolling update:
 az containerapp job create \
   --name wayfinder-migrate --resource-group "$RG" --environment wayfinder-env \
   --trigger-type Manual --replica-timeout 600 \
-  --image ghcr.io/rbrasier/wayfinder:0.28.44 \
+  --image ghcr.io/rbrasier/wayfinder:0.41.1 \
   --command migrate
 ```
 

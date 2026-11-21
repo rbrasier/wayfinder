@@ -7,7 +7,7 @@ import {
 } from "@/lib/template-draft-limits";
 import { saveBlockedReason, type EditableRow } from "./template-annotation-model";
 
-// The example path's steps (ADR-067). `reupload` and `reference` are the same
+// The example path's steps (ADR-070). `reupload` and `reference` are the same
 // surfaces the tagged-template path uses.
 export type DraftStep = "choose-examples" | "drafting" | "review" | "compare" | "saving" | "reupload" | "reference";
 

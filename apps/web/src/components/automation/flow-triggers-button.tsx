@@ -45,12 +45,10 @@ export function FlowTriggersButton({ flowId }: { flowId: string }) {
                   <FieldGroupLabel id="triggers-inputs">Inputs</FieldGroupLabel>
                   <TriggerInputsEditor flowId={flowId} saved={triggers.data.triggerInputs} />
                 </section>
-                {triggers.data.canManageWebhook && (
-                  <section className="space-y-2">
-                    <FieldGroupLabel id="triggers-webhook">Start via webhook</FieldGroupLabel>
-                    <WebhookPanel flowId={flowId} webhook={triggers.data.webhook} webhookUrl={triggers.data.webhookUrl} />
-                  </section>
-                )}
+                <section className="space-y-2">
+                  <FieldGroupLabel id="triggers-webhook">Start via webhook</FieldGroupLabel>
+                  <WebhookPanel flowId={flowId} webhook={triggers.data.webhook} webhookUrl={triggers.data.webhookUrl} />
+                </section>
                 {triggers.data.webhook && (
                   <section className="space-y-2">
                     <FieldGroupLabel id="triggers-runs">Recent webhook runs</FieldGroupLabel>

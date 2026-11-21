@@ -1,7 +1,7 @@
 # Phase — Template Drafting from Examples
 
-- **Status**: Implemented in 0.41.1 — see `template-drafting-from-examples.summary.md`
-- **Target version**: **PATCH**, 0.41.0 → 0.41.1 on `release/alpha-3`.
+- **Status**: Implemented in 0.41.8 — see `template-drafting-from-examples.summary.md`
+- **Target version**: **PATCH**, 0.41.7 → 0.41.8 on `release/alpha-3`.
   CLAUDE.md's rule would make a new feature MINOR on `main`. The maintainer
   chose PATCH on 2026-10-28 because this extends the existing template upload
   flow and changes no schema.
@@ -10,10 +10,11 @@
   maintainer's request on 2026-10-29, and retargeted to `release/alpha-3`
   once that line was cut (2026-11-01). Landing a feature on a release branch
   knowingly overrides the "no new features on a release branch" rule; the
-  forward-merge carries it to `main`. ADR renumbered 066 → 067, because
-  ADR-066 (delegated admin roles) already exists.
+  forward-merge carries it to `main`. The ADR has been renumbered as each
+  line took the numbers first: it is now ADR-070, because alpha-3 holds
+  ADR-066 (delegated admin roles) and ADR-067 to 069 (document signatures).
 - **PRD**: `docs/development/prd/template-drafting-from-examples.prd.md`
-- **ADR**: `docs/development/adr/067-template-drafting-is-extract-then-code-anchor.adr.md`
+- **ADR**: `docs/development/adr/070-template-drafting-is-extract-then-code-anchor.adr.md`
 - **Issue**: #347
 
 ## 1. Goal
@@ -183,7 +184,7 @@ None. No migration.
 
 ## 7. ADR required
 
-ADR-067 (new). The AI extracts, code places tags, the AI verifies; the
+ADR-070 (new). The AI extracts, code places tags, the AI verifies; the
 comparison is a domain function; the draft route persists nothing.
 
 ## 8. Risks / open questions

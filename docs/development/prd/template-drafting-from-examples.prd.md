@@ -1,9 +1,9 @@
 # PRD — Template Drafting from Examples
 
-- **Status**: Accepted — implemented in 0.41.1
+- **Status**: Accepted — implemented in 0.41.8
 - **Date**: 2026-10-28
 - **Author**: rbrasier
-- **Target version**: 0.41.1 (bump: PATCH, the maintainer's choice; see the phase doc §1)
+- **Target version**: 0.41.8 (bump: PATCH, the maintainer's choice; see the phase doc §1)
 - **Issue**: #347 (parent #346, "Wayfinder feedback")
 
 ## 1. Problem
@@ -113,12 +113,12 @@ as it does today.
 
 ## 9. Architectural decisions
 
-- ADR-067 (new): template drafting extracts with the AI and places tags with
+- ADR-070 (new): template drafting extracts with the AI and places tags with
   code, with a cross-example comparison filter and a verify-only second
   pass.
 - Restores the caption-to-value anchoring from `ed73b66` and the
   modal's copy and layout from `eb5e93e`/`d900b6b`. It does not restore the
-  AI's self-reported confidence (see ADR-067 §2).
+  AI's self-reported confidence (see ADR-070 §2).
 - Assumes the annotation design from v0.21.3: tag syntax is built
   server-side, and examples are held in the browser and never stored.
 

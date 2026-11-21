@@ -70,7 +70,7 @@ const downloadBase64 = (base64: string, filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-// The draft-from-examples path (ADR-067): pick filled examples, draft, review,
+// The draft-from-examples path (ADR-070): pick filled examples, draft, review,
 // compare side by side, save. Examples stay in the browser; the save posts the
 // base example with the reviewed rows to the existing template route, which
 // writes the placeholders into it there.

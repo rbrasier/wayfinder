@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dialog";
 
 // The first step of template upload: does the author already have a template
-// with {{ tags }}, or a filled example to draft one from (ADR-067)?
+// with {{ tags }}, or a filled example to draft one from (ADR-070)?
 export function TemplateSourceChoiceModal({
   onChooseTagged,
   onChooseExamples,

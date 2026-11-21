@@ -141,7 +141,7 @@ const tagFor = (line: string): string => `{{ ${line} }}`;
 const replacementFor = (placement: Placement): string =>
   placement.insertAfter ? `${placement.sourceText} ${tagFor(placement.line)}` : tagFor(placement.line);
 
-// Drafts a template from filled examples (ADR-067): the model extracts fields,
+// Drafts a template from filled examples (ADR-070): the model extracts fields,
 // code decides where each placeholder lands, and a checking pass may only add.
 // The document is edited once, by annotate(), as plain text substitutions
 // inside its existing runs — it is never rebuilt, so its formatting survives.

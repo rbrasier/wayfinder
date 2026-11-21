@@ -8,7 +8,7 @@ const UNREADABLE_EXAMPLE = "This file could not be read as a Word document.";
 const textOf = (example: UploadedExample): string | null =>
   generatorFor("docx").extractFullText({ templateBytes: example.buffer }).data?.text ?? null;
 
-// Drafts a template from filled examples (ADR-067). Nothing is persisted: the
+// Drafts a template from filled examples (ADR-070). Nothing is persisted: the
 // examples may carry real supplier data or personal details, so they live only
 // in this request and in the browser. The author saves through POST …/template,
 // which re-applies the reviewed rows to the base example.

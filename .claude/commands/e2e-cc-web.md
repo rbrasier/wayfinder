@@ -193,7 +193,7 @@ After the run, produce a structured report:
 - Specs run sequentially (`workers: 1`, shared auth state) and the DB is **not**
   reset between files, so flows created by `admin-flow-editing` are still there
   when later specs run.
-- `@sparticuz/chromium` is ~Chromium 123 while Playwright (1.60) bundles ~143.
+- `@sparticuz/chromium` is ~Chromium 123 while Playwright (1.64) bundles a newer Chromium.
   Stick with **`@sparticuz/chromium@123`**: bumping to `@143` (to match CI) was
   tried and is *worse* — it adds flaky logout-context timeouts and does **not**
   fix the hydration failures below, confirming those are app-level, not browser.
