@@ -38,6 +38,7 @@ export const SEED_FIXTURE_KEYS = [
   'approvalWithdrawDraftStepName',
   'offSystemApprovalSessionId',
   'offSystemApprovalNextStepName',
+  'signingSessionId',
   'extractionFlowId',
   'extractionRunId',
   'automationFlowId',

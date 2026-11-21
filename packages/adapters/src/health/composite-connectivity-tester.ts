@@ -10,6 +10,8 @@ import {
   type EmbeddingsConfig,
   type IConnectivityTester,
   type IEmbeddingsProvider,
+  type ISignatureServicesProbe,
+  type SignatureConfig,
   type N8nConfig,
   type Result,
   type StorageConfig,
@@ -38,6 +40,7 @@ interface RuntimeConfigSource {
   getN8nConfig(): Promise<N8nConfig>;
   getEmbeddingsConfig(): Promise<EmbeddingsConfig>;
   getAuthConfig(): Promise<AuthConfig>;
+  getSignatureConfig(): Promise<SignatureConfig>;
   // The PKI environment gate as a boolean — the addresses themselves never
   // reach a probe (ADR-042 §3).
   isPkiEnvConfigured(): boolean;
@@ -56,6 +59,9 @@ export interface ConnectivityTesterDeps {
   fetchFn?: typeof fetch;
   minioClientFactory?: MinioClientFactory;
   timeoutMs?: number;
+  // The document signing services, probed against the saved signature config
+  // (ADR-067 §6). Absent reads every signing target as skipped.
+  signatureProbe?: ISignatureServicesProbe;
 }
 
 // Mirrors CompositeHealthChecker: holds the integration dependencies and
@@ -138,6 +144,12 @@ export class CompositeConnectivityTester implements IConnectivityTester {
           await deps.runtimeConfig.getAuthConfig(),
           deps.credentialAccounts,
         );
+      case "pdf-converter":
+      case "signature-engine":
+      case "timestamp-authority":
+      case "signing-provider":
+        if (!deps.signatureProbe) return { target, ok: false, skipped: true, message: "Not configured" };
+        return deps.signatureProbe.probe(target, await deps.runtimeConfig.getSignatureConfig());
     }
   }
 }

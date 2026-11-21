@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ok, type Approval, type IApprovalRepository, type TemplateField } from "@wayfinder/domain";
-import { approvalValuesForStep } from "./approval-values";
+import { approvalOwnedForStep, loadSlotImages } from "./approval-values";
+import { InMemoryObjectStorage } from "../__fixtures__/presentation-doubles";
 
 const at = (iso: string) => new Date(iso);
 
@@ -60,10 +61,10 @@ const repositoryOf = (rows: Approval[]): IApprovalRepository =>
       ),
   }) as unknown as IApprovalRepository;
 
-const valuesFor = (rows: Approval[]) =>
-  approvalValuesForStep(repositoryOf(rows), "sess-1", "node-draft", fields);
+const valuesFor = async (rows: Approval[]) =>
+  (await approvalOwnedForStep(repositoryOf(rows), "sess-1", "node-draft", fields)).values;
 
-describe("approvalValuesForStep", () => {
+describe("approvalOwnedForStep", () => {
   it("fills a slot from the approval that decided it", async () => {
     expect(await valuesFor([approval()])).toEqual({
       finance_signature: "Approved by:   Jane Doe",
@@ -181,8 +182,8 @@ describe("approval comment slots", () => {
     field("finance_note", "approval_comment", "finance_signature"),
   ];
 
-  const commentValuesFor = (rows: Approval[]) =>
-    approvalValuesForStep(repositoryOf(rows), "sess-1", "node-draft", commentFields);
+  const commentValuesFor = async (rows: Approval[]) =>
+    (await approvalOwnedForStep(repositoryOf(rows), "sess-1", "node-draft", commentFields)).values;
 
   it("fills the comment from the approval that signed the slot it names", async () => {
     const withComment = approval({ comment: "Within delegated authority." });
@@ -250,12 +251,9 @@ describe("approval comment slots", () => {
     });
 
     expect(
-      await approvalValuesForStep(
-        repositoryOf([finance, legal]),
-        "sess-1",
-        "node-draft",
-        twoSlots,
-      ),
+      (
+        await approvalOwnedForStep(repositoryOf([finance, legal]), "sess-1", "node-draft", twoSlots)
+      ).values,
     ).toEqual({
       finance_signature: "Approved by:   Jane Doe",
       finance_note: "Budget confirmed.",
@@ -287,15 +285,47 @@ describe("approval comment slots", () => {
     ];
 
     expect(
-      await approvalValuesForStep(
-        repositoryOf([approval({ comment: "Within delegated authority." })]),
-        "sess-1",
-        "node-draft",
-        unbound,
-      ),
+      (
+        await approvalOwnedForStep(repositoryOf([approval({ comment: "Within delegated authority." })]), "sess-1", "node-draft", unbound)
+      ).values,
     ).toEqual({
       finance_signature: "Approved by:   Jane Doe",
       stray_note: "",
     });
+  });
+});
+
+describe("drawn signature images", () => {
+  it("returns the drawing frozen into the approval that filled the slot", async () => {
+    const drawn = approval({
+      recordSnapshot: {
+        subjectNodeId: "node-draft",
+        signatureFieldKey: "finance_signature",
+        attestationText: "Approved by:   Jane Doe",
+        drawnSignatureStoragePath: "signatures/drawn/manager-1/1.png",
+      },
+    });
+
+    const owned = await approvalOwnedForStep(repositoryOf([drawn]), "sess-1", "node-draft", fields);
+
+    expect(owned.imagePaths).toEqual({ finance_signature: "signatures/drawn/manager-1/1.png" });
+  });
+
+  it("returns no image for an attestation-only approval", async () => {
+    const owned = await approvalOwnedForStep(repositoryOf([approval()]), "sess-1", "node-draft", fields);
+
+    expect(owned.imagePaths).toEqual({});
+  });
+
+  it("loads stored images and skips a missing one rather than failing the render", async () => {
+    const storage = new InMemoryObjectStorage();
+    await storage.put("signatures/drawn/a.png", Buffer.from("png-a"), "image/png");
+
+    const images = await loadSlotImages(storage, {
+      finance_signature: "signatures/drawn/a.png",
+      legal_signature: "signatures/drawn/missing.png",
+    });
+
+    expect(Object.keys(images)).toEqual(["finance_signature"]);
   });
 });

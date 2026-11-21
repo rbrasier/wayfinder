@@ -47,6 +47,26 @@ export const userRouter = router({
     return { ok: true };
   }),
 
+  // The caller's own remembered drawn signature (ADR-067 §2). There is no way to
+  // read or write anyone else's.
+  getDrawnSignature: authenticatedProcedure.query(async ({ ctx }) => {
+    const result = await ctx.container.useCases.getDrawnSignature.execute(ctx.userId);
+    if (result.error) throw toTrpcError(result.error);
+    return result.data;
+  }),
+
+  saveDrawnSignature: authenticatedProcedure
+    .input(z.object({ pngBase64: z.string().min(1).max(400_000) }))
+    .mutation(async ({ ctx, input }) => {
+      const result = await ctx.container.useCases.saveDrawnSignature.execute({
+        userId: ctx.userId,
+        impersonatorId: ctx.impersonatorId,
+        png: Buffer.from(input.pngBase64, "base64"),
+      });
+      if (result.error) throw toTrpcError(result.error);
+      return { updatedAt: result.data.updatedAt };
+    }),
+
   updateProfile: authenticatedProcedure
     .input(updateProfileInputSchema)
     .mutation(async ({ ctx, input }) => {

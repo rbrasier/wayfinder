@@ -4,7 +4,9 @@ import {
   ok,
   offSystemApprovalAllowed,
   offSystemDateError,
+  type Approval,
   type ApprovalNodeConfig,
+  type DigitalSignatureRecord,
   type IApprovalRepository,
   type IAuditLogger,
   type IClock,
@@ -14,6 +16,24 @@ import {
   type Result,
 } from "@wayfinder/domain";
 import type { DecideApproval, DecideApprovalOutput } from "./decide-approval";
+
+// What a certificate-signing install requires of off-system evidence
+// (ADR-068 §5). Absent on an install that has not wired signing.
+export interface SignedEvidencePolicy {
+  check(
+    approval: Approval,
+    evidence: { mimeType: string; bytes: Buffer },
+  ): Promise<
+    Result<
+      | { required: false }
+      | { required: true; record: DigitalSignatureRecord; messageId: string; document: unknown }
+    >
+  >;
+  adopt(
+    accepted: { required: true; record: DigitalSignatureRecord; messageId: string; document: unknown },
+    storagePath: string,
+  ): Promise<Result<void>>;
+}
 
 export interface RecordOffSystemApprovalInput {
   approvalId: string;
@@ -52,6 +72,7 @@ export class RecordOffSystemApproval {
     private readonly auditLogger: IAuditLogger,
     private readonly decideApproval: DecideApproval,
     private readonly clock: IClock,
+    private readonly signedEvidence?: SignedEvidencePolicy,
   ) {}
 
   async execute(input: RecordOffSystemApprovalInput): Promise<Result<DecideApprovalOutput>> {
@@ -96,6 +117,10 @@ export class RecordOffSystemApproval {
       );
     }
 
+    const signed = this.signedEvidence ? await this.signedEvidence.check(approval, input.evidence) : null;
+    if (signed?.error) return signed;
+    const accepted = signed?.data.required ? signed.data : null;
+
     // Every cheap refusal is already behind us, so the common rejection paths
     // never write an object at all.
     const timestamp = this.clock.now().toISOString().replace(/[:.]/g, "-");
@@ -125,6 +150,7 @@ export class RecordOffSystemApproval {
           storagePath: stored.data.key,
         },
       },
+      ...(accepted ? { digitalSignature: { ...accepted.record, pdfStoragePath: stored.data.key } } : {}),
     });
     if (decided.error) {
       // The bytes are referenced by nothing now — a refused nomination or one
@@ -133,6 +159,8 @@ export class RecordOffSystemApproval {
       await this.objectStorage.delete(stored.data.key).catch(() => undefined);
       return decided;
     }
+
+    if (accepted) await this.signedEvidence!.adopt(accepted, stored.data.key);
 
     // Written alongside the `approval.decided` entry rather than instead of it.
     // One entry cannot carry both actors, and neither reading of the trail —
