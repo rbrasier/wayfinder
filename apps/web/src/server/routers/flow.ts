@@ -13,6 +13,7 @@ import {
 } from "../trpc";
 import { automationStepRejection } from "./automation-step-guard";
 import { toTrpcError } from "../trpc-errors";
+import { requireFeatureForCaller } from "../feature-gates";
 
 const flowIdInput = z.object({ flowId: z.string().guid() });
 
@@ -449,6 +450,7 @@ export const flowRouter = router({
   duplicate: authenticatedProcedure
     .input(flowIdInput)
     .mutation(async ({ ctx, input }) => {
+      await requireFeatureForCaller(ctx, "flow_portability");
       const result = await ctx.container.useCases.duplicateFlow.execute({
         flowId: input.flowId,
         requestedByUserId: ctx.userId,

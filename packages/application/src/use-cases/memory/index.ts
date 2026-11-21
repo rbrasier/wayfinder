@@ -5,3 +5,4 @@ export * from "./reject-lesson";
 export * from "./get-flow-memory-panel";
 export * from "./get-lesson-detail";
 export * from "./sweep-flow-memory";
+export * from "./flag-gated-flow-memory-sweep";

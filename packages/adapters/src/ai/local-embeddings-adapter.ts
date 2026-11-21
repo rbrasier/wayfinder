@@ -1,4 +1,4 @@
-import { createRequire } from "node:module";
+import nodeModule from "node:module";
 import { domainError, err, ok, type Result } from "@wayfinder/domain";
 
 // Whether this artefact can run the local provider at all. A Lambda zip ships
@@ -13,14 +13,18 @@ import { domainError, err, ok, type Result } from "@wayfinder/domain";
 // here: it is transformers' dependency, and pnpm links only a package's direct
 // dependencies beside it. Resolving it from adapters succeeded only when
 // NODE_PATH happened to reach pnpm's hidden hoist directory.
-const requireFromAdapters = createRequire(import.meta.url);
+//
+// Called as a property of the module, never as a named import: webpack (Next
+// bundles adapters into the web server) rewrites a named `createRequire` into
+// its own require machinery, which answers "unavailable" every time.
+const requireFromAdapters = nodeModule.createRequire(import.meta.url);
 
 // Returns the resolved file path; `fromPath` defaults to this module.
 export type ModuleResolver = (specifier: string, fromPath?: string) => string;
 
 const resolveModule: ModuleResolver = (specifier, fromPath) => {
   if (fromPath === undefined) return requireFromAdapters.resolve(specifier);
-  return createRequire(fromPath).resolve(specifier);
+  return nodeModule.createRequire(fromPath).resolve(specifier);
 };
 
 export const isLocalEmbeddingsAvailable = (resolve: ModuleResolver = resolveModule): boolean => {

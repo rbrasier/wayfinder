@@ -22,6 +22,7 @@ import {
   TrackUsage,
   UpsertFeatureFlag,
   SweepFlowMemory,
+  FlagGatedFlowMemorySweep,
   CaptureSessionObservations,
   DistilFlowLessons,
   ExecuteQueuedMcpCalls,
@@ -264,7 +265,8 @@ export const buildContainer = (env: Env) => {
 
   // Flow memory (ADR-057): capture from sessions that finished since the last
   // successful run, then distil the flows that now carry enough evidence. Off by
-  // default, so an upgrade never starts spending model calls unasked.
+  // default, so an upgrade never starts spending model calls unasked: it needs
+  // both FLOW_MEMORY_ENABLED and the flow_memory flag.
   const memoryApprovals = new DrizzleApprovalRepository(db);
   const memoryAnalytics = new DrizzleAnalyticsRepository(db);
   const flowObservations = new DrizzleFlowObservationRepository(db);
@@ -290,10 +292,15 @@ export const buildContainer = (env: Env) => {
 
   const flowMemoryWorkers = env.FLOW_MEMORY_ENABLED
     ? [
-        new FlowMemoryWorker(flowMemorySweeper, jobRepo, logger, {
-          tickIntervalMs: env.FLOW_MEMORY_TICK_MS,
-          evidenceThreshold: env.FLOW_MEMORY_EVIDENCE_THRESHOLD,
-        }),
+        new FlowMemoryWorker(
+          new FlagGatedFlowMemorySweep(new IsFeatureEnabled(featureFlags), flowMemorySweeper),
+          jobRepo,
+          logger,
+          {
+            tickIntervalMs: env.FLOW_MEMORY_TICK_MS,
+            evidenceThreshold: env.FLOW_MEMORY_EVIDENCE_THRESHOLD,
+          },
+        ),
       ]
     : [];
 

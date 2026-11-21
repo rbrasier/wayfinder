@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const resolveSession = vi.fn();
 const inspectExecute = vi.fn();
 const importExecute = vi.fn();
+const isFeatureEnabledForUser = vi.fn();
 
 vi.mock("@/lib/container", () => ({
   getContainer: () => ({
@@ -12,6 +13,7 @@ vi.mock("@/lib/container", () => ({
     useCases: {
       inspectFlowImport: { execute: inspectExecute },
       importFlow: { execute: importExecute },
+      isFeatureEnabledForUser: { execute: isFeatureEnabledForUser },
     },
   }),
 }));
@@ -42,6 +44,7 @@ const smallArchive = (): Blob => new Blob([new Uint8Array([1, 2, 3])], { type: "
 
 beforeEach(() => {
   resolveSession.mockReset().mockResolvedValue({ userId: "user-1", isAdmin: false });
+  isFeatureEnabledForUser.mockReset().mockResolvedValue({ data: true });
   inspectExecute.mockReset().mockResolvedValue({ data: { manifest: {}, resolved: [], unresolved: [], assetCount: 0, warnings: [] } });
   importExecute.mockReset().mockResolvedValue({
     data: { flow: { id: "flow-9", name: "Imported" }, unresolved: [], warnings: [] },
@@ -62,6 +65,17 @@ describe("POST /api/flows/import — authentication", () => {
     const response = await POST(requestWith({ file: smallArchive(), mode: "inspect" }));
 
     expect(response.status).toBe(401);
+    expect(inspectExecute).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/flows/import — flow_portability flag", () => {
+  it("answers 403 while the flag is off, before reading the archive", async () => {
+    isFeatureEnabledForUser.mockResolvedValue({ data: false });
+
+    const response = await POST(requestWith({ file: smallArchive(), mode: "inspect" }));
+
+    expect(response.status).toBe(403);
     expect(inspectExecute).not.toHaveBeenCalled();
   });
 });

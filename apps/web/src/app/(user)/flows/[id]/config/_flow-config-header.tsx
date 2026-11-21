@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { FlowVersionIndicator } from "@/components/canvas/flow-version-indicator";
 import { trpc } from "@/trpc/client";
+import { useFlowHeaderGates } from "./_use-flow-header-gates";
 
 type UpdateFlowMutation = ReturnType<typeof trpc.flow.update.useMutation>;
 type FlowVisibilityKind = "private" | "global" | "group" | "organisation";
@@ -84,6 +85,7 @@ export function FlowConfigHeader({
   setDeleteConfirmOpen: Dispatch<SetStateAction<boolean>>;
 }) {
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
+  const { canManageTriggers, testRunsEnabled, portabilityEnabled } = useFlowHeaderGates();
   const publishTargetsQuery = trpc.group.publishTargets.useQuery();
   const publishTargets = publishTargetsQuery.data ?? [];
   const canPublishToGroup = publishTargets.length > 0;
@@ -133,21 +135,25 @@ export function FlowConfigHeader({
         {flowStatus === "published" ? `Published · ${visibilityLabel(flowVisibility)}` : "Draft"}
       </Badge>
       <div className="ml-auto flex items-center gap-2">
-        <FlowTriggersButton flowId={flowId} />
+        {canManageTriggers && <FlowTriggersButton flowId={flowId} />}
         <Button size="sm" variant="outline" onClick={onAddStep}>
           + Add step
         </Button>
         {/* Runs the working draft, published or not, without leaving the
             canvas (ADR-048). Offered on a draft precisely because a draft is
             what the author cannot otherwise exercise. */}
-        <Button size="sm" variant="outline" onClick={onTestFlow}>
-          Test
-        </Button>
-        <Button size="sm" variant="outline" asChild>
-          <a href={`/api/flows/${flowId}/export`} download>
-            Export
-          </a>
-        </Button>
+        {testRunsEnabled && (
+          <Button size="sm" variant="outline" onClick={onTestFlow}>
+            Test
+          </Button>
+        )}
+        {portabilityEnabled && (
+          <Button size="sm" variant="outline" asChild>
+            <a href={`/api/flows/${flowId}/export`} download>
+              Export
+            </a>
+          </Button>
+        )}
         <div className="relative" ref={flowMenuRef}>
           <Button
             size="sm"
