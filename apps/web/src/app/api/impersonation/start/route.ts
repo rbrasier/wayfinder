@@ -17,12 +17,19 @@ export const POST = (req: NextRequest): Promise<NextResponse> =>
       return NextResponse.json({ error: "Admin only." }, { status: 403 });
     }
 
+    const container = getContainer();
+    // Experimental in alpha-3: off until an admin enables view_as_user. Only
+    // starting is gated, so a simulation already running can always be ended.
+    const flag = await container.useCases.isFeatureEnabled.execute("view_as_user");
+    if (flag.error || flag.data !== true) {
+      return NextResponse.json({ error: "View as user is switched off." }, { status: 403 });
+    }
+
     const body = (await req.json().catch(() => ({}))) as StartBody;
     if (typeof body.userId !== "string" || body.userId.length === 0) {
       return NextResponse.json({ error: "A user to view as is required." }, { status: 400 });
     }
 
-    const container = getContainer();
     const targetResult = await container.repos.users.findById(body.userId);
     if (targetResult.error) {
       return NextResponse.json({ error: "Server error" }, { status: 500 });

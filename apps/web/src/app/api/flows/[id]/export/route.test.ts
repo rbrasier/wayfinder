@@ -4,12 +4,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const resolveSession = vi.fn();
 const resolveEffectivePermissions = vi.fn();
 const exportExecute = vi.fn();
+const isFeatureEnabledForUser = vi.fn();
 
 vi.mock("@/lib/container", () => ({
   getContainer: () => ({
     resolveSession,
     resolveEffectivePermissions,
-    useCases: { exportFlow: { execute: exportExecute } },
+    useCases: {
+      exportFlow: { execute: exportExecute },
+      isFeatureEnabledForUser: { execute: isFeatureEnabledForUser },
+    },
   }),
 }));
 
@@ -34,6 +38,7 @@ const params = Promise.resolve({ id: FLOW_ID });
 beforeEach(() => {
   resolveSession.mockReset().mockResolvedValue({ userId: "user-1", isAdmin: false });
   resolveEffectivePermissions.mockReset().mockResolvedValue({ data: new Set() });
+  isFeatureEnabledForUser.mockReset().mockResolvedValue({ data: true });
   exportExecute.mockReset().mockResolvedValue({
     data: { filename: "procurement-approval-2026-08-17.zip", archive: Buffer.from("zip bytes") },
   });
@@ -44,6 +49,16 @@ describe("GET /api/flows/[id]/export", () => {
     const response = await GET(request(null), { params });
 
     expect(response.status).toBe(401);
+    expect(exportExecute).not.toHaveBeenCalled();
+  });
+
+  it("answers 403 while flow_portability is off, without building an archive", async () => {
+    isFeatureEnabledForUser.mockResolvedValue({ data: false });
+
+    const response = await GET(request(), { params });
+
+    expect(response.status).toBe(403);
+    expect(isFeatureEnabledForUser).toHaveBeenCalledWith("user-1", "flow_portability", false);
     expect(exportExecute).not.toHaveBeenCalled();
   });
 

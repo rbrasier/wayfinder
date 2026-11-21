@@ -13,6 +13,7 @@ const USERS = [
 ];
 
 const auditRows: Array<Record<string, unknown>> = [];
+const viewAsUserFlag = { enabled: true };
 
 vi.mock("@/lib/container", () => ({
   getContainer: () => ({
@@ -23,6 +24,11 @@ vi.mock("@/lib/container", () => ({
           auditRows.push(payload);
           return { data: true };
         },
+      },
+    },
+    useCases: {
+      isFeatureEnabled: {
+        execute: async (key: string) => ({ data: key === "view_as_user" && viewAsUserFlag.enabled }),
       },
     },
     repos: {
@@ -58,6 +64,7 @@ const setCookieFor = (response: Response): string =>
 
 beforeEach(() => {
   auditRows.length = 0;
+  viewAsUserFlag.enabled = true;
   principal.current = { userId: ADMIN, isAdmin: true, impersonatorId: null };
 });
 
@@ -80,6 +87,16 @@ describe("POST /api/impersonation/start", () => {
 
     expect(setCookie.toLowerCase()).toContain("httponly");
     expect(setCookie).toContain("Path=/");
+  });
+
+  it("refuses to start while view_as_user is off", async () => {
+    viewAsUserFlag.enabled = false;
+
+    const response = await start(requestWith({ userId: TARGET }));
+
+    expect(response.status).toBe(403);
+    expect(setCookieFor(response)).not.toContain("wf.impersonation=ey");
+    expect(auditRows).toHaveLength(0);
   });
 
   it("refuses a non-admin", async () => {

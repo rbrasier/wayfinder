@@ -4,6 +4,7 @@ import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
 import { resolveCanOversee } from "@/lib/oversight";
 import { statusForDomainError } from "@/lib/http-errors";
+import { featureGateResponse } from "@/lib/feature-gate-response";
 
 // Downloads a flow as a portable archive. A binary body, so it is a route
 // handler rather than a tRPC procedure (PRD §7). Authorisation is the
@@ -16,6 +17,9 @@ async function handleGET(
 ): Promise<NextResponse> {
   const { id: flowId } = await params;
   const container = getContainer();
+
+  const switchedOff = await featureGateResponse(container, principal, "flow_portability");
+  if (switchedOff) return switchedOff;
 
   const result = await container.useCases.exportFlow.execute({
     flowId,
