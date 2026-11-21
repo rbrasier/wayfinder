@@ -9,7 +9,13 @@ import {
   type Result,
   type Role,
 } from "@wayfinder/domain";
-import { IsFeatureEnabled, IsFeatureEnabledForUser, ListFeatureFlags, SetFeatureFlagRoles } from "./get-feature-flag";
+import {
+  EXPERIMENTAL_FEATURE_FLAGS,
+  IsFeatureEnabled,
+  IsFeatureEnabledForUser,
+  ListFeatureFlags,
+  SetFeatureFlagRoles,
+} from "./get-feature-flag";
 
 class FakeFeatureFlagRepository implements IFeatureFlagRepository {
   flags = new Map<string, FeatureFlag>();
@@ -170,6 +176,15 @@ describe("automation flags default off (ADR-041 §4)", () => {
     expect((await useCase.execute("extraction_flows")).data).toBe(true);
   });
 
+  it.each([...EXPERIMENTAL_FEATURE_FLAGS])(
+    "reports experimental flag %s disabled when there is no flag row",
+    async (key) => {
+      const useCase = new IsFeatureEnabled(new FakeFeatureFlagRepository());
+
+      expect((await useCase.execute(key)).data).toBe(false);
+    },
+  );
+
   it.each(["event_watch", "ai_task_node", "email_node"])(
     "keeps %s enabled by default so unattended automation ships on",
     async (key) => {
@@ -207,6 +222,18 @@ describe("ListFeatureFlags", () => {
 
     for (const key of ["event_watch", "ai_task_node", "email_node"]) {
       expect(result.data?.find((flag) => flag.key === key)?.enabled).toBe(true);
+    }
+  });
+
+  it("surfaces the alpha-3 experimental flags as disabled defaults", async () => {
+    const useCase = new ListFeatureFlags(new FakeFeatureFlagRepository());
+
+    const result = await useCase.execute();
+
+    for (const key of EXPERIMENTAL_FEATURE_FLAGS) {
+      const listed = result.data?.find((flag) => flag.key === key);
+      expect(listed?.enabled).toBe(false);
+      expect(listed?.description).toBeTruthy();
     }
   });
 

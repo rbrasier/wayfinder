@@ -27,12 +27,20 @@ const requireFlowEditor = async (ctx: TrpcContext & { userId: string }, flowId: 
   }
 };
 
+// The Triggers dialog decides how a flow is started from outside, so the
+// "Start flows via webhook" permission opens it; owning the flow alone does not.
+const requireWebhookTriggerer = (ctx: TrpcContext & { userId: string }): void => {
+  if (actorOf(ctx).canUseWebhooks) return;
+  throw new TRPCError({ code: "FORBIDDEN", message: "You do not have permission to start flows via webhook." });
+};
+
 // A flow's triggers (ADR-064) and the unattended runs they start (ADR-065):
 // the flow editor's Triggers tab reads and writes through here.
 export const automationRouter = router({
   flowTriggers: authenticatedProcedure
     .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
+      requireWebhookTriggerer(ctx);
       await requireFlowEditor(ctx, input.flowId);
       const [flow, webhook] = await Promise.all([
         ctx.container.repos.flows.findById(input.flowId),
@@ -44,7 +52,6 @@ export const automationRouter = router({
         triggerInputs: flow.data?.triggerInputs ?? [],
         webhook: webhook.data,
         webhookUrl: `${ctx.container.env.BETTER_AUTH_URL}/api/triggers/${input.flowId}`,
-        canManageWebhook: actorOf(ctx).canUseWebhooks,
         isAdmin: ctx.isAdmin,
       };
     }),
@@ -52,6 +59,7 @@ export const automationRouter = router({
   setTriggerInputs: authenticatedProcedure
     .input(z.object({ flowId: z.string().guid(), inputs: z.array(triggerInputSchema).max(50) }))
     .mutation(async ({ ctx, input }) => {
+      requireWebhookTriggerer(ctx);
       await requireFlowEditor(ctx, input.flowId);
       const result = await ctx.container.useCases.setTriggerInputs.execute(input);
       if (result.error) throw toTrpcError(result.error);
@@ -99,6 +107,7 @@ export const automationRouter = router({
   webhookRuns: authenticatedProcedure
     .input(z.object({ flowId: z.string().guid() }))
     .query(async ({ ctx, input }) => {
+      requireWebhookTriggerer(ctx);
       await requireFlowEditor(ctx, input.flowId);
       const webhook = await ctx.container.repos.flowTriggers.findByFlow(input.flowId, "webhook");
       if (webhook.error) throw toTrpcError(webhook.error);

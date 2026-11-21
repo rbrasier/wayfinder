@@ -10,6 +10,8 @@ export interface StepFeatureFlags {
   skillsEnabled: boolean;
   aiTaskNodeEnabled: boolean;
   emailNodeEnabled: boolean;
+  // A step's own Test entry opens the flow test modal (ADR-048).
+  testRunsEnabled: boolean;
 }
 
 export function useStepFeatureFlags(): StepFeatureFlags {
@@ -21,5 +23,6 @@ export function useStepFeatureFlags(): StepFeatureFlags {
     skillsEnabled: flags.useQuery({ key: "skills" }).data ?? false,
     aiTaskNodeEnabled: flags.useQuery({ key: "ai_task_node" }).data ?? false,
     emailNodeEnabled: flags.useQuery({ key: "email_node" }).data ?? false,
+    testRunsEnabled: flags.useQuery({ key: "flow_test_runs" }).data ?? false,
   };
 }

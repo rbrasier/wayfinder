@@ -1,4 +1,4 @@
-import { createRequire } from "module";
+import nodeModule from "node:module";
 import path from "node:path";
 import type { ILogger } from "@wayfinder/domain";
 import pino from "pino";
@@ -13,7 +13,9 @@ const createPinoInstance = (isDev: boolean): pino.Logger => {
     // file paths, which are webpack chunk paths in Next.js — not resolvable.
     // Using pino-pretty as a synchronous stream (required from process.cwd())
     // sidesteps worker threads and the bundled-path resolution problem entirely.
-    const _require = createRequire(path.join(process.cwd(), "index.js"));
+    // A named `createRequire` import would be rewritten by webpack into
+    // `undefined`; the property call reaches Node's real one.
+    const _require = nodeModule.createRequire(path.join(process.cwd(), "index.js"));
     const pretty = _require("pino-pretty") as (opts: Record<string, unknown>) => pino.DestinationStream;
     return pino(pretty({ colorize: true, translateTime: "HH:MM:ss", ignore: "pid,hostname" }));
   } catch {
