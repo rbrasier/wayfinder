@@ -100,7 +100,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
   const canPublishToEveryone =
     isAdmin ||
     ((meQuery.data?.permissions ?? []) as PermissionKey[]).includes("workflow:publish_to_everyone");
-  const { autoNodeEnabled, scheduledNodeEnabled, mcpEnabled, skillsEnabled, aiTaskNodeEnabled, emailNodeEnabled } =
+  const { autoNodeEnabled, scheduledNodeEnabled, mcpEnabled, skillsEnabled, aiTaskNodeEnabled, emailNodeEnabled, testRunsEnabled } =
     useStepFeatureFlags();
   const [editingMetadata, setEditingMetadata] = useState(false);
 
@@ -698,7 +698,7 @@ function CanvasInner({ flowId }: { flowId: string }) {
         initialValues={initialConfigValues}
         onSave={handleConfigSave}
         onDelete={editingNodeId ? handleNodeDelete : undefined}
-        onTestStep={editingNodeId ? () => flowTest.openStepTest(editingNodeId) : undefined}
+        onTestStep={editingNodeId && testRunsEnabled ? () => flowTest.openStepTest(editingNodeId) : undefined}
         onClose={handleConfigClose}
         isSaving={isSavingConfig}
         priorStepFields={priorStepFields}

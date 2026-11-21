@@ -453,6 +453,7 @@ export function MessageFeed({
                   editable card on the generating message is unchanged. */}
               {signedDocument?.document && (
                 <DocumentCard
+                  sessionId={sessionId}
                   messageId={signedDocument.id}
                   document={signedDocument.document}
                   documentGenerationConfidence={
@@ -491,6 +492,7 @@ export function MessageFeed({
                   withdrawal brought the session back to the step. */}
               {msg.document && showsDocumentCard({ hasDocument: true, isAdvancing: isAdvancingMsg }) && (
                 <DocumentCard
+                  sessionId={sessionId}
                   messageId={msg.id}
                   document={msg.document}
                   documentGenerationConfidence={msg.aiPayload?.documentGenerationConfidence ?? null}

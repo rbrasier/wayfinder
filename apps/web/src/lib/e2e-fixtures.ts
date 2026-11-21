@@ -1,9 +1,11 @@
 import type { Result } from "@wayfinder/domain";
 import { schema } from "@wayfinder/adapters";
+import { EXPERIMENTAL_FEATURE_FLAGS } from "@wayfinder/application";
 import { eq, inArray } from "drizzle-orm";
 import type { Container } from "./container";
 import { seedForkFlow, seedConfirmationSession } from "./e2e-fixtures-flows";
 import { seedStorageObjects } from "./e2e-fixtures-storage";
+import { seedSigningSession } from "./e2e-fixtures-signing";
 import { seedAutomationFlow } from "./e2e-fixtures-automation";
 import { seedStructuredSession } from "./e2e-fixtures-structured";
 import { seedExtractionRun } from "./e2e-fixtures-extraction";
@@ -81,6 +83,9 @@ export interface SeedResult {
   approvalWithdrawDraftStepName: string;
   offSystemApprovalSessionId: string;
   offSystemApprovalNextStepName: string;
+  // A pending approval that signs a real .docx and converts it to PDF through
+  // the mocks server's Gotenberg (ADR-067).
+  signingSessionId: string;
   // One signature bound by an approval left on the default subject, and one
   // nothing signs — the two states the canvas advisory must tell apart.
   signatureWarningFlowId: string;
@@ -279,6 +284,15 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     await container.useCases.upsertFeatureFlag.execute({ key: "extraction_flows", enabled: true }),
     "enable extraction_flows flag",
   );
+  // alpha-3's experimental features default off. The suite exercises test runs,
+  // flow memory, portability, view-as-user and lookup sources, so switch them on
+  // here rather than letting their specs fail or skip.
+  for (const key of EXPERIMENTAL_FEATURE_FLAGS) {
+    unwrap(
+      await container.useCases.upsertFeatureFlag.execute({ key, enabled: true }),
+      `enable ${key} flag`,
+    );
+  }
 
   // Seed a library skill so the flow-editor skill picker is populated — its
   // search box only renders once the library is non-empty.
@@ -487,6 +501,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
   const approvalWithdraw = await seedWithdrawableApprovalSession(container, ownerUserId);
   const offSystemApproval = await seedOffSystemApprovalSession(container, ownerUserId);
   const signatureWarningFlowId = await seedSignatureWarningFlow(container, ownerUserId);
+  const signing = await seedSigningSession(container, ownerUserId);
   const extraction = await seedExtractionRun(container, ownerUserId);
   const automationFlowId = await seedAutomationFlow(container, ownerUserId);
 
@@ -506,6 +521,7 @@ export const seedE2EFixtures = async (container: Container): Promise<SeedResult>
     offSystemApprovalSessionId: offSystemApproval.sessionId,
     offSystemApprovalNextStepName: offSystemApproval.nextStepName,
     signatureWarningFlowId,
+    signingSessionId: signing.sessionId,
     extractionFlowId: extraction.flowId,
     extractionRunId: extraction.runId,
     automationFlowId,

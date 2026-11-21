@@ -2,6 +2,7 @@
 // is the source of truth for the decision; the resolver only ever *suggests* an
 // approver, and the operator must confirm (or override) before it is sent.
 
+import type { DigitalSignatureRecord } from "./digital-signature";
 import type { OffSystemApprovalEvidence } from "./off-system-approval";
 
 // `run_owner` and `named_user` are raised by an AI task review (ADR-065 §3),
@@ -93,6 +94,9 @@ export interface Approval {
   // Conflating the two would credit the approval to the wrong person or lose
   // who recorded it, and both facts have to survive (ADR-055 §2).
   readonly offSystemNominatedByUserId: string | null;
+  // The certificate signature on this decision, or the signing attempt in
+  // flight (ADR-068 §6). Absent on every approval that never signed one.
+  readonly digitalSignature?: DigitalSignatureRecord | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -135,4 +139,5 @@ export interface ApprovalUpdate {
   offSystemApprovedOn?: string | null;
   offSystemEvidence?: OffSystemApprovalEvidence | null;
   offSystemNominatedByUserId?: string | null;
+  digitalSignature?: DigitalSignatureRecord | null;
 }

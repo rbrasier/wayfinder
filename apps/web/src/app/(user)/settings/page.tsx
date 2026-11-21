@@ -1,3 +1,4 @@
+import { DrawnSignatureCard } from "@/components/settings/drawn-signature-card";
 import { OrganisationMembershipCard } from "@/components/settings/organisation-membership-card";
 import { ProfileSettingsForm } from "@/components/settings/profile-settings-form";
 import { WelcomeTourCard } from "@/components/settings/welcome-tour-card";
@@ -13,6 +14,8 @@ export default function SettingsPage() {
 
       <div className="space-y-4">
         <ProfileSettingsForm />
+
+        <DrawnSignatureCard />
 
         <OrganisationMembershipCard />
 

@@ -23,7 +23,12 @@ const makeContainer = () => {
   const getTestRunReport = { execute: vi.fn().mockResolvedValue(ok({ steps: [] })) };
   const duplicateFlow = { execute: vi.fn().mockResolvedValue(ok({ id: "copy" })) };
   const container = {
-    useCases: { getFlowMemoryPanel, getTestRunReport, duplicateFlow },
+    useCases: {
+      getFlowMemoryPanel,
+      getTestRunReport,
+      duplicateFlow,
+      isFeatureEnabledForUser: { execute: vi.fn().mockResolvedValue(ok(true)) },
+    },
   } as unknown as Container;
   return { container, getFlowMemoryPanel, getTestRunReport, duplicateFlow };
 };

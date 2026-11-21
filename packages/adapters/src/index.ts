@@ -14,6 +14,7 @@ export * from "./telemetry/index";
 export * from "./node-executors/index";
 export * from "./n8n/n8n-workflow-directory";
 export * from "./documents/index";
+export * from "./signing/index";
 export * from "./exports/index";
 export * from "./extraction/index";
 export * from "./archives/index";

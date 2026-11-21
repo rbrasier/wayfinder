@@ -4,6 +4,7 @@ import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
 import { statusForDomainError } from "@/lib/http-errors";
+import { featureGateResponse } from "@/lib/feature-gate-response";
 
 // Both halves of inspect-then-commit live here, chosen by the `mode` field.
 // The client holds the file and posts it twice — once to see what is in it, once
@@ -17,6 +18,8 @@ const isImportMode = (value: unknown): value is ImportMode =>
 async function handlePOST(req: NextRequest, principal: ResolvedSession): Promise<NextResponse> {
   const container = getContainer();
 
+  const switchedOff = await featureGateResponse(container, principal, "flow_portability");
+  if (switchedOff) return switchedOff;
 
   const formData = await req.formData();
   const file = formData.get("file");

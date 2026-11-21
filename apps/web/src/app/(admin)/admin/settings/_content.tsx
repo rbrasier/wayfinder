@@ -27,17 +27,21 @@ import { OrganisationsCard } from "@/components/settings/organisations-card";
 import { RagEmbeddingsCard } from "@/components/settings/rag-embeddings-card";
 import { RegistrationToggleCard } from "@/components/settings/registration-toggle-card";
 import { SessionUploadsCard } from "@/components/settings/session-uploads-card";
+import { SignatureCard } from "@/components/settings/signature-card";
 import { ExtractionConfigCard } from "@/components/settings/extraction-config-card";
 import { RetentionCard } from "@/components/settings/retention-card";
 import { SiemStreamingCard } from "@/components/settings/siem-streaming-card";
 import { SiteBannerCard } from "@/components/settings/site-banner-card";
 import { StorageCard } from "@/components/settings/storage-card";
+import { trpc } from "@/trpc/client";
 
 // Access, deployment shape, directory and retention settings can grant access
 // or destroy records, so they stay with Global Admins; a Technical Admin sees the
 // rest (ADR-066 §3).
 export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: boolean }) {
   const connectivity = useConnectivity();
+  const lookupSourcesEnabled =
+    trpc.featureFlag.isAdminSurfaceEnabled.useQuery({ key: "lookup_sources" }).data ?? false;
   const [rerunSetup, setRerunSetup] = useState(false);
 
   return (
@@ -98,6 +102,14 @@ export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: 
             </CollapsibleSection>
 
             <CollapsibleSection
+              title="Signatures"
+              description="How approvers sign documents, and PDF output."
+              testId="settings-section-signatures"
+            >
+              <SignatureCard connectivity={connectivity} />
+            </CollapsibleSection>
+
+            <CollapsibleSection
               title="Integrations"
               description="External services Wayfinder connects to."
             >
@@ -105,7 +117,7 @@ export function AppSettingsContent({ isGlobalAdmin }: { readonly isGlobalAdmin: 
               <RagEmbeddingsCard connectivity={connectivity} />
               <EmailCard connectivity={connectivity} />
               <AutomationCard />
-              <LookupSourcesCard />
+              {lookupSourcesEnabled && <LookupSourcesCard />}
             </CollapsibleSection>
 
             <CollapsibleSection title="Storage & uploads" description="Where files live and upload limits.">
