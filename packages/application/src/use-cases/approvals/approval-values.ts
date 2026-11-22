@@ -2,9 +2,23 @@ import {
   approvalCommentSlotKey,
   type Approval,
   type IApprovalRepository,
+  type IObjectStorage,
   type TemplateField,
 } from "@wayfinder/domain";
-import { ATTESTATION_TEXT_KEY, SIGNATURE_FIELD_KEY, SUBJECT_NODE_ID_KEY } from "./approval-record-keys";
+import {
+  ATTESTATION_TEXT_KEY,
+  DRAWN_SIGNATURE_PATH_KEY,
+  SIGNATURE_FIELD_KEY,
+  SUBJECT_NODE_ID_KEY,
+} from "./approval-record-keys";
+
+export interface ApprovalOwnedValues {
+  values: Record<string, string>;
+  // Slot key → the drawn signature frozen into the approval that filled it
+  // (ADR-067 §2). Read from the record, like the attestation, so a later redraw
+  // never changes a signature already given.
+  imagePaths: Record<string, string>;
+}
 
 // Every value on a step's template that an approval owns rather than the
 // conversation: each signature slot mapped to the attestation block frozen into
@@ -19,22 +33,23 @@ import { ATTESTATION_TEXT_KEY, SIGNATURE_FIELD_KEY, SUBJECT_NODE_ID_KEY } from "
 // The blocks are read from the records, never recomputed. A decided approval's
 // record is frozen (ADR-045 §6); re-deriving one would re-sign on the signer's
 // behalf if anything bound into the hash had changed since.
-export const approvalValuesForStep = async (
+export const approvalOwnedForStep = async (
   approvals: IApprovalRepository,
   sessionId: string,
   subjectNodeId: string,
   fields: readonly TemplateField[],
-): Promise<Record<string, string>> => {
+): Promise<ApprovalOwnedValues> => {
   const slots = fields.filter((field) => field.type === "signature").map((field) => field.key);
   const comments = fields.filter((field) => field.type === "approval_comment");
-  if (slots.length === 0 && comments.length === 0) return {};
+  const imagePaths: Record<string, string> = {};
+  if (slots.length === 0 && comments.length === 0) return { values: {}, imagePaths };
 
   const values: Record<string, string> = {};
   for (const slot of slots) values[slot] = "";
   for (const comment of comments) values[comment.key] = "";
 
   const sessionApprovals = await approvals.listBySession(sessionId);
-  if (sessionApprovals.error) return values;
+  if (sessionApprovals.error) return { values, imagePaths };
 
   // A step can be decided more than once: rejected, amended, returned and
   // approved. Every decision keeps its own row and its own frozen record, so the
@@ -60,6 +75,8 @@ export const approvalValuesForStep = async (
     if (!slot || !text || !(slot in values)) continue;
     if (values[slot]) continue;
     values[slot] = text;
+    const drawnPath = readString(approval.recordSnapshot, DRAWN_SIGNATURE_PATH_KEY);
+    if (drawnPath) imagePaths[slot] = drawnPath;
     // The row's own comment column, written once by the pending-guarded update
     // and never again, so it is as frozen as the attestation beside it — and an
     // approval decided before comment tags existed fills one on the next render.
@@ -72,7 +89,22 @@ export const approvalValuesForStep = async (
     values[comment.key] = commentBySlot[slot] ?? "";
   }
 
-  return values;
+  return { values, imagePaths };
+};
+
+// Loads the frozen drawings for a render. A missing object degrades to the
+// attestation text alone rather than failing the render: the text, not the
+// picture, is the evidence.
+export const loadSlotImages = async (
+  objectStorage: IObjectStorage,
+  imagePaths: Record<string, string>,
+): Promise<Record<string, Buffer>> => {
+  const images: Record<string, Buffer> = {};
+  for (const [slot, path] of Object.entries(imagePaths)) {
+    const loaded = await objectStorage.get(path);
+    if (!loaded.error) images[slot] = loaded.data;
+  }
+  return images;
 };
 
 // Falls back to creation for a row decided before the column carried a value, so

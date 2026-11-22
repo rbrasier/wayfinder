@@ -17,6 +17,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ApproverPicker } from "@/components/chat/approver-picker";
+import { SignaturePad } from "@/components/signatures/signature-pad";
 import { trpc } from "@/trpc/client";
 import {
   ApprovalSubject,
@@ -84,6 +85,21 @@ export function DecisionModal({
     typeof window !== "undefined"
       ? `${window.location.origin}/chats/${approval.sessionId}`
       : `/chats/${approval.sessionId}`;
+
+  // Only an approval signs, so only an approval asks for a drawing first.
+  const signing = trpc.approval.signingRequirement.useQuery(
+    { approvalId: approval.approval.id },
+    { enabled: decision === "approved" },
+  );
+  const needsDrawing = decision === "approved" && signing.data?.needsDrawing === true;
+  // A certificate step is approved by signing it at the approver's provider;
+  // the decision is recorded when they return with a valid signature.
+  const signsWithCertificate =
+    decision === "approved" && signing.data?.method === "certificate" && signing.data.signs;
+  const startSigning = trpc.approval.startCertificateSigning.useMutation({
+    onSuccess: ({ redirectUrl }) => window.location.assign(redirectUrl),
+    onError: (error) => toast.error(error.message ?? "Could not start signing"),
+  });
 
   const decide = trpc.approval.decide.useMutation({
     onSuccess: async (data) => {
@@ -260,6 +276,13 @@ export function DecisionModal({
             {/* Editable here: their approval is still pending, and fixing a
                 typo beats sending the whole thing back (ADR-045 §5). */}
             <PreviousStep previousStep={approval.previousStep} canEdit />
+            {needsDrawing && <SignaturePad />}
+            {signsWithCertificate && (
+              <p className="text-[12px] text-[#666055]" data-testid="certificate-signing-note">
+                Approving signs this document with your digital ID. You will go to your signing provider to
+                authorise it, then come back here. The document becomes a PDF that can no longer be edited.
+              </p>
+            )}
             <Textarea
               ref={commentRef}
               aria-label="Decision comment"
@@ -298,11 +321,22 @@ export function DecisionModal({
                 Route back to user
               </Button>
             </>
+          ) : signsWithCertificate ? (
+            <Button
+              size="sm"
+              data-testid="approve-and-sign"
+              onClick={() =>
+                startSigning.mutate({ approvalId: approval.approval.id, comment: comment.trim() || null })
+              }
+              disabled={startSigning.isPending}
+            >
+              {startSigning.isPending ? "Opening your signing provider…" : "Approve & sign"}
+            </Button>
           ) : (
             <Button
               size="sm"
               onClick={() => submit()}
-              disabled={decide.isPending || (commentRequired && !comment.trim())}
+              disabled={decide.isPending || needsDrawing || (commentRequired && !comment.trim())}
             >
               {decision === "approved" ? "Confirm approval" : "Request changes"}
             </Button>

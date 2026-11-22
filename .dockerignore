@@ -21,8 +21,11 @@ coverage
 # The Lambda deployment target is not part of any container image. It sits
 # outside the pnpm workspace so its dependencies never reach the image; this
 # keeps its source out too, since the Dockerfile copies the whole tree
-# (ADR-056 §2).
-deploy
+# (ADR-056 §2). The DSS signature engine is the exception: its sources are
+# built into the default image (ADR-069 §3), but never a host-built jar.
+deploy/*
+!deploy/dss
+deploy/dss/target
 
 # Repository and tooling noise that only slows the build context transfer.
 .git

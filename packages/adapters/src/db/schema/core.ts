@@ -46,6 +46,10 @@ export const core_users = pgTable("core_users", {
   // Null until the first-login welcome tour is completed or skipped (ADR-056).
   // Backfilled to the migration time for accounts that already existed.
   welcome_tour_completed_at: timestamp("welcome_tour_completed_at", { withTimezone: true }),
+  // The user's remembered drawn signature (ADR-067 §2): the object-storage path
+  // of the current drawing. Null until they first draw one.
+  drawn_signature_storage_path: text("drawn_signature_storage_path"),
+  drawn_signature_updated_at: timestamp("drawn_signature_updated_at", { withTimezone: true }),
   created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updated_at: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

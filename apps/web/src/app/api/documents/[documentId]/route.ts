@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { resolveChangeRequests } from "@wayfinder/application";
-import type { ConversationalNodeConfig } from "@wayfinder/domain";
+import type { ConversationalNodeConfig, SessionDocument } from "@wayfinder/domain";
 import type { ResolvedSession } from "@wayfinder/adapters";
 import { getContainer } from "@/lib/container";
 import { withPrincipal } from "@/lib/with-principal";
@@ -39,6 +39,12 @@ async function handleGET(
     return NextResponse.json({ error: accessError(access.status) }, { status: access.status });
   }
 
+  // `?format=pdf` serves the PDF an approval step rendered on signing (ADR-067
+  // §3) — the signed record itself once a certificate signature exists.
+  if (req.nextUrl.searchParams.get("format") === "pdf") {
+    return servePdf(container, documentMeta);
+  }
+
   const { storagePath, filename } = documentMeta;
 
   const getResult = await container.objectStorage.get(storagePath);
@@ -55,6 +61,27 @@ async function handleGET(
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Content-Length": String(getResult.data.length),
+    },
+  });
+}
+
+async function servePdf(
+  container: ReturnType<typeof getContainer>,
+  documentMeta: SessionDocument,
+): Promise<NextResponse> {
+  const pdfPath = documentMeta.pdf?.storagePath;
+  if (!pdfPath) return NextResponse.json({ error: "No PDF for this document" }, { status: 404 });
+
+  const pdfResult = await container.objectStorage.get(pdfPath);
+  if (pdfResult.error) return NextResponse.json({ error: "document_unavailable" }, { status: 410 });
+
+  const filename = documentMeta.filename.replace(/\.[a-z0-9]+$/i, "") + ".pdf";
+  return new NextResponse(pdfResult.data as unknown as BodyInit, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": String(pdfResult.data.length),
     },
   });
 }

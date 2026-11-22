@@ -10,4 +10,7 @@ export const SIGNATURE_FIELD_KEY = "signatureFieldKey";
 // The rendered attestation block, frozen at decision time. Stored rather than
 // recomputed so a later change around it can never alter what was signed.
 export const ATTESTATION_TEXT_KEY = "attestationText";
+// The approver's drawn signature object, frozen at decision time (ADR-067 §2).
+// A path, not the user's current drawing, so a redraw never re-signs the past.
+export const DRAWN_SIGNATURE_PATH_KEY = "drawnSignatureStoragePath";
 export const STEP_KEY = "stepKey";
