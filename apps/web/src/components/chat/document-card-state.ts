@@ -40,3 +40,27 @@ export interface EditAffordanceInput {
 // different answers.
 export const showsEditAffordance = (input: EditAffordanceInput): boolean =>
   input.canEditDocuments && input.allowManualEdit && !input.isOnApprovalNode;
+
+export interface DownloadOption {
+  format: "pdf" | "original";
+  label: string;
+  primary: boolean;
+}
+
+export interface DownloadableDocument {
+  filename: string;
+  pdf?: { storagePath: string | null; status: string } | null;
+}
+
+// Once a document has a PDF, the PDF is the record (signed or about to be), so
+// it is the main download and the editable original sits beside it. Without one
+// the original is the only file and keeps the plain "Download" label.
+export const downloadOptions = (document: DownloadableDocument): DownloadOption[] => {
+  const hasPdf = Boolean(document.pdf?.storagePath) && document.pdf?.status !== "superseded";
+  if (!hasPdf) return [{ format: "original", label: "↓ Download", primary: true }];
+  const extension = document.filename.match(/\.([a-z0-9]+)$/i)?.[1]?.toUpperCase() ?? "Original";
+  return [
+    { format: "pdf", label: "↓ PDF", primary: true },
+    { format: "original", label: `↓ ${extension}`, primary: false },
+  ];
+};

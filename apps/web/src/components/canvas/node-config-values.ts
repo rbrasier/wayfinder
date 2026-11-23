@@ -86,6 +86,9 @@ export interface NodeConfigValues {
   // (ADR-055 §4). True by default, and stored only when turned off — absent in
   // the config means allowed.
   allowOffSystemApproval: boolean;
+  // Whether the signed document is also rendered as a PDF/A when this approval
+  // decides (ADR-067 §1). Off by default; stored only when on.
+  convertToPdfOnSigning: boolean;
   notifyOnComplete: boolean;
 }
 
@@ -138,5 +141,6 @@ export const DEFAULT_VALUES: NodeConfigValues = {
   signatureFieldKey: "",
   changesRequestedTargetNodeId: "",
   allowOffSystemApproval: true,
+  convertToPdfOnSigning: false,
   notifyOnComplete: false,
 };
