@@ -36,7 +36,7 @@ changes applied. Checked against `main`:
   `MinioStorageAdapter`, `minioClientOptions` or `patches/`. Remaining mentions of
   `MinioStorageAdapter` are in the original PRD and ADR-009, which record past
   decisions and are left as written. The `to-be-implemented/` phase that mentions
-  object storage (`scaling-new-infrastructure.phase.md`) was already updated to
+  object storage (the scaling-new-infrastructure phase) was already updated to
   `S3ObjectStorageAdapter` by #405.
 - **ADR / PRD numbering.** No new ADRs or PRDs, so nothing can collide.
 - **Behaviour.** The storage swap keeps the `IObjectStorage` contract and the
