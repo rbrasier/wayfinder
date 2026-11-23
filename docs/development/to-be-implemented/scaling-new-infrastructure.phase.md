@@ -108,7 +108,7 @@ here until the last code slice lands (the former roadmap's convention).
    [`lambda-deployment-target.phase.md`](./lambda-deployment-target.phase.md)
    and ADR-056. The load balancer's idle timeout must exceed turn length
    (~300 s) for both the chat stream and the SSE fan-out.
-6. **Object storage parametrisation.** `MinioStorageAdapter` already speaks
+6. **Object storage parametrisation.** `S3ObjectStorageAdapter` already speaks
    S3 — parametrise endpoint/region/credentials for native S3. Azure Blob
    needs a small new `IObjectStorage` adapter, or keep the S3 API via a
    MinIO gateway.

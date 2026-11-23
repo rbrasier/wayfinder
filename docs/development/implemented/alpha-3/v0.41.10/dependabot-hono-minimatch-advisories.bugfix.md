@@ -10,7 +10,7 @@ Every one of the 9 alerts gets fixed on `release/alpha-3`:
   - `aws-cdk-lib` goes to 2.278.0. That release bundles a patched `minimatch` 11.
 - **Regression test:** `scripts/lockfile-advisories.test.mjs` gets the new floors and loses both exceptions added in v0.41.1, so it fails before the fix.
 
-`stream-json` is out of scope. Forcing v3 breaks `minio` as soon as it loads (see Known limitations).
+`stream-json` was first left out, because forcing v3 breaks `minio` as soon as it loads. After the PR opened, the maintainer asked to replace the `minio` client package with `@aws-sdk/client-s3` in this same PR. That removes `stream-json` entirely (see "Addendum — minio client replaced").
 
 ## Advisories
 
@@ -55,10 +55,7 @@ The minimatch chain also triggers npm audit's GHSA-3g3m-2fjr-6pw4 on `glob` `>=9
 
 ## Known limitations
 
-- **`stream-json` 1.9.1 stays.**
-  - It is flagged by GHSA-528h-pc64-c93x, GHSA-hqr4-qq8f-hg3x and GHSA-mjw6-4jj6-33hc (moderate). The patched 3.6+ line is ESM-only and renamed `jsonl/Parser.js` to `jsonl/parser.js`.
-  - `minio@8.0.7`, the latest release, calls `require("stream-json/jsonl/Parser.js")` from `notification.js`, which `minio.js` loads on import. Overriding it would crash the storage adapter.
-  - It clears when `minio` publishes a release that supports stream-json 3.
+- None remaining. `pnpm audit` and `npm audit` in `deploy/lambda` both report no vulnerabilities.
 
 ## Implementation summary (v0.41.10)
 
@@ -89,5 +86,27 @@ The minimatch chain also triggers npm audit's GHSA-3g3m-2fjr-6pw4 on `glob` `>=9
   - It failed 2 of 3 cases before the fix, naming the 6 vulnerable copies, and passes 3 of 3 after.
 - **E2E:** none. No user-facing behaviour changed, and the lockfile test is the guard.
 - **Deviations from the first summary:**
-  - At the approval gate you asked to include the `@opennextjs/aws` 3 → 4 jump, and it was included.
-  - `stream-json` stays excluded (see Known limitations).
+  - At the approval gate the maintainer asked to include the `@opennextjs/aws` 3 → 4 jump, and it was included.
+  - After the PR opened, the maintainer asked to replace the `minio` client package in this PR (below).
+
+## Addendum — minio client replaced with `@aws-sdk/client-s3`
+
+- **Why:**
+  - `stream-json` (GHSA-528h-pc64-c93x, -hqr4-qq8f-hg3x and -mjw6-4jj6-33hc) reached the workspace only through the `minio` npm client. The patched 3.6+ line is ESM-only and renamed `jsonl/Parser.js`, which `minio@8.0.7` requires as soon as it loads, so an override was impossible.
+  - The client sat behind the `IObjectStorage` interface and was used in only two files, so swapping it is contained.
+- **What changed:**
+  - **New adapter:** `S3ObjectStorageAdapter` (`packages/adapters/src/storage/s3-object-storage.ts`) replaces `MinioStorageAdapter`. It uses the same six operations, mapped onto `HeadBucket`, `CreateBucket`, `PutObject`, `GetObject`, `DeleteObject` and `HeadObject`.
+  - **Client settings:** `s3ClientOptions` replaces `minioClientOptions`. Path style maps onto `forcePathStyle`.
+  - **Region:** the SDK needs a region to sign, so a blank region falls back to `us-east-1`, with `followRegionRedirects` so Amazon S3 can correct it per bucket. A configured region outside `us-east-1` is sent as the bucket's `LocationConstraint` when the bucket is created.
+  - **Health probe:** the storage probe uses the same S3 client. Its injected factory is renamed from `MinioClientFactory` to `StorageClientFactory`.
+  - **Wiring:** both containers (`apps/web`, `apps/api`) construct the new adapter.
+- **Removed with `minio`:**
+  - `stream-json`, `query-string`, `decode-uri-component` and `fast-xml-parser`. The AWS SDK no longer uses `fast-xml-parser`.
+  - The `query-string@7.1.3` patch from v0.41.1, and the `decode-uri-component` and `fast-xml-parser` overrides, which had nothing left to act on. The lockfile-advisory test keeps their floors, so they would be caught if a dependency brought them back.
+- **Unchanged:**
+  - The MinIO server in Docker and in CI. It speaks S3.
+  - The `MINIO_*` environment variables, which name the server, not the client.
+- **Verification:**
+  - **Unit tests:** `s3-client-options.test.ts` (5 tests) and `s3-object-storage.test.ts` (14 tests) were written first and failed until the adapter existed.
+  - **Live check:** a full round trip ran against a live S3-compatible endpoint (moto server; `dl.min.io` is blocked in this sandbox). It covered the probe, an idempotent `initialise`, exists, NOT_FOUND, put, get and delete.
+  - **Build and validate:** `next build` of `apps/web` passes, `./validate.sh` passes and `pnpm audit` reports no known vulnerabilities.
