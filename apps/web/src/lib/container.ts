@@ -176,7 +176,7 @@ import {
   LangGraphAgentRunner,
   LanguageModelAdapter,
   LlmCallGovernor,
-  MinioStorageAdapter,
+  S3ObjectStorageAdapter,
   N8nHttpWorkflowDirectory,
   NodemailerEmailSender,
   PinoLogger,
@@ -494,7 +494,7 @@ const build = () => {
     encryption: settingsEncryption,
     languageModel: llm,
   });
-  const objectStorage = new MinioStorageAdapter(runtimeConfig);
+  const objectStorage = new S3ObjectStorageAdapter(runtimeConfig);
   const extraction = buildExtractionModule({
     db,
     flows,
