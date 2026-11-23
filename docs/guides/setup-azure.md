@@ -50,7 +50,7 @@ the n8n callback webhook (`/v1/webhooks`), if you use it.
 Wayfinder publishes a container image, so there is nothing to build:
 
 ```
-ghcr.io/rbrasier/wayfinder:0.41.1
+ghcr.io/rbrasier/wayfinder:0.41.10
 ```
 
 It is public — no registry credential and no pull secret on the Container App.
@@ -62,7 +62,7 @@ you tested.
 **Default or `-slim`.** The image above includes the built-in PDF converter
 (LibreOffice) and signature engine (EU DSS) used by document signatures; they
 start only if an admin turns on a method that needs them.
-`ghcr.io/rbrasier/wayfinder:0.41.1-slim` is
+`ghcr.io/rbrasier/wayfinder:0.41.10-slim` is
 the same image without them, about 600 MB smaller, for installs that never
 sign with drawings or certificates or that run those engines separately. With
 certificate signing in use, give the web container roughly 500 MB more memory
@@ -80,8 +80,8 @@ ACR=wayfinderacr
 az group create --name "$RG" --location uksouth
 az acr create --resource-group "$RG" --name "$ACR" --sku Basic
 az acr import --name "$ACR" \
-  --source ghcr.io/rbrasier/wayfinder:0.41.1 \
-  --image wayfinder:0.41.1
+  --source ghcr.io/rbrasier/wayfinder:0.41.10 \
+  --image wayfinder:0.41.10
 ```
 
 `az acr import` copies registry-to-registry — no local Docker, and nothing
@@ -229,7 +229,7 @@ something several replicas race to do during a rolling update:
 az containerapp job create \
   --name wayfinder-migrate --resource-group "$RG" --environment wayfinder-env \
   --trigger-type Manual --replica-timeout 600 \
-  --image ghcr.io/rbrasier/wayfinder:0.41.1 \
+  --image ghcr.io/rbrasier/wayfinder:0.41.10 \
   --command migrate
 ```
 

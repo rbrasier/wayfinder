@@ -47,7 +47,7 @@ callback webhook (`/v1/webhooks`), which is the one route an outside caller hits
 Wayfinder publishes a container image, so there is nothing to build:
 
 ```
-ghcr.io/rbrasier/wayfinder:0.41.1
+ghcr.io/rbrasier/wayfinder:0.41.10
 ```
 
 It is public — no credential, no `imagePullSecret`. One image contains both
@@ -58,7 +58,7 @@ scale-out event can never pull a different build than the one you tested.
 **Default or `-slim`.** The image above includes the built-in PDF converter
 (LibreOffice) and signature engine (EU DSS) used by document signatures; they
 start only if an admin turns on a method that needs them.
-`ghcr.io/rbrasier/wayfinder:0.41.1-slim` is
+`ghcr.io/rbrasier/wayfinder:0.41.10-slim` is
 the same image without them, about 600 MB smaller, for installs that never
 sign with drawings or certificates or that run those engines separately. With
 certificate signing in use, give the web container roughly 500 MB more memory
@@ -78,9 +78,9 @@ aws ecr create-repository --repository-name wayfinder --region "$AWS_REGION"
 aws ecr get-login-password --region "$AWS_REGION" \
   | docker login --username AWS --password-stdin "$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com"
 
-docker pull ghcr.io/rbrasier/wayfinder:0.41.1
-docker tag ghcr.io/rbrasier/wayfinder:0.41.1 "$REPO:0.41.1"
-docker push "$REPO:0.41.1"
+docker pull ghcr.io/rbrasier/wayfinder:0.41.10
+docker tag ghcr.io/rbrasier/wayfinder:0.41.10 "$REPO:0.41.10"
+docker push "$REPO:0.41.10"
 ```
 
 **Air-gapped or egress-restricted?** The published image fetches the local

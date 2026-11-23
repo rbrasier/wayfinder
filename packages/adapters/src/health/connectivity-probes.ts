@@ -1,6 +1,5 @@
-import { Client as MinioClient } from "minio";
 import { isEntraConfigured } from "@wayfinder/domain";
-import { minioClientOptions } from "../storage/minio-client-options";
+import { bucketExists, createS3Client } from "../storage/s3-object-storage";
 import type {
   AiConfig,
   AuthConfig,
@@ -137,18 +136,20 @@ export const probeAiConnectivity = async (
   return withMessage({ target, ok: outcome.ok, latencyMs: Date.now() - start }, outcome.message);
 };
 
-// Structural minio client so tests can inject a fake without a live endpoint.
+// Structural client so tests can inject a fake without a live endpoint.
 interface BucketProbeClient {
   bucketExists(bucket: string): Promise<boolean>;
 }
 
-export type MinioClientFactory = (config: StorageConfig) => BucketProbeClient;
+export type StorageClientFactory = (config: StorageConfig) => BucketProbeClient;
 
-export const defaultMinioClientFactory: MinioClientFactory = (config) =>
-  new MinioClient(minioClientOptions(config));
+export const defaultStorageClientFactory: StorageClientFactory = (config) => {
+  const client = createS3Client(config);
+  return { bucketExists: (bucket) => bucketExists(client, bucket) };
+};
 
 export interface StorageProbeDeps {
-  clientFactory?: MinioClientFactory;
+  clientFactory?: StorageClientFactory;
   timeoutMs?: number;
 }
 
@@ -161,7 +162,7 @@ export const probeStorageConnectivity = async (
     return { target, ok: false, skipped: true, message: "Storage is not configured" };
   }
 
-  const clientFactory = deps.clientFactory ?? defaultMinioClientFactory;
+  const clientFactory = deps.clientFactory ?? defaultStorageClientFactory;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
 
   const start = Date.now();

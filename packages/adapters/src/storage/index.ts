@@ -1,2 +1,2 @@
 export * from "./local-document-storage";
-export * from "./minio-storage";
+export * from "./s3-object-storage";

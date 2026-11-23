@@ -29,7 +29,7 @@ import {
   type CredentialAccountProbe,
   type EmailProbe,
   type GraphProbe,
-  type MinioClientFactory,
+  type StorageClientFactory,
 } from "./connectivity-probes";
 import { isEmbeddingsProvider } from "@wayfinder/shared";
 import { embeddingsCredentialsFor } from "../ai/embeddings-adapter";
@@ -57,7 +57,7 @@ export interface ConnectivityTesterDeps {
   // Sign-in authority override, matching the one the Entra provider uses.
   entraAuthority?: string;
   fetchFn?: typeof fetch;
-  minioClientFactory?: MinioClientFactory;
+  storageClientFactory?: StorageClientFactory;
   timeoutMs?: number;
   // The document signing services, probed against the saved signature config
   // (ADR-067 §6). Absent reads every signing target as skipped.
@@ -114,7 +114,7 @@ export class CompositeConnectivityTester implements IConnectivityTester {
         });
       case "storage":
         return probeStorageConnectivity(await deps.runtimeConfig.getStorageConfig(), {
-          clientFactory: deps.minioClientFactory,
+          clientFactory: deps.storageClientFactory,
           timeoutMs,
         });
       case "n8n":
