@@ -82,6 +82,11 @@ This starts:
 
 Wait a few seconds for Postgres to be healthy before continuing.
 
+Document signatures need nothing extra: the default image carries its own PDF
+converter and signature engine. The `pdf` (Gotenberg) and `signing` (DSS
+sidecar) profiles remain for installs on the `-slim` image or that prefer
+separate services. See [document-signatures.md](document-signatures.md).
+
 ---
 
 ## 5. Start the development servers
