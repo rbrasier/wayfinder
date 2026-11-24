@@ -46,7 +46,7 @@ const buildDeps = (overrides: Partial<ConnectivityTesterDeps> = {}): Connectivit
   embeddingsProvider: { embed: async () => ok([0.1]) },
   credentialAccounts: { countAccountsWithPassword: async () => 1 },
   fetchFn: vi.fn().mockResolvedValue({ ok: true, status: 200 } as unknown as Response),
-  minioClientFactory: () => ({ bucketExists: async () => true }),
+  storageClientFactory: () => ({ bucketExists: async () => true }),
   timeoutMs: 50,
   ...overrides,
 });

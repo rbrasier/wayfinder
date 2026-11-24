@@ -22,7 +22,7 @@ where the Playwright/Chrome download CDNs are blocked (403). This is the
   which ships a headless Chromium inside its npm tarball.
 - MinIO has no apt package and its release CDN (`dl.min.io`) is blocked (403),
   so object storage is provided by **`s3rver`** — a pure-JS S3-compatible server
-  installed from the npm registry. The app's `MinioStorageAdapter` talks plain
+  installed from the npm registry. The app's `S3ObjectStorageAdapter` talks plain
   S3 (path-style), so `s3rver` is a drop-in. This unblocks the upload/RAG specs
   (`phase-rag-with-pgvector`, `enhance-reindex-documents`) that the CI job skips.
 
@@ -82,7 +82,7 @@ nohup node /tmp/s3srv/run.js >/tmp/s3rver.log 2>&1 &
 
 The env mirrors `.github/workflows/e2e.yml`, plus the `MINIO_*` overrides that
 point the app at `s3rver` with its default `S3RVER`/`S3RVER` credentials. The
-`MinioStorageAdapter` resolves its client lazily, so the app can start before or
+`S3ObjectStorageAdapter` resolves its client lazily, so the app can start before or
 after `s3rver`, but starting storage first keeps the boot log clean.
 
 ```bash

@@ -15,12 +15,12 @@
   },
   "dependencies": {
     "@codegenie/serverless-express": "^4.17.1",
-    "aws-cdk-lib": "^2.273.0",
+    "aws-cdk-lib": "^2.278.0",
     "constructs": "^10.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
-    "@opennextjs/aws": "^3.10.4",
+    "@opennextjs/aws": "^4.2.0",
     "@types/aws-lambda": "^8.10.163",
     "@types/node": "^22.0.0",
     "aws-cdk": "^2.1029.0",

@@ -61,7 +61,7 @@ import {
   DocxGenerator,
   ExtractionWorker,
   LanguageModelAdapter,
-  MinioStorageAdapter,
+  S3ObjectStorageAdapter,
   NodemailerEmailSender,
   PinoLogger,
   RetentionWorker,
@@ -319,7 +319,7 @@ export const buildContainer = (env: Env) => {
   const flowVersions = new DrizzleFlowVersionRepository(db);
   const extractionRuns = new DrizzleExtractionRunRepository(db);
   const extractionDrafts = new DrizzleExtractionDraftRepository(db);
-  const objectStorage = new MinioStorageAdapter(runtimeConfig);
+  const objectStorage = new S3ObjectStorageAdapter(runtimeConfig);
   const documentExtractor = new DocumentExtractorService(new DocxGenerator());
   const proposeExtractionFields = new ProposeExtractionFields(
     extractionRuns,
