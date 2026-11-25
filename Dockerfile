@@ -53,7 +53,7 @@ RUN if [ "$VENDOR_EMBEDDINGS_MODEL" = "true" ]; then \
 
 # ── Built-in signing engines (ADR-069) ───────────────────────────────────────
 # The DSS signature engine jar, the same one the standalone sidecar runs.
-FROM maven:3.9.11-eclipse-temurin-21@sha256:6fdc855a6ed81d288ca7ca37ac6ff5e9308b612485c0801d70b25a858c83d237 AS dss-build
+FROM maven:3.9-eclipse-temurin-26@sha256:b2c1ad85954592f9928e84327c65201f308ad9b5d8ed7d5b823717c97bf23fbb AS dss-build
 WORKDIR /build
 COPY deploy/dss/pom.xml .
 RUN mvn -q -B dependency:go-offline
