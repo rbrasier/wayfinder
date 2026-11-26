@@ -37,3 +37,11 @@ docs
 test-results
 playwright-report
 **/*.tsbuildinfo
+
+# Written into the checkout by CI steps that run between builds: trivy-action
+# keeps its multi-GB vulnerability DB in .cache/trivy, and publish.yml writes
+# the CycloneDX SBOM. Left in the context, they change `COPY . .`, so the next
+# build misses the cache, reruns `pnpm build` and ships the files in the image.
+.cache
+trivy_envs.txt
+*.cdx.json

@@ -79,6 +79,18 @@ jobs:
   docker-image:
     name: Build container image
     runs-on: ubuntu-latest
+
+    # Job-scoped, not step-scoped: every `docker compose` invocation interpolates
+    # the compose file, so a step without these fails to read it at all — even
+    # `logs` and `down`.
+    env:
+      WAYFINDER_VERSION: ci
+      POSTGRES_PASSWORD: postgres
+      BETTER_AUTH_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci-test-secret-must-be-at-least-16-chars
+      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      SCHEDULER_TICK_SECRET: ci-scheduler-tick-secret
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -95,7 +107,11 @@ jobs:
           context: .
           push: false
           load: true
-          tags: wayfinder:ci
+          # The second tag is the name docker-compose.prod.yml runs, so the
+          # smoke test below starts this exact image.
+          tags: |
+            wayfinder:ci
+            ghcr.io/rbrasier/wayfinder:ci
           build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -114,81 +130,11 @@ jobs:
           exit-code: "1"
           trivyignores: .trivyignore
 
-      # The -slim image (ADR-069 §3): the same layers minus the built-in
-      # signing engines. Built from the cache the default build just filled.
-      - name: Build -slim image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          target: runtime-slim
-          push: false
-          load: true
-          tags: wayfinder:ci-slim
-          build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
-          cache-from: type=gha
-
-      - name: Scan -slim image for CVEs (Trivy)
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          image-ref: wayfinder:ci-slim
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-          trivyignores: .trivyignore
-          skip-setup-trivy: true
-
-      # A -slim image carrying either engine would defeat its purpose, and the
-      # app's "not included in this image" message depends on their absence.
-      - name: Check -slim leaves the built-in engines out
-        run: |
-          docker run --rm --entrypoint sh wayfinder:ci-slim -c \
-            'test ! -e /usr/bin/soffice && test ! -e /opt/wayfinder/jre && test ! -e /opt/wayfinder/dss'
-          docker run --rm --entrypoint sh wayfinder:ci -c \
-            'test -x /usr/bin/soffice && test -x /opt/wayfinder/jre/bin/java && test -f /opt/wayfinder/dss/wayfinder-dss.jar'
-
-      # Measured inside each image: `docker image inspect .Size` mixes
-      # compressed and unpacked layer sizes depending on how an image was
-      # loaded, so the two tags' numbers were not comparable.
-      - name: Report image sizes
-        run: |
-          for tag in ci ci-slim; do
-            SIZE=$(docker run --rm --entrypoint sh "wayfinder:$tag" -c 'du -sxm / 2>/dev/null | cut -f1')
-            echo "wayfinder:$tag unpacked size: ${SIZE} MiB"
-          done
-
-  # Exercises the one deployment artifact CI can run end to end, on the runner
-  # itself: the whole stack comes up, migrations apply as their own service, and
-  # the web app answers.
-  compose-smoke:
-    name: Compose stack smoke test
-    runs-on: ubuntu-latest
-    needs: docker-image
-
-    # Job-scoped, not step-scoped: every `docker compose` invocation interpolates
-    # the compose file, so a step without these fails to read it at all — even
-    # `logs` and `down`.
-    env:
-      WAYFINDER_VERSION: ci
-      POSTGRES_PASSWORD: postgres
-      BETTER_AUTH_URL: http://localhost:3000
-      BETTER_AUTH_SECRET: ci-test-secret-must-be-at-least-16-chars
-      SETTINGS_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
-      SCHEDULER_TICK_SECRET: ci-scheduler-tick-secret
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Build image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          push: false
-          load: true
-          tags: ghcr.io/rbrasier/wayfinder:ci
-          cache-from: type=gha
-
+      # Compose stack smoke test. It lives in this job so it runs the exact image
+      # the scan just passed, with no second build. The stack comes up,
+      # migrations apply as their own service, and the web app answers. It is
+      # torn down before the -slim build so the runner's disk is freed first.
+      #
       # The published image is the artefact ECS, Azure Container Apps, Railway
       # and EC2 all consume, with the same three entrypoint commands. So these
       # assertions are not "the compose path" — they cover every container
@@ -314,6 +260,48 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose -f docker-compose.prod.yml down -v
+
+      # The -slim image (ADR-069 §3): the same layers minus the built-in
+      # signing engines. Built from the cache the default build just filled.
+      - name: Build -slim image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runtime-slim
+          push: false
+          load: true
+          tags: wayfinder:ci-slim
+          build-args: SECURITY_REFRESH=${{ steps.refresh.outputs.date }}
+          cache-from: type=gha
+
+      - name: Scan -slim image for CVEs (Trivy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: wayfinder:ci-slim
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          trivyignores: .trivyignore
+          skip-setup-trivy: true
+
+      # A -slim image carrying either engine would defeat its purpose, and the
+      # app's "not included in this image" message depends on their absence.
+      - name: Check -slim leaves the built-in engines out
+        run: |
+          docker run --rm --entrypoint sh wayfinder:ci-slim -c \
+            'test ! -e /usr/bin/soffice && test ! -e /opt/wayfinder/jre && test ! -e /opt/wayfinder/dss'
+          docker run --rm --entrypoint sh wayfinder:ci -c \
+            'test -x /usr/bin/soffice && test -x /opt/wayfinder/jre/bin/java && test -f /opt/wayfinder/dss/wayfinder-dss.jar'
+
+      # Measured inside each image: `docker image inspect .Size` mixes
+      # compressed and unpacked layer sizes depending on how an image was
+      # loaded, so the two tags' numbers were not comparable.
+      - name: Report image sizes
+        run: |
+          for tag in ci ci-slim; do
+            SIZE=$(docker run --rm --entrypoint sh "wayfinder:$tag" -c 'du -sxm / 2>/dev/null | cut -f1')
+            echo "wayfinder:$tag unpacked size: ${SIZE} MiB"
+          done
 
   deploy-lambda:
     name: Lambda deployment target
