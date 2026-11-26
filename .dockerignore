@@ -39,9 +39,13 @@ playwright-report
 **/*.tsbuildinfo
 
 # Written into the checkout by CI steps that run between builds: trivy-action
-# keeps its multi-GB vulnerability DB in .cache/trivy, and publish.yml writes
-# the CycloneDX SBOM. Left in the context, they change `COPY . .`, so the next
-# build misses the cache, reruns `pnpm build` and ships the files in the image.
+# keeps its multi-GB vulnerability DB in .cache/trivy, publish.yml writes the
+# CycloneDX SBOM, and `docker compose up` creates ./trust as the empty source of
+# docker-compose.prod.yml's bind mount. Left in the context, they change
+# `COPY . .`, so the next build misses the cache, reruns `pnpm build` and ships
+# the files in the image. ./trust is deployment config in any case — the signer
+# CA certificates an operator mounts; the image creates /app/trust itself.
 .cache
 trivy_envs.txt
 *.cdx.json
+trust

@@ -3,7 +3,7 @@
 - **Source**: maintainer request, after "Build container image" became the slowest
   check on PR #408 (no issue)
 - **Base**: `release/alpha-3`, on `enhance/ci-image-job-speedup/claude-rbrasier`
-- **Version**: PATCH 0.41.10 → 0.41.12 (0.41.11 is held by the open Dependabot PR #408)
+- **Version**: PATCH 0.41.11 → 0.41.12 (0.41.11 was taken by Dependabot PR #408, merged first)
 
 ## Approved change summary
 
@@ -20,8 +20,8 @@ cache and the -slim image is actually slim. Together these should take about
   separate `compose-smoke` job, and no second image build.
 - **Same image:** the smoke test runs the image built with `SECURITY_REFRESH`, the
   one the scan passed. The old job rebuilt it without that build argument.
-- **Build context:** `.cache/`, `trivy_envs.txt` and `*.cdx.json` are excluded
-  from the Docker build context.
+- **Build context:** `.cache/`, `trivy_envs.txt`, `*.cdx.json` and `trust/` are
+  excluded from the Docker build context.
 
 ## Why — what the job log showed
 
@@ -42,14 +42,21 @@ the images it pushes were most likely rebuilt rather than reused, and carried th
 same files. This change fixes that too, through `.dockerignore`; `publish.yml`
 itself is unchanged.
 
+A second source showed up on this PR's first CI run, once the smoke test ran in
+the same job: `docker-compose.prod.yml` bind-mounts `./trust`, which is not in the
+repository, so `docker compose up` creates an empty `trust/` in the checkout. That
+also changed the build context. `./trust` holds deployment config (the signer CA
+certificates an operator mounts), and the image creates `/app/trust` itself, so it
+is excluded too.
+
 ## Implementation
 
 - `.github/workflows/ci.yml`: the `compose-smoke` job is removed. Its job-scoped
   environment and all its steps move into `docker-image`, between the main Trivy
   scan and `Build -slim image`. The main build also tags
   `ghcr.io/rbrasier/wayfinder:ci`, the name `docker-compose.prod.yml` runs.
-- `.dockerignore`: excludes `.cache`, `trivy_envs.txt` and `*.cdx.json`, with the
-  reason recorded alongside.
+- `.dockerignore`: excludes `.cache`, `trivy_envs.txt`, `*.cdx.json` and `trust`,
+  with the reason recorded alongside.
 - `VERSION`, `package.json`: 0.41.12.
 
 ## Tests
