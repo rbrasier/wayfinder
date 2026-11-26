@@ -64,7 +64,7 @@ RUN mvn -q -B package -DskipTests
 # A Java runtime cut down to the modules the engine uses (from `jdeps
 # --print-module-deps` on the jar, plus jdk.crypto.ec for TLS to a timestamp
 # authority). A full JRE would roughly double this layer.
-FROM eclipse-temurin:21.0.8_9-jdk-noble@sha256:03b731a231066bd04ada0a7ee9003cdbc1460083344f9277245b233e5ffcbf47 AS jre
+FROM eclipse-temurin:24.0.2_12-jdk-noble@sha256:dacac8e9a0df0d2bd24e702b4431132875c249930b70555ebd7ca285b5bee684 AS jre
 RUN jlink \
       --add-modules java.base,java.compiler,java.desktop,java.naming,java.net.http,java.security.jgss,java.sql,jdk.httpserver,jdk.net,jdk.crypto.ec \
       --strip-debug --no-man-pages --no-header-files --compress=zip-6 \
