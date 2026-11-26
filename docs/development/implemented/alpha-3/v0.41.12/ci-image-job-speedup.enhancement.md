@@ -20,8 +20,8 @@ cache and the -slim image is actually slim. Together these should take about
   separate `compose-smoke` job, and no second image build.
 - **Same image:** the smoke test runs the image built with `SECURITY_REFRESH`, the
   one the scan passed. The old job rebuilt it without that build argument.
-- **Build context:** `.cache/`, `trivy_envs.txt`, `*.cdx.json` and `trust/` are
-  excluded from the Docker build context.
+- **Build context:** `.cache/`, `trivy_envs.txt`, `trivyignores`, `*.cdx.json` and
+  `trust/` are excluded from the Docker build context.
 
 ## Why — what the job log showed
 
@@ -49,13 +49,19 @@ also changed the build context. `./trust` holds deployment config (the signer CA
 certificates an operator mounts), and the image creates `/app/trust` itself, so it
 is excluded too.
 
+The second CI run showed the -slim image back to its expected size (3188 MiB against
+3668 MiB for the full image), but `COPY . .` still missed. trivy-action's
+entrypoint merges the `trivyignores` input into `./trivyignores` in the workspace,
+another file written between the two builds, so it is excluded as well.
+
 ## Implementation
 
 - `.github/workflows/ci.yml`: the `compose-smoke` job is removed. Its job-scoped
   environment and all its steps move into `docker-image`, between the main Trivy
   scan and `Build -slim image`. The main build also tags
   `ghcr.io/rbrasier/wayfinder:ci`, the name `docker-compose.prod.yml` runs.
-- `.dockerignore`: excludes `.cache`, `trivy_envs.txt`, `*.cdx.json` and `trust`,
+- `.dockerignore`: excludes `.cache`, `trivy_envs.txt`, `trivyignores`, `*.cdx.json` and
+  `trust`,
   with the reason recorded alongside.
 - `VERSION`, `package.json`: 0.41.12.
 
