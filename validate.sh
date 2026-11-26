@@ -566,16 +566,12 @@ for stale in scripts/init-project.sh scripts/update-framework.sh \
   fi
 done
 
-# Bracketed first letter so this script does not match its own search, the same
-# trick as `ps aux | grep '[s]shd'`. -a because two source files use a literal
-# NUL as a delimiter in a template literal, which makes grep call them binary
-# and skip them without saying so.
-OLD_SCOPE_PATTERN='@[r]brasier'
-SCOPE_LEAKS=$(grep -ral "$OLD_SCOPE_PATTERN" . \
-    --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.next \
-    --exclude-dir=.turbo --exclude-dir=dist --exclude-dir=coverage 2>/dev/null \
-  | grep -v "^./docs/development/implemented/" \
-  | sort)
+if ! node --test scripts/find-template-scope-leaks.test.mjs > /dev/null 2>&1; then
+  TEMPLATE_RESIDUE+="  scope scan failing its tests — run 'node --test scripts/find-template-scope-leaks.test.mjs'"$'\n'
+fi
+if ! SCOPE_LEAKS=$(scripts/find-template-scope-leaks.sh); then
+  TEMPLATE_RESIDUE+="  scripts/find-template-scope-leaks.sh failed — run it directly to see why"$'\n'
+fi
 if [ -n "$SCOPE_LEAKS" ]; then
   TEMPLATE_RESIDUE+="  old template package scope outside docs/development/implemented/:"$'\n'
   TEMPLATE_RESIDUE+=$(echo "$SCOPE_LEAKS" | sed 's/^/    /')$'\n'
