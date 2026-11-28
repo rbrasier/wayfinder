@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Figtree, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { connection } from "next/server";
 import { Toaster } from "sonner";
 import { NavigationProgress } from "@/components/navigation-progress";
@@ -11,17 +11,20 @@ import { getContainer } from "@/lib/container";
 import { TrpcProvider } from "@/trpc/Provider";
 import "@/styles/globals.css";
 
-const figtree = Figtree({
-  subsets: ["latin"],
+// Bundled rather than fetched from Google at build time, so `next build` needs
+// no network (a failed fetch used to fail the build). Latin subset, variable
+// weight axis — the ranges are each font's full axis.
+const figtree = localFont({
+  src: "./fonts/figtree-latin-wght-normal.woff2",
   variable: "--font-figtree",
-  weight: ["400", "500", "600", "700"],
+  weight: "300 900",
   display: "swap",
 });
 
-const jetBrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
+const jetBrainsMono = localFont({
+  src: "./fonts/jetbrains-mono-latin-wght-normal.woff2",
   variable: "--font-jetbrains-mono",
-  weight: ["400", "500"],
+  weight: "100 800",
   display: "swap",
 });
 
